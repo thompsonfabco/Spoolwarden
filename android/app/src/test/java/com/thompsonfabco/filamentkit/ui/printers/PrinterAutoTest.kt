@@ -20,7 +20,6 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -75,7 +74,7 @@ class PrinterAutoTest {
     }
 
     private fun detail(auto: AutoWait?) = PrinterDetail(printer, PrinterStatus(), auto)
-    private fun conflict(code: String) = ApiError(409, code, "", JsonObject(mapOf("text" to JsonPrimitive("The Hub says so."))), noHubMessage = true)
+    private fun conflict(code: String) = ApiError(409, code, "The Hub says so.")
 
     @Test fun theNoticeNamesTheSpoolAndThePrinterAndHasNoChoices() {
         val n = PrinterTexts.autoNotice(waiting(), "Workshop X1")

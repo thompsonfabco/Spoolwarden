@@ -236,7 +236,7 @@ class Api(
 
     /**
      * `POST api/events/{id}/undo`. 409 `changed_since`, `too_old`, `already_undone` or `not_undoable` is an [ApiError]
-     * whose `text` is in [ApiError.extra]; 404 `not_found` is an older Hub (or an event the Hub no longer has).
+     * whose `message` is the Hub's sentence; 404 `not_found` is an older Hub (or an event the Hub no longer has).
      */
     suspend fun undoEvent(id: Long): UndoAnswer =
         HistoryWire.undo(call(request("api", "events", id.toString(), "undo").post(ByteArray(0).toRequestBody(null))))

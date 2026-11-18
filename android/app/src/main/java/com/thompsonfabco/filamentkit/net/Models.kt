@@ -525,8 +525,8 @@ internal object LenientAuto : KSerializer<AutoWait?> {
     override fun serialize(encoder: Encoder, value: AutoWait?) = (encoder as JsonEncoder).encodeJsonElement(JsonNull)
 }
 
-/** The Auto routes' 409 carries the Hub's sentence as `text`, not `message`; it is kept in [ApiError.extra]. Null when none. */
-val ApiError.autoText: String? get() = extra["text"].primitiveText()?.ifBlank { null }
+/** The Hub's own sentence of a refusal (`message`, as on every kit route). Null when the reply was not the Hub speaking. */
+val ApiError.autoText: String? get() = message.takeUnless { notFromHub }
 
 /** The spool an Auto load replaces: the one that was waiting. */
 data class AutoReplaces(val spoolId: Int?, val name: String)

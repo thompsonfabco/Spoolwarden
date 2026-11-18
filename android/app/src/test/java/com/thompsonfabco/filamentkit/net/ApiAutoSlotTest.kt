@@ -69,8 +69,8 @@ class ApiAutoSlotTest {
         assertEquals(AutoLoadResult(), r)
     }
 
-    @Test fun autoNotPossibleIs409WithTheHubsText() {
-        json("""{"error":"auto_not_possible","text":"This printer has no slots the Hub can watch. Choose a slot."}""", 409)
+    @Test fun autoNotPossibleIs409WithTheHubsMessage() {
+        json("""{"error":"auto_not_possible","message":"This printer has no slots the Hub can watch. Choose a slot."}""", 409)
         val e = assertThrows(ApiError::class.java) { runBlocking { api.autoLoad("P1", 12, dryRun = true) } }
         assertEquals(409, e.status)
         assertEquals("auto_not_possible", e.code)
@@ -88,7 +88,7 @@ class ApiAutoSlotTest {
     }
 
     @Test fun nothingToChooseIs409() {
-        json("""{"error":"nothing_to_choose","text":"Nothing to choose."}""", 409)
+        json("""{"error":"nothing_to_choose","message":"Nothing to choose."}""", 409)
         val e = assertThrows(ApiError::class.java) { runBlocking { api.autoChoose("P1", "A2") } }
         assertEquals("nothing_to_choose", e.code)
         assertEquals("Nothing to choose.", e.autoText)
@@ -103,7 +103,7 @@ class ApiAutoSlotTest {
     }
 
     @Test fun notWaitingIs409() {
-        json("""{"error":"not_waiting","text":"Nothing is waiting."}""", 409)
+        json("""{"error":"not_waiting","message":"Nothing is waiting."}""", 409)
         val e = assertThrows(ApiError::class.java) { runBlocking { api.autoCancel("P1") } }
         assertEquals("not_waiting", e.code)
     }

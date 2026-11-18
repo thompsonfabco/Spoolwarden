@@ -648,14 +648,13 @@ class PrinterViewModel(
         private const val AUTO_NOT_POSSIBLE = "auto_not_possible"
 
         /**
-         * An Auto route's refusal carries the Hub's sentence as `text`: the error is given the words the screen shows
-         * (the Hub's own, else for `auto_not_possible` the ruled one); any other error is unchanged.
+         * An Auto route's refusal carries the Hub's sentence as `message`: `auto_not_possible` is given the words the
+         * screen shows (the Hub's own, else the ruled one); any other error is unchanged.
          */
         internal fun autoError(e: ApiError): ApiError {
             val text = e.autoText
             return when {
                 e.code == AUTO_NOT_POSSIBLE -> ApiError(e.status, e.code, text ?: LoadTexts.AUTO_REFUSED, e.extra)
-                text != null && e.notFromHub -> ApiError(e.status, e.code, text, e.extra)
                 else -> e
             }
         }

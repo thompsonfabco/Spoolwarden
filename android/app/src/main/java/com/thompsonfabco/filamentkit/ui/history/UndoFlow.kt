@@ -4,7 +4,6 @@ import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.UndoWhyNot
 import kotlinx.coroutines.CancellationException
-import kotlinx.serialization.json.JsonPrimitive
 import kotlin.math.max
 
 /** The event kinds the Hub can undo (R84 3.1): the seven spool and slot actions. */
@@ -59,10 +58,10 @@ object UndoRules {
         return newest
     }
 
-    /** The words of a refusal: the Hub's own `text` when it sent one, else ours for its `error`. */
+    /** The words of a refusal: the Hub's own `message` when it sent one, else ours for its `error`. */
     fun refusal(e: Throwable): String {
         if (e !is ApiError) return HistoryTexts.UNDO_FAILED
-        val hubText = (e.extra["text"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+        val hubText = e.message.takeUnless { e.notFromHub }
         return when {
             hubText != null && e.status == CONFLICT -> hubText
             e.status == CONFLICT -> whyNot(e.code)

@@ -5,8 +5,6 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.UndoAnswer
 import com.thompsonfabco.filamentkit.net.UndoState
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -29,9 +27,7 @@ class UndoFlowTest {
         override suspend fun undoEvent(id: Long): UndoAnswer = undoAnswer()
     }
 
-    private fun refusal(code: String, text: String?) = ApiError(
-        409, code, "x", JsonObject(if (text == null) emptyMap() else mapOf("text" to JsonPrimitive(text))),
-    )
+    private fun refusal(code: String, message: String?) = ApiError(409, code, message.orEmpty())
 
     @Test fun theToastIsHeldTenSecondsOrWhatAccessibilityRecommendsIfLonger() {
         assertEquals(10_000L, UndoRules.holdMs(10_000))

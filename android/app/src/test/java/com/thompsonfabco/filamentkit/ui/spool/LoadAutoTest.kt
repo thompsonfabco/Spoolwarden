@@ -16,7 +16,6 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlinx.serialization.json.JsonObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -148,7 +147,7 @@ class LoadAutoTest {
 
     @Test fun aPrinterThatCannotWatchRefusesInTheHubsWordsOrTheRuledOnes() = runTest(dispatcher) {
         val b = backend(auto)
-        b.failure = ApiError(409, "auto_not_possible", "", JsonObject(mapOf("text" to kotlinx.serialization.json.JsonPrimitive("No sensors."))))
+        b.failure = ApiError(409, "auto_not_possible", "No sensors.")
         val vm = LoadPreviewViewModel(spool, "X1A", AUTO_SLOT, b)
         advanceUntilIdle()
         assertFalse(vm.state.value.ready)
@@ -164,7 +163,7 @@ class LoadAutoTest {
         val b = backend(auto)
         val vm = LoadPreviewViewModel(spool, "X1A", AUTO_SLOT, b)
         advanceUntilIdle()
-        b.failure = ApiError(409, "auto_not_possible", "", JsonObject(mapOf("text" to kotlinx.serialization.json.JsonPrimitive("No sensors."))))
+        b.failure = ApiError(409, "auto_not_possible", "No sensors.")
         vm.load()
         advanceUntilIdle()
         assertEquals(HubFailure.Message("No sensors."), vm.state.value.failure)

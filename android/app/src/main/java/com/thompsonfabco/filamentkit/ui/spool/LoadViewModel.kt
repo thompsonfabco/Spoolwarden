@@ -77,7 +77,7 @@ internal fun autoOffered(printer: Printer?): Boolean = printer?.autoPossible == 
 /** The slot the step starts on: Automatic when it is offered (A5), else none (a slot is tapped). */
 internal fun preselected(printer: Printer?): String? = AUTO_SLOT.takeIf { autoOffered(printer) }
 
-/** What the Hub's refusal of an Auto says: its own `text`, else the ruled sentence (A6). */
+/** What the Hub's refusal of an Auto says: its own `message`, else the ruled sentence (A6). */
 internal fun autoRefusal(e: ApiError): String = e.autoText ?: LoadTexts.AUTO_REFUSED
 
 /** An Auto call's failure: the refusal (409 `auto_not_possible`) in words, anything else as every load failure. */
