@@ -309,6 +309,8 @@ data class Printer(
     val pinned: Boolean = false,
     /** A Klipper printer's Moonraker host name or address; none for a Bambu printer. */
     val host: String? = null,
+    /** Auto can be chosen for a load here (two or more slots the Hub can watch); servers before it send none, so false. */
+    @Serializable(with = LenientBool::class) @SerialName("auto_possible") val autoPossible: Boolean = false,
 ) {
     /** What to show for the model: its name, else the code an older server sent, else null. */
     val shownModel: String? get() = modelName?.takeIf { it.isNotBlank() } ?: model?.takeIf { it.isNotBlank() }
@@ -387,6 +389,8 @@ data class AmsSlot(
     @Serializable(with = LenientNullableBool::class) val present: Boolean? = null,
     @Serializable(with = LenientNullableBool::class) val reading: Boolean? = null,
     @Serializable(with = LenientPending::class) val pending: SlotPending? = null,
+    /** The Hub can see a spool go into this slot, so Auto may choose it; older servers send none (false). */
+    @Serializable(with = LenientBool::class) val watchable: Boolean = false,
 )
 
 /**
@@ -457,9 +461,105 @@ data class PrinterStatus(
     @Serializable(with = LenientNullableLong::class) val updated: Long? = null,
 )
 
-/** [status] is null while the server has no connection to the printer. */
+/** [status] is null while the server has no connection to the printer. [auto] is the Auto assignment waiting here, if any. */
 @Serializable
-data class PrinterDetail(val printer: Printer, val status: PrinterStatus? = null)
+data class PrinterDetail(
+    val printer: Printer,
+    val status: PrinterStatus? = null,
+    @Serializable(with = LenientAuto::class) val auto: AutoWait? = null,
+)
+
+/** The spool an Auto assignment waits for. */
+data class AutoSpool(val id: Int?, val name: String, val material: String, val colorHex: String)
+
+/**
+ * An Auto assignment on a printer (`auto` of `GET api/printers/{id}`): [state] `waiting`, or `choose` when two slots
+ * were loaded and [slots] (labels) are to be chosen from. [text] is the Hub's own sentence for it; [expiresAt] is as sent.
+ */
+data class AutoWait(
+    val spoolId: Int?,
+    val spool: AutoSpool?,
+    val state: String,
+    val slots: List<String>,
+    val text: String,
+    val expiresAt: String?,
+) {
+    val choosing: Boolean get() = state == STATE_CHOOSE
+
+    companion object {
+        const val STATE_WAITING = "waiting"
+        const val STATE_CHOOSE = "choose"
+    }
+}
+
+private fun JsonElement?.primitiveText(): String? = (this as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
+private fun JsonElement?.primitiveInt(): Int? = primitiveText()?.toDoubleOrNull()?.roundToInt()
+
+/** A list of labels: the strings and numbers in an array; anything else is none. */
+private fun JsonElement?.labels(): List<String> =
+    (this as? JsonArray).orEmpty().mapNotNull { it.primitiveText()?.takeIf { s -> s.isNotBlank() } }
+
+/** `auto`: an object is an assignment; absent, null or any other shape is none (a Hub without Auto sends none). */
+@OptIn(ExperimentalSerializationApi::class)
+internal object LenientAuto : KSerializer<AutoWait?> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("LenientAuto", PrimitiveKind.STRING).nullable
+    override fun deserialize(decoder: Decoder): AutoWait? {
+        val obj = (decoder as? JsonDecoder ?: throw SerializationException("JSON only")).decodeJsonElement() as? JsonObject
+            ?: return null
+        val spool = (obj["spool"] as? JsonObject)?.let {
+            AutoSpool(
+                it["id"].primitiveInt(), it["name"].primitiveText().orEmpty(), it["material"].primitiveText().orEmpty(),
+                it["color_hex"].primitiveText().orEmpty(),
+            )
+        }
+        return AutoWait(
+            spoolId = obj["spool_id"].primitiveInt() ?: spool?.id,
+            spool = spool,
+            // anything but "choose" is a plain wait
+            state = if (obj["state"].primitiveText() == AutoWait.STATE_CHOOSE) AutoWait.STATE_CHOOSE else AutoWait.STATE_WAITING,
+            slots = obj["slots"].labels(),
+            text = obj["text"].primitiveText().orEmpty(),
+            expiresAt = obj["expires_at"].primitiveText(),
+        )
+    }
+    override fun serialize(encoder: Encoder, value: AutoWait?) = (encoder as JsonEncoder).encodeJsonElement(JsonNull)
+}
+
+/** The Auto routes' 409 carries the Hub's sentence as `text`, not `message`; it is kept in [ApiError.extra]. Null when none. */
+val ApiError.autoText: String? get() = extra["text"].primitiveText()?.ifBlank { null }
+
+/** The spool an Auto load replaces: the one that was waiting. */
+data class AutoReplaces(val spoolId: Int?, val name: String)
+
+/**
+ * `POST api/printers/{id}/slots/auto/load`. A dry run answers [watching] (the slot labels the Hub will watch) and, when
+ * another spool was waiting, [replaces]; the real call answers [pending] true and [message]. Read leniently by [parse].
+ */
+data class AutoLoadResult(
+    val watching: List<String> = emptyList(),
+    val replaces: AutoReplaces? = null,
+    val dryRun: Boolean = false,
+    val pending: Boolean = false,
+    val expiresIn: Int? = null,
+    val message: String = "",
+) {
+    companion object {
+        fun parse(body: JsonElement): AutoLoadResult {
+            val obj = body as? JsonObject ?: return AutoLoadResult()
+            val replaces = (obj["replaces"] as? JsonObject)?.let {
+                AutoReplaces(it["spool_id"].primitiveInt(), it["name"].primitiveText().orEmpty())
+            }
+            return AutoLoadResult(
+                watching = obj["watching"].labels(),
+                replaces = replaces,
+                dryRun = obj["dry_run"].primitiveText() == "true",
+                pending = obj["pending"].primitiveText() == "true",
+                expiresIn = obj["expires_in"].primitiveInt(),
+                message = obj["message"].primitiveText().orEmpty(),
+            )
+        }
+    }
+}
 
 /** `POST /api/printers/{id}/command`; [reply] is the server's `{ok, reply}` result for the printer's answer. */
 @Serializable
