@@ -730,8 +730,8 @@ class PrinterViewModelTest {
         assertEquals("AMS A", PrinterHelp.unitTitle(AmsUnit(0, "A", "ams")))
         assertEquals("the external spool holder", PrinterHelp.slotName("Ext"))
         assertEquals("slot B3", PrinterHelp.slotName("B3"))
-        assertEquals("Moved back: #3 → Shelf 1", PrinterHelp.movedBackLine(null, 3, "Shelf 1"))
-        assertEquals("spool #9", PrinterHelp.spoolName(SlotSpool(9)))
+        assertEquals("Moved back: Spool 3 → Shelf 1", PrinterHelp.movedBackLine(null, 3, "Shelf 1"))
+        assertEquals("Spool 9", PrinterHelp.spoolName(SlotSpool(9)))
     }
 
     @Test fun externalHoldersAreNamedFromSay() {

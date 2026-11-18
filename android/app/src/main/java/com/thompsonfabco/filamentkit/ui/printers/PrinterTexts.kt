@@ -105,7 +105,7 @@ object PrinterTexts {
             note,
         ).joinToString(" ")
 
-    /** A spool view (`inventory.spool_view`) as a person names it: brand and name, else "spool #id". */
+    /** A spool view (`inventory.spool_view`) as a person names it: brand and name, else "Spool id". */
     fun spoolName(view: JsonObject): String {
         fun text(key: String) = (view[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()?.ifBlank { null }
         val named = listOfNotNull(text("vendor"), text("name")).joinToString(" ")
