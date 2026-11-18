@@ -54,7 +54,7 @@ internal fun spoolResultToastText(result: SpoolResult): String = when (result) {
     SpoolResult.TagMoved -> stringResource(R.string.spool_result_tag_moved)
     is SpoolResult.Loaded -> stringResource(R.string.spool_result_loaded, result.printer, result.slot)
     is SpoolResult.LoadedUnconfirmed -> stringResource(R.string.spool_load_unconfirmed)
-    is SpoolResult.Waiting -> LoadTexts.waiting(result)
+    is SpoolResult.Waiting -> LoadTexts.waitingIn(result.slot)
 }
 
 /** The offer a spool screen result makes, or null when the Hub has no Undo for it. */

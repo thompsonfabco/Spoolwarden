@@ -1,4 +1,4 @@
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LoadViewModel.kt | Spool #${} | text of the Auto slot (AS4); moves to the string catalogue with AS2, its proposed key is in the contract requests
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LoadViewModel.kt | Spool ${} | text of the Auto slot (AS4); moves to the string catalogue with AS2, its proposed key is in the contract requests
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LoadViewModel.kt | The Hub has no Auto. | text of the Auto slot (AS4); moves to the string catalogue with AS2, its proposed key is in the contract requests
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LoadViewModel.kt | auto | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/LoadViewModel.kt | auto_not_possible | wire key, route or value of the Auto slot (AS4), not a text

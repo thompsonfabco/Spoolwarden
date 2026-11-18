@@ -87,7 +87,7 @@ internal fun autoFailure(e: Throwable): HubFailure =
 private const val AUTO_NOT_POSSIBLE = "auto_not_possible"
 
 /** How a spool is named in a sentence: its brand and name, else its number. */
-internal fun spoolWords(spool: SpoolSummary): String = spool.title.ifBlank { "Spool #${spool.id}" }
+internal fun spoolWords(spool: SpoolSummary): String = spool.title.ifBlank { "Spool ${spool.id}" }
 
 /** The printers that can take a load now: set up and connected (05 7.6). */
 internal fun canTakeLoad(p: Printer): Boolean = p.configured && p.state == Printer.STATE_CONNECTED

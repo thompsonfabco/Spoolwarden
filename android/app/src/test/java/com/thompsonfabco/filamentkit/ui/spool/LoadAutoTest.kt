@@ -124,6 +124,15 @@ class LoadAutoTest {
         assertEquals("it survives the spool screen's saved state", result, SpoolResult.decode(result.encode()))
     }
 
+    @Test fun theShortAutoTextIsTheToastsAndTheFallbacksHaveNoHash() {
+        assertEquals("Waiting for the spool to be loaded.", LoadTexts.waitingIn(AUTO_SLOT))
+        assertEquals("Spool 214", spoolWords(spool.copy(brand = "", name = "")))
+        assertEquals(
+            "Waiting for the spool to be loaded into any slot of P.",
+            LoadTexts.waiting(SpoolResult.Waiting("P", AUTO_SLOT, "")),
+        )
+    }
+
     @Test fun aNamedLoadStillGoesToTheNamedCall() = runTest(dispatcher) {
         val b = backend(auto)
         val vm = LoadPreviewViewModel(spool, "X1A", "A2", b)

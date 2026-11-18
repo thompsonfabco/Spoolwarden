@@ -7,9 +7,9 @@ package com.thompsonfabco.filamentkit.ui.spool
  * their proposed keys in the contract requests.
  */
 object LoadTexts {
-    /** The result of a load the printer has not carried out yet; [slot] is the slot's label. */
+    /** The short result of a load the printer has not carried out yet (the toast's text); [slot] is the slot's label. */
     fun waitingIn(slot: String): String =
-        if (isAuto(slot)) "Waiting for the spool to be loaded into any slot." else "Waiting for the spool to load in $slot."
+        if (isAuto(slot)) "Waiting for the spool to be loaded." else "Waiting for the spool to load in $slot."
 
     /** The slot step's first choice and its hint (A5); `spool_load_auto`, `spool_load_auto_hint`. */
     const val AUTOMATIC = "Automatic"

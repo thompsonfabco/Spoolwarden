@@ -90,8 +90,8 @@ class PrinterAutoTest {
     }
 
     @Test fun aSpoolWithoutANameIsNamedByItsNumberOrAsTheSpool() {
-        assertEquals("Spool #12", PrinterTexts.autoSpool(waiting().copy(spool = null)))
-        assertEquals("Spool #12", PrinterTexts.autoSpool(waiting().copy(spool = spool.copy(name = " "))))
+        assertEquals("Spool 12", PrinterTexts.autoSpool(waiting().copy(spool = null)))
+        assertEquals("Spool 12", PrinterTexts.autoSpool(waiting().copy(spool = spool.copy(name = " "))))
         assertEquals("the spool", PrinterTexts.autoSpool(waiting().copy(spool = null, spoolId = null)))
     }
 

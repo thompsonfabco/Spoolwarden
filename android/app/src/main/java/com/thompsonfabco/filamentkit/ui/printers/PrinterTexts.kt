@@ -59,7 +59,7 @@ object PrinterTexts {
 
     /** A spool as the Auto notice names it: its name, else its number, else "the spool". */
     fun autoSpool(auto: AutoWait): String =
-        auto.spool?.name?.ifBlank { null } ?: (auto.spoolId ?: auto.spool?.id)?.let { "Spool #$it" } ?: "the spool"
+        auto.spool?.name?.ifBlank { null } ?: (auto.spoolId ?: auto.spool?.id)?.let { "Spool $it" } ?: "the spool"
 
     /**
      * The one notice an Auto assignment makes on the printer's screen (A4): [text] (waiting, or the question when two slots
