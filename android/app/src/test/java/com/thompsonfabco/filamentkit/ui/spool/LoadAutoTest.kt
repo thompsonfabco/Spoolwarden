@@ -79,14 +79,12 @@ class LoadAutoTest {
         assertNull(preselected(null))
     }
 
-    @Test fun pickingASlotMovesTheChoiceAndAReloadKeepsIt() = runTest(dispatcher) {
+    @Test fun aReloadOpensOnAutomaticAgain() = runTest(dispatcher) {
         val vm = LoadSlotsViewModel("X1A", backend(auto))
         advanceUntilIdle()
-        vm.select("A2")
-        assertEquals("A2", vm.state.value.selected)
         vm.load()
         advanceUntilIdle()
-        assertEquals("A2", vm.state.value.selected)
+        assertEquals(AUTO_SLOT, vm.state.value.selected)
     }
 
     @Test fun theDryRunSaysWhatItWatchesAndNothingWhenNothingWasWaiting() = runTest(dispatcher) {

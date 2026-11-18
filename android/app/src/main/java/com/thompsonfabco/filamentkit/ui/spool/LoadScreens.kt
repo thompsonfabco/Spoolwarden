@@ -233,12 +233,12 @@ fun LoadSlotsScreen(
             },
         ) {
             val can = printer?.let(::canTakeLoad) == true
-            // Automatic first and chosen, on a printer the Hub can watch (A5); a slot is picked as before, then Next
+            // one list: Automatic first and selected on a printer the Hub can watch (A5), the slots under it; a tap goes on
             if (ui.auto) {
                 SpoolPanel {
                     ChoiceRow(
                         LoadTexts.AUTOMATIC, LoadTexts.AUTOMATIC_HINT, selected = isAuto(ui.selected.orEmpty()), enabled = can,
-                    ) { vm.select(AUTO_SLOT) }
+                    ) { onPick(AUTO_SLOT) }
                 }
             }
             ui.units.filter { u -> u.slots.any { it.label.isNotBlank() } }.forEach { unit ->
@@ -249,16 +249,10 @@ fun LoadSlotsScreen(
                 SpoolPanel {
                     unit.slots.filter { it.label.isNotBlank() }.forEachIndexed { i, slot ->
                         if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
-                        if (ui.auto) SlotRow(slot, ui.units, can, selected = ui.selected == slot.label) { vm.select(slot.label) }
+                        if (ui.auto) SlotRow(slot, ui.units, can, selected = ui.selected == slot.label) { onPick(slot.label) }
                         else SlotRow(slot, ui.units, can) { onPick(slot.label) }
                     }
                 }
-            }
-            if (ui.auto) {
-                SwButton(
-                    stringResource(R.string.common_next), { ui.selected?.let(onPick) }, Modifier.fillMaxWidth(),
-                    kind = SwButtonKind.Main, enabled = can && ui.selected != null,
-                )
             }
         }
     }
@@ -292,7 +286,7 @@ private fun SlotRow(slot: AmsSlot, units: List<AmsUnit>, enabled: Boolean, selec
     val empty = PrinterHelp.slotEmpty(slot) && !(waiting && swatchColor(hex) != null)
     Row(
         Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).let {
-            // with Automatic offered the rows are a choice, and Next goes on with it
+            // with Automatic offered the rows sit in one list with it: a radio each, a tap goes on
             if (selected == null) it.clickable(enabled = enabled, onClick = onClick)
             else it.selectable(selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
         },

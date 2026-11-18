@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -512,6 +513,36 @@ class SpoolScreenSemanticsTest {
             ),
             listOf("AMS A"),
         )
+    }
+
+    @Test fun loadSlotsStepWithAutomaticIsOneListAndATapGoesOn() {
+        SpoolCache.clear()
+        val autoX1 = x1.copy(autoPossible = true)
+        val picks = mutableListOf<String>()
+        fun open() {
+            val vm = LoadSlotsViewModel("X1A", FakeLoad(listOf(autoX1), PrinterDetail(autoX1, status), plan))
+            host("Load into a printer") {
+                LoadSlotsScreen(vm, polymaker.toSpoolSummary(), skipped = true, onPick = { picks += it }, onPairAgain = {})
+            }
+        }
+        open()
+        rule.waitForIdle()
+        rule.onNodeWithText("Automatic").assertIsSelected()
+        assertTrue("no Next: a tap on a row goes on", rule.onAllNodesWithText("Next").fetchSemanticsNodes().isEmpty())
+        rule.onNodeWithText("Automatic").performClick()
+        rule.onNodeWithText("A1").performClick()
+        assertEquals(listOf(AUTO_SLOT, "A1"), picks)
+    }
+
+    @Test fun loadSlotsStepWithoutAutomaticOffersNoAutomaticRow() {
+        SpoolCache.clear()
+        val vm = LoadSlotsViewModel("X1A", FakeLoad(listOf(x1), PrinterDetail(x1, status), plan))
+        var picked: String? = null
+        host("Load into a printer") { LoadSlotsScreen(vm, polymaker.toSpoolSummary(), skipped = true, onPick = { picked = it }, onPairAgain = {}) }
+        rule.waitForIdle()
+        assertTrue(rule.onAllNodesWithText("Automatic").fetchSemanticsNodes().isEmpty())
+        rule.onNodeWithText("A1").performClick()
+        assertEquals("A1", picked)
     }
 
     @Test fun loadSlotsStepWithAPrinterProblem() {

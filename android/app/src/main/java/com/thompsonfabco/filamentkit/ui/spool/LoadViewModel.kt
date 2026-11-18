@@ -134,7 +134,7 @@ data class LoadSlotsUi(
     val loading: Boolean = true,
     val failure: HubFailure? = null,
     val loadedAt: Long? = null,
-    /** The choice the step stands on: [AUTO_SLOT] when Automatic is offered and nothing else was picked, else a slot's label. */
+    /** The choice the list opens on: [AUTO_SLOT] when Automatic is offered, else none. A tap on any row goes on at once. */
     val selected: String? = null,
 ) {
     /** Automatic is offered first (the printer says Auto is possible). */
@@ -149,9 +149,6 @@ class LoadSlotsViewModel(private val printerId: String, private val backend: Loa
         load()
     }
 
-    /** The step's choice moves to [label] (Automatic or a slot); Next then goes on with it. */
-    fun select(label: String) = _state.update { it.copy(selected = label) }
-
     fun load() {
         _state.update { it.copy(loading = true, failure = null) }
         viewModelScope.launch {
@@ -162,9 +159,7 @@ class LoadSlotsViewModel(private val printerId: String, private val backend: Loa
                 _state.update {
                     LoadSlotsUi(
                         d.printer, units, slots, loading = false, loadedAt = System.currentTimeMillis(),
-                        // a reload keeps what the person picked, if it is still a choice
-                        selected = it.selected?.takeIf { pick -> isAuto(pick) && autoOffered(d.printer) || slots.any { s -> s.label == pick } }
-                            ?: preselected(d.printer),
+                        selected = preselected(d.printer),
                     )
                 }
             } catch (e: CancellationException) {
