@@ -6,10 +6,12 @@ import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.AutoLoadResult
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.LoadResult
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
+import com.thompsonfabco.filamentkit.net.autoText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,12 +25,18 @@ interface LoadBackend {
     suspend fun printer(id: String): PrinterDetail
     suspend fun load(id: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult
 
+    /** Auto (A6); a backend without it answers like a Hub that has none (404). */
+    suspend fun autoLoad(id: String, spoolId: Int, dryRun: Boolean): AutoLoadResult =
+        throw ApiError(404, "not_found", "The Hub has no Auto.")
+
     companion object {
         fun of(current: () -> Api): LoadBackend = object : LoadBackend {
             override suspend fun printers() = current().printers()
             override suspend fun printer(id: String) = current().printer(id)
             override suspend fun load(id: String, label: String, spoolId: Int, dryRun: Boolean) =
                 current().load(id, label, spoolId, dryRun)
+            override suspend fun autoLoad(id: String, spoolId: Int, dryRun: Boolean) =
+                current().autoLoad(id, spoolId, dryRun)
         }
     }
 }
@@ -57,6 +65,29 @@ internal fun loadResult(r: LoadResult, printer: String, label: String): SpoolRes
     r.confirmed -> SpoolResult.Loaded(printer, label)
     else -> SpoolResult.LoadedUnconfirmed(printer, label)
 }
+
+/** The slot label Auto travels as, through the load steps' routes; `auto` is reserved on the Hub (A6). */
+const val AUTO_SLOT = "auto"
+
+internal fun isAuto(label: String): Boolean = label.equals(AUTO_SLOT, ignoreCase = true)
+
+/** Automatic is the slot step's first choice only on a printer the Hub says can do it; any other printer is as before. */
+internal fun autoOffered(printer: Printer?): Boolean = printer?.autoPossible == true
+
+/** The slot the step starts on: Automatic when it is offered (A5), else none (a slot is tapped). */
+internal fun preselected(printer: Printer?): String? = AUTO_SLOT.takeIf { autoOffered(printer) }
+
+/** What the Hub's refusal of an Auto says: its own `text`, else the ruled sentence (A6). */
+internal fun autoRefusal(e: ApiError): String = e.autoText ?: LoadTexts.AUTO_REFUSED
+
+/** An Auto call's failure: the refusal (409 `auto_not_possible`) in words, anything else as every load failure. */
+internal fun autoFailure(e: Throwable): HubFailure =
+    if (e is ApiError && e.code == AUTO_NOT_POSSIBLE) HubFailure.Message(autoRefusal(e)) else hubFailure(e)
+
+private const val AUTO_NOT_POSSIBLE = "auto_not_possible"
+
+/** How a spool is named in a sentence: its brand and name, else its number. */
+internal fun spoolWords(spool: SpoolSummary): String = spool.title.ifBlank { "Spool #${spool.id}" }
 
 /** The printers that can take a load now: set up and connected (05 7.6). */
 internal fun canTakeLoad(p: Printer): Boolean = p.configured && p.state == Printer.STATE_CONNECTED
@@ -103,7 +134,12 @@ data class LoadSlotsUi(
     val loading: Boolean = true,
     val failure: HubFailure? = null,
     val loadedAt: Long? = null,
-)
+    /** The choice the step stands on: [AUTO_SLOT] when Automatic is offered and nothing else was picked, else a slot's label. */
+    val selected: String? = null,
+) {
+    /** Automatic is offered first (the printer says Auto is possible). */
+    val auto: Boolean get() = autoOffered(printer)
+}
 
 class LoadSlotsViewModel(private val printerId: String, private val backend: LoadBackend) : ViewModel() {
     private val _state = MutableStateFlow(LoadSlotsUi())
@@ -113,6 +149,9 @@ class LoadSlotsViewModel(private val printerId: String, private val backend: Loa
         load()
     }
 
+    /** The step's choice moves to [label] (Automatic or a slot); Next then goes on with it. */
+    fun select(label: String) = _state.update { it.copy(selected = label) }
+
     fun load() {
         _state.update { it.copy(loading = true, failure = null) }
         viewModelScope.launch {
@@ -120,7 +159,14 @@ class LoadSlotsViewModel(private val printerId: String, private val backend: Loa
                 val d = backend.printer(printerId)
                 val units = d.status?.ams.orEmpty()
                 val slots = units.flatMap { it.slots }.filter { it.label.isNotBlank() }
-                _state.update { LoadSlotsUi(d.printer, units, slots, loading = false, loadedAt = System.currentTimeMillis()) }
+                _state.update {
+                    LoadSlotsUi(
+                        d.printer, units, slots, loading = false, loadedAt = System.currentTimeMillis(),
+                        // a reload keeps what the person picked, if it is still a choice
+                        selected = it.selected?.takeIf { pick -> isAuto(pick) && autoOffered(d.printer) || slots.any { s -> s.label == pick } }
+                            ?: preselected(d.printer),
+                    )
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -139,6 +185,8 @@ data class LoadPreviewUi(
     val units: List<AmsUnit> = emptyList(),
     val checking: Boolean = true,
     val plan: LoadResult? = null,
+    /** The dry run of an Auto load ([AUTO_SLOT]): the slots watched and the spool it replaces; [plan] stays null then. */
+    val autoPlan: AutoLoadResult? = null,
     val writing: Boolean = false,
     val failure: HubFailure? = null,
     val pairingRefused: Boolean = false,
@@ -146,11 +194,14 @@ data class LoadPreviewUi(
     /** [failure] came from the write: the Hub refused it, so it is shown with no Try again (05 7.6). */
     val failedWrite: Boolean = false,
     val finished: SpoolResult? = null,
-)
+) {
+    /** The Hub's preview is here, whichever kind of load it is for. */
+    val ready: Boolean get() = plan != null || autoPlan != null
+}
 
 /**
- * The preview of loading [spool] into slot [label] of printer [printerId], asked for when it is made, and the load
- * itself. The write is not stopped by leaving the screen: Back waits for its answer ([writing], [gate]).
+ * The preview of loading [spool] into slot [label] of printer [printerId] (any slot when [label] is [AUTO_SLOT]), asked
+ * for when it is made, and the load itself. The write is not stopped by leaving the screen: Back waits for its answer ([writing], [gate]).
  */
 class LoadPreviewViewModel(
     private val spool: SpoolSummary,
@@ -171,17 +222,19 @@ class LoadPreviewViewModel(
         viewModelScope.launch {
             try {
                 val d = backend.printer(printerId)
-                val plan = backend.load(printerId, label, spool.id, dryRun = true)
+                val auto = isAuto(label)
+                val plan = if (auto) null else backend.load(printerId, label, spool.id, dryRun = true)
+                val autoPlan = if (auto) backend.autoLoad(printerId, spool.id, dryRun = true) else null
                 _state.update {
                     it.copy(
-                        printer = d.printer, units = d.status?.ams.orEmpty(), checking = false, plan = plan,
+                        printer = d.printer, units = d.status?.ams.orEmpty(), checking = false, plan = plan, autoPlan = autoPlan,
                         failure = it.failure.afterSuccess(),
                     )
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(checking = false, failure = hubFailure(e)) }
+                _state.update { it.copy(checking = false, failure = autoFailure(e)) }
             }
         }
     }
@@ -190,15 +243,20 @@ class LoadPreviewViewModel(
     fun load() {
         val s = _state.value
         val printer = s.printer ?: return
-        if (s.writing || s.checking || s.plan == null) return
+        if (s.writing || s.checking || !s.ready) return
         gate.set(true)
         _state.update { it.copy(writing = true, failure = null, failedWrite = false, pairingRefused = false, dropped = false) }
         viewModelScope.launch {
             try {
-                val r = backend.load(printerId, label, spool.id, dryRun = false)
-                val result = loadResult(r, printer.name, label)
-                // the spool as the Hub has it now, for the spool screen that is shown next
-                r.spool.asSummary()?.let(SpoolCache::put)
+                val result = if (isAuto(label)) {
+                    backend.autoLoad(printerId, spool.id, dryRun = false)
+                    SpoolResult.Waiting(printer.name, AUTO_SLOT, spoolWords(spool))
+                } else {
+                    val r = backend.load(printerId, label, spool.id, dryRun = false)
+                    // the spool as the Hub has it now, for the spool screen that is shown next
+                    r.spool.asSummary()?.let(SpoolCache::put)
+                    loadResult(r, printer.name, label)
+                }
                 _state.update { it.copy(writing = false, finished = result) }
             } catch (e: CancellationException) {
                 throw e
@@ -211,7 +269,7 @@ class LoadPreviewViewModel(
                         e.code == UNAUTHORIZED -> it.copy(writing = false, pairingRefused = true)
                         // no route: the request may or may not have reached the printer
                         e.status == 0 -> it.copy(writing = false, dropped = true)
-                        else -> hubFailure(e).let { f ->
+                        else -> autoFailure(e).let { f ->
                             // an answer the app cannot read: nobody knows if it worked, so the load is not offered again
                             if (f == HubFailure.Unexpected) it.copy(writing = false, dropped = true)
                             else it.copy(writing = false, failure = f, failedWrite = true)

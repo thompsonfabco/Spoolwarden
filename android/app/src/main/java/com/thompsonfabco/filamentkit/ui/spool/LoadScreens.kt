@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -24,12 +26,14 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
+import com.thompsonfabco.filamentkit.net.AutoLoadResult
 import com.thompsonfabco.filamentkit.net.LoadResult
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.ui.ColorSwatch
@@ -229,6 +233,14 @@ fun LoadSlotsScreen(
             },
         ) {
             val can = printer?.let(::canTakeLoad) == true
+            // Automatic first and chosen, on a printer the Hub can watch (A5); a slot is picked as before, then Next
+            if (ui.auto) {
+                SpoolPanel {
+                    ChoiceRow(
+                        LoadTexts.AUTOMATIC, LoadTexts.AUTOMATIC_HINT, selected = isAuto(ui.selected.orEmpty()), enabled = can,
+                    ) { vm.select(AUTO_SLOT) }
+                }
+            }
             ui.units.filter { u -> u.slots.any { it.label.isNotBlank() } }.forEach { unit ->
                 Text(
                     PrinterHelp.unitTitle(unit), Modifier.semantics { heading() },
@@ -237,16 +249,41 @@ fun LoadSlotsScreen(
                 SpoolPanel {
                     unit.slots.filter { it.label.isNotBlank() }.forEachIndexed { i, slot ->
                         if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
-                        SlotRow(slot, ui.units, can) { onPick(slot.label) }
+                        if (ui.auto) SlotRow(slot, ui.units, can, selected = ui.selected == slot.label) { vm.select(slot.label) }
+                        else SlotRow(slot, ui.units, can) { onPick(slot.label) }
                     }
                 }
+            }
+            if (ui.auto) {
+                SwButton(
+                    stringResource(R.string.common_next), { ui.selected?.let(onPick) }, Modifier.fillMaxWidth(),
+                    kind = SwButtonKind.Main, enabled = can && ui.selected != null,
+                )
             }
         }
     }
 }
 
+/** A choice of the slot step that is not a slot of the printer: a radio row with its hint. */
 @Composable
-private fun SlotRow(slot: AmsSlot, units: List<AmsUnit>, enabled: Boolean, onClick: () -> Unit) {
+private fun ChoiceRow(title: String, hint: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row)
+            .selectable(selected, enabled = enabled, role = Role.RadioButton, onClick = onClick),
+        horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected, onClick = null, enabled = enabled)
+        Column(Modifier.weight(1f).padding(vertical = space.s2)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = if (enabled) colors.text else colors.muted)
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = colors.muted)
+        }
+    }
+}
+
+@Composable
+private fun SlotRow(slot: AmsSlot, units: List<AmsUnit>, enabled: Boolean, selected: Boolean? = null, onClick: () -> Unit) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     val waiting = PrinterHelp.slotWaiting(slot)
@@ -254,9 +291,14 @@ private fun SlotRow(slot: AmsSlot, units: List<AmsUnit>, enabled: Boolean, onCli
     // a waiting slot keeps its spool's colour when it is known, with the clock mark of the printers list
     val empty = PrinterHelp.slotEmpty(slot) && !(waiting && swatchColor(hex) != null)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(enabled = enabled, onClick = onClick),
+        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).let {
+            // with Automatic offered the rows are a choice, and Next goes on with it
+            if (selected == null) it.clickable(enabled = enabled, onClick = onClick)
+            else it.selectable(selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+        },
         horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (selected != null) RadioButton(selected, onClick = null, enabled = enabled)
         Text(
             PrinterHelp.slotLabel(slot, units), Modifier.widthIn(min = SpoolwardenTheme.sizes.slotLabel),
             style = SpoolwardenTheme.type.data, color = if (enabled) colors.text else colors.muted,
@@ -264,7 +306,20 @@ private fun SlotRow(slot: AmsSlot, units: List<AmsUnit>, enabled: Boolean, onCli
         ColorSwatch(hex, empty = empty)
         if (waiting) WaitingMark()
         Text(slotLine(slot), Modifier.weight(1f).padding(vertical = space.s2), style = MaterialTheme.typography.bodyMedium, color = if (enabled) colors.text else colors.muted)
-        if (enabled) SwIcon(R.drawable.sw_ic_chevron, null, tint = colors.muted)
+        if (enabled && selected == null) SwIcon(R.drawable.sw_ic_chevron, null, tint = colors.muted)
+    }
+}
+
+/** The rows of the Hub's preview of an Auto load: the hint and, when another spool was waiting, that it is replaced. */
+@Composable
+private fun AutoPlanRows(plan: AutoLoadResult) {
+    val replaced = plan.replaces?.let { LoadTexts.replaces(it.name.ifBlank { "Spool #${it.spoolId ?: "?"}" }) }
+    val lines = listOfNotNull(LoadTexts.AUTOMATIC_HINT, replaced)
+    SpoolPanel {
+        lines.forEachIndexed { i, line ->
+            if (i > 0) HorizontalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
+            Text(line, Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).padding(vertical = SpoolwardenTheme.space.s3), style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
 
@@ -331,12 +386,14 @@ fun LoadPreviewScreen(
     LaunchedEffect(ui.finished) { ui.finished?.let { finished(it) } }
     LoadPage(spool, modifier) {
         val printer = ui.printer
-        if (printer != null) Header(stringResource(R.string.spool_load_confirm_title, printer.name, slot))
+        if (printer != null) {
+            Header(if (isAuto(slot)) LoadTexts.autoTitle(printer.name) else stringResource(R.string.spool_load_confirm_title, printer.name, slot))
+        }
         if (ui.checking) Text(stringResource(R.string.common_checking), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
         HubNoticeOf(ui.failure, onPairAgain)
         // the states every Hub screen has (05 3.2); Try again asks the preview again, or sends the load again
         ScreenState(
-            loaded = ui.plan != null,
+            loaded = ui.ready,
             loading = ui.checking,
             // a refused or unknown write is never offered again as Try again (05 7.6)
             error = ui.failure?.takeIf { !ui.failedWrite }?.let { hubFailureText(it) },
@@ -347,6 +404,7 @@ fun LoadPreviewScreen(
                 PlanRows(plan)
                 Text(stringResource(R.string.spool_load_confirm_text), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
             }
+            ui.autoPlan?.let { AutoPlanRows(it) }
         }
         if (ui.failedWrite) ui.failure?.let { f -> hubFailureText(f)?.let { NoticeCard(NoticeKind.Bad, it) } }
         if (ui.pairingRefused) NoticeCard(NoticeKind.Bad, stringResource(R.string.spool_load_pairing_refused))
@@ -363,7 +421,7 @@ fun LoadPreviewScreen(
             SwButton(stringResource(R.string.common_back), onBack, enabled = !ui.writing)
             SwButton(
                 stringResource(if (ui.writing) R.string.spool_load_loading else R.string.common_load), vm::load,
-                kind = SwButtonKind.Main, enabled = ui.plan != null && !ui.checking && !ui.dropped, busy = ui.writing,
+                kind = SwButtonKind.Main, enabled = ui.ready && !ui.checking && !ui.dropped, busy = ui.writing,
             )
         }
     }

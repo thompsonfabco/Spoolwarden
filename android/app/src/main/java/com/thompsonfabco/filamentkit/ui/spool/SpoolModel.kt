@@ -174,7 +174,7 @@ sealed interface SpoolResult {
     data class LoadedUnconfirmed(val printer: String, val slot: String) : SpoolResult
 
     /** The Hub assigned the spool to the slot and it waits for the slot to load (`pending: true`, R83 section 3.5). */
-    data class Waiting(val printer: String, val slot: String) : SpoolResult
+    data class Waiting(val printer: String, val slot: String, val spool: String = "") : SpoolResult
 
     /** The result as one text, to hand it to the spool screen through its saved state or its route. */
     fun encode(): String = when (this) {
@@ -185,7 +185,7 @@ sealed interface SpoolResult {
         TagMoved -> listOf(TAG_MOVED)
         is Loaded -> listOf(LOADED, printer, slot)
         is LoadedUnconfirmed -> listOf(UNCONFIRMED, printer, slot)
-        is Waiting -> listOf(WAITING, printer, slot)
+        is Waiting -> listOfNotNull(WAITING, printer, slot, spool.ifBlank { null })
     }.joinToString(SEPARATOR)
 
     companion object {
@@ -211,6 +211,7 @@ sealed interface SpoolResult {
                 p[0] == LOADED && p.size == 3 -> Loaded(p[1], p[2])
                 p[0] == UNCONFIRMED && p.size == 3 -> LoadedUnconfirmed(p[1], p[2])
                 p[0] == WAITING && p.size == 3 -> Waiting(p[1], p[2])
+                p[0] == WAITING && p.size == 4 -> Waiting(p[1], p[2], p[3])
                 else -> null
             }
         }
