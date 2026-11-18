@@ -248,6 +248,7 @@ fun PrinterScreen(
             offline = false,
         ) {
             if (printer == null) return@ScreenState
+            AutoNotice(printer, state, viewModel)
             StatusPanel(printer, state, viewModel)
             CameraPanel(printer, camera, visible, cameraShown, onCameraShown, onPairAgain)
             SlotsPanel(printer, state, onSlot = { sheetSlot = it.label })
@@ -296,6 +297,21 @@ private fun Overflow(onSettings: () -> Unit, onReport: () -> Unit, onRefresh: ()
 }
 
 // --- status ---
+
+/**
+ * The one notice of an Auto assignment on this printer (A4): what it waits for with Stop waiting, or, when two slots were
+ * loaded, the question with the slots to choose from. Nothing when no Auto is waiting.
+ */
+@Composable
+private fun AutoNotice(printer: Printer, state: PrinterUiState, viewModel: PrinterViewModel) {
+    val auto = state.auto ?: return
+    val notice = PrinterTexts.autoNotice(auto, printer.name)
+    val stop = SwAction(PrinterTexts.STOP_WAITING) { if (!state.autoBusy) viewModel.stopWaiting() }
+    NoticeCard(
+        NoticeKind.Info, notice.text,
+        actions = notice.choices.map { label -> SwAction(label) { if (!state.autoBusy) viewModel.chooseAutoSlot(label) } } + stop,
+    )
+}
 
 /** The panel under the top bar: the state, the progress of a print, temperatures, alerts and the controls. */
 @OptIn(ExperimentalLayoutApi::class)

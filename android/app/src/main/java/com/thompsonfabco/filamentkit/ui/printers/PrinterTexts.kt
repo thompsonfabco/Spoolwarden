@@ -1,5 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
+import com.thompsonfabco.filamentkit.net.AutoWait
+import com.thompsonfabco.filamentkit.ui.spool.LoadTexts
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -48,6 +50,28 @@ object PrinterTexts {
     }
 
     fun clearTitle(label: String): String = "Clear slot $label?"
+
+    /** The Auto notice's button (A4); proposed key `printer_auto_stop`. */
+    const val STOP_WAITING = "Stop waiting"
+
+    /** The Auto in the state `choose` (A4); proposed key `printer_auto_choose`. */
+    fun autoChoose(spool: String): String = "Two slots were loaded. Which one got $spool?"
+
+    /** A spool as the Auto notice names it: its name, else its number, else "the spool". */
+    fun autoSpool(auto: AutoWait): String =
+        auto.spool?.name?.ifBlank { null } ?: (auto.spoolId ?: auto.spool?.id)?.let { "Spool #$it" } ?: "the spool"
+
+    /**
+     * The one notice an Auto assignment makes on the printer's screen (A4): [text] (waiting, or the question when two slots
+     * were loaded) and, in that second state, the [choices] to press (the slots' labels).
+     */
+    data class AutoNotice(val text: String, val choices: List<String>)
+
+    fun autoNotice(auto: AutoWait, printer: String): AutoNotice {
+        val spool = autoSpool(auto)
+        return if (auto.choosing) AutoNotice(autoChoose(spool), auto.slots)
+        else AutoNotice(LoadTexts.waitingAuto(spool, printer), emptyList())
+    }
 
     /**
      * The sentence for the question and the result: the Hub's own [hubText] when it gives one, else the app's own on a

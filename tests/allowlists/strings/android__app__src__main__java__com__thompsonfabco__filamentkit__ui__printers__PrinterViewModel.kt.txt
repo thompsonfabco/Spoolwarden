@@ -26,6 +26,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | Slot mapping or a load is in progress on this printer. Try again in a moment. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | The Hub cannot reach the printer. Check that the printer is turned on and connected to  | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | The Hub does not know this printer. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | The Hub has no Auto. | text of the Auto slot (AS4); moves to the string catalogue with AS2, its proposed key is in the contract requests
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | The Hub has no camera view for this printer. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | The camera could not be shown right now. Leave this screen and come back to try again. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | The camera did not start. Check that the printer is on and that LAN Mode Liveview  | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
@@ -49,6 +50,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | already_undone | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | ams_ht | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | api_key | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | auto_not_possible | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | bambu | Hub identifier (printer family), not a text (EV7b)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | camera_unavailable | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | cert_changed | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
@@ -71,6 +73,8 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | no_reply | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | not_configured | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | not_found | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | not_waiting | wire key, route or value of the Auto slot (AS4), not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | nothing_to_choose | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | nothing_to_undo | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | offline | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | ok | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
