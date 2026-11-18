@@ -704,7 +704,7 @@ class PrinterViewModelTest {
         )
         assertEquals("Clear slot A1? The Hub forgets the spool recorded here.", PrinterTexts.clearQuestion("A1", null, null))
         assertEquals(
-            "Clear slot A1? The Hub forgets the spool recorded here. Spool #7 goes back to its previous place.",
+            "Clear slot A1? The Hub forgets the spool recorded here. Spool 7 goes back to its previous place.",
             PrinterTexts.clearQuestion("A1", PrinterTexts.spoolName(buildJsonObject { put("id", 7) }), " "),
         )
         assertEquals("Cleared slot A1.", PrinterTexts.clearDone("A1", null, null, waitingEnded = false, printerCleared = false))

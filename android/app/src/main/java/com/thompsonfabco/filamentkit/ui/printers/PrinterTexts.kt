@@ -111,6 +111,6 @@ object PrinterTexts {
         val named = listOfNotNull(text("vendor"), text("name")).joinToString(" ")
         if (named.isNotBlank()) return named
         val id = (view["id"] as? JsonPrimitive)?.let { it.intOrNull?.toString() ?: it.contentOrNull }
-        return if (id.isNullOrBlank()) "The spool" else "Spool #$id"
+        return if (id.isNullOrBlank()) "The spool" else "Spool $id"
     }
 }
