@@ -124,6 +124,12 @@ class LoadAutoTest {
         assertEquals("it survives the spool screen's saved state", result, SpoolResult.decode(result.encode()))
     }
 
+    @Test fun aReplacedSpoolWithoutANameOrNumberIsTheSpool() {
+        assertEquals("Acme PLA", LoadTexts.replacedName("Acme PLA", 7))
+        assertEquals("Spool 7", LoadTexts.replacedName("", 7))
+        assertEquals("Replaces the spool, which was waiting.", LoadTexts.replaces(LoadTexts.replacedName("", null)))
+    }
+
     @Test fun theShortAutoTextIsTheToastsAndTheFallbacksHaveNoHash() {
         assertEquals("Waiting for the spool to be loaded.", LoadTexts.waitingIn(AUTO_SLOT))
         assertEquals("Spool 214", spoolWords(spool.copy(brand = "", name = "")))

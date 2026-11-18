@@ -307,7 +307,7 @@ private fun SlotRow(slot: AmsSlot, units: List<AmsUnit>, enabled: Boolean, selec
 /** The rows of the Hub's preview of an Auto load: the hint and, when another spool was waiting, that it is replaced. */
 @Composable
 private fun AutoPlanRows(plan: AutoLoadResult) {
-    val replaced = plan.replaces?.let { LoadTexts.replaces(it.name.ifBlank { "Spool ${it.spoolId ?: "?"}" }) }
+    val replaced = plan.replaces?.let { LoadTexts.replaces(LoadTexts.replacedName(it.name, it.spoolId)) }
     val lines = listOfNotNull(LoadTexts.AUTOMATIC_HINT, replaced)
     SpoolPanel {
         lines.forEachIndexed { i, line ->

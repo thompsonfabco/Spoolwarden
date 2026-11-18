@@ -24,6 +24,10 @@ object LoadTexts {
     /** The dry run's line when another spool was waiting (A4); `spool_load_auto_replaces`. */
     fun replaces(spool: String): String = "Replaces $spool, which was waiting."
 
+    /** The waiting spool the dry run names: its name, else its number, else "the spool". */
+    fun replacedName(name: String, id: Int?): String =
+        name.ifBlank { if (id != null) "Spool $id" else "the spool" }
+
     /** The notice and the load result of an Auto that waits (A4); `printer_auto_waiting`. */
     fun waitingAuto(spool: String, printer: String): String = "Waiting for $spool to be loaded into any slot of $printer."
 
