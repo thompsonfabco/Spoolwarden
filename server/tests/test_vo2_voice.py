@@ -374,6 +374,33 @@ def test_a_broken_file_is_kept_aside_and_never_overwritten():
     assert any("voice.xml" in p for p in statexml.problems())
 
 
+# ---- a passing read error is not a broken file (R626/R629) ----
+
+def test_a_transient_read_error_leaves_a_good_file_in_place(monkeypatch):
+    voice_state.save({"speed": 80}, _cfg())
+    f = _file()
+    good = f.read_bytes()
+    real = voice_state._read
+
+    def blip():
+        raise PermissionError(13, "a passing blip")
+    monkeypatch.setattr(voice_state, "_read", blip)
+    assert voice_state.stored(_cfg()) == {}                      # no value for that read
+    assert voice_state.save({"volume": 10}, _cfg()) is False     # nothing written over the good file
+    assert f.read_bytes() == good and not (f.parent / "voice.xml.unreadable").exists()
+    monkeypatch.setattr(voice_state, "_read", real)
+    assert voice_state.stored(_cfg()) == {"speed": 80}           # the next read succeeds
+
+
+def test_a_schema_broken_file_is_still_kept_aside():
+    f = _file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(b'<other speed="80"/>')
+    assert voice_state.save({"speed": 90}, _cfg()) is True
+    assert (f.parent / "voice.xml.unreadable").read_bytes() == b'<other speed="80"/>'
+    assert voice_state.stored(_cfg()) == {"speed": 90}
+
+
 def test_the_real_router_mounts_the_voice_routes_and_writes_voice_xml(app, station):  # noqa: F811
     cfg = config.load()
     cfg["station"]["url"] = "http://127.0.0.1:5003"
