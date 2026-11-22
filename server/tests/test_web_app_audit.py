@@ -781,14 +781,14 @@ READY = {
     "read_limit": r"""
   await waitPage(); stub('read', () => reply({ error: "Today's label reads on the Hub are used up." }, 429)); await give(2);
   button('Read labels').click();
-  await until('the line', () => $('.add__read [data-state=bad]'));
+  await until('the line', () => $('.add__read [data-state=bad]') && text('.add__read [data-state=bad]'));
   need('the Hub text, then the way on', text('.add__read').includes("Today's label reads on the Hub are used up. Add by hand, or try again tomorrow."));
   need('the photos are kept', $$('.add__photo').length === 2);
 """,
     "read_failed": r"""
   await waitPage(); stub('read', () => reply({ error: 'The Label Reader did not answer.', read_id: null }, 502)); await give(2);
   button('Read labels').click();
-  await until('the line', () => $('.add__read [data-state=bad]'));
+  await until('the line', () => $('.add__read [data-state=bad]') && text('.add__read [data-state=bad]'));
   need('the Hub text, then the photos are kept, with Try again', text('.add__read').includes('The Label Reader did not answer. Your photos and edits are kept.') && button('Try again', $('.add__read')));
 """,
     "read_replace": r"""

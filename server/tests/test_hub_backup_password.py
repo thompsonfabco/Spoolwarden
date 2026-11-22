@@ -138,6 +138,7 @@ SW.setLock("unlocked", { code: "__CODE__" });
 await until(() => pane() && paneText().startsWith("A backup"), "the list read again");
 out.state = paneText();
 setPw("backup_password", "another password"); setPw("backup_password_again", "another password"); await press("Change the backup password");
+await until(() => paneResult(), "the result");
 out.changed = { sent: window.__hub.last, result: paneResult() };
 // Remove asks first: Cancel changes nothing
 await press("Remove the backup password");
@@ -151,6 +152,7 @@ dlg = await until(() => $("dialog[open]"), "the question");
 $('[data-action="confirm"]', dlg).click();
 await until(() => !window.__hub.set && !$("dialog[open]"), "the removal");
 await until(() => pane() && paneText().startsWith("No backup"), "the pane again");
+await until(() => paneResult(), "the removal result");
 out.removed = { state: paneText(), result: paneResult(), button: text(pane().querySelector("[type=submit]")), remove: !![...pane().querySelectorAll("button")].find((b) => text(b) === "Remove the backup password"),
                 oldWarning: OLD() };
 """)
@@ -207,6 +209,7 @@ const confirm = async () => { $('[data-action="confirm"]', dlg).click(); await s
 await confirm();                                               // nothing typed
 out.empty = text($(".field__error", field().closest(".field")));
 field().value = "wrong one"; await confirm();
+await until(() => text($(".dialog__result .result__text", dlg)), "the refusal");
 out.wrong = { result: text($(".dialog__result .result__text", dlg)), open: dlg.open, job: calls().includes("job"), focus: document.activeElement === field() };
 field().value = "right password"; await confirm();
 await until(() => !dlg.open, "the dialog to close");
