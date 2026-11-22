@@ -215,6 +215,70 @@ data class HistoryRecord(
     @Serializable(with = LenientDouble::class) val weight: Double? = null,
     val tag: String? = null,
     val revisions: List<HistoryRevision> = emptyList(),
+    /** Where the record's correction stands for Share corrections (null: an older Hub that has none). */
+    val share: RecordShare? = null,
+)
+
+/**
+ * A record's correction for Share corrections (`share` of a history record): [state] `waiting` (kept on the reader),
+ * `not_queued` (the reader did not take it; [reason] says why) or `none`; [entries]: how many items wait.
+ */
+@Serializable
+data class RecordShare(
+    val state: String = "none",
+    val reason: String? = null,
+    @Serializable(with = LenientInt::class) val entries: Int = 0,
+)
+
+/**
+ * `GET /api/intake/share-corrections` (Hub stage V1.2): the Hub's setting ([saved]), the reader's own ([actual], null when
+ * it does not say), whether they differ and how many corrections wait ([count], null when unknown). [reason] is why the
+ * setting cannot work now: `off`, `not_installed`, `too_old` or `no_answer`.
+ */
+@Serializable
+data class ShareState(
+    val saved: Boolean = false,
+    val actual: Boolean? = null,
+    val differs: Boolean = false,
+    @Serializable(with = LenientNullableInt::class) val count: Int? = null,
+    val reason: String? = null,
+) {
+    /** Corrections are being kept: the setting is on and nothing but a silent reader stops it (a silent one shows as "not queued"). */
+    val on: Boolean get() = saved && (reason == null || reason == "no_answer")
+}
+
+/** One correction waiting on the reader (`entries` of `GET /api/label-reader/corrections`; the reader's own summary). */
+@Serializable
+data class CorrectionEntry(
+    @Serializable(with = TextId::class) val id: String,
+    @SerialName("created_at") val createdAt: String = "",
+    val predicted: JsonObject = JsonObject(emptyMap()),
+    val corrected: JsonObject = JsonObject(emptyMap()),
+    @Serializable(with = LenientText::class) val note: String? = null,
+    @Serializable(with = LenientInt::class) val photos: Int = 0,
+    /** The Hub's record (or `<record>.<n>` for a later item of it). */
+    @Serializable(with = LenientText::class) val record: String? = null,
+    /** Which reader's reading was corrected: `local` or `cloud` (null: the reader did not say). */
+    @Serializable(with = LenientText::class) val source: String? = null,
+    @Serializable(with = LenientText::class) @SerialName("thumbnail_b64") val thumbnail: String? = null,
+)
+
+/** A record whose correction the reader did not take (not counted, not sent): [name], [at], and why. */
+@Serializable
+data class NotQueuedCorrection(
+    val record: String = "",
+    @Serializable(with = LenientText::class) val at: String? = null,
+    @Serializable(with = LenientText::class) val name: String? = null,
+    val reason: String = "",
+)
+
+/** `GET /api/label-reader/corrections`: what waits on the reader, its size in [bytes] and the records it did not take. */
+data class CorrectionsWaiting(
+    val optIn: Boolean,
+    val count: Int,
+    val bytes: Long,
+    val entries: List<CorrectionEntry>,
+    val notQueued: List<NotQueuedCorrection>,
 )
 
 /** `POST .../revise`: the AI's proposal for [item], nothing written yet. [changes] are the fields that differ. */
