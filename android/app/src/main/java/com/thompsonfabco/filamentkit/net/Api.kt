@@ -333,6 +333,23 @@ class Api(
 
     suspend fun lowSpools(): LowSpools = AlertParsing.lowSpools(call(request("api", "spools", "low").get()))
 
+    /** The Weigh Station's voice (R88); a Hub without it answers 404, and `station: false` means no Weigh Station. */
+    suspend fun voice(): VoiceSettings = VoiceParsing.settings(call(request("api", "voice").get()))
+
+    /** Saves the given keys of `speech`, `speaker`, `speed` and `volume`; the answer is the values now in force. */
+    suspend fun patchVoice(changes: JsonObject): VoiceSettings =
+        VoiceParsing.settings(call(request("api", "voice").patch(changes.toBody())))
+
+    /** The Weigh Station says its one test sentence; 409 `busy` and `off` and 502 `no_answer` carry the Hub's sentence. */
+    suspend fun testVoice(speaker: Int?, speed: Int?, volume: Int?) {
+        val body = buildJsonObject {
+            speaker?.let { put("speaker", it) }
+            speed?.let { put("speed", it) }
+            volume?.let { put("volume", it) }
+        }
+        call(request("api", "voice", "test").post(body.toBody()))
+    }
+
     /** Spoolman's filaments (also ones without spools) whose vendor, name or material hold every word of [q]. */
     suspend fun filaments(q: String): List<FilamentChoice> {
         val req = request("api", "filaments") { if (q.isNotBlank()) addQueryParameter("q", q.trim()) }

@@ -153,6 +153,8 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | size | not 
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | skip | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | slot | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | slots | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | speaker | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | speed | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | spool | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | spool_id | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | spool_ids | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
@@ -181,4 +183,6 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | values | li
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | vendor | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | vendors | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | view | not text: a route, JSON field or wire value of checked-out spools (CO6, R88 1.7)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | voice | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | volume | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | wait | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
