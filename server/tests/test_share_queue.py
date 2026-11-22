@@ -297,7 +297,7 @@ def test_an_old_share_json_is_read_and_moved_once_and_left_as_it_was(sm):
     assert (d / "share.xml").is_file() and (d / "share.json").read_text(encoding="utf-8") == old
     assert share_queue.entry_records() == {"fb-3": hid}
     (d / "share.json").write_text(json.dumps({"entries": {}, "failed": None}), encoding="utf-8")
-    assert share_queue.state(hid)["entries"] == 1                 # the XML form wins from then on
+    assert share_queue.state(hid)["entries"] == 0                 # an older release emptied it: its change wins once
 
 
 def test_a_damaged_share_xml_never_raises_is_not_overwritten_and_is_reported(sm, reader):

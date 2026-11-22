@@ -771,8 +771,10 @@ def test_an_old_current_json_is_read_and_moved_once_and_left_as_it_was():
     (lib / "current.json").write_text(old, encoding="utf-8")
     assert library._read_state("current.json") == {"dir": "7-x", "version": 7, "at": 1.0}
     assert (lib / "current.xml").is_file() and (lib / "current.json").read_text(encoding="utf-8") == old
-    (lib / "current.json").write_text("{}", encoding="utf-8")          # the XML form now wins
-    assert library._read_state("current.json")["version"] == 7
+    (lib / "current.json").write_text('{"dir": "6-x", "version": 6, "at": 2.0}', encoding="utf-8")   # an older release
+    assert library._read_state("current.json")["version"] == 6          # its change wins once ...
+    (lib / "current.json").write_text("{}", encoding="utf-8")
+    assert library._read_state("current.json")["version"] == 1          # ... and so does the next one (hash recorded each time)
 
 
 def test_a_damaged_current_xml_is_the_bundled_snapshot_not_a_crash():
@@ -783,14 +785,14 @@ def test_a_damaged_current_xml_is_the_bundled_snapshot_not_a_crash():
     assert any("current.xml" in p for p in statexml.problems())
 
 
-def test_an_old_local_entry_json_is_read_and_moved_to_xml_and_xml_wins():
+def test_an_old_local_entry_json_is_read_and_moved_to_xml_and_a_later_change_wins_once():
     d = config.paths().state / "library-local" / "acme"
     d.mkdir(parents=True)
     (d / "3d-pla.json").write_text(dumps(_local_entry("3D PLA")), encoding="utf-8")
     assert library.load().lookup("Acme", "3D PLA").local["product"] == "3D PLA"     # a name that starts with a digit
     assert (d / "3d-pla.xml").is_file() and (d / "3d-pla.json").is_file()
-    (d / "3d-pla.json").write_text(dumps(_local_entry("Other")), encoding="utf-8")
-    assert library.load().lookup("Acme", "3D PLA").local is not None            # the XML form wins
+    (d / "3d-pla.json").write_text(dumps({**_local_entry("3D PLA"), "material": "PETG"}), encoding="utf-8")
+    assert library.load().lookup("Acme", "3D PLA").local["material"] == "PETG"   # an older release's change wins once
     assert library.remove_local("acme--3d-pla") is True
     assert not list(d.parent.rglob("*.*"))
 

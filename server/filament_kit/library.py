@@ -512,26 +512,12 @@ def _local_damaged(xp: Path) -> bool:
 
 def _read_local(path: Path):
     """One of the owner's entries (given by its JSON name): the XML form, else the JSON form, which is moved to XML
-    once (the JSON file stays as it was). The root element is `entry` for every file: a product name may start with a
-    digit, which no element name can. An XML form that cannot be read is noted (`statexml.problems()`) and never
-    overwritten: the JSON form beside it is used, or the entry is skipped."""
+    once (the JSON file stays as it was); a JSON that v0.6.2 changed after a rollback wins once (statexml.read). The root
+    element is `entry` for every file: a product name may start with a digit, which no element name can. An XML form
+    that cannot be read is noted (`statexml.problems()`) and never overwritten: the JSON form beside it is used, or the
+    entry is skipped."""
     from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
-    xp = path.with_suffix(".xml")
-    try:
-        raw = xp.read_bytes()
-    except OSError:
-        raw = None
-    if raw is not None:
-        try:
-            e = statexml.loads(raw, "entry")
-            statexml.clear_problem(xp)
-            return e
-        except statexml.StateXmlError as err:
-            statexml.note_problem(xp, str(err))
-    e = _read_json(path)
-    if isinstance(e, dict) and raw is None:
-        statexml.migrate(path, e, tag="entry")
-    return e
+    return statexml.read(path, tag="entry")
 
 
 def _load_local() -> list[dict]:
@@ -795,8 +781,7 @@ def remove_local(entry_id: str) -> bool:
             return False
         if damaged:
             statexml.quarantine(path)             # an XML that cannot be read is kept aside, not deleted
-        for q in (xp, path):
-            q.unlink(missing_ok=True)
+        statexml.unlink(path)                     # the XML, the JSON and its hash
         try:
             path.parent.rmdir()
         except OSError:
