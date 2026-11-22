@@ -291,33 +291,53 @@ def _flocked(serial: str):
 
 
 def _load(path: Path, for_write: bool = False) -> dict:
-    """{'entries': [...], 'undone': [...]} of a month file. An unreadable one is logged once and noted
-    (statexml.problems()) and read as empty; before the next write it is kept as `<name>.unreadable`, never
-    overwritten, and the problem stays noted under that name."""
+    """{'entries': [...], 'undone': [...]} of a month file. One that parses as broken is logged once and noted
+    (statexml.problems()) and read as empty; before the next write it is kept as `<name>.unreadable` (`.1` ... `.4` when
+    older copies exist: none is replaced), never overwritten, and the problem stays noted under that name. A read that
+    fails (permission, I/O) is only noted and reads as empty: the file is a good one, it stays, and a write that needs
+    it fails instead of overwriting it."""
     empty = {'entries': [], 'undone': []}
     try:
         raw = path.read_bytes()
     except FileNotFoundError:
         return empty
-    except OSError as e:
+    except OSError as e:                # a passing read error: the file may be good, so it is not set aside
         reason = f"cannot read: {e.strerror or e}"
-        raw = None
-    if raw is not None:
-        try:
-            data = statexml.loads(raw, TAG)
-        except statexml.StateXmlError as e:
-            reason = str(e)
-        else:
-            _forget(path)
-            return {k: [x for x in data[k] if isinstance(x, dict)] if isinstance(data.get(k), list) else []
-                    for k in ('entries', 'undone')}
+        _report(path, reason)
+        if for_write:
+            raise OSError(f"cannot read {path.name} ({reason}); not written over it") from e
+        return empty
+    try:
+        data = statexml.loads(raw, TAG)
+    except statexml.StateXmlError as e:
+        reason = str(e)
+    else:
+        _forget(path)
+        return {k: [x for x in data[k] if isinstance(x, dict)] if isinstance(data.get(k), list) else []
+                for k in ('entries', 'undone')}
     _report(path, reason)
     if for_write and path.exists():
-        if not statexml.quarantine(path):
+        aside = _set_aside(path)
+        if aside is None:
             raise OSError(f"cannot keep the damaged {path.name} aside ({reason})")
         _forget(path)
-        _report(path.with_name(path.name + ".unreadable"), f"damaged ({reason}); kept aside, its entries are not shown")
+        _report(aside, f"damaged ({reason}); kept aside, its entries are not shown")
     return empty
+
+
+def _set_aside(path: Path) -> Path | None:
+    """Move a damaged file to `<name>.unreadable`, or `.unreadable.1` ... `.4` when that name is taken (an older copy is
+    never replaced). The new name, or None when it could not be moved or five copies are there already."""
+    for n in range(5):
+        dest = path.with_name(path.name + ".unreadable" + (f".{n}" if n else ""))
+        if dest.exists():
+            continue
+        try:
+            os.replace(path, dest)
+        except OSError:
+            return None
+        return dest
+    return None
 
 
 def _save(path: Path, data: dict) -> None:

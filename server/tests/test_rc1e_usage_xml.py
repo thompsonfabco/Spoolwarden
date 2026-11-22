@@ -648,3 +648,37 @@ def test_a_leftover_pending_file_is_noted_by_a_new_process_until_it_is_drained()
     assert not any("rollback" in p for p in statexml.problems())
     usage.entries(SERIAL, days=30)
     assert not any("rollback" in p for p in statexml.problems())
+
+
+def test_a_passing_read_error_leaves_the_good_month_file_in_place_and_noted(monkeypatch):
+    r = usage.append(SERIAL, {"job": "a"})
+    month = _dir() / "usage" / "2026-11.xml"
+    before = month.read_bytes()
+    real = Path.read_bytes
+
+    def denied(self):
+        if self.name == "2026-11.xml":
+            raise PermissionError(errno.EACCES, "Permission denied")
+        return real(self)
+    with monkeypatch.context() as m:
+        m.setattr(Path, "read_bytes", denied)
+        assert usage.entries(SERIAL, days=30) == []                  # no value for this call
+        assert any("2026-11.xml" in p and "cannot read" in p for p in statexml.problems())
+        with pytest.raises(OSError):                                 # a write must not go over the file it could not read
+            usage.append(SERIAL, {"job": "b"})
+    assert month.read_bytes() == before                              # was: moved aside to .unreadable and replaced
+    assert not list((_dir() / "usage").glob("*.unreadable*"))
+    assert [e["id"] for e in usage.entries(SERIAL, days=30)] == [r["id"]]
+    assert not any("2026-11.xml" in p for p in statexml.problems())
+
+
+def test_a_month_file_that_parses_as_broken_is_set_aside_and_older_copies_are_kept():
+    month = _dir() / "usage" / "2026-11.xml"
+    usage.append(SERIAL, {"job": "a"})
+    for i in range(3):
+        month.write_bytes(b"<usage version='1'>broken %d" % i)
+        usage.append(SERIAL, {"job": f"n{i}"})
+    names = sorted(p.name for p in month.parent.glob("2026-11.xml.unreadable*"))
+    assert names == ["2026-11.xml.unreadable", "2026-11.xml.unreadable.1", "2026-11.xml.unreadable.2"]
+    assert [(month.parent / n).read_bytes() for n in names] == [b"<usage version='1'>broken %d" % i for i in range(3)]
+    assert month.is_file() and len(usage.entries(SERIAL, days=30)) == 1
