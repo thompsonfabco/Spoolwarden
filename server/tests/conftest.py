@@ -18,6 +18,14 @@ def _restore_app_logger():
     log.handlers[:], log.level, log.propagate = saved
 
 
+@pytest.fixture
+def mountable(monkeypatch):
+    """The demo may be switched on (`demo.MOUNTABLE` is False in the product until the seal's leak lists are empty): a
+    test that calls `demo.start` takes this, so it runs the real start path."""
+    from filament_kit import demo
+    monkeypatch.setattr(demo, "MOUNTABLE", True)
+
+
 HOST_NAME = "workshop-hub"
 
 

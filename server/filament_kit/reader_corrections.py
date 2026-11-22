@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import time
 
-from . import local_reader, modules
+from . import demo, local_reader, modules
 
 NO_READER = ("The Label Reader: On this Hub is not on, so there are no corrections waiting. Turn it on in Features "
              "first.")
@@ -53,6 +53,8 @@ def _wrap(e: local_reader.LocalReaderError) -> CorrectionsError:
 
 def _ready(cfg: dict) -> dict:
     """The reader's capabilities when it is on, answers and has the correction queue: else the refusal that says which."""
+    if demo.is_on():
+        raise CorrectionsError(409, demo.NOT_IN_DEMO_CODE, demo.NOT_IN_DEMO)
     if "local_intake" not in modules.enabled(cfg):
         raise CorrectionsError(409, "no_reader", NO_READER)
     h = local_reader.health(cfg)
@@ -126,6 +128,8 @@ def not_queued() -> list[dict]:
 def retry(rid: str) -> dict:
     """Queue a record's correction again, now; its new share state ({state, reason, entries})."""
     from . import intake_history, share_queue
+    if demo.is_on():
+        raise CorrectionsError(409, demo.NOT_IN_DEMO_CODE, demo.NOT_IN_DEMO)
     try:
         intake_history._load(rid)
     except intake_history.HistoryError:

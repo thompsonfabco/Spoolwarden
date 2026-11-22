@@ -27,8 +27,12 @@ NOT_EMPTY = "The demo is for an empty Hub. This Hub has real data."
 NOT_IN_DEMO = "Not in the demo."
 CANNOT_TELL = "Cannot tell whether this Hub is empty: Spoolman cannot be reached. Start Spoolman, then try again."
 NO_CAMERA = "No camera in the demo."
+NOT_MOUNTABLE = "The demo cannot be switched on in this version."
 NOT_IN_DEMO_CODE = "in_demo"            # the code of a stop (409); "not_in_demo" is the leave route's: the demo is off
 SAMPLE = Path(__file__).with_name("sample.xml")
+# Whether the demo may be switched on: `start()` refuses (`NotMountable`) while this is False. Set True only when the seal test's leak lists (`server/tests/test_demo_sealed.py`)
+# are all empty: `test_the_demo_is_not_mountable_while_a_leak_list_is_not_empty` fails otherwise.
+MOUNTABLE = False
 
 
 class DemoError(Exception):
@@ -64,6 +68,15 @@ class NotInDemo(DemoError):
 
     def __init__(self):
         super().__init__(NOT_IN_DEMO)
+
+
+class NotMountable(DemoError):
+    """`start()` while `MOUNTABLE` is False: this version cannot switch the demo on (the seal is not complete)."""
+
+    code = "not_mountable"
+
+    def __init__(self):
+        super().__init__(NOT_MOUNTABLE)
 
 
 class NotDemo(DemoError):
@@ -155,10 +168,12 @@ def real_data(spoolman=None, registry_load=None) -> str | None:
 
 
 def start(now: datetime | None = None, *, spoolman=None, registry_load=None) -> dict:
-    """Switch the demo on: only on an empty Hub (`NotEmpty` otherwise). Already on is a plain yes. Makes the demo's
+    """Switch the demo on: only on an empty Hub (`NotEmpty` otherwise). Already on is a plain yes. `NotMountable` while `MOUNTABLE` is False. Makes the demo's
     folder with its inventory (the sample's) and the marker; returns `{demo: True}`."""
     if is_on():
         return {"demo": True}
+    if not MOUNTABLE:                            # nothing is made or written: the seal is not complete in this version
+        raise NotMountable()
     if real_data(spoolman, registry_load) is not None:
         raise NotEmpty()
     from . import inventory

@@ -128,6 +128,20 @@ def seed_usage(now: datetime | None = None, sample=None) -> None:
                      at=now - timedelta(hours=float(el.get("ago-hours", "0"))))
 
 
+class NoManualMaps:
+    """What a pretend Klipper printer's `manual` is (the real one, `bridge.klipper.manual.KlipperManualMaps`, saves a
+    slot-map.xml in the printer's state folder and reads the printer's slots): map by loading filament has nothing to
+    watch here, so every step is the demo's stop sentence as a manual-map refusal (409), never a 500, and nothing is
+    written."""
+
+    def _refuse(self, *a, **k):
+        from ..bridge.manual import ManualError
+        from . import NOT_IN_DEMO, NOT_IN_DEMO_CODE
+        raise ManualError(409, NOT_IN_DEMO_CODE, NOT_IN_DEMO)
+
+    start = view = confirm = skip = stop = answer_offer = _refuse
+
+
 class Family:
     """One pretend family: the printers of `family` ("bambu" or "klipper") of the sample set."""
 
@@ -140,6 +154,7 @@ class Family:
         self._stop = threading.Event()
         self.t0 = 0.0
         self.p: dict[str, Pretend] = {}
+        self.manual = NoManualMaps()          # the Klipper family's `manual` (api.py manual_call); a Bambu one uses the mapper's
         self.rearm()
         _made.add(self)
 

@@ -47,7 +47,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import quote, urlparse
 
-from . import config, station_client
+from . import config, demo, station_client
 
 DEFAULT_URL = "http://127.0.0.1:7915"
 API_MAJOR = 1                    # the reader API major version this kit speaks; any 1.x is accepted
@@ -271,6 +271,7 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False,
     """One call. `method` defaults to GET without a body, POST with one. `errors`: {reader error code or HTTP status:
     (kind, text)} tried before the generic mapping (the feedback calls' own words). `raw_cap`: the answer is bytes
     (a download) of at most that many, else `too_large`; without it the answer is a JSON object."""
+    demo.stop()                  # the demo never calls a reader (the feedback calls too); health() and test() answer first
     _reachable(url)
     opener, pin = _opener_for(url)
     data = None if body is None else json.dumps(body).encode("utf-8")
@@ -442,6 +443,9 @@ def health(cfg: dict, timeout: float = HEALTH_TIMEOUT) -> dict:
     out = {"ok": False, "degraded": False, "url": s["url"], "api_version": None, "version": None, "tiers": {},
            "revise": False, "auth_required": False, "last_read_at": None, "error": None,
            "capabilities": capabilities(None)}
+    if demo.is_on():
+        out["error"] = demo.NOT_IN_DEMO
+        return out
     try:
         h = _request(f"{s['url']}/v1/health", body=None, timeout=timeout)
     except LocalReaderError as e:
@@ -477,6 +481,8 @@ def test(cfg: dict, timeout: float = HEALTH_TIMEOUT, trust: bool = False) -> dic
     "changed" (not the one kept: the result says so and `trust=True` keeps the new one) or "replaced" (it was changed
     and `trust` took it). For an http address on another machine `warning` holds the row's text (`https_row`). Never
     raises."""
+    if demo.is_on():             # no TLS handshake, no pin kept
+        return {**health(cfg, timeout), "fp": None, "pin": None, "https": False, "warning": None}
     u = urlparse(settings(cfg)["url"])
     out: dict = {"fp": None, "pin": None, "https": u.scheme == "https", "warning": (https_row(cfg) or {}).get("text")}
     if u.scheme == "https" and u.hostname:

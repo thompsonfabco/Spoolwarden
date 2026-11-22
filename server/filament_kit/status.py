@@ -543,6 +543,9 @@ def _local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
     if https:                       # a reader on another machine at an http address (R82 s2 p6, ruled 21:12)
         yield Row(FAIL if https["state"] == "needs_a_look" else INFO, https["text"],
                   https["fix"] or "", key="label-reader.https")
+    if demo.is_on():
+        yield Row(INFO, demo.NOT_IN_DEMO, key="label-reader.local")      # no reader is asked in the demo
+        return
     h = local_reader.health(cfg)
     if not h["ok"] and getting_started.reader_install_pending(cfg):     # R82 s6 p5: switched on, nothing installed here
         _addr_say = address_texts.say
