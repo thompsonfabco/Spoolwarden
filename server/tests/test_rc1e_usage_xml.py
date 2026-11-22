@@ -70,7 +70,7 @@ def test_append_writes_one_xml_file_per_month_and_reads_back():
 def test_months_are_separate_files_and_all_are_read(monkeypatch):
     for at, eid in (("2026-09-30T23:00:00Z", E1), ("2026-11-01T00:00:01Z", E2)):
         usage._write_line(SERIAL, _entry(eid, at))
-    names = sorted(p.name for p in (_dir() / "usage").iterdir())
+    names = sorted(p.name for p in (_dir() / "usage").iterdir() if p.name != ".lock")
     assert names == ["2026-09.xml", "2026-11.xml"]
     got = usage.entries(SERIAL, days=10_000, by="month")["months"]
     assert [m["month"] for m in got] == ["2026-11", "2026-09"]
@@ -94,7 +94,7 @@ def test_old_jsonl_is_read_once_moved_and_left_unchanged():
     got = {e["id"]: e for e in usage.entries(SERIAL, days=10_000)}
     assert set(got) == {E1, E2, E3} and got[E2]["undone"] and not got[E3]["undone"] and not got[E1]["undone"]
     assert (d / "usage.jsonl").read_text(encoding="utf-8") == text          # the old file is as it was
-    assert sorted(p.name for p in (d / "usage").iterdir()) == [".migrated", "2026-10.xml", "2026-11.xml"]
+    assert sorted(p.name for p in (d / "usage").iterdir() if p.name != ".lock") == [".migrated", "2026-10.xml", "2026-11.xml"]
     usage.append(SERIAL, {"job": "new"})
     assert len(usage.entries(SERIAL, days=10_000)) == 4                      # read once: no entry twice
     assert len(usage.entries(SERIAL, days=10_000)) == 4
@@ -176,7 +176,7 @@ def test_a_damaged_month_file_is_logged_once_and_stays_noted_after_it_is_kept(ca
     with caplog.at_level("WARNING"):
         usage.entries(SERIAL, days=30)
         usage.entries(SERIAL, days=30)
-    assert len([r for r in caplog.records if "2026-11.xml" in r.getMessage()]) == 1       # once, not per read
+    assert len([r for r in caplog.records if f"usage: {f}:" in r.getMessage()]) == 1       # once, not per read
     assert any(p.startswith(str(f) + " (") for p in statexml.problems())
     usage._write_line(SERIAL, _entry(E3, "2026-11-03T00:00:00Z"))
     kept = str(f) + ".unreadable"

@@ -393,6 +393,9 @@ def _old_form(serial: str, rec: dict) -> None:
         try:
             if new:
                 give_to_state_owner(f)
+                marker = _dir(serial) / DIR / MIGRATED       # no old log was there: this one holds nothing to move
+                if not marker.exists():
+                    _write_atomic(marker, b"nothing to move from usage.jsonl\n", 0o600, state_owned=True)
             os.write(fd, (json.dumps(rec, separators=(',', ':')) + "\n").encode('utf-8'))
             os.fsync(fd)
         finally:
