@@ -5,6 +5,9 @@
     spool weigh <n> <grams with the spool>                 `PATCH /api/spools/<n>` {gross}
     spool move <n> <location|auto>                         `PATCH /api/spools/<n>` {location} or {auto_location: true}
     spool empty <n>                                        `PATCH /api/spools/<n>` {empty: true}
+    spools --checked-out                                   `GET /api/spools?filter=checked_out` (R88 1.6; the count is `total`)
+    spool return <n>                                       `GET /api/spools/<n>`, then `POST /api/spools/<n>/return` {}
+    spool home <n> <location>                              `PATCH /api/spools/<n>` {home}, a dry run first
     catalog local | local remove <id> | add --ask          `GET /api/library/local`, `DELETE /api/library/local/<id>`,
                                                            `POST /api/library/local/form`
     devices show <id|name> | set <id|name> <setting> <value>   the Hub page's `GET device/<id>`, `POST device/<id>/settings`
@@ -56,6 +59,23 @@ CLI_SPOOL_EMPTY_ASK = "Mark spool {n} empty?"
 CLI_SPOOL_EMPTY_DONE = "Spool {n} is marked empty."
 CLI_SPOOL_NOT_PLACED = "no place"
 CLI_SPOOL_IN_PRINTER = "in {printer}, {slot}"
+CLI_SPOOL_NOT_CHECKED_OUT = "This spool is not checked out."
+CLI_CHECKED_OUT_EMPTY = "No spool is checked out."
+CLI_CHECKED_OUT_COUNT_ONE = "1 spool is checked out."
+CLI_CHECKED_OUT_COUNT = "{n} spools are checked out."
+CLI_SPOOL_WHERE_PRINTER = "In {printer} – {slot}"
+CLI_SPOOL_HOME = "Home: {place}"
+CLI_SPOOL_HOME_NOT_RECORDED = "not recorded"
+CLI_SPOOL_SINCE = "since {value}"
+CLI_SPOOL_RETURN_PREVIEW = "Spool {n}, {name}. {value}."
+CLI_SPOOL_RETURN_ASK = "Return to {place}?"
+CLI_SPOOL_RETURN_ASK_PLAIN = "Return?"
+CLI_SPOOL_RETURN_DONE = "Returned to {place}."
+CLI_SPOOL_RETURN_DONE_PLAIN = "Returned."
+CLI_SPOOL_HOME_PREVIEW = "Spool {n}, {name}: home {before}, would be {after}."
+CLI_SPOOL_HOME_ASK = "Change the home of spool {n} to {after}?"
+CLI_SPOOL_HOME_DONE = "Home is now {place}."
+CLI_SPOOL_HOME_SAME = "Home is already {place}."
 CLI_CATALOG_LOCAL_EMPTY = "No entries of your own yet."
 CLI_CATALOG_LOCAL_EMPTY_FIX = "Add one: {command} catalog add --ask"
 CLI_CATALOG_REMOVE_ASK = "Remove {brand} {name} from your own entries? Slicer presets are rebuilt."
@@ -167,7 +187,7 @@ def _kv(pairs: list[tuple[str, object]]) -> list[str]:
 
 # ---------- spools ----------
 
-FILTERS = ("sealed", "opened", "loaded", "low")
+FILTERS = ("sealed", "opened", "loaded", "low", "checked_out")
 
 
 def cmd_spools(api, words: list[str] | None = None, filter: str | None = None) -> int:
@@ -182,6 +202,8 @@ def cmd_spools(api, words: list[str] | None = None, filter: str | None = None) -
         return fail(e)
     output.emit(r)
     rows = r.get("spools") or []
+    if filter == "checked_out":
+        return _checked_out_list(r, rows)
     if not rows:
         output.out(CLI_SPOOLS_NONE_MATCH if query else CLI_SPOOLS_EMPTY)
     else:
@@ -198,6 +220,30 @@ def cmd_spools(api, words: list[str] | None = None, filter: str | None = None) -
     return 0
 
 
+def home_cell(view: dict) -> str:
+    return CLI_SPOOL_HOME.format(place=view.get("home") or CLI_SPOOL_HOME_NOT_RECORDED)
+
+
+def _checked_out_list(r: dict, rows: list) -> int:
+    """The Checked out list (R88 1.6): where each spool is, its home, since when; the count is the answer's `total`."""
+    if not rows:
+        output.out(CLI_CHECKED_OUT_EMPTY)
+        return 0
+    cells = []
+    for v in (x.get("view") or {} for x in rows):
+        loaded = v.get("loaded")
+        place = (CLI_SPOOL_WHERE_PRINTER.format(printer=loaded.get("printer"), slot=loaded.get("slot")) if loaded
+                 else v.get("location") or CLI_SPOOL_NOT_PLACED)
+        since = v.get("checked_out_since")
+        cells.append([v.get("id"), spool_name(v), place, home_cell(v),
+                      CLI_SPOOL_SINCE.format(value=str(since)[:16].replace("T", " ")) if since else ""])
+    output.out_lines(output.table(["No", "Filament", "Where", "Home", "Since"], cells, long=1, right=(0,)))
+    output.out()
+    n = r.get("total", len(rows))
+    output.out(CLI_CHECKED_OUT_COUNT_ONE if n == 1 else CLI_CHECKED_OUT_COUNT.format(n=n))
+    return 0
+
+
 def _number(value) -> int | None:
     try:
         n = int(str(value).lstrip("#"))
@@ -207,6 +253,9 @@ def _number(value) -> int | None:
 
 
 def _spool_error(e, n: int) -> int:
+    if getattr(e, "code", None) == "not_checked_out":
+        output.error(CLI_SPOOL_NOT_CHECKED_OUT)
+        return output.USAGE
     if getattr(e, "http", None) == 404 or getattr(e, "code", None) == "not_found":
         output.error(CLI_SPOOL_NOT_FOUND.format(n=n), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
         return output.USAGE
@@ -307,6 +356,52 @@ def cmd_spool_empty(api, number, yes: bool = False) -> int:
         api, number, {"empty": True}, command=f"empty {number}", yes=yes,
         preview=lambda n, b, a: CLI_SPOOL_EMPTY_PREVIEW.format(n=n, name=spool_name(b), before=grams(b.get("remaining_g"))),
         ask=lambda n, a: CLI_SPOOL_EMPTY_ASK.format(n=n), done=lambda n, a, same: CLI_SPOOL_EMPTY_DONE.format(n=n))
+
+
+def cmd_spool_return(api, number, yes: bool = False) -> int:
+    """`spool return`: read the spool (its home is the question), ask, then `POST /api/spools/<n>/return` (the route
+    takes no dry run). The result names the place the answer's spool is in."""
+    n = _number(number)
+    if n is None:
+        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
+        return output.USAGE
+    if api is None:
+        return down()
+    from .web.slots import SlotError
+    try:
+        view = api.get(f"/api/spools/{n}").get("view") or {}
+    except SlotError as e:
+        return _spool_error(e, n)
+    if not view.get("checked_out"):
+        output.error(CLI_SPOOL_NOT_CHECKED_OUT)
+        return output.USAGE
+    output.out(CLI_SPOOL_RETURN_PREVIEW.format(n=n, name=spool_name(view), value=home_cell(view)))
+    home = view.get("home")
+    rc = confirmed(CLI_SPOOL_RETURN_ASK.format(place=home) if home else CLI_SPOOL_RETURN_ASK_PLAIN,
+                   f"returning spool {n}", f"spoolwarden spool return {n}", yes)
+    if rc is not None:
+        return rc
+    try:
+        r = api.post(f"/api/spools/{n}/return", {})
+    except SlotError as e:
+        return _spool_error(e, n)
+    output.emit(r)
+    place = (r.get("spool") or {}).get("location") or (r.get("view") or {}).get("location")
+    output.out(CLI_SPOOL_RETURN_DONE.format(place=place) if place else CLI_SPOOL_RETURN_DONE_PLAIN)
+    return 0
+
+
+def cmd_spool_home(api, number, location: str, yes: bool = False) -> int:
+    def preview(n, b, a):
+        if a.get("home") == b.get("home"):
+            return None
+        return CLI_SPOOL_HOME_PREVIEW.format(n=n, name=spool_name(a or b), after=a.get("home"),
+                                             before=b.get("home") or CLI_SPOOL_HOME_NOT_RECORDED)
+
+    return _change(
+        api, number, {"home": location}, command=f"home {number} {location}", yes=yes, preview=preview,
+        ask=lambda n, a: CLI_SPOOL_HOME_ASK.format(n=n, after=a.get("home")),
+        done=lambda n, a, same: (CLI_SPOOL_HOME_SAME if same else CLI_SPOOL_HOME_DONE).format(place=a.get("home")))
 
 
 # ---------- the catalog's own entries ----------
@@ -548,13 +643,14 @@ def cmd_devices_set(page, ident: str, setting: str, value: str, yes: bool = Fals
 # ---------- the parsers and their run (hooked in by cli.py) ----------
 
 def add_parser(sub) -> None:
-    """`spools` and `spool show|weigh|move|empty`."""
+    """`spools` and `spool show|weigh|move|empty|return|home`."""
     sp = sub.add_parser("spools", help="the spools: search by words, or only sealed, opened, loaded or running low")
     sp.add_argument("words", nargs="*", help="brand, name, material, place or tag: every word must match")
     group = sp.add_mutually_exclusive_group()
     for f, text in (("sealed", "only sealed spools"), ("opened", "only opened spools"),
-                    ("loaded", "only spools in a printer"), ("low", "only spools running low")):
-        group.add_argument("--" + f, dest="filter", action="store_const", const=f, help=text)
+                    ("loaded", "only spools in a printer"), ("low", "only spools running low"),
+                    ("checked_out", "only spools taken out of a printer and not yet returned")):
+        group.add_argument("--" + f.replace("_", "-"), dest="filter", action="store_const", const=f, help=text)
     one = sub.add_parser("spool", help="one spool: show, weigh, move, mark empty")
     ones = one.add_subparsers(dest="spool_cmd", required=True)
     ones.add_parser("show", help="its facts").add_argument("number")
@@ -565,7 +661,11 @@ def add_parser(sub) -> None:
     m.add_argument("number")
     m.add_argument("location")
     ones.add_parser("empty", help="mark it empty").add_argument("number")
-    for p in (w, m, ones.choices["empty"]):
+    ones.add_parser("return", help="send a checked-out spool back to its home").add_argument("number")
+    h = ones.add_parser("home", help="change the home of a checked-out spool")
+    h.add_argument("number")
+    h.add_argument("location")
+    for p in (w, m, ones.choices["empty"], ones.choices["return"], h):
         p.add_argument("-y", "--yes", action="store_true", help="do not ask")
 
 
@@ -579,4 +679,8 @@ def run(args, api) -> int:
         return cmd_spool_weigh(api, args.number, args.grams, args.yes)
     if c == "move":
         return cmd_spool_move(api, args.number, args.location, args.yes)
+    if c == "return":
+        return cmd_spool_return(api, args.number, args.yes)
+    if c == "home":
+        return cmd_spool_home(api, args.number, args.location, args.yes)
     return cmd_spool_empty(api, args.number, args.yes)
