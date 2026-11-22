@@ -14,6 +14,7 @@ Loading a spool into a slot drops that slot from the file (`forget`): the owner 
 undo the load."""
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Callable
@@ -36,20 +37,35 @@ def path(serial: str):
     return demo.where(config.paths().state / "printers" / serial, f"printers/{serial}") / FILE      # the demo keeps its own
 
 
+def _old_form(data) -> bytes:
+    """slottest-snapshot.json as the release before wrote it (json.dumps indent 2, no newline), kept current for a rollback."""
+    return json.dumps(data, indent=2).encode("utf-8")
+
+
+def _cleared_by_older_release(serial: str) -> bool:
+    """The XML form and the recorded hash of the JSON form are there but the JSON is gone: the release before restored the
+    printer and cleared the snapshot (it deletes only the JSON). That settles it: the XML form goes too."""
+    f = path(serial)
+    if f.exists() or not statexml.xml_path(f).is_file() or not f.with_name(f.name + ".sha256").is_file():
+        return False
+    statexml.unlink(f)
+    return True
+
+
 def save(serial: str, kind: str, slots: list[dict], test_colours=()) -> None:
     """Write the snapshot (raises OSError: the caller must then not touch the printer)."""
     data = {"kind": kind, "at": time.time(),
             "slots": [{"label": s["label"], "ams_id": int(s["ams_id"]), "tray_id": int(s["tray_id"]),
                        "setting": dict(s["setting"])} for s in slots],
             "test_colours": [str(c).upper() for c in test_colours]}
-    statexml.write(path(serial), data, mode=0o600)
+    statexml.write(path(serial), data, mode=0o600, old_format=_old_form)      # the release before reads the JSON form
 
 
 def load(serial: str) -> dict | None:
     f = path(serial)
-    if not statexml.exists(f):
+    if not statexml.exists(f) or _cleared_by_older_release(serial):
         return None
-    d = statexml.read(f)
+    d = statexml.read(f, mode=0o600)          # a rewrite from the older release's JSON keeps the save's mode
     if d is None:
         # unreadable but present: still a pending restore, with nothing we can trust in it
         return {"kind": "unknown", "slots": [], "test_colours": [], "corrupt": True}
@@ -68,7 +84,7 @@ def load(serial: str) -> dict | None:
 
 def pending(serial: str) -> bool:
     try:
-        return statexml.exists(path(serial))
+        return statexml.exists(path(serial)) and not _cleared_by_older_release(serial)
     except ValueError:
         return False
 
@@ -77,7 +93,8 @@ def pending_serials() -> list[str]:
     root = demo.where(config.paths().state / "printers", "printers")
     if not root.is_dir():
         return []
-    return sorted(d.name for d in root.iterdir() if registry.SERIAL.fullmatch(d.name) and statexml.exists(d / FILE))
+    return sorted(d.name for d in root.iterdir() if registry.SERIAL.fullmatch(d.name) and statexml.exists(d / FILE)
+                  and not _cleared_by_older_release(d.name))
 
 
 def clear(serial: str) -> None:

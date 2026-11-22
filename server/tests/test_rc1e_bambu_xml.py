@@ -35,11 +35,11 @@ def _full_map():
 
 # ---------------------------------------------------------------- the slot map
 
-def test_slotmap_round_trips_in_xml_only(state):
+def test_slotmap_round_trips_in_xml_with_the_json_beside(state):
     m = _full_map()
     ams.save_map(SERIAL, m)
     d = state / "printers" / SERIAL
-    assert (d / "slotmap.xml").is_file() and not (d / "slotmap.json").exists()
+    assert (d / "slotmap.xml").is_file() and (d / "slotmap.json").is_file()
     assert (d / "slotmap.xml").read_bytes().startswith(b"<?xml")
     back = ams.load_map(SERIAL)
     for name in ("slots", "calibrated", "observe", "updated", "fingerprint", "stale", "scheme", "learned",
@@ -64,9 +64,9 @@ def test_old_slotmap_json_is_read_moved_and_left_as_it_was(state):
     assert m.slots == SLOTS and m.calibrated and not m.observe and m.updated == 1762800000.25
     assert (f.parent / "slotmap.xml").is_file()             # moved at the first read
     assert f.read_bytes() == before                         # the rollback finds its settings
-    m.suspect = True                                        # from now on the XML is the one in use
+    m.suspect = True                                        # the XML is the one in use; the JSON is kept current beside it
     ams.save_map(SERIAL, m)
-    assert f.read_bytes() == before and ams.load_map(SERIAL).suspect is True
+    assert json.loads(f.read_bytes())["suspect"] is True and ams.load_map(SERIAL).suspect is True
 
 
 def test_damaged_slotmap_xml_is_the_default_map_and_is_reported(state):
@@ -135,10 +135,10 @@ class _Job:
     started, finished = 1762800000.5, 1762800060.25
 
 
-def test_mapping_status_round_trips_in_xml_only(state):
+def test_mapping_status_round_trips_in_xml_with_the_json_beside(state):
     mapping._save_status(SERIAL, _Job)
     d = state / "printers" / SERIAL
-    assert (d / "mapping.xml").is_file() and not (d / "mapping.json").exists()
+    assert (d / "mapping.xml").is_file() and (d / "mapping.json").is_file()
     v = mapping._load_status(SERIAL)
     assert v["state"] == "done" and v["job_id"] == "12345" and v["step"] == "Mapping finished"
     assert v["problems"] == ["Ext-L: no slot", "1.0"] and v["notes"] == ["a & b <c>"]
@@ -179,10 +179,10 @@ SNAP_SLOTS = [{"label": "A1", "ams_id": 0, "tray_id": 0, "setting": {"tray_info_
               {"label": "A2", "ams_id": 0, "tray_id": 1, "setting": {}}]
 
 
-def test_snapshot_round_trips_in_xml_only(state):
+def test_snapshot_round_trips_in_xml_with_the_json_kept_beside_it(state):
     snapshot.save(SERIAL, "slottest", SNAP_SLOTS, ["FA0100ff"])
     d = state / "printers" / SERIAL
-    assert (d / "slottest-snapshot.xml").is_file() and not (d / "slottest-snapshot.json").exists()
+    assert (d / "slottest-snapshot.xml").is_file() and (d / "slottest-snapshot.json").is_file()
     assert snapshot.pending(SERIAL) and snapshot.pending_serials() == [SERIAL]
     got = snapshot.load(SERIAL)
     assert got == {"kind": "slottest", "slots": SNAP_SLOTS, "test_colours": ["FA0100FF"]}
