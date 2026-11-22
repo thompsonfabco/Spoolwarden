@@ -788,8 +788,11 @@ def test_apply_gives_a_kept_pairing_to_the_current_station_user(tmp_path, monkey
     assert ran == []  # nothing paired yet: nothing to hand over
     _paired(["192.0.2.5"])
     apply.execute(act, run=ran.append, root=tmp_path / "root")
-    d, srv, tok = (str(p) for p in (server_api.pairing_dir(), server_api.server_file(), server_api.token_file()))
+    d, srv, old, sha, tok = (str(p) for p in (server_api.pairing_dir(), server_api.server_file(),
+                                              server_api.old_server_file(), server_api._old_sha_file(),
+                                              server_api.token_file()))
     assert ran == [["chown", "root:filament-kit-station", d], ["chown", "root:filament-kit-station", srv],
+                   ["chown", "root:filament-kit-station", old], ["chown", "root:filament-kit-station", sha],
                    ["chown", "filament-kit-station:filament-kit-station", tok]]
 
 

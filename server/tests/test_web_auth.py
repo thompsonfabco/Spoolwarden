@@ -563,7 +563,7 @@ def test_store_creates_parent_and_writes_0600_atomically(store, monkeypatch):
     store.d["clients"]["c"] = {"client_id": "c"}
     store.save()
     xp = statexml.xml_path(store.path)
-    assert xp.exists() and not store.path.exists() and not list(xp.parent.glob("*.tmp"))
+    assert xp.exists() and store.path.exists() and not list(xp.parent.glob("*.tmp"))
     assert opened and opened[0][1] == 0o600 and opened[0][0].endswith(".tmp")
     if os.name != "nt":
         assert (xp.stat().st_mode & 0o777) == 0o600
@@ -638,8 +638,8 @@ def test_store_moves_an_old_json_file_once_as_0600_and_leaves_it(tmp_path):
     assert xp.exists() and path.read_bytes() == before
     if os.name != "nt":
         assert (xp.stat().st_mode & 0o777) == 0o600
-    path.write_text("{}", encoding="utf-8")                      # from now on only the XML form is used
-    assert auth.Store(path).d == st.d
+    assert auth.Store(path).d == st.d                            # unchanged JSON: the XML form answers, nothing moves
+    assert path.read_bytes() == before
 
 
 def test_oauth_json_is_kept_current_in_the_old_shape_with_0600(store, provider):
