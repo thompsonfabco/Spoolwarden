@@ -18,6 +18,7 @@ internal class SettingsActions(
     val onSimulateTag: (String) -> Unit,
     val onLook: (Look) -> Unit = {},
     val alerts: AlertsActions = AlertsActions(),
+    val voice: VoiceActions = VoiceActions(),
     /** Opens the Hub at a glance screen (R83 section 5). */
     val onOpenHubGlance: () -> Unit = {},
 )
@@ -39,6 +40,7 @@ internal fun SettingsGroupPage(group: SettingsGroup, facts: SettingsFacts, actio
             modifier = modifier,
         )
         SettingsGroup.Alerts -> AlertsSettings(facts.alerts, actions.alerts, modifier)
+        SettingsGroup.Voice -> VoiceSettingsPage(facts.voice, actions.voice, modifier)
         SettingsGroup.Updates -> UpdatesSettings(
             appVersion = facts.appVersion,
             hubVersion = facts.hub?.version,

@@ -7,7 +7,7 @@ import com.thompsonfabco.filamentkit.update.UpdateFailure
 import com.thompsonfabco.filamentkit.update.UpdateUi
 
 /** The groups of 05-android-app 12.1, in the order the list shows them. */
-internal enum class SettingsGroup { Appearance, Hub, Alerts, Updates, Licences, Developer }
+internal enum class SettingsGroup { Appearance, Hub, Alerts, Voice, Updates, Licences, Developer }
 
 /** The paired Hub as the Hub connection group shows it (12.3). */
 internal class SettingsHub(val name: String, val address: String, val fingerprint: String, val version: String?)
@@ -26,6 +26,8 @@ internal class SettingsFacts(
     val look: Look = Look.Console,
     /** Alerts on this phone (R80); the default is the switch off with nothing to ask. */
     val alerts: AlertsFacts = AlertsFacts(),
+    /** The Weigh Station voice (R88): the group exists only while the Hub says it has a Weigh Station. */
+    val voice: VoiceUi = VoiceUi(),
 )
 
 /** What the Alerts group shows: the phone's switch, whether the Hub has alerts at all, and the local network permission. */
@@ -36,9 +38,9 @@ internal class AlertsFacts(
     val localNetworkGranted: Boolean = true,
 )
 
-/** The groups the list shows: Developer only in a debug build. */
-internal fun settingsGroups(developer: Boolean): List<SettingsGroup> =
-    SettingsGroup.entries.filter { developer || it != SettingsGroup.Developer }
+/** The groups the list shows: Developer only in a debug build, Weigh Station voice only when the Hub has a Weigh Station. */
+internal fun settingsGroups(developer: Boolean, voice: Boolean = false): List<SettingsGroup> =
+    SettingsGroup.entries.filter { (developer || it != SettingsGroup.Developer) && (voice || it != SettingsGroup.Voice) }
 
 /**
  * The fingerprint check switch is the old "skip" setting the other way round: on (the default) means the check runs,

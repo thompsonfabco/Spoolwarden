@@ -188,6 +188,13 @@ import com.thompsonfabco.filamentkit.net.HistorySummary
 import com.thompsonfabco.filamentkit.net.IntakeHistory
 import com.thompsonfabco.filamentkit.net.RevisionProposal
 import com.thompsonfabco.filamentkit.ui.history.EditScreen
+import com.thompsonfabco.filamentkit.net.CorrectionEntry
+import com.thompsonfabco.filamentkit.net.CorrectionsWaiting
+import com.thompsonfabco.filamentkit.net.NotQueuedCorrection
+import com.thompsonfabco.filamentkit.net.ShareState
+import com.thompsonfabco.filamentkit.ui.history.CorrectionsBackend
+import com.thompsonfabco.filamentkit.ui.history.CorrectionsScreen
+import com.thompsonfabco.filamentkit.ui.history.CorrectionsViewModel
 import com.thompsonfabco.filamentkit.ui.history.HistoryBackend
 import com.thompsonfabco.filamentkit.ui.history.HistoryListScreen
 import com.thompsonfabco.filamentkit.ui.history.HistoryListViewModel
@@ -275,10 +282,10 @@ open class ScreenSemanticsTest {
     }
 
     /** Light and dark, font scale 1 and 2, on the screen already shown. */
-    private fun auditAllFour(shows: String, sectionTitles: List<String> = emptyList()) {
+    private fun auditAllFour(shows: String, sectionTitles: List<String> = emptyList(), controls: Boolean = true) {
         rule.waitForIdle()
         rule.onNodeWithText(shows).assertExists()
-        assertTrue("the screen has controls to audit", SemanticsAudit.clickableCount(rule.onRoot().fetchSemanticsNode()) >= 1)
+        if (controls) assertTrue("the screen has controls to audit", SemanticsAudit.clickableCount(rule.onRoot().fetchSemanticsNode()) >= 1)
         for (isDark in listOf(false, true)) {
             for (scale in listOf(1f, 2f)) {
                 dark = isDark
@@ -1418,6 +1425,55 @@ open class ScreenSemanticsTest {
         auditAllFour("Accept")
     }
 
+    @Test fun recentListWithTheShareCorrectionsLine() {
+        val vm = HistoryListViewModel(FakeHistory(share = ShareState(saved = true, count = 3)))
+        host("Recently added") { HistoryListScreen(vm, null, onOpen = {}, onPairAgain = {}, onOpenCorrections = {}) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Share corrections is on · 3 waiting").assertExists()
+        auditAllFour("Polymaker PolyTerra PLA Charcoal Black")
+    }
+
+    @Test fun recentEditWithTheShareCorrectionsLine() {
+        val vm = RecordViewModel(FakeHistory(share = ShareState(saved = true)), "a1")
+        host("Recently added") { EditScreen(vm, item = 0, onClose = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        rule.onNodeWithText("Share corrections is on: this correction will wait on the Hub to be shared.").assertExists()
+        auditAllFour("Save changes")
+    }
+
+    @Test fun recentCorrections() {
+        val vm = CorrectionsViewModel(FakeCorrections())
+        host("Corrections waiting") { CorrectionsScreen(vm, null, onOpenRecord = {}, onOpenPhoto = { _, _ -> }, onPairAgain = {}) }
+        rule.waitForIdle()
+        rule.onNodeWithText("1 waiting · 3.4 MB").assertExists()
+        auditAllFour("Remove")
+    }
+
+    @Test fun recentCorrectionsWithARecordTheReaderDidNotTake() {
+        val vm = CorrectionsViewModel(
+            FakeCorrections(
+                CorrectionsWaiting(
+                    0, 0, emptyList(),
+                    listOf(NotQueuedCorrection("r9", "2026-11-15T11:00:00+00:00", "SUNLU PLA+ Grey", "the Label Reader did not answer: down")),
+                ),
+            ),
+        )
+        host("Corrections waiting") { CorrectionsScreen(vm, null, onOpenRecord = {}, onOpenPhoto = { _, _ -> }, onPairAgain = {}) }
+        auditAllFour("SUNLU PLA+ Grey")
+    }
+
+    @Test fun recentCorrectionsWhenEmpty() {
+        val vm = CorrectionsViewModel(FakeCorrections(CorrectionsWaiting(0, 0, emptyList(), emptyList())))
+        host("Corrections waiting") { CorrectionsScreen(vm, null, onOpenRecord = {}, onOpenPhoto = { _, _ -> }, onPairAgain = {}) }
+        auditAllFour("No corrections waiting", controls = false)
+    }
+
+    @Test fun recentCorrectionsWhenTheReaderDoesNotAnswer() {
+        val vm = CorrectionsViewModel(FakeCorrections(error = ApiError(503, "unreachable", "The reader does not answer.")))
+        host("Corrections waiting") { CorrectionsScreen(vm, null, onOpenRecord = {}, onOpenPhoto = { _, _ -> }, onPairAgain = {}) }
+        auditAllFour("The reader does not answer, so the corrections waiting cannot be shown. They are kept.")
+    }
+
     @Test fun recentEdit() {
         val history = FakeHistory()
         val vm = RecordViewModel(history, "a1")
@@ -1488,7 +1544,28 @@ open class ScreenSemanticsTest {
         assertTrue(audit().any { "own click" in it })
     }
 
+    private class FakeCorrections(
+        val list: CorrectionsWaiting = CorrectionsWaiting(
+            1, 3_565_000,
+            listOf(
+                CorrectionEntry(
+                    "fb-1", "2026-11-12T14:09:00+00:00",
+                    buildJsonObject { put("vendor", "Polymakr"); put("name", "PolyTerra PLA"); put("color_hex", "2B2B2E") },
+                    buildJsonObject { put("vendor", "Polymaker"); put("name", "PolyTerra PLA"); put("color_hex", "1F1F22") },
+                    "brand is Polymaker", 2, "r1", "local", null,
+                ),
+            ),
+            emptyList(),
+        ),
+        val error: Exception? = null,
+    ) : CorrectionsBackend {
+        override suspend fun waiting(): CorrectionsWaiting = error?.let { throw it } ?: list
+        override suspend fun remove(id: String) = Unit
+        override suspend fun share() = ShareState(saved = true, count = list.count)
+    }
+
     private class FakeHistory(
+        val share: ShareState? = null,
         val records: List<HistorySummary> = listOf(
             HistorySummary(
                 "a1", "2026-11-12T14:05:00+00:00", "phone", "detected", photos = 2, undoable = true,
@@ -1538,6 +1615,7 @@ open class ScreenSemanticsTest {
         override suspend fun applyProposal(id: String, proposal: String) = record
         override suspend fun applyValues(id: String, item: Int, values: JsonObject) = record
         override suspend fun undo(id: String, revision: Int) = record
+        override suspend fun share() = share
     }
 
     private class FakePrinters(

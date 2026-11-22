@@ -49,6 +49,9 @@ internal val AddProfileTitle: Int get() = R.string.catalog_title
 @Serializable data object SpoolsGraph
 @Serializable data object SpoolsRoute
 
+/** Scan a label (05-android-app 4.4, 7.1): the QR scanner in label mode; a label that is read opens [SpoolRoute]. */
+@Serializable data object SpoolsScanRoute
+
 // The spool screens and the tag screens are in the graph of every tab (05-android-app 2.5, "Shared"): they open on the stack
 // of the tab that is selected.
 /** [result] is a [com.thompsonfabco.filamentkit.ui.spool.SpoolResult] already shown by the screen that led here (a link), as its text. */
@@ -62,7 +65,10 @@ internal val AddProfileTitle: Int get() = R.string.catalog_title
 
 @Serializable data object PrintersGraph
 @Serializable data object PrintersRoute
-@Serializable data class PrinterRoute(val id: String)
+/** [askMap]: the printer opens with the Hub's "Map the slots of ...?" question open (the add-printer map offer). */
+@Serializable data class PrinterRoute(val id: String, val askMap: Boolean = false)
+/** Where a button of the add-printer map offer goes (05 9.12 step 4): Map slots asks first as 9.7, Later just opens. */
+fun mapOfferRoute(id: String, mapNow: Boolean) = PrinterRoute(id, askMap = mapNow)
 @Serializable data class PrinterMapRoute(val id: String)
 @Serializable data class PrinterSettingsRoute(val id: String, val replaceCode: Boolean = false)
 @Serializable data class PrinterPickRoute(val id: String, val slot: String)
@@ -72,6 +78,9 @@ internal val AddProfileTitle: Int get() = R.string.catalog_title
 @Serializable data class RecordRoute(val hid: String)
 @Serializable data class RecordEditRoute(val hid: String, val item: Int)
 @Serializable data class RecordPhotoRoute(val hid: String, val n: Int)
+
+/** `recent/corrections`: Corrections waiting (05-android-app 10.6), opened from Recently added and from a saved correction. */
+@Serializable data object RecentCorrectionsRoute
 
 @Serializable data object SettingsGraph
 @Serializable data object SettingsRoute

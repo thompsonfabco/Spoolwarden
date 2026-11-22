@@ -67,6 +67,8 @@ internal fun NoticeCard(
     modifier: Modifier = Modifier,
     title: String? = null,
     actions: List<SwAction> = emptyList(),
+    /** False: plain content when it appears, not read out (the demo notice, 02-components 9.1). */
+    announce: Boolean = true,
 ) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
@@ -85,7 +87,7 @@ internal fun NoticeCard(
             Column(Modifier.weight(1f)) {
                 Column(
                     Modifier.semantics {
-                        liveRegion = if (kind == NoticeKind.Bad) LiveRegionMode.Assertive else LiveRegionMode.Polite
+                        if (announce) liveRegion = if (kind == NoticeKind.Bad) LiveRegionMode.Assertive else LiveRegionMode.Polite
                     },
                 ) {
                     if (title != null) Text(title, style = MaterialTheme.typography.titleSmall)

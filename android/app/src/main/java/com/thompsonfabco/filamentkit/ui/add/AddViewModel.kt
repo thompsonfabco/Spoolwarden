@@ -20,7 +20,9 @@ import com.thompsonfabco.filamentkit.net.ParentList
 import com.thompsonfabco.filamentkit.net.Proposal
 import com.thompsonfabco.filamentkit.net.ReadResult
 import com.thompsonfabco.filamentkit.net.StorageAnswer
+import com.thompsonfabco.filamentkit.net.ShareState
 import com.thompsonfabco.filamentkit.net.VendorChoice
+import com.thompsonfabco.filamentkit.ui.history.shareStateOrNull
 import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.ui.isValidWeight
 import com.thompsonfabco.filamentkit.ui.storage.Place
@@ -80,6 +82,9 @@ interface IntakeApi {
 
     suspend fun vendors(): List<VendorChoice> = emptyList()
 
+    /** Whether Share corrections is on (05-android-app 10.6); null from a Hub that has none. The default keeps older fakes compiling. */
+    suspend fun shareCorrections(): ShareState? = null
+
     /** The picker's page: [limit] rows and the total (the default asks for them all, older fakes keep compiling). */
     suspend fun filamentPage(q: String, limit: Int): FilamentPage = filaments(q).let { FilamentPage(it, it.size) }
 
@@ -98,6 +103,7 @@ interface IntakeApi {
             override suspend fun filaments(q: String) = api().filaments(q)
             override suspend fun vendors() = api().vendors()
             override suspend fun filamentPage(q: String, limit: Int) = api().filamentPage(q, limit)
+            override suspend fun shareCorrections() = api().shareStateOrNull()
         }
 
         fun of(api: Api): IntakeApi = object : IntakeApi {
@@ -112,6 +118,7 @@ interface IntakeApi {
             override suspend fun filaments(q: String) = api.filaments(q)
             override suspend fun vendors() = api.vendors()
             override suspend fun filamentPage(q: String, limit: Int) = api.filamentPage(q, limit)
+            override suspend fun shareCorrections() = api.shareStateOrNull()
         }
     }
 }
@@ -217,6 +224,8 @@ data class AddUiState(
     val vendors: List<VendorChoice> = emptyList(),
     /** The server's complaint about one field (item index → item key → text), shown at that field until an edit. */
     val fieldErrors: Map<Int, Map<String, String>> = emptyMap(),
+    /** Share corrections is on at the Hub: the Check step says fields changed there will wait to be shared (null/false: no line). */
+    val shareOn: Boolean = false,
 ) {
     /** What each item still needs before Preview (item keys); empty lists when complete. */
     val missing: List<List<String>>
@@ -814,6 +823,20 @@ class AddViewModel(
     fun setOpenPanels(open: Set<Int>) = _state.update { it.copy(openPanels = open) }
 
     fun focusDone() = _state.update { it.copy(focus = null) }
+
+    /** Asks the Hub whether Share corrections is on, for the line on the Check step; a Hub without it, or no answer, is "not on". */
+    fun loadShare() {
+        scope.launch {
+            val on = try {
+                api.shareCorrections()?.on == true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                false
+            }
+            _state.update { it.copy(shareOn = on) }
+        }
+    }
 
     fun revealDone() = _state.update { it.copy(reveal = null) }
 

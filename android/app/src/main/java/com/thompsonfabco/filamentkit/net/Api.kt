@@ -6,6 +6,7 @@ import com.thompsonfabco.filamentkit.alerts.AlertsConfig
 import com.thompsonfabco.filamentkit.alerts.EventsAnswer
 import com.thompsonfabco.filamentkit.alerts.EventsQuery
 import com.thompsonfabco.filamentkit.alerts.LowSpools
+import com.thompsonfabco.filamentkit.ui.settings.acceptLanguage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -15,7 +16,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -34,6 +37,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.File
 import java.io.IOException
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /** What the client says for an error reply that carries no `message` of its own ([ApiError.notFromHub] knows it). */
@@ -59,10 +63,16 @@ class Api(
     private val localNetworkMissing: () -> Boolean = { LocalNetwork.missing() },
     /** The app's version, sent on every call as `X-Spoolwarden-Client: android/<version>` so the Hub can list it in Devices. */
     private val clientVersion: String = BuildConfig.VERSION_NAME,
+    /** The language in use, sent on every call as `Accept-Language` so the texts the Hub writes come in it (05-android-app 12.2). */
+    private val language: (() -> String)? = null,
 ) {
+    /** The Hub's own language from its latest `api/info` or `api/hub`: what Automatic falls back to ([acceptLanguage]). */
+    @Volatile private var hubLanguage: String? = null
+
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun info(): ServerInfo = decode(call(request("api", "info", auth = false).get()))
+    suspend fun info(): ServerInfo =
+        decode<ServerInfo>(call(request("api", "info", auth = false).get())).also { it.language?.let { l -> hubLanguage = l } }
 
     suspend fun pair(code: String): String {
         val body = buildJsonObject { put("code", code) }
@@ -146,6 +156,41 @@ class Api(
     /** Undoes [revision], the newest not undone yet; 409 `not_latest` otherwise. */
     suspend fun undoIntake(id: String, revision: Int): HistoryRecord =
         decode(call(history(id, "undo").post(buildJsonObject { put("revision", revision) }.toBody())))
+
+    // ---- Share corrections (Hub stage V1.4; an older Hub answers 404 `not_found`) ----
+
+    /** Whether Share corrections is on (`GET api/intake/share-corrections`: the state only, it is switched on the Hub page). */
+    suspend fun shareCorrections(): ShareState = decode(call(request("api", "intake", "share-corrections").get()))
+
+    /**
+     * The corrections waiting on the reader (`GET api/label-reader/corrections`). An entry the app cannot read is left out;
+     * [CorrectionsWaiting.count] is the Hub's own count. 503 `unreachable` when the reader does not answer.
+     */
+    suspend fun corrections(): CorrectionsWaiting {
+        val body = call(request("api", "label-reader", "corrections").get()).jsonObject
+        val entries = body["entries"]?.let { it as? JsonArray }.orEmpty().mapNotNull {
+            try {
+                decode<CorrectionEntry>(it)
+            } catch (_: Exception) {
+                null
+            }
+        }
+        val notQueued = body["not_queued"]?.let { it as? JsonArray }.orEmpty().mapNotNull {
+            try {
+                decode<NotQueuedCorrection>(it)
+            } catch (_: Exception) {
+                null
+            }
+        }
+        val bytes = (body["bytes"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toLong() ?: 0L
+        val count = (body["count"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt() ?: entries.size
+        return CorrectionsWaiting(count, bytes, entries, notQueued)
+    }
+
+    /** Takes correction [id] out of the reader's queue; the record it came from is unchanged. 404 `not_found` when it is gone. */
+    suspend fun removeCorrection(id: String) {
+        call(request("api", "label-reader", "corrections", id, "remove").post(ByteArray(0).toRequestBody(null)))
+    }
 
     /** The spool linked to tag [uid] (format `4:77:90:e`), or null. */
     suspend fun tag(uid: String): JsonObject? {
@@ -235,7 +280,7 @@ class Api(
 
     /**
      * `POST api/events/{id}/undo`. 409 `changed_since`, `too_old`, `already_undone` or `not_undoable` is an [ApiError]
-     * whose `text` is in [ApiError.extra]; 404 `not_found` is an older Hub (or an event the Hub no longer has).
+     * whose `message` is the Hub's sentence; 404 `not_found` is an older Hub (or an event the Hub no longer has).
      */
     suspend fun undoEvent(id: Long): UndoAnswer =
         HistoryWire.undo(call(request("api", "events", id.toString(), "undo").post(ByteArray(0).toRequestBody(null))))
@@ -287,6 +332,23 @@ class Api(
     }
 
     suspend fun lowSpools(): LowSpools = AlertParsing.lowSpools(call(request("api", "spools", "low").get()))
+
+    /** The Weigh Station's voice (R88); a Hub without it answers 404, and `station: false` means no Weigh Station. */
+    suspend fun voice(): VoiceSettings = VoiceParsing.settings(call(request("api", "voice").get()))
+
+    /** Saves the given keys of `speech`, `speaker`, `speed` and `volume`; the answer is the values now in force. */
+    suspend fun patchVoice(changes: JsonObject): VoiceSettings =
+        VoiceParsing.settings(call(request("api", "voice").patch(changes.toBody())))
+
+    /** The Weigh Station says its one test sentence; 409 `busy` and `off` and 502 `no_answer` carry the Hub's sentence. */
+    suspend fun testVoice(speaker: Int?, speed: Int?, volume: Int?) {
+        val body = buildJsonObject {
+            speaker?.let { put("speaker", it) }
+            speed?.let { put("speed", it) }
+            volume?.let { put("volume", it) }
+        }
+        call(request("api", "voice", "test").post(body.toBody()))
+    }
 
     /** Spoolman's filaments (also ones without spools) whose vendor, name or material hold every word of [q]. */
     suspend fun filaments(q: String): List<FilamentChoice> {
@@ -350,10 +412,14 @@ class Api(
     suspend fun printers(): List<Printer> =
         call(request("api", "printers").get()).jsonObject["printers"]?.jsonArray.orEmpty().map { decode(it) }
 
-    /** Sets up (or re-keys) a printer. [accessCode] goes only into this request body; it is never kept or logged. */
-    suspend fun addPrinter(serial: String, accessCode: String, name: String?): Printer {
+    /**
+     * Sets up (or re-keys) a printer: a found one by its [serial], or one typed by its [address] (then [serial] is
+     * optional). [accessCode] goes only into this request body; it is never kept or logged.
+     */
+    suspend fun addPrinter(serial: String?, accessCode: String, name: String?, address: String? = null): Printer {
         val body = buildJsonObject {
-            put("serial", serial)
+            serial?.takeIf { it.isNotBlank() }?.let { put("serial", it) }
+            address?.takeIf { it.isNotBlank() }?.let { put("address", it) }
             put("access_code", accessCode)
             name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
         }
@@ -363,16 +429,34 @@ class Api(
     }
 
     /** Adds a Klipper printer by the address of its Moonraker; the API key is set afterwards, from the printer's own screen. */
-    suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer {
+    suspend fun addKlipperPrinter(host: String, port: Int, name: String?, apiKey: String? = null): Printer {
         val body = buildJsonObject {
             put("family", "klipper")
             put("host", host)
             put("port", port)
             name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
+            apiKey?.takeIf { it.isNotBlank() }?.let { put("api_key", it) }
         }
         val printer = call(request("api", "printers").post(body.toBody())).jsonObject["printer"]
             ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return the printer")
         return decode(printer)
+    }
+
+    /**
+     * Asks the Hub whether a Klipper printer answers at [host]:[port]; nothing is saved. A refusal (a bad address or
+     * port, an API key wanted or refused, the Klipper module off) is an [ApiError] with the Hub's own message. The
+     * [apiKey] goes only into this request body.
+     */
+    suspend fun testKlipperPrinter(host: String, port: Int, apiKey: String?): Boolean {
+        val body = buildJsonObject {
+            put("family", "klipper")
+            put("host", host)
+            put("port", port)
+            apiKey?.takeIf { it.isNotBlank() }?.let { put("api_key", it) }
+        }
+        val reachable = call(request("api", "printers", "test").post(body.toBody()), SLOW_READ_S).jsonObject["reachable"]
+        return (reachable as? JsonPrimitive)?.booleanOrNull
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not say whether the printer answered")
     }
 
     /**
@@ -466,6 +550,29 @@ class Api(
         }
         return decode(call(request("api", "printers", id, "slots", label, "load").post(body.toBody())))
     }
+
+    /**
+     * Auto: the spool goes to whichever slot of the printer gets one (A6). [dryRun] says which slots would be watched and
+     * what it replaces; 409 `auto_not_possible` when the printer has no slots the Hub can watch.
+     */
+    suspend fun autoLoad(printerId: String, spoolId: Int, dryRun: Boolean): AutoLoadResult {
+        val body = buildJsonObject {
+            put("spool_id", spoolId)
+            put("dry_run", dryRun)
+        }
+        return AutoLoadResult.parse(call(request("api", "printers", printerId, "slots", "auto", "load").post(body.toBody())))
+    }
+
+    /** Names the slot for an Auto in the state `choose`; the answer is a named load's. 409 `nothing_to_choose`. */
+    suspend fun autoChoose(printerId: String, slot: String): LoadResult {
+        val body = buildJsonObject { put("slot", slot) }
+        return decode(call(request("api", "printers", printerId, "auto", "choose").post(body.toBody())))
+    }
+
+    /** Stop waiting: ends the printer's Auto. True when it was cancelled; 409 `not_waiting` when none was waiting. */
+    suspend fun autoCancel(printerId: String): Boolean =
+        (call(request("api", "printers", printerId, "auto", "cancel").post(ByteArray(0).toRequestBody(null))) as? JsonObject)
+            ?.get("cancelled")?.jsonPrimitive?.booleanOrNull == true
 
     suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult {
         val body = buildJsonObject { put("dry_run", dryRun) }
@@ -592,9 +699,55 @@ class Api(
 
     /** `GET api/hub`; null when the Hub has no such call (an older Hub, 404), so the feature is hidden. */
     suspend fun hub(): HubAnswer? = try {
-        KitWire.hub(call(request("api", "hub").get()))
+        KitWire.hub(call(request("api", "hub").get())).also { it.language?.let { l -> hubLanguage = l } }
     } catch (e: ApiError) {
         if (e.status == 404) null else throw e
+    }
+
+    /**
+     * `POST api/demo/leave` (any paired phone): leaves the demo and answers whether the Hub is still in it (false).
+     * 409 `not_in_demo` when the demo is already off ([ApiError.code]).
+     */
+    suspend fun leaveDemo(): Boolean =
+        ((call(request("api", "demo", "leave").post(JsonObject(emptyMap()).toBody())) as? JsonObject)
+            ?.get("demo") as? JsonPrimitive)?.booleanOrNull ?: false
+
+    @Volatile private var labelRoutesKnown: Boolean? = null
+
+    /**
+     * Whether the Hub has the label routes (`GET api/spools/{id}/label.svg`, `GET /s/{id}`): Scan a label and Print a label
+     * are absent until it has (05-android-app 16). Asked once per [Api] with a spool number no Hub has: a Hub that has the
+     * route refuses it with its own `message`; one without it answers a 404 that is not the Hub's (INFERENCE, no Hub
+     * with the route exists yet). A call that cannot tell (offline, 5xx) throws and nothing is remembered.
+     */
+    suspend fun labelRoutes(): Boolean {
+        labelRoutesKnown?.let { return it }
+        return try {
+            labelSvg(0, "62x29")
+            true
+        } catch (e: ApiError) {
+            if (e.status == 404 && e.notFromHub) false
+            else if (e.status in 400..499) true
+            else throw e
+        }.also { labelRoutesKnown = it }
+    }
+
+    /** The label of spool [id] at [size] (`62x29`, `50x30`, `a4-63x34`, `a4-70x37` or `letter-66x25`) as the Hub draws it: SVG text. 404 `not_found`. */
+    suspend fun labelSvg(id: Int, size: String): ByteArray = withContext(Dispatchers.IO) {
+        val request = request("api", "spools", id.toString(), "label.svg") { addQueryParameter("size", size) }.get().build()
+        execute(request, null).use { resp ->
+            if (!resp.isSuccessful) {
+                val error = errorFor(resp.code, resp.body.string(), request.header("Authorization"))
+                // a 404 that is not the Hub's own, for a spool that may well exist: the Hub has no label routes
+                if (error.status == 404 && error.notFromHub && id > 0) labelRoutesKnown = false
+                throw error
+            }
+            try {
+                resp.body.bytes()
+            } catch (e: IOException) {
+                throw offline("The connection to the Hub was lost: ${e.message}")
+            }
+        }
     }
 
     /** `GET api/library/local`: the owner's own entries; 404 `not_found` from an older Hub. */
@@ -625,6 +778,17 @@ class Api(
         return KitWire.spools(call(req.get()))
     }
 
+    /**
+     * `POST api/spools/{id}/return` (R88 1.7): sends a checked-out spool to its home. 409 `not_checked_out` and the
+     * other refusals are an [ApiError] whose message is the Hub's; 404 is a Hub without the route.
+     */
+    suspend fun returnSpool(spoolId: Int): JsonObject =
+        spool(call(request("api", "spools", spoolId.toString(), "return").post(ByteArray(0).toRequestBody(null))))
+
+    /** `PATCH api/spools/{id}` with `home` (R88 1.7); 409 `not_checked_out`, 400 an unknown location. */
+    suspend fun setHome(spoolId: Int, home: String): JsonObject =
+        spool(call(request("api", "spools", spoolId.toString()).patch(buildJsonObject { put("home", home) }.toBody())))
+
     // ---- end printers --------------------------------------------------------------------------------------
 
     // --- plumbing ---
@@ -639,6 +803,7 @@ class Api(
             query?.invoke(this)
         }.build()
         val b = Request.Builder().url(url).header(CLIENT_HEADER, "android/$clientVersion")
+            .header("Accept-Language", language?.invoke() ?: acceptLanguage(Locale.getDefault().toLanguageTag(), hubLanguage))
         if (auth) token()?.let { b.header("Authorization", "Bearer $it") }
         return b
     }
@@ -730,8 +895,12 @@ class Api(
         else -> "http_$status"
     }
 
-    private fun spool(body: JsonElement): JsonObject =
-        body.jsonObject["spool"]?.jsonObject ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a spool")
+    /** The answer's `spool`, with its phone-shaped `view` (where R88's checked-out fields are) kept beside it when there is one. */
+    private fun spool(body: JsonElement): JsonObject {
+        val spool = body.jsonObject["spool"]?.jsonObject ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a spool")
+        val view = body.jsonObject["view"] as? JsonObject ?: return spool
+        return if (spool.containsKey("view")) spool else JsonObject(spool + ("view" to view))
+    }
 
     private inline fun <reified T> decode(body: JsonElement): T = json.decodeFromJsonElement(body)
 

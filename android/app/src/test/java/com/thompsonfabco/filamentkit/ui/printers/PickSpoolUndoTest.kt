@@ -6,7 +6,6 @@ import com.thompsonfabco.filamentkit.net.LoadResult
 import com.thompsonfabco.filamentkit.net.LoadSlot
 import com.thompsonfabco.filamentkit.net.UndoAnswer
 import com.thompsonfabco.filamentkit.net.UndoState
-import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
 import com.thompsonfabco.filamentkit.ui.history.UndoFlow
 import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
 import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
@@ -129,8 +128,8 @@ class PickSpoolUndoTest {
         fake.events = listOf(event(9, "spool.loaded"))
         val v = vm()
         v.loadSpool(7)
-        fake.undoError = ApiError(409, "changed_since", "x")
+        fake.undoError = ApiError(409, "changed_since", "The Hub says why.")
         val outcome = v.undoLoad(v.state.value.loadedEvent!!)
-        assertEquals(UndoOutcome.Refused(HistoryTexts.UNDO_CHANGED_SINCE), outcome)
+        assertEquals(UndoOutcome.Refused("The Hub says why."), outcome)
     }
 }
