@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from .. import demo
 from . import DemoError, NotInDemo, is_on, leave, refusal, start, state
 
 BAD_ON = "on must be true or false"
@@ -61,3 +62,8 @@ ROUTES: list[Route] = [
     Route("POST", "/api/demo/leave", post_leave, "paired", web_token=True),
     Route("POST", "/intake/api/demo/leave", post_leave, "web"),
 ]
+
+
+def mountable() -> list[Route]:
+    """What RC9 mounts: `ROUTES` once `demo.MOUNTABLE` is True (the seal's leak lists are empty), nothing before."""
+    return list(ROUTES) if demo.MOUNTABLE else []
