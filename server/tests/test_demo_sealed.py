@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from filament_kit import cli, config, demo, modules, pairing, setup_code, setup_helper
+from filament_kit import cli, config, demo, modules, pairing, setup_code, setup_helper, setup_page
 from filament_kit.api import create_app
 from filament_kit.bridge import camera, family, mapping, registry
 from filament_kit.demo import printers
@@ -47,12 +47,14 @@ STREAMS = ("/intake/api/printers/{id}/events",)           # a server-sent stream
 # the first runs on the test boxes.
 LEAKS: dict[str, str] = {}
 
-# what the Klipper per-printer page routes reach with a real body (the walk's empty bodies stop before they get there):
-# `POST /setup/api/printers/{serial}/test` calls Moonraker's /printer/info (a Bambu printer: a TLS handshake) in
-# `setup_page.py printer_test` (RC9, Antigravity's file): it needs a 409 "Not in the demo." (`code=demo.NOT_IN_DEMO_CODE`)
-# before `_moonraker_test`. Empty when that lands.
+# what the per-printer page routes reach with a real body (the walk's empty bodies stop before they get there), for the
+# two Klipper printers and then the Bambu one: `POST /setup/api/printers/{serial}/test` calls Moonraker's /printer/info
+# (a Bambu printer: a TLS handshake with 192.0.2.40) in `setup_page.py printer_test` (RC9, Antigravity's file): it needs a
+# 409 "Not in the demo." (`code=demo.NOT_IN_DEMO_CODE`) before `_moonraker_test` and before `tlspin.leaf_fp`. A route
+# listed here is held by `test_firmware_download_and_the_per_printer_routes_with_bodies_stay_inside` and left out of the
+# every-route walk; empty when the stop lands (the walk then covers it).
 KLIPPER_ROUTE_LEAKS: dict[str, list[str]] = {
-    "POST /setup/api/printers/{serial}/test": ["connect voron.example"],
+    "POST /setup/api/printers/{serial}/test": ["connect voron.example", "connect 192.0.2.57", "connect 192.0.2.40"],
 }
 
 # what the calls with a real body leave outside the demo's folder (the walk's empty bodies stop before they get there)
@@ -223,11 +225,27 @@ def routes_of(app):
                 yield m, r.path
 
 
+class SteppedTime:
+    """`time` as the setup page sees it, with `monotonic` moving 10 s at every call: the 3 s gap between two checks
+    (`CHECK_GAP`) is never in the way, so a route behind it is reached by the walk whatever the speed of the machine."""
+
+    def __init__(self):
+        self._now = 1000.0
+
+    def monotonic(self) -> float:
+        self._now += 10.0
+        return self._now
+
+    def __getattr__(self, name):
+        return getattr(time, name)
+
+
 @pytest.fixture
 def hub(tmp_path, monkeypatch):
     """The kit app in demo: the demo's own registry (the hook registry.py needs, put in by the test), the pretend
     families, the real camera hub and mapper, every way out recorded. Returns (client, recorder, the two families)."""
     demo.start(spoolman=type("E", (), {"get": lambda self, p: []})(), registry_load=lambda: {})
+    monkeypatch.setattr(setup_page, "time", SteppedTime())
     monkeypatch.setattr(registry, "load", printers.registry_printers)
     sm = Spoolman("http://127.0.0.1:1")
     bambu, klipper = printers.Family("bambu", sm), printers.Family("klipper", sm)
@@ -272,8 +290,8 @@ def test_every_route_in_the_demo(hub, tmp_path):
     leaks: dict[str, set] = {}
     walked = 0
     for method, path in routes_of(app):
-        if path in PAIRING_ROUTES or path in STREAMS:
-            continue
+        if path in PAIRING_ROUTES or path in STREAMS or f"{method} {path}" in KLIPPER_ROUTE_LEAKS:
+            continue                                              # (the last: held by the per-printer test below)
         url = sample_path(path)
         before, n, w = snapshot(tmp_path), len(out.seen), len(out.wrote)
         kw = {"json": {"code": CODE} if path.startswith("/setup/") else {}} if method in (
@@ -295,9 +313,10 @@ def test_every_route_in_the_demo(hub, tmp_path):
     assert set(leaks) == set(LEAKS), "\n" + report
 
 
-def test_firmware_download_and_the_klipper_printer_routes_with_bodies_stay_inside(hub, tmp_path):
-    """R587 M2 and M4: the firmware image is no download in the demo, and every per-printer page route for each Klipper
-    printer, with a body that gets past the checks, reaches nothing and writes nothing outside the demo's folder."""
+def test_firmware_download_and_the_per_printer_routes_with_bodies_stay_inside(hub, tmp_path):
+    """R587 M2 and M4, R609 N1: the firmware image is no download in the demo, and every per-printer page route for each
+    pretend printer (both Klipper ones, then the Bambu one), with a body that gets past the checks and the check gap
+    out of the way, reaches nothing and writes nothing outside the demo's folder."""
     c, out, _ = hub
     before, n, w = snapshot(tmp_path), len(out.seen), len(out.wrote)
     r = c.get("/setup/api/firmware/printer-station.bin")
@@ -308,13 +327,13 @@ def test_firmware_download_and_the_klipper_printer_routes_with_bodies_stay_insid
     for method, path in routes_of(c.app):
         if not path.startswith("/setup/api/printers/{serial}") or method == "GET":
             continue
-        for pid in ("garage-voron", "mainsailos"):
+        for pid in ("garage-voron", "mainsailos", "00M00A000000001"):
             k = len(out.seen)
             c.request(method, sample_path(path).replace("00M00A000000001", pid), json=body)
             walked += 1
             time.sleep(0.3)                      # a route that leaves a thread behind is caught at its own request
             reached.setdefault(f"{method} {path}", []).extend(x for x in out.seen[k:] if not INSIDE.match(x))
-    assert walked >= 20
+    assert walked >= 30
     assert {r: v for r, v in reached.items() if v} == KLIPPER_ROUTE_LEAKS      # held exactly, like LEAKS
     assert sorted(k for k in out.seen[n:] if not INSIDE.match(k)) == sorted(x for v in KLIPPER_ROUTE_LEAKS.values() for x in v)
     after = snapshot(tmp_path)
