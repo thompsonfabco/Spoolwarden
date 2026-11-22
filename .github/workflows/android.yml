@@ -66,6 +66,9 @@ jobs:
           restore-keys: robolectric-android-all-${{ runner.os }}-
       # ... and fill it here, retried: one test class per SDK level (each distinct @Config(sdk = [...]) in the tests, and a class without
       # @Config for Robolectric's default level), run by Gradle itself, so the layout is Robolectric's own. Warns and goes on if all tries fail.
+      # Try 2 fetches from the Google mirror of Maven Central (same paths) instead of repo1.maven.org: the tests of one SDK level failed on all
+      # three tries from the runner (HTTP error from Maven Central) while the other levels downloaded fine. The property goes in through
+      # JAVA_TOOL_OPTIONS, so Gradle prints "Picked up JAVA_TOOL_OPTIONS" lines (harmless). A failed try prints the cause from the test report.
       - name: Download the Robolectric runtime
         run: |
           src=app/src/test/java
@@ -77,10 +80,15 @@ jobs:
           add "$(grep -rLF '@Config(' $(grep -rlE 'RunWith\((Robolectric|AndroidJUnit4)' "$src") | head -n 1)"
           echo "warm-up classes: ${tests[*]}"
           [ "${#tests[@]}" -gt 0 ] || exit 0
+          mirror=https://maven-central.storage-download.googleapis.com/maven2
           for attempt in 1 2 3; do
+            opts=""
+            [ "$attempt" -eq 2 ] && opts="-Drobolectric.dependency.repo.url=$mirror -Drobolectric.dependency.repo.id=google-mirror"
             # --no-build-cache --rerun: the tests must really run here, a cached result downloads nothing
-            ./gradlew testDebugUnitTest --no-build-cache --rerun "${tests[@]}" && exit 0
+            JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} $opts" ./gradlew testDebugUnitTest --no-build-cache --rerun "${tests[@]}" && exit 0
             echo "::warning::Robolectric runtime download failed (attempt $attempt of 3)"
+            echo "cause (from the test report):"
+            { grep -hE 'Server returned HTTP response code|FileNotFoundException|IOException|UnknownHost|ConnectException|SocketTimeout|SSLException' app/build/test-results/testDebugUnitTest/*.xml || true; } | sort -u | head -n 4 | cut -c1-300
             [ "$attempt" -lt 3 ] && sleep $((attempt * 60))
           done
           echo "::warning::the Robolectric runtime could not be downloaded in advance; the tests try again themselves"
