@@ -34,6 +34,9 @@
 #include "secrets.h"         // optional: a build with settings compiled in (copied into flash; see loadSettings)
 #define HAVE_SECRETS 1
 #endif
+#ifndef READER_HUB_IP
+#define READER_HUB_IP ""
+#endif
 #include "fw_build.h"        // FW_BUILD, generated per build by fw_build.py
 #include "reader_api.h"
 #include "menu.h"
@@ -494,7 +497,8 @@ bool hubConnect(WiFiClientSecure& tls, uint32_t budgetMs) {
   ensureMdns();
   if (tls.connected()) return true;
   uint32_t t0 = millis();
-  std::vector<HubAddress> list = hubAddresses(cfg.base, cfg.hubIp, hubIpNow, mdnsSliceMs(budgetMs), mdnsLookup);
+  std::vector<HubAddress> list = hubAddresses(cfg.base, cfg.hubIp, hubIpNow, mdnsSliceMs(budgetMs), mdnsLookup,
+                                              READER_HUB_IP);
   tls.setHandshakeTimeout(HANDSHAKE_S);
   for (size_t i = 0; i < list.size(); i++) {
     uint32_t ms = connectSliceMs(budgetMs, millis() - t0, list.size() - i);

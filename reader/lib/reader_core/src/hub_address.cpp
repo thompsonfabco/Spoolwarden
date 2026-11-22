@@ -58,7 +58,7 @@ bool isIpv4(const std::string& s) {
 }
 
 std::vector<HubAddress> hubAddresses(const std::string& base, const std::string& hubIp, const std::string& cachedIp,
-                                     uint32_t mdnsMs, const MdnsLookup& lookup) {
+                                     uint32_t mdnsMs, const MdnsLookup& lookup, const std::string& compiledHubIp) {
   std::vector<HubAddress> out;
   BaseParts p = parseBase(base);
   if (!p.ok) return out;                     // nothing to connect to
@@ -72,8 +72,9 @@ std::vector<HubAddress> hubAddresses(const std::string& base, const std::string&
   } else if (lookup && lookup(p.host, mdnsMs, ip) && isIpv4(ip)) {
     a.source = ADDR_MDNS; a.ip = ip; out.push_back(a);
   }
-  if (isIpv4(hubIp) && (out.empty() || out[0].ip != hubIp)) {
-    a.source = ADDR_HUB_IP; a.ip = hubIp; out.push_back(a);
+  const auto& fallbackIp = hubIp.empty() ? compiledHubIp : hubIp;
+  if (isIpv4(fallbackIp) && (out.empty() || out[0].ip != fallbackIp)) {
+    a.source = ADDR_HUB_IP; a.ip = fallbackIp; out.push_back(a);
   }
   return out;
 }
