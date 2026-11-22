@@ -91,11 +91,14 @@ def test_public_quarantine_numbers_the_copies_and_keeps_five_at_most(tmp_path):
 
 
 def test_quarantine_with_no_file_is_false_and_makes_no_copy(tmp_path):
-    assert statexml.quarantine(tmp_path / "lines.json") is False
-    assert not list(tmp_path.iterdir())
+    d = tmp_path / "s"
+    d.mkdir()
+    assert statexml.quarantine(d / "lines.json") is False
+    assert not list(d.iterdir())
 
 
 def test_a_deleted_json_removes_a_token_bearing_xml_and_leaves_nothing_behind(tmp_path):
+    tmp_path = tmp_path / "s"
     p = tmp_path / "pair-aside.json"
     other = tmp_path / "other.json"
     statexml.write(other, {"n": 1}, 0o640)
