@@ -4,6 +4,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.net.KitWire
 import com.thompsonfabco.filamentkit.net.StorageAnswer
 import com.thompsonfabco.filamentkit.ui.history.ActivityBackend
 import kotlinx.serialization.json.Json
@@ -29,6 +30,12 @@ interface SpoolBackend : ActivityBackend {
     /** The locations with how full each is (`GET api/storage`); the default is the names alone, so older fakes compile. */
     suspend fun storage(): StorageAnswer = StorageAnswer.ofNames(locations())
 
+    /** `POST api/spools/{id}/return` (R88 1.7); the default is a Hub without it, so older fakes compile. */
+    suspend fun returnSpool(spoolId: Int): JsonObject = throw ApiError(404, "not_found", "Not found")
+
+    /** `PATCH api/spools/{id}` with `home` (R88 1.7); the default is a Hub without it. */
+    suspend fun setHome(spoolId: Int, home: String): JsonObject = throw ApiError(404, "not_found", "Not found")
+
     companion object {
         /** Calls go to whatever [current] returns at that moment, so a re-pair or a trusted certificate reaches the screen. */
         fun of(current: () -> Api): SpoolBackend = object : SpoolBackend {
@@ -43,6 +50,8 @@ interface SpoolBackend : ActivityBackend {
 
             override suspend fun locations() = current().locations()
             override suspend fun storage() = current().locationList()
+            override suspend fun returnSpool(spoolId: Int) = current().returnSpool(spoolId)
+            override suspend fun setHome(spoolId: Int, home: String) = current().setHome(spoolId, home)
             override suspend fun activity(subject: String, limit: Int) = current().activity(subject, limit)
             override suspend fun undoEvent(id: Long) = current().undoEvent(id)
         }
@@ -67,6 +76,12 @@ data class SpoolSummary(
     val filamentId: Int? = null,
     val emptyWeight: Double? = null,
     val lot: String? = null,
+    /** R88 section 1: the spool has a remembered place; [home] is that place, [checkedOutSince] the time of the load. */
+    val checkedOut: Boolean = false,
+    val home: String? = null,
+    val checkedOutSince: String? = null,
+    /** "<printer> – <slot>" when the Hub says which slot holds the spool. */
+    val inSlot: String? = null,
 ) {
     /** "Brand Name", else "spool 214" has no name to show. */
     val title: String get() = listOf(brand, name).filter { it.isNotBlank() }.joinToString(" ")
@@ -91,6 +106,7 @@ fun JsonObject.toSpoolSummary(): SpoolSummary {
     val vendor = filament?.get("vendor") as? JsonObject
     fun JsonElement?.text(): String? = (this as? JsonPrimitive)?.contentOrNull
     fun JsonElement?.number(): Double? = (this as? JsonPrimitive)?.doubleOrNull
+    val checked = checkedOutInfo()
     val archived = (this["archived"] as? JsonPrimitive)?.booleanOrNull == true
     val sealed = this["comment"].text()?.contains(SEALED_NOTE) == true
     return SpoolSummary(
@@ -111,6 +127,10 @@ fun JsonObject.toSpoolSummary(): SpoolSummary {
         filamentId = (filament?.get("id") as? JsonPrimitive)?.intOrNull,
         emptyWeight = (this["spool_weight"].number() ?: filament?.get("spool_weight").number())?.takeIf { it > 0 },
         lot = this["lot_nr"].text()?.ifBlank { null },
+        checkedOut = checked?.checkedOut == true,
+        home = checked?.home,
+        checkedOutSince = checked?.since,
+        inSlot = KitWire.spoolLoaded(this)?.let { "${it.printer} – ${it.slot}" }?.takeIf { checked?.checkedOut == true },
     )
 }
 

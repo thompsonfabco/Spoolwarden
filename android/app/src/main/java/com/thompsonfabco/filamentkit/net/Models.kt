@@ -974,6 +974,7 @@ object SpoolFilter {
     const val OPENED = "opened"
     const val LOADED = "loaded"
     const val LOW = "low"
+    const val CHECKED_OUT = "checked_out"
 }
 
 object KitWire {
