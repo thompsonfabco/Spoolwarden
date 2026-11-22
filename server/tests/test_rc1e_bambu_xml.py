@@ -64,9 +64,9 @@ def test_old_slotmap_json_is_read_moved_and_left_as_it_was(state):
     assert m.slots == SLOTS and m.calibrated and not m.observe and m.updated == 1762800000.25
     assert (f.parent / "slotmap.xml").is_file()             # moved at the first read
     assert f.read_bytes() == before                         # the rollback finds its settings
-    m.suspect = True                                        # from now on the XML is the one in use
+    m.suspect = True                                        # the XML is the one in use; the JSON is kept current beside it
     ams.save_map(SERIAL, m)
-    assert f.read_bytes() == before and ams.load_map(SERIAL).suspect is True
+    assert json.loads(f.read_bytes())["suspect"] is True and ams.load_map(SERIAL).suspect is True
 
 
 def test_damaged_slotmap_xml_is_the_default_map_and_is_reported(state):
