@@ -77,6 +77,7 @@ async function refreshStorage() {
 function placeLabel(l) {
   const sets = l.type === "containers", used = Number(l.used) || 0, name = l.name;
   const limit = sets ? null : l.limit;
+  if (l.used == null) return name + " · " + SW.t("common_unknown");      // Spoolman did not answer: the counts are null, not 0
   if (sets ? l.free === 0 : limit != null && used >= limit) return SW.t("storage_option_full", { name });
   if (sets) return SW.t("storage_option_containers_free", { name, free: l.free ?? 0 });
   return limit != null ? SW.t("storage_option_limit", { name, used, limit }) : SW.t("storage_option_plain", { name, count: used });

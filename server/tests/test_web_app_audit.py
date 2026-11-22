@@ -1139,6 +1139,8 @@ READY = {
   await refreshStorage(); need('a new answer keeps the choice', sel().value === 'Dry box');
   const here = placeEntries().find((e) => e.value === 'Dry box').here;
   need('a container of a prefixed set counts as the set, by the names the Hub lists and no name built here', here('Dry bin 1') && here('Dry bin 3') && here('Dry box') && !here('Dry box 1') && !here('Dry bin 5') && !here('Dry bin 01'));
+  stub('storage', () => reply({ locations: STORE.locations.map((l) => ({ ...l, used: null, free: null, containers: l.containers && l.containers.map((c) => ({ ...c, taken: null })) })), counts_unavailable: true })); await refreshStorage();
+  need('counts the Hub could not get are said as unknown, never as 0 or Full', labels().length === 7 && labels().slice(1).every((l) => l.endsWith(' · ' + SW.t('common_unknown'))) && sel().value === 'Dry box');
 """,
     "storage_auto_line": r"""
   await waitPage();

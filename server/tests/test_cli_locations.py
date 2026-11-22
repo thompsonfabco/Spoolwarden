@@ -12,7 +12,7 @@ import sys
 import pytest
 from starlette.testclient import TestClient
 
-from filament_kit import apply, cli, config, inventory, output, pairing, storage, storage_api
+from filament_kit import apply, cli, config, inventory, locations_cli, output, pairing, storage, storage_api
 from filament_kit.api import create_app
 from filament_kit.spoolman import SpoolmanError
 from filament_kit.storage import ANY, CONTAINERS, MATERIALS, Location, Storage
@@ -133,16 +133,22 @@ def test_locations_json_is_the_answer_of_get_api_storage(capsys, sm, tmp_path):
     tok = pairing.redeem_code(pairing.issue().code)
     served = c.get("/api/storage", headers={"Authorization": f"Bearer {tok}"}).json()
     assert rc == 0 and json.loads(out) == served == storage_api.current_view(sm)
-    assert list(json.loads(out)) == ["locations", "order_by_material", "everything_else", "notices"]
+    assert list(json.loads(out)) == ["locations", "order_by_material", "everything_else", "notices", "counts_unavailable"]
     assert "Note:" not in out
 
 
-def test_the_list_without_spoolman_says_so(capsys):
+def test_the_list_without_spoolman_is_shown_with_the_counts_unknown(capsys):
     class Down(FakeSm):
         def get(self, path):
-            raise SpoolmanError("connection refused", 0)
+            raise SpoolmanError("connection refused", None)
     rc, out, err = run(capsys, Down(), "locations")
-    assert rc == 1 and out == "" and err.startswith("Error: Spoolman did not answer")
+    assert rc == 0 and "Rack 1" in out and "Storage box" in out
+    assert out.count("Unknown") == 4
+    assert " ".join(err.split()) == "Note: " + " ".join(locations_cli.text("common_spoolman_unreachable").split())
+    rc, out, _ = run(capsys, Down(), "locations", "--json")
+    view = json.loads(out)
+    assert rc == 0 and view["counts_unavailable"] is True
+    assert [r["used"] for r in view["locations"]] == [None] * 4 and [r["free"] for r in view["locations"]] == [None] * 4
 
 
 # ================================================================ add

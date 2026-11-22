@@ -46,6 +46,20 @@ class StorageTest {
         assertTrue(a.orderByMaterial.isEmpty() && a.everythingElse.isEmpty())
     }
 
+    @Test fun countsTheHubCouldNotGetAreNullNotZero() {
+        val a = parse(
+            """{"locations":[{"name":"Rack 1","type":"bulk","limit":20,"used":null,"free":null,"position":1},
+               {"name":"Storage box","type":"containers","count":12,"used":null,"free":null,"position":2,
+                "containers":[{"name":"Storage box 01","number":1,"taken":null}]}],
+             "counts_unavailable":true}""",
+        )!!
+        assertEquals(listOf("Rack 1", "Storage box"), a.names)
+        assertNull(a.locations[0].used)
+        assertNull(a.locations[1].used)
+        assertNull(a.locations[1].free)
+        assertEquals(listOf("Storage box 01"), a.locations[1].containerNames)
+    }
+
     @Test fun locationsAreInFillOrderByPositionThenListOrder() {
         val a = parse("""{"locations":[{"name":"C","position":3},{"name":"A","position":1},{"name":"X"},{"name":"B","position":2}]}""")!!
         assertEquals(listOf("A", "B", "C", "X"), a.names)

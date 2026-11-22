@@ -475,7 +475,7 @@ async function spPlaces() {
 async function spHomeSheet(view, opener) {
   let rows = [];
   try { rows = ((await api("settings/storage")).locations || []); } catch { /* the choice then holds the current home only */ }
-  const label = (l) => { const cap = l.limit != null ? l.limit : l.count; return cap != null ? tx("spools_home_option_of", { name: l.name, used: l.used ?? 0, capacity: cap }) : tx("spools_home_option", { name: l.name, used: l.used ?? 0 }); };
+  const label = (l) => { if (l.used == null) return l.name + ": " + SW.t("common_unknown"); const cap = l.limit != null ? l.limit : l.count; return cap != null ? tx("spools_home_option_of", { name: l.name, used: l.used ?? 0, capacity: cap }) : tx("spools_home_option", { name: l.name, used: l.used ?? 0 }); };
   const field = SW.field({ type: "select", label: tx("spools_home_place"), name: "home", options: rows.map((l) => ({ value: l.name, label: label(l) })) });
   if (view.v.home && rows.some((l) => l.name === view.v.home)) field._control.value = view.v.home;
   const out = slotBox();

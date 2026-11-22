@@ -43,6 +43,7 @@ const stCsvItem = () => ({ label: stT("storage_download_csv"), icon: "download",
 
 // ----- the rows' words -----
 function stFull(r) {
+  if (r.used === null) return SW.t("common_unknown");      // Spoolman did not answer: the count is unknown, not 0
   const used = r.used || 0;
   if (r.type === "containers") return SW.t("storage_used_containers", { used, count: r.count || 0 });
   return r.limit ? SW.t("storage_used_limit", { used, limit: r.limit }) : SW.t("storage_used_plain", { count: used });
@@ -124,6 +125,7 @@ function storageGroup({ st }) {
     v.badges.replaceChildren(...[row.overflow ? "storage_badge_overflow" : null, row.default_overflow ? "storage_badge_default_overflow" : null,
       row.sealed ? "storage_badge_sealed" : null].filter(Boolean).map((k) => SW.status("note", { small: true, text: SW.t(k) })));
     v.full.textContent = stFull(row);
+    if (row.used === null) v.full.title = SW.t("common_spoolman_unreachable"); else v.full.removeAttribute("title");
     v.takes.textContent = stTakesText(row);
     v.edit.setAttribute("aria-label", SW.t("settings_storage_edit_name", { name: row.name }));
     stRelabel(v.up, SW.t("storage_move_up", { name: row.name }));

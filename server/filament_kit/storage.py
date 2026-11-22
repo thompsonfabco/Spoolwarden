@@ -145,13 +145,22 @@ class Storage:
 
     def describe(self, taken) -> list[dict]:
         """One dict per location in fill order, the rows of `GET api/storage`: `containers` ([{name, number, taken}]) and `prefix` are null for Bulk storage; a client never builds a
-        container name itself. (no other field; the web app's "Automatic" line comes from the preview.)"""
-        return [{"id": x.id, "name": x.name, "type": x.type, "limit": x.limit, "count": x.count,
-                 "used": self.used(x, taken), "free": self.free(x, taken), "fill": x.fill,
-                 "materials": list(x.materials), "overflow": x.overflow, "default_overflow": x.default_overflow,
-                 "sealed": x.sealed, "position": i + 1, "containers": self.containers(x, taken),
-                 "prefix": x.container_prefix() if x.type == CONTAINERS else None}
-                for i, x in enumerate(self.locations)]
+        container name itself. (no other field; the web app's "Automatic" line comes from the preview.)
+        `taken` None = the counts are unknown (Spoolman did not answer): `used`, `free` and each container's `taken`
+        are null, never 0."""
+        known = taken is not None
+        out = [{"id": x.id, "name": x.name, "type": x.type, "limit": x.limit, "count": x.count,
+                "used": self.used(x, taken) if known else None, "free": self.free(x, taken) if known else None,
+                "fill": x.fill, "materials": list(x.materials), "overflow": x.overflow,
+                "default_overflow": x.default_overflow, "sealed": x.sealed, "position": i + 1,
+                "containers": self.containers(x, taken if known else {}),
+                "prefix": x.container_prefix() if x.type == CONTAINERS else None}
+               for i, x in enumerate(self.locations)]
+        if not known:
+            for row in out:
+                for c in row["containers"] or []:
+                    c["taken"] = None
+        return out
 
     def choosable(self) -> list[str]:
         """Every text a spool's location may be set to by name: each location's name (a containers location's name

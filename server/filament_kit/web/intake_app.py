@@ -923,7 +923,7 @@ class IntakeApp:
     async def storage_get(self, request: Request):
         """The twin of the app's GET api/storage: the same data (storage_api.view), under this app's base."""
         def run() -> dict:
-            return storage_api.view(self.tools.storage_list(), inventory._used_locations(self.tools.sm))
+            return storage_api.view(self.tools.storage_list(), storage_api.taken_or_unknown(self.tools.sm))
         return await anyio.to_thread.run_sync(run)
 
     EVENT_PARAMS = ("since", "since_at", "kinds", "limit", "newest", "alert", "client")

@@ -1691,8 +1691,8 @@ def _storage_show_lines(rows: list, sm_factory) -> list[str]:
     holds the locations of `GET api/storage`."""
     try:
         view = storage_api.current_view((sm_factory or locations_cli.default_spoolman)())
-    except (SpoolmanError, OSError, KeyError):          # without Spoolman the list is still shown, with nothing used
-        view = storage_api.view(storage.current(), {})
+    except (SpoolmanError, OSError, KeyError):          # without Spoolman the list is still shown, with the counts unknown
+        view = storage_api.view(storage.current(), None)
     rows.append({"label": "Locations", "key": None, "value": view["locations"]})
     width = max(len(r["name"]) for r in view["locations"])
     return [f"  {r['position']:>2}  {r['name']:<{width}}  {locations_cli.row_line(r, view['locations'])}"
