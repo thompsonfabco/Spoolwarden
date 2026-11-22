@@ -1008,7 +1008,7 @@ def test_return_spool_reports_spool_returned(sm, store):
     d = ev["data"]
     assert (d["before_location"], d["after_location"], d["before_slot"]) == (SLOT, "Rack 1", "A2")
     assert str(d["after_grams"]) in ("640", "640.0")
-    assert inventory.RETURNED_TEXT.format(spool="x", slot="A2", home="Rack 1") == "Returned x from A2 to Rack 1."
+    assert inventory.RETURNED_TEXT.format(spool="x", slot="A2", location="Rack 1") == "Returned x from A2 to Rack 1."
     again = pytest.raises(inventory.NotCheckedOut, inventory.return_spool, sm, s["id"])
     assert str(again.value) == "This spool is not checked out."
 

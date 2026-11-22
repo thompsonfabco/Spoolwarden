@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 
 SEALED_COMMENT = "SEALED - tag when opened"
 NOT_CHECKED_OUT = "This spool is not checked out."
-RETURNED_TEXT = "Returned {spool} from {slot} to {home}."      # the activity sentence of spool.returned
+RETURNED_TEXT = "Returned {spool} from {slot} to {location}."      # the activity sentence of spool.returned
 RETURNED_TEXT_NO_HOME = "Returned {spool} from {slot}."         # ... when the rules place it nowhere: no place
 
 # serializes add + placement (in this process and the other one) so two adds never pick the same box
