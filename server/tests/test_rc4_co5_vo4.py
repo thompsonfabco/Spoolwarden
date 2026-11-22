@@ -296,7 +296,7 @@ def _parts(js: str) -> dict:
 
 def _co(tmp_path):
     js = _app()
-    return _node(tmp_path, CO_HARNESS % {**_parts(js), "co": _cut(js, "// ----- Checked out (R88", "// ----- Weigh Station voice")})
+    return _node(tmp_path, CO_HARNESS % {**_parts(js), "co": _cut(js, "// ----- Checked out", "// ----- Weigh Station voice")})
 
 
 def _vo(tmp_path):
