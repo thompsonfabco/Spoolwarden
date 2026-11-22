@@ -30,6 +30,9 @@ class Spoolman:
         self.timeout = timeout
 
     def _request(self, method: str, path: str, body: Any = None) -> Any:
+        from . import demo      # here: the demo imports this module
+        if demo.is_on():        # the demo's own inventory answers; the real Spoolman is never reached
+            return self._demo(method, path, body)
         url = f"{self.base_url}/api/v1/{path.lstrip('/')}"
         data = None
         headers = {"Accept": "application/json"}
@@ -52,6 +55,16 @@ class Spoolman:
             return json.loads(raw)
         except ValueError as e:
             raise SpoolmanError(f"bad response from spoolman {method} {path}: not JSON", status=status) from e
+
+    @staticmethod
+    def _demo(method: str, path: str, body: Any) -> Any:
+        from .demo import inventory
+        try:
+            return inventory.request(method, path, body)
+        except inventory.DemoSpoolmanError as e:
+            raise SpoolmanError(f"spoolman {method} {path} -> {e.status}: {e.message}", status=e.status) from e
+        except (OSError, ValueError, KeyError) as e:     # the demo's file is gone or unreadable (the demo just ended)
+            raise SpoolmanError("spoolman_unreachable", status=None) from e
 
     def get(self, path: str) -> Any:
         return self._request("GET", path)
