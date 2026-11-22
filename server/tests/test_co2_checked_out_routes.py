@@ -2,7 +2,7 @@
 `home` on PATCH /api/spools/{id}), the Weigh Station's three (tag, save with `return`, `POST /api/station/return`) and the web
 app's twins. Real inventory over the fake Spoolman; the Klipper printer is a recorder.
 
-The command line's requests (R682, co7-spools-cli 607c9268) are replayed at the end: every field it reads must be in the answer."""
+The command line's requests (co7-spools-cli 607c9268) are replayed at the end: every field it reads must be in the answer."""
 from __future__ import annotations
 
 import json
@@ -396,7 +396,7 @@ def test_save_with_return_that_loses_a_race_writes_no_weight(stc, sm, monkeypatc
 
 
 def test_save_with_return_keeps_the_returns_undo_possible_weighed_before_returned(stc, sm, store):  # noqa: F811
-    """R701: the weight is written under the return's lock, so spool.weighed comes before spool.returned and the return's Undo
+    """The weight is written under the return's lock, so spool.weighed comes before spool.returned and the return's Undo
     (the event_id the station answers) is not refused with changed_since."""
     from filament_kit import undo
     s = _out(sm, home="Rack 2", name="Undoable")

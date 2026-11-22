@@ -365,7 +365,7 @@ def test_the_page_audit_passes_on_every_view(served_web):
 
 @pytest.mark.parametrize("look", ("console", "palette", "workbench", "panes"))
 def test_a_record_opens_with_its_fields_in_every_theme(served_web, request, look):
-    """R298: Palette (a sheet), Workbench (a card) and Panes show the record in a dialog or a pane; it must open there with
+    """Palette (a sheet), Workbench (a card) and Panes show the record in a dialog or a pane; it must open there with
     the 13 fields of its one saved item, as in Console where it opens in place, and without a page error."""
     if request.node.callspec.params["served_web"] != "waiting":
         pytest.skip("one data state is enough: the themes differ in markup, not in data")
@@ -416,7 +416,7 @@ def _flow(url: str, flow: str, width: int) -> dict:
 
 @pytest.mark.parametrize("flow, width", [("add-found", 375), ("add-klipper", 375), ("add-found", 768), ("add-klipper", 768)])
 def test_a_printer_just_added_opens_with_added(served_changing, flow, width):
-    """R304 MED 1: the add sheet's own Back lands before the address changes, so the page ends on the new printer (not back on #printers)."""
+    """The add sheet's own Back lands before the address changes, so the page ends on the new printer (not back on #printers)."""
     out = _flow(served_changing, flow, width)
     assert out["opened"] and out["cardsAfter"] == out["cardsBefore"] + 1, json.dumps(out)
     assert out["hash"].startswith("#printers/") and out["events"][-1] == "hashchange:" + out["hash"], json.dumps(out)
@@ -425,7 +425,7 @@ def test_a_printer_just_added_opens_with_added(served_changing, flow, width):
 
 @pytest.mark.parametrize("width", [375, 768])
 def test_forgetting_a_printer_closes_its_page(served_changing, width):
-    """R304 MED 2: at tablet width the open printer can sit at #printers with no id, so no hashchange closes it after Forget."""
+    """At tablet width the open printer can sit at #printers with no id, so no hashchange closes it after Forget."""
     out = _flow(served_changing, "forget", width)
     assert out["openBefore"] and not out["openAfter"] and not out["has404"], json.dumps(out)
     assert out["hash"] == "#printers" and "Workshop X1" not in out["cardsAfter"] and len(out["cardsAfter"]) == 2, json.dumps(out)

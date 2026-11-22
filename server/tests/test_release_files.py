@@ -890,7 +890,7 @@ def test_wrapper_reads_the_repair_version_from_state_xml_with_the_kits_python(tm
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
 def test_wrapper_repair_line_takes_a_state_json_changed_after_a_rollback(tmp_path, monkeypatch):
-    """R600 MEDIUM: a rollback writes previous=None, held=N; v0.6.2 then updates and writes only state.json
+    """A rollback writes previous=None, held=N; v0.6.2 then updates and writes only state.json
     (previous=0.6.2, failed=N) and stops halfway. The wrapper reads the state as updates.half_install does, so its repair
     line carries --version 0.6.2, and the two agree."""
     import json

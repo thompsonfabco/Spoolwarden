@@ -74,7 +74,7 @@ def test_a_phones_token_cannot_tell_the_hub_about_a_station(hub):
     assert r.status_code in (400, 403) and pairing.station_info() is None
 
 
-# ---- the reason a plain-HTTP station gives is one clean line of bounded length (R494 LOW)
+# ---- the reason a plain-HTTP station gives is one clean line of bounded length
 
 EVIL = "no\nopenssl\r\n\t\x1b[31mred\x1b[0m\x00\x07 ‮end " + "x" * 5000
 

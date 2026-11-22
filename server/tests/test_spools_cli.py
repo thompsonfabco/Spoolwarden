@@ -436,7 +436,7 @@ def test_parsers_and_run(capsys):
     assert spools_cli.run(parse("spool", "show", "12"), FakeApi({"GET /api/spools/12": {"spool": {}, "view": spool_view(12)}})) == 0
 
 
-# ---------- R88: checked out, return, home ----------
+# ---------- checked out, return, home ----------
 
 SINCE = "2026-11-20T10:00:00Z"
 IN_SLOT = {"printer_id": "S1", "printer": "Workshop", "slot": "A2"}

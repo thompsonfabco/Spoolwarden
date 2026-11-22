@@ -77,12 +77,12 @@ def test_the_page_follows_the_phones_language_when_the_hub_has_the_pack(env):
     kit = RcKit()
     r = page(env, kit, {"Accept-Language": "de-DE,de;q=0.9,en;q=0.5"})
     assert "<html lang=de " in r.text and "/intake/api/strings/de.js'" in r.text
-    # English first, the language after it (its texts replace English when they load): R574 HIGH 4 changed this from "no English"
+    # English first, the language after it (its texts replace English when they load)
     assert r.text.index("/intake/shared/strings.js'") < r.text.index("/intake/api/strings/de.js'") < r.text.index("/intake/shared/components.js'")
 
 
 def test_a_non_english_page_keeps_a_working_catalogue_when_the_hub_goes_down(env):
-    """R574 HIGH 4: the page chose German while the Hub answered; with the Hub down its German script answers 502, and the page
+    """The page chose German while the Hub answered; with the Hub down its German script answers 502, and the page
     still loads the English catalogue before it, so no screen shows bare keys."""
     kit = RcKit()
     c = signed(make_app(env, kit))
@@ -153,7 +153,7 @@ def test_leave_demo_keeps_the_hubs_refusal(env):
 
 
 def test_leaving_drops_the_banner_a_page_load_cached_while_the_hub_was_leaving(env):
-    """R574 LOW: a page load during the leave read the Hub while the demo was still on; the reload after Leave demo has no banner."""
+    """A page load during the leave read the Hub while the demo was still on; the reload after Leave demo has no banner."""
     kit = RcKit()
     kit.demo = True
     c = signed(make_app(env, kit))
@@ -228,7 +228,7 @@ def test_the_print_page(env, monkeypatch):
     for size in FIVE:
         assert c.get(f"/intake/labels?ids=3&size={size}").status_code == 200, size
     for q in ("ids=", "ids=a", "ids=1,,2", "ids=1&size=a4", "ids=1&size=sheet24", "", "ids=" + ",".join(["1"] * 101),
-              "ids=0", "ids=3,0"):                                     # whole numbers of 1 or more, as the refusal says (R574 LOW)
+              "ids=0", "ids=3,0"):                                     # whole numbers of 1 or more, as the refusal says
         assert c.get("/intake/labels?" + q).status_code == 400, q
     assert c.get("/intake/labels?ids=0").text.startswith("Give the spool numbers")
     assert c.get("/intake/labels?ids=1&size=sheet24").text == BAD_SIZE
@@ -321,7 +321,7 @@ class LangEventKit:
 
 
 def test_an_alert_reaches_each_phone_in_its_own_language(tmp_path):
-    """R574 MED 6: the stored language is used: the feed asks the Hub for the event in each subscription's language, once per language,
+    """The stored language is used: the feed asks the Hub for the event in each subscription's language, once per language,
     and a phone whose language the Hub cannot give gets the Hub's own words."""
     store = push.Store(tmp_path / "push.xml")
     for n, lang in (("a", "de"), ("b", "de"), ("c", None), ("d", "ru")):
@@ -376,7 +376,7 @@ def test_the_scripts_hold_the_new_places():
 
 
 def test_the_activity_twin_refuses_in_the_twins_shape(env):
-    """R663: a bad `newest`, `limit` or since+newest is {error: code, message: sentence}, not {error: sentence}."""
+    """A bad `newest`, `limit` or since+newest is {error: code, message: sentence}, not {error: sentence}."""
     c = signed(make_app(env, RcKit()))
     for q in ("newest=abc", "newest=0", "newest=5&since=3", "limit=ten"):
         r = c.get("/intake/api/activity?" + q)

@@ -516,7 +516,7 @@ def test_a_wrong_access_code_is_said_as_such(slow, capsys):
 
 @pytest.mark.parametrize("command", ["report", "map"])
 def test_a_refused_first_attempt_does_not_end_the_wait(slow, monkeypatch, capsys, command):
-    """R102: a printer still booting refuses the first attempt (settled as offline); the CLI keeps waiting for
+    """A printer still booting refuses the first attempt (settled as offline); the CLI keeps waiting for
     paho's retry until CONNECT_WAIT instead of saying "did not answer" at once."""
     monkeypatch.setattr(calib3mf, "run", _result())
     m = slow(copy.deepcopy(REPORT), refused_first=True)
@@ -547,7 +547,7 @@ def test_a_wrong_access_code_stops_the_wait_at_once(slow, monkeypatch, capsys):
 
 
 def test_a_saved_record_holding_a_serial_host_or_name_never_reaches_the_offline_report():
-    """Review R106 (LOW): the saved section takes only the kit's own labels and unit kinds, and no serial-shaped value
+    """The saved section takes only the kit's own labels and unit kinds, and no serial-shaped value
     anywhere, as the live report does; whatever was seeded into the saved state."""
     registry.upsert(registry.Printer(SERIAL, "", "N6", "192.0.2.5", "12345678", True))
     smap = ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0},
@@ -578,7 +578,7 @@ def test_a_serial_shaped_value_is_left_out_of_every_field():
 
 
 def test_long_hex_presence_bits_stay():
-    """Review R110 note 1: the serial filter leaves hex shapes alone (a-f and digits can't spell a serial)."""
+    """The serial filter leaves hex shapes alone (a-f and digits can't spell a serial)."""
     assert printer_report._plain("1000000000000f", printer_report.HEX_OR_INT) == "1000000000000f"
     assert printer_report._plain("ffffffffffffffff", printer_report.HEX_OR_INT) == "ffffffffffffffff"
     assert printer_report._plain("0948ZZ0A0000001", printer_report.HEX_OR_INT) is None   # not hex: the shape refuses it

@@ -507,7 +507,7 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: 
             **({"event_id": ev["id"], "event": ev} if ev else {})}
 
 
-STILL_SHOWS = "The printer still shows the old filament for this slot until a spool is loaded."   # R83
+STILL_SHOWS = "The printer still shows the old filament for this slot until a spool is loaded."
 
 
 def clear(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: str = SEALED) -> dict:

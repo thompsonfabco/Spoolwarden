@@ -360,7 +360,7 @@ def test_the_web_app_says_when_the_reader_is_off_and_the_public_page_has_no_rout
     assert _web("https://example.test/f").get("/intake/api/label-reader/corrections").status_code in (404, 405)
 
 
-# ---------- review R365: the command line, the lock, a missing count, a conflict ----------
+# ---------- the command line, the lock, a missing count, a conflict ----------
 
 def test_the_list_and_package_work_while_the_page_is_locked_out_and_writes_do_not(hub):
     from filament_kit import setup_code

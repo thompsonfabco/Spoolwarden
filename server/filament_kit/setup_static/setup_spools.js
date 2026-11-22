@@ -148,7 +148,7 @@ const addressId = () => { const m = /^#spools\/(\d+)$/.exec(location.hash); retu
 const spEventId = (r) => {
   const e = r && r.event;
   if (e && e.id != null) return e.undo && e.undo.possible === false ? null : e.id;
-  return r && r.event_id != null ? r.event_id : null;      // the Hub's own words for it (R84 ruling 4); none: no Undo
+  return r && r.event_id != null ? r.event_id : null;      // the Hub's own words for it; none: no Undo
 };
 // Undo answers "Put back." (and the Hub's note), or the Hub's refusal (409) in its words
 const spUndo = (id, view) => needCode(async () => {

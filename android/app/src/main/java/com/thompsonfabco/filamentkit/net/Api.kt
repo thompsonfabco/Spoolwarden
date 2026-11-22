@@ -895,7 +895,7 @@ class Api(
         else -> "http_$status"
     }
 
-    /** The answer's `spool`, with its phone-shaped `view` (where R88's checked-out fields are) kept beside it when there is one. */
+    /** The answer's `spool`, with its phone-shaped `view` (where the checked-out fields are) kept beside it when there is one. */
     private fun spool(body: JsonElement): JsonObject {
         val spool = body.jsonObject["spool"]?.jsonObject ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a spool")
         val view = body.jsonObject["view"] as? JsonObject ?: return spool

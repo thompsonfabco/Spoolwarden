@@ -19,7 +19,7 @@ may rename it). The images are `firmware/intake-panel.bin` (whole, at 0x0) and `
 - See: how many of the 30 starts reach "Wi-Fi: connected" and then link up; RSSI against the reference.
 - Pass: 30 of 30; RSSI within 6 dB of the reference at the same spot; no drop in 24 h (est).
 
-## B2. TLS handshake time and speech stutter (H8, H5; R88 prove-first 4)
+## B2. TLS handshake time and speech stutter (H8, H5)
 - Do: link up, then play speech phrases back to back for 10 minutes (volume 50) with the tag reader polling and the OLED
   updating; also reconnect 30 times (restart the station service) while a phrase plays. A bench build that prints a timestamp
   at the handshake start and end, the minimum free heap and the largest free block over serial is needed: the release

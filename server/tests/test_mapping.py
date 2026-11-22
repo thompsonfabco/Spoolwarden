@@ -609,7 +609,7 @@ def test_every_reason_has_its_next_step_and_every_outcome_its_text():
 @pytest.mark.parametrize("abort,reason", [(slottest.OFFLINE, "offline"),
                                           ("The printer started a job (RUNNING); the slot test stopped.", "busy")])
 def test_a_slot_test_stopped_midway_carries_its_reason(stubs, abort, reason):
-    """R60: offline or busy during the test, not only before it."""
+    """Offline or busy during the test, not only before it."""
     stubs["st"] = SlotTestResult(problems=[abort, "A1: not confirmed (x)"], reason=reason)
     v = mapping.Mapper(FakeManager()).run(SERIAL)
     assert v["outcome"] == "failed" and v["reason"] == reason and v["next_step"] == mapping.NEXT_STEP[reason]

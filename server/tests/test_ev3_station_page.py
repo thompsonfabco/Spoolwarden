@@ -18,7 +18,7 @@ from filament_kit.station import http as station_http
 from filament_kit.station import guard, page, settings
 
 TOKEN = "T0ken_for_the_station_pairing_0123456789"
-OPEN_FROM_HUB = "Open this page from the Hub: Devices, this Weigh Station, Open this device's page."   # R83, 2026-11-18 00:52
+OPEN_FROM_HUB = "Open this page from the Hub: Devices, this Weigh Station, Open this device's page."
 
 
 class Clock:

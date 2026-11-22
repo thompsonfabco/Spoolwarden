@@ -123,7 +123,7 @@ def _loopback(host: str | None) -> bool:
 
 
 def needs_https(url: str) -> bool:
-    """An `http://` address that is not this machine's own (127.0.0.1): what R82 refuses once the reader serves HTTPS."""
+    """An `http://` address that is not this machine's own (127.0.0.1): what is refused once the reader serves HTTPS."""
     u = urlparse(str(url or "").strip())
     return u.scheme == "http" and bool(u.hostname) and not _loopback(u.hostname)
 
@@ -226,7 +226,7 @@ REFUSALS = {"bad_request", "no_photos", "too_many_photos", "too_large", "bad_ima
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Never follow a redirect: the reader answers at the address the owner set, and a redirect followed with the
-    bearer token would hand it to another host (review R127 note 1). A 3xx is then an HTTP error like any other."""
+    bearer token would hand it to another host. A 3xx is then an HTTP error like any other."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None

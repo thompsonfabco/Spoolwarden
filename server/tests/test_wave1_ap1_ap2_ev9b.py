@@ -225,7 +225,7 @@ def test_certificate_renew_prompts_renews_restarts_and_prints_fingerprint(tmp_pa
     assert "Certificate present." in out_keep
     assert pairing.fingerprint((etc / "cert.pem").read_bytes()) == old_fp
 
-    # With --renew, prompts exact R86 question; declining leaves cert unchanged
+    # With --renew, prompts the exact question; declining leaves cert unchanged
     prompts = []
     restarts = []
     monkeypatch.setattr(cli, "_restart_service", lambda: restarts.append(1))

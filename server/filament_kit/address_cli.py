@@ -1,4 +1,4 @@
-"""The command line of the address and first-run phase (R82, step AF5): `port` and the Getting started block of
+"""The command line of the address and first-run phase (step AF5): `port` and the Getting started block of
 `status`. Its texts are in address_texts.MESSAGES (the catalogue); cli.py hooks the parser in and runs it.
 
     port                 the Hub's port and its address; no sudo

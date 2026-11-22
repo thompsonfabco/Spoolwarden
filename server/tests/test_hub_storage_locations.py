@@ -1,7 +1,7 @@
 """Settings > Storage locations on the Hub page, in a real headless browser: the list of
 locations in fill order with Add, Edit, Move up and down, Make default overflow, Sealed spools go here and Remove, the
-"Where a new spool goes" panel built from the unsaved list, one Save with the dirty mark, the field and dialog texts of R79
-section 5, and the list readable in all four looks at 1280, 1776, 1024, 768 and 390 px (no summary squeezed to a sliver or
+"Where a new spool goes" panel built from the unsaved list, one Save with the dirty mark, the field and dialog texts
+and the list readable in all four looks at 1280, 1776, 1024, 768 and 390 px (no summary squeezed to a sliver or
 wrapped past two lines, no sideways scrolling: the lesson of the Panes summary-width finding). The page runs against the Hub's
 real routes and storage.xml with spools in the fake Spoolman. The same skip rules as the page audit:
 no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
@@ -564,7 +564,7 @@ out.widths = widths;
 
 @pytest.mark.parametrize("width", [1280, 1776])
 def test_the_list_keeps_a_readable_width_with_the_add_or_edit_form_open(hub, tmp_path, width):
-    """Review R462: in Panes the open editor sat beside Settings' own list and left the group 185 px (rows stacked as cards,
+    """In Panes the open editor sat beside Settings' own list and left the group 185 px (rows stacked as cards,
     buttons wrapped). With the form open every look keeps the group and its list wide, and the Edit button on one line."""
     seen = _drive_storage(hub, tmp_path, OPEN_WIDTH, width=width)["widths"]
     assert {(w["look"], w["what"]) for w in seen} == {(l, k) for l in ("console", "workbench", "palette", "panes") for k in ("add", "edit")}

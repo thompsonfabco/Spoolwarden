@@ -31,7 +31,7 @@ log = logging.getLogger("filament_kit.watch")
 PAUSE_SETTLE = 2.0          # seconds to wait for the stage or the sensor that says why a print paused
 POLL = 5.0                  # seconds between looks at whether each printer answers
 OFFLINE_GRACE = 30.0        # seconds a printer must stay offline before printer.offline (a reconnect is not news)
-ERROR_REPEAT = 1800.0       # seconds before the same printer error code of the same printer is told again (R475 LOW 2)
+ERROR_REPEAT = 1800.0       # seconds before the same printer error code of the same printer is told again
 BAMBU_ONLINE = ("connected", "needs_developer_mode")
 KLIPPER_ONLINE = ("connected", "unknown_model")
 ACTIVE = ("RUNNING", "PAUSE")
@@ -313,7 +313,7 @@ class Watcher:
             return "print.paused", {"reason": "error", "stage": obs["error"]}
         if obs.get("runout") is False:                          # the sensors say filament is there: not a runout
             return "print.paused", {"reason": "user"}
-        return "print.paused", {"reason": "unknown"}            # no sensor to ask (R80 fallback)
+        return "print.paused", {"reason": "unknown"}            # no sensor to ask (the fallback)
 
     def _errors(self, pid: str, p: _Printer, obs: dict) -> None:
         """printer.error for each error code that was not there before (HMS codes and the print error)."""

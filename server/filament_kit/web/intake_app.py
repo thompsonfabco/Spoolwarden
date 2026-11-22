@@ -624,7 +624,7 @@ class IntakeApp:
             return self._kit_refusal(e)
         finally:
             # dropped again once the Hub answered: a page load that read the Hub while it was leaving must not keep the banner
-            # for the reload that follows (R574 LOW)
+            # for the reload that follows
             self._kit_cache.pop("hub", None)
 
     async def asset(self, request: Request):
@@ -931,7 +931,7 @@ class IntakeApp:
 
     @staticmethod
     def _kit_refusal(e) -> JSONResponse:
-        """The Hub's refusal, or its silence, as the kit answers one: {error: code, message: sentence} (R83 addition 2026-11-18 01:06)."""
+        """The Hub's refusal, or its silence, as the kit answers one: {error: code, message: sentence}."""
         st = e.http
         answered = isinstance(st, int) and 400 <= st < 600 and st != 401
         extra = {"field": e.field} if getattr(e, "field", None) else {}

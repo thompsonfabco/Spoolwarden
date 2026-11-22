@@ -328,7 +328,7 @@ function historyTab() {
     corrLink.hidden = false;
   }
   const shareNote = () => (shareOn ? h("p", { class: "muted corr__note" }, SW.icon("info", "icon--s"), " ", tt("corr_save_on")) : null);
-  // the Hub's reason, when it gave one: an empty reason leaves no dangling ": ." (R574 LOW)
+  // the Hub's reason, when it gave one: an empty reason leaves no dangling ": ."
   const reasonOf = (r) => (typeof r === "string" ? r.trim() : "");
   const notTaken = (r) => (reasonOf(r) ? tt("corr_not_taken", { reason: reasonOf(r) }) : tt("corr_not_taken_plain"));
   const notWaiting = (r) => (reasonOf(r) ? tt("corr_not_waiting", { reason: reasonOf(r) }) : tt("corr_not_waiting_plain"));

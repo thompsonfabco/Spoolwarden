@@ -374,7 +374,7 @@ def test_a_broken_file_is_kept_aside_and_never_overwritten():
     assert any("voice.xml" in p for p in statexml.problems())
 
 
-# ---- a passing read error is not a broken file (R626/R629) ----
+# ---- a passing read error is not a broken file ----
 
 def test_a_transient_read_error_leaves_a_good_file_in_place(monkeypatch):
     voice_state.save({"speed": 80}, _cfg())
@@ -454,7 +454,7 @@ def test_the_root_side_never_touches_voice_xml_it_asks_the_service():
             assert word not in text, (p.name, word)
 
 
-# ---- the sender attaches the pairing proof (R594 ruling) ----
+# ---- the sender attaches the pairing proof ----
 
 @pytest.fixture
 def wire(monkeypatch):

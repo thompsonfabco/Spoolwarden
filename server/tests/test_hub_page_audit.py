@@ -492,7 +492,7 @@ def test_features_does_not_scroll_sideways_at_320_px_in_a_wide_font_with_a_long_
 
 
 # What a top-level `function` or `var` of a classic script would replace on `window` (a `const` or `let` of such a name is a
-# SyntaxError), and the names every object has: a section script must not declare one of these (R332: `function scrollTo`
+# SyntaxError), and the names every object has: a section script must not declare one of these (`function scrollTo`
 # turned off the page's own scrolling)
 BROWSER_NAMES = {
     "scrollTo", "scroll", "scrollBy", "open", "close", "print", "name", "status", "top", "parent", "self", "length", "focus", "blur",

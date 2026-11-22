@@ -313,7 +313,7 @@ def _viewer_may(method: str, path: str) -> bool:
 # The printer writes a web token may make (add, edit, forget). The kit's own phone web app (the built-in pairing
 # INTAKE_DEVICE, home network only) always may; the web module's (its public address) only while the owner's switch
 # "Allow printer changes from the public address" (config web.printer_changes) is on. The web module checks the same
-# switch; this holds it even if that internet-facing process does not (review R111 note 1).
+# switch; this holds it even if that internet-facing process does not.
 _PRINTER_WRITE = re.compile(r"/api/printers(?:/[^/]+)?")
 PUBLIC_PRINTER_CHANGES_OFF = ("Printer changes from the public address are off. Turn on \"Allow printer changes from "
                               "the public address\" on the setup page (Settings, General), or use the page on the home "
@@ -472,7 +472,7 @@ def _hardware_view() -> dict:
 
 
 PATCH_KEYS = frozenset({"name", "address", "port", "access_code", "api_key", "unpin"})
-# What a paired device may not do alone (review R103): make the server send a secret it holds to a host the device
+# What a paired device may not do alone: make the server send a secret it holds to a host the device
 # names. A Bambu address change keeps the certificate pin, so the stored Access Code only goes to the same printer.
 NEEDS_CODE_TO_UNPIN = ("trusting a new certificate needs the printer's Access Code in the same request "
                        "(access_code): the stored one is never sent to a certificate the kit hasn't seen")
@@ -743,7 +743,7 @@ def _printer_routes(printers) -> list[Route]:
                 raise BadRequest("unpin is for a Bambu printer", "unpin")
             if body["unpin"] is not True:
                 raise BadRequest("unpin must be true", "unpin")
-            if "access_code" not in body:      # R103: the stored code never goes to a certificate it hasn't seen
+            if "access_code" not in body:      # the stored code never goes to a certificate it hasn't seen
                 raise BadRequest(NEEDS_CODE_TO_UNPIN, "access_code")
             want["unpin"] = True
         if "api_key" in body:
@@ -773,7 +773,7 @@ def _printer_routes(printers) -> list[Route]:
                 other = registry.klipper_at(registry.load(), host, port)
                 if other is not None and other.serial != p.serial:
                     raise _Conflict(f"{registry.display_name(other)} is already at {host}:{port}")
-                # R103: Moonraker has no certificate pin, so a stored key would go to whatever answers there
+                # Moonraker has no certificate pin, so a stored key would go to whatever answers there
                 if p.api_key and "api_key" not in body:
                     raise BadRequest(NEEDS_KEY_TO_MOVE, "api_key")
             elif p.access_code and not p.cert_fp and "access_code" not in body:

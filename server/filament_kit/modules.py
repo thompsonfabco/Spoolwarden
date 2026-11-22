@@ -62,7 +62,7 @@ MODULES: dict[str, Module] = {m.name: m for m in (
     _m("remote", "Remote access", "Public https name for the web UI (nginx, certbot)",
        depends=("web",), apt=("nginx", "certbot")),
     # orders needs Claude (ai_intake) even when the local reader is on: the order history goes only into Claude's
-    # prompt; the local reader never gets it (reader contract v1). The decision of 2026-11-12, after review R127.
+    # prompt; the local reader never gets it (reader contract v1). The decision of 2026-11-12.
     _m("orders", "Order history", "Order history file for the shop tools",
        depends=("ai_intake",), needs_text="order matching needs the Claude reader"),
     _m("updates", "Automatic updates", "Daily check for a new signed release; installs it and keeps the one before",

@@ -37,7 +37,7 @@ from . import config, pairing
 TTL = 600
 # A security limit, not a tidiness one: commit-then-reveal stops a man in the middle only because unrevealed requests
 # are few (3) and short-lived (TTL). Raising either gives such an attacker more tries at the six-digit code
-# (audit v0.5.0, finding 4; R61).
+# (audit v0.5.0, finding 4).
 MAX_PENDING = 3
 GRACE = 120     # seconds a fetched token can be fetched again (a lost reply); 0 gives it out once, as before
 FILE = "station-requests.json"

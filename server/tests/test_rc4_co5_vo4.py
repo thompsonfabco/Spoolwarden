@@ -1,4 +1,4 @@
-"""R88 in the web app, run in Node without a browser: CO5 (the Checked out chip and list, the Home line, Return with its result and
+"""The web app, run in Node without a browser: CO5 (the Checked out chip and list, the Home line, Return with its result and
 Undo; the design, web app) and VO4 (Settings > Weigh Station voice: Speak, Voice read only, Speaker, Speed,
 Volume, Test; the design, web app). The page's own functions (with their stub texts, `tt`) are cut out of
 app.js and given a small DOM, `api` and `SW`."""
@@ -353,17 +353,17 @@ def test_the_spool_sheet_has_the_home_line_change_home_and_return():
 
 
 def test_change_home_says_only_the_home_the_hubs_answer_gives(tmp_path):
-    """R622 MEDIUM 1: "Home is now <location>." only from the answer's `view.home`; an answer without it says nothing false."""
+    """The line "Home is now <location>." comes only from the answer's `view.home`; an answer without it says nothing false."""
     js = _app()
     out = _node(tmp_path, HOME_HARNESS % {**_parts(js), "home": _cut(js, "    async function setHome(l) {", "    async function sendBack(button) {")})
     assert out["took"] == ["Home is now Dry box 2.", "Dry box 2"]
     assert out["ignored"] == [None, None] and out["noView"] == [None, "Shelf A"]     # no line, and the home not made up
     assert out["refused"] == ["There is no such place.", "Shelf A"]                  # the Hub's refusal
-    assert out["busy"] is True                                                        # R622 LOW: a second press waits
+    assert out["busy"] is True                                                        # a second press waits
 
 
 def test_a_search_on_its_way_does_not_replace_the_checked_out_list(tmp_path):
-    """R622 LOW: pressing the chip makes a search answer still coming too late to draw."""
+    """Pressing the chip makes a search answer still coming too late to draw."""
     js = _app()
     out = _node(tmp_path, FIND_HARNESS % {**_parts(js), "find": _cut(js, "  function setCo(on) {", "  function rowButton(f, s) {")})
     assert out["draws"] == ["co"] and out["busy"] is False
@@ -371,7 +371,7 @@ def test_a_search_on_its_way_does_not_replace_the_checked_out_list(tmp_path):
 
 def test_the_checked_out_list_says_when_it_shows_one_page(tmp_path):
     out = _co(tmp_path)
-    assert "2 of 5 shown." in out["two"][1]                          # R622 LOW: the chip counts `total`, the list one page
+    assert "2 of 5 shown." in out["two"][1]                          # the chip counts `total`, the list one page
 
 
 # ---- VO4 ----
@@ -425,7 +425,7 @@ def test_the_voice_rows_line_follows_remote(tmp_path):
 
 
 def test_the_voice_panel_is_drawn_and_marked_while_the_hub_is_away(tmp_path):
-    """R622 MEDIUM 2 (the design, web app points 4 and 5)."""
+    """The design, web app points 4 and 5)."""
     out = _vo(tmp_path)
     a = out["awayLast"]
     assert a["hidden"] is False and a["asked"] == 0 and a["group"] is True       # at once, from the values last read

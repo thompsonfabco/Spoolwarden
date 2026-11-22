@@ -1,5 +1,5 @@
-"""Wave round 3, the Weigh Station: `page_from` in GET /settings and STATION_PAGE_FROM reaching the handler (review R559
-finding 12, the behaviour of 02.2), and the handler's refusal sentences from the catalogue (R559 finding 11, D13)."""
+"""Wave round 3, the Weigh Station: `page_from` in GET /settings and STATION_PAGE_FROM reaching the handler
+(the behaviour of 02.2), and the handler's refusal sentences from the catalogue (D13)."""
 from __future__ import annotations
 
 import json

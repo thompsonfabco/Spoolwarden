@@ -324,7 +324,7 @@ def routes(page) -> list[tuple]:
 
     async def unpin(request, body):
         serial = page._serial(request)
-        if "access_code" not in body:       # R103: the stored code never goes to a certificate it hasn't seen
+        if "access_code" not in body:       # the stored code never goes to a certificate it hasn't seen
             raise Refused(400, "trusting a new certificate needs the printer's Access Code in the same request")
         access = page._access_code(body)
 

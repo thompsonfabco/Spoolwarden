@@ -1,5 +1,5 @@
 """EA3 (a): every status row has a stable key, the same whether the row is OK or needs a look, and unique in a run;
-the watcher's Checks use it instead of guessing from the first words of the text (R475 LOW 1)."""
+the watcher's Checks use it instead of guessing from the first words of the text."""
 from __future__ import annotations
 
 import ast

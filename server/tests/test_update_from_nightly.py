@@ -47,7 +47,7 @@ def test_a_nightly_is_replaced_by_the_latest_release(env, srv, monkeypatch, caps
 
 
 def test_a_newer_nightly_is_replaced_by_the_older_release(env, srv, monkeypatch, capsys):
-    """R77 review: an unsigned nightly never stays because the newest release is older."""
+    """An unsigned nightly never stays because the newest release is older."""
     srv.add("1.0.0")
     monkeypatch.setattr(updates, "current_version", lambda: "1.1.0")
     monkeypatch.setattr(updates, "version_text", lambda: "1.1.0-nightly.20261110")

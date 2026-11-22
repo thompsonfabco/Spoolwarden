@@ -529,10 +529,10 @@ function printersTab() {
       ...(addedId === g.id && !isUp(p) ? [sentence("ok", t("printers_added_connecting"))] : []));
     if (addedId === g.id && isUp(p)) addedId = null;
     g.up = isUp(p);
-    g.loadAny.hidden = !g.up;                           // Load a spool is in the header whenever the printer is connected (R83 addition 4)
+    g.loadAny.hidden = !g.up;                           // Load a spool is in the header whenever the printer is connected
     if (!g.camOn) g.camBtn.hidden = !g.camKind();       // the list may learn of a camera later
   }
-  // ----- Auto (R83 addition, contract A6): the waiting notice with Stop waiting, and the choice when two slots were loaded -----
+  // ----- Auto (contract A6): the waiting notice with Stop waiting, and the choice when two slots were loaded -----
   const autoSpool = (a) => { const s = (a && a.spool) || {}, sid = (a && a.spool_id) ?? s.id; return `${s.vendor || ""} ${s.name || ""}`.trim() || (sid != null ? t("spool_title", { id: sid }) : tg("auto_the_spool")); };
   function paintAuto(p, auto) {
     const g = page;
@@ -551,7 +551,7 @@ function printersTab() {
     kids.push(h("div", { class: "pauto__buttons" }, needsHub(SW.btn(tg("auto_stop"), { cls: "btn--ghost", action: "auto-stop", run: () => autoStop(spool, line) }))), line);
     g.autoBox.replaceChildren(...kids);
   }
-  async function autoStop(spool, line) {                // no question: stopping loses nothing (R83 addition 01:06)
+  async function autoStop(spool, line) {                // no question: stopping loses nothing
     const g = page;
     await act(line, t("common_working"), async () => {
       await pj(`${enc(g.id)}/auto/cancel`, {});

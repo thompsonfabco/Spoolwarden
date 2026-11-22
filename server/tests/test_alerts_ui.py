@@ -1,4 +1,4 @@
-"""EA5 of R80: the shared alert banner, the Alerts list, the events poller and the browser-notification helper
+"""EA5: the shared alert banner, the Alerts list, the events poller and the browser-notification helper
 (web-shared/alerts.js, alerts.css), pressed in a real headless browser through tests/page_drive.mjs and audited through
 tests/aut5_run.mjs. The Hub is a stub: a fake GET api/events in the shape the Hub gives it, served by the page
 (server/tests/alerts_ui/alerts-page.js); no server code is involved. The same skip rules as the page audit: no Node 22 or no

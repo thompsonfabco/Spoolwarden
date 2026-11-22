@@ -480,7 +480,7 @@ def test_the_station_says_the_test_sentence_end_to_end(hub, piper):
         assert w.getnframes() == 10
 
 
-# ---- R594: the texts are the catalogue's (D13)
+# ---- the texts are the catalogue's (D13)
 
 def _state_copy():
     """A second copy of station/state.py, read fresh, so its texts are resolved again against the page's catalogue."""

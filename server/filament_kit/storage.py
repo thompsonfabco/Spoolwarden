@@ -241,7 +241,7 @@ def validate(locations: list[Location], before: list[Location] | None = None, *,
                 "Use Nothing, only when you choose it, or name the materials.")
         if x.default_overflow and not x.overflow:
             bad("overflow", "The default overflow must be an overflow location.", "Switch overflow on.")
-    for i, x in enumerate(locations):          # a name that is a container's name, refused both ways (R79, 22:06)
+    for i, x in enumerate(locations):          # a name that is a container's name, refused both ways
         for j, st_ in enumerate(locations):
             if (check_clashes and i != j and st_.type == CONTAINERS and isinstance(x.name, str)
                     and is_container_name(st_, x.name)

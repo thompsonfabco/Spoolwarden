@@ -1170,7 +1170,7 @@ def test_the_printers_tab_has_manage_printers():
     for words in ('"common_add"', '"common_rename"', '"common_change"', '"common_replace"', '"common_forget"',
                   '"printers_forget"', '"common_add_klipper_printer"', '`${id}/edit`', '`${id}/forget`', 'pj("add", sent)'):
         assert words in text, words
-    # review R103's rules, as the kit enforces them: a new certificate comes with the code, an unpinned printer's new
+    # the review's rules, as the kit enforces them: a new certificate comes with the code, an unpinned printer's new
     # address with its code, a Klipper move with its key
     # (S3.5: the address change asks for the Access Code pinned or not, the user's staging decision of 2026-11-12)
     assert "edit({ unpin: true, access_code: c }" in text
@@ -1246,7 +1246,7 @@ def test_klipper_printers_get_no_remap_or_report_buttons():
 
 
 def test_review_r304_small_fixes_are_in_the_page():
-    """R304 LOW 1, 2, 4, 5, 6 and the two MED fixes: what the browser flows in test_web_app_audit.py do not reach."""
+    """What the browser flows in test_web_app_audit.py do not reach."""
     text = (STATIC / "printers.js").read_text(encoding="utf-8")
     assert "again: () => unloadSlot(sl, sp, button)" in text                   # 1: Try again runs the whole unload, sheet included
     assert text.count("g.camBtn.hidden = !g.camKind()") == 2                   # 2: no camera, no button, from the first paint
@@ -1294,7 +1294,7 @@ def test_confirmations_and_questions_are_sheets_not_native_dialogs():
 
 def test_every_catalogue_key_is_written_once():
     """json.loads keeps the last of two equal keys, so a key added twice on two branches silently overrides the
-    other text (R304: printers_fix_unauthorized had two wordings after a rebase)."""
+    other text (printers_fix_unauthorized had two wordings after a rebase)."""
     import collections
     repo = Path(__file__).resolve().parents[2]
     pairs = json.loads((repo / "strings" / "en.json").read_text(encoding="utf-8"), object_pairs_hook=lambda kv: kv)
@@ -1303,7 +1303,7 @@ def test_every_catalogue_key_is_written_once():
 
 
 
-# ---------- Auto (R83 addition A6, AS3): the three routes, the printer's auto object and auto_possible ----------
+# ---------- Auto (A6, AS3): the three routes, the printer's auto object and auto_possible ----------
 AUTO_WAIT = {"spool_id": 9, "spool": {"id": 9, "name": "PLA Red", "material": "PLA", "color_hex": "C0392B"}, "state": "waiting", "text": "Waiting for 9.",
              "expires_at": "2026-11-18T01:30:00-05:00"}
 

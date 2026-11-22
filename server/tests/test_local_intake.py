@@ -84,7 +84,7 @@ def test_the_module_is_opt_in_last_and_newer():
 
 
 def test_orders_needs_the_claude_reader():
-    """Decision after review R127 note 2: the order history goes only into Claude's prompt, so orders needs ai_intake
+    """The order history goes only into Claude's prompt, so orders needs ai_intake
     even with the local reader on, and every place that refuses or adds it says why."""
     base = {"spoolman": True, "server": True, "orders": True}
     modules.validate({"modules": {**base, "ai_intake": True}, "orders": {"file": "/x.json"}})
@@ -497,7 +497,7 @@ def test_api_revise_with_the_local_reader_uses_no_cap(sm, fake_reader):
     assert r.json()["reader"] == "local" and intake.reads_today(config.paths().state / "reads.json") == 0
 
 
-# ---------- review R127 notes ----------
+# ---------- review notes ----------
 
 def test_a_redirect_is_never_followed_with_the_token(sm, tmp_path):
     """Note 1: a reader that answers 302 to another host is a failed read; the other host never gets the token."""
@@ -537,7 +537,7 @@ def test_a_claude_call_that_never_reached_it_gives_its_read_back(sm, fake_reader
     assert out["reader"] == "local" and cap.taken == 1 and cap.refunded == 1
 
 
-# ---------- the reader's token from the page and the CLI (decision after R127 note 4) ----------
+# ---------- the reader's token from the page and the CLI ----------
 
 def test_the_page_sets_and_removes_the_reader_token_with_the_code(env, caplog):
     from test_setup_page import Helper, client, make, post

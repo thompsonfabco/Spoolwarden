@@ -19,7 +19,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.InetAddress
 
-/** The three Voice calls of R88 (2026-11-22 01:35) against a fake Hub: the server is not built yet. */
+/** The three Voice calls against a fake Hub: the server is not built yet. */
 class ApiVoiceTest {
     private val cert = serverCert()
     private val server = MockWebServer().also {

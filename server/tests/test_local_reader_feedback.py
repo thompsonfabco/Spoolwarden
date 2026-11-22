@@ -286,7 +286,7 @@ def test_the_kit_never_sends_an_address(rd):
         local_reader._check_body({"Feedback_Endpoint": "x"})
 
 
-# ---------- review R362 LOWs ----------
+# ---------- review LOWs ----------
 
 @pytest.mark.parametrize("url", ["http://127.0.0.1:99999", "http://127.0.0.1:abc"])
 def test_a_bad_port_is_an_answer_not_an_exception(url):

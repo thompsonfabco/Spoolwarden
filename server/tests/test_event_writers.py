@@ -181,7 +181,7 @@ def test_a_rename_that_matches_no_spool_still_says_so(store):
     assert store.read()["events"][0]["data"]["spools"] == "0"
 
 
-# ---------------------------------------------------------------- R475 LOW 4: no store write under inventory's lock
+# ---------------------------------------------------------------- no store write under inventory's lock
 
 class LockWatcher(NullSink):
     """Notes whether inventory's `_LOCK` is held (by this thread) at each write."""

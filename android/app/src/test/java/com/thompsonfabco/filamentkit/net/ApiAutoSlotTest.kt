@@ -17,7 +17,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.InetAddress
 
-/** The Auto slot calls and fields (R83 addition, A6), built against the contract: the Hub side is not built yet. */
+/** The Auto slot calls and fields (A6), built against the contract: the Hub side is not built yet. */
 class ApiAutoSlotTest {
     private val cert = serverCert()
     private val server = MockWebServer().also {

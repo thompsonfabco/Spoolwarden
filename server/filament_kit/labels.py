@@ -3,7 +3,7 @@
 The Hub draws a label as SVG: the QR code of the spool's short address (`https://<name>.local[:port]/s/<number>`), the
 spool's number large, brand, name, material, a box in the filament's colour with its hex value, the net weight, the lot,
 the date it was added, and the nozzle and bed temperatures when the filament has them. Black on white; the colour box is
-the only colour. Sizes (R85, 2026-11-22 00:50): 62x29 mm and 50x30 mm (rolls), and three sheet stocks, each laid out as its
+the only colour. Sizes: 62x29 mm and 50x30 mm (rolls), and three sheet stocks, each laid out as its
 stock (margins, pitch): a4-63x34 (24), a4-70x37 (24) and letter-66x25 (30). Every size is drawn to its real size in
 millimetres. Everything of a label, its code's quiet zone included, lies inside the size's content inset. When the label
 is too short for it all, the temperatures go first, then the lot, then the date, then the net weight.
@@ -163,7 +163,7 @@ def _hex(value) -> str | None:
 
 def label_data(spool: dict) -> dict:
     """What a label shows, from a Spoolman spool: number, vendor, name, material, color_hex (`#RRGGBB` or None), lot, added
-    (`YYYY-MM-DD`, a day and nothing more, R83), net_g (the filament's net weight text, empty when unknown), nozzle_c and
+    (`YYYY-MM-DD`, a day and nothing more), net_g (the filament's net weight text, empty when unknown), nozzle_c and
     bed_c (text, empty when the filament has none)."""
     f = spool.get("filament") or {}
     added = re.match(r"\d{4}-\d{2}-\d{2}", str(spool.get("registered") or ""))

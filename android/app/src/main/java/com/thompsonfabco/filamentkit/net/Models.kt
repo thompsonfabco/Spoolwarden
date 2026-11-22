@@ -1057,7 +1057,7 @@ data class ClearResult(
     /** The slot's setting on the printer was cleared too (Klipper, printer online). */
     val printerCleared: Boolean,
     val dryRun: Boolean,
-    /** The Hub's own sentence about what the printer still shows (Bambu Lab, R83); absent on older answers. */
+    /** The Hub's own sentence about what the printer still shows (Bambu Lab); absent on older answers. */
     val text: String? = null,
 )
 
@@ -1138,7 +1138,7 @@ data class LocalLibrary(val entries: List<LocalEntry>, val materials: List<Strin
 data class EntryProblem(val field: String, val text: String)
 
 /** `GET /api/spools` with its `spoolman_url` (absent when Spoolman cannot be reached from where the phone is). */
-/** [filters] is the top-level `filters` list (R88: the filter names this Hub applies); null when absent, which is an older Hub. */
+/** [filters] is the top-level `filters` list (the filter names this Hub applies); null when absent, which is an older Hub. */
 data class SpoolsAnswer(val spools: List<JsonObject>, val spoolmanUrl: String?, val filters: List<String>? = null, val total: Int? = null)
 
 /** Where a spool is loaded: the `loaded` field of the spool view. */

@@ -1,4 +1,4 @@
-"""web.push fed from the Hub's events (R80, EA4): the push.xml store and its one-time move from push.json, one push per
+"""web.push fed from the Hub's events (EA4): the push.xml store and its one-time move from push.json, one push per
 alert event, a condition once while it lasts, and the web twins of the events and alerts routes. No network, no Hub:
 the kit API is a fake that answers GET api/events from a list."""
 from __future__ import annotations

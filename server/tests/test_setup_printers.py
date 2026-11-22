@@ -101,7 +101,7 @@ def test_a_literal_address_is_never_looked_up():
     ("192.168.1.40", True), ("10.0.0.7", True), ("172.31.0.9", True), ("127.0.0.1", True), ("fe80::1", True), ("fd00::7", True),
     ("192.0.2.40", False), ("100.64.7.7", False), ("169.254.7.7", False), ("2001:db8::1", False), ("203.0.113.9", False)])
 def test_an_address_the_unit_doesnt_reach_is_kept_with_a_note(host, reach):
-    """Review R31: the server's unit allows the home networks only (a test keeps SERVICE_REACH equal to it). A printer
+    """The server's unit allows the home networks only (a test keeps SERVICE_REACH equal to it). A printer
     elsewhere is saved all the same (the owner's choice), with a note saying why it will show offline and what allows it."""
     kept, problem, note = hostaddr.inspect(host)
     assert kept == host and problem is None
@@ -348,7 +348,7 @@ def test_adding_what_a_scan_found_puts_that_entry_into_use(both, manager):
 
 
 def test_a_scan_knows_a_printer_added_by_name(both, kl, manager, scanned):
-    """Review R31: `kl` is at printer.example.com, which resolves to 192.0.2.77 here; a scan finding 192.0.2.77 reports
+    """`kl` is at printer.example.com, which resolves to 192.0.2.77 here; a scan finding 192.0.2.77 reports
     that printer, and adds no second entry for it."""
     scanned.found = [("192.0.2.77", 7125)]
     r = post(client(both), "printers/scan", {})
@@ -578,7 +578,7 @@ def test_the_add_form_asks_a_klipper_printer_for_no_access_code():
 
 
 def test_a_running_mapping_is_followed_again_after_a_reload(mapped):
-    """Review R31: the row says when this server's Mapper runs a job for the printer, and the page follows it (progress
+    """The row says when this server's Mapper runs a job for the printer, and the page follows it (progress
     and Stop) as it draws, not only from the Map slots click; a refused start also joins a job that is running."""
     app, fake = mapped
     fake.running_for = set()

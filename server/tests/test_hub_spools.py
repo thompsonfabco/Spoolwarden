@@ -165,7 +165,7 @@ out.gone = await api("spools/9999").then(() => null, (e) => ({ status: e.status,
 out.badOffset = await api("spools?offset=-1").then(() => null, (e) => ({ status: e.status, message: e.message }));
 out.noCode = await fetch("/setup/api/spools/2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gross: 300, dry_run: true }) }).then(async (r) => ({ status: r.status, body: await r.json() }));
 """)
-    assert page["chips"] == [T("common_sealed"), T("spool_state_opened"), "In a printer", "Checked out (0)", "Running low"] and page["group"] == "Show only"   # R88 / the design, Hub page order: the Checked out chip sits between In a printer and Running low, its count the total of filter=checked_out
+    assert page["chips"] == [T("common_sealed"), T("spool_state_opened"), "In a printer", "Checked out (0)", "Running low"] and page["group"] == "Show only"   # the design, Hub page order: the Checked out chip sits between In a printer and Running low, its count the total of filter=checked_out
     assert page["field"] == {"label": "Find a spool", "hint": "Brand, name, material, place, number or tag.", "type": "search"}
     assert page["chip"]["sealed"]["ids"] == SEALED and page["chip"]["sealed"]["pressed"] == ["sealed"] and page["chip"]["sealed"]["count"] == "3 spools"
     assert len(page["chip"]["opened"]["ids"]) == 50 and page["chip"]["opened"]["more"] and page["chip"]["opened"]["count"] == f"{OPENED} spools"
@@ -396,7 +396,7 @@ def test_in_panes_the_spools_summaries_stay_readable_blocks(hub, stock, tmp_path
 
 
 def test_a_hub_that_names_no_filters_shows_the_four_chips_and_no_checked_out(hub, stock, tmp_path, monkeypatch):
-    """R88 (1954.2): the Checked out chip is drawn only when the list answer's `filters` has it; an older Hub's answer has none."""
+    """The Checked out chip is drawn only when the list answer's `filters` has it; an older Hub's answer has none."""
     from filament_kit.setup_console import spools_tab
     monkeypatch.setattr(spools_tab, "filters", lambda: None)
     page = _go(hub, tmp_path, r"""

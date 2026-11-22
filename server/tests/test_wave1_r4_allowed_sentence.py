@@ -1,4 +1,4 @@
-"""R597: the Devices page shows "This Weigh Station answers only the addresses on its allow-list." under a station's page link when the
+"""The Devices page shows "This Weigh Station answers only the addresses on its allow-list." under a station's page link when the
 station's `page_from` is `allowed`; the Hub already passes `page_from` through (device_tab.py)."""
 import json
 import shutil

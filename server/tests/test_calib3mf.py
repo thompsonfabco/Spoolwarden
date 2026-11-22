@@ -1144,7 +1144,7 @@ def test_the_last_prints_numbers_alone_prove_nothing(fake_ftp, printer):
 
 @pytest.mark.parametrize("state", ["FAILED", "FINISH"])
 def test_mapping_again_with_the_same_numbers_as_the_last_job(fake_ftp, printer, state):
-    """Review R117 finding 1: a re-map right after a good one (the reply brings back the last job's numbers, and this
+    """A re-map right after a good one (the reply brings back the last job's numbers, and this
     job reports the same) is confirmed, not "no slot mapping"."""
     m = FakeManager(fake_ftp.root, "native", report=_after(owner_h2d_report(), state, [0, 2, 32768, 33024]))
     m.echo = {"mapping": [0, 2, 32768, 33024]}
@@ -1154,7 +1154,7 @@ def test_mapping_again_with_the_same_numbers_as_the_last_job(fake_ftp, printer, 
 
 
 def test_trace_never_logs_an_address_or_a_host_name():
-    """Review R117 finding 3: the reply's reason and the traced words keep plain words only."""
+    """The reply's reason and the traced words keep plain words only."""
     t = calib3mf._reply_trace({"result": "fail", "reason": "cannot reach 192.0.2.20 or kit.local for printer.3mf"})
     assert t == {"result": "fail", "reason": "cannot reach or for"}
     assert calib3mf.trace({"fail_reason": "192.0.2.20", "gcode_state": "kit.local"}, "x") == {"ours": None}

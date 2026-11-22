@@ -127,7 +127,7 @@ def test_enter_in_a_station_setting_does_not_reload_the_page():
     assert re.search(r'\$\("settings"\)\.addEventListener\("submit", function \(e\) \{ e\.preventDefault\(\);', src)
 
 
-# ---- R560 MEDIUM (refuter-01): Overview and Getting started
+# ---- Overview and Getting started
 
 def test_still_to_do_keeps_its_setup_code_row_while_getting_started_shows():
     src = js("setup_overview.js")

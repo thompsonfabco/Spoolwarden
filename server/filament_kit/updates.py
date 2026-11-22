@@ -546,7 +546,7 @@ def _update(cfg: dict, *, scheduled: bool, fetcher: release.Fetcher | None,
         nightly_now = on_nightly()
         _note_release(fetcher, s["repo"], rel, now)     # the console shows it, and the timer keeps it fresh
         # a nightly from before they were dropped: the latest signed release always replaces it, even an older one
-        # (R77 review: keeping the unsigned build would leave the owner believing they are back on releases)
+        # (keeping the unsigned build would leave the owner believing they are back on releases)
         downgrade = nightly_now and _newer(cur, latest)
         if downgrade and not _modules_fit(latest):
             return 1

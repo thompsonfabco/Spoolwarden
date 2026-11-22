@@ -736,7 +736,7 @@ def test_the_apply_and_catalog_waits_run_programs_and_say_so(cfg, capsys, monkey
     assert seen == {"Applying the changes…": True, "Updating the Filament Catalog…": True}
 
 
-# ---------- R348: commands whole, the right stream and exit code, names that can be typed ----------
+# ---------- commands whole, the right stream and exit code, names that can be typed ----------
 
 def test_a_status_fix_that_is_a_command_is_not_split(monkeypatch):
     from filament_kit import output

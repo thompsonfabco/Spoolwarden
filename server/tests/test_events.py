@@ -570,7 +570,7 @@ def test_unchanged_months_are_not_parsed_again(store, monkeypatch):             
     assert seen == []
 
 
-# ---------------------------------------------------------------- R80 changes after R465 (E2, E4, E6) and the hard link
+# ---------------------------------------------------------------- Later changes (E2, E4, E6) and the hard link
 
 def test_since_at_reads_by_time(store):                                                       # E4 / point 1
     for d in (1, 5, 10, 20):

@@ -75,7 +75,7 @@ def test_the_xml_form_wins_when_both_are_there(etc):
 
 
 def test_a_json_changed_by_an_older_release_wins_over_the_xml_and_the_hash_key_is_not_returned(etc):
-    """R600 LOW: the web unit's reader follows the same rule as config.load_raw (json_sha256), and stays read only."""
+    """The web unit's reader follows the same rule as config.load_raw (json_sha256), and stays read only."""
     config.save({"slot_service": {"token_file": "/old"}})
     (etc / "config.json").write_text(json.dumps({"slot_service": {"token_file": "/new"}}), encoding="utf-8")
     xml = (etc / "config.xml").read_bytes()

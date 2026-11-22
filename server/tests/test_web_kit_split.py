@@ -254,7 +254,7 @@ def test_no_kit_folder_is_writable_by_the_web_user(kit, tmp_path):
 
 @LINUX
 def test_the_apply_takes_back_the_web_users_read_on_the_old_slot_token(kit, tmp_path):
-    """Review R181 note 2: an install that used the old scanner's slot service granted the web unit read on its token
+    """An install that used the old scanner's slot service granted the web unit read on its token
     file; with slot_service gone, the next `modules apply` (web_access.grant) takes that grant back."""
     from filament_kit import acl
     if not acl.supported():

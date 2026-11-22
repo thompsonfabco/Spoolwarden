@@ -460,7 +460,7 @@ def test_the_filament_system_is_read_only_for_a_pause(klipper, monkeypatch):
     assert wait_for(lambda: True in calls)                      # a pause reads the filament system too
 
 
-# ---------------------------------------------------------------- R475 LOW 2: a flapping HMS code is not news every time
+# ---------------------------------------------------------------- a flapping HMS code is not news every time
 
 def test_a_hms_code_that_goes_and_comes_back_is_told_once_in_half_an_hour(bambu, sink, store):
     """The alert rules say "a new printer error code appears" and is silent on repeats; a code that clears and returns (a notice
@@ -486,7 +486,7 @@ def test_a_hms_code_that_goes_and_comes_back_is_told_once_in_half_an_hour(bambu,
 
 
 def test_klippy_shutdown_in_a_job_reports_the_last_percent_seen(klipper, store):
-    """R475 LOW 3: print.failed (klippy_shutdown) said percent 0; it carries the last percent the watcher saw."""
+    """The print.failed event (klippy_shutdown) said percent 0; it carries the last percent the watcher saw."""
     fake, fam, wt, pid = klipper
     printing(fake, pct=0.4)
     assert wait_for(lambda: kinds(store) == ["print.started"])

@@ -24,7 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** Automatic in the load steps (R83 addition, A5): offered and preselected only where the Hub says it is possible. */
+/** Automatic in the load steps (A5): offered and preselected only where the Hub says it is possible. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LoadAutoTest {
     private val dispatcher = StandardTestDispatcher()

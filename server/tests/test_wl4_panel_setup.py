@@ -300,7 +300,7 @@ def test_off_also_skips_unasked_lines(env):
     assert ps.disable(panel)["panel_forgotten"] is True
 
 
-# ---- R614: the panel's port, a damaged token file, CRLF lines, the unit's allow lines ----
+# ---- the panel's port, a damaged token file, CRLF lines, the unit's allow lines ----
 
 def test_the_panel_port_must_differ_from_the_stations_own(env):
     panel = Panel()
@@ -364,7 +364,7 @@ def test_a_settings_rewrite_keeps_the_allow_lines(env):
     assert "STATION_PANEL_LINK=usb" in apply.station_dropin(config.load(), ["127.0.0.1"])
 
 
-# ---- R641 follow-ups: the reader skips every line that is not OK or ERR; errors after the panel's OK; CRLF end to end ----
+# ---- follow-ups: the reader skips every line that is not OK or ERR; errors after the panel's OK; CRLF end to end ----
 
 def test_w_k_and_air_lines_before_the_answer_are_skipped(env):
     panel = Panel()
@@ -441,7 +441,7 @@ def test_crlf_fixture_through_the_full_enable_path(env):
     assert ps.disable(Panel("OK\r\n"))["panel_forgotten"] is True
 
 
-# ---- R88: every ERR <reason> is a refusal; only `store` has its own sentence ----
+# ---- every ERR <reason> is a refusal; only `store` has its own sentence ----
 
 TOKEN_RE = re.compile(r"CFG LINK \S+ \S+ \S+ (\w+)")
 REASONS = ["long", "cfg", "hex", "ssid", "password", "address", "port", "fingerprint", "token", "store", "brand-new-reason"]

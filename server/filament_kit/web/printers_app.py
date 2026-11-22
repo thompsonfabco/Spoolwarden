@@ -20,7 +20,7 @@ The web process never talks to a printer. Everything goes to the kit server's ow
                                         dry_run: false), as the Android app does
     POST printers/{id}/slots/{label}/unload  {[dry_run]}: the slot's spool goes back to where it was (Spoolman
                                         only)
-    POST printers/{id}/slots/auto/load  {spool_id[, dry_run]}: Auto (R83 addition A6): no slot named, the Hub loads the spool
+    POST printers/{id}/slots/auto/load  {spool_id[, dry_run]}: Auto (A6): no slot named, the Hub loads the spool
                                         where one shows up; POST printers/{id}/auto/choose {slot} when two slots were loaded;
                                         POST printers/{id}/auto/cancel stops waiting
     GET  printers/tagged                the last tapped tag and its spool (the load picker's "last tap")
@@ -77,7 +77,7 @@ ENTRY = re.compile(r"[A-Za-z0-9_-]{1,64}")
 HLS_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}\.(ts|m3u8)")
 HLS_TYPES = {"m3u8": "application/vnd.apple.mpegurl", "ts": "video/mp2t"}
 MAX_SEGMENT = 16 * 1024 * 1024
-LIST_FIELDS = ("id", "name", "model", "family", "state", "camera", "summary", "auto_possible")      # auto_possible: Automatic can be chosen (R83 addition A6)
+LIST_FIELDS = ("id", "name", "model", "family", "state", "camera", "summary", "auto_possible")      # auto_possible: Automatic can be chosen (A6)
 # the kit path of each step, written out so test_web_token_scope sees every path this unit calls
 MANUAL_STEPS = {"start": "/api/printers/{serial}/manual-map/start", "confirm": "/api/printers/{serial}/manual-map/confirm",
                 "skip": "/api/printers/{serial}/manual-map/skip", "stop": "/api/printers/{serial}/manual-map/stop",
@@ -291,7 +291,7 @@ class PrintersApp:
                                     {"spool_id": spool, "dry_run": dry})
 
     async def auto_load(self, request: Request):
-        """Auto (R83 addition A1, contract A6): a spool for the printer with no slot named; the Hub watches the slots and loads it where
+        """Auto (A1, contract A6): a spool for the printer with no slot named; the Hub watches the slots and loads it where
         one shows up. A dry run unless `dry_run: false`: {auto, watching, replaces?} then {auto, pending, expires_in, message}."""
         serial = self._serial(request)
         b = await self._body(request)

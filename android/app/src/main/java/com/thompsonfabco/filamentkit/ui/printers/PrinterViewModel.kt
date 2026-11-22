@@ -515,7 +515,7 @@ class PrinterViewModel(
         }
     }
 
-    // --- Auto (R83 addition, A4): Stop waiting, and the choice when two slots were loaded ---
+    // --- Auto (A4): Stop waiting, and the choice when two slots were loaded ---
 
     /** Stop waiting. A 409 `not_waiting` means it already ended: the printer is only read again. */
     fun stopWaiting() {

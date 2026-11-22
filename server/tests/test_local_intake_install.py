@@ -268,7 +268,7 @@ def test_cli_install_says_when_the_reader_does_not_answer(key, server, applied, 
 
 
 def test_cli_remove_leaves_orders_on_the_claude_reader(key, server, applied, capsys):
-    """orders needs Claude, not the local reader (decision after R127 note 2): removing the reader keeps it."""
+    """orders needs Claude, not the local reader: removing the reader keeps it."""
     s = server({"0.2.1": mrf.make_release(key)})
     lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
     cfg = config.load()
@@ -309,7 +309,7 @@ def test_the_page_runs_install_and_remove_as_jobs():
 
 
 def test_the_page_reads_the_saved_plan_and_never_fetches(key, server, monkeypatch):
-    """Review R148 finding 2: the kit server's unit cannot reach GitHub; the plan runs as a root job and the page
+    """The kit server's unit cannot reach GitHub; the plan runs as a root job and the page
     reads what it saved."""
     from test_setup_page import Helper, client, make
     s = server({"0.2.1": mrf.make_release(key)})
@@ -328,7 +328,7 @@ def test_the_page_reads_the_saved_plan_and_never_fetches(key, server, monkeypatc
     assert c.get("/setup/api/settings/general").json()["local_intake_installed"] is None
 
 
-# ---------------------------------------------------------------- review R148
+# ---------------------------------------------------------------- review findings
 
 def _record(tmp_path, d):
     (tmp_path / "store").mkdir(exist_ok=True)
@@ -342,7 +342,7 @@ def _record(tmp_path, d):
     {"version": "0.2.1", "tier": "rm -rf"},
 ])
 def test_a_record_that_is_not_one_is_never_acted_on(tmp_path, rec):
-    """Review R148 finding 1: remove (root) builds nothing from a record that is not an X.Y.Z version."""
+    """Remove (root) builds nothing from a record that is not an X.Y.Z version."""
     _record(tmp_path, rec)
     run = Run()
     assert lii.installed() is None and lii.remove(run=run) is False and not run.calls
@@ -388,7 +388,7 @@ def test_the_record_and_the_plan_live_in_roots_store_not_the_service_state(key, 
 
 
 def test_auto_on_a_release_without_an_auto_tier_is_its_cpu_tier(key, server):
-    """Review R148 finding 3."""
+    """Finding 3."""
     m = mrf.manifest("0.2.1")
     del m["tiers"]["auto"]
     s = server({"0.2.1": mrf.make_release(key, manifest_over={"tiers": m["tiers"]})})
@@ -400,7 +400,7 @@ def test_auto_on_a_release_without_an_auto_tier_is_its_cpu_tier(key, server):
 
 
 def test_a_downgrade_is_labelled_and_needs_the_version_by_name(key, server):
-    """Review R148 finding 4."""
+    """Finding 4."""
     rels = {"0.2.2": mrf.make_release(key, "0.2.2")}
     s = server(rels)
     lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
@@ -416,14 +416,14 @@ def test_a_downgrade_is_labelled_and_needs_the_version_by_name(key, server):
 
 
 def test_a_record_with_a_bad_version_does_not_break_the_plan(key, server, tmp_path):
-    """Review R148 finding 5."""
+    """Finding 5."""
     s = server({"0.2.1": mrf.make_release(key)})
     _record(tmp_path, {"version": "latest", "tier": "cpu"})
     assert lii.plan(config.load(), fetcher=fetcher(s))["installed"] is None
 
 
 def test_the_page_job_installs_exactly_the_planned_version(key, server, applied, monkeypatch, capsys):
-    """Review R148 finding 6: a release published after the page showed its plan is not installed instead."""
+    """A release published after the page showed its plan is not installed instead."""
     rels = {"0.2.1": mrf.make_release(key, "0.2.1")}
     s = server(rels)
     monkeypatch.setattr(lii, "wait_healthy", lambda cfg, *a, **k: {"ok": True, "version": "x", "api_version": "1.0"})
@@ -439,7 +439,7 @@ def test_the_page_job_installs_exactly_the_planned_version(key, server, applied,
     assert cli.cmd_local_intake_install(None, None, True, fetcher=fetcher(s), run=Run(), planned=True) == 1
 
 
-# ---------------------------------------------------------------- review R148, second round
+# ---------------------------------------------------------------- review findings, second round
 
 def _installed_020(key, server, monkeypatch):
     rels = {"0.2.2": mrf.make_release(key, "0.2.2")}

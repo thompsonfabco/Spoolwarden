@@ -109,7 +109,7 @@ def capture():
 def held():
     """Events emitted inside this block are kept and written, in order, when the OUTERMOST block ends: the code that
     reports from under a lock (inventory's `_LOCK`) takes the lock INSIDE this block, so the store's write (it costs
-    O(month)) never lengthens the time the lock is held (R475 LOW 4). Actor and batch are taken when `emit` is called."""
+    O(month)) never lengthens the time the lock is held. Actor and batch are taken when `emit` is called."""
     if _held.get() is not None:
         yield
         return

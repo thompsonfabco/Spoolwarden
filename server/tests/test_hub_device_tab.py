@@ -589,7 +589,7 @@ def test_the_rows_open_and_the_station_settings_work_in_every_look_at_both_width
 
 
 
-# ---------------------------------------------------------------- review R497: one deadline, no proxy, odd keys and ids
+# ---------------------------------------------------------------- one deadline, no proxy, odd keys and ids
 import socket
 import time
 

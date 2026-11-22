@@ -1,4 +1,4 @@
-"""Review R103 on the wire: after any PATCH a paired device may send alone, a host at the new address never receives
+"""On the wire: after any PATCH a paired device may send alone, a host at the new address never receives
 the stored Access Code. A real Manager (paho, TLS pinning) against the e2e's fake printer on 127.0.0.1."""
 from __future__ import annotations
 

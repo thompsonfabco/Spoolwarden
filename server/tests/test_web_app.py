@@ -1033,7 +1033,7 @@ def test_spools_texts_come_from_the_catalogue_and_new_keys_use_the_section_prefi
     assert "innerHTML" not in src and ".style." not in src                         # no data into markup, no inline style (the CSP)
 
 
-# ---------- R345: open names the tap it was asked about; a spool edit is shown as Spoolman holds it ----------
+# ---------- open names the tap it was asked about; a spool edit is shown as Spoolman holds it ----------
 
 def test_web_open_with_the_tap_the_page_looked_at(app, env, sm):
     sid = _web_spool(sm)

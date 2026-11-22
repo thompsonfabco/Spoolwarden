@@ -384,7 +384,7 @@ def test_a_reader_that_cannot_delete_changes_nothing(app, jobs, fake_reader, tmp
     assert config.load()["label_reader"]["share_corrections"] is True and not jobs
 
 
-# ---------------------------------------------------------------- review R367
+# ---------------------------------------------------------------- review notes
 
 def test_a_save_that_is_refused_deletes_nothing(app, jobs, fake_reader, tmp_path):
     """MED 1: the whole save is checked before anything is deleted."""

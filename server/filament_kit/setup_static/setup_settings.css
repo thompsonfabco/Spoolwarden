@@ -116,7 +116,7 @@
 .pairing__print { overflow-wrap: anywhere; font-size: var(--fs-m); }
 .pairing__wait { display: flex; align-items: center; gap: var(--s2); }
 .pairing .code__text { max-height: calc(var(--s7) * 3); }
-/* Storage locations (R79; the design, Hub page): the list of places in fill order, the Add and Edit form, and the panel of where a new spool goes */
+/* Storage locations (the design, Hub page): the list of places in fill order, the Add and Edit form, and the panel of where a new spool goes */
 .coll--storage { grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.6fr) max-content; }
 /* a tablet's table has no room for four columns of text and four buttons: the buttons go on a line of their own */
 @media (min-width: 601px) and (max-width: 1024px) {

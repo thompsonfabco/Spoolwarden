@@ -28,7 +28,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** The Auto notice on the printer's screen (R83 addition, A4): Stop waiting and the choice of two slots. */
+/** The Auto notice on the printer's screen (A4): Stop waiting and the choice of two slots. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PrinterAutoTest {
     private val dispatcher = StandardTestDispatcher()

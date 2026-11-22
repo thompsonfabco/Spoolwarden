@@ -56,7 +56,7 @@ def test_it_pairs_as_its_own_device_and_sends_no_push(monkeypatch, env):  # noqa
     assert kit._device == api.INTAKE_DEVICE
 
 
-# ---------------------------------------------------------------- R91 review notes
+# ---------------------------------------------------------------- review notes
 
 def test_the_kits_own_pairing_is_built_in_and_not_revoked_from_the_page(app):
     from test_setup_page import post

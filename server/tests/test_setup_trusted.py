@@ -281,7 +281,7 @@ def _root_at_a_terminal(monkeypatch):
 
 
 def test_a_new_setup_code_keeps_trusted_computers_and_says_so(app, helper, monkeypatch, capsys):
-    """Review R32 ruling: security is the owner's choice. A new code keeps trusted computers (they stood in for the old
+    """Security is the owner's choice. A new code keeps trusted computers (they stood in for the old
     one by the owner's own choice) and says so, with where to revoke; --revoke-trusted is the other choice."""
     cli = _root_at_a_terminal(monkeypatch)
     c = client(app)
