@@ -707,6 +707,7 @@ def test_a_lock_timeout_after_a_permanent_loss_does_not_weaken_the_note(monkeypa
 
 def test_a_pending_lock_that_stays_taken_does_not_hold_the_write_for_ever(monkeypatch):
     monkeypatch.setattr(usage, "PEND_WAIT", 0.3, raising=False)
+    monkeypatch.setattr(usage, "_old_form", lambda serial, rec: False)          # the line goes to the pending file
     usage._pend_lock.acquire()                  # a thread that stays in the pending guard
     try:
         t, out = _in_thread(usage.append, SERIAL, {"job": "x"})
@@ -723,6 +724,7 @@ def test_a_pending_lock_that_stays_taken_does_not_hold_the_write_for_ever(monkey
 @needs_flock
 def test_a_pending_lock_held_by_another_process_is_waited_for_only_so_long(monkeypatch):
     monkeypatch.setattr(usage, "PEND_WAIT", 0.3, raising=False)
+    monkeypatch.setattr(usage, "_old_form", lambda serial, rec: False)          # the line goes to the pending file
     holder = _holder(_dir(), usage.PENDING_LOCK)
     try:
         t, out = _in_thread(usage.append, SERIAL, {"job": "x"})
@@ -739,18 +741,18 @@ def test_a_pending_lock_held_by_another_process_is_waited_for_only_so_long(monke
 
 @needs_flock
 def test_one_process_draining_and_one_pending_at_once_lose_and_double_nothing():
-    ids = [f"{i:032x}" for i in range(1, 121)]
+    ids = [f"{i:032x}" for i in range(1, 401)]
     drain = os.linesep.join([
         "import time", "from filament_kit.bridge import usage",
-        "for _ in range(150):",
+        "for _ in range(1500):",
         "    with usage._flocked('%s'):" % SERIAL,
         "        usage._drain('%s')" % SERIAL,
-        "    time.sleep(0.002)"])
+        "    time.sleep(0.0005)"])
     pend = os.linesep.join([
         "import sys, time", "from filament_kit.bridge import usage",
         "for i in sys.argv[1:]:",
         "    usage._pend('%s', {'id': i, 'at': '2026-11-12T10:00:00Z', 'job': 'j' + i, 'grams': 1.0, 'spool_id': 7, 'slot': 'A1', 'observe': False})" % SERIAL,
-        "    time.sleep(0.001)"])
+        "    pass"])
     procs = [subprocess.Popen([sys.executable, "-c", drain], env=_sub_env()),
              subprocess.Popen([sys.executable, "-c", pend, *ids], env=_sub_env())]
     assert [p.wait(120) for p in procs] == [0, 0]
