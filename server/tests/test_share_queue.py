@@ -326,3 +326,14 @@ def test_an_empty_state_removes_both_forms(sm):
 def test_the_state_file_is_private_to_the_hub(sm, reader):
     hid = saved(sm, {"nozzle": 225})
     assert ((intake_history._dir(hid) / "share.xml").stat().st_mode & 0o777) == 0o600
+
+
+@pytest.mark.skipif(not hasattr(__import__("os"), "geteuid"), reason="file modes are the Hub's on Linux")
+def test_an_old_share_json_moved_to_xml_keeps_its_private_mode(sm):
+    import os
+    hid = saved(sm)
+    d = _state_dir(hid)
+    (d / "share.json").write_text(json.dumps({"entries": {hid: "fb-3"}, "failed": None}), encoding="utf-8")
+    os.chmod(d / "share.json", 0o600)
+    assert share_queue.state(hid)["entries"] == 1
+    assert (os.stat(d / "share.xml").st_mode & 0o777) == 0o600

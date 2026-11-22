@@ -1,6 +1,8 @@
 """The intake history (intake_history.py): records from saves, photos from reads, revisions, undo, retention."""
 import copy
 import json
+import os
+import stat
 
 import pytest
 from fakes.claude_fake import FakeClaude
@@ -470,3 +472,31 @@ def test_a_damaged_record_xml_is_no_such_record_not_a_crash(sm):
     with pytest.raises(intake_history.HistoryError):
         intake_history._load(hid)
     assert any("record.xml" in p for p in statexml.problems())
+
+
+# ---------------------------------------------------------------- RC1d rework: the mode, and the old form for one release
+
+@pytest.mark.skipif(not hasattr(os, "geteuid"), reason="file modes are the Hub's on Linux")
+def test_a_record_json_moved_to_xml_keeps_its_private_mode(sm):
+    r, hid = add(sm)
+    d = intake_history._dir(hid)
+    rec = intake_history._load(hid)
+    (d / "record.xml").unlink()
+    rec.pop("version")
+    (d / "record.json").write_text(json.dumps(rec), encoding="utf-8")
+    os.chmod(d / "record.json", 0o600)
+    got = intake_history._load(hid)
+    assert stat.S_IMODE(os.stat(d / "record.xml").st_mode) == 0o600
+    assert intake_history._version(got) == 0                    # a record with no counter keeps counting from 0
+
+
+@pytest.mark.skipif(not hasattr(os, "geteuid"), reason="file modes are the Hub's on Linux")
+def test_a_pending_read_json_moved_to_xml_keeps_its_private_mode(sm):
+    out = read(sm)
+    pend = config.paths().state / "intake-history" / "pending" / out["read_id"]
+    body = statexml.read(pend / "read.json")
+    (pend / "read.xml").unlink()
+    (pend / "read.json").write_text(json.dumps(body), encoding="utf-8")
+    os.chmod(pend / "read.json", 0o600)
+    r, hid = add(sm, read_id=out["read_id"])                    # record_save reads the pending read
+    assert intake_history.get(hid)["read"]["items"][0]["vendor"] == "SUNLU"

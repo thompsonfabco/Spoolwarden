@@ -101,8 +101,8 @@ def _read_record(path: Path):
         except (OSError, ValueError):
             old = None
         if isinstance(old, dict):
-            statexml.migrate(path, {**old, "version": _version(old)})
-    return statexml.read(path, keep_version=True)
+            statexml.migrate(path, {**old, "version": _version(old)}, mode=0o600)
+    return statexml.read(path, keep_version=True, mode=0o600)
 
 
 def _load(rid: str) -> dict:
@@ -213,7 +213,7 @@ def record_save(saved: list[dict], *, source: str, device: str | None = None, re
                 p = _pending(read_id)
                 for i, ph in enumerate(_photos(p), 1):
                     shutil.move(str(ph), str(d / f"photo{i}.jpg"))
-                read = statexml.read(p / "read.json")
+                read = statexml.read(p / "read.json", mode=0o600)
                 shutil.rmtree(p, ignore_errors=True)
             rec = {"id": rid, "at": _now(), "source": source if source in SOURCES else "phone",
                    "device": (device or "")[:80], "state": "detected", "read_id": read_id if read else None,

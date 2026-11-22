@@ -48,7 +48,7 @@ def _path(rid: str):
 
 def _read(rid: str) -> dict:
     try:
-        d = statexml.read(_path(rid))
+        d = statexml.read(_path(rid), mode=0o600)
     except Exception:  # noqa: BLE001 - a bad id or a bad file: nothing waits
         return {"entries": {}, "failed": None}
     ent = d.get("entries") if isinstance(d, dict) and isinstance(d.get("entries"), dict) else {}
