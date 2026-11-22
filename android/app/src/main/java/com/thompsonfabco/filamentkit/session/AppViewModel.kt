@@ -10,6 +10,7 @@ import com.thompsonfabco.filamentkit.alerts.AlertsFeed
 import com.thompsonfabco.filamentkit.alerts.AlertsLauncher
 import com.thompsonfabco.filamentkit.alerts.AlertsStore
 import com.thompsonfabco.filamentkit.alerts.NotifyAction
+import com.thompsonfabco.filamentkit.ui.settings.VoiceModel
 import com.thompsonfabco.filamentkit.data.Settings
 import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.drafts.DraftStore
@@ -84,6 +85,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         onTest = { AlertNotifier(app).act(listOf(NotifyAction.ShowTest(it))) },
         hub = session.config.map { c -> c?.takeIf { it.isPaired() }?.fingerprint },
     )
+
+    /** The Weigh Station voice group (R88): its state, and the saves and the Test the Settings page asks for. */
+    internal val voice = VoiceModel(viewModelScope, { session.api.value }, router::report)
 
     private val _alertTap = MutableStateFlow<AlertTarget?>(null)
 

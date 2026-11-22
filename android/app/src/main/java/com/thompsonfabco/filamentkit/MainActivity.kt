@@ -263,10 +263,13 @@ import com.thompsonfabco.filamentkit.ui.settings.SettingsGroup
 import com.thompsonfabco.filamentkit.ui.settings.SettingsGroupPage
 import com.thompsonfabco.filamentkit.ui.settings.SettingsHub
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
+import com.thompsonfabco.filamentkit.ui.settings.SettingsVoiceRoute
 import com.thompsonfabco.filamentkit.ui.settings.UpdateActions
+import com.thompsonfabco.filamentkit.ui.settings.VoiceActions
 import com.thompsonfabco.filamentkit.ui.settings.icon
 import com.thompsonfabco.filamentkit.ui.settings.settingsGroups
 import com.thompsonfabco.filamentkit.ui.settings.titleText
+import com.thompsonfabco.filamentkit.ui.settings.voicePlaceTitle
 import com.thompsonfabco.filamentkit.ui.spool.LinkFindScreen
 import com.thompsonfabco.filamentkit.ui.spool.LinkFindViewModel
 import com.thompsonfabco.filamentkit.ui.spool.LinkPreviewScreen
@@ -390,6 +393,7 @@ internal fun FilamentKitApp(
     val notice by app.router.notice.collectAsStateWithLifecycle()
     val alertsUi by app.alerts.state.collectAsStateWithLifecycle()
     val alertsOn by app.alertsStore.on.collectAsStateWithLifecycle(initialValue = false)
+    val voiceUi by app.voice.state.collectAsStateWithLifecycle()
     // each ask for Spools with the Running low filter on (Home's line, an alert's action) counts one up
     var lowRequest by rememberSaveable { mutableIntStateOf(0) }
 
@@ -434,6 +438,10 @@ internal fun FilamentKitApp(
     val appContext = LocalContext.current.applicationContext
     LaunchedEffect(lifecycle, config) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { AlertsLauncher.startIfNeeded(appContext) }
+    }
+    // The Weigh Station voice (R88): read when the Hub answers, so the Settings list knows whether the group exists
+    LaunchedEffect(api, online) {
+        if (!inPairing && api != null && online) app.voice.refresh()
     }
     // The banners, the Alerts list and the running-low count are read about every 10 s while the app is showing: a day
     // back for the banners, seven days for the list
@@ -897,7 +905,7 @@ internal fun FilamentKitApp(
                 // the pills of Palette are a row under the top bar on a tablet and wider; nothing on a phone or in another look
                 Column {
                     if (!scanning) SwTopBar(
-                        title = if (sectionPage) stringResource(R.string.nav_label) else printerPlaceTitle(destination, entry) ?: alertsPlaceTitle(destination) ?: hubPlaceTitle(destination) ?: placeTitle(destination, entry, storedCertificate),
+                        title = if (sectionPage) stringResource(R.string.nav_label) else printerPlaceTitle(destination, entry) ?: alertsPlaceTitle(destination) ?: hubPlaceTitle(destination) ?: voicePlaceTitle(destination) ?: placeTitle(destination, entry, storedCertificate),
                         subtitle = if (destination?.hasRoute(HomeRoute::class) == true && !sectionPage) config?.name?.takeIf { it.isNotBlank() } else null,
                         onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
                         scrollBehavior = scroll,
@@ -911,7 +919,7 @@ internal fun FilamentKitApp(
                         tab, navVisible && !scanning, tabTapped, settingsUpdate = update.available != null,
                         more = paletteMore(
                             tab, stringResource(Tab.Settings.label),
-                            settingsGroups(BuildConfig.DEBUG).map { group ->
+                            settingsGroups(BuildConfig.DEBUG, voiceUi.shown).map { group ->
                                 val route = group.route()
                                 PillMore(
                                     group.titleText(), group.icon, destination?.hasRoute(route::class) == true,
@@ -1438,6 +1446,7 @@ internal fun FilamentKitApp(
                         appVersion = BuildConfig.VERSION_NAME,
                         developer = BuildConfig.DEBUG,
                         alerts = AlertsFacts(alertsOn, alertsUi.available, localNetwork.granted),
+                        voice = voiceUi,
                     )
                     val settingsActions = SettingsActions(
                         onAppearance = app::setAppearance,
@@ -1471,6 +1480,7 @@ internal fun FilamentKitApp(
                             onRecent = { openAlertTarget(AlertTarget.AlertsList) },
                             requestLocalNetwork = localNetwork.request,
                         ),
+                        voice = VoiceActions(onSave = app.voice::save, onTest = app.voice::test, said = app.voice.said),
                     )
                     composable<SettingsRoute> {
                         SettingsScreen(
@@ -1484,6 +1494,7 @@ internal fun FilamentKitApp(
                     composable<SettingsAppearanceRoute> { SettingsGroupPage(SettingsGroup.Appearance, settingsFacts, settingsActions) }
                     composable<SettingsHubRoute> { SettingsGroupPage(SettingsGroup.Hub, settingsFacts, settingsActions) }
                     composable<SettingsAlertsRoute> { SettingsGroupPage(SettingsGroup.Alerts, settingsFacts, settingsActions) }
+                    composable<SettingsVoiceRoute> { SettingsGroupPage(SettingsGroup.Voice, settingsFacts, settingsActions) }
                     composable<SettingsUpdatesRoute> { SettingsGroupPage(SettingsGroup.Updates, settingsFacts, settingsActions) }
                     composable<LicencesRoute> { SettingsGroupPage(SettingsGroup.Licences, settingsFacts, settingsActions) }
                     composable<SettingsDeveloperRoute> { SettingsGroupPage(SettingsGroup.Developer, settingsFacts, settingsActions) }
@@ -1668,6 +1679,7 @@ private fun SettingsGroup.route(): Any = when (this) {
     SettingsGroup.Appearance -> SettingsAppearanceRoute
     SettingsGroup.Hub -> SettingsHubRoute
     SettingsGroup.Alerts -> SettingsAlertsRoute
+    SettingsGroup.Voice -> SettingsVoiceRoute
     SettingsGroup.Updates -> SettingsUpdatesRoute
     SettingsGroup.Licences -> LicencesRoute
     SettingsGroup.Developer -> SettingsDeveloperRoute

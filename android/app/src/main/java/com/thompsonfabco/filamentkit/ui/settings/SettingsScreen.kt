@@ -53,7 +53,7 @@ internal fun SettingsScreen(
 @Composable
 private fun SettingsList(facts: SettingsFacts, onOpen: (SettingsGroup) -> Unit, modifier: Modifier, selected: SettingsGroup?) {
     Column(modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(SpoolwardenTheme.sizes.hairline)) {
-        settingsGroups(facts.developer).forEach { group ->
+        settingsGroups(facts.developer, facts.voice.shown).forEach { group ->
             SettingsRow(
                 icon = group.icon,
                 title = group.titleText(),
@@ -72,6 +72,7 @@ internal val SettingsGroup.icon: Int
         SettingsGroup.Appearance -> R.drawable.sw_ic_half_circle
         SettingsGroup.Hub -> R.drawable.sw_ic_plug
         SettingsGroup.Alerts -> R.drawable.sw_ic_warning
+        SettingsGroup.Voice -> R.drawable.sw_ic_scale
         SettingsGroup.Updates -> R.drawable.sw_ic_updates
         SettingsGroup.Licences -> R.drawable.sw_ic_info
         SettingsGroup.Developer -> R.drawable.sw_ic_tag
@@ -84,6 +85,8 @@ internal val SettingsGroup.title: Int
         SettingsGroup.Appearance -> R.string.appearance_title
         SettingsGroup.Hub -> R.string.hub_sheet_title
         SettingsGroup.Alerts -> R.string.settings_group_alerts
+        // no catalogue text yet: titleText says VoiceTexts.GROUP
+        SettingsGroup.Voice -> 0
         SettingsGroup.Updates -> R.string.settings_updates_title
         SettingsGroup.Licences -> R.string.settings_licences_title
         SettingsGroup.Developer -> R.string.settings_developer_title
@@ -91,7 +94,7 @@ internal val SettingsGroup.title: Int
 
 /** The title a group shows. */
 @Composable
-internal fun SettingsGroup.titleText(): String = stringResource(title)
+internal fun SettingsGroup.titleText(): String = if (this == SettingsGroup.Voice) VoiceTexts.GROUP else stringResource(title)
 
 /** The live summary under a group's title. */
 @Composable
@@ -103,6 +106,7 @@ private fun summary(group: SettingsGroup, facts: SettingsFacts): String = when (
         stringResource(R.string.settings_summary_hub, hub.name, stringResource(facts.hubState.word))
     } ?: stringResource(R.string.settings_hub_none)
     SettingsGroup.Alerts -> stringResource(if (facts.alerts.on) R.string.settings_hub_check_on else R.string.settings_hub_check_off)
+    SettingsGroup.Voice -> stringResource(if (facts.voice.settings?.speech == true) R.string.settings_hub_check_on else R.string.settings_hub_check_off)
     SettingsGroup.Updates -> when (val s = updatesSummary(facts.update)) {
         is UpdatesSummary.Ready -> stringResource(R.string.settings_updates_ready, s.version)
         UpdatesSummary.UpToDate -> stringResource(R.string.settings_updates_current, facts.appVersion)
