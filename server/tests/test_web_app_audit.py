@@ -947,7 +947,7 @@ READY = {
   toggle.click(); typeIn(field('Weight with spool', card).querySelector('input'), '700'); toggle.click();         // opened, a weight, sealed again
   need('sealed again hides the weight', toggle.checked && field('Weight with spool', card).hidden);
   $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
-  need('a sealed card sends no weight', sent.length === 1 && !('gross' in sent[0].items[0]) && !text('.add__results').includes('700'));
+  need('a sealed card sends no weight', sent.length === 1 && !('gross' in sent[0].items[0]) && !text('.add__results').split(stamp).join('').includes('700'));   // the brand and name carry the stamp, whose digits may hold 700
 """,
     "numbers_and_colours": r"""
   await waitPage(); spyAdd(); const stamp = String(Date.now());
@@ -1430,6 +1430,7 @@ SP_READY = {
   need('the first row: filament, spool, place, grams, others', /Elegoo PLA Red/.test(rows[0]) && /Spool 11/.test(rows[0]) && /Rack 1 · 80 g left · 2 more in stock/.test(rows[0]));
   need('the last one is marked and has no stock line', /Last one/.test(rows[1]) && !/more in stock/.test(rows[1]) && /140 g left/.test(rows[1]) && !!$('.spools__last'));
   need('the chip is on, the search is out of the way', chip.getAttribute('aria-pressed') === 'true' && search().closest('.hidden'));
+  stub(/^find\?/, (u, i) => sleep(700).then(() => fetchReal(u, i)));      // the search the chip asks for when off answers after the filter is on again (seen under load)
   chip.click();
   await until('the search is back', () => !search().closest('.hidden') && chip.getAttribute('aria-pressed') === 'false');
   const low2 = [{ id: 11, filament: 'Elegoo PLA Red', material: 'PLA', color: 'C0392B', remaining_g: 80, location: 'Rack 1', in_stock: 2, last_one: false }, { id: 12, filament: 'Bambu Lab PETG Orange', material: 'PETG', color: 'F2762E', remaining_g: 140, location: 'Dry bin 1', in_stock: 0, last_one: true }];
