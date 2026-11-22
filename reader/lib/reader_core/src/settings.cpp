@@ -1,5 +1,7 @@
 #include "settings.h"
 
+#include "hub_address.h"
+
 #include <ArduinoJson.h>
 #include <cstdio>
 #include <cstring>
@@ -39,6 +41,8 @@ bool parseSettings(const char* json, Settings& out, std::string& why) {
   s.otaKey = str(o["ota_key"]);
   s.rootCa = str(o["root_ca"]);
   s.buzzerLow = o["buzzer_low"].is<bool>() && o["buzzer_low"].as<bool>();
+  s.hubIp = str(o["hub_ip"]);
+  s.printer = str(o["printer"]);
   while (!s.base.empty() && s.base.back() == '/') s.base.pop_back();
   if (s.ssid.empty() || s.ssid.size() > 32) { why = "ssid must be 1 to 32 bytes"; return false; }
   if (s.pass.size() > 63) { why = "pass must be at most 63 bytes"; return false; }
@@ -46,6 +50,8 @@ bool parseSettings(const char* json, Settings& out, std::string& why) {
   if (s.token.size() < 16 || s.token.size() > 128 || !tokenChars(s.token)) { why = "token is not a reader token"; return false; }
   if (!s.otaKey.empty() && !pem(s.otaKey, "PUBLIC KEY")) { why = "ota_key is not a PEM public key"; return false; }
   if (!s.rootCa.empty() && !pem(s.rootCa, "CERTIFICATE")) { why = "root_ca is not a PEM certificate"; return false; }
+  if (!s.hubIp.empty() && !isIpv4(s.hubIp)) { why = "hub_ip is not an IPv4 address"; return false; }
+  if (s.printer.size() > MAX_PRINTER_ID) { why = "printer is too long"; return false; }
   out = s;
   return true;
 }
@@ -87,6 +93,16 @@ std::string settingsStamp(const Settings& s) {
 
 bool adoptCompiled(const Settings& flash, const std::string& savedStamp, const std::string& compiledStamp) {
   return flash.base.empty() || savedStamp != compiledStamp;
+}
+
+std::string startPrinter(const std::string& remembered, const std::string& provisioned, bool provisionedIsNew) {
+  return provisionedIsNew && !provisioned.empty() ? provisioned : remembered;
+}
+
+void BootReport::server(int httpCode) {
+  if (httpCode == 401 || httpCode == 403) server_ = "unauth";
+  else if (httpCode > 0 || httpCode == HTTP_TOO_BIG) server_ = "ok";
+  else server_ = "fail";
 }
 
 std::string helloLine(long build, bool configured, const char* wifi, const char* server) {

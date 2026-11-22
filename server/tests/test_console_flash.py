@@ -18,7 +18,6 @@ from filament_kit import cli, config, reader_flash as rf, reader_setup as rs, re
 
 STATIC = Path(cli.__file__).parent / "setup_static"
 ROOT = Path(cli.__file__).resolve().parents[2]
-PUBLIC = "https://kit.example.net/filament"
 BOARD = rs.Reader("/dev/ttyACM0", "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_AA:BB:CC:DD:EE:FF-if00",
                   "USB JTAG/serial debug unit")
 
@@ -37,10 +36,24 @@ def app(env, monkeypatch):  # noqa: F811
     return make(env, Helper(), Mgr())
 
 
-def _public(url=PUBLIC):
-    cfg = config.load()
-    cfg["web"] = {**cfg["web"], "public_url": url}
-    config.save(cfg)
+HUB_IP = "192.0.2.7"
+
+
+@pytest.fixture
+def home(monkeypatch):
+    """The Hub's own certificate in the etc folder (as the real maker writes it) and its home name and address."""
+    from filament_kit import pairing
+    etc = config.paths().etc
+    etc.mkdir(parents=True, exist_ok=True)
+    pairing.make_cert("fkhub", [HUB_IP], etc)
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "fkhub")
+    monkeypatch.setattr(pairing, "local_ips", lambda: [HUB_IP, "192.0.2.8"])
+    return (etc / "cert.pem").read_text(encoding="ascii")
+
+
+def _printer(name="Garage"):
+    from filament_kit.bridge import registry
+    return registry.add_bambu("01P00A000000001", name, "X1C", "192.0.2.50", "12345678").serial
 
 
 # ---------- the images ----------
@@ -56,9 +69,17 @@ def test_the_listing_names_both_images_and_the_server_boards_without_their_seria
     assert devs["intake-panel"]["version"] == rf.panel_image()[1]
     assert d["server_boards"] == [{"port": "/dev/ttyACM0", "product": "USB JTAG/serial debug unit"}]
     assert "AA:BB" not in r.text
-    assert d["settings_ok"] is False and "public_url" in d["settings_why"]
-    _public()
-    assert client(app).get("/setup/api/firmware").json()["settings_ok"] is True
+    assert "settings_ok" not in d and "settings_why" not in d        # no public address is asked for any more
+    assert d["printers"] == []
+
+
+def test_the_listing_offers_the_printers_by_name_and_none_with_the_feature_off(app):
+    serial = _printer("Garage")
+    assert client(app).get("/setup/api/firmware").json()["printers"] == [{"id": serial, "name": "Garage"}]
+    cfg = config.load()
+    cfg["modules"] = {**cfg["modules"], "printers": False}
+    config.save(cfg)
+    assert client(app).get("/setup/api/firmware").json()["printers"] == []
 
 
 def test_an_image_is_served_whole_from_the_kit_and_only_to_the_home_network(app):
@@ -82,23 +103,39 @@ def test_the_installed_images_win_over_a_checkouts(env, tmp_path):  # noqa: F811
 
 # ---------- the browser way: the Printer Station's token ----------
 
-def test_provision_needs_the_code_and_gives_the_token_and_the_address(app):
-    _public()
+def test_provision_needs_the_code_and_gives_the_token_and_the_address(app, home):
     assert post(client(app), "flash/provision", {}, code=None).status_code in (401, 403)
     assert reader_tokens.TokenStore().list() == []
     r = post(client(app), "flash/provision", {"name": "bench"})
     assert r.status_code == 200, r.text
     d = r.json()
-    assert d["base"] == PUBLIC + "/reader" and len(d["token"]) >= 16
+    port = config.load()["port"]
+    assert d["base"] == f"https://fkhub.local:{port}/reader" and len(d["token"]) >= 16
+    assert d["root_ca"] == home and d["hub_ip"] == HUB_IP and d["printer"] == ""
+    assert "kit.example" not in r.text            # no public address anywhere in it
     assert [(t["id"], t["name"]) for t in reader_tokens.TokenStore().list()] == [(d["id"], "bench")]
     # a failed run takes it back with the route the Devices tab has
     assert post(client(app), f"readers/{d['id']}/revoke", {}).status_code == 200
     assert reader_tokens.TokenStore().list() == []
 
 
-def test_provision_without_a_public_address_makes_no_token(app):
+def test_provision_needs_no_public_address_and_carries_the_chosen_printer(app, home):
+    assert not (config.load().get("web") or {}).get("public_url")
+    serial = _printer()
+    r = post(client(app), "flash/provision", {"printer": serial})
+    assert r.status_code == 200 and r.json()["printer"] == serial and r.json()["base"].startswith("https://fkhub.local:")
+
+
+def test_provision_refuses_a_printer_the_hub_does_not_have_and_makes_no_token(app, home):
+    r = post(client(app), "flash/provision", {"printer": "NOPE"})
+    assert r.status_code == 400 and r.json()["field"] == "printer"
+    assert reader_tokens.TokenStore().list() == []
+
+
+def test_provision_without_the_hubs_certificate_makes_no_token(app, monkeypatch):
+    monkeypatch.setattr(rs.pairing, "short_hostname", lambda: "fkhub")
     r = post(client(app), "flash/provision", {})
-    assert r.status_code == 409 and "public_url" in r.json()["error"]
+    assert r.status_code == 409 and "certificate" in r.json()["error"]
     assert reader_tokens.TokenStore().list() == []
 
 
@@ -116,10 +153,70 @@ def test_the_server_way_leaves_the_answers_root_only_and_starts_the_job(app, mon
     assert r.status_code == 200, r.text
     assert r.json()["name"] == "reader_setup" and started == ["reader_setup"]
     p = rf.pending_path()
-    assert json.loads(p.read_text()) == {**ANSWERS, "port": "/dev/ttyACM0", "name": "printer-station"}
+    assert json.loads(p.read_text()) == {**ANSWERS, "port": "/dev/ttyACM0", "name": "printer-station", "printer": ""}
     if os.name == "posix":
         assert p.stat().st_mode & 0o777 == 0o600
     assert "wifi-secret-1" not in r.text
+
+
+def test_the_server_way_carries_the_chosen_printer_and_refuses_a_bad_one(app, monkeypatch):
+    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="": None)
+    serial = _printer()
+    assert post(client(app), "flash/server", {**ANSWERS, "printer": serial}).status_code == 200
+    assert json.loads(rf.pending_path().read_text())["printer"] == serial
+    rf.pending_path().unlink()
+    r = post(client(app), "flash/server", {**ANSWERS, "printer": "a b/c"})
+    assert r.status_code == 400 and r.json()["field"] == "printer" and not rf.pending_path().exists()
+
+
+def _klipper(name="Bench"):
+    from filament_kit.bridge import registry
+    return registry.add_klipper(name, "mainsail.local").serial
+
+
+def _only_klipper_is_on():
+    cfg = config.load()
+    cfg["modules"] = {**cfg["modules"], "printers": False, "klipper": True}
+    config.save(cfg)
+
+
+def test_the_printer_list_holds_bambu_and_klipper_printers_alike(app):
+    bambu, klipper = _printer("Garage"), _klipper("Bench")
+    got = client(app).get("/setup/api/firmware").json()["printers"]
+    assert {(p["id"], p["name"]) for p in got} == {(bambu, "Garage"), (klipper, "Bench")}
+
+
+def test_a_klipper_only_hub_offers_its_printers_and_a_hub_with_neither_feature_none(app):
+    _printer("Garage")
+    klipper = _klipper("Bench")
+    _only_klipper_is_on()
+    assert {p["id"] for p in client(app).get("/setup/api/firmware").json()["printers"]} == {"01P00A000000001", klipper}
+    cfg = config.load()
+    cfg["modules"] = {**cfg["modules"], "printers": False, "klipper": False}
+    config.save(cfg)
+    assert client(app).get("/setup/api/firmware").json()["printers"] == []
+
+
+def test_all_three_ways_refuse_a_printer_the_hub_does_not_have_with_one_text(app, home, monkeypatch, usb, capsys):
+    """The browser way (flash/provision), the Hub's USB (flash/server and the root helper's op) and the command line
+    (`reader setup --pending` and `--printer`) all say reader_setup.UNKNOWN_PRINTER for an id the Hub has not."""
+    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="": None)
+    text = rs.UNKNOWN_PRINTER
+    assert post(client(app), "flash/provision", {"printer": "01P00A000000009"}).json()["error"] == text
+    assert reader_tokens.TokenStore().list() == []
+    assert post(client(app), "flash/server", {**ANSWERS, "printer": "01P00A000000009"}).json()["error"] == text
+    with pytest.raises(setup_helper.Refused) as e:                 # the helper, asked directly (it is a root door of its own)
+        setup_helper._reader_usb({**ANSWERS, "printer": "01P00A000000009"})
+    assert e.value.message == text and not rf.pending_path().exists()
+    # the command line: the pending answers, and the option
+    rf.write_pending({**ANSWERS, "port": "/dev/ttyACM1", "printer": "01P00A000000009"})
+    capsys.readouterr()
+    assert cli._reader_setup_usb(_args(base=None), _no_ask, _no_ask, run=_run) == 1
+    assert text in capsys.readouterr().err
+    with pytest.raises(rs.SetupError) as e:
+        rs.home_settings("x" * 70)                                  # too long for the firmware: the same refusal, not FK-ERR
+    assert str(e.value) == text
+    assert "settings" not in usb and reader_tokens.TokenStore().list() == []
 
 
 def test_a_job_that_does_not_start_leaves_no_answers(app, monkeypatch):
@@ -212,6 +309,21 @@ def test_pending_takes_the_answers_once_asks_nothing_and_prints_no_secret(usb, c
     assert "no answers from the setup page" in capsys.readouterr().err
 
 
+def test_pending_without_a_base_gives_the_reader_the_hubs_home_address(usb, home):
+    _printer()
+    rf.write_pending({**ANSWERS, "port": "/dev/ttyACM1", "printer": "01P00A000000001"})
+    assert cli._reader_setup_usb(_args(base=None), _no_ask, _no_ask, run=_run) == 0
+    s = usb["settings"]
+    assert s["base"] == f"https://fkhub.local:{config.load()['port']}/reader"
+    assert (s["root_ca"], s["hub_ip"], s["printer"]) == (home, HUB_IP, "01P00A000000001")
+
+
+def test_a_base_given_by_hand_keeps_the_older_settings(usb):
+    rf.write_pending({**ANSWERS, "port": "/dev/ttyACM1"})
+    assert cli._reader_setup_usb(_args(), _no_ask, _no_ask, run=_run) == 0
+    assert not {"root_ca", "hub_ip", "printer"} & set(usb["settings"])
+
+
 def test_pending_without_a_port_and_several_boards_asks_nothing(usb, capsys):
     rf.write_pending(ANSWERS)
     assert cli._reader_setup_usb(_args(), _no_ask, _no_ask, run=_run) == 1
@@ -300,7 +412,9 @@ function makePort() {
           const line = buf.slice(0, i); buf = buf.slice(i + 1); board.lines.push(line.slice(0, 7));
           if (line === "FK?") {
             const done = board.settings !== null;
-            say(`FK-READER 1794501335 configured=${done ? 1 : 0} wifi=${done ? scenario.wifi : "-"} server=${done ? scenario.server : "-"}\n`);
+            // scenario.line: what a reader that joined the Wi-Fi sends after its settings (a late or cut-short report)
+            say(done && scenario.line ? scenario.line + "\n"
+              : `FK-READER 1794501335 configured=${done ? 1 : 0} wifi=${done ? scenario.wifi : "-"} server=${done ? scenario.server : "-"}\n`);
           } else if (line.startsWith("FK-SET ")) {
             if (scenario.refuse) { say(`FK-ERR ${scenario.refuse}\n`); continue; }
             board.settings = JSON.parse(line.slice(7));
@@ -314,8 +428,10 @@ function makePort() {
     async close() {},
   };
 }
+// a minute of waiting for the report passes in about a second when the scenario sends a line
+const t0 = Date.now(), FastDate = { now: () => t0 + (Date.now() - t0) * 60 };
 const ctx = { navigator: { serial: { getPorts: async () => [makePort()] } }, window: { isSecureContext: true },
-  TextEncoder, TextDecoder, setTimeout, clearTimeout, console, Date, JSON, Promise, Math };
+  TextEncoder, TextDecoder, setTimeout, clearTimeout, console, Date: scenario.line ? FastDate : Date, JSON, Promise, Math };
 vm.createContext(ctx);
 vm.runInContext(src, ctx);
 const settings = { ssid: "Home", pass: "pw", base: "https://kit.example.net/filament/reader", token: "t".repeat(43), buzzer_low: false };
@@ -345,6 +461,56 @@ def test_the_browser_provisioning_against_a_fake_board(tmp_path, scenario, ok, c
         assert r["reason"] == "not a JSON object"
     if not scenario.get("refuse"):
         assert r["settings"]["token"] == "t" * 43 and r["sent"] == ["FK-SET "]
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="needs node")
+@pytest.mark.parametrize("line", [
+    "FK-READER 1794501335 configured=1 wifi=ok server=-",      # joined the Wi-Fi, the Hub check not finished: no report comes
+    "FK-READER 1794501335 configured=1 wifi=ok server=o",      # a report cut short
+    "FK-READER 1794501335 configured=1 wifi=o",
+    "FK-READER 1794501335 configured=1 wifi=f",
+])
+def test_a_late_or_cut_short_report_from_a_reader_that_joined_the_wifi_never_says_wifi(tmp_path, line):
+    """Reproduces the owner's wrong text. On 58731d34 these gave "report" or "hub_unreachable" ("did not report back" or
+    "could not reach the Hub"); the page's answer for a report that does not come is its own "late" (R17)."""
+    script = tmp_path / "fake.js"
+    script.write_text(FAKE_SERIAL, encoding="utf-8")
+    out = subprocess.run([shutil.which("node"), str(script), str(STATIC / "setup_flash.js"), json.dumps({"line": line})],
+                         capture_output=True, text=True, timeout=120, check=True).stdout
+    r = json.loads(out)
+    assert r["ok"] is False and r["code"] == "late", r
+    texts = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))
+    assert texts["flash_error_late"] == "The reader did not answer in time. Run this again."
+
+
+def test_the_flash_form_offers_the_printer_and_writes_the_homes_settings():
+    js = (STATIC / "setup_flash.js").read_text(encoding="utf-8")
+    # "Choose on the reader" first, so it is the default; then the Hub's printers by name
+    assert 'options: [{ value: "", label: SW.t("flash_printer_reader") }, ...(F.printers || []).map(' in js
+    assert 'printer: printer._control.value' in js
+    # the browser way sends it to provision, the server way to flash/server, and the board gets what provision answered
+    assert 'api("flash/provision", { code: theCode(), name: a.name || undefined, printer: a.printer })' in js
+    assert 'port, printer: a.printer, name: a.name || undefined }' in js
+    assert "root_ca: tok.root_ca, hub_ip: tok.hub_ip, printer: tok.printer" in js
+    # no refusal for a missing public address
+    assert "noPublic" not in js and "flash_no_public" not in js and "settings_ok" not in js
+    texts = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))
+    assert "flash_no_public" not in texts and texts["flash_printer"] == "Printer" and texts["flash_printer_reader"] == "Choose on the reader"
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="needs node")
+def test_the_hub_unreachable_text_names_the_home_address_it_tried(tmp_path):
+    js = (STATIC / "setup_flash.js").read_text(encoding="utf-8")
+    fn = "function provisionText" + js.split("function provisionText")[1].split("\n}\n")[0] + "\n}\n"
+    texts = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))
+    code = ("const T = " + json.dumps({k: texts[k] for k in ("flash_error_hub_unreachable", "flash_error_wifi")}) + ";\n"
+            "const SW = { t: (k, v) => T[k].replace(/\\{(\\w+)\\}/g, (_, n) => v[n]) };\n" + fn +
+            'console.log(JSON.stringify([provisionText({ code: "hub_unreachable" }, "Home", "https://fkhub.local:8443/reader (192.0.2.7)"),'
+            ' provisionText({ code: "wifi" }, "Home", "x")]));')
+    out = subprocess.run([shutil.which("node"), "-e", code], capture_output=True, encoding="utf-8", timeout=30, check=True).stdout
+    unreachable, wifi = json.loads(out)
+    assert "https://fkhub.local:8443/reader (192.0.2.7)" in unreachable and "public address" not in unreachable
+    assert "could not join 'Home'" in wifi
 
 
 def test_every_text_the_flash_section_says_is_in_the_catalogue():

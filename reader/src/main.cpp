@@ -18,6 +18,7 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <ESPmDNS.h>
 #include <HTTPClient.h>
 #include <Adafruit_PN532.h>
 #include <Adafruit_GFX.h>
@@ -37,6 +38,7 @@
 #include "reader_api.h"
 #include "menu.h"
 #include "settings.h"
+#include "hub_address.h"
 #include "ota_digest.h"
 
 using namespace reader;
@@ -122,12 +124,13 @@ static const int PIN_ENC_SW  = 1;
 static const bool ENC_SW_TO_VCC = true;
 
 // --- Buzzer (on a PWM-capable pin) ---
-//     High-triggered (the default): a magnetic buzzer switched by an N-channel
-//     MOSFET such as a BS170, pin HIGH = on, so the pin idles LOW. A reader built
-//     with the older 3-pin module (GND, I/O, VCC, PNP driver) is low-triggered:
-//     the settings' buzzer_low (`reader setup --buzzer low`). A build from a
-//     secrets.h without READER_BUZZER_ACTIVE_LOW predates the setting, and those
-//     readers were all built with that module, so it means low.
+//     Bare buzzer (the default, high-triggered): a magnetic buzzer switched by an
+//     N-channel MOSFET such as a BS170, pin HIGH = on, so the pin idles LOW. A
+//     reader built with a buzzer with a driver board (the 3-pin GND, I/O, VCC
+//     module, PNP driver) is low-triggered: the settings' buzzer_low
+//     (`reader setup --buzzer low`). A build from a secrets.h without
+//     READER_BUZZER_ACTIVE_LOW predates the setting, and those readers were all
+//     built with that module, so it means low.
 static const int  PIN_BUZZER        = 0;
 #if defined(READER_BUZZER_ACTIVE_LOW)
 static const bool COMPILED_BUZZER_LOW = READER_BUZZER_ACTIVE_LOW;
@@ -195,8 +198,8 @@ const SlotEntry* curSlot() {
 // ---- settings (written over USB, kept in flash) ---------------------------------
 Settings cfg;              // what the reader runs with
 bool     configured = false;
-const char* wifiState = "-";     // how the last start went, for FK? (ok / fail / -)
-const char* serverState = "-";   // ok / fail / unauth / -
+BootReport boot;           // how the last start went, for FK? (wifi ok / fail / -, server ok / fail / unauth / -)
+bool printerNew = false;   // the settings were just written over USB with a printer: start on it (see setup)
 
 const char* rootCa() { return cfg.rootCa.empty() ? DEFAULT_ROOT_CA : cfg.rootCa.c_str(); }
 
@@ -212,6 +215,9 @@ void loadSettings() {
   cfg.otaKey = p.getString("ota_key", "").c_str();
   cfg.rootCa = p.getString("root_ca", "").c_str();
   cfg.buzzerLow = p.getBool("buzzer_low", COMPILED_BUZZER_LOW);
+  cfg.hubIp = p.getString("hub_ip", "").c_str();
+  cfg.printer = p.getString("printer", "").c_str();
+  printerNew = p.getBool("printer_new", false);
   std::string savedStamp = p.getString("src_stamp", "").c_str();
   p.end();
 #ifdef HAVE_SECRETS
@@ -229,6 +235,7 @@ void loadSettings() {
   std::string stamp = settingsStamp(compiled);
   if (adoptCompiled(cfg, savedStamp, stamp)) {
     cfg = compiled;
+    printerNew = false;
     if (saveSettings(cfg)) {
       Preferences w;
       if (w.begin("fk-cfg", false)) { w.putString("src_stamp", stamp.c_str()); w.end(); }
@@ -247,7 +254,10 @@ bool saveSettings(const Settings& s) {
             p.putString("token", s.token.c_str()) == s.token.size() &&
             p.putString("ota_key", s.otaKey.c_str()) == s.otaKey.size() &&
             p.putString("root_ca", s.rootCa.c_str()) == s.rootCa.size() &&
-            p.putBool("buzzer_low", s.buzzerLow) == 1;
+            p.putBool("buzzer_low", s.buzzerLow) == 1 &&
+            p.putString("hub_ip", s.hubIp.c_str()) == s.hubIp.size() &&
+            p.putString("printer", s.printer.c_str()) == s.printer.size() &&
+            p.putBool("printer_new", !s.printer.empty()) == 1;
   p.end();
   return ok;
 }
@@ -260,7 +270,7 @@ void serialPoll() {
     if (!serialLines.push((char)Serial.read(), line)) continue;
     switch (command(line, arg)) {
       case CMD_HELLO:
-        Serial.println(helloLine((long)FW_BUILD, configured, wifiState, serverState).c_str());
+        Serial.println(helloLine((long)FW_BUILD, configured, boot.wifiText(), boot.serverText()).c_str());
         break;
       case CMD_SET: {
         Settings s; std::string why;
@@ -429,6 +439,81 @@ String formatUid(const uint8_t* uid, uint8_t len) {
 WiFiClientSecure apiTls;
 HTTPClient       apiHttp;
 
+// ---- where the Hub is -----------------------------------------------------------
+// base's host is usually "<name>.local": looked up by mDNS (bounded), else the settings' hub_ip. Either way the TLS
+// handshake checks the certificate against root_ca and that NAME (connect(ip, port, host, ca, ...) sets the SNI and
+// the name checked; setInsecure is never used). A base whose host is not ".local" is not touched: HTTPClient connects
+// by name as it always did. The address that worked is kept until a connect fails; a failed address is followed by
+// the next one (the mDNS answer, then hub_ip) inside the same bound.
+//
+// The bound (HUB_CONNECT_BUDGET_MS or the caller's smaller one) covers the mDNS lookup and the TCP connects of all the
+// addresses: NetworkClientSecure::connect(ip, port, host, ...) takes its TCP timeout from NetworkClient::_timeout
+// (NetworkClientSecure.cpp:148, default 30000 from :33), which setConnectionTimeout sets (NetworkClient.cpp:349); the
+// Stream::setTimeout the code used before does not reach it. The handshake that follows a TCP connect is bounded by
+// sslclient->handshake_timeout (ssl_client.cpp:319, default 120000 from NetworkClientSecure.cpp:41), which
+// setHandshakeTimeout(seconds) sets (NetworkClientSecure.cpp:445).
+bool          mdnsUp = false;
+volatile bool wifiGotIp = false;   // Wi-Fi got an address (set by the event, taken by ensureMdns)
+std::string   hubIpNow;            // the address in use ("" = look it up on the next connect)
+
+void onWifiGotIp(arduino_event_id_t, arduino_event_info_t) { wifiGotIp = true; }
+
+void startMdns();
+// mDNS comes up whenever Wi-Fi is up (boot or a reconnect), not only when it was up at boot.
+void ensureMdns() {
+  if (!mdnsNeedsStart(WiFi.status() == WL_CONNECTED, mdnsUp, wifiGotIp)) return;
+  wifiGotIp = false;
+  if (mdnsUp) MDNS.end();
+  startMdns();
+}
+
+bool mdnsLookup(const std::string& host, uint32_t timeoutMs, std::string& ip) {
+  ensureMdns();
+  if (!mdnsUp) return false;
+  std::string name = host;
+  if (!name.empty() && name.back() == '.') name.pop_back();
+  name.erase(name.size() - 6);   // ".local": the library takes the bare name
+  IPAddress a = MDNS.queryHost(name.c_str(), timeoutMs);
+  if (a == IPAddress((uint32_t)0)) return false;
+  ip = a.toString().c_str();
+  return true;
+}
+
+void startMdns() {
+  String name = "fk-reader-" + String((uint32_t)(ESP.getEfuseMac() >> 24) & 0xFFFFFF, HEX);
+  mdnsUp = MDNS.begin(name.c_str());
+}
+
+// Opens `tls` to the Hub when base needs the lookup above and `tls` is not connected yet; true when HTTPClient may go
+// on (it reuses a connected client). Call after http.begin(tls, url): begin() drops a connection made before it.
+// budgetMs bounds the whole of it (lookup and TCP connects); a peer that takes the TCP connection and then says
+// nothing is cut by the handshake limit (HANDSHAKE_S) on top.
+bool hubConnect(WiFiClientSecure& tls, uint32_t budgetMs) {
+  BaseParts bp = parseBase(cfg.base);
+  if (!bp.ok || !isLocalName(bp.host)) return true;      // old behaviour: by name, in HTTPClient
+  ensureMdns();
+  if (tls.connected()) return true;
+  uint32_t t0 = millis();
+  std::vector<HubAddress> list = hubAddresses(cfg.base, cfg.hubIp, hubIpNow, mdnsSliceMs(budgetMs), mdnsLookup);
+  tls.setHandshakeTimeout(HANDSHAKE_S);
+  for (size_t i = 0; i < list.size(); i++) {
+    uint32_t ms = connectSliceMs(budgetMs, millis() - t0, list.size() - i);
+    IPAddress ip;
+    if (!ms || !ip.fromString(list[i].ip.c_str())) continue;
+    tls.setConnectionTimeout(ms);
+    if (tls.connect(ip, list[i].port, list[i].host.c_str(), rootCa(), nullptr, nullptr)) {
+      if (list[i].ip != hubIpNow)
+        Serial.printf("hub %s -> %s (%s)\n", bp.host.c_str(), list[i].ip.c_str(), list[i].source == ADDR_MDNS ? "mDNS" : "hub_ip");
+      hubIpNow = list[i].ip;
+      return true;
+    }
+    Serial.printf("hub %s: %s did not answer\n", bp.host.c_str(), list[i].ip.c_str());
+  }
+  if (list.empty()) Serial.printf("hub %s: no address\n", bp.host.c_str());
+  hubIpNow.clear();                                      // look it up again on the next connect
+  return false;
+}
+
 // A String sink that refuses bytes past `cap`, so a huge (or endless chunked)
 // reply cannot exhaust the heap; HTTPClient::writeToStream stops on the refusal.
 class CappedString : public Stream {
@@ -448,16 +533,18 @@ class CappedString : public Stream {
   String& s_;
   size_t cap_;
 };
-static const int HTTP_TOO_BIG = -100;   // our code: reply refused for size
 
 // quick: one short attempt (background refreshes and taps), see LIST_QUICK_TIMEOUT_MS.
-int apiRequest(const String& url, const char* body, String& resp, bool quick = false) {
+// boundMs: one attempt with that connect and read time each (the Hub check at start, HUB_CHECK_MS).
+int apiRequest(const String& url, const char* body, String& resp, bool quick = false, uint32_t boundMs = 0) {
   int code = -1;
-  for (int attempt = 0; attempt < (quick ? 1 : 2); attempt++) {
+  uint32_t readMs = boundMs ? boundMs : quick ? LIST_QUICK_TIMEOUT_MS : 6000;
+  uint32_t connectMs = boundMs ? boundMs : quick ? LIST_QUICK_TIMEOUT_MS : 5000;
+  for (int attempt = 0; attempt < (quick || boundMs ? 1 : 2); attempt++) {
     apiHttp.setReuse(true);
-    apiHttp.setTimeout(quick ? LIST_QUICK_TIMEOUT_MS : 6000);
-    apiHttp.setConnectTimeout(quick ? LIST_QUICK_TIMEOUT_MS : 5000);
-    if (!apiHttp.begin(apiTls, url)) { apiTls.stop(); continue; }
+    apiHttp.setTimeout(readMs);
+    apiHttp.setConnectTimeout(connectMs);
+    if (!apiHttp.begin(apiTls, url) || !hubConnect(apiTls, connectMs)) { apiHttp.end(); apiTls.stop(); continue; }
     apiHttp.addHeader("X-Auth-Token", cfg.token.c_str());
     if (body) { apiHttp.addHeader("Content-Type", "application/json"); code = apiHttp.POST(body); }
     else      code = apiHttp.GET();
@@ -531,15 +618,16 @@ uint32_t settleAt = 0;   // when to save the selection after the knob stops (0 =
 // Both lists. Re-selects the SAVED printer and slot label (the current ones only
 // while a knob turn is not saved yet), so a unit that drops out for one refresh
 // does not move the choice for good. On a failure the last good lists stay.
-bool refreshListsNow(bool quick) {
+bool refreshListsNow(bool quick, uint32_t boundMs = 0) {
   if (WiFi.status() != WL_CONNECTED) { serverOk = false; return false; }
   std::string wantPrinter = !savedPrinter.empty() ? savedPrinter
                                                   : (curPrinter() ? curPrinter()->id : std::string());
   std::string wantLabel = wantedLabel(savedLabel, curSlot() ? curSlot()->label : std::string(),
                                       settleAt != 0 && menu.mode == MODE_SLOTS);
   String resp;
-  int code = apiRequest(urlPrinters, nullptr, resp, quick);
-  serverState = code == 200 ? "ok" : (code == 401 || code == 403) ? "unauth" : "fail";
+  int code = apiRequest(urlPrinters, nullptr, resp, quick, boundMs);
+  boot.server(code);
+  if (boundMs) Serial.println(helloLine((long)FW_BUILD, true, boot.wifiText(), boot.serverText()).c_str());   // the Hub's answer, as soon as it is known
   bool ok = code == 200 && parsePrinters(resp.c_str(), printers);
   resp = "";
   if (!ok) {
@@ -549,15 +637,15 @@ bool refreshListsNow(bool quick) {
   }
   int i = findPrinter(printers, wantPrinter);
   menu.printer = i < 0 ? 0 : i;
-  serverOk = fetchSlots(wantLabel, quick);
+  serverOk = fetchSlots(wantLabel, quick || boundMs != 0);
   return serverOk;
 }
 
 // listsAt is stamped when the refresh ENDS, so a slow failing one cannot be due again
 // at once; listFails drives the retry back-off (listRetryMs).
 // quick: one short attempt, used for retries and taps so a dead server cannot hold the loop.
-void refreshLists(bool quick = false) {
-  bool ok = refreshListsNow(quick);
+void refreshLists(bool quick = false, uint32_t boundMs = 0) {
+  bool ok = refreshListsNow(quick, boundMs);
   listsAt = millis();
   listFails = ok ? 0 : listFails + 1;
 }
@@ -690,7 +778,7 @@ void showProgress(const char* title, const char* line, int pct) {
 bool httpsGet(HTTPClient& http, WiFiClientSecure& tls, const String& url) {
   tls.setCACert(rootCa());
   http.setTimeout(15000);
-  if (!http.begin(tls, url)) return false;
+  if (!http.begin(tls, url) || !hubConnect(tls, 15000)) return false;
   http.addHeader("X-Auth-Token", cfg.token.c_str());
   return http.GET() == 200;
 }
@@ -945,24 +1033,34 @@ void setup() {
   }
 
   WiFi.mode(WIFI_STA);
+  WiFi.onEvent(onWifiGotIp, ARDUINO_EVENT_WIFI_STA_GOT_IP);
   WiFi.begin(cfg.ssid.c_str(), cfg.pass.c_str());
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) { serialPoll(); delay(250); }
-  wifiState = WiFi.status() == WL_CONNECTED ? "ok" : "fail";
+  boot.wifi(WiFi.status() == WL_CONNECTED);
+  // Wi-Fi is known before the Hub is called: say so now (the Hub check below can take its full bound).
+  Serial.println(helloLine((long)FW_BUILD, true, boot.wifiText(), boot.serverText()).c_str());
+  ensureMdns();
 
   apiTls.setCACert(rootCa());
   confirmOtaImage();
   prefs.begin("reader", false);
   savedPrinter = prefs.getString("printer", "").c_str();
+  if (printerNew) {   // set up with a printer just now: start on it, the knob can change it later
+    savePrinter(startPrinter(savedPrinter, cfg.printer, printerNew));
+    Preferences w;
+    if (w.begin("fk-cfg", false)) { w.putBool("printer_new", false); w.end(); }
+    printerNew = false;
+  }
   savedLabel   = prefs.getString("slot_label", "").c_str();
   if (prefs.isKey("slot")) prefs.remove("slot");   // the H2D-only firmware's slot index
-  refreshLists();
+  refreshLists(false, HUB_CHECK_MS);   // bounded; reports server= as soon as the Hub answers
   checkForUpdate();
   lastActivity = millis();
   redraw();
   if (WiFi.status() != WL_CONNECTED || !serverOk) buzzError();
   else                                            buzzOk();
-  Serial.println(helloLine((long)FW_BUILD, true, wifiState, serverState).c_str());
+  Serial.println(helloLine((long)FW_BUILD, true, boot.wifiText(), boot.serverText()).c_str());
 }
 
 bool swallowPress = false;  // this press woke a dark screen: ignore the rest of it
