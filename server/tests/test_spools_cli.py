@@ -485,62 +485,51 @@ def return_api(view, answer):
     return FakeApi({"GET /api/spools/12": {"spool": {}, "view": view}, "POST /api/spools/12/return": answer})
 
 
-def test_return_asks_with_the_home_then_posts(capsys, terminal):
+@pytest.fixture
+def never_asked(monkeypatch):
+    """A terminal whose every question fails the test."""
+    monkeypatch.setattr(output, "terminal", lambda: True)
+
+    def fail_input(prompt=""):
+        raise AssertionError(f"asked: {prompt!r}")
+    monkeypatch.setattr(builtins, "input", fail_input)
+    monkeypatch.setattr(output, "confirm", lambda *a, **k: pytest.fail("confirm was called"))
+
+
+def test_return_asks_nothing_posts_and_names_undo(capsys, never_asked):
     api = return_api(out_view(12), returned())
-    asked = terminal("y")
     assert spools_cli.cmd_spool_return(api, "12") == 0
     out = capsys.readouterr().out
-    assert asked == ["Return to Rack 1? [y/N] "] and "Spool 12, Acme PLA Red. Home: Rack 1." in out
-    assert out.rstrip().endswith("Returned to Rack 1.")
-    assert api.calls == [("GET", "/api/spools/12", None), ("POST", "/api/spools/12/return", {})]
+    assert "[y/N]" not in out and out.splitlines() == ["Returned to Rack 1.", "To undo it: spoolwarden undo"]
+    assert api.calls == [("POST", "/api/spools/12/return", {})]
 
 
-def test_return_with_no_home_asks_plain_and_names_the_place_the_answer_gives(capsys, terminal):
+def test_return_names_the_place_the_answer_gives(capsys, never_asked):
     api = return_api(out_view(12, home=None), returned("Storage box 1"))
-    asked = terminal("y")
+    assert spools_cli.cmd_spool_return(api, "12") == 0
+    assert capsys.readouterr().out.startswith("Returned to Storage box 1.")
+
+
+def test_return_with_no_place_in_the_answer_is_just_returned(capsys, never_asked):
+    api = return_api(out_view(12, home=None), returned(None))
     assert spools_cli.cmd_spool_return(api, "12") == 0
     out = capsys.readouterr().out
-    assert asked == ["Return? [y/N] "] and "Home: not recorded" in out and out.rstrip().endswith("Returned to Storage box 1.")
+    assert out.splitlines() == ["Returned.", "To undo it: spoolwarden undo"]
 
 
-def test_return_with_no_place_in_the_answer_is_just_returned(capsys):
-    api = return_api(out_view(12, home=None), returned(None))
-    assert spools_cli.cmd_spool_return(api, "12", yes=True) == 0
-    assert capsys.readouterr().out.rstrip().endswith("Returned.")
-
-
-def test_return_answered_no_posts_nothing(capsys, terminal):
-    api = return_api(out_view(12), returned())
-    terminal("n")
-    assert spools_cli.cmd_spool_return(api, "12") == output.CANCELLED
-    assert [m for m, _, _ in api.calls] == ["GET"]
-
-
-def test_return_yes_does_not_ask(capsys):
-    assert spools_cli.cmd_spool_return(return_api(out_view(12), returned()), "12", yes=True) == 0
-    assert "[y/N]" not in capsys.readouterr().out
-
-
-def test_return_json_never_asks_and_gives_the_answer():
+def test_return_json_gives_the_answer_without_asking(never_asked):
     api = return_api(out_view(12), returned())
     rc, doc = run_json(lambda: spools_cli.cmd_spool_return(api, "12"))
-    assert rc == output.USAGE and doc["ok"] is False and [m for m, _, _ in api.calls] == ["GET"]
-    rc, doc = run_json(lambda: spools_cli.cmd_spool_return(api, "12", yes=True))
     assert rc == 0 and doc == {"spool": {"id": 12, "location": "Rack 1"}, "event_id": 7}
+    assert [m for m, _, _ in api.calls] == ["POST"]
 
 
-def test_return_of_a_spool_that_is_not_checked_out_is_refused_before_posting(capsys):
-    api = return_api(spool_view(12, checked_out=False, home=None), returned())
-    assert spools_cli.cmd_spool_return(api, "12", yes=True) == output.USAGE
-    assert "This spool is not checked out." in capsys.readouterr().err
-    assert [m for m, _, _ in api.calls] == ["GET"]
-
-
-def test_return_refused_by_the_hub_with_409(capsys):
+def test_return_of_a_spool_that_is_not_checked_out_is_refused_by_the_hub(capsys, never_asked):
     api = return_api(out_view(12), SlotError("This spool is not checked out.", code="not_checked_out", http=409))
-    assert spools_cli.cmd_spool_return(api, "12", yes=True) == output.USAGE
-    err = capsys.readouterr().err
-    assert "This spool is not checked out." in err and "Traceback" not in err
+    assert spools_cli.cmd_spool_return(api, "12") == output.USAGE
+    cap = capsys.readouterr()
+    assert "This spool is not checked out." in cap.err and "Traceback" not in cap.err
+    assert "undo" not in cap.out
 
 
 def test_return_bad_number_unknown_spool_and_no_hub(capsys):
@@ -591,12 +580,14 @@ def test_r88_parsers_and_run(capsys):
     assert parse("spools", "--checked-out").filter == "checked_out"
     with pytest.raises(SystemExit):
         parse("spools", "--checked-out", "--low")
-    r = parse("spool", "return", "12", "-y")
-    assert (r.spool_cmd, r.number, r.yes) == ("return", "12", True)
+    r = parse("spool", "return", "12")
+    assert (r.spool_cmd, r.number) == ("return", "12") and not hasattr(r, "yes")
+    with pytest.raises(SystemExit):
+        parse("spool", "return", "12", "-y")
     h = parse("spool", "home", "12", "Rack 1")
     assert (h.spool_cmd, h.number, h.location, h.yes) == ("home", "12", "Rack 1", False)
     assert spools_cli.run(parse("spools", "--checked-out"), FakeApi({"GET /api/spools?filter=checked_out": listing()})) == 0
-    assert spools_cli.run(parse("spool", "return", "12", "-y"), return_api(out_view(12), returned())) == 0
+    assert spools_cli.run(parse("spool", "return", "12"), return_api(out_view(12), returned())) == 0
     api = FakeApi({"PATCH /api/spools/12": edit(out_view(12), out_view(12, home="Overflow"))})
     assert spools_cli.run(parse("spool", "home", "12", "Overflow", "-y"), api) == 0
     assert "Home is now Overflow." in capsys.readouterr().out

@@ -6,14 +6,15 @@
     spool move <n> <location|auto>                         `PATCH /api/spools/<n>` {location} or {auto_location: true}
     spool empty <n>                                        `PATCH /api/spools/<n>` {empty: true}
     spools --checked-out                                   `GET /api/spools?filter=checked_out` (R88 1.6; the count is `total`)
-    spool return <n>                                       `GET /api/spools/<n>`, then `POST /api/spools/<n>/return` {}
+    spool return <n>                                       `POST /api/spools/<n>/return` {} (asks nothing: undoable)
     spool home <n> <location>                              `PATCH /api/spools/<n>` {home}, a dry run first
     catalog local | local remove <id> | add --ask          `GET /api/library/local`, `DELETE /api/library/local/<id>`,
                                                            `POST /api/library/local/form`
     devices show <id|name> | set <id|name> <setting> <value>   the Hub page's `GET device/<id>`, `POST device/<id>/settings`
 
 Every changing command asks the Hub for a dry run, shows what would change, asks, and then does it; `-y` skips the
-asking, and `--json` never asks (output.confirm). Every command gives `output.emit` the object of its route.
+asking, and `--json` never asks (output.confirm). `spool return` is undoable (R88 1.6), so it asks nothing and has
+no `-y`; its result line names `spoolwarden undo`. Every command gives `output.emit` the object of its route.
 
 `api` is the kit API client (`cli._server_api()`: `get`, `patch`, `post`, `delete`, raising web.slots.SlotError), or
 None when no Hub answers. `page` for the device commands is `page(method, route, body=None) -> dict`, one of the Hub
@@ -67,11 +68,9 @@ CLI_SPOOL_WHERE_PRINTER = "In {printer} – {slot}"
 CLI_SPOOL_HOME = "Home: {place}"
 CLI_SPOOL_HOME_NOT_RECORDED = "not recorded"
 CLI_SPOOL_SINCE = "since {value}"
-CLI_SPOOL_RETURN_PREVIEW = "Spool {n}, {name}. {value}."
-CLI_SPOOL_RETURN_ASK = "Return to {place}?"
-CLI_SPOOL_RETURN_ASK_PLAIN = "Return?"
 CLI_SPOOL_RETURN_DONE = "Returned to {place}."
 CLI_SPOOL_RETURN_DONE_PLAIN = "Returned."
+CLI_SPOOL_RETURN_UNDO = "To undo it: {command} undo"
 CLI_SPOOL_HOME_PREVIEW = "Spool {n}, {name}: home {before}, would be {after}."
 CLI_SPOOL_HOME_ASK = "Change the home of spool {n} to {after}?"
 CLI_SPOOL_HOME_DONE = "Home is now {place}."
@@ -358,9 +357,9 @@ def cmd_spool_empty(api, number, yes: bool = False) -> int:
         ask=lambda n, a: CLI_SPOOL_EMPTY_ASK.format(n=n), done=lambda n, a, same: CLI_SPOOL_EMPTY_DONE.format(n=n))
 
 
-def cmd_spool_return(api, number, yes: bool = False) -> int:
-    """`spool return`: read the spool (its home is the question), ask, then `POST /api/spools/<n>/return` (the route
-    takes no dry run). The result names the place the answer's spool is in."""
+def cmd_spool_return(api, number) -> int:
+    """`spool return`: `POST /api/spools/<n>/return` and nothing asked (a return is undoable). The result names the
+    place the answer's spool is in, then how to undo it."""
     n = _number(number)
     if n is None:
         output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
@@ -369,25 +368,13 @@ def cmd_spool_return(api, number, yes: bool = False) -> int:
         return down()
     from .web.slots import SlotError
     try:
-        view = api.get(f"/api/spools/{n}").get("view") or {}
-    except SlotError as e:
-        return _spool_error(e, n)
-    if not view.get("checked_out"):
-        output.error(CLI_SPOOL_NOT_CHECKED_OUT)
-        return output.USAGE
-    output.out(CLI_SPOOL_RETURN_PREVIEW.format(n=n, name=spool_name(view), value=home_cell(view)))
-    home = view.get("home")
-    rc = confirmed(CLI_SPOOL_RETURN_ASK.format(place=home) if home else CLI_SPOOL_RETURN_ASK_PLAIN,
-                   f"returning spool {n}", f"spoolwarden spool return {n}", yes)
-    if rc is not None:
-        return rc
-    try:
         r = api.post(f"/api/spools/{n}/return", {})
     except SlotError as e:
         return _spool_error(e, n)
     output.emit(r)
     place = (r.get("spool") or {}).get("location") or (r.get("view") or {}).get("location")
     output.out(CLI_SPOOL_RETURN_DONE.format(place=place) if place else CLI_SPOOL_RETURN_DONE_PLAIN)
+    output.out(CLI_SPOOL_RETURN_UNDO.format(command=COMMAND))
     return 0
 
 
@@ -661,11 +648,12 @@ def add_parser(sub) -> None:
     m.add_argument("number")
     m.add_argument("location")
     ones.add_parser("empty", help="mark it empty").add_argument("number")
-    ones.add_parser("return", help="send a checked-out spool back to its home").add_argument("number")
+    ones.add_parser("return", help="send a checked-out spool back to its home (undoable, so it asks nothing)"
+                    ).add_argument("number")
     h = ones.add_parser("home", help="change the home of a checked-out spool")
     h.add_argument("number")
     h.add_argument("location")
-    for p in (w, m, ones.choices["empty"], ones.choices["return"], h):
+    for p in (w, m, ones.choices["empty"], h):
         p.add_argument("-y", "--yes", action="store_true", help="do not ask")
 
 
@@ -680,7 +668,7 @@ def run(args, api) -> int:
     if c == "move":
         return cmd_spool_move(api, args.number, args.location, args.yes)
     if c == "return":
-        return cmd_spool_return(api, args.number, args.yes)
+        return cmd_spool_return(api, args.number)
     if c == "home":
         return cmd_spool_home(api, args.number, args.location, args.yes)
     return cmd_spool_empty(api, args.number, args.yes)
