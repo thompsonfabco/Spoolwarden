@@ -572,6 +572,10 @@ private fun FoundRow(p: Printer, enabled: Boolean, reason: Boolean, onAdd: () ->
 private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: PrintersViewModel) {
     var code by remember(d.serial) { mutableStateOf("") }
     var name by remember(d.serial) { mutableStateOf(d.name) }
+    var address by remember(d.serial) { mutableStateOf(d.address) }
+    // a refusal that names a field is shown under that field, not as a notice
+    val field = (d.problem as? Problem.HubSaid)?.field?.takeIf { it in setOf("address", "access_code") }
+    val fieldText = d.problem?.takeIf { field != null }?.let { problemText(it) }
     val model = if (d.model == null) {
         stringResource(R.string.common_bambu_lab)
     } else {
@@ -582,7 +586,7 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
         onClose = { if (!d.busy) viewModel.cancelAdd() },
         confirm = SwDialogButton(
             label = stringResource(if (d.busy) R.string.printer_add_connecting else R.string.common_add_printer),
-            onClick = { viewModel.submitAdd(code, name) },
+            onClick = { viewModel.submitAdd(code, name, address) },
             kind = SwButtonKind.Main,
             enabled = code.isNotBlank(),
             busy = d.busy,
@@ -590,18 +594,25 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
         cancel = SwAction(stringResource(if (d.guided) R.string.common_back else R.string.common_cancel), viewModel::cancelAdd),
         cancelEnabled = !d.busy,
     ) {
-        val facts = stringResource(R.string.printer_add_facts, model, d.serial)
-        Text(withMono(facts, d.serial), style = MaterialTheme.typography.bodyMedium)
+        if (d.serial.isNotBlank()) {
+            val facts = stringResource(R.string.printer_add_facts, model, d.serial)
+            Text(withMono(facts, d.serial), style = MaterialTheme.typography.bodyMedium)
+        }
+        FormField(
+            address, { address = it }, stringResource(R.string.common_address), enabled = !d.busy, mono = true,
+            keyboard = KeyboardType.Uri,
+            error = if (d.addressMissing) stringResource(R.string.common_error_address) else if (field == "address") fieldText else null,
+        )
         FormField(
             code, { code = it }, stringResource(R.string.common_field_access_code), secret = true, enabled = !d.busy,
             hint = stringResource(R.string.common_hint_access_code),
-            error = if (d.codeMissing) stringResource(R.string.common_error_access_code) else null,
+            error = if (d.codeMissing) stringResource(R.string.common_error_access_code) else if (field == "access_code") fieldText else null,
         )
         FormField(
             name, { name = it }, stringResource(R.string.common_field_name_optional), enabled = !d.busy,
             placeholder = stringResource(R.string.printer_add_name_placeholder),
         )
-        d.problem?.let { ProblemNotice(it, onPairAgain) }
+        if (field == null) d.problem?.let { ProblemNotice(it, onPairAgain) }
         if (d.busy) BusyReason(R.string.common_busy_wait)
     }
 }
@@ -694,6 +705,7 @@ private fun GuideSheet(g: AddGuide, found: List<Printer>, onPairAgain: () -> Uni
                 rows.isEmpty() -> Text(PrinterTexts.GUIDE_NONE, style = MaterialTheme.typography.bodyMedium, color = SpoolwardenTheme.colors.muted)
             }
             SwButton(PrinterTexts.GUIDE_BY_ADDRESS, viewModel::addByAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Plain)
+            SwButton(PrinterTexts.GUIDE_BAMBU_BY_ADDRESS, viewModel::addBambuByAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Plain)
         }
     }
 }

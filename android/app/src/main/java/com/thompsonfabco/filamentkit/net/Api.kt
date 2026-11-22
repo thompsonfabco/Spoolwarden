@@ -351,10 +351,14 @@ class Api(
     suspend fun printers(): List<Printer> =
         call(request("api", "printers").get()).jsonObject["printers"]?.jsonArray.orEmpty().map { decode(it) }
 
-    /** Sets up (or re-keys) a printer. [accessCode] goes only into this request body; it is never kept or logged. */
-    suspend fun addPrinter(serial: String, accessCode: String, name: String?): Printer {
+    /**
+     * Sets up (or re-keys) a printer: a found one by its [serial], or one typed by its [address] (then [serial] is
+     * optional). [accessCode] goes only into this request body; it is never kept or logged.
+     */
+    suspend fun addPrinter(serial: String?, accessCode: String, name: String?, address: String? = null): Printer {
         val body = buildJsonObject {
-            put("serial", serial)
+            serial?.takeIf { it.isNotBlank() }?.let { put("serial", it) }
+            address?.takeIf { it.isNotBlank() }?.let { put("address", it) }
             put("access_code", accessCode)
             name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
         }

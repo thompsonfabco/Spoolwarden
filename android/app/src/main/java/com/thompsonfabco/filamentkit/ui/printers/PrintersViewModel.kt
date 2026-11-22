@@ -61,14 +61,21 @@ data class SlotLook(val hex: String, val empty: Boolean, val waiting: Boolean = 
     val drawnEmpty: Boolean get() = empty && !(waiting && swatchColor(hex) != null)
 }
 
-/** "Add Bambu Lab <model>": the form for a printer the Hub found. [guided]: opened from the guide, so Back returns to it. */
+/**
+ * "Add Bambu Lab <model>": the form for a printer the Hub found, or (blank [serial]) one added by its typed address.
+ * [guided]: opened from the guide, so Back returns to it.
+ */
 data class AddDialog(
+    /** Blank when the printer was not found and is added by its [address]. */
     val serial: String,
     /** The model's name; null when the Hub does not know it. */
     val model: String?,
     val name: String,
     val busy: Boolean = false,
     val codeMissing: Boolean = false,
+    /** The address the form starts with: the found row's, or blank. */
+    val address: String = "",
+    val addressMissing: Boolean = false,
     val problem: Problem? = null,
     val guided: Boolean = false,
 )
@@ -203,6 +210,7 @@ class PrintersViewModel(
             dialog = AddDialog(
                 serial = p.serial, model = p.shownModel,
                 name = if (p.name == p.serial) "" else p.name,
+                address = p.ip.orEmpty(),
                 guided = guided,
             ),
             guide = null,
@@ -218,18 +226,35 @@ class PrintersViewModel(
         if (d?.guided == true) openGuide() else refresh()
     }
 
-    fun submitAdd(accessCode: String, name: String) {
+    /** The form for a Bambu Lab printer that was not found: its address is typed (R87 section 2). */
+    fun openAddByAddress(guided: Boolean = false) = _state.update {
+        it.copy(dialog = AddDialog(serial = "", model = null, name = "", guided = guided), guide = null)
+    }
+
+    /**
+     * Adds the printer. A found printer goes by its serial, as before; one with no serial, or whose [address] was typed
+     * over the found one, goes by that address (the serial, when there is one, goes along).
+     */
+    fun submitAdd(accessCode: String, name: String, address: String = "") {
         val d = _state.value.dialog ?: return
         if (d.busy) return
         val code = accessCode.trim()
-        if (code.isEmpty()) {
-            _state.update { it.copy(dialog = d.copy(codeMissing = true, problem = null)) }
+        val typed = address.trim()
+        val byAddress = d.serial.isBlank() || (typed.isNotEmpty() && typed != d.address)
+        val addressMissing = byAddress && typed.isEmpty()
+        if (code.isEmpty() || addressMissing) {
+            _state.update { it.copy(dialog = d.copy(codeMissing = code.isEmpty(), addressMissing = addressMissing, problem = null)) }
             return
         }
-        _state.update { it.copy(dialog = d.copy(name = name, busy = true, codeMissing = false, problem = null)) }
+        _state.update { it.copy(dialog = d.copy(name = name, busy = true, codeMissing = false, addressMissing = false, problem = null)) }
         viewModelScope.launch {
             guard(onError = { p -> _state.update { s -> s.copy(dialog = s.dialog?.copy(busy = false, problem = p)) } }) {
-                val p = backend.addPrinter(d.serial, code, name.trim().ifBlank { null })
+                val label = name.trim().ifBlank { null }
+                val p = if (byAddress) {
+                    backend.addPrinterByAddress(d.serial.ifBlank { null }, code, label, typed)
+                } else {
+                    backend.addPrinter(d.serial, code, label)
+                }
                 settleLater()
                 if (p.state == "connected") {
                     _state.update { it.copy(dialog = null, added = p.name, mapOffer = MapOffer(p.id, p.name)) }
@@ -348,6 +373,12 @@ class PrintersViewModel(
     fun addByAddress() {
         guideJob?.cancel()
         openAddKlipper(guided = true)
+    }
+
+    /** "Type a Bambu Lab printer's address": step 2 of the guide with an empty address, for a printer that was not found. */
+    fun addBambuByAddress() {
+        guideJob?.cancel()
+        openAddByAddress(guided = true)
     }
 
     /** The map question was answered. */

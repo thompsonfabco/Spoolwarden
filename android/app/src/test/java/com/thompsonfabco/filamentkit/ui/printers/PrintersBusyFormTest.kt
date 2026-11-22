@@ -30,7 +30,7 @@ import org.robolectric.shadows.ShadowDialog
 
 /** An add that is running cannot be abandoned (05-android-app 2.5, rule 2): the form on a phone, held busy. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w411dp-h800dp")
+@Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w411dp-h1000dp")
 class PrintersBusyFormTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
 

@@ -71,6 +71,14 @@ class PrintersListTest {
             addError?.let { throw it }
             return addResult!!
         }
+        /** serial, address, name of each add by address */
+        val addedByAddress = mutableListOf<Triple<String?, String, String?>>()
+        override suspend fun addPrinterByAddress(serial: String?, accessCode: String, name: String?, address: String): Printer {
+            addedByAddress += Triple(serial, address, name)
+            addGate?.await()
+            addError?.let { throw it }
+            return addResult!!
+        }
         override suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer {
             added += Triple(host, port, name)
             addGate?.await()
@@ -249,6 +257,78 @@ class PrintersListTest {
         val vm = PrintersViewModel(backend)
         vm.openAdd(printer("B", state = "not_configured", configured = false))
         assertEquals("B", vm.state.value.dialog!!.serial)
+    }
+
+    // --- Add a Bambu Lab printer by its address ---
+
+    @Test fun aFoundPrintersAddressFillsTheFormAndAnUntouchedOneAddsBySerial() = runTest(dispatcher) {
+        backend.addResult = printer("B")
+        val vm = PrintersViewModel(backend)
+        vm.openAdd(printer("B", state = "not_configured", configured = false))
+        assertEquals("192.0.2.40", vm.state.value.dialog!!.address)
+        vm.submitAdd("12345678", "", "192.0.2.40")
+        runCurrent()
+        assertEquals(listOf("B"), backend.addedBambu)
+        assertTrue(backend.addedByAddress.isEmpty())
+    }
+
+    @Test fun anEditedAddressAddsByAddressWithTheSerialAlong() = runTest(dispatcher) {
+        backend.addResult = printer("B")
+        val vm = PrintersViewModel(backend)
+        vm.openAdd(printer("B", state = "not_configured", configured = false))
+        vm.submitAdd("12345678", "Garage", " 192.0.2.99 ")
+        runCurrent()
+        assertTrue(backend.addedBambu.isEmpty())
+        assertEquals(Triple("B" as String?, "192.0.2.99", "Garage" as String?), backend.addedByAddress.single())
+        assertNull(vm.state.value.dialog)
+    }
+
+    @Test fun aPrinterThatWasNotFoundIsAddedByTheAddressTyped() = runTest(dispatcher) {
+        backend.addResult = printer("B")
+        val vm = PrintersViewModel(backend)
+        vm.openGuide(); runCurrent()
+        vm.addBambuByAddress()
+        val d = vm.state.value.dialog!!
+        assertEquals("", d.serial)
+        assertTrue(d.guided)
+        assertNull(vm.state.value.guide)
+        vm.submitAdd("12345678", "", "192.0.2.77")
+        runCurrent()
+        assertEquals(Triple(null as String?, "192.0.2.77", null as String?), backend.addedByAddress.single())
+        assertEquals("Workshop X1", vm.state.value.added)
+        assertNull(vm.state.value.dialog)
+    }
+
+    @Test fun noAddressOrNoCodeAsksBeforeAnyRequest() = runTest(dispatcher) {
+        val vm = PrintersViewModel(backend)
+        vm.openAddByAddress()
+        vm.submitAdd("", "", "  ")
+        runCurrent()
+        val d = vm.state.value.dialog!!
+        assertTrue(d.addressMissing)
+        assertTrue(d.codeMissing)
+        assertFalse(d.busy)
+        assertTrue(backend.addedByAddress.isEmpty())
+    }
+
+    @Test fun aRefusalByAddressShowsTheHubsMessageAndField() = runTest(dispatcher) {
+        backend.addError = ApiError(400, "bad_request", "That address is not valid", JsonObject(mapOf("field" to JsonPrimitive("address"))))
+        val vm = PrintersViewModel(backend)
+        vm.openAddByAddress()
+        vm.submitAdd("12345678", "", "not an address")
+        runCurrent()
+        val d = vm.state.value.dialog!!
+        assertEquals(Problem.HubSaid("That address is not valid", "address"), d.problem)
+        assertFalse(d.busy)
+    }
+
+    @Test fun anExistingPrinterIsTheHubsOwnMessage() = runTest(dispatcher) {
+        backend.addError = ApiError(409, "exists", "This printer is already set up")
+        val vm = PrintersViewModel(backend)
+        vm.openAddByAddress()
+        vm.submitAdd("12345678", "", "192.0.2.77")
+        runCurrent()
+        assertEquals(Problem.HubSaid("This printer is already set up"), vm.state.value.dialog!!.problem)
     }
 
     // --- Add a Klipper printer ---

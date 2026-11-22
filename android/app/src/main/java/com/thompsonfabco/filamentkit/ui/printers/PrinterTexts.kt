@@ -24,6 +24,9 @@ object PrinterTexts {
     const val GUIDE_NONE = "None found. Type its address in the next step."
     const val GUIDE_BY_ADDRESS = "Type its address"
 
+    /** EV7d: a Bambu Lab printer that was not found is added by its address. Proposed key `printers_guide_bambu_by_address`. */
+    const val GUIDE_BAMBU_BY_ADDRESS = "Type a Bambu Lab printer's address"
+
     /** EV7d: the Klipper test before an add. [address] is "host:port". Reuses the Hub's texts (address_texts.py). */
     fun klipperNotReached(address: String): String = "The Hub could not reach a Klipper printer at $address."
     const val TRY_AGAIN = "Try again"
