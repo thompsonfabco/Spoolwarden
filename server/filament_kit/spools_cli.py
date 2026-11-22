@@ -70,7 +70,7 @@ CLI_SPOOL_HOME_NOT_RECORDED = "not recorded"
 CLI_SPOOL_SINCE = "since {value}"
 CLI_SPOOL_RETURN_DONE = "Returned to {place}."
 CLI_SPOOL_RETURN_DONE_PLAIN = "Returned."
-CLI_SPOOL_RETURN_UNDO = "To undo it: {command}"
+CLI_SPOOL_RETURN_UNDO = "To undo it: {undo}"
 CLI_SPOOL_HOME_PREVIEW = "Spool {n}, {name}: home {before}, would be {after}."
 CLI_SPOOL_HOME_ASK = "Change the home of spool {n} to {after}?"
 CLI_SPOOL_HOME_DONE = "Home is now {place}."
@@ -189,16 +189,24 @@ def _kv(pairs: list[tuple[str, object]]) -> list[str]:
 FILTERS = ("sealed", "opened", "loaded", "low", "checked_out")
 
 
-def cmd_spools(api, words: list[str] | None = None, filter: str | None = None) -> int:
-    """`spools`: the spools matching every word and the one filter, one row each, then the count and Spoolman's address."""
+def cmd_spools(api, words: list[str] | None = None, filter: str | None = None, low: bool = False) -> int:
+    """`spools`: the spools matching every word and the one filter, one row each, then the count and Spoolman's address.
+    `low` is the first word `low` (the same as --low): with another filter the Hub is asked for that filter and the rows
+    that are not running low are dropped here."""
     if api is None:
         return down()
     from .web.slots import SlotError
+    keep_low = low and filter not in (None, "low")
+    if low and filter is None:
+        filter = "low"
     query = {k: v for k, v in (("q", " ".join(words or [])), ("filter", filter)) if v}
     try:
         r = api.get("/api/spools" + ("?" + urllib.parse.urlencode(query) if query else ""))
     except SlotError as e:
         return fail(e)
+    if keep_low:
+        r = {**r, "spools": [x for x in r.get("spools") or [] if (x.get("view") or {}).get("low")]}
+        r["total"] = len(r["spools"])
     output.emit(r)
     rows = r.get("spools") or []
     if filter == "checked_out":
@@ -256,7 +264,7 @@ def _spool_error(e, n: int) -> int:
         output.error(CLI_SPOOL_NOT_CHECKED_OUT)
         return output.USAGE
     if getattr(e, "http", None) == 404 or getattr(e, "code", None) == "not_found":
-        output.error(CLI_SPOOL_NOT_FOUND.format(n=n), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
+        output.error(CLI_SPOOL_NOT_FOUND.format(n=n), output.fill(CLI_SPOOL_NOT_FOUND_FIX, command=COMMAND))
         return output.USAGE
     return fail(e)
 
@@ -264,7 +272,7 @@ def _spool_error(e, n: int) -> int:
 def cmd_spool_show(api, number) -> int:
     n = _number(number)
     if n is None:
-        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
+        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), output.fill(CLI_SPOOL_NOT_FOUND_FIX, command=COMMAND))
         return output.USAGE
     if api is None:
         return down()
@@ -289,7 +297,7 @@ def _change(api, number, body: dict, *, command: str, preview, ask, done, yes: b
     (`ask(after)`), the real change, its result line (`done(after)`; None: nothing changes, a line says so)."""
     n = _number(number)
     if n is None:
-        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
+        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), output.fill(CLI_SPOOL_NOT_FOUND_FIX, command=COMMAND))
         return output.USAGE
     if api is None:
         return down()
@@ -362,7 +370,7 @@ def cmd_spool_return(api, number) -> int:
     place the answer's spool is in, then how to undo it."""
     n = _number(number)
     if n is None:
-        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
+        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), output.fill(CLI_SPOOL_NOT_FOUND_FIX, command=COMMAND))
         return output.USAGE
     if api is None:
         return down()
@@ -375,7 +383,7 @@ def cmd_spool_return(api, number) -> int:
     place = (r.get("spool") or {}).get("location") or (r.get("view") or {}).get("location")
     output.out(CLI_SPOOL_RETURN_DONE.format(place=place) if place else CLI_SPOOL_RETURN_DONE_PLAIN)
     event = r.get("event_id")
-    output.out(CLI_SPOOL_RETURN_UNDO.format(command=f"sudo {COMMAND} undo" + (f" {event}" if event is not None else "")))
+    output.out(CLI_SPOOL_RETURN_UNDO.format(undo=f"sudo {COMMAND} undo" + (f" {event}" if event is not None else "")))
     return 0
 
 
@@ -406,7 +414,7 @@ def cmd_catalog_local(api) -> int:
     entries = r.get("entries") or []
     if not entries:
         output.out(CLI_CATALOG_LOCAL_EMPTY)
-        output.out(CLI_CATALOG_LOCAL_EMPTY_FIX.format(command=COMMAND))
+        output.out(output.fill(CLI_CATALOG_LOCAL_EMPTY_FIX, command=COMMAND))
         return 0
     output.out_lines(output.table(["Id", "Brand", "Name", "Material", "Added"],
                                   [[e.get("id"), e.get("brand"), e.get("name"), e.get("material"), e.get("added") or ""]
@@ -424,7 +432,7 @@ def cmd_catalog_local_remove(api, entry_id: str, yes: bool = False) -> int:
         return fail(e)
     entry = next((e for e in entries if str(e.get("id")) == entry_id), None)
     if entry is None:
-        output.error(CLI_CATALOG_NOT_FOUND.format(id=entry_id), CLI_CATALOG_NOT_FOUND_FIX.format(command=COMMAND))
+        output.error(CLI_CATALOG_NOT_FOUND.format(id=entry_id), output.fill(CLI_CATALOG_NOT_FOUND_FIX, command=COMMAND))
         return output.USAGE
     rc = confirmed(CLI_CATALOG_REMOVE_ASK.format(**{k: entry.get(k) for k in ("brand", "name")}),
                    f"removing {entry.get('brand')} {entry.get('name')}", f"spoolwarden catalog local remove {entry_id}", yes)
@@ -440,7 +448,7 @@ def cmd_catalog_local_remove(api, entry_id: str, yes: bool = False) -> int:
 
 
 def _missing_entry(entry_id: str) -> int:
-    output.error(CLI_CATALOG_NOT_FOUND.format(id=entry_id), CLI_CATALOG_NOT_FOUND_FIX.format(command=COMMAND))
+    output.error(CLI_CATALOG_NOT_FOUND.format(id=entry_id), output.fill(CLI_CATALOG_NOT_FOUND_FIX, command=COMMAND))
     return output.USAGE
 
 
@@ -455,7 +463,7 @@ def cmd_catalog_add_ask(api, *, ask=input, yes: bool = False) -> int:
     the form's order. The Hub builds the entry from the values (`POST /api/library/local/form`). `ask(prompt)`: the
     terminal's input (a test's own)."""
     if not output.terminal() and ask is input:
-        output.error(CLI_CATALOG_ADD_NO_TERMINAL, CLI_CATALOG_ADD_NO_TERMINAL_FIX.format(command=COMMAND))
+        output.error(CLI_CATALOG_ADD_NO_TERMINAL, output.fill(CLI_CATALOG_ADD_NO_TERMINAL_FIX, command=COMMAND))
         return output.USAGE
     if api is None:
         return down()
@@ -520,7 +528,7 @@ def _find_device(page, ident: str):
         output.error(CLI_DEVICE_AMBIGUOUS.format(name=ident, names=", ".join(f"{r['name']} ({r['id']})" for r in found)),
                      CLI_DEVICE_AMBIGUOUS_FIX)
     else:
-        output.error(CLI_DEVICE_NOT_FOUND.format(name=ident), CLI_DEVICE_NOT_FOUND_FIX.format(command=COMMAND))
+        output.error(CLI_DEVICE_NOT_FOUND.format(name=ident), output.fill(CLI_DEVICE_NOT_FOUND_FIX, command=COMMAND))
     return None, output.USAGE
 
 
@@ -660,7 +668,9 @@ def add_parser(sub) -> None:
 
 def run(args, api) -> int:
     if args.cmd == "spools":
-        return cmd_spools(api, args.words, args.filter)
+        words = list(args.words)
+        low = bool(words) and words[0] == "low"          # the first word `low` is the low filter, never a search word
+        return cmd_spools(api, words[1:] if low else words, args.filter, low)
     c = args.spool_cmd
     if c == "show":
         return cmd_spool_show(api, args.number)

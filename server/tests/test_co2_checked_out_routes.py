@@ -161,6 +161,82 @@ def test_return_caller_rules(sm, printers, store):  # noqa: F811
     assert ("POST", "/api/spools/{id}/return") in api.WEB_ROUTES and ("POST", "/api/spools/{id}/return") not in api.VIEWER_ROUTES
 
 
+def test_return_and_home_have_the_callers_of_the_spools_move_and_weight(sm, printers, store):  # noqa: F811
+    """Pins the orchestrator's ruling (CO2 follow-up 1): `return` and the `home` change are for the callers of the existing spool
+    move / weight route (PATCH /api/spools/{id}). Compared by running both for every kind of token. The one difference is the
+    web token, which the kit route refuses (the web app writes a move and a weight in its own process, through its twin) while
+    the Return twin must reach the Hub, which tells a Klipper printer: that is why return is in WEB_ROUTES (HOME_WEB_ROUTES
+    is for the voice routes). Any other divergence fails here."""
+    app = create_app(sm=sm)
+    tokens = {"viewer": _auth("Viewer", role=pairing.VIEWER_ROLE), "station": _auth("station", scope="station"),
+              "phone": _auth("Phone"), "home_web": _auth(INTAKE_DEVICE, role=web_access.WEB_ROLE),
+              "public_web": _auth("web (MCP)", role=web_access.WEB_ROLE)}
+    allowed = {"return": set(), "home": set(), "move": set(), "weight": set()}
+    with TestClient(app, raise_server_exceptions=False) as client:
+        for who, h in tokens.items():
+            ids = [_out(sm, name=f"{who} {i}")["id"] for i in range(4)]
+            calls = {"return": client.post(f"/api/spools/{ids[0]}/return", json={}, headers=h),
+                     "home": client.patch(f"/api/spools/{ids[1]}", json={"home": NEW()}, headers=h),
+                     "move": client.patch(f"/api/spools/{ids[2]}", json={"location": "Rack 2"}, headers=h),
+                     "weight": client.patch(f"/api/spools/{ids[3]}", json={"remaining": 400}, headers=h)}
+            for name, r in calls.items():
+                if r.status_code not in (401, 403):
+                    allowed[name].add(who)
+    assert allowed["home"] == allowed["move"] == allowed["weight"] == {"phone"}
+    assert allowed["return"] == allowed["home"] | {"home_web", "public_web"}       # only the web token differs, and said so above
+    assert "viewer" not in allowed["return"] | allowed["home"] and "station" not in allowed["return"] | allowed["home"]
+    assert ("PATCH", "/api/spools/{id}") not in api.WEB_ROUTES and ("POST", "/api/spools/{id}/return") not in api.HOME_WEB_ROUTES
+
+
+def test_return_is_no_more_reachable_than_the_most_permissive_spool_change_the_web_app_has(sm, printers, store):  # noqa: F811
+    """CO2 caller ruling: return gives the web app NO MORE REACH than it already has for changing a spool. Every spool change the
+    web app has, with the list that admits its kit route (or none: it runs in the app's own process) and whether its twin refuses
+    the public address; return's reach must equal the widest of them, so moving return (or one of them) between lists fails here.
+    Reach: 2 = the public address too (WEB_ROUTES, or a twin with no home-only check), 1 = home only (HOME_WEB_ROUTES, or a twin
+    that refuses the public address), 0 = phone / PC only."""
+    web_routes, home_routes = set(api.WEB_ROUTES), set(api.HOME_WEB_ROUTES)
+
+    def listed(method, path):
+        return 2 if (method, path) in web_routes else 1 if (method, path) in home_routes else 0
+
+    # action: (twin, kit route it calls, reach)
+    changes = {
+        "load into a slot": ("POST /intake/api/printers/{id}/slots/{label}/load", ("POST", "/api/printers/{id}/slots/{label}/load")),
+        "unload a slot": ("POST /intake/api/printers/{id}/slots/{label}/unload", ("POST", "/api/printers/{id}/slots/{label}/unload")),
+        "undo an action": ("POST /intake/api/events/{event}/undo", ("POST", "/api/events/{id}/undo")),
+        "undo a usage entry": ("POST /intake/api/printers/{id}/usage/{entry}/undo", ("POST", "/api/usage/{entry_id}/undo")),
+    }
+    reach = {name: listed(*kit) for name, (_twin, kit) in changes.items()}
+    # add, edit (weight, move, empty, home) and the tag link run in the app's own process on Spoolman: no kit route, no token, and
+    # no home-only check on the app's public address (only the voice twins have one). Proved by running them on a public-address app.
+    public = Starlette(routes=IntakeApp(mcp_tools.Tools(sm, kit_api=None, kit_writes=False), public_url="https://hub.example",
+                                        lan_cidrs=["192.168.1.0/24"], push=False).routes())
+    pc = TestClient(public, base_url="https://hub.example", client=("192.168.1.50", 1234))
+    org = {"origin": "https://hub.example"}
+    s = _out(sm, name="Reach")
+    edit = pc.post(f"/intake/api/spools/{s['id']}", json={"remaining": 400}, headers=org)       # a dry run: the weight edit twin
+    assert edit.status_code == 200 and edit.json().get("error") != "home_only"
+    add = pc.post("/intake/api/add", json={"items": []}, headers=org)                           # reaches its own checks, not a refusal
+    assert add.status_code != 403
+    reach["edit a spool (weight, move, empty, home)"] = 2
+    reach["add a spool"] = 2
+    voice = pc.patch("/intake/api/voice", json={}, headers=org)                                 # the home-only wording the app already has
+    assert voice.status_code == 403 and voice.json()["error"] == "home_only"
+    widest = max(reach.values())
+    assert widest == 2 and all(reach[k] == 2 for k in changes)                                  # the list the table below quotes
+    assert listed("POST", "/api/spools/{id}/return") == widest
+    assert ("POST", "/api/spools/{id}/return") in api.WEB_ROUTES and ("POST", "/api/spools/{id}/return") not in api.HOME_WEB_ROUTES
+    # the kit's own spool PATCH (move, weight, home) is phone / PC only: the web app does not call it
+    assert listed("PATCH", "/api/spools/{id}") == 0
+    # the web tokens (home and public) reach return, the viewer and the station never, a phone / PC always
+    app = create_app(sm=sm)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        for who, h, ok in (("viewer", _auth("Viewer", role=pairing.VIEWER_ROLE), False), ("station", _auth("station", scope="station"), False),
+                           ("phone", _auth("Phone"), True), ("home_web", _auth(INTAKE_DEVICE, role=web_access.WEB_ROLE), True),
+                           ("public_web", _auth("web (MCP)", role=web_access.WEB_ROLE), True)):
+            r = client.post(f"/api/spools/{_out(sm, name=who)['id']}/return", json={}, headers=h)
+            assert (r.status_code not in (401, 403)) is ok, who
+
 # ---------- a Klipper printer is told ----------
 
 class FakeBambu:
@@ -175,9 +251,9 @@ class FakeKlipper(FakeBambu):
     def __init__(self, sm):
         self.sm, self.calls = sm, []
 
-    def return_spool(self, sm, pid, spool_id, *, grams=None, rules=None, dry=False):
+    def return_spool(self, sm, pid, spool_id, *, grams=None, rules=None, dry=False, gross=None):
         self.calls.append((pid, spool_id, grams, dry))
-        return inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry)
+        return inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry, gross=gross)
 
 
 def test_a_spool_in_a_klipper_slot_goes_back_through_the_klipper_family(sm, printers, store):  # noqa: F811
@@ -194,6 +270,21 @@ def test_a_spool_in_a_klipper_slot_goes_back_through_the_klipper_family(sm, prin
         bambu = _out(sm, name="On the H2D")                                       # a Bambu Lab slot: the Hub's record only
         assert client.post(f"/api/spools/{bambu['id']}/return", json={}).status_code == 200
         assert len(klipper.calls) == 1
+
+
+def test_a_klipper_slot_with_no_klipper_family_says_the_printer_was_not_told(sm, printers, store, caplog):  # noqa: F811
+    app = create_app(sm, printers=family.Printers(bambu=FakeBambu(), klipper=None), camera_hub=object(), mapper=object(),
+                     enabled_modules=frozenset({"server", "printers"}))
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.headers.update(_auth())
+        sk = _opened(sm, 600, name="On the Sovol")
+        sm.patch(f"spool/{sk['id']}", {"location": "Big Sovol – T0", "extra": {**(sk.get("extra") or {}), **inventory.prev_extra("Rack 2", SINCE)}})
+        with caplog.at_level("WARNING"):
+            r = client.post(f"/api/spools/{sk['id']}/return", json={})
+        assert r.status_code == 200 and r.json()["location"] == "Rack 2" and r.json()["printer_notified"] is False
+        assert "cannot be told" in caplog.text
+        bambu = _out(sm, name="On the H2D")             # a spool that was not in a Klipper slot says nothing of it
+        assert "printer_notified" not in client.post(f"/api/spools/{bambu['id']}/return", json={}).json()
 
 
 # ---------- PATCH home ----------
@@ -286,6 +377,50 @@ def test_save_with_return_of_a_spool_that_is_not_checked_out_writes_nothing(stc,
     assert stc.post("/api/station/save", json={"uid": uid, "gross_g": 450, "return": "yes"}).status_code == 400
     ok = stc.post("/api/station/save", json={"uid": uid, "gross_g": 450})              # the plain save is as it was
     assert ok.status_code == 200 and "returned" not in ok.json()
+
+
+def test_save_with_return_that_loses_a_race_writes_no_weight(stc, sm, monkeypatch):
+    """The spool is sent home by someone else between the checked-out check and the return: 409, and the weight was not written."""
+    s = _out(sm, home="Rack 2", name="Raced")
+    uid = _own_tag(sm, s)
+    before = sm.get(f"spool/{s['id']}")["remaining_weight"]
+    real = inventory.return_spool
+
+    def raced(sm_, spool_id, **kw):
+        sm_.patch(f"spool/{spool_id}", {"location": "Rack 2", "extra": {**(sm_.get(f"spool/{spool_id}").get("extra") or {}), **inventory.prev_extra("")}})
+        return real(sm_, spool_id, **kw)
+    monkeypatch.setattr(inventory, "return_spool", raced)
+    r = stc.post("/api/station/save", json={"uid": uid, "gross_g": 600, "return": True})
+    assert r.status_code == 409 and r.json()["error"] == "not_checked_out"
+    assert sm.get(f"spool/{s['id']}")["remaining_weight"] == before
+
+
+def test_save_with_return_keeps_the_returns_undo_possible_weighed_before_returned(stc, sm, store):  # noqa: F811
+    """R701: the weight is written under the return's lock, so spool.weighed comes before spool.returned and the return's Undo
+    (the event_id the station answers) is not refused with changed_since."""
+    from filament_kit import undo
+    s = _out(sm, home="Rack 2", name="Undoable")
+    uid = _own_tag(sm, s)
+    b = stc.post("/api/station/save", json={"uid": uid, "gross_g": 600, "return": True}).json()
+    evs = [e for e in store.all_events() if e["kind"] in ("spool.weighed", "spool.returned")]
+    assert [e["kind"] for e in sorted(evs, key=lambda e: e["id"])] == ["spool.weighed", "spool.returned"]
+    ret = next(e for e in evs if e["kind"] == "spool.returned")
+    assert ret["id"] == b["event_id"]
+    assert undo.evaluate(ret, all_evs=store.all_events(), sm=sm)["possible"] is True
+
+
+def test_save_with_return_that_loses_the_race_writes_no_event_at_all(stc, sm, store, monkeypatch):  # noqa: F811
+    s = _out(sm, home="Rack 2", name="Raced twice")
+    uid = _own_tag(sm, s)
+    real = inventory.return_spool
+
+    def raced(sm_, spool_id, **kw):
+        sm_.patch(f"spool/{spool_id}", {"location": "Rack 2", "extra": {**(sm_.get(f"spool/{spool_id}").get("extra") or {}), **inventory.prev_extra("")}})
+        return real(sm_, spool_id, **kw)
+    monkeypatch.setattr(inventory, "return_spool", raced)
+    r = stc.post("/api/station/save", json={"uid": uid, "gross_g": 600, "return": True})
+    assert r.status_code == 409
+    assert [e for e in store.all_events() if e["kind"] in ("spool.weighed", "spool.returned")] == []
 
 
 def test_save_with_return_and_no_place_for_the_spool_says_returned_alone(stc, sm, monkeypatch):

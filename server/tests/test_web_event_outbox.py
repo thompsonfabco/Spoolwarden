@@ -66,6 +66,16 @@ def sender(box, hub, **kw):
     return eo.Sender(box, hub, **kw)
 
 
+@pytest.fixture(autouse=True)
+def own_event_sink():
+    """The event sink is process-wide: an earlier test of the same worker can leave one installed, and these tests read the default
+    one (`never_raises`). Start each test with none, and put back what was there."""
+    before = event_sink._sink
+    event_sink.set_sink(None)
+    yield
+    event_sink.set_sink(before)
+
+
 @pytest.fixture
 def box(tmp_path):
     return eo.Outbox(tmp_path / "web" / "events-outbox.xml")

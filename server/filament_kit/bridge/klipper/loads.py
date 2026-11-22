@@ -411,7 +411,7 @@ class LoadsMixin:
                                    "printer_cleared": cleared if not dry else bool(gcode), "dry_run": dry}, False)
 
     def return_spool(self, sm, pid: str, spool_id, *, grams: float | None = None, rules=None,
-                     dry: bool = False) -> dict:
+                     dry: bool = False, gross: float | None = None) -> dict:
         """`inventory.return_spool` for a spool taken out of printer `pid` by hand. The Hub's record comes first and is
         never stopped by the printer: when the spool is recorded in one of this printer's slots and the printer
         answers (online, not printing) it is told to clear that slot, as Clear does; a printer that does not answer, or
@@ -425,9 +425,9 @@ class LoadsMixin:
         loc = spool.get("location") or ""
         label = loc[len(prefix):] if prefix and loc.startswith(prefix) and len(loc) > len(prefix) else None
         if label is None:
-            return inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry)
+            return inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry, gross=gross)
         with self._slot_lock(pid, label):
-            out = inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry)
+            out = inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry, gross=gross)
             if dry:
                 return out
             self._returned.setdefault(pid, {})[label] = int(spool["id"])

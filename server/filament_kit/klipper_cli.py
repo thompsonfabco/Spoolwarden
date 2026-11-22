@@ -380,23 +380,23 @@ def cmd_printer_slot(api, printer: dict, action: str, slot: str, spool=None, yes
                      stop: bool = False) -> int:
     """`printer load|unload|clear <name> <slot> [<spool n>]`: the preview (a dry run), the question, the change."""
     if not _SLOT.fullmatch(slot or ""):
-        output.error(CLI_SLOT_BAD.format(value=slot), CLI_SLOT_BAD_FIX.format(command=spools_cli.COMMAND))
+        output.error(CLI_SLOT_BAD.format(value=slot), output.fill(CLI_SLOT_BAD_FIX, command=spools_cli.COMMAND))
         return output.USAGE
     slot = "auto" if slot.lower() == "auto" else slot       # the word is compared without regard to case (R83)
     if stop:
         if action != "load" or slot != "auto":
-            output.error(CLI_SLOT_AUTO_STOP_ONLY, CLI_SLOT_AUTO_STOP_FIX.format(command=spools_cli.COMMAND))
+            output.error(CLI_SLOT_AUTO_STOP_ONLY, output.fill(CLI_SLOT_AUTO_STOP_FIX, command=spools_cli.COMMAND))
             return output.USAGE
         return cmd_auto_stop(api, printer)
     body: dict = {}
     if action == "load":
         if spool is None:
-            output.error(CLI_SLOT_LOAD_NEEDS_SPOOL, CLI_SLOT_LOAD_NEEDS_SPOOL_FIX.format(command=spools_cli.COMMAND))
+            output.error(CLI_SLOT_LOAD_NEEDS_SPOOL, output.fill(CLI_SLOT_LOAD_NEEDS_SPOOL_FIX, command=spools_cli.COMMAND))
             return output.USAGE
         n = spools_cli._number(spool)
         if n is None:
             output.error(spools_cli.CLI_SPOOL_NUMBER_BAD.format(value=spool),
-                         spools_cli.CLI_SPOOL_NOT_FOUND_FIX.format(command=spools_cli.COMMAND))
+                         output.fill(spools_cli.CLI_SPOOL_NOT_FOUND_FIX, command=spools_cli.COMMAND))
             return output.USAGE
         body = {"spool_id": n}
     if api is None:

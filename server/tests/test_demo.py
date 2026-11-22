@@ -181,6 +181,13 @@ def test_the_route_list():
                    ("POST", "/intake/api/demo/leave", "web", False)]
 
 
+def test_the_routes_are_mounted_only_while_the_demo_is_mountable(monkeypatch):
+    monkeypatch.setattr(demo, "MOUNTABLE", False)
+    assert routes.mountable() == []
+    monkeypatch.setattr(demo, "MOUNTABLE", True)
+    assert routes.mountable() == routes.ROUTES
+
+
 def test_post_demo(env, monkeypatch):
     assert routes.post_demo({"on": "yes"})[0] == 400 and routes.post_demo({})[0] == 400
     monkeypatch.setattr(demo, "real_data", lambda *a: "spools")

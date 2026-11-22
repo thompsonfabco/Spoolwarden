@@ -12,6 +12,8 @@ a plural text takes its form from `count`.
 """
 from __future__ import annotations
 
+from . import output
+
 PRODUCT, COMMAND = "Spoolwarden", "spoolwarden"
 
 MESSAGES: dict[str, str | dict] = {
@@ -210,7 +212,7 @@ def say(key: str, /, **fill) -> str:
     text = MESSAGES[key]
     if isinstance(text, dict):
         text = text["one" if fill.get("count") == 1 else "other"]
-    return text.format(product=PRODUCT, command=COMMAND, **fill)
+    return output.fill(text, product=PRODUCT, command=COMMAND, **fill)
 
 
 REASON_LIMIT = 200

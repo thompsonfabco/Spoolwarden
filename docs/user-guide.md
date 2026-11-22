@@ -368,13 +368,22 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `recent revise <record> --note TEXT [--item N]` | Ask the Label Reader to correct it | Ask the Label Reader to correct it |
 | `recent edit <record> field=value... [--item N] [--spools 41,42]` | Edit by hand | Edit by hand, Save changes |
 | `recent undo <record>` | Undo the newest revision that is not undone | Undo revision N |
+| `spool` | Prints where spools are opened, tagged and moved | (none) |
 | `spools low` | The opened spools at or under the running-low threshold | Overview, Running low |
+| `spools [<words>] [--sealed \| --opened \| --loaded \| --low \| --checked-out]` | The spools, searched by words; `--checked-out` lists the spools taken out of a printer and not yet returned | Spools |
+| `spool show <n>` | One spool's facts | Spools |
+| `spool weigh <n> <grams> [-y]` | Set a spool's weight from a weighing with the spool on the scale (asks) | Spools |
+| `spool move <n> <location\|auto> [-y]` | Put a spool in a place (asks) | Spools |
+| `spool empty <n> [-y]` | Mark a spool empty (asks) | Spools |
+| `spool return <n>` | Send a checked-out spool back to its home (undoable, so it asks nothing) | Spools |
+| `spool home <n> <location> [-y]` | Change the home of a checked-out spool (asks) | Spools |
 | `events [--since ID\|TIME] [--kind PREFIX] [--follow]` | The Hub's events, newest last; `--follow` keeps printing new ones | Settings > Alerts > Recent alerts (alerts only) |
 | `devices` (same as `devices list`) | Paired devices | Devices |
 | `devices forget <device>` | Unpair a device | Unpair |
 | `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link Slicer Sync / Link a Weigh Station |
 | `weigh-station pair [--local]` | Run on the Weigh Station: pair it with the Hub | Pair the Weigh Station on this Hub |
 | `weigh-station flash-display` | Write the Weigh Station display firmware over USB | Flash a device |
+| `weigh-station panel-wifi [--off] [--address ADDRESS]` | Set the display panel up to reach the Weigh Station over Wi-Fi, or with `--off` back to the USB cable (root) | (none) |
 | `weigh-station pairing-state` | Paired, not paired or not checked yet | (none) |
 | `tag-reader list` | Tag Reader tokens | Devices, Tag Readers |
 | `tag-reader new-token [--name NAME]` | Make a token | Make a token |
@@ -433,7 +442,6 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `uninstall [--purge]` | Remove Spoolwarden (asks) | Updates, footer line |
 | `logs [<service>] [--lines 50\|100\|200]` | The end of a service's log | Logs |
 | `add` | Prints where spools are added | (none) |
-| `spool` | Prints where spools are opened, tagged and moved | (none) |
 | `help [<command> \| aliases \| --markdown]` | Help; `--markdown` prints the command table for the user guide | (none) |
 
 ### Notes on some commands

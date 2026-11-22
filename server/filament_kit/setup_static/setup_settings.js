@@ -16,7 +16,7 @@ const SET_GROUPS = [
   ["network", "settings_group_network", "plug", groupNetwork, "general"],
   ["passphrase", "settings_group_passphrase", "lock", groupPassphrase, null],
   ["catalog", "settings_group_catalog", "tag", groupCatalog, "library"],
-  ["voice", "settings_group_voice", "scale", groupVoice, "general"],
+  ["voice", "settings_group_voice", "scale", (d) => voiceGroup(d), "general"],   // setup_voice.js
 ];
 const SET_KEY = Object.fromEntries(SET_GROUPS.map((g) => [g[0], g[1]]));
 const SET_ICON = Object.fromEntries(SET_GROUPS.map((g) => [g[0], g[2]]));
@@ -1193,22 +1193,4 @@ function groupCatalog({ lib }) {
 
   body.push(form);
   return setGroup("catalog", { desc: SW.t("settings_catalog_desc"), badges, body });
-}
-
-// ----- Weigh Station voice (03 10.10): applies on choosing, no Save -----
-function groupVoice({ g }) {
-  if (!g.station_on) return setGroup("voice", { desc: SW.t("settings_voice_desc"), body: [offNote("settings_voice_off")] });
-  const res = sbox(), was = g.values["station.tts"] === "espeak" ? "espeak" : "auto";
-  const fs = SW.segmented({ legend: SW.t("settings_voice_label"), name: "station.tts", value: was, write: true, result: res,
-    options: [{ value: "auto", label: SW.t("settings_voice_piper") }, { value: "espeak", label: SW.t("settings_voice_espeak") }],
-    apply: async (value) => {
-      try { await api("settings/general", { key: "station.tts", value, code: theCode() }); } catch (e) { throw Object.assign(e, { text: () => hubText(e.message) }); }
-      say(res, SW.t(value === "auto" ? "settings_voice_saved_piper" : "settings_voice_saved_espeak"), true);
-      if (setSeen.g) setSeen.g.values["station.tts"] = value;
-      paintList();
-      followApply(true);
-    } });
-  const lines = h("ul", { class: "settings__lines" }, h("li", { textContent: SW.t("settings_voice_piper") + ": " + SW.t("settings_voice_piper_line") }),
-    h("li", { textContent: SW.t("settings_voice_espeak") + ": " + SW.t("settings_voice_espeak_line") }));
-  return setGroup("voice", { desc: SW.t("settings_voice_desc"), body: [h("div", { class: "settings__choice" }, fs, lines, res)] });
 }

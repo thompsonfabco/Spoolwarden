@@ -33,7 +33,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from .. import (__version__, config, hubport, intake, inventory, lan, modules, pairing, shared_files, storage, storage_api,
+from .. import (__version__, config, demo, hubport, intake, inventory, lan, modules, pairing, shared_files, storage, storage_api,
                 tagsources)
 from ..intake import CapReached, ReadError
 from ..spoolman import SpoolmanError
@@ -689,11 +689,11 @@ class IntakeApp:
                 if text is None:
                     log.exception("intake %s", request.url.path)
                     return JSONResponse({"error": "Something went wrong on the Hub. The details are in its log."}, 500)
-                status = 409 if type(e).__name__ in ("TagConflict", "TapChanged") else 400
+                status = 409 if type(e).__name__ in ("TagConflict", "TapChanged") or isinstance(e, demo.DemoError) else 400
                 field = getattr(e, "field", None)           # the body key a refusal is about, when it is about one
                 problems = getattr(e, "problems", None)     # a refused add: every problem, with its item and field
                 return JSONResponse({"error": text, **({"field": field} if isinstance(field, str) else {}),
-                                     **({"code": e.code} if isinstance(e, TapChanged) else {}),
+                                     **({"code": e.code} if isinstance(e, (TapChanged, demo.DemoError)) else {}),
                                      **({"problems": problems} if isinstance(problems, list) else {})}, status)
         return route
 

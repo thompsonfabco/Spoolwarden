@@ -897,11 +897,14 @@ def send_back(sm: Spoolman, spool: dict, *, rules=None, dry: bool = False) -> st
     return dest
 
 
-def return_spool(sm: Spoolman, spool_id: int, *, grams: float | None = None, rules=None, dry: bool = False) -> dict:
+def return_spool(sm: Spoolman, spool_id: int, *, grams: float | None = None, rules=None, dry: bool = False,
+                 gross: float | None = None) -> dict:
     """Send a checked-out spool back that was taken out of the printer by hand: `send_back`, so its location (the Hub's
     record of the slot) becomes its home; the printer itself is not told here (a Klipper printer is, by
     `LoadsMixin.return_spool`). NotCheckedOut for a spool that is not checked out (a spool with no home is). `grams` (the weight just taken at
-    the Weigh Station, already saved by the caller) is only recorded as `after_grams`. Reports spool.returned
+    the Weigh Station) is only recorded as `after_grams`. `gross` (that weighing, scale weight with the spool) is saved here, under
+    the same lock and after the checked-out check, so its spool.weighed comes before spool.returned (the return's Undo
+    stays possible) and a spool that is no longer checked out gets nothing written. Reports spool.returned
     (`before_location`, `after_location` (left out when the rules place it nowhere), `before_slot`, `after_grams`,
     `before_since`, `before_home`). Answers `spool` (Spoolman's, after), `view`,
     `before`, `dry`, `event_id` and `event`."""
@@ -910,6 +913,8 @@ def return_spool(sm: Spoolman, spool_id: int, *, grams: float | None = None, rul
             before = sm.get(f"spool/{spool_id}")
             if not checked_out(before):
                 raise NotCheckedOut()
+            if gross is not None and not dry:
+                update_spool(sm, spool_id, gross=gross, dry=False)
             dest = send_back(sm, before, rules=rules, dry=dry)
             if dry:
                 final = {**before, "location": dest,

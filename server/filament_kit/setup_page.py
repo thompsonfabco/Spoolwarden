@@ -64,7 +64,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import __version__, config, getting_started, hostaddr, hubport, lan, modules, pairing, qr, reader_tokens, setup_code, shared_files, trusted
+from . import __version__, config, demo, getting_started, hostaddr, hubport, lan, modules, pairing, qr, reader_tokens, setup_code, shared_files, trusted
 from .bridge import registry
 from .station_client import station_reach
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offline, Unauthorized
@@ -80,7 +80,7 @@ SHELL_SCRIPTS = (
     "setup_tabs.js", "setup_start.js", "setup_overview.js", "setup_features.js", "setup_updates.js",
     "setup_settings.js", "setup_devices.js", "setup_printer_live.js", "setup_printers.js", "setup_trust.js",
     "setup_presets.js", "setup_backup.js", "setup_storage.js", "setup_logs.js", "setup_intake.js",
-    "setup_spools.js", "setup_analytics.js", "setup_flash.js",
+    "setup_spools.js", "setup_analytics.js", "setup_flash.js", "setup_voice.js",
 )
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
@@ -692,6 +692,8 @@ class SetupPage:
 
     async def key_check(self, request: Request, body: dict):
         from . import cli
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         self._gap()
         ok, text = await anyio.to_thread.run_sync(cli.check_key, self.client_factory)
         return {"ok": ok, "text": text}
@@ -759,6 +761,8 @@ class SetupPage:
         /printer/info. And the connection's state."""
         from .bridge import tlspin
         serial = self._serial(request)
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         await anyio.to_thread.run_sync(self._entry, serial)   # 404 / 409 before the gap is spent
         self._gap()
 

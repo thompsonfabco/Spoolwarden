@@ -5549,5 +5549,60 @@
     <string name="voice_off">Speaking is switched off.</string>
     <string name="voice_played">Played on the Weigh Station.</string>
     <string name="voice_remote">Chosen on the Weigh Station\'s own computer: spoolwarden config.</string>
-    <string name="voice_speaker_hint">This voice has 904 speakers. Try a few with Test.</string>
+    <!-- 1=count -->
+    <string name="voice_speaker_hint">This voice has %1$d speakers. Try a few with Test.</string>
+    <string name="station_returned">Returned</string>
+    <!-- 1=home -->
+    <string name="station_home">Home: %1$s</string>
+    <string name="station_home_none">not recorded</string>
+    <!-- 1=location -->
+    <string name="station_return_to">to %1$s</string>
+    <!-- 1=grams -->
+    <string name="station_return_left">%1$s g left</string>
+    <string name="station_would_return">Would return</string>
+    <string name="station_not_checked_out">Not checked out</string>
+    <!-- 1=location -->
+    <string name="station_said_returned_to">Returned to %1$s.</string>
+    <string name="station_said_returned">Returned.</string>
+    <!-- 1=spool -->
+    <string name="event_title_spool_returned">Spool %1$s returned</string>
+    <!-- 1=spool 2=slot 3=location -->
+    <string name="event_text_spool_returned">Returned %1$s from %2$s to %3$s.</string>
+    <!-- 1=spool 2=slot -->
+    <string name="event_text_spool_returned_no_home">Returned %1$s from %2$s.</string>
+    <string name="demo_not_in_demo">Not in the demo.</string>
+    <string name="voice_cli_no_service">The Hub is not running, so the voice cannot be changed or tested.</string>
+    <string name="voice_cli_no_service_fix">start it, then try again.</string>
+    <string name="voice_cli_no_answer_fix">check that it is on, then try again.</string>
+    <string name="voice_cli_config_command">sudo spoolwarden config</string>
+    <!-- 1=top -->
+    <string name="voice_cli_speaker_range">speaker must be a whole number from 0 to %1$s.</string>
+    <!-- 1=low 2=high 3=step -->
+    <string name="voice_cli_speed_range">speed must be a whole number from %1$s to %2$s, in steps of %3$s.</string>
+    <string name="voice_cli_volume_range">volume must be a whole number from 0 to 100.</string>
+    <string name="cli_spool_not_checked_out">This spool is not checked out.</string>
+    <string name="cli_checked_out_empty">No spool is checked out.</string>
+    <string name="cli_checked_out_count_one">1 spool is checked out.</string>
+    <!-- 1=n -->
+    <string name="cli_checked_out_count">%1$s spools are checked out.</string>
+    <!-- 1=printer 2=slot -->
+    <string name="cli_spool_where_printer">In %1$s – %2$s</string>
+    <!-- 1=place -->
+    <string name="cli_spool_home">Home: %1$s</string>
+    <string name="cli_spool_home_not_recorded">not recorded</string>
+    <!-- 1=value -->
+    <string name="cli_spool_since">since %1$s</string>
+    <!-- 1=place -->
+    <string name="cli_spool_return_done">Returned to %1$s.</string>
+    <string name="cli_spool_return_done_plain">Returned.</string>
+    <!-- 1=undo -->
+    <string name="cli_spool_return_undo">To undo it: %1$s</string>
+    <!-- 1=n 2=name 3=before 4=after -->
+    <string name="cli_spool_home_preview">Spool %1$s, %2$s: home %3$s, would be %4$s.</string>
+    <!-- 1=n 2=after -->
+    <string name="cli_spool_home_ask">Change the home of spool %1$s to %2$s?</string>
+    <!-- 1=place -->
+    <string name="cli_spool_home_done">Home is now %1$s.</string>
+    <!-- 1=place -->
+    <string name="cli_spool_home_same">Home is already %1$s.</string>
 </resources>

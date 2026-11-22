@@ -187,7 +187,8 @@ def returned_answer(name: str, out: dict, grams=None, dry: bool = False) -> dict
     title = TEXT_WOULD_RETURN if dry else TEXT_RETURNED
     return {"location": where, "speak": SAID_RETURNED_TO.format(location=where) if where else SAID_RETURNED,
             "display": [_ascii(title)[:TITLE_WIDTH], *[_ascii(r)[:DISPLAY_WIDTH] for r in rows]],
-            **({"event_id": out["event_id"]} if out.get("event_id") is not None else {})}
+            **({"event_id": out["event_id"]} if out.get("event_id") is not None else {}),
+            **({"printer_notified": False} if out.get("printer_notified") is False else {})}
 
 
 def return_spool(sm, rules: dict, body: dict, returner=None) -> dict:
@@ -254,14 +255,18 @@ def save(sm, rules: dict, body: dict, returner=None) -> dict:
                 raise FlowError(502, "tag_not_linked", str(e), lines(f"Saved #{sid}", "tag not linked:",
                                                                      "link it on the phone"), spool_id=sid) from e
         try:
-            # a sealed spool keeps its net weight (its bag weighs too), as when it was first saved
-            s = sm.get(f"spool/{sid}") if sealed_now else inventory.update_spool(sm, sid, gross=gross, dry=dry)
+            # a sealed spool keeps its net weight (its bag weighs too), as when it was first saved. With `return` the weight is
+            # only checked here (dry); the return writes it under its own lock, after its checked-out check and before its
+            # event, so the return's Undo stays possible and a spool that stopped being checked out between the check above
+            # and the lock is refused with nothing written (R88 CO2 follow-up 2, R701)
+            s = sm.get(f"spool/{sid}") if sealed_now else inventory.update_spool(sm, sid, gross=gross, dry=dry or bool(back))
         except ValueError as e:
             raise FlowError(422, "weight_out_of_range", str(e), lines("Weight too low", "check the scale")) from e
         v = _spool_view(s)
         if back:    # weighed, now sent back: the answer is the return's, with the weight (and the place it went to)
             try:
-                out = _returner(sm, rules, returner)(sid, grams=v["remaining_g"], dry=dry)
+                out = _returner(sm, rules, returner)(sid, grams=v["remaining_g"], dry=dry,
+                                                     **({} if dry or sealed_now else {"gross": gross}))
             except inventory.NotCheckedOut:
                 raise _not_checked_out() from None
             return {"spool_id": sid, "created": False, "dry": dry, "returned": True, "remaining_g": v["remaining_g"],
