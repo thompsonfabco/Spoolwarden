@@ -239,7 +239,7 @@ def test_unload_ends_a_waiting_assignment_and_says_so(rig, sm, store):
     assert d["waiting_ended"] is True and (SERIAL, "A3") in store.jobs()                  # a dry run ends nothing
     r = pending.unload(m, sm, SERIAL, "A3", False, store=store)
     assert r["waiting_ended"] is True and store.jobs() == {}
-    assert sm.get(f"spool/{sm.sp2['id']}")["location"] == "Sealed stock"
+    assert sm.get(f"spool/{sm.sp2['id']}")["location"] == "Rack 1"          # no home: placed by the rules
     sm.patch(f"spool/{sm.sp2['id']}", {"location": "Office H2D – AMS A3"})
     assert pending.unload(m, sm, SERIAL, "A3", False, store=store)["waiting_ended"] is False
 

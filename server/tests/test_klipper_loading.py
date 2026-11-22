@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from filament_kit import inventory
 from filament_kit.bridge import loading, registry, status
 from filament_kit.bridge.klipper import hardware as kh
 from filament_kit.bridge.klipper import loads
@@ -59,7 +60,7 @@ def loc_of(sm, sid):
 
 
 def prev_of(sm, sid):
-    return json.loads((sm.get(f"spool/{sid}").get("extra") or {}).get("prev_location") or '""')
+    return inventory.prev_entry(sm.get(f"spool/{sid}"))[0]
 
 
 @pytest.fixture
@@ -575,3 +576,77 @@ def test_a_klipper_load_writes_spool_loaded_and_unloaded_in_one_batch(printer, s
         assert len(store.read()["events"]) == 2
     finally:
         event_sink.set_sink(None)
+
+
+# ---------- CO1: checked out, the one send-back, Return ----------
+
+SINCE = "2026-11-20T10:00:00Z"
+
+
+def test_a_klipper_load_records_home_and_time_and_slot_to_slot_keeps_them(printer, sm, fil):
+    fam, pid, fake = printer
+    s = spool(sm, fil, "Shelf 2")
+    assert fam.load(sm, pid, "T0", s["id"], False)["confirmed"] is True
+    home, since = inventory.prev_entry(sm.get(f"spool/{s['id']}"))
+    assert home == "Shelf 2" and since and since.endswith("Z")
+    # a spool arriving from another slot keeps the home and the time it had (the follow move's patch)
+    other = spool(sm, fil, "SV08 MAX \u2013 T1")
+    sm.patch(f"spool/{other['id']}", {"extra": {"prev_location": inventory.prev_text("Shelf 9", SINCE)}})
+    patch = loads._patch(sm.get(f"spool/{other['id']}"), LOC)
+    assert inventory.prev_entry({"extra": patch["extra"]}) == ("Shelf 9", SINCE)
+    older = spool(sm, fil, "SV08 MAX \u2013 T1", prev="Shelf 8")                  # an older entry, no time
+    patch = loads._patch(sm.get(f"spool/{older['id']}"), LOC)
+    assert inventory.prev_entry({"extra": patch["extra"]}) == ("Shelf 8", None)
+
+
+def test_a_klipper_unload_with_no_home_is_placed_by_the_rules(printer, sm, fil):
+    from filament_kit import storage
+    fam, pid, fake = printer
+    s = spool(sm, fil, LOC)                                   # recorded in the slot, no home
+    goes = inventory.auto_place(sm, s, storage.current())[0]
+    r = fam.unload(sm, pid, "T0", False)
+    assert r["moved_back"] == [{"id": s["id"], "location": goes}] and goes != "Sealed stock"
+
+
+def test_return_sends_the_spool_home_and_clears_the_printer(printer, sm, fil):
+    fam, pid, fake = printer
+    s = spool(sm, fil, "Shelf 1")
+    assert fam.load(sm, pid, "T0", s["id"], False)["confirmed"] is True
+    r = fam.return_spool(sm, pid, s["id"])
+    assert r["spool"]["location"] == "Shelf 1" and r["view"]["checked_out"] is False
+    assert fake.gcode_log[-1] == "CLEAR_ACTIVE_SPOOL"
+    assert loc_of(sm, s["id"]) == "Shelf 1" and prev_of(sm, s["id"]) == ""
+    with pytest.raises(inventory.NotCheckedOut):
+        fam.return_spool(sm, pid, s["id"])
+
+
+def test_return_while_the_printer_is_off_moves_the_record_and_follow_does_not_load_it_back(moonraker, sm, fil):
+    """Prove-first 5: the printer is off (nothing answers) while its spool is returned; when it comes back it still
+    shows that spool in the slot, and the Hub's record stays where the return put it."""
+    s = spool(sm, fil, "Voron \u2013 T0")
+    sm.patch(f"spool/{s['id']}", {"extra": {"prev_location": inventory.prev_text("Shelf 5", SINCE)}})
+    moonraker.set_spool(s["id"])                              # the printer shows the spool in its slot
+    pid = registry.add_klipper("Voron", moonraker.host, moonraker.port).serial
+    fam = KlipperFamily(sm, backoff=(0.1, 0.4))              # not started: the printer does not answer
+    r = fam.return_spool(sm, pid, s["id"])
+    assert r["spool"]["location"] == "Shelf 5" and moonraker.gcode_log == []
+    fam.start()
+    try:
+        assert fam.wait_settled(pid, 8) == "unknown_model"
+        assert wait_for(lambda: fam._seen.get(pid) is not None)       # the first look at the printer was made
+        time.sleep(0.5)
+        assert loc_of(sm, s["id"]) == "Shelf 5" and prev_of(sm, s["id"]) == ""
+        moonraker.set_spool(None)                             # the printer clears the slot: the hold ends
+        assert wait_for(lambda: not fam._returned.get(pid))
+        moonraker.set_spool(s["id"])                          # a later tap of the same spool is followed again
+        assert wait_for(lambda: loc_of(sm, s["id"]) == "Voron \u2013 T0")
+    finally:
+        fam.stop()
+
+
+def test_return_with_a_printer_that_refuses_the_clear_still_returns(printer, sm, fil):
+    fam, pid, fake = printer
+    s = spool(sm, fil, "Shelf 1")
+    assert fam.load(sm, pid, "T0", s["id"], False)["confirmed"] is True
+    fake.gcode_errors["CLEAR_ACTIVE_SPOOL"] = "Klipper is busy"
+    assert fam.return_spool(sm, pid, s["id"])["spool"]["location"] == "Shelf 1"

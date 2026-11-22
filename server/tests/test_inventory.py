@@ -898,3 +898,125 @@ def test_search_matches_material_and_spool_number(sm, printers):
     assert {s["id"] for s in inventory.find(sm, "petg", False)} == {b["id"]}
     assert [s["id"] for s in inventory.find(sm, f"#{a['id']}", False)] == [a["id"]]
     assert [s["id"] for s in inventory.find(sm, str(b["id"]), False)] == [b["id"]]
+
+
+# ---------- CO1: checked out, the one send-back, Return, the home edit ----------
+
+SINCE = "2026-11-20T10:00:00Z"
+SLOT = "Office H2D \u2013 AMS A2"
+
+
+@pytest.fixture
+def store(printers):
+    from filament_kit import event_sink, events
+    st = events.store()
+    event_sink.set_sink(event_sink.StoreSink(st))
+    yield st
+    event_sink.set_sink(None)
+
+
+def _out(sm, home="Rack 1", since=SINCE, **kw):
+    """An opened spool recorded in a printer slot, checked out from `home`."""
+    s = _opened(sm, 700, **kw)
+    return sm.patch(f"spool/{s['id']}", {"location": SLOT, "extra": {
+        **(s.get("extra") or {}), "prev_location": inventory.prev_text(home, since)}})
+
+
+def test_prev_location_is_read_with_and_without_since():
+    def x(v):
+        return inventory.prev_entry({"extra": {"prev_location": v}})
+    assert x(json.dumps({"location": "Rack 1", "since": SINCE})) == ("Rack 1", SINCE)
+    assert x(json.dumps({"location": "Rack 1"})) == ("Rack 1", None)
+    assert x(json.dumps("Rack 1")) == ("Rack 1", None)                       # an older entry
+    assert x("Rack 1") == ("Rack 1", None)                                   # plain text
+    assert x(json.dumps("")) == ("", None) and x(None) == ("", None) and x("7") == ("", None)
+    assert inventory.prev_entry({}) == ("", None)
+    assert json.loads(inventory.prev_text("Rack 1")) == "Rack 1"             # no time: as older Hubs wrote it
+    assert json.loads(inventory.prev_text("Rack 1", SINCE)) == {"location": "Rack 1", "since": SINCE}
+    assert json.loads(inventory.prev_text("", SINCE)) == ""
+
+
+def test_the_view_and_the_filter_know_checked_out_spools(sm, printers):
+    out = _out(sm, name="Out one")
+    older = _opened(sm, 600, name="Older one")
+    sm.patch(f"spool/{older['id']}", {"location": "Big Sovol \u2013 T0",
+                                      "extra": {"prev_location": json.dumps("Rack 2")}})
+    home = _opened(sm, 500, name="At home")
+    gone = _out(sm, name="Used up")
+    sm.patch(f"spool/{gone['id']}", {"remaining_weight": 0})
+    v = inventory.spool_view(sm.get(f"spool/{out['id']}"))
+    assert (v["checked_out"], v["home"], v["checked_out_since"]) == (True, "Rack 1", SINCE)
+    vo = inventory.spool_view(sm.get(f"spool/{older['id']}"))
+    assert (vo["checked_out"], vo["home"], vo["checked_out_since"]) == (True, "Rack 2", None)
+    vh = inventory.spool_view(sm.get(f"spool/{home['id']}"))
+    assert (vh["checked_out"], vh["home"], vh["checked_out_since"]) == (False, None, None)
+    assert {s["id"] for s in inventory.search(sm, "", False, "checked_out")} == {out["id"], older["id"]}
+    assert "checked_out" in inventory.FILTERS
+
+
+def test_send_back_goes_home_else_by_the_placement_rules(sm, printers):
+    from filament_kit import storage
+    s = _out(sm, home="Rack 2")
+    assert inventory.send_back(sm, sm.get(f"spool/{s['id']}"), dry=True) == "Rack 2"
+    assert sm.get(f"spool/{s['id']}")["location"] == SLOT                    # a dry run writes nothing
+    assert inventory.send_back(sm, sm.get(f"spool/{s['id']}")) == "Rack 2"
+    back = sm.get(f"spool/{s['id']}")
+    assert back["location"] == "Rack 2" and inventory.prev_entry(back) == ("", None)
+    nohome = _opened(sm, 400, name="No home")
+    sm.patch(f"spool/{nohome['id']}", {"location": SLOT})
+    cur = sm.get(f"spool/{nohome['id']}")
+    expect = inventory.auto_place(sm, cur, storage.current())[0]
+    assert inventory.send_back(sm, cur) == expect != "Sealed stock"          # an opened spool is not sealed stock
+    assert sm.get(f"spool/{nohome['id']}")["location"] == expect
+
+
+def test_return_spool_reports_spool_returned(sm, store):
+    s = _out(sm)
+    r = inventory.return_spool(sm, s["id"], grams=640)
+    assert r["spool"]["location"] == "Rack 1" and r["view"]["checked_out"] is False
+    assert r["before"]["checked_out"] is True and r["dry"] is False
+    ev = r["event"]
+    assert ev["kind"] == "spool.returned" and r["event_id"] == ev["id"]
+    d = ev["data"]
+    assert (d["before_location"], d["after_location"], d["before_slot"]) == (SLOT, "Rack 1", "A2")
+    assert str(d["after_grams"]) in ("640", "640.0")
+    assert inventory.RETURNED_TEXT.format(spool="x", slot="A2", home="Rack 1") == "Returned x from A2 to Rack 1."
+    again = pytest.raises(inventory.NotCheckedOut, inventory.return_spool, sm, s["id"])
+    assert str(again.value) == "This spool is not checked out."
+
+
+def test_return_spool_without_a_weight_leaves_after_grams_out_and_dry_writes_nothing(sm, store):
+    s = _out(sm)
+    d = inventory.return_spool(sm, s["id"], dry=True)
+    assert d["dry"] is True and d["spool"]["location"] == "Rack 1" and "event" not in d
+    assert sm.get(f"spool/{s['id']}")["location"] == SLOT
+    r = inventory.return_spool(sm, s["id"])
+    assert "after_grams" not in r["event"]["data"]
+
+
+def test_a_checked_out_spools_home_can_be_changed(sm, printers):
+    s = _out(sm)
+    r = inventory.edit_spool(sm, s["id"], home="Overflow", dry=False, rules=RULES)
+    assert r["view"]["home"] == "Overflow" and r["view"]["checked_out_since"] == SINCE    # the time stays
+    assert r["spool"]["location"] == SLOT                                               # the spool itself is not moved
+    d = inventory.edit_spool(sm, s["id"], home="Rack 1", dry=True, rules=RULES)
+    assert d["view"]["home"] == "Rack 1" and sm.get(f"spool/{s['id']}")["extra"]["prev_location"] == json.dumps(
+        {"location": "Overflow", "since": SINCE})
+    with pytest.raises(inventory.SpoolEditError) as e:
+        inventory.edit_spool(sm, s["id"], home="Nowhere", dry=False, rules=RULES)
+    assert e.value.field == "home"
+    with pytest.raises(inventory.SpoolEditError):
+        inventory.edit_spool(sm, s["id"], home="Nowhere", dry=False, locations=["Rack 1"])
+    plain = _opened(sm, 300, name="Not out")
+    with pytest.raises(inventory.NotCheckedOut):
+        inventory.edit_spool(sm, plain["id"], home="Rack 1", dry=False, rules=RULES)
+
+
+def test_the_filter_names_and_counts(sm, printers):
+    assert inventory.filter_names() == ["sealed", "opened", "loaded", "low", "checked_out"]
+    s = _out(sm, name="Out one")
+    _opened(sm, 50, name="Low one")
+    c = inventory.filter_counts(sm)
+    assert c["checked_out"] == 1 and c["loaded"] == 1 and c["low"] == 1 and c["opened"] == 2 and c["sealed"] == 0
+    r = inventory.edit_spool(sm, s["id"], home="Overflow", dry=False, rules=RULES)
+    assert r["home_text"] == "Home is now Overflow."

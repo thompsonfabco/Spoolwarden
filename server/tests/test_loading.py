@@ -5,7 +5,7 @@ import threading
 
 import pytest
 
-from filament_kit import profiles
+from filament_kit import inventory, profiles, storage
 from filament_kit.bridge import ams, connection, loading, registry, slottest
 from filament_kit.bridge.connection import Manager, PrinterOffline, UnknownPrinter
 from filament_kit.bridge.registry import Printer
@@ -111,7 +111,7 @@ def at(sm, location):
 
 def prev(s):
     v = (s.get("extra") or {}).get("prev_location")
-    return None if v is None else json.loads(v)
+    return None if v is None else inventory.prev_entry(s)[0]
 
 
 def test_load_writes_the_slot_then_spoolman(rig, sm, fil):
@@ -400,11 +400,12 @@ def test_previous_occupants_go_back(rig, sm, fil):
     m, printer, client = rig
     s = spool(sm, fil, "Rack 1")
     a = spool(sm, fil, LOC_A2, prev="Storage box 1")
-    b = spool(sm, fil, LOC_A2)                        # no prev_location: sealed stock
+    b = spool(sm, fil, LOC_A2)                        # no prev_location: placed by the placement rules
+    b_goes = inventory.auto_place(sm, b, storage.current())[0]
     keep = spool(sm, fil, "Office H2D – AMS A1", prev="Rack 1")
     r = loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
     assert sm.get(f"spool/{a['id']}")["location"] == "Storage box 1"
-    assert sm.get(f"spool/{b['id']}")["location"] == "Sealed stock"
+    assert sm.get(f"spool/{b['id']}")["location"] == b_goes != "Sealed stock"     # an opened spool is not sealed stock
     assert prev(sm.get(f"spool/{a['id']}")) == ""
     assert sm.get(f"spool/{keep['id']}")["location"] == "Office H2D – AMS A1"
     assert [x["id"] for x in at(sm, LOC_A2)] == [s["id"]]
@@ -507,14 +508,14 @@ def test_unload_moves_spool_back_without_mqtt(rig, sm, fil):
     assert r["slot"]["label"] == "A2" and r["slot"]["location"] == LOC_A2 and r["preset"] is None
 
 
-def test_unload_without_prev_goes_to_sealed_stock_and_dry_run(rig, sm, fil, spoolman_fake_store):
+def test_unload_without_prev_is_placed_by_the_rules_and_dry_run(rig, sm, fil, spoolman_fake_store):
     m, printer, client = rig
     s = spool(sm, fil, LOC_A2)
     before = copy.deepcopy(spoolman_fake_store["spools"])
     r = loading.unload(m, sm, SERIAL, "A2", True)
-    assert spoolman_fake_store["spools"] == before and r["spool"]["location"] == "Sealed stock"
+    assert spoolman_fake_store["spools"] == before and r["spool"]["location"] == "Rack 1"
     loading.unload(m, sm, SERIAL, "A2", False)
-    assert sm.get(f"spool/{s['id']}")["location"] == "Sealed stock"
+    assert sm.get(f"spool/{s['id']}")["location"] == "Rack 1"
 
 
 def test_unload_works_while_printer_offline_or_busy(rig, sm, fil):
@@ -546,7 +547,7 @@ def test_clear_of_a_slot_with_no_spool_is_not_an_error_and_dry_run_changes_nothi
     before = copy.deepcopy(spoolman_fake_store["spools"])
     d = loading.clear(m, sm, SERIAL, "A2", True)
     assert spoolman_fake_store["spools"] == before and d["dry_run"] is True
-    assert d["spool"]["location"] == "Sealed stock" and d["moved_back"] == [{"id": s["id"], "location": "Sealed stock"}]
+    assert d["spool"]["location"] == "Rack 1" and d["moved_back"] == [{"id": s["id"], "location": "Rack 1"}]
 
 
 def test_clear_view_is_the_kit_routes_answer(rig, sm, fil):
@@ -759,3 +760,94 @@ def test_an_unload_writes_spool_unloaded(rig, sm, fil, evstore):
     (e,) = evstore.read()["events"]
     assert e["kind"] == "spool.unloaded" and e["subject"]["id"] == str(s["id"])
     assert e["data"]["before_location"] == LOC_A2 and e["data"]["after_location"] == "Rack 1" and e["data"]["batch"]
+
+
+# ---------- CO1: checked out (prev_location with `since`), the one send-back ----------
+
+SINCE = "2026-11-20T10:00:00Z"
+
+
+def test_a_load_records_the_home_and_the_time_and_the_spool_is_checked_out(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, "Rack 1")
+    loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    got = sm.get(f"spool/{s['id']}")
+    home, since = inventory.prev_entry(got)
+    assert home == "Rack 1" and since and since.endswith("Z")
+    v = inventory.spool_view(got)
+    assert (v["checked_out"], v["home"], v["checked_out_since"]) == (True, "Rack 1", since)
+    assert [r["id"] for r in inventory.search(sm, "", False, "checked_out")] == [s["id"]]
+
+
+def test_a_slot_to_slot_move_keeps_the_home_and_the_time(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, "Office H2D \u2013 AMS A1", prev=None)
+    sm.patch(f"spool/{s['id']}", {"extra": {"prev_location": inventory.prev_text("Rack 1", SINCE)}})
+    loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    got = sm.get(f"spool/{s['id']}")
+    assert got["location"] == LOC_A2 and inventory.prev_entry(got) == ("Rack 1", SINCE)
+
+
+def test_an_older_prev_location_without_since_reads_and_shows_no_time(rig, sm, fil):
+    """Prove-first 3: both forms are read by the loader and the view; the older (plain) form moves on unchanged."""
+    m, printer, client = rig
+    old = spool(sm, fil, "Office H2D \u2013 AMS A1", prev="Rack 1")                  # the plain text, as older Hubs wrote it
+    new = spool(sm, fil, "Office H2D \u2013 AMS A3")
+    sm.patch(f"spool/{new['id']}", {"extra": {"prev_location": inventory.prev_text("Rack 2", SINCE)}})
+    assert loading.prev_location(sm.get(f"spool/{old['id']}")) == "Rack 1"
+    assert loading.prev_location(sm.get(f"spool/{new['id']}")) == "Rack 2"
+    vo = inventory.spool_view(sm.get(f"spool/{old['id']}"))
+    assert (vo["checked_out"], vo["home"], vo["checked_out_since"]) == (True, "Rack 1", None)
+    assert inventory.spool_view(sm.get(f"spool/{new['id']}"))["checked_out_since"] == SINCE
+    loading.load(m, sm, SERIAL, "A2", old["id"], False, preset_for=FakePresets())    # the older entry moves slot to slot
+    got = sm.get(f"spool/{old['id']}")
+    assert inventory.prev_entry(got) == ("Rack 1", None) and json.loads(got["extra"]["prev_location"]) == "Rack 1"
+    loading.unload(m, sm, SERIAL, "A2", False)
+    assert sm.get(f"spool/{old['id']}")["location"] == "Rack 1"
+
+
+def test_unload_and_clear_send_a_spool_home_and_it_is_no_longer_checked_out(rig, sm, fil):
+    m, printer, client = rig
+    a = spool(sm, fil, "Rack 1")
+    loading.load(m, sm, SERIAL, "A2", a["id"], False, preset_for=FakePresets())
+    loading.unload(m, sm, SERIAL, "A2", False)
+    got = sm.get(f"spool/{a['id']}")
+    assert got["location"] == "Rack 1" and prev(got) == "" and inventory.spool_view(got)["checked_out"] is False
+    loading.load(m, sm, SERIAL, "A2", a["id"], False, preset_for=FakePresets())
+    loading.clear(m, sm, SERIAL, "A2", False)
+    got = sm.get(f"spool/{a['id']}")
+    assert got["location"] == "Rack 1" and prev(got) == "" and inventory.spool_view(got)["home"] is None
+
+
+def test_a_spool_with_no_home_is_placed_by_the_rules_not_put_in_sealed_stock(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, LOC_A2)                                # in the slot, no home recorded
+    goes = inventory.auto_place(sm, s, storage.current())[0]
+    r = loading.unload(m, sm, SERIAL, "A2", False)
+    assert r["moved_back"] == [{"id": s["id"], "location": goes}] and goes != "Sealed stock"
+    assert sm.get(f"spool/{s['id']}")["location"] == goes
+
+
+def test_a_replacing_load_sends_the_old_spool_to_its_home(rig, sm, fil):
+    m, printer, client = rig
+    a = spool(sm, fil, "Rack 1")
+    b = spool(sm, fil, "Rack 2")
+    loading.load(m, sm, SERIAL, "A2", a["id"], False, preset_for=FakePresets())
+    r = loading.load(m, sm, SERIAL, "A2", b["id"], False, preset_for=FakePresets())
+    assert r["moved_back"] == [{"id": a["id"], "location": "Rack 1"}]
+    assert inventory.spool_view(sm.get(f"spool/{a['id']}"))["checked_out"] is False
+    assert inventory.spool_view(sm.get(f"spool/{b['id']}"))["home"] == "Rack 2"
+
+
+def test_return_sends_a_spool_taken_out_by_hand_home_and_empties_the_hub_record(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, "Rack 1")
+    loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    sent = len(settings(client))
+    r = inventory.return_spool(sm, s["id"], grams=640)
+    assert r["spool"]["location"] == "Rack 1" and r["view"]["checked_out"] is False
+    assert r["before"]["loaded"]["slot"] == "A2" and r["view"]["loaded"] is None
+    assert at(sm, LOC_A2) == [] and prev(sm.get(f"spool/{s['id']}")) == ""
+    assert len(settings(client)) == sent                      # Bambu Lab: the Hub's record only, no slot write sent
+    with pytest.raises(inventory.NotCheckedOut, match="not checked out"):
+        inventory.return_spool(sm, s["id"])

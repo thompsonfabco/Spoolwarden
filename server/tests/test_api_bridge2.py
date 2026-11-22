@@ -255,7 +255,7 @@ def test_load_dry_run_shape(client, mgr, sm, monkeypatch):
     assert b["preset"]["filament_id"] == "P7a1b2c3" and b["preset"]["name"].startswith("SUNLU")
     assert b["nozzle_mm"] == 0.4 and b["nozzle_assumed"] is False
     assert b["confirmed"] is False and b["problems"] == []              # never null on a dry run
-    assert b["moved_back"] == [{"id": 2, "location": "Sealed stock"}]    # spool 2 would leave A1
+    assert b["moved_back"] == [{"id": 2, "location": "Rack 1"}]         # spool 2 would leave A1 (no home: placed by the rules)
     assert b["spool"]["id"] == 1 and b["spool"]["location"] == LOC_A1   # what would happen
     assert mgr.writes == [] and sm.spools[1]["location"] == "Rack 1"
 
@@ -273,9 +273,9 @@ def test_load_for_real(client, mgr, sm, monkeypatch, caplog):
     assert r.status_code == 200, r.text
     b = r.json()
     assert b["confirmed"] is True and b["problems"] == []
-    assert b["moved_back"] == [{"id": 2, "location": "Sealed stock"}]
+    assert b["moved_back"] == [{"id": 2, "location": "Rack 1"}]
     assert mgr.writes and mgr.writes[0][2]["tray_info_idx"] == "P7a1b2c3"
-    assert sm.spools[1]["location"] == LOC_A1 and sm.spools[2]["location"] == "Sealed stock"
+    assert sm.spools[1]["location"] == LOC_A1 and sm.spools[2]["location"] == "Rack 1"
     assert any("load" in rec.getMessage() and f"serial={SERIAL}" in rec.getMessage() and "spool=1" in
                rec.getMessage() for rec in caplog.records)
 
@@ -371,23 +371,23 @@ def test_unload(client, sm, caplog):
         r = client.post(f"/api/printers/{SERIAL}/slots/A1/unload", json={"dry_run": False})
     assert r.status_code == 200, r.text
     b = r.json()
-    assert b["location"] == "Sealed stock" and b["spool"]["id"] == 2 and b["slot"]["label"] == "A1"
-    assert b["moved_back"] == [{"id": 2, "location": "Sealed stock"}]
-    assert sm.spools[2]["location"] == "Sealed stock"
+    assert b["location"] == "Rack 1" and b["spool"]["id"] == 2 and b["slot"]["label"] == "A1"      # no home: the placement rules
+    assert b["moved_back"] == [{"id": 2, "location": "Rack 1"}]
+    assert sm.spools[2]["location"] == "Rack 1"
     assert any("unload" in rec.getMessage() and f"serial={SERIAL}" in rec.getMessage() for rec in caplog.records)
 
 
-def test_unload_dry_run_and_sealed_location_from_config(client, sm):
-    from filament_kit import storage          # the old key is no longer read: the list says where sealed spools go
+def test_unload_dry_run_places_an_opened_spool_by_the_rules_not_in_the_sealed_location(client, sm):
+    from filament_kit import storage          # an opened spool with no home is not sealed stock, whatever that place is
     st = storage.current()
     st.sealed_location().sealed = False
     st.locations.insert(0, storage.Location("Sealed shelf", sealed=True))
     storage.save(st)
     r = client.post(f"/api/printers/{SERIAL}/slots/A1/unload", json={"dry_run": True})
-    assert r.status_code == 200 and r.json()["location"] == "Sealed shelf"
+    assert r.status_code == 200 and r.json()["location"] == "Rack 1"
     assert sm.spools[2]["location"] == LOC_A1          # dry run: nothing changed
     r = client.post(f"/api/printers/{SERIAL}/slots/A1/unload", json={"dry_run": False})
-    assert r.json()["location"] == "Sealed shelf" and sm.spools[2]["location"] == "Sealed shelf"
+    assert r.json()["location"] == "Rack 1" and sm.spools[2]["location"] == "Rack 1"
 
 
 def test_unload_prev_location_wins(client, sm):

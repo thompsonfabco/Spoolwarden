@@ -2,7 +2,7 @@
 
 Load: the adapter's set gcode goes to Moonraker; the kit then waits up to CONFIRM_TIMEOUT for the printer to show the
 spool in that slot. Only a confirmed load changes Spoolman (location "<name> – <label>", prev_location = where it
-came from; the slot's earlier spools go back to theirs). Refused while printing (allowed paused or idle). A gcode
+came from and the time of the load; the slot's earlier spools go back to their homes, `inventory.send_back`). Refused while printing (allowed paused or idle). A gcode
 Klipper refuses is returned word for word in `problems`.
 
 Follow mode: whenever a slot's spool changes on the printer without a kit load (an nfc2klipper tap, the touchscreen,
@@ -13,6 +13,11 @@ slot is checked again so a tap that landed meanwhile wins.
 
 Unload: the clear gcode when the printer is online and not printing, then the slot's spools go back (Spoolman only
 when the printer is offline, like the Bambu unload).
+
+Return: a checked-out spool taken out by hand goes back to its home (`inventory.return_spool`); the printer is told to
+clear the slot when it answers, and a printer that does not answer does not stop it. The slot is then held: while the
+printer still shows that spool there, follow mode does not load it back (kept in memory, until the printer shows
+something else in the slot).
 """
 from __future__ import annotations
 
@@ -40,12 +45,14 @@ def _slot_location(s: dict, cur: str) -> bool:
 
 
 def _patch(s: dict, loc: str) -> dict:
-    import json
     cur = s.get("location") or ""
     if cur == loc:
         return {}
-    prev = loading.prev_location(s) if _slot_location(s, cur) else cur
-    return {"location": loc, "extra": {**(s.get("extra") or {}), "prev_location": json.dumps(prev)}}
+    if _slot_location(s, cur):                  # slot-to-slot moves keep the original shelf and its time
+        prev, since = inventory.prev_entry(s)
+    else:
+        prev, since = cur, inventory._now()
+    return {"location": loc, "extra": {**(s.get("extra") or {}), "prev_location": inventory.prev_text(prev, since)}}
 
 
 class LoadsMixin:
@@ -55,6 +62,7 @@ class LoadsMixin:
         self._seen: dict[str, dict[str, int | None]] = {}
         self._follow_clock = time.monotonic
         self._follow_fail: dict[str, tuple[float, float]] = {}      # pid -> (retry not before, last pause)
+        self._returned: dict[str, dict[str, int]] = {}      # pid -> {label: spool id} returned by hand, not to follow
         self._follow_q: queue.Queue = queue.Queue()
         self._follow_thread: threading.Thread | None = None
         self.add_listener(self._on_change)
@@ -71,6 +79,7 @@ class LoadsMixin:
         self._follow_thread = None
         self._seen.clear()
         self._follow_fail.clear()
+        self._returned.clear()
 
     def _slot_lock(self, pid: str, label: str) -> threading.Lock:
         with self._slot_locks_lock:
@@ -123,6 +132,9 @@ class LoadsMixin:
         if self._follow_clock() < self._follow_fail.get(pid, (0.0, 0.0))[0]:
             return          # a recent Spoolman failure: the slots stay unseen, the first update after the pause retries
         cur = self._current(pid)
+        held = self._returned.get(pid) or {}
+        for label in [l for l, sid in held.items() if cur.get(l) != sid]:
+            del held[label]                 # the printer shows something else there now: follow it again
         seen = self._seen.get(pid)
         failed = False
         if seen is None:
@@ -132,7 +144,7 @@ class LoadsMixin:
             # A slot left out of the baseline stays unseen until its move succeeds, so a failure is retried.
             todo = []
             for label, sid in cur.items():
-                if sid is None:
+                if sid is None or held.get(label) == sid:       # a returned spool the printer still shows
                     continue
                 here = [s.get("id") for s in loading.occupants(self.sm, self._location(pid, label))]
                 if here != [sid]:
@@ -153,6 +165,9 @@ class LoadsMixin:
             with self._slot_lock(pid, label):
                 now = self._current(pid).get(label)
                 if self._seen.get(pid, {}).get(label, "unset") == now:
+                    continue
+                if now is not None and held.get(label) == now:
+                    self._seen.setdefault(pid, {})[label] = now      # returned by hand: seen, not loaded back
                     continue
                 ok = self._follow_slot(pid, label, now)
             failed |= not ok
@@ -221,11 +236,11 @@ class LoadsMixin:
         p = registry.load().get(pid)
         return bstatus.location(registry.display_name(p) if p else pid, label, family="klipper")
 
-    def _move(self, pid: str, label: str, spool_id, dry: bool, sealed: str = loading.SEALED):
+    def _move(self, pid: str, label: str, spool_id, dry: bool):
         """Spoolman: spool `spool_id` (or nothing) is now in that slot. Returns (moved_back, final spool | None)."""
         sm, loc = self.sm, self._location(pid, label)
         with inventory._LOCK, event_sink.batch_scope():
-            moved = loading.send_back(sm, loading.occupants(sm, loc, spool_id), sealed, dry)
+            moved = loading.send_back(sm, loading.occupants(sm, loc, spool_id), dry)
             final = None
             if spool_id is not None:
                 fresh = sm.get(f"spool/{spool_id}")
@@ -270,7 +285,7 @@ class LoadsMixin:
         result = {"slot": {"label": label, "location": loc}, "preset": preset, "dry_run": bool(dry), "problems": [],
                   "nozzle_mm": nozzle, "nozzle_assumed": assumed}
         if dry:
-            moved, final = self._move(pid, label, spool["id"], dry=True, sealed=sealed_location)
+            moved, final = self._move(pid, label, spool["id"], dry=True)
             return {**result, "spool": final, "confirmed": None, "moved_back": moved, "command": {"gcode": gcode}}
         confirmed = False
         with self._slot_lock(pid, label):
@@ -289,7 +304,7 @@ class LoadsMixin:
             moved = []
             final = sm.get(f"spool/{spool['id']}")
             if confirmed:
-                moved, final = self._move(pid, label, spool["id"], dry=False, sealed=sealed_location)
+                moved, final = self._move(pid, label, spool["id"], dry=False)
                 self._seen.setdefault(pid, {})[label] = spool["id"]
                 self._publish(pid)
         self._follow_q.put(pid)                  # a tap that landed meanwhile wins
@@ -343,7 +358,7 @@ class LoadsMixin:
                     c.client.gcode(gcode)
                 except MoonrakerError as e:
                     problems.append(f"{label}: {e}")
-            moved = loading.send_back(sm, here, sealed_location, dry)
+            moved = loading.send_back(sm, here, dry)
             if not dry:
                 self._seen.setdefault(pid, {})[label] = None
                 self.forget_spools()
@@ -384,7 +399,7 @@ class LoadsMixin:
                     cleared = True
                 except MoonrakerError as e:
                     log.warning("klipper %s: cannot clear %s on the printer (%s)", pid, label, e)
-            moved = loading.send_back(sm, here, sealed_location, dry) if here else []
+            moved = loading.send_back(sm, here, dry) if here else []
             if not dry:
                 self._seen.setdefault(pid, {})[label] = None
                 self.forget_spools()
@@ -394,6 +409,44 @@ class LoadsMixin:
                      else sm.get(f"spool/{first['id']}"))
         return loading.clear_view({"slot": {"label": label, "location": loc}, "spool": spool, "moved_back": moved,
                                    "printer_cleared": cleared if not dry else bool(gcode), "dry_run": dry}, False)
+
+    def return_spool(self, sm, pid: str, spool_id, *, grams: float | None = None, rules=None,
+                     dry: bool = False) -> dict:
+        """`inventory.return_spool` for a spool taken out of printer `pid` by hand. The Hub's record comes first and is
+        never stopped by the printer: when the spool is recorded in one of this printer's slots and the printer
+        answers (online, not printing) it is told to clear that slot, as Clear does; a printer that does not answer, or
+        refuses, only leaves a log line. Either way the slot is held (`_returned`), so follow mode does not load the
+        spool back when the printer shows it again. NotCheckedOut for a spool that is not checked out."""
+        p = registry.load().get(pid)
+        if p is None:
+            raise loading.NotFound(f"no printer {pid}")
+        prefix = self._location(pid, "")
+        spool = loading._spool(sm, spool_id)
+        loc = spool.get("location") or ""
+        label = loc[len(prefix):] if prefix and loc.startswith(prefix) and len(loc) > len(prefix) else None
+        if label is None:
+            return inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry)
+        with self._slot_lock(pid, label):
+            out = inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry)
+            if dry:
+                return out
+            self._returned.setdefault(pid, {})[label] = int(spool["id"])
+            self._seen.setdefault(pid, {})[label] = None
+            c = self._conn(pid)
+            if c is not None and c.state in ("connected", "unknown_model"):
+                try:
+                    c, model, system, adapter, st, plabel = self._target(pid, label)
+                    if (st.get("print_stats") or {}).get("state") != "printing":
+                        gcode = adapter.clear_gcode(plabel, model, system, self.hw(), st)
+                        if gcode:
+                            c.client.gcode(gcode)
+                except (NotSupported, UnknownSlot, loading.NotFound):
+                    pass
+                except (MoonrakerError, PrinterOffline) as e:
+                    log.warning("klipper %s: cannot clear %s on the printer after a return (%s)", pid, label, e)
+            self.forget_spools()
+            self._publish(pid)
+        return out
 
     def _publish(self, pid: str) -> None:
         """Write the printer's slots to Moonraker lane_data when its setting says so (lanes.should_publish)."""

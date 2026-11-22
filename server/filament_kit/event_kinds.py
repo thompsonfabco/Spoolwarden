@@ -65,7 +65,7 @@ def _kinds() -> dict[str, Kind]:
     add("usage.recorded", "info", ("printer", "job", "spool", "material", "grams") + _RUN)
     add("spool.low", "warn", ("spool", "filament", "material", "grams", "in_stock"), RAISES, "spool-low")
     add("spool.ok", "ok", ("spool",), CLEARS, "spool-low")
-    for name in ("added", "opened", "weighed", "moved", "emptied", "loaded", "unloaded"):
+    for name in ("added", "opened", "weighed", "moved", "emptied", "loaded", "unloaded", "returned"):
         add(f"spool.{name}", "info", _SPOOL_CHANGE + (("auto",) if name == "loaded" else ()))
     add("storage.low", ("warn", "bad"), ("free", "total", "percent", "direction"), RAISES, "storage-low", keyed=False)
     add("storage.ok", "ok", ("free", "total"), CLEARS, "storage-low", keyed=False)
@@ -100,7 +100,7 @@ KINDS: dict[str, Kind] = _kinds()
 
 ACTIVITY_KINDS: frozenset[str] = frozenset({
     "spool.added", "spool.opened", "spool.weighed", "spool.moved", "spool.emptied", "spool.loaded", "spool.unloaded",
-    "slot.cleared",
+    "spool.returned", "slot.cleared",
     "usage.recorded", "usage.undone",
     "location.renamed",
     "hub.started", "hub.updated", "hub.restored",
