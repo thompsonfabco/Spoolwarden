@@ -436,7 +436,7 @@ def test_the_voice_refusal_sentences_come_from_the_catalogue_with_the_english_as
     from filament_kit.station import page
     english = {"bad_speech": "speech must be true or false.",
                "bad_speaker": "speaker must be a whole number from 0 to 903.",
-               "bad_speed": "speed must be a whole number from 50 to 200.",
+               "bad_speed": "speed must be a whole number from 50 to 200, in steps of 10.",
                "bad_volume": "volume must be a whole number from 0 to 100.",
                "busy": "The Weigh Station is in use. Try again when it is idle.",
                "off": "Speaking is switched off."}
@@ -444,3 +444,23 @@ def test_the_voice_refusal_sentences_come_from_the_catalogue_with_the_english_as
     assert _state_copy().VOICE_TEXTS == english
     monkeypatch.setattr(page, "_CATALOGUE", {f"station_voice_{k}": f"[{k}]" for k in english})
     assert _state_copy().VOICE_TEXTS == {k: f"[{k}]" for k in english}  # a catalogue key wins
+
+
+# ---- R594 L2: the speed goes in steps of 10 at the station too
+
+@pytest.mark.parametrize("speed", [55, 51, 199, 101])
+def test_a_speed_off_the_steps_of_ten_is_refused(hub, speed):
+    status, d = post(hub, "/voice", {"speed": speed})
+    assert status == 400 and d["error"] == "bad_request" and "steps of 10" in d["message"]
+    assert st.live == {}
+    assert post(hub, "/voice/test", {"speed": speed})[0] == 400 and speech.speech["text"] is None
+
+
+@pytest.mark.parametrize("speed", [50, 60, 100, 130, 200])
+def test_a_speed_on_the_steps_of_ten_is_taken(hub, speed):
+    assert post(hub, "/voice", {"speed": speed}) == (200, {}) and st.voice_value("speed") == speed
+
+
+def test_a_hello_speed_off_the_steps_is_skipped():
+    speech.apply_hello({"voice": {"speed": 95, "volume": 10}})
+    assert st.live == {"volume": 10}

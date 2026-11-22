@@ -38,7 +38,7 @@ _t = _station_page.catalogue_text
 VOICE_TEXTS = {
     "bad_speech": _t("station_voice_bad_speech", "speech must be true or false."),
     "bad_speaker": _t("station_voice_bad_speaker", "speaker must be a whole number from 0 to 903."),
-    "bad_speed": _t("station_voice_bad_speed", "speed must be a whole number from 50 to 200."),
+    "bad_speed": _t("station_voice_bad_speed", "speed must be a whole number from 50 to 200, in steps of 10."),
     "bad_volume": _t("station_voice_bad_volume", "volume must be a whole number from 0 to 100."),
     "busy": _t("station_voice_busy", "The Weigh Station is in use. Try again when it is idle."),
     "off": _t("station_voice_off", "Speaking is switched off."),
