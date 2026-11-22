@@ -423,28 +423,108 @@ def test_on_a_fresh_old_log_the_line_is_written_before_the_marker(monkeypatch):
     assert [e["id"] for e in usage.entries(SERIAL, days=30)] == [r["id"]]      # and a lost marker costs no double
 
 
-@needs_flock
-def test_a_lock_held_too_long_skips_the_old_form_instead_of_hanging(monkeypatch):
-    d = _dir()
-    d.mkdir(parents=True)
-    (d / "usage.jsonl").write_text(json.dumps(_entry(E1, "2026-11-10T10:00:00Z")) + "\n", encoding="utf-8")
-    (d / "usage").mkdir()
-    monkeypatch.setattr(usage, "LOCK_WAIT", 0.3, raising=False)
-    holder = subprocess.Popen(
+def _holder(d):
+    """A process that holds usage/.lock until its stdin is closed."""
+    (d / "usage").mkdir(parents=True, exist_ok=True)
+    h = subprocess.Popen(
         [sys.executable, "-I", "-c",
          "import fcntl,sys;f=open(sys.argv[1],'a');fcntl.flock(f,fcntl.LOCK_EX);print('held',flush=True);sys.stdin.read()",
          str(d / "usage" / ".lock")], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    assert h.stdout.readline().strip() == "held"
+    return h
+
+
+def _release(h):
+    h.stdin.close()
+    h.wait(10)
+
+
+def _in_thread(fn, *a):
+    out = {}
+    t = threading.Thread(target=lambda: out.update(r=fn(*a)), daemon=True)
+    t.start()
+    return t, out
+
+
+@needs_flock
+def test_a_lock_held_too_long_keeps_the_record_pending_and_the_next_locked_write_appends_it(monkeypatch):
+    d = _dir()
+    d.mkdir(parents=True)
+    (d / "usage.jsonl").write_text(json.dumps(_entry(E1, "2026-11-10T10:00:00Z")) + "\n", encoding="utf-8")
+    monkeypatch.setattr(usage, "LOCK_WAIT", 0.3, raising=False)
+    holder = _holder(d)
     try:
-        assert holder.stdout.readline().strip() == "held"
-        out = {}
-        worker = threading.Thread(target=lambda: out.update(r=usage.append(SERIAL, {"job": "new"})), daemon=True)
-        worker.start()
-        worker.join(5)
+        t, out = _in_thread(usage.append, SERIAL, {"job": "new"})
+        t.join(5)
         assert "r" in out                                  # was: waited for the holder with no limit
         assert sorted(e["id"] for e in usage.entries(SERIAL, days=10_000)) == sorted([E1, out["r"]["id"]])
-        assert [x["id"] for x in _v062_read(SERIAL)[0]] == [E1]              # the rollback copy was skipped
+        assert [x["id"] for x in _v062_read(SERIAL)[0]] == [E1]              # not in usage.jsonl yet ...
+        assert (d / "usage" / usage.PENDING).is_file()                       # ... but kept, in a file that survives a restart
         assert any("usage.jsonl" in p and "rollback" in p for p in statexml.problems())
     finally:
-        holder.stdin.close()
-        holder.wait(10)
-        worker.join(10)
+        _release(holder)
+    later = usage.append(SERIAL, {"job": "later"})
+    assert [x["id"] for x in _v062_read(SERIAL)[0]] == [E1, out["r"]["id"], later["id"]]        # both lines, in order
+    assert not (d / "usage" / usage.PENDING).exists() and not (d / "usage" / usage.DRAINING).exists()
+    assert not any("usage.jsonl" in p for p in statexml.problems())
+    assert sorted(e["id"] for e in usage.entries(SERIAL, days=10_000)) == sorted([E1, out["r"]["id"], later["id"]])
+
+
+@needs_flock
+def test_an_undo_made_while_the_lock_was_busy_reaches_usage_jsonl_and_the_note_stays_until_then(monkeypatch):
+    r = usage.append(SERIAL, {"job": "a", "grams": 4.0, "spool_id": 7, "slot": "A1", "observe": False})
+    monkeypatch.setattr(usage, "LOCK_WAIT", 0.3, raising=False)
+    holder = _holder(_dir())
+    sm = FakeSpoolman()
+    try:
+        t, out = _in_thread(usage.undo, r["id"], sm)
+        t.join(5)
+        assert out["r"]["undone"] and sm.used == [(7, -4.0)]
+        with pytest.raises(usage.AlreadyUndone):           # the pending undo is in force at once
+            usage.undo(r["id"], sm)
+        assert [e["undone"] for e in usage.entries(SERIAL, days=30)] == [True]
+        assert r["id"] not in _v062_read(SERIAL)[1]
+    finally:
+        _release(holder)
+    usage.append(SERIAL, {"job": "b"})
+    assert r["id"] in _v062_read(SERIAL)[1]                # a rollback now shows the entry undone
+    assert not any("rollback" in p for p in statexml.problems())
+    assert sm.used == [(7, -4.0)]
+
+
+@needs_flock
+def test_a_pending_record_survives_a_restart_and_is_not_lost_when_the_append_keeps_failing(monkeypatch):
+    d = _dir()
+    monkeypatch.setattr(usage, "LOCK_WAIT", 0.3, raising=False)
+    holder = _holder(d)
+    try:
+        t, out = _in_thread(usage.append, SERIAL, {"job": "p1"})
+        t.join(5)
+    finally:
+        _release(holder)
+    p1 = out["r"]["id"]
+    with monkeypatch.context() as m:                       # usage.jsonl cannot be appended to (disk full): nothing goes through
+        m.setattr(usage, "_old_form", lambda serial, rec: False)
+        p2 = usage.append(SERIAL, {"job": "p2"})["id"]
+    assert (d / "usage" / usage.DRAINING).is_file() or (d / "usage" / usage.PENDING).is_file()
+    assert [x["id"] for x in _v062_read(SERIAL)[0]] == []
+    assert any("rollback" in p for p in statexml.problems())
+    p3 = usage.append(SERIAL, {"job": "p3"})["id"]
+    assert [x["id"] for x in _v062_read(SERIAL)[0]] == [p1, p2, p3]          # in the order they were made
+    assert sorted(e["id"] for e in usage.entries(SERIAL, days=30)) == sorted([p1, p2, p3])
+    assert not any("rollback" in p for p in statexml.problems())
+
+
+@needs_flock
+def test_a_busy_lock_does_not_rewrite_the_month_file_under_the_holder(monkeypatch):
+    usage.append(SERIAL, {"job": "a"})
+    month = _dir() / "usage" / "2026-11.xml"
+    before = month.read_bytes()
+    monkeypatch.setattr(usage, "LOCK_WAIT", 0.3, raising=False)
+    holder = _holder(_dir())
+    try:
+        t, out = _in_thread(usage.append, SERIAL, {"job": "b"})
+        t.join(5)
+        assert "r" in out and month.read_bytes() == before        # was: rewritten without the lock (a stopped CLI's _move then undoes it)
+    finally:
+        _release(holder)
