@@ -352,7 +352,7 @@ class FakeClaude:
 
 
 @pytest.fixture(params=["pretend", "wired"])
-def hub(request, tmp_path, monkeypatch):
+def hub(request, tmp_path, monkeypatch, mountable):
     """The kit app in demo: the demo's own registry (the hook registry.py needs, put in by the test), the real camera
     hub and mapper, every way out recorded; the families are the pretend ones alone ("pretend") or wired as `main()`
     wires them ("wired": a `Switch` over the real Bambu `Manager` and the real `KlipperFamily`, started with the demo on,
@@ -536,6 +536,20 @@ def test_the_mount_guard_fails_a_mountable_demo_with_a_list_left(monkeypatch):
             assert not_mountable_yet(demo.MOUNTABLE, leak_lists()) == [], "flipped with a leak list left"
 
 
+def test_start_refuses_while_the_demo_is_not_mountable(tmp_path):
+    """`demo.MOUNTABLE` is False in the product: `start()` raises `NotMountable` and makes nothing, so wiring the demo into
+    a command or a route before the leak lists are empty switches nothing on."""
+    from filament_kit.demo import routes
+    assert demo.MOUNTABLE is False
+    before = snapshot(tmp_path)
+    with pytest.raises(demo.NotMountable) as e:
+        demo.start(spoolman=type("E", (), {"get": lambda self, p: []})(), registry_load=lambda: {})
+    assert e.value.message == demo.NOT_MOUNTABLE and e.value.code == "not_mountable"
+    assert not demo.is_on() and not demo.folder().exists() and snapshot(tmp_path) == before
+    assert routes.post_demo({"on": True}) == (409, {"error": demo.NOT_MOUNTABLE, "code": "not_mountable"})
+    assert not demo.is_on()
+
+
 def test_manual_map_on_the_pretend_printers_is_a_refusal_never_a_500(hub, tmp_path):
     """The kit manual-map routes for a pretend Klipper printer (its family had no `manual`: AttributeError, 500) and a
     pretend Bambu one answer with a manual-map refusal or an answer, and nothing real is touched."""
@@ -643,7 +657,7 @@ class WebKit:
         return {}
 
 
-def test_push_stops_in_the_demo(tmp_path, monkeypatch):
+def test_push_stops_in_the_demo(tmp_path, monkeypatch, mountable):
     """R85 4.3 "sends no push": in the web unit the push routes (key, subscribe, unsubscribe, the test alert) answer 409
     "Not in the demo.", the alert feed tells no phone, and the sender, the subscriptions file and the VAPID key are not
     touched; a subscription made before the demo is left as it was."""

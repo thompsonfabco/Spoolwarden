@@ -24,7 +24,7 @@ class Empty:
 
 
 @pytest.fixture(autouse=True)
-def env(tmp_path, monkeypatch):
+def env(tmp_path, monkeypatch, mountable):
     for name in ("etc", "state", "opt", "backups"):
         (tmp_path / name).mkdir()
         monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
