@@ -138,6 +138,8 @@ def prev_entry(s: dict) -> tuple[str, str | None]:
         if isinstance(w, str):
             try:
                 w = json.loads(w)
+                if isinstance(w, str) and w:                # the current form: a JSON string holding the {location, since} object
+                    w = json.loads(w)
             except ValueError:
                 w = None
         if isinstance(w, dict) and w.get("location") == home:
@@ -155,12 +157,13 @@ def checked_out(s: dict) -> bool:
 def prev_extra(home: str, since: str | None = None) -> dict:
     """The `extra` entries for a checked-out spool: its `home` ("" when it came from no place) and the time of the load.
     `prev_location` stays the plain place, as older Hubs wrote it (empty with no place), so a rolled-back Hub still
-    finds the home; the checked-out mark and its time go in `prev_since` ({"location", "since"}, the location being
-    that same home, possibly ""). Neither home nor time: not checked out, both emptied."""
+    finds the home; the checked-out mark and its time go in `prev_since`: the {"location", "since"} object (the location
+    being that same home, possibly "") as JSON text inside a JSON string, because Spoolman rejects a text extra field
+    whose value is not a string (`prev_entry` also reads the object written directly by 0.7 builds). Neither home nor time: not checked out, both emptied."""
     if not home and not since:
         return {"prev_location": json.dumps(""), "prev_since": json.dumps("")}
     return {"prev_location": json.dumps(home),
-            "prev_since": json.dumps({"location": home, "since": since} if since else "")}
+            "prev_since": json.dumps(json.dumps({"location": home, "since": since}) if since else "")}
 
 
 def describe(s: dict) -> str:

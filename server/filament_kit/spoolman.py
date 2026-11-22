@@ -10,7 +10,7 @@ from typing import Any
 EXTRA_FIELDS: list[tuple[str, str, str]] = [
     ("spool", "nfc_id", "text"),
     ("spool", "prev_location", "text"),
-    ("spool", "prev_since", "text"),       # when the spool was checked out ("{location, since}"; prev_location stays plain)
+    ("spool", "prev_since", "text"),       # when the spool was checked out (a JSON string holding {location, since}; prev_location stays plain)
     ("spool", "box_humidity", "float"),          # open_spool: box hygrometer % ...
     ("spool", "humidity_checked", "datetime"),   # ... and when it was read (UTC)
     ("filament", "nozzle_range", "text"),
