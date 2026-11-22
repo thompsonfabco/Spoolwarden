@@ -8,15 +8,13 @@ import android.util.Base64
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +35,8 @@ import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwMenu
+import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
 import com.thompsonfabco.filamentkit.ui.components.SwSkeleton
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -59,19 +59,23 @@ object PrintTexts {
     fun preview(id: Int, name: String, material: String, left: String) = "Label of spool $id: $name, $material, $left g"
 }
 
-/** The label sizes of the Hub's drawing (`size=` of `GET api/spools/{id}/label.svg`) with their names (7.10). */
-internal enum class LabelSize(val wire: String, val title: String, val widthMm: Int, val heightMm: Int) {
-    Small("62x29", "62 x 29 mm", 62, 29),
-    Medium("50x30", "50 x 30 mm", 50, 30),
-    Sheet("sheet24", "Sheet of 24", 210, 297),
+/**
+ * The label sizes of the Hub's drawing (`size=` of `GET api/spools/{id}/label.svg`) with their names (7.10, R85 of 22 Nov). A
+ * sheet size answers one label of that stock's size, so the page is always one label.
+ */
+internal enum class LabelSize(val wire: String, val title: String, val widthMm: Float, val heightMm: Float) {
+    Small("62x29", "62 x 29 mm", 62f, 29f),
+    Medium("50x30", "50 x 30 mm", 50f, 30f),
+    A4Small("a4-63x34", "A4 sheet of 24, 63.5 x 33.9 mm", 63.5f, 33.9f),
+    A4Large("a4-70x37", "A4 sheet of 24, 70 x 37 mm", 70f, 37f),
+    Letter("letter-66x25", "Letter sheet of 30, 2-5/8 x 1 in", 66.675f, 25.4f),
 }
 
-/** What the app asks Android to print on: a label's own size, or an A4 sheet for [LabelSize.Sheet]; no margins. */
+/** What the app asks Android to print on: the label's own size, in thousandths of an inch; no margins. */
 internal fun labelMedia(size: LabelSize): PrintAttributes.MediaSize =
-    if (size == LabelSize.Sheet) PrintAttributes.MediaSize.ISO_A4
-    else PrintAttributes.MediaSize("sw-label-${size.wire}", size.title, mil(size.widthMm), mil(size.heightMm))
+    PrintAttributes.MediaSize("sw-label-${size.wire}", size.title, mil(size.widthMm), mil(size.heightMm))
 
-private fun mil(mm: Int): Int = Math.round(mm * 1000 / 25.4f)
+private fun mil(mm: Float): Int = Math.round(mm * 1000 / 25.4f)
 
 /**
  * The page the print service gets: the Hub's drawing as an image (so nothing inside the drawing can run), as wide as the
@@ -115,6 +119,7 @@ internal fun PrintLabelSheet(spool: SpoolSummary, source: LabelSource, onDismiss
     var size by remember { mutableStateOf(LabelSize.Small) }
     var load by remember { mutableStateOf<LabelLoad?>(null) }
     var retry by remember { mutableIntStateOf(0) }
+    var choosing by remember { mutableStateOf(false) }
     var page by remember { mutableStateOf<WebView?>(null) }
     var shown by remember { mutableStateOf(false) }
     LaunchedEffect(size, retry) {
@@ -128,26 +133,17 @@ internal fun PrintLabelSheet(spool: SpoolSummary, source: LabelSource, onDismiss
             verticalArrangement = Arrangement.spacedBy(space.s3),
         ) {
             Text(PrintTexts.TITLE, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                LabelSize.entries.forEachIndexed { index, choice ->
-                    SegmentedButton(
-                        selected = choice == size,
-                        onClick = { size = choice },
-                        shape = SegmentedButtonDefaults.itemShape(index, LabelSize.entries.size),
-                        modifier = Modifier.heightIn(min = SpoolwardenTheme.sizes.row),
-                        colors = SegmentedButtonDefaults.colors(
-                            activeContainerColor = colors.accent, activeContentColor = colors.onAccent,
-                            activeBorderColor = colors.accent,
-                            inactiveContainerColor = colors.surface, inactiveContentColor = colors.text,
-                            inactiveBorderColor = colors.borderStrong,
-                        ),
-                        label = { Text(choice.title, style = MaterialTheme.typography.labelLarge) },
-                    )
+            Box {
+                SwButton(size.title, { choosing = true }, Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row))
+                SwMenu(choosing, { choosing = false }) {
+                    LabelSize.entries.forEach { choice ->
+                        SwMenuItem(choice.title, { choosing = false; size = choice }, checked = choice == size)
+                    }
                 }
             }
             val said = PrintTexts.preview(spool.id, spool.title, spool.material, spool.remaining?.let { formatGrams(it) }.orEmpty())
             when (val l = load) {
-                null -> SwSkeleton(Modifier.aspectRatio(size.widthMm.toFloat() / size.heightMm), height = SpoolwardenTheme.sizes.columnMax / 4)
+                null -> SwSkeleton(Modifier.aspectRatio(size.widthMm / size.heightMm), height = SpoolwardenTheme.sizes.columnMax / 4)
                 is LabelLoad.Failed -> {
                     Text(
                         PrintTexts.COULD_NOT + l.text.takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty(),
@@ -156,7 +152,7 @@ internal fun PrintLabelSheet(spool: SpoolSummary, source: LabelSource, onDismiss
                     SwButton(stringResource(R.string.common_try_again), { retry++ })
                 }
                 is LabelLoad.Loaded -> AndroidView(
-                    modifier = Modifier.fillMaxWidth().aspectRatio(size.widthMm.toFloat() / size.heightMm).heightIn(max = SpoolwardenTheme.sizes.columnMax / 2)
+                    modifier = Modifier.fillMaxWidth().aspectRatio(size.widthMm / size.heightMm).heightIn(max = SpoolwardenTheme.sizes.columnMax / 2)
                         .semantics { contentDescription = said },
                     factory = { ctx ->
                         WebView(ctx).apply {

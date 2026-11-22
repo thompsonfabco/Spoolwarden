@@ -609,7 +609,7 @@ class Api(
         (call(request("api", "demo", "leave").post(JsonObject(emptyMap()).toBody())) as? JsonObject)
             ?.get("demo")?.jsonPrimitive?.booleanOrNull ?: false
 
-    /** The label of spool [id] at [size] (`62x29`, `50x30` or `sheet24`) as the Hub draws it: SVG text. 404 `not_found`. */
+    /** The label of spool [id] at [size] (`62x29`, `50x30`, `a4-63x34`, `a4-70x37` or `letter-66x25`) as the Hub draws it: SVG text. 404 `not_found`. */
     suspend fun labelSvg(id: Int, size: String): ByteArray = withContext(Dispatchers.IO) {
         val request = request("api", "spools", id.toString(), "label.svg") { addQueryParameter("size", size) }.get().build()
         execute(request, null).use { resp ->

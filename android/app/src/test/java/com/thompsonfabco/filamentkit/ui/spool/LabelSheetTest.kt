@@ -30,17 +30,24 @@ class LabelSheetTest {
 
     private val spool = SpoolSummary(214, "Polymaker", "PolyTerra PLA Charcoal Black", "PLA", "#333333", "Shelf B", 620.0)
 
-    @Test fun theThreeSizesAskTheHubByTheirWireNames() {
-        assertEquals(listOf("62x29", "50x30", "sheet24"), LabelSize.entries.map { it.wire })
-        assertEquals(listOf("62 x 29 mm", "50 x 30 mm", "Sheet of 24"), LabelSize.entries.map { it.title })
+    @Test fun theFiveSizesAskTheHubByTheirWireNamesTheRollFirst() {
+        assertEquals(listOf("62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25"), LabelSize.entries.map { it.wire })
+        assertEquals(
+            listOf(
+                "62 x 29 mm", "50 x 30 mm", "A4 sheet of 24, 63.5 x 33.9 mm", "A4 sheet of 24, 70 x 37 mm",
+                "Letter sheet of 30, 2-5/8 x 1 in",
+            ),
+            LabelSize.entries.map { it.title },
+        )
     }
 
-    @Test fun aLabelIsPrintedAtItsOwnSizeInThousandthsOfAnInchAndTheSheetOnA4() {
-        val small = labelMedia(LabelSize.Small)
-        assertEquals(2441, small.widthMils)
-        assertEquals(1142, small.heightMils)
-        assertEquals(1969, labelMedia(LabelSize.Medium).widthMils)
-        assertEquals(android.print.PrintAttributes.MediaSize.ISO_A4.widthMils, labelMedia(LabelSize.Sheet).widthMils)
+    @Test fun aLabelIsPrintedAtItsOwnSizeInThousandthsOfAnInch() {
+        fun mils(size: LabelSize) = labelMedia(size).let { it.widthMils to it.heightMils }
+        assertEquals(2441 to 1142, mils(LabelSize.Small))
+        assertEquals(1969 to 1181, mils(LabelSize.Medium))
+        assertEquals(2500 to 1335, mils(LabelSize.A4Small))
+        assertEquals(2756 to 1457, mils(LabelSize.A4Large))
+        assertEquals(2625 to 1000, mils(LabelSize.Letter))
     }
 
     @Test fun thePrintedPageHoldsTheDrawingAsAnImage() {
@@ -69,8 +76,6 @@ class LabelSheetTest {
         rule.waitForIdle()
         rule.onNodeWithText("Print a label").assertExists()
         rule.onNodeWithText("62 x 29 mm").assertExists()
-        rule.onNodeWithText("50 x 30 mm").assertExists()
-        rule.onNodeWithText("Sheet of 24").assertExists()
         rule.onNodeWithContentDescription("Label of spool 214: Polymaker PolyTerra PLA Charcoal Black, PLA, 620 g").assertExists()
         rule.onNodeWithText(
             "The code holds this Hub's address, hub.local:8710. If the Hub is renamed or moves to another port, " +
@@ -78,12 +83,25 @@ class LabelSheetTest {
         ).assertExists()
         rule.onNodeWithText("Print").assertExists()
         assertEquals(listOf("62x29"), asked)
-        rule.onNodeWithText("50 x 30 mm").performClick()
+        var current = "62 x 29 mm"
+        for ((title, wire) in listOf(
+            "50 x 30 mm" to "50x30", "A4 sheet of 24, 63.5 x 33.9 mm" to "a4-63x34", "A4 sheet of 24, 70 x 37 mm" to "a4-70x37",
+            "Letter sheet of 30, 2-5/8 x 1 in" to "letter-66x25",
+        )) {
+            rule.onNodeWithText(current).performClick()
+            rule.onNodeWithText(title).performClick()
+            rule.waitForIdle()
+            assertEquals(wire, asked.last())
+            current = title
+        }
+        assertEquals(listOf("62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25"), asked)
+    }
+
+    @Test fun aBadSizeRefusalShowsTheHubsOwnMessage() {
+        val refusal = "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25."
+        show(LabelSource({ throw ApiError(400, "bad_size", refusal) }, { "hub.local" }))
         rule.waitForIdle()
-        assertEquals(listOf("62x29", "50x30"), asked)
-        rule.onNodeWithText("Sheet of 24").performClick()
-        rule.waitForIdle()
-        assertEquals(listOf("62x29", "50x30", "sheet24"), asked)
+        rule.onNodeWithText("Could not draw the label. $refusal").assertExists()
     }
 
     @Test fun aRefusalShowsTheHubsTextAndTryAgainAsksAgain() {
