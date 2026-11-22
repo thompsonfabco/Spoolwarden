@@ -3,7 +3,7 @@ the rows Speak, Voice, Speaker, Speed, Volume and Test; no Save button, each row
 the Speaker row for the many-speaker voice only; the line under Voice; the four results of Test; a refused change going back; and a
 Weigh Station on another computer. The group is built by setup_voice.js, which RG1 registers; until then this test loads it the way RG1
 will (its script next to the others, its builder in the Voice row of SET_GROUPS). The Hub's side (VO2) is a stub here: the page's `api`
-is wrapped, so station/voice (the read and the save of Speak, Speaker, Speed and Volume), the Voice row's settings/general write and
+is wrapped, so station/voice (the view read G, which needs no code, and the save by P of Speak, Speaker, Speed and Volume), the Voice row's settings/general write and
 station/voice/test answer from the test. The settings values of the four are decoys: the group must read only the answer. The same skip rules as the page audit: no Node 22 or no
 browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
@@ -24,15 +24,15 @@ def _voice_files(monkeypatch):
 
 HELPERS = r"""
 // the stub Hub: every request the group makes is recorded; a saved value is kept and shown on the next read
-const calls = [], reads = [];
-const voice = { speech: true, speaker: 0, speed: 100, volume: 50, voice: "Piper, many speakers", voice_file: "Piper, many speakers", speaker_range: [0, 903] };
+const calls = [], reads = [], codeFree = {};
+const voice = { speech: true, speaker: 0, speed: 100, volume: 50, voice: "Piper, many speakers", speaker_range: [0, 903] };
 const general = { "station.tts": "auto", "station.voice": "en_US-libritts_r-medium" };
 const plan = { remote: false, test: null, save: null };
 const realApi = api;
 api = async (path, body) => {
-  if (path === "station/voice" && body) {
+  if (path === "station/voice" && body === undefined) { reads.push(codeFree); return { station: true, ...voice, remote: plan.remote }; }   // G, the view read
+  if (path === "station/voice") {
     const { code, ...rest } = body;
-    if (!Object.keys(rest).length) { reads.push(rest); return { station: true, ...voice, remote: plan.remote }; }
     if (plan.save) { calls.push(["refused", rest]); throw hubError(400, { error: "no way", code: "bad_value", field: Object.keys(rest)[0] }); }
     calls.push(["save", rest]); Object.assign(voice, rest); return { station: true, ...voice, remote: plan.remote };
   }
@@ -243,21 +243,36 @@ out.calls = calls.slice();
 out.withdrawn = JSON.stringify(calls).match(/station\.(speech|voice_speaker|voice_speed|speaker_volume)/);
 """)
     assert page["shown"] == {"speak": True, "speaker": "0", "speed": "100", "volume": "50"}      # not the decoys
-    assert page["reads"] and all(r == {} for r in page["reads"])      # a read sends nothing but the code
+    assert page["reads"] and all(r == {} for r in page["reads"])      # a read is the code-free G
     assert page["calls"] == [["save", {"speed": 120}], ["general", {"station.tts": "auto", "station.voice": "en_US-ljspeech-medium"}]]
     assert page["withdrawn"] is None
 
 
-def test_while_the_page_is_locked_the_group_asks_to_unlock_and_reads_again_when_it_is_open(hub, tmp_path):
+def test_while_the_page_is_locked_the_rows_show_read_only_without_a_note_and_are_editable_after_unlock(hub, tmp_path):
     page = _drive_voice(hub, tmp_path, r"""
 SW.setLock("locked");
-await until(() => !$("#set-voice .voice__test") && $("#set-voice .banner"), "the locked note");
-out.locked = { note: text($("#set-voice .banner__text")), rows: !!sw() };
+await until(() => $("#set-voice .voice__test") && !pickEl(), "the locked rows");
+await sleep(100);
+const controls = () => [...document.querySelectorAll("#set-voice input, #set-voice select, #set-voice button")];
+out.locked = { rows: !!sw(), note: !!$("#set-voice .banner"),
+  voiceValue: [...document.querySelectorAll("#set-voice input[type=text]")].map((c) => c.value),
+  disabled: controls().every((c) => c.disabled), count: controls().length,
+  values: { speak: sw().checked, speed: sliders()[0].value, volume: sliders()[1].value } };
+out.html = grp().textContent.includes("shown once the page is unlocked");
 const before = reads.length;
 SW.setLock("unlocked", { code: "__CODE__" });
-await until(() => $("#set-voice .voice__test"), "the rows back");
+await until(() => pickEl(), "the editable rows");
+await sleep(100);
 out.reads = reads.length - before;
-out.note = !$("#set-voice .banner");
+out.open = { disabled: controls().filter((c) => c.disabled).length, note: !!$("#set-voice .banner") };
+change(sliders()[0], "90");
+await until(() => calls.length === 1, "the speed save");
+out.calls = calls.slice();
 """)
-    assert page["locked"] == {"note": "The voice settings are shown once the page is unlocked.", "rows": False}
-    assert page["reads"] == 1 and page["note"] is True
+    assert page["locked"]["rows"] and page["locked"]["note"] is False
+    assert page["locked"]["voiceValue"] == ["Piper, many speakers"]
+    assert page["locked"]["disabled"] is True and page["locked"]["count"] >= 5
+    assert page["locked"]["values"] == {"speak": True, "speed": "100", "volume": "50"}
+    assert page["html"] is False
+    assert page["reads"] == 1 and page["open"] == {"disabled": 0, "note": False}
+    assert page["calls"] == [["save", {"speed": 90}]]
