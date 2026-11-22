@@ -40,10 +40,10 @@ def on():
 
 
 def test_no_connection_is_made_in_the_demo(env):
-    """The demo starts on an empty registry, so a printer is added after it (a stale registry): sync still connects nothing."""
-    on()
+    """The real registry holds a printer of each family: with the demo on, sync still connects nothing."""
     registry.add_bambu("00M00A000000001", "X1", "X1C", "192.0.2.9", "12345678")
     registry.add_klipper("Voron", "192.0.2.30")
+    on()
     made = []
     m = Manager(client_factory=lambda *a, **k: made.append(a) or SimpleNamespace(), port=1)
     m.sync()
@@ -175,3 +175,49 @@ def test_the_presets_cannot_be_changed_in_the_demo(env):
     with pytest.raises(ProfileError) as e:
         asyncio.run(guarded(post))
     assert (e.value.status, e.value.code, e.value.message) == (409, "in_demo", demo.NOT_IN_DEMO) and seen == [1, 1]
+
+def test_main_wires_the_real_and_the_pretend_family_through_a_switch(env, monkeypatch):
+    """`main()` itself (the server not served): the printers' family is a Switch that follows the demo's marker at each call
+    (real Manager off, pretend family on), the camera hub is the one app and lifespan share."""
+    from filament_kit import config, modules
+    from filament_kit.bridge import camera
+    from filament_kit.demo import printers as demo_printers
+    cfg = config.load()
+    cfg["modules"] = {n: n in {*modules.MODES["server"], "klipper"} for n in modules.MODULES}
+    config.save(cfg)
+    seen = {}
+    real_create = main_mod.create_app
+    monkeypatch.setattr(main_mod, "create_app", lambda *a, **kw: seen.update(printers=kw.get("printers"),
+                                                                         hub=kw.get("camera_hub")) or real_create(*a, **kw))
+    monkeypatch.setattr(main_mod, "serve", lambda app, hub, **kw: None)
+    main_mod.main()
+    bambu, klipper, hub = seen["printers"].bambu, seen["printers"].klipper, seen["hub"]
+    assert isinstance(bambu, demo_printers.Switch) and isinstance(klipper, demo_printers.Switch)
+    assert isinstance(hub, camera.Hub)
+    assert isinstance(bambu._now(), Manager) and isinstance(klipper._now(), KlipperFamily)          # the demo is off
+    on()
+    assert isinstance(bambu._now(), demo_printers.Family) and bambu._now().family == "bambu"        # the demo is on
+    assert isinstance(klipper._now(), demo_printers.Family) and klipper._now().family == "klipper"
+    demo.leave()
+    assert isinstance(bambu._now(), Manager)                                                         # and back without a restart
+
+
+def test_the_registry_shows_the_demos_printers_and_takes_no_write(env):
+    """`registry.load()` and `peek()` answer the demo's printers while it is on; every writer takes `_locked()`, which stops."""
+    real = registry.add_bambu("00M00A0000000R1", "Real", "X1C", "192.0.2.9", "12345678")
+    on()
+    assert real.serial not in registry.load() and real.serial not in registry.peek()
+    assert registry.load() and set(registry.load()) == set(registry.peek())
+    with pytest.raises(demo.NotInDemo):
+        registry.add_bambu("00M00A0000000R2", "Other", "X1C", "192.0.2.10", "12345678")
+    with pytest.raises(demo.NotInDemo):
+        registry.remove(next(iter(registry.load())))
+    demo.leave()
+    assert set(registry.load()) == {real.serial}                       # the real registry is as it was
+
+
+def test_the_catalog_download_stops_in_the_demo(env):
+    from filament_kit import library
+    on()
+    with pytest.raises(library.LibraryError, match="Not in the demo."):
+        library.update("https://example.invalid/library.tar.gz", opener=lambda *a, **k: pytest.fail("reached outside"))
