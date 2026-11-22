@@ -236,20 +236,31 @@ def make_cert(hostname: str, ips: list[str], dest: Path, extra_dns: list[str] = 
     return fingerprint(cert_pem)
 
 
+BOTH_FORMS = "devices.json"     # kept in both forms for one release (a rollback needs the pairings)
+
+
 def _read(name: str) -> list:
+    """A state list file (`devices.json`, `pending.json`, `spent.json`, `station-requests.json`), given by its JSON name:
+    its XML form when there is one, else the JSON form (moved to XML on the way, R85 s1)."""
+    from .profiles import statexml
     f = config.paths().state / name
-    try:   # never through a link: root (modules apply) reads these too, in a folder the service user owns
-        fd = os.open(f, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    except FileNotFoundError:
-        return []
-    with os.fdopen(fd, encoding="utf-8") as fh:
-        return json.loads(fh.read())
+    for p in (f, statexml.xml_path(f)):
+        if p.is_symlink():      # never through a link: root (modules apply) reads these too, in a folder the service user owns
+            raise OSError(errno.ELOOP, "a state file is a link", str(p))
+    out = statexml.read_list(f, mode=0o600, state_owned=True)
+    return [] if out is None else out
 
 
 def _write(name: str, obj: list) -> None:
+    """Save the list as its XML form (0600, the state's owner). `devices.json`, the list of paired devices, is also
+    written as JSON, XML first, for one release: `update --rollback` keeps the pairings (R85 s1.5). The other files
+    are XML only after the move; their JSON file stays as it was at the move."""
+    from .profiles import statexml
     state = config.paths().state
     state.mkdir(parents=True, exist_ok=True)
-    _write_atomic(state / name, json.dumps(obj, indent=2).encode("utf-8"), 0o600, state_owned=True)
+    statexml.write_list(state / name, obj, 0o600, state_owned=True)
+    if name == BOTH_FORMS:
+        _write_atomic(state / name, json.dumps(obj, indent=2).encode("utf-8"), 0o600, state_owned=True)
 
 
 def _hash(token: str) -> str:

@@ -98,7 +98,7 @@ def test_pair_prints_code(capsys):
     _cert()
     assert cli.main(["pair", "--no-wait"]) == 0
     out = capsys.readouterr().out
-    pend = json.loads((config.paths().state / "pending.json").read_text())
+    pend = pairing._read("pending.json")
     assert f"Pairing code: {pend[0]['code'][:3]} {pend[0]['code'][3:]}" in out
     assert "fkit://pair?" in out or "█" in out or "▀" in out
 
@@ -465,7 +465,7 @@ def test_pair_pc_prints_link_not_qr(capsys, monkeypatch):
     assert rows[i + 1].startswith("fkit://pair?")
     fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
     assert "  " + " ".join(fp[j:j + 4] for j in range(0, 32, 4)) in rows
-    pend = json.loads((config.paths().state / "pending.json").read_text())
+    pend = pairing._read("pending.json")
     assert f"Pairing code: {pend[0]['code'][:3]} {pend[0]['code'][3:]}" in out
     pairing.redeem_code(pend[0]["code"])
     assert [d["name"] for d in pairing.devices()] == ["pc"]
@@ -722,7 +722,7 @@ def test_pair_kinds_are_mutually_exclusive(capsys, flags):
     with pytest.raises(SystemExit) as e:
         cli.main(["pair", *flags])
     assert e.value.code == 2 and "not allowed with" in capsys.readouterr().err
-    assert not (config.paths().state / "pending.json").exists()
+    assert not (config.paths().state / "pending.xml").exists()
 
 
 def test_config_menu_station_voice_piper_or_espeak(monkeypatch, capsys):
