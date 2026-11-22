@@ -255,6 +255,15 @@ def test_a_bad_wifi_name_is_refused_before_a_token_is_made(tmp_path, monkeypatch
     assert reader_tokens.TokenStore().list() == []
 
 
+def test_an_unknown_printer_is_exit_2_with_the_text_and_nothing_is_made(hub, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.setattr(rs, "reader_base", lambda cfg: BASE)
+    out = tmp_path / "secrets.h"
+    assert cli.cmd_reader_setup(_args(out=str(out), base=None, printer="nope"), ask_secret=_secret("p", "p")) == 2
+    assert rs.UNKNOWN_PRINTER in capsys.readouterr().err
+    assert not out.exists() and reader_tokens.TokenStore().list() == []
+
+
 def test_nothing_else_said_is_the_usb_setup(monkeypatch):
     """No --source, --out or --secrets: the Printer Station on this server's USB (test_reader_flash.py)."""
     got = []
