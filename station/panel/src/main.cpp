@@ -25,6 +25,13 @@
 //                                         1 s, or for a different tag)
 //                 "NFC ok" / "NFC none"   whether a PN532 answers on the bus: sent after every HELLO and whenever that
 //                                         changes (it is looked for every 5 s, so it can be plugged in later)
+//                 "CFG WIFI <ssid hex> <password hex|->", "CFG LINK <address> <port> <fingerprint> <token>" and "CFG CLEAR":
+//                         the Wi-Fi set-up (since firmware 14), over USB only. Each is answered "OK" once the whole line
+//                         was understood and stored in NVS, else "ERR <reason>" (long hex ssid password address port
+//                         fingerprint token cfg). A line over 256 characters is answered "ERR long" and dropped, never
+//                         cut short. Limits: name 1-32 bytes, password 8-63 bytes (or "-": an open network), address at
+//                         most 64 characters, port 1-65535, fingerprint 64 hex digits (the station certificate's SHA-256),
+//                         token 32 hex digits. The station's side is server/filament_kit/station/panel_setup.py.
 // The PC resends "L" every second; with no "L" for 5 s (station service stopped) the lamps go dark and the display
 // says the station is offline ("Waiting for PC" before the first "L" since boot). The OLED (SSD1306 128x64, I2C
 // 0x3C) shares the bus with the air sensor and the PN532
@@ -33,8 +40,14 @@
 //
 // Pins follow the peripheral standard: I2C on 5/6 and the buzzer on 0 as on the reader; never the strapping pins
 // 2, 8, 9 or the USB pair 18, 19. GPIO 20/21 are the C3's default UART, unused here (serial is native USB); the
-// ROM's boot text on 21 is harmless, the amplifier stays silent with no I2S clock. Wi-Fi and Bluetooth stay off: the
-// sketch never includes or calls them, and the core starts the radio only when it is used.
+// ROM's boot text on 21 is harmless, the amplifier stays silent with no I2S clock. Bluetooth stays off. Wi-Fi stays off
+// until the set-up lines above stored a network and a station; then a link task (panel_net.h, the state machine in
+// lib/panel_core/src/panel_link.h) joins the network, dials the station service over TLS, checks the station certificate's
+// fingerprint against the stored one BEFORE sending anything, says "HELLO intake-panel <version> esp32c3 <token>" and then
+// carries the same lines as USB, with "K" every 500 ms when it has nothing else to say (R88 4.3). The panel is on one
+// carrier at a time and USB wins: a line from the station on USB within the last 5 s keeps the Wi-Fi link closed.
+// While the station is not there over Wi-Fi the display says "No Weigh Station service" and the Wi-Fi state, or
+// "Wrong certificate" / "Set up again by USB" when the pin did not match.
 #include <Arduino.h>
 #include <ESP_I2S.h>
 #include <Wire.h>
@@ -42,9 +55,12 @@
 #include "aht20.h"
 #include "bme280.h"
 #include "pn532.h"
+#include "panel_cfg.h"
 #include "panel_core.h"
+#include "panel_link.h"
+#include "panel_net.h"
 
-static const char *VERSION = "13";
+static const char *VERSION = "14";
 static const uint8_t PIN_SDA = 5;            // I2C SDA (air sensor, OLED)
 static const uint8_t PIN_SCL = 6;            // I2C SCL
 static const uint8_t PIN_BUZZER = 0;         // buzzer module signal
@@ -62,6 +78,27 @@ static const uint32_t NFC_RETRY_MS = 5000;  // between looks for an absent PN532
 static const uint32_t AIR_MS = 10000;      // a forced-mode reading every 10 s: the sensor barely warms itself
 static const uint32_t SAMPLE_RATE = 8000;
 
+// ---------- carriers: USB serial, or the Wi-Fi link's two byte rings; the panel talks on one at a time ----------
+static panel::ByteRing<4096> netRx;   // the link task fills it (the station's bytes), loop() empties it
+static panel::ByteRing<1024> netTx;   // loop() fills it (whole lines), the link task sends it
+static panel::Link panelLink(netRx, netTx, VERSION);
+static panel::Settings settings;      // the stored Wi-Fi set-up (loop()'s copy)
+static bool usbActive = false;        // the station spoke on USB within the last WATCHDOG_MS: USB wins
+enum Out : uint8_t { OUT_USB, OUT_NET };
+
+static void sendTo(Out o, const char *line) {
+  if (o == OUT_USB) { Serial.println(line); return; }
+  uint8_t buf[panel::MAX_LINE + 1];
+  size_t n = strlen(line);
+  if (n > panel::MAX_LINE - 1) n = panel::MAX_LINE - 1;
+  memcpy(buf, line, n);
+  buf[n++] = '\n';
+  netTx.push(buf, n);  // a full ring drops the line (the link is stuck; it ends within 5 s)
+}
+// The panel's own lines (buttons, air, tags, NFC state) go to the Wi-Fi link while it is up and USB is quiet, else to USB
+// (where, with no host, they are dropped as before).
+static void emit(const char *line) { sendTo(panelLink.up() && !usbActive ? OUT_NET : OUT_USB, line); }
+
 struct Lamp {
   uint8_t pin, mode = 0;
   uint32_t since = 0;
@@ -77,7 +114,7 @@ struct Button {
   panel::ButtonTimer timer;  // "P" on a short press's release, "L" once held 800 ms
   void poll(uint32_t now) {
     char kind = timer.poll(digitalRead(pin) == LOW, now);
-    if (kind) { Serial.print(kind); Serial.print(' '); Serial.println(code); }
+    if (kind) { char l[4] = {kind, ' ', code, 0}; emit(l); }
   }
 };
 
@@ -217,7 +254,7 @@ struct Air {
     if (centiHpa) snprintf(hpa, sizeof hpa, "%u.%02u", (unsigned)(centiHpa / 100), (unsigned)(centiHpa % 100));
     snprintf(out, sizeof out, "AIR %s%d.%02d %s %s", centiC < 0 ? "-" : "", abs(centiC) / 100, abs(centiC) % 100,
              rh, hpa);
-    Serial.println(out);
+    emit(out);
     // bottom line: "22.7°C 61%RH 1017hPa" (6x10 font: 21 characters)
     int32_t tenthsC = (centiC + (centiC < 0 ? -5 : 5)) / 10;
     int n = snprintf(shown, sizeof shown, "%s%d.%d\xb0" "C", tenthsC < 0 ? "-" : "", abs(tenthsC) / 10,
@@ -243,7 +280,7 @@ struct Nfc {
   static constexpr uint8_t ARGS[3][6] = {{0x14, 0x01, 0x00, 0x01}, {0x32, 0x05, 0xFF, 0x01, 0x00}, {0x4A, 0x01, 0x00}};
   static constexpr uint8_t ARGN[3] = {4, 5, 3};
 
-  void say() { Serial.println(ok ? "NFC ok" : "NFC none"); }
+  void say() { emit(ok ? "NFC ok" : "NFC none"); }
   void note() { if (loud) say(); }
   void fail(uint32_t now) {
     static const uint8_t cancel[6] = {0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00};  // an ACK frame aborts the chip's command
@@ -294,7 +331,9 @@ struct Nfc {
     if (!pn532Uid(d, n, uid, len) || !gate.report(uid, len, now)) return;
     char hex[21];
     pn532Hex(uid, len, hex);
-    Serial.print("TAG "); Serial.println(hex);
+    char tag[32];
+    snprintf(tag, sizeof tag, "TAG %s", hex);
+    emit(tag);
   }
 };
 
@@ -309,7 +348,16 @@ struct Display {
                       // "offline" (the station may be about to reflash us, and an older firmware leaves the OLED as is)
   uint32_t retry = 0, drawn = 0;
   char rows[5][41] = {{0}};  // 0: title, 1-4: body
+  bool netOn = false;        // set up for Wi-Fi and USB is quiet: while offline, say what the Wi-Fi link is doing
+  panel::Screen net = {};
 
+  // The Wi-Fi link's words for the offline screen (panel::netScreen); on == false: the USB texts.
+  void setNet(bool on, const panel::Screen &s) {
+    if (on == netOn && (!on || memcmp(&s, &net, sizeof net) == 0)) return;
+    netOn = on;
+    if (on) net = s;
+    if (offline) dirty = true;
+  }
   void set(int row, const char *text) {
     if (row < 0 || row > 4) return;
     if (strncmp(rows[row], text, sizeof rows[row] - 1) == 0) return;
@@ -339,10 +387,15 @@ struct Display {
     }
     dirty = false; drawn = now;
     u8g2.clearBuffer();
+    bool wifiText = offline && netOn;
+    const char *title = wifiText ? net.rows[0] : !offline ? rows[0] : seen ? "Station offline" : "Waiting for PC";
     u8g2.setFont(u8g2_font_helvB10_tf);
-    u8g2.drawStr(0, 11, !offline ? rows[0] : seen ? "Station offline" : "Waiting for PC");
+    if (u8g2.getStrWidth(title) > 128) u8g2.setFont(u8g2_font_6x10_tf);  // a long Wi-Fi title: the small font
+    u8g2.drawStr(0, 11, title);
     u8g2.setFont(u8g2_font_6x10_tf);
-    if (!offline)
+    if (wifiText)
+      for (int r = 1; r <= 4; r++) u8g2.drawStr(0, 12 + r * 10, net.rows[r]);
+    else if (!offline)
       for (int r = 1; r <= 4; r++) u8g2.drawStr(0, 12 + r * 10, rows[r]);
     u8g2.drawHLine(0, 53, 128);
     u8g2.drawStr(0, 63, air.shown[0] ? air.shown : "no air sensor");
@@ -359,23 +412,47 @@ static Display display;
 static uint32_t lastL = 0;
 static uint16_t beepHz = 0, beepMs = 0; static uint8_t beepsLeft = 0; static uint32_t nextBeep = 0;
 static bool beeping = false; static uint32_t beepEnd = 0;
-static char line[64]; static uint8_t len = 0;
-static uint16_t binLeft = 0;  // raw audio bytes still to come after an "A <n>" line
+static uint32_t lastUsb = 0;  // when the last line arrived on USB (0: none since boot)
 
-static void hello() {
-  Serial.print("HELLO intake-panel "); Serial.print(VERSION); Serial.println(" esp32c3");
-  nfc.say();
+// What is read from one carrier: its line reader and the raw audio bytes still to come after an "A <n>" line.
+struct Carrier { panel::LineReader reader; uint16_t binLeft = 0; };
+static Carrier usbIn, netIn;
+
+// The answer to "?" goes back on the carrier that asked; the NFC state follows it.
+static void hello(Out o) {
+  char l[48];
+  panel::helloLine(l, sizeof l, VERSION, nullptr);
+  sendTo(o, l);
+  sendTo(o, nfc.ok ? "NFC ok" : "NFC none");
 }
 
-static void handle(const char *s) {
+static void handle(const char *s, Out from, Carrier &in) {
+  if (from == OUT_USB) {  // the set-up lines come over USB only
+    panel::Settings next = settings;
+    panel::CfgResult c = panel::cfgParse(s, next);
+    if (c.isCfg) {
+      const char *err = c.err;
+      bool ok = c.ok;
+      if (ok && !panelnet::storeSettings(next)) { ok = false; err = "store"; }
+      if (ok) {
+        settings = next;
+        panelLink.configure(settings);
+        if (settings.configured()) panelnet::startLinkTask(panelLink);
+      }
+      char reply[24];
+      panel::cfgReply(ok, err, reply, sizeof reply);
+      sendTo(OUT_USB, reply);  // OK only now: the whole line was understood and stored
+      return;
+    }
+  }
   panel::Command cmd;
   if (!panel::parseLine(s, cmd)) return;
   switch (cmd.kind) {
-    case '?': hello(); break;
+    case '?': hello(from); break;
     case 'L': hold.set(cmd.a); discard.set(cmd.b); lastL = millis(); display.setOffline(false); break;
     case 'D': display.set(cmd.a, cmd.text); break;
     case 'B': beepHz = cmd.a; beepMs = cmd.b; beepsLeft = cmd.c; nextBeep = millis(); break;
-    case 'A': binLeft = cmd.a; break;
+    case 'A': in.binLeft = cmd.a; break;
     case 'V': volume = cmd.a; break;
   }
 }
@@ -416,27 +493,62 @@ void setup() {
   nfc.retryMs = NFC_RETRY_MS;
   nfc.loud = true;
   Serial.println();
-  hello();
+  hello(OUT_USB);
   if (!speech) Serial.println("I2S failed: no speech");
+  // Wi-Fi settings stored by an earlier set-up: the link task starts the radio only when both lines are there
+  if (panelnet::loadSettings(settings) && settings.configured()) {
+    panelLink.configure(settings);
+    panelnet::startLinkTask(panelLink);
+  }
+}
+
+static void feed(Carrier &in, Out from, char c) {
+  if (in.binLeft) {
+    ringPush((uint8_t)c);
+    in.binLeft--;
+    return;
+  }
+  switch (in.reader.feed(c)) {
+    case panel::LineReader::Line:
+      if (from == OUT_USB) lastUsb = millis();
+      handle(in.reader.buf, from, in);
+      break;
+    case panel::LineReader::TooLong:  // never truncated: said once, dropped whole
+      if (from == OUT_USB) lastUsb = millis();
+      sendTo(from, "ERR long");
+      break;
+    default: break;
+  }
 }
 
 void loop() {
-  while (Serial.available()) {
-    char c = Serial.read();
-    if (binLeft) {
-      ringPush((uint8_t)c);
-      binLeft--;
-    } else if (c == '\n' || c == '\r') {
-      line[len] = 0;
-      if (len) handle(line);
-      len = 0;
-    } else if (len < sizeof(line) - 1) {
-      line[len++] = c;
-    }
-  }
+  while (Serial.available()) feed(usbIn, OUT_USB, (char)Serial.read());
+  // the station's bytes over Wi-Fi, a bounded amount per pass so the buttons and lamps keep their timing
+  uint8_t nb[64];
+  for (int budget = 512, n; budget > 0 && (n = (int)netRx.pop(nb, sizeof nb)) > 0; budget -= n)
+    for (int i = 0; i < n; i++) feed(netIn, OUT_NET, (char)nb[i]);
+  static bool wasUp = false;
+  bool up = panelLink.up();
+  if (up && !wasUp) nfc.say();  // a new link: the station learns the reader's state (the HELLO was the link's own)
+  if (!up && wasUp) { netIn = Carrier(); netRx.clear(); }  // a dropped link: half a line or audio is not carried over
+  wasUp = up;
   // read after the serial loop: handle() stamps lastL and Lamp::since with millis(), and an earlier `now` could be
   // behind them, so the unsigned differences below would wrap to ~4.29e9
   uint32_t now = millis();
+  usbActive = lastUsb && now - lastUsb <= WATCHDOG_MS;
+  panelLink.setUsbActive(usbActive);
+  {
+    panel::NetView v;
+    v.configured = settings.configured();
+    v.phase = usbActive ? panel::Phase::UsbWins : panelLink.phase();
+    v.why = panelLink.why();
+    v.wifiJoined = panelLink.wifiJoined();
+    v.wifiStalled = panelLink.wifiStalled();
+    v.wrongCert = panelLink.wrongCert();
+    v.settings = &settings;
+    panel::Screen scr;
+    display.setNet(panel::netScreen(v, scr), scr);
+  }
   if (lastL && now - lastL > WATCHDOG_MS) { hold.set(0); discard.set(0); lastL = 0; display.setOffline(true); }
   if (beeping && (int32_t)(now - beepEnd) >= 0) { buzzerIdle(); beeping = false; }
   if (beepsLeft && (int32_t)(now - nextBeep) >= 0) {
