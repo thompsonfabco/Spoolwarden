@@ -213,15 +213,15 @@ await settle(() => !rows().length && $(".empty"), "the empty state");
 out.empty = text($(".empty"));
 out.finalChips = chips();
 """.replace("__A__", str(made["A"])).replace("__B__", str(made["B"])).replace("__C__", str(made["C"])).replace("__D__", str(made["D"])))
-    assert page["chips"][-1] == "Checked out (3)" and page["chips"][:4] == [T("common_sealed"), T("spool_state_opened"), "In a printer", "Running low"]
+    assert page["chips"] == [T("common_sealed"), T("spool_state_opened"), "In a printer", "Checked out (3)", "Running low"]    # design order: 03 16.2
     assert page["ids"] == [made["A"], made["B"], made["C"]] and page["count"] == "3 spools"
     assert "In Workshop X1 – AMS A1" in page["where"]["A"] and "Home: Rack 1" in page["where"]["A"] and "since 2026-11-20" in page["where"]["A"]
     assert "Home: Rack 2" in page["where"]["B"] and "since" not in page["where"]["B"]
     assert "Home: not recorded" in page["where"]["C"] and "since" not in page["where"]["C"]
     assert page["buttons"] == {"A": "Return to Rack 1", "B": "Return to Rack 2", "C": "Return"} and page["label"] == "Return to Rack 1: Polymaker PolyTerra PLA Charcoal Black"
     assert page["toast"] == "Returned to Rack 1."
-    assert page["afterChips"][-1] == "Checked out (2)"
-    assert page["empty"].startswith("No spool is checked out.") and page["finalChips"][-1] == "Checked out (0)"
+    assert page["afterChips"][3] == "Checked out (2)"
+    assert page["empty"].startswith("No spool is checked out.") and page["finalChips"][3] == "Checked out (0)"
 
 
 def test_the_home_line_and_change_home_show_only_while_checked_out(hub, made, stubbed, tmp_path):

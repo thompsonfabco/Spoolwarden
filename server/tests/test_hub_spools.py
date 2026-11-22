@@ -165,7 +165,7 @@ out.gone = await api("spools/9999").then(() => null, (e) => ({ status: e.status,
 out.badOffset = await api("spools?offset=-1").then(() => null, (e) => ({ status: e.status, message: e.message }));
 out.noCode = await fetch("/setup/api/spools/2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gross: 300, dry_run: true }) }).then(async (r) => ({ status: r.status, body: await r.json() }));
 """)
-    assert page["chips"] == [T("common_sealed"), T("spool_state_opened"), "In a printer", "Running low", "Checked out (0)"] and page["group"] == "Show only"   # R88: the fifth chip, its count the total of filter=checked_out
+    assert page["chips"] == [T("common_sealed"), T("spool_state_opened"), "In a printer", "Checked out (0)", "Running low"] and page["group"] == "Show only"   # R88 / 03 16.2 order: the Checked out chip sits between In a printer and Running low, its count the total of filter=checked_out
     assert page["field"] == {"label": "Find a spool", "hint": "Brand, name, material, place, number or tag.", "type": "search"}
     assert page["chip"]["sealed"]["ids"] == SEALED and page["chip"]["sealed"]["pressed"] == ["sealed"] and page["chip"]["sealed"]["count"] == "3 spools"
     assert len(page["chip"]["opened"]["ids"]) == 50 and page["chip"]["opened"]["more"] and page["chip"]["opened"]["count"] == f"{OPENED} spools"

@@ -382,7 +382,7 @@ const CHIPS = [["sealed", "common_sealed"], ["opened", "spool_state_opened"], ["
 const spChipText = (f, k) => (f === "checked_out" ? (st.checked == null ? tx("spools_chip_checked_out_plain") : tx("spools_chip_checked_out", { count: st.checked })) : tx(k));
 function spPaintChips() {
   const group = parts.chips;
-  group.replaceChildren(...[...CHIPS, ...(spCanCO() ? [["checked_out", "spools_chip_checked_out"]] : [])].map(([f, k]) => spX("button", {
+  group.replaceChildren(...(spCanCO() ? [...CHIPS.slice(0, 3), ["checked_out", "spools_chip_checked_out"], CHIPS[3]] : CHIPS).map(([f, k]) => spX("button", {
     class: "chip spools-chip", type: "button", "aria-pressed": String(st.filter === f), "data-filter": f,
     on: { click: () => { st.filter = st.filter === f ? "" : f; for (const b of group.children) b.setAttribute("aria-pressed", String(b.dataset.filter === st.filter)); reload(); } } }, spChipText(f, k))));
 }
