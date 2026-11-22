@@ -5,6 +5,7 @@ from fakes.claude_fake import FakeClaude
 from starlette.testclient import TestClient
 
 from filament_kit import config, inventory, pairing
+from filament_kit.profiles import statexml
 from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
 
@@ -304,7 +305,7 @@ def test_read_error_502_then_retry(sm):
     assert r.status_code == 200 and r.json()["read_id"] == body["read_id"]
     r = c.post("/api/intake/retry/gone", headers=auth(tok))
     assert r.status_code == 404 and r.json()["error"] == "not_found"
-    assert len(json.loads((config.paths().state / "reads.json").read_text())) == 2  # not_found took no read
+    assert len(statexml.read_list(config.paths().state / "reads.json")) == 2  # not_found took no read
 
 
 def test_retry_expired_read_costs_no_cap(sm, tmp_path):
@@ -390,19 +391,19 @@ def test_read_spoolman_down_503_refunds_cap(sm, dead_port):
     tok = token()
     assert read(c, tok, [("a.jpg", JPEG)]).status_code == 200
     reads = config.paths().state / "reads.json"
-    assert len(json.loads(reads.read_text())) == 1
+    assert len(statexml.read_list(reads)) == 1
     dead = Spoolman(f"http://127.0.0.1:{dead_port}", timeout=2)
     c_dead = client(dead, fake)
     r = read(c_dead, tok, [("a.jpg", JPEG)])
     assert r.status_code == 503 and r.json()["error"] == "spoolman_unreachable"
-    assert len(json.loads(reads.read_text())) == 1
+    assert len(statexml.read_list(reads)) == 1
     # retry of a kept read: a Spoolman outage gives the read back too
     fake.raises = anthropic.APIConnectionError(request=httpx.Request("POST", "https://x"))
     read_id = read(c, tok, [("a.jpg", JPEG)]).json()["read_id"]
-    assert len(json.loads(reads.read_text())) == 2
+    assert len(statexml.read_list(reads)) == 2
     r = c_dead.post(f"/api/intake/retry/{read_id}", headers=auth(tok))
     assert r.status_code == 503 and r.json()["error"] == "spoolman_unreachable"
-    assert len(json.loads(reads.read_text())) == 2
+    assert len(statexml.read_list(reads)) == 2
 
 
 def test_filaments_and_vendors_for_a_manual_add(sm):

@@ -34,7 +34,7 @@ import time
 from pathlib import Path
 
 from . import config, library, local_reader, locks, modules, read_confidence, tagsources
-from .profiles import builds, lines
+from .profiles import builds, lines, statexml
 from .spoolman import Spoolman
 
 log = logging.getLogger(__name__)
@@ -168,13 +168,19 @@ def _stamps(raw) -> list[dict]:
     return out
 
 
+def _old_stamps(rows: list) -> bytes:
+    """reads.json as v0.6.2 wrote it: compact, a bare number for a stamp with no ticket."""
+    return json.dumps([e if "ticket" in e else e["t"] for e in rows]).encode("utf-8")
+
+
+def _read_stamps(path: Path):
+    """What reads.xml holds (reads.json, a JSON list, is moved to it on the way), or None."""
+    return statexml.read_list(Path(path), mode=0o644, state_owned=True)
+
+
 def reads_today(path: Path) -> int:
-    """The reads taken in the last 24 h (`doctor`'s count and the tests'), in either format of reads.json."""
-    try:
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return 0
-    return sum(1 for e in _stamps(raw) if e["t"] > time.time() - 86400)
+    """The reads taken in the last 24 h (`doctor`'s count and the tests'), in either format of the reads file."""
+    return sum(1 for e in _stamps(_read_stamps(path)) if e["t"] > time.time() - 86400)
 
 
 class ReadCap:
@@ -190,12 +196,8 @@ class ReadCap:
         self._lock = locks.ProcessLock(self.path.with_name("reads.lock"))
 
     def _load(self, now: float) -> list[dict]:
-        try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return []
         out = []
-        for e in _stamps(raw):
+        for e in _stamps(_read_stamps(self.path)):
             if e["t"] <= now - 86400:
                 continue
             if "ticket" in e and e["t"] < now - TICKET_TTL:   # a dead ticket: keep only the stamp
@@ -204,16 +206,10 @@ class ReadCap:
         return out
 
     def _save(self, stamps: list[dict]) -> None:
-        """A temp file and a rename, so a crash never resets the cap. The kit's own file: the web unit takes its
-        reads through the kit API (/api/intake/cap/take)."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_name(self.path.name + ".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o644)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(json.dumps([e if "ticket" in e else e["t"] for e in stamps]))
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, self.path)
+        """Written as reads.xml (atomic, 0644, the state's owner), so a crash never resets the cap. The kit's own file:
+        the web unit takes its reads through the kit API (/api/intake/cap/take)."""
+        statexml.write_list(self.path, [{k: e[k] for k in ("t", "ticket", "device") if k in e} for e in stamps],
+                            0o644, state_owned=True, old_format=_old_stamps)
 
     def take(self, device: str | None = None) -> str:
         """Use one read; returns the ticket that may give it back (`refund`)."""
@@ -333,12 +329,35 @@ def _sweep_failed() -> None:
             pass
 
 
+META, OLD_META = "meta.xml", "meta.json"      # a kept read's note; a read kept before the move has the JSON form only
+
+
+def _kept_meta(d: Path) -> dict:
+    """The hint and tag of a kept read: the XML form, else the old JSON form; {} when neither can be read (logged: a
+    damaged note never stops the retry, which then runs without the hint)."""
+    for name in (META, OLD_META):
+        try:
+            raw = (d / name).read_bytes()
+        except OSError:
+            continue
+        try:
+            meta = statexml.loads(raw, statexml.tag_of(Path(META))) if name == META else json.loads(raw.decode("utf-8"))
+        except (statexml.StateXmlError, ValueError) as e:
+            log.warning("a kept read's %s could not be read (%s)", name, e)
+            continue
+        if isinstance(meta, dict):
+            return meta
+    return {}
+
+
 def _keep(read_id: str, images: list[bytes], hint: str, tag_uid: str | None) -> None:
     d = _failed_dir() / read_id
     d.mkdir(parents=True, exist_ok=True)
     for i, data in enumerate(images):
         _write_new(d / f"photo{i}.jpg", data)
-    _write_new(d / "meta.json", json.dumps({"hint": hint, "tag_uid": tag_uid}).encode("utf-8"))
+    _write_new(d / META, statexml.dumps(statexml.tag_of(Path(META)), {"hint": hint, "tag_uid": tag_uid}))
+    # the old form beside it (a write-once file, so no hash): `update --rollback` retries a kept read with its hint
+    _write_new(d / OLD_META, json.dumps({"hint": hint, "tag_uid": tag_uid}).encode("utf-8"))
 
 
 def _forget(read_id: str) -> None:
@@ -670,9 +689,6 @@ def retry(read_id: str, sm: Spoolman, client=None, *, orders: list[dict] | None 
         raise ReadError("not_found", "those photos are no longer kept (24 h); send them again")
     d = _failed_dir() / read_id
     images = [p.read_bytes() for p in sorted(d.glob("photo*.jpg"), key=lambda p: int(p.stem[5:]))]
-    try:
-        meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        meta = {}
+    meta = _kept_meta(d)
     return read_labels(sm, images, meta.get("hint") or "", meta.get("tag_uid"), client=client, read_id=read_id,
                        orders=orders, charge=charge)

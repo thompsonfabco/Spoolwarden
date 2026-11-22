@@ -46,7 +46,7 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
                                                which goes to the browser's cookie and nowhere else
     trust_list  trust_rename {id, name}  trust_revoke {id}  trust_revoke_all  trust_enabled {enabled}
     reader_usb {ssid, pass, buzzer[, port][, name][, printer]}   the Printer Station plugged into this server: the answers checked,
-                                               left root-only in /etc/filament-kit/reader-setup.json for the job
+                                               left root-only in /etc/filament-kit/reader-setup.xml (and .json) for the job
                                                `reader_setup` (`reader setup --pending`), which deletes the file as it
                                                reads it; a job that does not start deletes it here
     port_change {port}                         change the Hub's web port: validated, written root-only to
@@ -1020,7 +1020,7 @@ def _reader_usb(req: dict) -> dict:
     try:
         _start_job("reader_setup")
     except Refused:
-        reader_flash.pending_path().unlink(missing_ok=True)
+        reader_flash.drop_pending()
         raise
     return {"name": "reader_setup"}
 

@@ -815,10 +815,10 @@ def test_a_station_device_from_before_scopes_is_scoped(server):
     """A device named "station" with no stored scope (paired by an earlier build) reaches only the station routes."""
     port, _ = server
     _pair(port)
-    devs = json.loads((config.paths().state / "devices.json").read_text())
+    devs = pairing._read("devices.json")
     for d in devs:
         d.pop("scope", None)
-    (config.paths().state / "devices.json").write_text(json.dumps(devs))
+    pairing._write("devices.json", devs)
     api = server_api.ServerApi(timeout=10)
     assert api.tag_lookup(UID)[0] == 200
     assert api._call("GET", "/api/spools")[0] == 403

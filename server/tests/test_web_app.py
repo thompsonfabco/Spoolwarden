@@ -19,6 +19,7 @@ from mcp.client.streamable_http import streamable_http_client  # noqa: E402
 from starlette.testclient import TestClient  # noqa: E402
 
 from filament_kit import config, inventory, modules, tags, tagsources  # noqa: E402
+from filament_kit.profiles import statexml  # noqa: E402
 from filament_kit.spoolman import Spoolman  # noqa: E402
 from filament_kit.web import __main__ as web_main  # noqa: E402
 from filament_kit.web import app as web_app, auth  # noqa: E402
@@ -523,7 +524,7 @@ def test_web_read_refunds_only_when_claude_was_not_reached(app, sm, fake, monkey
     reads = config.paths().state / "reads.json"
 
     def count():
-        return len(json.loads(reads.read_text())) if reads.exists() else 0
+        return len(statexml.read_list(reads) or [])
     with _client(app) as c:
         post = {"headers": {"Origin": ORIGIN}}
         photo = [("photos", ("a.jpg", JPEG, "image/jpeg"))]

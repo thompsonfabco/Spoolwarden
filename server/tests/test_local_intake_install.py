@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from fakes import module_release_fake as mrf
 
 from filament_kit import cli, config, local_intake_install as lii, release, setup_helper
+from filament_kit.profiles import statexml
 
 
 @pytest.fixture(autouse=True)
@@ -218,7 +219,7 @@ def test_upgrade_keeps_the_release_before_and_prunes_older_ones(key, server, tmp
     rels["0.3.0"] = mrf.make_release(key, "0.3.0")
     lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
     assert sorted(d.name for d in (tmp_path / "store").iterdir() if d.is_dir()) == ["0.2.2", "0.3.0"]
-    assert (tmp_path / "store" / "installed.json").is_file()       # the record lives in root's store
+    assert (tmp_path / "store" / "installed.xml").is_file()        # the record lives in root's store
 
 
 def test_remove_runs_the_installed_releases_uninstaller(key, server, tmp_path):
@@ -381,7 +382,8 @@ def test_the_record_and_the_plan_live_in_roots_store_not_the_service_state(key, 
     s = server({"0.2.1": mrf.make_release(key)})
     lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
     lii.save_plan(lii.plan(config.load(), tier="cpu", fetcher=fetcher(s)))
-    assert {p.name for p in (tmp_path / "store").iterdir() if p.is_file()} == {"installed.json", "plan.json"}
+    assert {p.name for p in (tmp_path / "store").iterdir() if p.is_file()} == {
+        "installed.json", "installed.json.sha256", "installed.xml", "plan.json", "plan.json.sha256", "plan.xml"}
     assert not list(config.paths().state.glob("local-intake*"))
 
 
@@ -431,9 +433,9 @@ def test_the_page_job_installs_exactly_the_planned_version(key, server, applied,
     rels["0.2.2"] = mrf.make_release(key, "0.2.2")                  # published after the owner saw 0.2.1
     assert cli.cmd_local_intake_install(None, None, True, fetcher=fetcher(s), run=Run(), planned=True) == 0
     assert lii.installed()["version"] == "0.2.1"
-    plan = json.loads((lii.store() / "plan.json").read_text())
+    plan = statexml.read(lii.store() / "plan.json", state_owned=False)
     plan["at"] -= lii.PLAN_TTL + 1
-    (lii.store() / "plan.json").write_text(json.dumps(plan))
+    statexml.write(lii.store() / "plan.json", plan, 0o644, state_owned=False)
     assert cli.cmd_local_intake_install(None, None, True, fetcher=fetcher(s), run=Run(), planned=True) == 1
 
 

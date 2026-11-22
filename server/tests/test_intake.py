@@ -11,6 +11,7 @@ from fakes.claude_fake import FakeClaude
 from filament_kit.intake import (RULES, SCHEMA, CapReached, PhotoError, ReadCap, ReadError, check_photos,
                                  read_labels, retry)
 from filament_kit import intake
+from filament_kit.profiles import statexml
 from filament_kit.spoolman import Spoolman
 
 JPEG = b"\xff\xd8\xff\xe0" + b"x" * 100
@@ -208,8 +209,8 @@ def test_cap_refund_gives_back_exactly_the_taken_read(tmp_path):
     cap = ReadCap(f, 2)
     t = cap.take("phone-1")
     cap.refund(t, "phone-1")
-    stamps = json.loads(f.read_text())
-    assert len(stamps) == 1 and stamps[0] < time.time() - 50
+    stamps = statexml.read_list(f)
+    assert len(stamps) == 1 and stamps[0]["t"] < time.time() - 50 and "ticket" not in stamps[0]
     cap.take("phone-1")
     with pytest.raises(CapReached):
         cap.take("phone-1")
