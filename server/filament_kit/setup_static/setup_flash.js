@@ -380,6 +380,8 @@ function drawFlash(body, F, J) {
   const boards = () => F.server_boards || [];
   const board = SW.field({ label: SW.t("flash_board"), type: "select", name: "board", options: boards().map((b) => ({ value: b.port, label: SW.t("flash_board_option", { port: b.port, product_name: b.product }) })) });
   const settingsEl = h("div", { class: "flash-form" }, ssid, pass, again, buzzer, printer, name, board);
+  const warning = h("div");
+  if (F.tag_reader_warning) say(warning, F.tag_reader_warning, "warn");
   // 4 write
   const goHere = SW.btn(SW.t("flash_connect_write"), { cls: "btn--primary" });
   const goHub = SW.btn(SW.t("flash_write_hub"), { cls: "btn--primary" });
@@ -432,6 +434,7 @@ function drawFlash(body, F, J) {
   const sync = () => {
     const { dev, here } = state(), tag = dev.id === "printer-station", busy = running();
     settingsEl.hidden = !tag;
+    warning.hidden = !tag || !F.tag_reader_warning;
     settingsStep.hidden = !tag;
     board.hidden = !(tag && !here && boards().length > 1);
     for (const i of deviceEl.elements) i.disabled = busy;
@@ -456,7 +459,7 @@ function drawFlash(body, F, J) {
 
   const step = (title, ...kids) => h("li", { class: "steps__step" }, h("span", { class: "steps__num" }),
     h("div", { class: "steps__body" }, h("span", { class: "steps__title", textContent: title }), ...kids));
-  const settingsStep = step(SW.t("flash_step_settings"), settingsEl);
+  const settingsStep = step(SW.t("flash_step_settings"), warning, settingsEl);
   const stepsEl = h("ol", { class: "steps" }, step(SW.t("flash_step_device"), deviceEl),
     step(SW.t("flash_step_plugged"), whereEl, phoneNote, h("p", { class: "muted", textContent: SW.t("flash_plugged_hint") })),
     settingsStep, step(SW.t("flash_step_write"), writeEl));

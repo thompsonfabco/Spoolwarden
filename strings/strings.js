@@ -706,6 +706,7 @@ window.SW_TEXT = Object.freeze({
   "flash_error_wifi": "The Tag Reader could not join '{wifi}'. Check the Wi-Fi name and password (2.4 GHz networks only).",
   "flash_error_write": "Writing the firmware failed ({reason}). Check the cable is a data cable and try again.",
   "flash_firmware": "Firmware {version}",
+  "flash_no_local_name": "The Hub's certificate has no .local name, so a Tag Reader could not check it. The certificate is made once, when the Hub is installed, and this version has no command that renews it.",
   "flash_intro": "Writes Spoolwarden's firmware over USB. Nothing is downloaded: the firmware comes with the Hub.",
   "flash_no_board": "No board was chosen. Press Connect and write again and pick the board.",
   "flash_no_boards": "No board is plugged into the Hub. Plug it in with a data cable; this list updates by itself.",

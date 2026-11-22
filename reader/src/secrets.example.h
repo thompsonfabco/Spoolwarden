@@ -25,6 +25,10 @@ REPLACE-WITH-THE-KEY-FROM-ota_publish.py--init-key
 // 1 = buzzer with driver board (low-triggered, the 3-pin module). Without this line the reader assumes 1.
 #define READER_BUZZER_ACTIVE_LOW 0
 
+// Optional: the Hub's home IPv4 address, tried when the .local name in READER_BASE does not resolve. Copied into the
+// reader's flash with the other settings, so it survives an update built without this file. `reader setup` writes it.
+// #define READER_HUB_IP "192.168.1.20"
+
 // Optional: the root CA of a server whose certificate is not from Let's Encrypt
 // (the default pin is ISRG Root X1). Uncomment and paste the PEM.
 // #define READER_ROOT_CA R"CERT(-----BEGIN CERTIFICATE-----
