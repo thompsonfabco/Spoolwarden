@@ -170,7 +170,7 @@ def test_to_panel_ffmpeg_failure_raises(monkeypatch):
 def test_speak_streams_256_byte_frames_in_real_time(monkeypatch):
     ser = st.panel["ser"] = Ser()
     samples = bytes(range(16, 240)) * 20  # 4480 bytes = 0.56 s
-    monkeypatch.setattr(speech, "synth", lambda t: b"wav")
+    monkeypatch.setattr(speech, "synth", lambda t, opts=None: b"wav")
     monkeypatch.setattr(speech, "to_panel", lambda w, chip=None: samples)
     t0 = time.monotonic()
     speech.speak("Held")
@@ -182,7 +182,7 @@ def test_speak_streams_256_byte_frames_in_real_time(monkeypatch):
 
 def test_newer_phrase_cuts_off_the_old_one_fading_to_zero(monkeypatch):
     ser = st.panel["ser"] = Ser()
-    monkeypatch.setattr(speech, "synth", lambda t: b"wav")
+    monkeypatch.setattr(speech, "synth", lambda t, opts=None: b"wav")
     monkeypatch.setattr(speech, "to_panel", lambda w, chip=None: bytes([200]) * 8000)
     speech.speech_ready.set()  # a newer phrase is already waiting
     speech.speak("old")
@@ -193,7 +193,7 @@ def test_newer_phrase_cuts_off_the_old_one_fading_to_zero(monkeypatch):
 
 def test_speech_without_panel_plays_on_the_beep_output(monkeypatch):
     calls = []
-    monkeypatch.setattr(speech, "synth", lambda t: b"wav")
+    monkeypatch.setattr(speech, "synth", lambda t, opts=None: b"wav")
     monkeypatch.setattr(beep, "beep_device", lambda: "plughw:2,0")
     monkeypatch.setattr(speech.subprocess, "run", lambda a, **kw: calls.append((a, kw["input"])) or Done())
     speech.speak("Discarded")
@@ -208,7 +208,7 @@ def test_speech_loop_survives_aplay_trouble(monkeypatch):
     """aplay missing or hung must not end the speech thread: the next phrase is still spoken."""
     spoken = []
 
-    def speak(text):
+    def speak(text, opts=None):
         spoken.append(text)
         if len(spoken) == 1:
             raise subprocess.TimeoutExpired("aplay", 15)
@@ -234,9 +234,9 @@ def test_speech_loop_survives_aplay_trouble(monkeypatch):
 
 def test_speak_survives_a_missing_synth_or_ffmpeg(monkeypatch):
     ser = st.panel["ser"] = Ser()
-    monkeypatch.setattr(speech, "synth", lambda t: None)
+    monkeypatch.setattr(speech, "synth", lambda t, opts=None: None)
     speech.speak("x")
-    monkeypatch.setattr(speech, "synth", lambda t: b"wav")
+    monkeypatch.setattr(speech, "synth", lambda t, opts=None: b"wav")
 
     def broken(w, chip=None):
         raise OSError("no ffmpeg")
@@ -492,7 +492,7 @@ def test_c3_cutoff_fades_toward_128():
 def test_speak_cutoff_uses_the_chip(monkeypatch):
     ser = st.panel["ser"] = Ser()
     monkeypatch.setitem(st.ports, "panel_chip", "esp32c3")
-    monkeypatch.setattr(speech, "synth", lambda t: b"wav")
+    monkeypatch.setattr(speech, "synth", lambda t, opts=None: b"wav")
     monkeypatch.setattr(speech, "to_panel", lambda w, chip=None: bytes([200]) * 8000 if chip == "esp32c3" else b"")
     speech.speech_ready.set()
     speech.speak("old")
