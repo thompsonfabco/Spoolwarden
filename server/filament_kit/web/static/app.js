@@ -3139,7 +3139,7 @@ function openTab() {
   const el = h("section", { class: "hidden" }, h("div", { class: "spools" },
     h("p", { class: "muted", textContent: SW.t("spools_intro") }), spoolmanBox,
     group(SW.t("spools_last_tag"), tagBody, tagLine),
-    h("div", { class: "spools__find" }, searchField, sealedBox, h("div", { class: "spools__chips" }, lowBtn, co.chip), findLine), resultsBox,
+    h("div", { class: "spools__find" }, searchField, sealedBox, h("div", { class: "spools__chips" }, co.chip, lowBtn), findLine), resultsBox,
     locsList));
   return {
     el,

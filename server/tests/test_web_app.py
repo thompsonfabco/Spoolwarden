@@ -1377,3 +1377,11 @@ def test_running_low_draws_only_the_newest_answer():
     start = js.index("async function loadLow()")
     body = js[start:js.index("function setLow(")]
     assert "const mine = ++lowStamp" in body and body.count("mine !== lowStamp") == 2
+
+
+def test_the_spools_chips_are_drawn_in_the_ruled_order_checked_out_before_running_low():
+    """DECISIONS R88 (ruled 2026-11-22 08:35): Sealed, Opened, In a printer, Checked out, Running low in every interface."""
+    from filament_kit.web import app as _app   # noqa: F401  (the module exists; the order is in its script)
+    import pathlib
+    src = (pathlib.Path(_app.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+    assert 'class: "spools__chips" }, co.chip, lowBtn)' in src and "lowBtn, co.chip" not in src
