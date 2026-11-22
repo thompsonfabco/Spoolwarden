@@ -18,10 +18,11 @@ class Done:
 
 
 @pytest.fixture(autouse=True)
-def settings_stay_as_they_were():
+def settings_stay_as_they_were(monkeypatch):
     """A test here must leave st.settings exactly as it found it (a hand-made key would leak into later tests)."""
     before = dict(st.settings)
     yield
+    monkeypatch.undo()          # the test's own monkeypatching is not a leak
     assert st.settings == before
 
 
