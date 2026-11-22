@@ -1,10 +1,12 @@
 """Spool labels and the short address (R85 section 5; contracts 6.1 and 6.2; design 02 section 7.13, 03 section 16.5).
 
 The Hub draws a label as SVG: the QR code of the spool's short address (`https://<name>.local[:port]/s/<number>`), the
-spool's number large, brand, name, material, a box in the filament's colour with its hex value, the lot, the date it was
-added, the net weight, and the nozzle and bed temperatures when the filament has them. Black on white; the colour box is
-the only colour. Sizes: 62x29 mm (a 62 mm roll), 50x30 mm, and a sheet of 24 (cells of 66 x 33 mm, three across and eight
-down, which fit A4 and Letter alike; the one-file form is an A4 page). Every size is drawn to its real size in millimetres.
+spool's number large, brand, name, material, a box in the filament's colour with its hex value, the net weight, the lot,
+the date it was added, and the nozzle and bed temperatures when the filament has them. Black on white; the colour box is
+the only colour. Sizes (R85, 2026-11-22 00:50): 62x29 mm and 50x30 mm (rolls), and three sheet stocks, each laid out as its
+stock (margins, pitch): a4-63x34 (24), a4-70x37 (24) and letter-66x25 (30). Every size is drawn to its real size in
+millimetres. Everything of a label, its code's quiet zone included, lies inside the size's content inset. When the label
+is too short for it all, the temperatures go first, then the lot, then the date, then the net weight.
 
 This module holds the data functions (what a label says, where an address goes), the drawing, the print page and the
 route handlers. It mounts nothing: `kit_routes()` and `labels_tab.routes()` give the routes as lists, and the registry
@@ -32,13 +34,33 @@ from .spoolman import Spoolman, SpoolmanError
 
 DEFAULT_SIZE = "62x29"
 # size -> (width mm, height mm, side of the square the code is drawn in, quiet zone included)
-SIZES = {"62x29": (62.0, 29.0, 26.0), "50x30": (50.0, 30.0, 21.0), "sheet24": (66.0, 33.0, 28.0)}
-SHEET_COLUMNS, SHEET_ROWS = 3, 8
-SHEET_COUNT = SHEET_COLUMNS * SHEET_ROWS
+SIZES = {"62x29": (62.0, 29.0, 26.0), "50x30": (50.0, 30.0, 21.0), "a4-63x34": (63.5, 33.9, 26.0),
+         "a4-70x37": (70.0, 37.0, 26.0), "letter-66x25": (66.675, 25.4, 21.0)}
+# size -> the band inside the label that stays empty, in mm (a printer's shift, or the edge it cannot print, costs nothing)
+INSETS = {"62x29": 1.0, "50x30": 1.0, "a4-63x34": 2.0, "a4-70x37": 5.0, "letter-66x25": 2.0}
+
+
+class Sheet(NamedTuple):
+    paper: str           # the CSS name of the paper
+    page: tuple          # width, height in mm
+    columns: int
+    rows: int
+    left: float          # margin to the first label, mm
+    top: float
+    pitch_x: float       # from one label's left edge to the next, mm
+    pitch_y: float
+
+    @property
+    def count(self) -> int:
+        return self.columns * self.rows
+
+
 A4 = (210.0, 297.0)
+LETTER = (215.9, 279.4)
+SHEETS = {"a4-63x34": Sheet("A4", A4, 3, 8, 7.25, 12.9, 66.0, 33.9), "a4-70x37": Sheet("A4", A4, 3, 8, 0.0, 0.5, 70.0, 37.0),
+          "letter-66x25": Sheet("letter", LETTER, 3, 10, 4.7625, 12.7, 69.85, 25.4)}
 MAX_LABELS = 100            # one request
 MIN_MODULE_MM = 0.4         # the smallest dark square the drawing may have (R85 assumption 6; labels_test holds it)
-PAD = 1.0                   # mm round the label
 PAGE_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; "
             "form-action 'none'; frame-ancestors 'none'")
 PAGE_HEADERS = {"Content-Security-Policy": PAGE_CSP, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
@@ -48,7 +70,9 @@ PAGE_HEADERS = {"Content-Security-Policy": PAGE_CSP, "X-Content-Type-Options": "
 TEXT_LABELS_TITLE_ONE = "Print a label"
 TEXT_LABELS_TITLE_MANY = "Print labels"
 TEXT_LABELS_SIZE = "Size"
-TEXT_LABELS_SIZE_NAMES = {"62x29": "62 x 29 mm", "50x30": "50 x 30 mm", "sheet24": "Sheet of 24"}
+TEXT_LABELS_SIZE_NAMES = {"62x29": "62 x 29 mm", "50x30": "50 x 30 mm", "a4-63x34": "A4 sheet of 24, 63.5 x 33.9 mm",
+                          "a4-70x37": "A4 sheet of 24, 70 x 37 mm", "letter-66x25": "Letter sheet of 30, 2-5/8 x 1 in"}
+TEXT_LABELS_ACTUAL_SIZE = "Print at actual size (100%), not fitted to the page."
 TEXT_LABELS_PRINT = "Print"
 TEXT_LABELS_ADDRESS = ("The code holds this Hub's address, {address}. If the Hub is renamed or moves to another port, old "
                        "labels still open in the Spoolwarden app's scanner but not from a phone's camera.")
@@ -62,10 +86,10 @@ TEXT_LABEL_NOZZLE = "Nozzle {c} °C"
 TEXT_LABEL_BED = "Bed {c} °C"
 TEXT_LABEL_TEMPS = "Nozzle {nozzle} / Bed {bed} °C"      # both, on one line: the narrow label has no room for two captions
 TEXT_LABEL_NET = "{g} g"
-TEXT_BAD_SIZE = "The size must be 62x29, 50x30 or sheet24."
+TEXT_BAD_SIZE = "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25."
 TEXT_BAD_IDS = "Give the spool numbers as ids=<n,n,...>, whole numbers of 1 or more."
 TEXT_TOO_MANY = "Ask for at most {limit} labels at a time."
-TEXT_SHEET_FULL = "A sheet holds 24 labels. Ask for fewer, or choose another size."
+TEXT_SHEET_FULL = "A sheet of this size holds {count} labels. Ask for fewer, or choose another size."
 TEXT_NO_CODE = "The Hub's address is too long for a QR code."
 TEXT_SPOOLMAN_DOWN = "Spoolman is not reachable."
 # the command line's lines (06 section 9.21), for the registry step
@@ -88,7 +112,7 @@ class LabelError(Exception):
 # ---------------------------------------------------------------- what a label says
 
 def parse_size(raw) -> str:
-    """The size asked for (None or empty: the default); LabelError bad_size for anything but the three."""
+    """The size asked for (None or empty: the default); LabelError bad_size for anything but the five."""
     if raw is None or raw == "":
         return DEFAULT_SIZE
     if not isinstance(raw, str) or raw not in SIZES:
@@ -106,9 +130,19 @@ def parse_ids(raw) -> list[int]:
     return [int(p) for p in parts]
 
 
+# every character XML 1.0 does not allow: controls but tab, line feed and carriage return; lone surrogates; U+FFFE, U+FFFF
+_XML_INVALID = re.compile("[^\x09\x0a\x0d\x20-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]")
+
+
+def _xml_safe(text: str) -> str:
+    return _XML_INVALID.sub("", text)
+
+
 def _clean(value) -> str:
-    """Text for a label: one line, no control characters (an XML document may not hold them)."""
-    return re.sub(r"\s+", " ", re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", str(value))).strip() if value is not None else ""
+    """Text for a label: one line, no control characters and no other character an XML document may not hold."""
+    if value is None:
+        return ""
+    return re.sub(r"\s+", " ", _xml_safe(re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", str(value)))).strip()
 
 
 def _num(value):
@@ -171,7 +205,7 @@ def web_app_on(cfg: dict | None = None) -> bool:
 # ---------------------------------------------------------------- the drawing
 
 def _n(x: float) -> str:
-    return f"{x:.2f}".rstrip("0").rstrip(".")
+    return f"{x:.4f}".rstrip("0").rstrip(".")
 
 
 def _width(text: str, fs: float, bold: bool = False) -> float:
@@ -196,7 +230,8 @@ def _text(x: float, y: float, fs: float, content: str, bold: bool = False, end: 
         return ""
     weight = ' font-weight="700"' if bold else ""
     anchor = ' text-anchor="end"' if end else ""
-    return f'<text x="{_n(x)}" y="{_n(y)}" font-size="{_n(fs)}"{weight}{anchor}>{html.escape(content, quote=False)}</text>'
+    return (f'<text x="{_n(x)}" y="{_n(y)}" font-size="{_n(fs)}"{weight}{anchor}>'
+            f'{html.escape(_xml_safe(content), quote=False)}</text>')
 
 
 def code_modules(address: str) -> list[list[bool]]:
@@ -230,45 +265,53 @@ def _qr_path(rows: list[list[bool]], x: float, y: float, box: float) -> str:
 
 
 def _body(data: dict, size: str, address: str) -> str:
-    """The inside of one label, in mm, from (0, 0) to the label's width and height."""
+    """The inside of one label, in mm, from (0, 0) to the label's width and height. Everything lies inside the size's inset.
+    The lines go down from the top of the content area; a label taller than the 62x29 one spreads them and grows the type, a
+    shorter one keeps the type and leaves out the lines that do not fit: the temperatures, then the lot and the date."""
     w, h, box = SIZES[size]
-    k = h / 29.0
-    x0 = PAD + box + 0.5
-    right = w - 1.5
+    inset = INSETS[size]
+    room_h = h - 2 * inset
+    k = max(1.0, room_h / 27.0)
+
+    def y(local: float) -> float:
+        return inset + local * k
+
+    x0 = inset + box + 0.5
+    right = w - inset - 0.5
     room = right - x0
     out = [f'<rect width="{_n(w)}" height="{_n(h)}" fill="#fff"/>',
-           _qr_path(code_modules(address), PAD, (h - box) / 2, box)]
+           _qr_path(code_modules(address), inset, inset + (room_h - box) / 2, box)]
     number = str(data["number"])
     number, nfs = _fit(number, room * 0.6, 7.4 * k, 4.0 * k, bold=True)
-    out.append(_text(x0, 9.0 * k, nfs, number, bold=True))
+    out.append(_text(x0, y(8.0), nfs, number, bold=True))
     material, mfs = _fit(data["material"], room - _width(number, nfs, True) - 1.5, 3.2 * k, 2.2 * k, bold=True)
-    out.append(_text(right, 9.0 * k, mfs, material, bold=True, end=True))
-    for text, y in ((data["vendor"], 13.2 * k), (data["name"], 16.6 * k)):
+    out.append(_text(right, y(8.0), mfs, material, bold=True, end=True))
+    for text, line in ((data["vendor"], 12.2), (data["name"], 15.6)):
         shown, fs = _fit(text, room, 2.8 * k, 1.8 * k)
-        out.append(_text(x0, y, fs, shown))
-    y = 21.0 * k
+        out.append(_text(x0, y(line), fs, shown))
     side = 3.4 * k
+    taken = 0.0
     if data["color_hex"]:
-        out.append(f'<rect x="{_n(x0)}" y="{_n(y - side + 0.4 * k)}" width="{_n(side)}" height="{_n(side)}" '
+        out.append(f'<rect x="{_n(x0)}" y="{_n(y(20.0) - side + 0.4 * k)}" width="{_n(side)}" height="{_n(side)}" '
                    f'fill="{data["color_hex"]}" stroke="#000" stroke-width="0.15"/>')
-        out.append(_text(x0 + side + 1.0, y, 2.6 * k, data["color_hex"]))
-    lot, lfs = _fit(TEXT_LABEL_LOT.format(lot=data["lot"]) if data["lot"] else "",
-                    room - (side + 1.0 + _width("#000000", 2.6 * k) + 1.0 if data["color_hex"] else 0), 2.6 * k, 2.0 * k)
-    out.append(_text(right, y, lfs, lot, end=True))
-    y = 24.5 * k
-    net = TEXT_LABEL_NET.format(g=data["net_g"]) if data["net_g"] else ""
-    net, nfs2 = _fit(net, room / 2, 2.6 * k, 2.0 * k)
-    out.append(_text(right, y, nfs2, net, end=True))
-    added, afs = _fit(TEXT_LABEL_ADDED.format(date=data["added"]) if data["added"] else "",
-                      room - _width(net, nfs2) - 1.5, 2.4 * k, 1.6 * k)
-    out.append(_text(x0, y, afs, added))
-    if data["nozzle_c"] and data["bed_c"]:
-        temps = TEXT_LABEL_TEMPS.format(nozzle=data["nozzle_c"], bed=data["bed_c"])
-    else:
-        temps = (TEXT_LABEL_NOZZLE.format(c=data["nozzle_c"]) if data["nozzle_c"] else
-                 TEXT_LABEL_BED.format(c=data["bed_c"]) if data["bed_c"] else "")
-    shown, tfs = _fit(temps, room, 2.4 * k, 1.8 * k)
-    out.append(_text(x0, 27.6 * k, tfs, shown))
+        out.append(_text(x0 + side + 1.0, y(20.0), 2.6 * k, data["color_hex"]))
+        taken = side + 1.0 + _width("#000000", 2.6 * k) + 1.0
+    net, nfs2 = _fit(TEXT_LABEL_NET.format(g=data["net_g"]) if data["net_g"] else "", room - taken, 2.6 * k, 2.0 * k)
+    out.append(_text(right, y(20.0), nfs2, net, end=True))
+    if (23.2 + 0.6) * k <= room_h + 1e-9:                       # the line of the date and the lot fits
+        lot, lfs = _fit(TEXT_LABEL_LOT.format(lot=data["lot"]) if data["lot"] else "", room * 0.3, 2.4 * k, 1.8 * k)
+        out.append(_text(right, y(23.2), lfs, lot, end=True))
+        added, afs = _fit(TEXT_LABEL_ADDED.format(date=data["added"]) if data["added"] else "",
+                          room - (_width(lot, lfs) + 1.5 if lot else 0), 2.4 * k, 1.6 * k)
+        out.append(_text(x0, y(23.2), afs, added))
+    if (26.3 + 0.6) * k <= room_h + 1e-9:                       # the line of the temperatures fits
+        if data["nozzle_c"] and data["bed_c"]:
+            temps = TEXT_LABEL_TEMPS.format(nozzle=data["nozzle_c"], bed=data["bed_c"])
+        else:
+            temps = (TEXT_LABEL_NOZZLE.format(c=data["nozzle_c"]) if data["nozzle_c"] else
+                     TEXT_LABEL_BED.format(c=data["bed_c"]) if data["bed_c"] else "")
+        shown, tfs = _fit(temps, room, 2.4 * k, 1.8 * k)
+        out.append(_text(x0, y(26.3), tfs, shown))
     return "".join(out)
 
 
@@ -280,7 +323,7 @@ def _svg(attrs: str, inner: str, standalone: bool) -> str:
 def _label_attrs(size: str, data: dict | None, x=None, y=None) -> str:
     w, h, _ = SIZES[size]
     place = f' x="{_n(x)}" y="{_n(y)}"' if x is not None else ""
-    named = f' role="img" aria-label="{html.escape(title_of(data))}"' if data else ""
+    named = f' role="img" aria-label="{html.escape(_xml_safe(title_of(data)))}"' if data else ""
     return f'{place} class="label" viewBox="0 0 {_n(w)} {_n(h)}" width="{_n(w)}mm" height="{_n(h)}mm"{named}'
 
 
@@ -292,19 +335,19 @@ def one_svg(data: dict, size: str, address: str, standalone: bool = True) -> str
 
 def file_svg(items: list[dict], size: str, home: str) -> str:
     """One SVG document holding a label for each item, in the order given (`spoolwarden spool label`); `home` is the Hub's
-    home address, each code adds its own spool's number. A roll size stacks them top to bottom; a sheet is an A4 page with
-    the cells filled from the top left (at most 24)."""
+    home address, each code adds its own spool's number. A roll size stacks them top to bottom; a sheet size is one page of
+    the paper, the labels placed where the stock has them (margins and pitch), filled from the top left, at most one sheet."""
     w, h, _ = SIZES[size]
     cells = []
-    if size == "sheet24":
-        if len(items) > SHEET_COUNT:
-            raise LabelError("too_many", TEXT_SHEET_FULL)
-        left = (A4[0] - SHEET_COLUMNS * w) / 2
-        top = (A4[1] - SHEET_ROWS * h) / 2
+    sheet = SHEETS.get(size)
+    if sheet:
+        if len(items) > sheet.count:
+            raise LabelError("too_many", TEXT_SHEET_FULL.format(count=sheet.count))
         for i, d in enumerate(items):
-            cells.append(_svg(_label_attrs(size, d, left + (i % SHEET_COLUMNS) * w, top + (i // SHEET_COLUMNS) * h),
+            cells.append(_svg(_label_attrs(size, d, sheet.left + (i % sheet.columns) * sheet.pitch_x,
+                                           sheet.top + (i // sheet.columns) * sheet.pitch_y),
                               _body(d, size, f"{home}/s/{d['number']}"), False))
-        total_w, total_h = A4
+        total_w, total_h = sheet.page
     else:
         for i, d in enumerate(items):
             cells.append(_svg(_label_attrs(size, d, 0, i * h), _body(d, size, f"{home}/s/{d['number']}"), False))
@@ -322,21 +365,27 @@ PRINT_JS = ("document.getElementById('print').addEventListener('click', function
 
 def print_css(size: str) -> str:
     """The page's styles: the preview on screen, and the print rules (everything but the labels is hidden; the paper is the
-    label's size on a roll, the browser's own paper for a sheet)."""
+    label's size on a roll, the stock's paper for a sheet size, and its labels where the stock has them)."""
     w, h, _ = SIZES[size]
-    sheet = size == "sheet24"
-    page = "@page { size: auto; margin: 0; }" if sheet else f"@page {{ size: {_n(w)}mm {_n(h)}mm; margin: 0; }}"
+    sheet = SHEETS.get(size)
+    page = f"@page {{ size: {sheet.paper}; margin: 0; }}" if sheet else f"@page {{ size: {_n(w)}mm {_n(h)}mm; margin: 0; }}"
     cut = "" if sheet else "break-after: page; "
+    grid = ""
+    if sheet:
+        grid = (f".sheet {{ box-sizing: border-box; width: {_n(sheet.page[0])}mm; margin: 1rem auto; background: #fff; "
+                f"outline: 1px solid #999; padding: {_n(sheet.top)}mm 0 0 {_n(sheet.left)}mm; display: grid; "
+                f"grid-template-columns: repeat({sheet.columns}, {_n(w)}mm); grid-auto-rows: {_n(h)}mm; "
+                f"column-gap: {_n(sheet.pitch_x - w)}mm; row-gap: {_n(sheet.pitch_y - h)}mm; justify-content: start; "
+                f"align-content: start; }}\n")
     return f"""body {{ margin: 0; background: #fff; color: #000; font: 16px/1.5 system-ui, sans-serif; }}
 .controls {{ max-width: 60rem; margin: 0 auto; padding: 1rem; }}
 h1 {{ font-size: 1.4rem; margin: 0 0 1rem; }}
 .sizes {{ display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 1rem; }}
 .sizes a {{ border: 1px solid #555; border-radius: 0.5rem; padding: 0.4rem 0.9rem; color: #000; text-decoration: none; }}
 .sizes a[aria-current="true"] {{ background: #000; color: #fff; }}
-.labels, .sheet {{ padding: 1rem; display: flex; flex-wrap: wrap; gap: 4mm; justify-content: center; }}
-.sheet {{ display: grid; grid-template-columns: repeat({SHEET_COLUMNS}, {_n(w)}mm); grid-auto-rows: {_n(h)}mm; gap: 0;
-  justify-content: center; align-content: start; }}
-.label {{ background: #fff; outline: 1px solid #999; display: block; }}
+.labels {{ padding: 1rem; display: flex; flex-wrap: wrap; gap: 4mm; justify-content: center; }}
+{grid}.label {{ background: #fff; outline: 1px solid #999; display: block; }}
+.actual-size {{ margin: 0 0 1rem; font-weight: 600; }}
 .missing {{ border: 1px dashed #555; padding: 0.5rem 1rem; }}
 .address {{ max-width: 60rem; margin: 0 auto; padding: 0 1rem; }}
 button {{ font: inherit; padding: 0.5rem 1.5rem; border: 0; border-radius: 0.5rem; background: #000; color: #fff; }}
@@ -345,7 +394,8 @@ button {{ font: inherit; padding: 0.5rem 1.5rem; border: 0; border-radius: 0.5re
   .controls, .address, .missing {{ display: none; }}
   .labels {{ display: block; padding: 0; }}
   .label {{ outline: 0; {cut}}}
-  .sheet {{ padding: 6mm 0 0; break-after: page; }}
+  .sheet {{ margin: 0; outline: 0; }}
+  .sheet + .sheet {{ break-before: page; }}
 }}
 """
 
@@ -363,21 +413,23 @@ def print_page(items: list, size: str, ids: list[int], address: str, error: str 
     current = ' aria-current="true"'
     sizes = "".join(f'<a href="labels?ids={ask}&amp;size={s}"{current if s == size else ""}>'
                     f'{_e(TEXT_LABELS_SIZE_NAMES[s])}</a>' for s in SIZES)
+    actual = f'<p class="actual-size">{_e(TEXT_LABELS_ACTUAL_SIZE)}</p>' if size in SHEETS else ""
     if error:
         body = (f'<p class="error" role="alert">{_e(TEXT_LABELS_ERROR.format(reason=error))} '
                 f'<a href="labels?ids={ask}&amp;size={size}">{_e(TEXT_LABELS_TRY_AGAIN)}</a></p>')
     else:
         drawn = [one_svg(i, size, f"{address}/s/{i['number']}", standalone=False) if isinstance(i, dict) else
                  f'<p class="missing">{_e(TEXT_LABELS_NOT_FOUND.format(number=i))}</p>' for i in items]
-        if size == "sheet24":
-            body = "".join(f'<div class="sheet">{"".join(drawn[n:n + SHEET_COUNT])}</div>' for n in range(0, len(drawn), SHEET_COUNT))
+        if size in SHEETS:
+            count = SHEETS[size].count
+            body = "".join(f'<div class="sheet">{"".join(drawn[n:n + count])}</div>' for n in range(0, len(drawn), count))
         else:
             body = f'<div class="labels">{"".join(drawn)}</div>'
     return (f'<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><title>{_e(title)}</title>'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<link rel="stylesheet" href="labels/print.css?size={size}"></head><body>'
             f'<main><div class="controls"><h1>{_e(title)}</h1>'
-            f'<div class="sizes" role="group" aria-label="{_e(TEXT_LABELS_SIZE)}"><span>{_e(TEXT_LABELS_SIZE)}</span>{sizes}</div></div>'
+            f'<div class="sizes" role="group" aria-label="{_e(TEXT_LABELS_SIZE)}"><span>{_e(TEXT_LABELS_SIZE)}</span>{sizes}</div>{actual}</div>'
             f'{body}'
             f'<p class="address">{_e(TEXT_LABELS_ADDRESS.format(address=address))}</p>'
             f'<div class="controls"><button id="print" type="button">{_e(TEXT_LABELS_PRINT)}</button></div></main>'

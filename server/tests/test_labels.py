@@ -14,6 +14,7 @@ from filament_kit import config, labels, pairing, qr
 from filament_kit.setup_console import labels_tab
 from filament_kit.spoolman import SpoolmanError
 
+SIZES5 = ["62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25"]
 NS = "{http://www.w3.org/2000/svg}"
 HOME = "https://spoolwarden.local:8710"
 ADDRESS = HOME + "/s/214"
@@ -84,11 +85,12 @@ def test_label_data_leaves_out_what_the_filament_does_not_have():
 
 
 def test_sizes_and_ids_are_checked():
-    assert [labels.parse_size(x) for x in (None, "", "62x29", "50x30", "sheet24")] == ["62x29"] * 2 + ["62x29", "50x30", "sheet24"]
-    for bad in ("A4", "62X29", ["62x29"]):
+    assert [labels.parse_size(x) for x in (None, "") + tuple(SIZES5)] == ["62x29"] * 2 + SIZES5
+    assert list(labels.SIZES) == SIZES5 and labels.DEFAULT_SIZE == "62x29"
+    for bad in ("A4", "62X29", ["62x29"], "sheet24"):
         with pytest.raises(labels.LabelError) as e:
             labels.parse_size(bad)
-        assert (e.value.code, e.value.status, e.value.message) == ("bad_size", 400, "The size must be 62x29, 50x30 or sheet24.")
+        assert (e.value.code, e.value.status, e.value.message) == ("bad_size", 400, "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25.")
     assert labels.parse_ids("214, 213,7") == [214, 213, 7]
     for bad in (None, "", " , ", "0", "-3", "1,x", "1.5", "1,,2x"):
         with pytest.raises(labels.LabelError) as e:
@@ -115,7 +117,7 @@ def test_the_redirect_goes_to_the_web_app_when_it_is_on_else_to_the_hub_page():
 
 # ---- the drawing
 
-@pytest.mark.parametrize("size", list(labels.SIZES))
+@pytest.mark.parametrize("size", [s for s in SIZES5 if s != "letter-66x25"])
 def test_a_label_is_drawn_to_its_real_size_with_everything_on_it(size):
     w, h, _ = labels.SIZES[size]
     root = parse(labels.one_svg(labels.label_data(spool(filament={"name": "PolyTerra PLA Black"})), size, ADDRESS))
@@ -156,9 +158,18 @@ def test_a_spool_with_little_known_still_draws_without_empty_words():
     assert root.get("aria-label") == "Label of spool 5: no name, no material, weight not known"
 
 
-@pytest.mark.parametrize("size", list(labels.SIZES))
-def test_no_text_runs_over_the_code_or_off_the_label(size):
+def text_box(t):
+    """Where a drawn text lies, in mm: left, right, top, bottom (width estimated, cap height 0.75 and descent 0.25 of the size)."""
+    x, y, fs, bold = float(t.get("x")), float(t.get("y")), float(t.get("font-size")), t.get("font-weight") == "700"
+    width = labels._width(t.text, fs, bold)
+    left, right = (x - width, x) if t.get("text-anchor") == "end" else (x, x + width)
+    return left, right, y - 0.75 * fs, y + 0.25 * fs
+
+
+@pytest.mark.parametrize("size", SIZES5)
+def test_nothing_of_a_label_runs_over_the_code_or_outside_its_inset(size):
     w, h, box = labels.SIZES[size]
+    inset = labels.INSETS[size]
     long = "Extra Long Brand Name " * 3
     d = labels.label_data(spool(lot_nr="LOT-WITH-A-LONG-NUMBER-0001", filament={"vendor": {"name": long}, "name": long * 2,
                                                                                   "material": "PLA-CF-HIGH-SPEED"}))
@@ -166,10 +177,54 @@ def test_no_text_runs_over_the_code_or_off_the_label(size):
     texts = list(root.iter(NS + "text"))
     assert any(t.text.endswith("…") for t in texts)                            # a name too long for its line ends in "…"
     for t in texts:
-        x, fs, bold = float(t.get("x")), float(t.get("font-size")), t.get("font-weight") == "700"
-        width = labels._width(t.text, fs, bold)
-        left, right = (x - width, x) if t.get("text-anchor") == "end" else (x, x + width)
-        assert labels.PAD + box <= left and right <= w, (size, t.text, left, right)
+        left, right, top, bottom = text_box(t)
+        assert inset + box <= left and right <= w - inset, (size, t.text, left, right)
+        assert inset <= top and bottom <= h - inset + 1e-9, (size, t.text, top, bottom)
+    for r in root.iter(NS + "rect"):                                            # the colour box
+        if r.get("x"):
+            x, y, side = float(r.get("x")), float(r.get("y")), float(r.get("width"))
+            assert inset + box <= x and x + side <= w - inset and inset <= y and y + side <= h - inset + 1e-9, size
+
+
+@pytest.mark.parametrize("size", SIZES5)
+def test_the_code_with_its_quiet_zone_lies_inside_the_inset(size):
+    w, h, box = labels.SIZES[size]
+    inset = labels.INSETS[size]
+    path = next(p for p in parse(labels.one_svg(labels.label_data(spool()), size, ADDRESS)).iter(NS + "path"))
+    x, y = (float(v) for v in re.search(r"translate\(([\d.]+) ([\d.]+)\)", path.get("transform")).groups())
+    assert x >= inset - 1e-9 and y >= inset - 1e-9 and x + box <= w - inset + 1e-9 and y + box <= h - inset + 1e-9
+
+
+def texts_of(size, **over):
+    return [t.text for t in parse(labels.one_svg(labels.label_data(spool(**over)), size, ADDRESS)).iter(NS + "text")]
+
+
+def test_the_short_label_leaves_out_temperatures_then_lot_then_date_and_keeps_what_identifies_the_spool():
+    said = texts_of("letter-66x25")
+    assert said[0] == "214"
+    for keep in ("Polymaker", "PolyTerra PLA Charcoal Black", "PLA", "#2B2B2E", "1000 g"):
+        assert keep in said, said
+    assert not any(x.startswith(("Nozzle", "Bed", "Lot", "Added")) for x in said)
+    # a label with room for everything shows the lot, the date and the temperatures
+    assert {"Lot F57", "Added 2026-11-12", "Nozzle 210 / Bed 60 °C"} <= set(texts_of("a4-70x37"))
+    # the order: of the four things, the temperatures are on the lowest line, then the lot and the date, then the weight
+    ys = {t.text: float(t.get("y")) for t in parse(labels.one_svg(labels.label_data(spool()), "62x29", ADDRESS)).iter(NS + "text")}
+    assert ys["Nozzle 210 / Bed 60 °C"] > ys["Lot F57"] and ys["Nozzle 210 / Bed 60 °C"] > ys["Added 2026-11-12"]
+    assert ys["Lot F57"] > ys["1000 g"] and ys["Added 2026-11-12"] > ys["1000 g"]
+
+
+def test_a_label_text_loses_every_character_xml_does_not_allow():
+    bad = "A\x00\x08\ufffe\uffff\ud800Z\U0001f600"
+    d = labels.label_data(spool(lot_nr="L" + bad, filament={"name": "N" + bad, "vendor": {"name": "V" + bad}}))
+    assert d["name"] == "NA Z\U0001f600" and d["vendor"] == "VA Z\U0001f600" and d["lot"] == "LA Z\U0001f600"
+    doc = labels.one_svg(d, "62x29", ADDRESS)
+    assert parse(doc).get("aria-label").startswith("Label of spool 214: VA Z")
+    for gone in ("\x00", "\x08", "\ufffe", "\uffff", "\ud800"):
+        assert gone not in doc
+    # data that did not come through label_data is cleaned where it is drawn
+    raw = dict(d, name="x\ufffey\ud800z", vendor="v\uffff")
+    drawn = [t.text for t in parse(labels.one_svg(raw, "62x29", ADDRESS)).iter(NS + "text")]
+    assert "xyz" in drawn and "v" in drawn
 
 
 def test_text_is_escaped_and_control_characters_are_dropped():
@@ -190,7 +245,8 @@ def test_the_code_reads_back_as_the_spools_address_at_every_size(size):
     assert decode(grid) == ADDRESS
     assert scale == pytest.approx(labels.module_mm(size, ADDRESS), rel=1e-3) and scale >= labels.MIN_MODULE_MM
     side = (len(grid) + 2 * qr.QUIET) * scale                                   # the code with its quiet zone, in mm
-    assert side == pytest.approx(box, rel=1e-3) and labels.PAD + side <= w and side + 2 * labels.PAD <= h + 1e-9
+    inset = labels.INSETS[size]
+    assert side == pytest.approx(box, rel=1e-3) and inset + side <= w - inset + 1e-9 and side + 2 * inset <= h + 1e-9
 
 
 @pytest.mark.parametrize("size", list(labels.SIZES))
@@ -225,22 +281,36 @@ def test_one_file_holds_a_label_for_each_number_in_the_order_given():
         assert decode(code_of(e)[0]) == f"{HOME}/s/{n}"                    # each code holds its own spool's address
 
 
-def test_a_sheet_is_an_a4_page_of_24_cells_filled_from_the_top_left():
-    items = [labels.label_data(spool(n)) for n in range(1, 25)]
-    root = parse(labels.file_svg(items, "sheet24", HOME))
-    assert (root.get("width"), root.get("height")) == ("210mm", "297mm")
+STOCK = {"a4-63x34": ((210.0, 297.0), 3, 8, 7.25, 12.9, 66.0, 33.9, (63.5, 33.9)),
+         "a4-70x37": ((210.0, 297.0), 3, 8, 0.0, 0.5, 70.0, 37.0, (70.0, 37.0)),
+         "letter-66x25": ((215.9, 279.4), 3, 10, 4.7625, 12.7, 69.85, 25.4, (66.675, 25.4))}
+
+
+@pytest.mark.parametrize("size", list(STOCK))
+def test_a_sheet_is_one_page_with_the_labels_where_the_stock_has_them(size):
+    (pw, ph), cols, rows, left, top, px, py, (lw, lh) = STOCK[size]
+    items = [labels.label_data(spool(n)) for n in range(1, cols * rows + 1)]
+    root = parse(labels.file_svg(items, size, HOME))
+    assert (float(root.get("width").removesuffix("mm")), float(root.get("height").removesuffix("mm"))) == (pw, ph)
     cells = [e for e in root if e.tag == NS + "svg"]
-    assert len(cells) == 24
-    xs, ys = sorted({float(e.get("x")) for e in cells}), sorted({float(e.get("y")) for e in cells})
-    assert len(xs) == 3 and len(ys) == 8 and xs[0] >= 0 and xs[-1] + 66 <= 210 and ys[0] >= 0 and ys[-1] + 33 <= 297
-    assert [e.get("x") for e in cells[:4]] == [e.get("x") for e in (cells[0], cells[1], cells[2], cells[0])]   # row by row
+    assert len(cells) == cols * rows
+    assert (float(cells[0].get("x")), float(cells[0].get("y"))) == pytest.approx((left, top))          # first label's corner
+    last = cells[-1]
+    assert (float(last.get("x")), float(last.get("y"))) == pytest.approx((left + (cols - 1) * px, top + (rows - 1) * py))
+    assert [float(c.get("x")) for c in cells[:cols + 1]] == pytest.approx([left + i * px for i in range(cols)] + [left])  # row by row
+    assert float(cells[cols].get("y")) == pytest.approx(top + py)
+    assert (cells[0].get("width"), cells[0].get("height")) == (f"{lw:g}mm", f"{lh:g}mm")
+    assert float(last.get("x")) + lw <= pw and float(last.get("y")) + lh <= ph                         # all on the paper
+    assert [next(t for t in c.iter(NS + "text")).text for c in cells] == [str(n) for n in range(1, cols * rows + 1)]
     with pytest.raises(labels.LabelError) as e:
-        labels.file_svg(items + items[:1], "sheet24", HOME)
-    assert e.value.code == "too_many" and e.value.message == "A sheet holds 24 labels. Ask for fewer, or choose another size."
+        labels.file_svg(items + items[:1], size, HOME)
+    assert e.value.code == "too_many"
+    assert e.value.message == f"A sheet of this size holds {cols * rows} labels. Ask for fewer, or choose another size."
 
 
-def test_a_sheet_fits_letter_paper_too():
-    assert labels.SHEET_COLUMNS * 66 <= 215.9 and labels.SHEET_ROWS * 33 <= 279.4
+def test_a_sheet_of_a_partly_filled_page_starts_at_the_top_left():
+    root = parse(labels.file_svg([labels.label_data(spool(n)) for n in (5, 6)], "letter-66x25", HOME))
+    assert [(c.get("x"), c.get("y")) for c in root if c.tag == NS + "svg"] == [("4.7625", "12.7"), ("74.6125", "12.7")]
 
 
 # ---- the print page
@@ -255,7 +325,9 @@ def test_the_print_page_has_the_size_choice_the_labels_the_address_line_and_prin
     links = re.findall(r'<a href="([^"]+)"( aria-current="true")?>([^<]+)</a>', doc)
     assert [(text, href) for href, _, text in links] == [
         ("62 x 29 mm", "labels?ids=214,213&amp;size=62x29"), ("50 x 30 mm", "labels?ids=214,213&amp;size=50x30"),
-        ("Sheet of 24", "labels?ids=214,213&amp;size=sheet24")]
+        ("A4 sheet of 24, 63.5 x 33.9 mm", "labels?ids=214,213&amp;size=a4-63x34"),
+        ("A4 sheet of 24, 70 x 37 mm", "labels?ids=214,213&amp;size=a4-70x37"),
+        ("Letter sheet of 30, 2-5/8 x 1 in", "labels?ids=214,213&amp;size=letter-66x25")]
     assert [text for _, current, text in links if current] == ["62 x 29 mm"]
     assert doc.count("<svg") == 2 and doc.count('role="img"') == 2
     assert ("The code holds this Hub&#x27;s address, https://spoolwarden.local:8710. If the Hub is renamed or moves to another "
@@ -288,10 +360,21 @@ def test_the_error_state_replaces_the_labels():
     assert "<svg" not in doc
 
 
-def test_a_sheet_page_groups_the_labels_24_to_a_page():
-    items = [labels.label_data(spool(n)) for n in range(1, 27)]
-    doc = page(items, "sheet24", range(1, 27))
+def test_a_sheet_page_groups_the_labels_to_the_stocks_page():
+    doc = page([labels.label_data(spool(n)) for n in range(1, 27)], "a4-63x34", range(1, 27))
     assert doc.count('class="sheet"') == 2 and doc.count("<svg") == 26
+    doc = page([labels.label_data(spool(n)) for n in range(1, 32)], "letter-66x25", range(1, 32))
+    assert doc.count('class="sheet"') == 2 and doc.count("<svg") == 31
+    assert page([labels.label_data(spool(n)) for n in range(1, 31)], "letter-66x25", range(1, 31)).count('class="sheet"') == 1
+
+
+def test_the_page_says_to_print_at_actual_size_for_a_sheet_only():
+    line = '<p class="actual-size">Print at actual size (100%), not fitted to the page.</p>'
+    for size in ("a4-63x34", "a4-70x37", "letter-66x25"):
+        assert line in page([labels.label_data(spool())], size)
+    for size in ("62x29", "50x30"):
+        assert "actual size" not in page([labels.label_data(spool())], size)
+    assert ".controls, .address, .missing { display: none; }" in labels.print_css("a4-63x34")    # the line hides when printing
 
 
 def test_the_print_rules_hide_everything_but_the_labels_and_set_the_paper():
@@ -299,9 +382,19 @@ def test_the_print_rules_hide_everything_but_the_labels_and_set_the_paper():
     assert "@page { size: 62mm 29mm; margin: 0; }" in roll and "break-after: page" in roll
     assert ".controls, .address, .missing { display: none; }" in roll
     assert "@page { size: 50mm 30mm; margin: 0; }" in labels.print_css("50x30")
-    sheet = labels.print_css("sheet24")
-    assert "@page { size: auto; margin: 0; }" in sheet and "grid-template-columns: repeat(3, 66mm)" in sheet
     assert "window.print()" in labels.PRINT_JS
+
+
+@pytest.mark.parametrize("size", list(STOCK))
+def test_a_sheet_prints_on_its_stated_paper_with_the_stocks_margins_and_pitch(size):
+    css = labels.print_css(size)
+    (pw, ph), cols, rows, left, top, px, py, (lw, lh) = STOCK[size]
+    paper = "A4" if pw == 210.0 else "letter"
+    assert f"@page {{ size: {paper}; margin: 0; }}" in css and "size: auto" not in css
+    assert f"padding: {top:g}mm 0 0 {left:g}mm" in css
+    assert f"grid-template-columns: repeat({cols}, {lw:g}mm)" in css
+    assert f"column-gap: {round(px - lw, 4):g}mm" in css and f"row-gap: {round(py - lh, 4):g}mm" in css
+    assert "padding: 6mm 0 0" not in css                                                              # the fixed top padding is gone
 
 
 def test_print_page_for_names_unknown_numbers_and_reports_spoolman_down():
@@ -331,7 +424,7 @@ def test_label_svg_answers_the_label_at_the_size_asked():
     r = c.get("/api/spools/214/label.svg")
     assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg+xml")
     assert parse(r.text).get("width") == "62mm"
-    for size, width in (("50x30", "50mm"), ("sheet24", "66mm")):
+    for size, width in (("50x30", "50mm"), ("a4-63x34", "63.5mm"), ("a4-70x37", "70mm"), ("letter-66x25", "66.675mm")):
         assert parse(c.get(f"/api/spools/214/label.svg?size={size}").text).get("width") == width
     assert decode(code_of(parse(r.text))[0]) == ADDRESS
 
@@ -339,7 +432,7 @@ def test_label_svg_answers_the_label_at_the_size_asked():
 def test_label_svg_refusals_have_the_kits_shape():
     c, _ = kit_client(FakeSm(spool(214)))
     r = c.get("/api/spools/214/label.svg?size=A4")
-    assert r.status_code == 400 and r.json() == {"error": "bad_size", "message": "The size must be 62x29, 50x30 or sheet24."}
+    assert r.status_code == 400 and r.json() == {"error": "bad_size", "message": "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25."}
     r = c.get("/api/spools/999/label.svg")
     assert r.status_code == 404 and r.json() == {"error": "not_found", "message": "Spool 999 was not found."}
     r = kit_client(FakeSm(down=True))[0].get("/api/spools/214/label.svg")
@@ -393,7 +486,7 @@ def test_the_page_serves_the_label_the_print_page_and_its_files(monkeypatch):
     c, _ = page_client(monkeypatch, FakeSm(spool(214), spool(213)))
     r = c.get("/spools/214/label.svg?size=50x30")
     assert r.status_code == 200 and r.headers["content-type"].startswith("image/svg+xml") and parse(r.text).get("width") == "50mm"
-    r = c.get("/labels?ids=214,213,999&size=sheet24")
+    r = c.get("/labels?ids=214,213,999&size=letter-66x25")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
     assert r.text.count("<svg") == 2 and "Spool 999 was not found." in r.text
     assert "script-src 'self'" in r.headers["content-security-policy"]
@@ -410,5 +503,5 @@ def test_the_page_refuses_in_its_own_shape(monkeypatch):
     r = c.get("/labels?ids=abc")
     assert r.status_code == 400 and r.json()["code"] == "bad_ids"
     r = c.get("/labels?ids=214&size=huge")
-    assert r.status_code == 400 and r.json()["error"] == "The size must be 62x29, 50x30 or sheet24."
+    assert r.status_code == 400 and r.json()["error"] == "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25."
     assert c.get("/labels").status_code == 400
