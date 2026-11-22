@@ -16,6 +16,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -34,6 +35,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.File
 import java.io.IOException
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /** What the client says for an error reply that carries no `message` of its own ([ApiError.notFromHub] knows it). */
@@ -59,6 +61,8 @@ class Api(
     private val localNetworkMissing: () -> Boolean = { LocalNetwork.missing() },
     /** The app's version, sent on every call as `X-Spoolwarden-Client: android/<version>` so the Hub can list it in Devices. */
     private val clientVersion: String = BuildConfig.VERSION_NAME,
+    /** The language in use, sent on every call as `Accept-Language` so the texts the Hub writes come in it (05-android-app 12.2). */
+    private val language: () -> String = { Locale.getDefault().toLanguageTag() },
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -597,6 +601,27 @@ class Api(
         if (e.status == 404) null else throw e
     }
 
+    /**
+     * `POST api/demo/leave` (any paired phone): leaves the demo and answers whether the Hub is still in it (false).
+     * 409 `not_in_demo` when the demo is already off ([ApiError.code]).
+     */
+    suspend fun leaveDemo(): Boolean =
+        (call(request("api", "demo", "leave").post(JsonObject(emptyMap()).toBody())) as? JsonObject)
+            ?.get("demo")?.jsonPrimitive?.booleanOrNull ?: false
+
+    /** The label of spool [id] at [size] (`62x29`, `50x30` or `sheet24`) as the Hub draws it: SVG text. 404 `not_found`. */
+    suspend fun labelSvg(id: Int, size: String): ByteArray = withContext(Dispatchers.IO) {
+        val request = request("api", "spools", id.toString(), "label.svg") { addQueryParameter("size", size) }.get().build()
+        execute(request, null).use { resp ->
+            if (!resp.isSuccessful) throw errorFor(resp.code, resp.body.string(), request.header("Authorization"))
+            try {
+                resp.body.bytes()
+            } catch (e: IOException) {
+                throw offline("The connection to the Hub was lost: ${e.message}")
+            }
+        }
+    }
+
     /** `GET api/library/local`: the owner's own entries; 404 `not_found` from an older Hub. */
     suspend fun localLibrary(): LocalLibrary = KitWire.localLibrary(call(request("api", "library", "local").get()))
 
@@ -639,6 +664,7 @@ class Api(
             query?.invoke(this)
         }.build()
         val b = Request.Builder().url(url).header(CLIENT_HEADER, "android/$clientVersion")
+            .header("Accept-Language", language())
         if (auth) token()?.let { b.header("Authorization", "Bearer $it") }
         return b
     }

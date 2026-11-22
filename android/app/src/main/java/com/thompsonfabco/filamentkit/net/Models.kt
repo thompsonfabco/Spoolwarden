@@ -38,6 +38,10 @@ data class ServerInfo(
     val modules: List<String>? = null,
     /** The Hub's default theme for devices that have not chosen (`console`, `workbench`, `palette`, `panes`); null from an older Hub. */
     val look: String? = null,
+    /** The Hub runs in demo (R85 section 3): the app shows the demo notice (05-android-app 3.7); false from an older Hub. */
+    @Serializable(with = LenientBool::class) val demo: Boolean = false,
+    /** The Hub's own language code (`en`), or null from an older Hub. */
+    val language: String? = null,
 ) {
     /** The label-photo add flow is offered: `ai_intake` is on (or the server is too old to say). */
     val labelReading: Boolean get() = modules == null || AI_INTAKE in modules
@@ -948,6 +952,10 @@ data class HubAnswer(
     val recordsKept: Long?,
     val spoolmanUrl: String?,
     val hubPage: String?,
+    /** The Hub runs in demo (05-android-app 3.7). */
+    val demo: Boolean = false,
+    /** The Hub's own language code, or null when it sent none. */
+    val language: String? = null,
 )
 
 /**
@@ -1027,6 +1035,8 @@ object KitWire {
             recordsKept = o.long("records_kept"),
             spoolmanUrl = o.str("spoolman_url")?.takeIf { it.isNotBlank() },
             hubPage = o.str("hub_page")?.takeIf { it.isNotBlank() },
+            demo = o.bool("demo") ?: false,
+            language = o.str("language")?.takeIf { it.isNotBlank() },
         )
     }
 

@@ -23,8 +23,11 @@ internal class FakeHub(var handler: (Request) -> Pair<Int, String> = { 200 to "{
             .body(body.toResponseBody("application/json".toMediaType())).build()
     }.build()
 
-    fun api(token: String? = "tok-123", clientVersion: String = BuildConfig.VERSION_NAME): Api =
-        Api(client, { "https://hub.test:8443" }, { token }, localNetworkMissing = { false }, clientVersion = clientVersion)
+    fun api(token: String? = "tok-123", clientVersion: String = BuildConfig.VERSION_NAME, language: String? = null): Api =
+        Api(
+            client, { "https://hub.test:8443" }, { token }, localNetworkMissing = { false }, clientVersion = clientVersion,
+            language = { language ?: java.util.Locale.getDefault().toLanguageTag() },
+        )
 
     fun query(i: Int, name: String): String? = requests[i].url.queryParameter(name)
 }
