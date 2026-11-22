@@ -33,16 +33,19 @@ jobs:
           # AGP downloads the platform and build-tools it needs itself
           packages: 'platform-tools'
           log-accepted-android-sdk-licenses: false
-      # a failure that is only the network (HTTP 429/5xx from the repository, a dependency that could not be downloaded) gets up to two more tries
-      # after a pause; any other failure, a failing test above all, fails the first time
+      # a failure that is only the network (Gradle's own resolution lines: HTTP 429/5xx from the repository, a dependency that could not be
+      # downloaded) gets up to two more tries after a pause; any other failure fails the first time, and a failing test never retries
       - name: Test and assemble
+        shell: bash          # GitHub runs this as bash -eo pipefail: the pipe below keeps gradlew's status
         run: |
+          set -o pipefail      # also holds if the step's shell is ever changed
           rc=0
           for attempt in 1 2 3; do
             rc=0
             ./gradlew testDebugUnitTest assembleDebug 2>&1 | tee gradle.log || rc=$?
             [ "$rc" -eq 0 ] && exit 0
-            grep -qE 'HTTP (429|5[0-9][0-9])|Could not (resolve|GET|download|HEAD)|Read timed out|Connection (reset|timed out)' gradle.log || exit "$rc"
+            grep -qE 'There were failing tests|^[[:alnum:]_.$]+ > .+ FAILED$' gradle.log && exit "$rc"
+            grep -qE "Could not resolve all (files|dependencies) for configuration|Could not (GET|HEAD) 'http|Received status code (429|5[0-9][0-9]) from server|Read timed out|Connection (reset|timed out)" gradle.log || exit "$rc"
             echo "::warning::dependency download failed (attempt $attempt of 3)"
             [ "$attempt" -lt 3 ] && sleep $((attempt * 60))
           done
