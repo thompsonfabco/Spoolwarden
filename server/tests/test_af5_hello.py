@@ -36,7 +36,7 @@ def kept():
 def test_the_three_values_are_kept_with_the_stations_pairing(hub):
     h = station()
     r = hub.get(f"/api/station/hello?fp={FP.upper()}&port=443&version=0.6.2", headers=h)
-    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert r.status_code == 200 and r.json()["ok"] is True and set(r.json()["voice"]) == {"speech", "speaker", "speed", "volume"}
     d = kept()
     assert (d["fp"], d["port"], d["version"]) == (FP, 443, "0.6.2") and d["hello_at"]
     assert pairing.station_info()["fp"] == FP
@@ -44,7 +44,7 @@ def test_the_three_values_are_kept_with_the_stations_pairing(hub):
 
 def test_an_older_station_sends_nothing_and_is_still_answered(hub):
     r = hub.get("/api/station/hello", headers=station())
-    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert r.status_code == 200 and r.json()["ok"] is True and set(r.json()["voice"]) == {"speech", "speaker", "speed", "volume"}
     assert "fp" not in kept()
 
 

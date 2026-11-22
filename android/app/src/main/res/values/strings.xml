@@ -5540,4 +5540,14 @@
     <string name="station_voice_off">Speaking is switched off.</string>
     <string name="station_voice_set_on_hub_note">Speaking and volume are set on the Hub: Settings > Weigh Station voice.</string>
     <string name="station_voice_set_on_hub">Speaking and volume are set on the Hub.</string>
+    <string name="voice_apps_readonly">Change the voice on the Hub page.</string>
+    <string name="voice_busy">The Weigh Station is in use. Try again when it is idle.</string>
+    <string name="voice_change_at_home">Change this at home.</string>
+    <string name="voice_no_answer">The Weigh Station did not answer.</string>
+    <string name="voice_no_station">This Hub has no Weigh Station.</string>
+    <string name="voice_not_saved">The voice settings could not be saved.</string>
+    <string name="voice_off">Speaking is switched off.</string>
+    <string name="voice_played">Played on the Weigh Station.</string>
+    <string name="voice_remote">Chosen on the Weigh Station\'s own computer: spoolwarden config.</string>
+    <string name="voice_speaker_hint">This voice has 904 speakers. Try a few with Test.</string>
 </resources>

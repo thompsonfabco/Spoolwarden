@@ -25,7 +25,7 @@ from pathlib import Path
 
 from . import __version__
 from . import storage, storage_api
-from . import address_cli, address_texts, firstrun, getting_started, history_cli, hostaddr, hubport, alerts, alerts_api, alerts_cli, apply, config, event_sink, inventory, klipper_cli, library, locations_cli, menu_ui, modules, output, pairing, qr, secret_input, steps
+from . import address_cli, address_texts, firstrun, getting_started, history_cli, hostaddr, hubport, alerts, alerts_api, alerts_cli, apply, config, event_sink, inventory, klipper_cli, library, locations_cli, menu_ui, modules, output, pairing, qr, secret_input, steps, voice_cli
 from . import status as status_rows
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
@@ -529,6 +529,13 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
             path.unlink(missing_ok=True)
 
 
+def cmd_station_voice_test() -> int:
+    """`weigh-station voice-test`: the Weigh Station says its test sentence. The Hub does it: this goes through its API."""
+    if not _no_systemd() and not _is_root():
+        return output.need_sudo(_sudo_command("sudo spoolwarden weigh-station voice-test"))
+    return voice_cli.cmd_voice_test(_server_api)
+
+
 def cmd_station_pairing_state(old_spelling: bool = False) -> int:
     """`weigh-station pairing-state` (06 9.7): `paired with 192.0.2.10:8710`, `not paired` or `not checked yet`; its `--json`
     `state` keeps `paired`, `unpaired`, `unchecked`. The old spelling `station pairing-state` still prints the one line
@@ -769,11 +776,12 @@ class _Item:
     """One setting of the menu: its label, the kind of answer and the key `config set` knows it by (06 8.3)."""
 
     def __init__(self, id, label, kind, key, *, choices=(), sep="", low=0, high=0, words="", restarts=False,
-                 keep_spaces=False, alert=""):
+                 keep_spaces=False, alert="", voice=""):
         self.id, self.label, self.kind, self.key = id, label, kind, key
         self.choices, self.sep, self.low, self.high, self.words = choices, sep, low, high, words
         self.restarts, self.keep_spaces = restarts, keep_spaces
         self.alert = alert           # an Alerts item: the type key, or the field of the alert rules (06 8.3, 9.17)
+        self.voice = voice           # a Weigh Station voice item, kept by the Hub's service (R88 01:50)
 
 
 _ITEMS = {i.id: i for i in (
@@ -804,6 +812,13 @@ _ITEMS = {i.id: i for i in (
     _Item("changes", "Allow printer changes from the public address", "bool", "web.printer_changes"),
     _Item("passphrase", "New passphrase", "secret", "web_passphrase"),
     _Item("voice", "Voice", "choice", "station.tts", choices=_VOICES),
+    _Item("voice_speech", "Speak", "bool", None, voice="speech"),
+    _Item("voice_speaker", "Speaker", "int", None, low=0, high=voice_cli.SPEAKER_MAX,
+          words=f"from 0 to {voice_cli.SPEAKER_MAX}", voice="speaker"),
+    _Item("voice_speed", "Speed", "int", None, low=voice_cli.SPEED_MIN, high=voice_cli.SPEED_MAX,
+          words=f"from {voice_cli.SPEED_MIN} to {voice_cli.SPEED_MAX} in steps of {voice_cli.SPEED_STEP}",
+          voice="speed"),
+    _Item("voice_volume", "Volume", "int", None, low=0, high=100, words="from 0 to 100", voice="volume"),
 )}
 
 # the groups, in the Hub page's order (03 10.1): id, title
@@ -815,7 +830,8 @@ _GROUP_ITEMS = {"appearance": ("theme",), "general": ("name", "spoolman"),
                 "alerts": tuple("alert_" + k for k in alerts.KEYS) + ("alert_last", "alert_low", "alert_warn"),
                 "reader": ("engine", "apikey", "model", "reads", "address", "tier", "keep"),
                 "backups": ("days",), "network": ("public", "station", "hosts", "changes"),
-                "passphrase": ("passphrase",), "catalog": (), "voice": ("voice",)}
+                "passphrase": ("passphrase",), "catalog": (),
+                "voice": ("voice", "voice_speech", "voice_speaker", "voice_speed", "voice_volume")}
 
 
 def _lower_first(label: str) -> str:
@@ -862,6 +878,7 @@ class _ConfigMenu:
         self.embedded = False                 # the Storage group alone, for the installer: no `s`, nothing is written
         self.final: list[str] = []            # said after the screen is gone
         self.sm_factory = None                # Spoolman for how full the storage locations are and for renames
+        self._voice, self._voice_asked = None, False   # the Hub's voice values (voice_cli.view), asked when first needed
         self._storage = None                  # the Storage locations screens (locations_cli.StorageEditor), made when opened
 
     # ----- values
@@ -870,7 +887,16 @@ class _ConfigMenu:
             return self.storage_editor().base
         if it.alert:
             return _alert_value(alerts.load(), it.alert)
+        if it.voice:
+            return (self.voice_view() or {}).get(it.voice)
         return _general_value(self.cfg if cfg is None else cfg, it.key)
+
+    def voice_view(self) -> dict | None:
+        """The voice values the Hub's service reports (the service's own file: never read here); None when none is
+        reachable or the Hub has no Weigh Station. Asked once per menu."""
+        if not self._voice_asked:
+            self._voice_asked, self._voice = True, voice_cli.view(_server_api)
+        return self._voice
 
     def storage_editor(self) -> "locations_cli.StorageEditor":
         if self._storage is None:
@@ -939,6 +965,12 @@ class _ConfigMenu:
                 try:
                     return alerts_api.whole(text, it.low, it.high)
                 except alerts_api.AlertsRefused as e:
+                    raise _Sentence(str(e)) from None
+            if it.voice and it.kind == "int":
+                n = int(text)
+                try:
+                    return voice_cli.check(it.voice, n, self.voice_view() or {})
+                except voice_cli.VoiceRefused as e:
                     raise _Sentence(str(e)) from None
             if it.kind == "int":
                 return _check_general(it, int(text))
@@ -1162,13 +1194,20 @@ class _ConfigMenu:
                     continue
                 if iid == "changes" and "web" not in on:
                     continue
-                add(iid)
+                if _ITEMS[iid].voice and self.voice_view() is None:
+                    continue                    # the Hub's service does not answer, or there is no Weigh Station
+                if iid == "voice_speaker" and (self.value(_ITEMS["voice"]) == "espeak"
+                                               or not self.voice_view().get("speaker_range")):
+                    continue
+                add(iid, extra=f"  {voice_cli.speaker_hint()}" if iid == "voice_speaker" else "")
         if gid == "backups":
             after = ["Back up now: sudo spoolwarden backup create", "Restore: sudo spoolwarden restore <zip>"]
         elif gid == "catalog":
             after = ["Update now: sudo spoolwarden catalog update", "Catalog token: sudo spoolwarden catalog token"]
         elif gid == "network":
             after = ["Firewall rules: spoolwarden remote firewall"]
+        elif gid == "voice":
+            after = ["Test the voice: sudo spoolwarden weigh-station voice-test"]
         sc = menu_ui.Screen(f"group-{gid}", f"Settings > {title}", rows, actions=tuple(actions),
                             save="" if self.embedded else "save", leave="back", changes=len(self.staged),
                             after=tuple(after))
@@ -1320,6 +1359,15 @@ class _ConfigMenu:
                 return
             for iid in rules:
                 del self.staged[iid]
+        voices = {i: self.staged[i] for i in self.staged if _ITEMS[i].voice}
+        if voices:                          # Weigh Station voice values: the Hub's service writes them
+            try:
+                voice_cli.save(_server_api, {_ITEMS[i].voice: v for i, v in voices.items()})
+            except voice_cli.VoiceRefused as e:
+                ui.error(f"nothing was saved: {str(e).rstrip('.')}. Your changes are still here.")
+                return
+            for iid in voices:
+                del self.staged[iid]
         if "storage" in self.staged:        # first: it is the part that can need Spoolman and take a while
             try:
                 renamed = self.storage_editor().save_rows(self.staged["storage"]).get("text", "")
@@ -1358,7 +1406,7 @@ class _ConfigMenu:
         """Put the staged settings into `new`; the sentence saying what is wrong, or None."""
         for iid, value in self.staged.items():
             it = _ITEMS[iid]
-            if it.kind in ("secret", "storage") or it.alert:
+            if it.kind in ("secret", "storage") or it.alert or it.voice:
                 continue
             if it.key == "backup.keep_days":
                 new.setdefault("backup", {})["keep_days"] = value
@@ -1509,7 +1557,9 @@ def cmd_config_show(sm_factory=None) -> int:
             if it.kind == "storage":
                 lines += _storage_show_lines(rows, sm_factory)
                 continue
-            if it.alert:                      # the Hub's alert rules: shown, but a setting of alerts.xml, not a key
+            if it.alert or it.voice:           # alerts and voice: shown, but not a key of the settings
+                if it.voice and menu.voice_view() is None:
+                    continue
                 value = menu.stored(it)
                 rows.append({"label": it.label, "key": None, "value": value})
                 gap = " " * (label_width - len(it.label) + 2)
@@ -1555,7 +1605,7 @@ _OLD_STORAGE_KEYS = ("locations", "placement.pla_location", "placement.box_prefi
 
 def _set_keys() -> list[str]:
     return [it.key for it in _ITEMS.values() if it.kind not in ("secret", "storage") and not it.alert
-            and it.id != "spoolman"]
+            and not it.voice and it.id != "spoolman"]
 
 
 def _config_set_value(it: _Item, raw: str):
@@ -6469,6 +6519,7 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
   'Run on the Weigh Station: pair it with the Hub',
   '{devices_pair_station_here}'),
  ('`weigh-station flash-display`', 'Write the Weigh Station display firmware over USB', '{nav_flash_device}'),
+ ('`weigh-station voice-test`', 'Play the voice test sentence on the Weigh Station', '{nav_settings} > {settings_group_voice}'),
  ('`weigh-station pairing-state`', 'Paired, not paired or not checked yet', '(none)'),
  ('`tag-reader list`', 'Tag Reader tokens', '{nav_devices}, {devices_readers_title}'),
  ('`tag-reader new-token [--name NAME]`', 'Make a token', '{devices_readers_make}'),
@@ -6792,6 +6843,7 @@ def _add_weigh_station(sub, name: str, *, alias: bool) -> None:
     _add_yes(fpp)
     stp_sub.add_parser("pairing-state", help="whether this Weigh Station is paired, as one line (paired, unpaired, "
                                              "unchecked in --json)")
+    stp_sub.add_parser("voice-test", help="play a short test message on the Weigh Station")
 
 
 def _add_presets(sub, name: str, *, alias: bool) -> None:
@@ -7261,7 +7313,8 @@ def _json_refusal(a) -> int | None:
 # `--quiet`: the commands whose standard output is only results (06 6.8 drops them). Every other command prints what it
 # exists to print there (a list, a detail, an answer, a link or token) or is a screen, and stays as it is.
 _RESULTS_ONLY = {("locations", "add"), ("locations", "edit"), ("locations", "move"), ("locations", "remove"),
-                 ("locations", "default-overflow"), ("locations", "sealed"), ("weigh-station", "flash-display"), ("backup", "create"), ("backup", "keep"), ("restore", None),
+                 ("locations", "default-overflow"), ("locations", "sealed"), ("weigh-station", "flash-display"),
+                 ("weigh-station", "voice-test"), ("backup", "create"), ("backup", "keep"), ("restore", None),
                  ("recent", "edit"), ("recent", "undo"), ("devices", "forget"), ("spoolman", "fields"),
                  ("spoolman", "address"), ("config", "set"), ("printer", "report"), ("printer", "unpin"),
                  ("catalog", "update"), ("catalog", "rollback"), ("catalog", "adopt"), ("catalog", "add"),
@@ -7306,6 +7359,8 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return cmd_station_pair_local()
     if args.cmd == "weigh-station" and args.station_cmd == "flash-display":
         return cmd_station_flash_panel(yes=args.yes, only_port=args.port)
+    if args.cmd == "weigh-station" and args.station_cmd == "voice-test":
+        return cmd_station_voice_test()
     if args.cmd == "weigh-station":
         return (cmd_station_pairing_state(old_spelling=getattr(args, "old_spelling", False))
                 if args.station_cmd == "pairing-state" else cmd_station_pair())

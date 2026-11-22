@@ -19,21 +19,24 @@ import urllib.parse
 import anyio
 
 from .. import config, station_client, voice_state
+from ..station.page import catalogue_text
 
 log = logging.getLogger(__name__)
 
-TEXT_VOICE_PLAYED = "Played on the Weigh Station."
-TEXT_VOICE_NO_ANSWER = "The Weigh Station did not answer."
-TEXT_VOICE_BUSY = "The Weigh Station is in use. Try again when it is idle."
-TEXT_VOICE_OFF = "Speaking is switched off."
-TEXT_VOICE_REMOTE = "Chosen on the Weigh Station's own computer: spoolwarden config."
-TEXT_VOICE_APPS_READONLY = "Change the voice on the Hub page."
+# the sentences: the string catalogue's, the English as the fallback
+_t = catalogue_text
+TEXT_VOICE_PLAYED = _t("voice_played", "Played on the Weigh Station.")
+TEXT_VOICE_NO_ANSWER = _t("voice_no_answer", "The Weigh Station did not answer.")
+TEXT_VOICE_BUSY = _t("voice_busy", "The Weigh Station is in use. Try again when it is idle.")
+TEXT_VOICE_OFF = _t("voice_off", "Speaking is switched off.")
+TEXT_VOICE_REMOTE = _t("voice_remote", "Chosen on the Weigh Station's own computer: {command} config.")
+TEXT_VOICE_APPS_READONLY = _t("voice_apps_readonly", "Change the voice on the Hub page.")
+TEXT_VOICE_NO_STATION = _t("voice_no_station", "This Hub has no Weigh Station.")
+TEXT_VOICE_NOT_SAVED = _t("voice_not_saved", "The voice settings could not be saved.")
 
 VOICE_MANY = "Piper, many speakers"
 VOICE_ONE = "Piper, one clear speaker"
 VOICE_ESPEAK = "espeak-ng, robotic, no download"
-
-TEXT_VOICE_NOT_SAVED = "The voice settings could not be saved."
 
 
 class VoiceError(Exception):
@@ -138,7 +141,7 @@ def save_voice(body, *, load=None) -> dict:
     cfg = (load or config.load)()
     new = check_values(body, cfg)
     if not station_url(cfg):
-        raise VoiceError(409, "no_station", "This Hub has no Weigh Station.")
+        raise VoiceError(409, "no_station", TEXT_VOICE_NO_STATION)
     if new:
         if not voice_state.save(new, cfg):
             raise VoiceError(500, "not_saved", TEXT_VOICE_NOT_SAVED)
@@ -153,7 +156,7 @@ def play_test(cfg: dict, body) -> None:
     """`POST /api/voice/test`: the station says its one sentence. VoiceError 409 `busy` / `off`, 502 `no_answer`."""
     values = {k: v for k, v in check_values(body, cfg).items() if k != "speech"}
     if not station_url(cfg):
-        raise VoiceError(409, "no_station", "This Hub has no Weigh Station.")
+        raise VoiceError(409, "no_station", TEXT_VOICE_NO_STATION)
     try:
         status, code = station_client.voice_test(station_url(cfg), values)
     except (station_client.StationCallError, OSError, ValueError):

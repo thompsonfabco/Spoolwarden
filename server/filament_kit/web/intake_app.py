@@ -287,6 +287,9 @@ class IntakeApp:
             ("/intake/api/restore_deleted", self.api(self.restore_deleted), ["POST"]),
             # the Hub at a glance and the owner's own catalog entries (R83 10.3): each passes the kit route on unchanged
             ("/intake/api/hub", self.api(self.hub_get), ["GET"]),
+            ("/intake/api/voice", self.api(self.voice_get), ["GET"]),
+            ("/intake/api/voice", self.api(self.voice_patch), ["PATCH"]),
+            ("/intake/api/voice/test", self.api(self.voice_test), ["POST"]),
             # languages, labels and the demo (R85 sections 3 to 5): each passes the kit route on unchanged
             ("/intake/api/languages", self.api(self.languages_twin), ["GET"]),
             ("/intake/api/strings/{name}", self.api(self.strings_twin), ["GET"]),
@@ -668,7 +671,7 @@ class IntakeApp:
         async def route(request: Request):
             if not self._lan(request):
                 return JSONResponse({"error": "home network only"}, 403)
-            if request.method == "POST" and not self._origin_ok(request):
+            if request.method in ("POST", "PATCH") and not self._origin_ok(request):
                 return JSONResponse({"error": "bad origin"}, 403)
             try:
                 res = await fn(request)
@@ -898,7 +901,9 @@ class IntakeApp:
         """The Hub's refusal, or its silence, as the kit answers one: {error: code, message: sentence} (R83 addition 2026-11-18 01:06)."""
         st = e.http
         answered = isinstance(st, int) and 400 <= st < 600 and st != 401
-        return JSONResponse({"error": e.code or ("refused" if answered else "unreachable"), "message": str(e)}, st if answered else 502)
+        extra = {"field": e.field} if getattr(e, "field", None) else {}
+        return JSONResponse({"error": e.code or ("refused" if answered else "unreachable"), "message": str(e), **extra},
+                            st if answered else 502)
 
     async def _hub_get(self, path: str):
         """GET `path` from the Hub with this app's pairing; the Hub's refusal or its silence as the JSON error it is."""
@@ -1018,6 +1023,29 @@ class IntakeApp:
 
     async def hub_get(self, request: Request):
         return await self._hub_get("/api/hub")
+
+    # the Weigh Station's voice (R88): each passes the kit route on. The kit lets this unit's token change it, and that token
+    # is the same on the public address, so the change and the test are refused there, here (R88 01:35.3)
+    VOICE_API = "/api/voice"
+
+    async def voice_get(self, request: Request):
+        return await self._hub_get(self.VOICE_API)
+
+    async def _voice_send(self, request: Request, send, path: str):
+        if self.origin is not None:
+            from ..station.page import catalogue_text
+            return JSONResponse({"error": "home_only", "message": catalogue_text("voice_change_at_home", "Change this at home.")}, 403)
+        b = await self._body(request)
+        try:
+            return await anyio.to_thread.run_sync(send, path, b)
+        except SlotError as e:
+            return self._kit_refusal(e)
+
+    async def voice_patch(self, request: Request):
+        return await self._voice_send(request, self.kit.patch, self.VOICE_API)
+
+    async def voice_test(self, request: Request):
+        return await self._voice_send(request, self.kit.post, f"{self.VOICE_API}/test")
 
     async def library_list(self, request: Request):
         return await self._hub_get("/api/library/local")

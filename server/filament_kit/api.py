@@ -35,6 +35,7 @@ from .bridge.slottest import NoStatus, PrinterBusy
 from .bridge.models import camera_kind, model_name
 from .inventory import AddFailed, TagConflict
 from .profiles.errors import ProfileError
+from .setup_console import voice_tab
 from .spoolman import Spoolman, SpoolmanError
 from .station_client import StationClient, StationUnreachable
 
@@ -215,14 +216,17 @@ WEB_ROUTES = (
     ("GET", "/api/analytics"),
     ("GET", "/api/export/{set}.csv"),
     ("GET", "/api/hub"),
+    ("GET", "/api/voice"),
 )
 _WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
+HOME_WEB_ROUTES = (("PATCH", "/api/voice"), ("POST", "/api/voice/test"))
 WEB_ONLY_PREFIX = "/api/profiles/web/"  # the web unit's preset writes: no phone or PC calls them
 WEB_ONLY_PATHS = ("/api/events/web",)   # the web unit's hand-over of its spool events (R80 E1)
 
 VIEWER_ROUTES = (
     ("GET", "/api/info"),
     ("GET", "/api/hub"),
+    ("GET", "/api/voice"),
     ("GET", "/api/events"),
     ("GET", "/api/alerts"),
     ("GET", "/api/printers"),
@@ -293,6 +297,10 @@ def _web_may(method: str, path: str) -> bool:
     return any(m == method and rx.fullmatch(path) for m, rx in _WEB_MATCH)
 
 
+def _home_web_may(method: str, path: str) -> bool:
+    return (method, path) in HOME_WEB_ROUTES
+
+
 def _viewer_may(method: str, path: str) -> bool:
     return any(m == method and rx.fullmatch(path) for m, rx in _VIEWER_MATCH)
 
@@ -333,7 +341,8 @@ def _authed(fn):
             return _err(403, "forbidden", "the intake station's token is for the station's routes only")
         # the path the router matched, not the URL's raw text
         path = request.scope["path"]
-        if scope == "web" and not _web_may(request.method, path):
+        if (scope == "web" and not _web_may(request.method, path)
+                and not (_home_web_may(request.method, path) and await run_in_threadpool(_is_intake_device, device))):
             return _err(403, "forbidden", "the web unit's token is for the web unit's routes only")
         if scope == "viewer" and not _viewer_may(request.method, path):
             return _err(403, "forbidden", "a viewer token may only read Hub status, printers, spools and health")
@@ -1455,7 +1464,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             if not kept:
                 return _err(400, "bad_hello", "the certificate fingerprint, port or version is not valid, or this "
                                               "token is not a Weigh Station's")
-        return JSONResponse({"ok": True})
+        return JSONResponse({"ok": True, "voice": await run_in_threadpool(lambda: voice_tab.hello_voice(config.load()))})
 
     @_handle
     async def station_pair_request(request: Request):
@@ -1815,6 +1824,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/station/tag/{uid}", _flow(station_tag)),
             Route("/api/station/recognize", _flow(station_recognize), methods=["POST"]),
             Route("/api/station/save", _flow(station_save), methods=["POST"]),
+            *voice_tab.kit_routes(_authed),
             *_gated([*_printer_routes(printers), *_bridge_routes(printers, mapper, sm),
                      *camera.routes(camera_hub, _authed)],
                     "klipper" if "klipper" in on and "printers" not in on else "printers", on),
