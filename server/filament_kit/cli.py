@@ -1097,7 +1097,7 @@ class _ConfigMenu:
             new = not bool(self.value(it))
             if it.id == "share_corrections":
                 from . import share_corrections as sc
-                ui.say(output.fill(_cli_text("cli_config_share_corrections_desc"), command="spoolwarden"))
+                ui.say(output.fill(_cli_text("cli_config_share_corrections_desc"), command=spools_cli.COMMAND))
                 if new:
                     why = sc.refusal(self.cfg)
                     if why:
@@ -1319,7 +1319,8 @@ class _ConfigMenu:
                 f"{use['photo_bytes'] / 1e6:.1f} MB of photos")
             from . import share_corrections as sc
             sc_count = sc.state(self.cfg).get("count") or 0
-            add("share_corrections", extra=output.fill(_cli_text("cli_config_share_corrections_waiting_extra"), count=sc_count) if sc_count > 0 else "")
+            add("share_corrections", ("Share corrections",),
+                f"  {output.fill(_cli_text('cli_config_share_corrections_waiting_extra'), count=sc_count)}" if sc_count > 0 else "")
         else:
             for iid in _GROUP_ITEMS[gid]:
                 if iid == "spoolman" and not ("server" in on and "spoolman" not in on):
@@ -1534,7 +1535,8 @@ class _ConfigMenu:
                     if share_delete:
                         try:
                             n_del = sc.delete_waiting(new)
-                            output.out(output.fill(_cli_text("cli_config_share_corrections_deleted"), count=n_del))
+                            output.out(output.fill(_cli_text("cli_config_share_corrections_deleted" if n_del != 1
+                                                             else "cli_config_share_corrections_deleted_one"), count=n_del))
                         except (sc.DeleteFailed, local_reader.LocalReaderError) as e:
                             ui.error(str(e))
                     elif waiting_n > 0:
@@ -4425,7 +4427,7 @@ def _dispatch_printer(a, manager_factory) -> int:
     if c == "show" and getattr(a, "watch", False):
         if not output.terminal() and not output.json_mode():
             output.error(_cli_text("cli_watch_no_terminal"),
-                         output.fill(_cli_text("cli_watch_no_terminal_fix"), command="spoolwarden"))
+                         output.fill(_cli_text("cli_watch_no_terminal_fix"), command=spools_cli.COMMAND))
             return output.USAGE
         row = _printer_named(a.printer, found=True)
         if row is None:
@@ -7714,7 +7716,7 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
             return spools_cli.cmd_catalog_add_ask(_server_api(), yes=args.yes)
         if not args.file:
             output.error(_cli_text("cli_catalog_add_missing_arg"),
-                         output.fill(_cli_text("cli_catalog_add_missing_arg_fix"), command="spoolwarden"))
+                         output.fill(_cli_text("cli_catalog_add_missing_arg_fix"), command=spools_cli.COMMAND))
             return output.USAGE
         return cmd_library_add(args.file)
     if args.cmd == "presets":

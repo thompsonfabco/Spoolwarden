@@ -173,12 +173,12 @@ def test_the_label_reader_screen_numbers_straight_through_under_its_sub_headings
     all_features(local_intake=True)
     assert run(monkeypatch, "5\nq\nq\n") == 0
     screen = capsys.readouterr().out.split("Settings > Label Reader")[1].split("  c check the key")[0]
-    for heading in ("Cloud (Claude)", "On this Hub", "Recently added"):
+    for heading in ("Cloud (Claude)", "On this Hub", "Recently added", "Share corrections"):   # 06-command-line.md 8.3
         assert f"\n  {heading}\n" in screen
     rows = [ln.split() for ln in screen.splitlines() if ln[:4].strip().isdigit()]
     assert [(r[0], " ".join(r[1:3])) for r in rows] == [
         ("1", "Engine order"), ("2", "Anthropic API"), ("3", "Claude model"), ("4", "Reads per"), ("5", "Address http://127.0.0.1:7915"),
-        ("6", "Tier Automatic"), ("7", "Records kept")]
+        ("6", "Tier Automatic"), ("7", "Records kept"), ("8", "Share corrections")]
 
 
 def test_with_one_engine_on_the_engine_row_says_so_and_cannot_be_opened(capsys, monkeypatch):

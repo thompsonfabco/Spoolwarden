@@ -5342,7 +5342,7 @@
     <string name="cli_catalog_ask_required">%1$s is needed.</string>
     <string name="cli_catalog_ask_speed">"Maximum volumetric speed, in mm³/s (Enter to skip): "</string>
     <string name="cli_catalog_local_empty">No entries of your own yet.</string>
-    <string name="cli_catalog_local_empty_fix">Add one: spoolwarden catalog add --ask</string>
+    <string name="cli_catalog_local_empty_fix">Add one: sudo spoolwarden catalog add --ask</string>
     <!-- 1=id -->
     <string name="cli_catalog_not_found">there is no entry %1$s of your own.</string>
     <string name="cli_catalog_not_found_fix">list them: spoolwarden catalog local</string>
@@ -5511,7 +5511,7 @@
     <string name="cli_watch_no_terminal_fix">use spoolwarden printer show --json for one reading.</string>
     <string name="cli_watch_stop">(Ctrl-C stops)</string>
     <string name="cli_catalog_add_missing_arg">give an entry file or --ask.</string>
-    <string name="cli_catalog_add_missing_arg_fix">run: spoolwarden catalog add --ask</string>
+    <string name="cli_catalog_add_missing_arg_fix">run: sudo spoolwarden catalog add --ask</string>
     <!-- 1=count -->
     <string name="cli_status_share_corrections_on">Share corrections: on, %1$d waiting</string>
     <!-- 1=count -->
@@ -5522,10 +5522,11 @@
     <string name="cli_config_share_corrections_delete_ask">Delete the %1$d corrections still waiting?</string>
     <!-- 1=count -->
     <string name="cli_config_share_corrections_deleted">%1$d corrections deleted.</string>
+    <string name="cli_config_share_corrections_deleted_one">1 correction deleted.</string>
     <!-- 1=count -->
     <string name="cli_config_share_corrections_kept">%1$d corrections kept.</string>
     <!-- 1=count -->
-    <string name="cli_config_share_corrections_waiting_extra">"  %1$d waiting"</string>
+    <string name="cli_config_share_corrections_waiting_extra">%1$d waiting</string>
     <!-- 1=who -->
     <string name="cli_who_unknown">unknown actor %1$s.</string>
     <!-- 1=names -->
