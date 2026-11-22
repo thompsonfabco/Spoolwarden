@@ -802,3 +802,36 @@ def test_a_damaged_local_entry_xml_is_skipped_and_the_json_form_is_used():
     (d / "pla-max.xml").write_text("<entry", encoding="utf-8")
     assert library.load().lookup("Acme", "PLA Max").local is not None
     assert (d / "pla-max.xml").read_text(encoding="utf-8") == "<entry"       # never overwritten by a read
+
+
+def test_adding_over_a_damaged_local_entry_xml_keeps_it_aside_and_notes_it():
+    d = config.paths().state / "library-local" / "acme"
+    d.mkdir(parents=True)
+    (d / "pla-max.xml").write_text("<entry", encoding="utf-8")
+    assert library.load().lookup("Acme", "PLA Max").local is None                  # skipped, not a crash
+    assert any(str(d / "pla-max.xml") in p for p in statexml.problems())           # and noted for the Checks row
+    library.add_local(dumps(_local_entry()).encode())
+    assert (d / "pla-max.xml.unreadable").read_text(encoding="utf-8") == "<entry"
+    assert library.load().lookup("Acme", "PLA Max").local is not None
+    assert not any(str(d / "pla-max.xml") in p for p in statexml.problems())
+
+
+def test_a_damaged_local_entry_xml_with_no_json_can_still_be_removed():
+    d = config.paths().state / "library-local" / "acme"
+    d.mkdir(parents=True)
+    (d / "pla-max.xml").write_text("<entry", encoding="utf-8")
+    assert library.remove_local("acme--pla-max") is True
+    assert not (d / "pla-max.xml").exists()
+    assert (d / "pla-max.xml.unreadable").read_text(encoding="utf-8") == "<entry"     # kept, not destroyed
+    assert library.remove_local("acme--pla-max") is False                              # now there is none
+
+
+def test_removing_a_local_entry_with_a_damaged_xml_and_a_json_keeps_the_damaged_file():
+    d = config.paths().state / "library-local" / "acme"
+    d.mkdir(parents=True)
+    (d / "pla-max.json").write_text(dumps(_local_entry()), encoding="utf-8")
+    (d / "pla-max.xml").write_text("<entry", encoding="utf-8")
+    assert library.remove_local("acme--pla-max") is True
+    assert not (d / "pla-max.json").exists() and not (d / "pla-max.xml").exists()
+    assert (d / "pla-max.xml.unreadable").read_text(encoding="utf-8") == "<entry"
+    assert library.load().lookup("Acme", "PLA Max").local is None

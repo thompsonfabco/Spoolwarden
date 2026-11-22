@@ -492,10 +492,23 @@ def _local_files(root: Path) -> list[Path]:
     return sorted(names)
 
 
+def _local_damaged(xp: Path) -> bool:
+    """The XML form of an owner's entry exists and cannot be read."""
+    from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
+    try:
+        statexml.loads(xp.read_bytes(), "entry")
+    except FileNotFoundError:
+        return False
+    except (OSError, statexml.StateXmlError):
+        return True
+    return False
+
+
 def _read_local(path: Path):
     """One of the owner's entries (given by its JSON name): the XML form, else the JSON form, which is moved to XML
     once (the JSON file stays as it was). The root element is `entry` for every file: a product name may start with a
-    digit, which no element name can."""
+    digit, which no element name can. An XML form that cannot be read is noted (`statexml.problems()`) and never
+    overwritten: the JSON form beside it is used, or the entry is skipped."""
     from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
     xp = path.with_suffix(".xml")
     try:
@@ -504,22 +517,14 @@ def _read_local(path: Path):
         raw = None
     if raw is not None:
         try:
-            return statexml.loads(raw, "entry")
-        except statexml.StateXmlError as e:
-            log.warning("%s is not readable (%s)", xp, e)
+            e = statexml.loads(raw, "entry")
+            statexml.clear_problem(xp)
+            return e
+        except statexml.StateXmlError as err:
+            statexml.note_problem(xp, str(err))
     e = _read_json(path)
     if isinstance(e, dict) and raw is None:
-        moving = xp.with_name(xp.name + ".moving")
-        try:
-            _write_atomic(moving, statexml.dumps("entry", e), 0o644, state_owned=True)
-            try:
-                os.link(moving, xp)
-            except FileExistsError:
-                pass
-        except (OSError, statexml.StateXmlError, TypeError, ValueError) as err:
-            log.warning("%s could not be converted (%s)", path, err)
-        finally:
-            moving.unlink(missing_ok=True)
+        statexml.migrate(path, e, tag="entry")
     return e
 
 
@@ -622,8 +627,7 @@ def add_local(data: bytes) -> tuple[dict, str]:
     from .profiles import statexml   # lazily, see _read_state
     path = _local_dir() / rel_path(entry).removeprefix("library/")
     with _locked():
-        make_state_dir(path.parent)
-        _write_atomic(path.with_suffix(".xml"), statexml.dumps("entry", entry), 0o644, state_owned=True)
+        statexml.write(path, entry, tag="entry")        # a damaged XML is kept aside as <name>.xml.unreadable
     lid = line_id(entry["vendor"], entry["product"])
     event_sink.emit("catalog.changed", {"type": "hub"}, {"what": "entry_added", "entry": lid})
     return entry, lid
@@ -775,11 +779,16 @@ def remove_local(entry_id: str) -> bool:
         return False
     vslug, pslug = entry_id.split("--", 1)
     path = _local_dir() / vslug / f"{pslug}.json"
+    from .profiles import statexml   # lazily, see _read_state
+    xp = path.with_suffix(".xml")
     with _locked():
         e = _read_local(path)
-        if not (isinstance(e, dict) and not validate(e, local=True)):
+        damaged = _local_damaged(xp)
+        if not (isinstance(e, dict) and not validate(e, local=True)) and not damaged:
             return False
-        for q in (path.with_suffix(".xml"), path):
+        if damaged:
+            statexml.quarantine(path)             # an XML that cannot be read is kept aside, not deleted
+        for q in (xp, path):
             q.unlink(missing_ok=True)
         try:
             path.parent.rmdir()
