@@ -377,3 +377,53 @@ def test_a_flood_of_other_lines_ends_in_the_timeout_refusal(env):
         ps.enable(panel, **GOOD)
     assert str(e.value) == "The panel did not answer in time." and len(panel.lines) == 1
     assert ps.stored_token() is None and config.load()["station"]["panel_link"] == "usb"
+
+
+def test_a_failed_save_after_the_panels_ok_is_a_sentence_not_the_raw_error(env, monkeypatch):
+    panel = Panel()
+    panel.reply = ["OK", "OK", "OK"]                  # both set-up lines, then the CFG CLEAR
+    def broken(token, folder=None):
+        raise OSError(13, "Permission denied: /var/lib/secret-path/panel_link.xml")
+    monkeypatch.setattr(ps, "store_token", broken)
+    with pytest.raises(ps.PanelSetupError) as e:
+        ps.enable(panel, **GOOD)
+    assert str(e.value) == ("The panel took the Wi-Fi settings, but the station could not save them. Run the set-up again.")
+    assert "secret-path" not in str(e.value) and e.value.__cause__ is None
+    assert panel.lines[-1] == ps.LINE_CLEAR and config.load()["station"]["panel_link"] == "usb"
+    assert ps.stored_token() is None
+
+
+def test_a_failed_config_write_after_the_panels_ok_is_a_sentence_too(env, monkeypatch):
+    def broken(link, port=None):
+        raise ValueError("both settings forms unreadable: /etc/spoolwarden/config.json")
+    monkeypatch.setattr(ps, "_set_link", broken)
+    panel = Panel(ps.REPLY_OK)
+    with pytest.raises(ps.PanelSetupError, match="could not save them") as e:
+        ps.enable(panel, **GOOD)
+    assert "config.json" not in str(e.value) and ps.stored_token() is None      # no half-kept token
+    assert panel.lines[-1] == ps.LINE_CLEAR
+
+
+def test_a_panel_that_does_not_answer_the_clear_still_gets_the_sentence(env, monkeypatch):
+    monkeypatch.setattr(ps, "_set_link", lambda link, port=None: (_ for _ in ()).throw(OSError("disk")))
+    panel = Panel()
+    panel.reply = ["OK", "OK"]                         # then silence: the CFG CLEAR times out, and is let go
+    with pytest.raises(ps.PanelSetupError, match="could not save them"):
+        ps.enable(panel, **GOOD)
+    assert panel.lines[-1] == ps.LINE_CLEAR
+
+
+def test_crlf_fixture_through_the_full_enable_path(env):
+    """A panel whose every line ends CRLF (the lines as the serial reader hands them, the terminator kept), including
+    the ones it sends unasked, through the whole of enable(): set-up lines sent, token kept, config switched."""
+    panel = Panel()
+    panel.reply = ["HELLO intake-panel 14 esp32c3\r\n", "W 812.5 1\r\n", "K\r\n", "AIR 21.5 40 1013\r\n", "OK\r\n",
+                   "P H\r\n", "OK\r\n"]
+    result = ps.enable(panel, **GOOD)
+    assert result == {"panel_link": "wifi", "panel_port": 5004} and panel.reply == []
+    assert panel.lines[0].startswith("CFG WIFI ") and panel.lines[1].startswith("CFG LINK ")
+    assert not any("\r" in l or "\n" in l for l in panel.lines)          # nothing of the panel's line endings goes back
+    assert ps.stored_token() and config.load()["station"]["panel_link"] == "wifi"
+    with pytest.raises(ps.PanelSetupError, match="did not accept"):
+        ps.enable(Panel("ERR long\r\n"), **GOOD)
+    assert ps.disable(Panel("OK\r\n"))["panel_forgotten"] is True

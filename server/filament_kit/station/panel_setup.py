@@ -58,6 +58,8 @@ TEXT_FIRMWARE_OLD = _t("panel_setup_firmware_old", "This panel's firmware is too
 TEXT_NO_ANSWER_USB = _t("panel_setup_no_answer_usb", "The panel did not answer over USB. Check the cable and try again.")
 TEXT_NOT_ACCEPTED = _t("panel_setup_not_accepted", "The panel did not accept the Wi-Fi settings.")
 TEXT_TIMEOUT = _t("panel_setup_timeout", "The panel did not answer in time.")
+TEXT_NOT_SAVED = _t("panel_setup_not_saved", "The panel took the Wi-Fi settings, but the station could not save them. "
+                    "Run the set-up again.")
 TEXT_NOT_CONNECTED = _t("check_panel_not_connected", "The Weigh Station's panel is not connected.")
 TEXT_NOT_CONNECTED_FIX = _t("check_panel_not_connected_fix", "check the panel has power and is in Wi-Fi range; to go back to "
                             "the USB cable: sudo spoolwarden weigh-station panel-wifi --off")
@@ -228,8 +230,16 @@ def enable(send: Callable[[str | None], str], *, version: str | None, ssid: str,
     fp = check_values(ssid=ssid, password=password, address=address, port=port, fingerprint=fingerprint)
     token = new_token()
     _send_all(send, setup_lines(ssid=ssid, password=password, address=address, port=port, fingerprint=fp, token=token))
-    store_token(token, folder)
-    _set_link("wifi", port)
+    try:                                                    # the panel said OK: what fails now is the station's own side
+        store_token(token, folder)
+        _set_link("wifi", port)
+    except (OSError, ValueError):
+        try:
+            forget_token(folder)                            # not saved: no half-kept token
+            _answer(send, LINE_CLEAR)                       # best effort: the panel forgets what it just took
+        except (OSError, PanelSetupError):
+            pass
+        raise PanelSetupError(TEXT_NOT_SAVED) from None     # never the OSError's text (paths, reasons)
     return {"panel_link": "wifi", "panel_port": port}
 
 
