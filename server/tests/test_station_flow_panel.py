@@ -14,7 +14,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 from filament_kit import config
-from filament_kit.station import beep, camera, flow, nfc, panel, server_api, speech
+from filament_kit.station import beep, camera, flow, nfc, panel, scale as station_scale, server_api, speech
 from filament_kit.station import http as station_http
 from filament_kit.station import state as st
 
@@ -87,6 +87,7 @@ def rig(monkeypatch):
     monkeypatch.setattr(flow, "api", lambda: api)
     monkeypatch.setattr(flow, "spawn", lambda fn, *args: fn(*args))
     monkeypatch.setattr(camera, "grab_photo", lambda: (JPEG, None))
+    monkeypatch.setattr(station_scale, "find_scale", lambda: "/dev/hidraw0")  # the computer has a scale
     said = []
     monkeypatch.setattr(speech, "say", said.append)
     seen = panel.Shown()
@@ -690,3 +691,110 @@ def test_a_late_return_after_a_new_scan_is_dropped(rig):
     nfc.on_tag(OUT)
     panel.on_line(b"L H")
     assert rig.step() == "weigh" and flow.flow["returning"] is False and flow.flow["spool"]["id"] == 123
+
+
+# ---------- a Weigh Station without a scale (R88 4.2, WL3) ----------
+
+def no_computer_scale(monkeypatch):
+    monkeypatch.setattr(station_scale, "find_scale", lambda: None)
+
+
+def panel_scale(grams, status="stable"):
+    """What the panel service keeps for a panel's `W` lines (a stub of WL1): st.state["panel_scale"]."""
+    with st.lock:
+        st.state["panel_scale"] = {"grams": grams, "status": status, "unit": 2}
+
+
+def test_no_scale_short_press_says_no_scale_here_and_changes_nothing(rig, monkeypatch):
+    no_computer_scale(monkeypatch)
+    nfc.on_tag(LINKED)
+    panel.on_line(b"P H")
+    assert rig.step() == "weigh" and rig.row(4) == "No scale here" and rig.said[-1] == "No scale here."
+    assert st.state["held"] is None and rig.api.calls == [("tag", LINKED)]
+
+
+def test_no_scale_in_returning_mode_short_press_answers_and_long_press_returns(rig, monkeypatch):
+    no_computer_scale(monkeypatch)
+    checked_out(rig)
+    nfc.on_tag(OUT)
+    panel.on_line(b"P H")
+    assert rig.step() == "weigh" and flow.flow["returning"] is True and rig.said[-1] == "No scale here."
+    assert [rig.row(n) for n in range(5)] == ["Returning", "PLA+ Black", "Home: Rack 1", "Yellow: weigh it",
+                                              "No scale here"]
+    assert sent(rig) == []
+    panel.on_line(b"L H")
+    assert rig.step() == "done" and rig.api.returns == [(OUT, 123)]
+    assert rig.said[-1] == "Returned to Rack 1."
+
+
+def test_no_scale_a_new_tag_goes_to_use_phone(rig, monkeypatch):
+    no_computer_scale(monkeypatch)
+    nfc.on_tag("4:ee:ee")
+    assert rig.step() == "phone" and rig.lamp() == "L 0 1"
+    assert [rig.row(n) for n in range(5)] == ["Use phone", "No scale here", "", "Red: start over", ""]
+    assert rig.said[-1] == "No scale here. Use the phone."
+    assert not [c for c in rig.api.calls if c[0] == "recognize"]
+
+
+def test_the_scale_rows_are_ascii_within_title_16_and_rows_21(rig, monkeypatch):
+    no_computer_scale(monkeypatch)
+    checked_out(rig)
+    for tag in ("4:ee:ee", OUT, LINKED):
+        nfc.on_tag(tag)
+        panel.on_line(b"P H")
+        rows = [rig.row(n) for n in range(5)]
+        assert len(rows[0]) <= 16 and all(len(r) <= 21 for r in rows)
+        assert all(all(" " <= ch <= "~" for ch in r) for r in rows)
+
+
+def test_a_sleeping_computer_scale_is_still_a_scale(rig):
+    """The USB device is there but has sent no reading yet: the plain "not settled" answer, not "No scale here"."""
+    nfc.on_tag(LINKED)
+    panel.on_line(b"P H")
+    assert rig.row(4) == "Scale not settled"
+    nfc.on_tag("4:ee:ee")
+    assert rig.step() == "camera"
+
+
+def test_a_panel_scale_is_used_when_the_computer_has_none(rig, monkeypatch):
+    no_computer_scale(monkeypatch)
+    panel_scale(1098.0)
+    nfc.on_tag("4:ee:ee")
+    assert rig.step() == "camera"  # a scale exists: the new tag is recognised as usual
+    panel.on_line(b"P H")
+    assert rig.step() == "weigh"
+    panel_scale(12.0)  # an empty pan
+    panel.on_line(b"P H")
+    assert rig.step() == "weigh" and rig.row(4) == "Scale not settled"
+    panel_scale(1098.0)
+    panel.on_line(b"P H")
+    assert rig.step() == "ready" and rig.row(0) == "1098 g" and rig.said[-1] == "1098 grams. Hold yellow to save."
+    panel.on_line(b"L H")
+    assert rig.step() == "done" and [c for c in rig.api.calls if c[0] == "save"][-1][1]["gross_g"] == 1098.0
+
+
+def test_a_panel_scale_weighs_a_checked_out_spool(rig, monkeypatch):
+    no_computer_scale(monkeypatch)
+    panel_scale(800.0)
+    checked_out(rig)
+    nfc.on_tag(OUT)
+    panel.on_line(b"P H")
+    assert rig.step() == "ready" and rig.row(0) == "800 g"
+
+
+def test_the_computers_scale_wins_when_both_exist(rig):
+    scale(900.0)
+    panel_scale(500.0)
+    nfc.on_tag(LINKED)
+    panel.on_line(b"P H")
+    assert rig.step() == "ready" and rig.row(0) == "900 g"
+    scale(900.0, "moving")  # the computer's scale is unsettled: the panel's settled reading is not borrowed
+    panel.on_line(b"P H")
+    assert rig.step() == "ready" and rig.row(4) == "Scale not settled"
+
+
+def test_a_device_with_no_reading_beats_the_panels_scale(rig):
+    panel_scale(500.0)  # the computer's USB scale is plugged in (rig) but silent: it wins
+    nfc.on_tag(LINKED)
+    panel.on_line(b"P H")
+    assert rig.step() == "weigh" and rig.row(4) == "Scale not settled"

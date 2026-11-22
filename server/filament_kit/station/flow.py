@@ -21,7 +21,7 @@ import threading
 import time
 import unicodedata
 
-from . import beep, camera, server_api, speech
+from . import beep, camera, scale, server_api, speech
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -78,9 +78,28 @@ def go(step, seq=None, **kw):
     return True
 
 
-def weight_now():
+def computer_scale() -> bool:
+    """The computer has a scale: it has sent a reading, or its USB device is there (a DYMO asleep sends nothing)."""
+    with st.lock:
+        seen = st.state["scale"] is not None
+    return seen or scale.find_scale() is not None
+
+
+def has_scale(computer) -> bool:
+    """Is there a scale at all: the computer's (`computer`, from computer_scale), else the panel's, which the panel
+    service keeps in st.state["panel_scale"] ({"grams", "status", "unit"} as "scale", or None) while a panel sends `W`
+    lines (R88 4.2). The computer's scale wins when both exist."""
+    return computer or st.state.get("panel_scale") is not None
+
+
+def scale_reading(computer):
+    """The reading of the scale in use (see has_scale), or None (callers hold the lock)."""
+    return st.state["scale"] if computer else st.state.get("panel_scale")
+
+
+def weight_now(computer):
     """The scale's reading if it is a settled spool (stable, over MIN_GRAMS), else None (callers hold the lock)."""
-    sc = st.state["scale"]
+    sc = scale_reading(computer)
     return sc["grams"] if sc and sc["status"] == "stable" and sc["grams"] >= st.MIN_GRAMS else None
 
 
@@ -109,6 +128,9 @@ def lookup(seq, nfc_id):
         if go("weigh", seq, spool=sp, display=d, returning=back):
             speech.say("Checked out spool. Press yellow to weigh it, or hold yellow to skip weighing." if back
                        else "Known spool. Put it on the scale.")
+    elif status == 200 and not has_scale(computer_scale()):  # nothing could weigh a new spool: the phone can (R88 4.2)
+        if go("phone", seq, display=["No scale here"]):
+            speech.say("No scale here. Use the phone.")
     elif status == 200:
         if go("camera", seq, display=[]):
             speech.say("New tag. Show the spool to the camera.")
@@ -242,13 +264,19 @@ def on_yellow(long_press):
     elif not long_press and step == "camera":
         if go("recognising", seq):
             spawn(recognise, seq, nfc_id)
+    elif not long_press and step in ("weigh", "ready") and not has_scale(computer_scale()):
+        go(step, seq, message="No scale here")  # also in returning mode: the long press still returns it
+        beep.beep("nothing")
+        speech.say("No scale here.")
     elif not long_press and step in ("weigh", "ready"):
+        computer = computer_scale()
         with st.lock:
-            grams = weight_now()
+            grams = weight_now(computer)
             if grams is not None:
                 st.state.update(held=grams, held_at=time.time())
         if grams is None:
-            sc = st.state["scale"]
+            with st.lock:
+                sc = scale_reading(computer)
             go(step, seq, message="Scale unit?" if sc and sc["status"].startswith("unit ") else "Scale not settled")
             beep.beep("nothing")
             speech.say("Put the spool on the scale and wait for it to settle.")
