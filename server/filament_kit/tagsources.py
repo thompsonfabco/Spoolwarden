@@ -27,7 +27,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from . import station_client, tags
+from . import demo, station_client, tags
 from .pairing import AmbiguousStation
 
 TIMEOUT = 4
@@ -100,6 +100,8 @@ def _get(url: str, via_station: bool) -> bytes:
 
 def _fetch(url: str, via_station: bool = False) -> dict | None:
     """One source's tag, or None for no tag / a failure (which also starts its back-off)."""
+    if demo.is_on():             # no source is asked in the demo: no tag
+        return None
     with _lock:
         failed = _failed.get(url)
     if failed is not None and time.monotonic() - failed < BACKOFF:

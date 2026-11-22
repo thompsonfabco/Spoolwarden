@@ -179,6 +179,7 @@ def start(now: datetime | None = None, *, spoolman=None, registry_load=None) -> 
     _give_to_state_owner(d)
     os.replace(tmp, d / MARKER)                  # the marker comes last: a half-made folder is not a demo
     _give_to_state_owner(d)
+    printers.switched()                          # a real printer family started before this closes its connections now
     return {"demo": True}
 
 
@@ -196,6 +197,8 @@ def leave() -> dict:
         pass
     (d / MARKER).unlink()                        # off first, so a half-deleted folder is no demo
     shutil.rmtree(d, ignore_errors=True)
+    from . import printers
+    printers.switched()                          # and opens them again for the real registry
     return {"demo": False}
 
 

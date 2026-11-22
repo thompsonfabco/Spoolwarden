@@ -359,8 +359,14 @@ class KlipperFamily(LoadsMixin):
 
     def sync(self) -> None:
         """Match the connections to the registry: new printers connect, removed ones stop, a changed host, port or
-        API key reconnects. In the demo no connection is made."""
-        if not self._started or demo.is_on():
+        API key reconnects. In the demo no connection is made, and one made before it was switched on is closed."""
+        if not self._started:
+            return
+        if demo.is_on():
+            with self._lock:
+                conns, self._conns = list(self._conns.values()), {}
+            for c in conns:
+                c.stop()
             return
         want = {p.serial: p for p in registry.load().values() if p.family == "klipper" and p.configured and p.host}
         start, stop, republish = [], [], []

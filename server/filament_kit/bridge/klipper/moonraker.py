@@ -28,6 +28,8 @@ import urllib.parse
 import urllib.request
 from typing import Callable
 
+from ... import demo
+
 log = logging.getLogger(__name__)
 ACTIONS = ("pause", "resume", "cancel")
 EVENTS = ("notify_klippy_ready", "notify_klippy_shutdown", "notify_klippy_disconnected", "notify_active_spool_set",
@@ -83,6 +85,7 @@ class Moonraker:
         return h
 
     def _call(self, method: str, path: str, *, query: dict | None = None, body: dict | None = None):
+        demo.stop()                  # no call to a printer in the demo
         url = self.base + path + (("?" + urllib.parse.urlencode(query, safe=",")) if query else "")
         data = json.dumps(body).encode() if body is not None else None
         headers = self._headers()
@@ -248,6 +251,7 @@ class Subscriber:
         delay = self.backoff[0]
         while not self._stop.is_set():
             try:
+                demo.stop()          # no socket to a printer in the demo
                 headers = {"X-Api-Key": self.client._key} if self.client._key else None
                 # Our own socket because websockets then refuses every redirect; left to itself it follows them,
                 # and on another host it would strip only its own credential headers, not X-Api-Key.

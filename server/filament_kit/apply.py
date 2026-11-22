@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import config, firstrun, hubport, modules, pairing, remote, secret_input
+from . import config, demo, firstrun, hubport, modules, pairing, remote, secret_input
 from .station import voice
 from .modules import MODULES, ModuleError
 
@@ -1084,6 +1084,7 @@ def execute(actions: list[Action], *, run: Callable[[list[str]], None] = run_che
 
     `resources` defaults to config.paths().opt / "resources" (what install.sh copies there). `step(sentence)` is told
     when each of step_names(actions) starts (steps.py)."""
+    demo.stop()                  # the system is not configured, restarted or installed into in the demo
     if resources is None:
         resources = config.paths().opt / "resources"
     ex = _Exec(run, Path(resources), Path(root))
@@ -1125,6 +1126,7 @@ def refresh_station(cfg: dict, *, run: Callable[[list[str]], None] = run_checked
     neither: a restart costs the reader about 6 s and resets the panel, and the running flow picks up new pairing
     files by itself (flow.api); a stopped station is started. Returns what it did: "restarted", "started" or
     "unchanged". Raises ApplyError or ModuleError."""
+    demo.stop()                  # no restart of the station in the demo
     modules.validate(cfg)
     data = station_dropin(cfg, _resolve_all(cfg, resolve), subnets=subnets).encode("utf-8")
     ex = _Exec(run, Path("."), Path(root))
@@ -1196,6 +1198,7 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
     raises ApplyError if it does not come.
 
     `pairing=False` (modules set/enable/disable, config menu) prints the status only, no QR code."""
+    demo.stop()                  # no wait for the server, no unit started in the demo
     ex = _Exec(run, Path("."), Path("/"))
     on = modules.enabled(cfg)
     host = socket.gethostname()

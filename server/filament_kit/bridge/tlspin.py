@@ -19,6 +19,7 @@ from cryptography import x509
 from cryptography.x509.oid import NameOID
 
 from . import registry
+from .. import demo
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ def _cn(der: bytes) -> str | None:
 
 
 def _leaf_der(ip: str, port: int, timeout: float) -> bytes:
+    demo.stop()                  # no handshake with a printer in the demo, whoever asks
     with socket.create_connection((ip, port), timeout=timeout) as raw:
         with context().wrap_socket(raw) as s:
             der = s.getpeercert(binary_form=True)
@@ -109,6 +111,7 @@ def check_socket(printer: registry.Printer, sock) -> str:
 
 def connect(printer: registry.Printer, port: int, timeout: float = 10) -> ssl.SSLSocket:
     """A TLS socket to `printer.ip:port` whose leaf already passed the pin check. Raises CertChanged / OSError."""
+    demo.stop()                  # no connection to a printer in the demo
     raw = socket.create_connection((printer.ip, port), timeout=timeout)
     try:
         s = context().wrap_socket(raw)

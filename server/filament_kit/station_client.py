@@ -27,6 +27,7 @@ import urllib.parse
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from . import demo
 from .pairing import AmbiguousStation
 
 
@@ -82,6 +83,7 @@ class PinnedConnection(http.client.HTTPSConnection):
         self.fp, self.seen = fp, None
 
     def connect(self):
+        demo.stop()                  # no connection to a station, a tag source or the network in the demo
         super().connect()
         self.seen = hashlib.sha256(self.sock.getpeercert(binary_form=True) or b"").hexdigest()
         if self.fp is not None and self.seen != self.fp:
@@ -148,6 +150,7 @@ def _resolve_before(address, deadline: float):
 
 
 def _connect_before(address, deadline: float) -> socket.socket:
+    demo.stop()                  # no connection to a station or the network in the demo
     error: OSError = OSError("no address found")
     for family, kind, protocol, _, target in _resolve_before(address, deadline):
         seconds = _remaining(deadline)

@@ -15,6 +15,7 @@ demo has just been switched on).
 """
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
@@ -27,6 +28,8 @@ from datetime import datetime, timedelta, timezone
 from ..bridge import loading, registry, status, xmlfile
 from .inventory import _children
 from ..bridge.connection import PrinterOffline, UnknownPrinter
+
+log = logging.getLogger(__name__)
 
 ALERT_AT = 120.0            # seconds after the demo starts (or restarts): the scripted alert
 KLIPPER_PRINT_AT = 20.0     # seconds after the start: the Garage Voron starts its print
@@ -110,6 +113,14 @@ def registry_printers(sample=None) -> dict[str, registry.Printer]:
 
 
 _made: "weakref.WeakSet[Family]" = weakref.WeakSet()
+_switches: "weakref.WeakSet[Switch]" = weakref.WeakSet()
+
+
+def switched() -> None:
+    """The demo has just been switched on or off: every real family wired behind a `Switch` matches its connections to
+    the new state now (on: it closes what it had open, off: it opens what the real registry has), not at its next round."""
+    for s in list(_switches):
+        s.sync()
 
 
 def rearm_all() -> None:
@@ -467,6 +478,30 @@ class Family:
         return {"spool": spool, "slot": {"label": label, "location": loc}, "preset": None, "dry_run": bool(dry),
                 "moved_back": moved, "problems": []}
 
+    def clear(self, sm, pid: str, label: str, dry: bool, *, sealed_location: str = loading.SEALED) -> dict:
+        """Clear slot `label`: its spool goes back as `unload` moves it; none recorded is not an error. The answer is the kit
+        route's (`loading.clear_view`); the pretend printer has no setting to clear (`printer_cleared` False)."""
+        p = self._get(pid)
+        if p is None or not p.configured:
+            raise loading.NotFound(f"no printer {pid}")
+        self._slot(p, label)
+        loc = status.location(p.name, label, p.family)
+        if p.gcode == "RUNNING" and p.slots[0].label == label:
+            raise loading.SlotInUse(f"{p.name} is printing; clear {label} once it is done")
+        here = loading.occupants(sm, loc)
+        moved = loading.send_back(sm, here, dry) if here else []
+        first = min(here, key=lambda s: s["id"]) if here else None
+        spool = None if first is None else ({**first, "location": moved[0]["location"]} if dry else sm.get(f"spool/{first['id']}"))
+        return loading.clear_view({"slot": {"label": label, "location": loc}, "spool": spool, "moved_back": moved,
+                                   "printer_cleared": False, "dry_run": bool(dry)}, False)
+
+    def return_spool(self, sm, pid: str, spool_id, *, grams: float | None = None, rules=None, dry: bool = False) -> dict:
+        """A spool taken out of the pretend printer by hand goes home (`inventory.return_spool`); there is no printer to tell."""
+        from .. import inventory
+        if self._get(pid) is None:
+            raise loading.NotFound(f"no printer {pid}")
+        return inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry)
+
     def usage(self, pid: str, days: float) -> list[dict]:
         return usage_entries(pid, days)
 
@@ -479,6 +514,14 @@ class Switch:
 
     def __init__(self, real, pretend: Family):
         self._real, self._pretend = real, pretend
+        _switches.add(self)
+
+    def sync(self) -> None:
+        """The real family reconciles its connections with the demo's state (a family without `sync` has none)."""
+        try:
+            getattr(self._real, "sync", lambda: None)()
+        except Exception:  # noqa: BLE001 - the next round of the family tries again
+            log.exception("demo: the real printer family could not be matched to the demo's state")
 
     def _now(self):
         from . import is_on

@@ -44,7 +44,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
-from .. import hostaddr
+from .. import demo, hostaddr
 from . import models, registry, tlspin
 
 log = logging.getLogger(__name__)
@@ -701,6 +701,8 @@ class Hub:
         """The printer and its camera kind; raises NoCamera / NotConfigured / Unavailable."""
         if self.stopping.is_set():
             raise Unavailable("the server is shutting down")
+        if demo.is_on():          # no camera source (a socket to a printer, a child process) in the demo
+            raise NoCamera(demo.NO_CAMERA)
         if not SERIAL.fullmatch(serial or ""):
             raise NoCamera("no such printer")
         p = self._lookup(serial)
