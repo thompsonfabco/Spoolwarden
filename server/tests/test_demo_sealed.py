@@ -999,7 +999,7 @@ def wait_for(check, seconds: float = 5.0, what: str = "the condition") -> None:
     raise AssertionError(f"timed out waiting for {what}")
 
 
-def test_a_bambu_manager_started_before_the_demo_goes_quiet_when_it_starts(tmp_path, monkeypatch):
+def test_a_bambu_manager_started_before_the_demo_goes_quiet_when_it_starts(tmp_path, monkeypatch, mountable):
     """R85 assumption 5: the real Bambu `Manager`, started and connected to a (fake) real printer BEFORE the demo is switched on
     (as `main()` wires it, behind a `Switch`), keeps no connection open and sends the printer nothing once `demo.start()`
     returned, and `demo.leave()` puts the connection back for what the real registry holds. The fake client records every
@@ -1065,7 +1065,7 @@ class FakeMoonraker:
         return call
 
 
-def test_a_klipper_family_started_before_the_demo_goes_quiet_when_it_starts(tmp_path, monkeypatch):
+def test_a_klipper_family_started_before_the_demo_goes_quiet_when_it_starts(tmp_path, monkeypatch, mountable):
     """The same for the real `KlipperFamily`: a printer it is connecting to before the demo gets no further call after
     `demo.start()` returned, and `demo.leave()` connects it again."""
     out = Outside(monkeypatch, tmp_path)
@@ -1096,7 +1096,7 @@ def test_a_klipper_family_started_before_the_demo_goes_quiet_when_it_starts(tmp_
 
 # ---- the root helper, the apply and the update (R85 assumption 5, item 6) ---------------------------------------------
 
-def test_the_root_helper_and_the_system_jobs_refuse_before_any_process(tmp_path, monkeypatch):
+def test_the_root_helper_and_the_system_jobs_refuse_before_any_process(tmp_path, monkeypatch, mountable):
     """R85 4.3: with the real paths on (no FK_NO_SYSTEMD: systemctl, apt, the job runner), every op of the root helper but the
     page's own code check answers 409 "Not in the demo." before it starts anything; and the code that runs as root on its
     own (the apply, the update and its rollback, the backup and its timer, the job runner) refuses the same way. A process,
@@ -1208,7 +1208,7 @@ CLI_NOT_RUN: dict[str, str] = {
 }
 
 
-def test_every_command_of_the_command_line_stays_inside_in_the_demo(tmp_path, monkeypatch):
+def test_every_command_of_the_command_line_stays_inside_in_the_demo(tmp_path, monkeypatch, mountable):
     """R85 4.3: every command the command line has (read from its argparse tree), alone and with `--yes` where it has one, run
     in the demo with Spoolman, Claude, the printers' clients, the sockets, the name lookups, the child processes and every
     write outside the demo's folder recorded and failing: nothing reaches outside."""
