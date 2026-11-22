@@ -217,7 +217,7 @@ def test_a_json_an_older_release_deleted_takes_the_xml_with_it(tmp_path):
     p.unlink()                                      # the older release said "none" by deleting the JSON
     assert statexml.read(p) is None
     assert not (tmp_path / "pair-aside.xml").exists()
-    assert (tmp_path / "pair-aside.xml.unreadable").is_file()          # kept for the user
+    assert not list(tmp_path.glob("*.unreadable*"))                    # a deletion is a deletion: no copy is kept
     assert not (tmp_path / "pair-aside.json.sha256").exists()
     assert statexml.read(p) is None
     statexml.write(p, {"n": 2})
