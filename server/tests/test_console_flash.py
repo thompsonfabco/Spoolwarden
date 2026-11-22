@@ -171,7 +171,7 @@ def test_the_server_way_carries_the_chosen_printer_and_refuses_a_bad_one(app, mo
 
 def _klipper(name="Bench"):
     from filament_kit.bridge import registry
-    return registry.add_klipper(name, "mainsail.localdomain").serial
+    return registry.add_klipper(name, "mainsail.local").serial
 
 
 def _only_klipper_is_on():
