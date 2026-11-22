@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Iterable, Iterator
 
-from . import address_texts, config, modules, output, pairing, remote
+from . import address_texts, config, demo, modules, output, pairing, remote
 
 OK, FAIL, INFO, DETAIL = "ok", "fail", "info", "detail"
 _MARKS = {"OK": OK, "--": INFO}
@@ -368,6 +368,9 @@ def _key_lines(client_factory, live_key: bool) -> Iterator[Row]:
         except OSError:
             pass
         yield Row(FAIL, "Anthropic key missing", "enter it under Settings", key="label-reader.anthropic-key")
+        return
+    if demo.is_on():        # the cloud is not asked in the demo
+        yield Row(INFO, demo.NOT_IN_DEMO, key="label-reader.anthropic-key")
         return
     ok, text = cli.check_key(client_factory)
     if ok:

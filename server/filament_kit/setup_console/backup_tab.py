@@ -22,7 +22,7 @@ import shutil
 import anyio
 from starlette.responses import StreamingResponse
 
-from .. import backup, backup_crypt, config
+from .. import backup, backup_crypt, config, demo
 from .texts import say
 
 MAX_UPLOAD = 2 * 2**30
@@ -33,12 +33,19 @@ def routes(page) -> list[tuple]:
 
     w = lambda fn: page.guard(fn, write=True)  # noqa: E731
 
+    def not_in_demo() -> None:
+        """The demo restores no backup (R85 4.3): an upload is not written, a pending one is not dropped, before the
+        helper (which refuses as well) is asked."""
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
+
     async def listing(request, body):
         r = await page._helper({"op": "backup_list", "code": body["code"]})
         return {"backups": r["backups"], "keep_days": r["keep_days"], "folder": r["folder"],
                 "password_set": bool(r.get("password_set", False))}
 
     async def download(request, body):
+        not_in_demo()
         name = body.get("name")
         if not isinstance(name, str) or not name:
             raise Refused(404, "no such backup")
@@ -79,6 +86,7 @@ def routes(page) -> list[tuple]:
         return {"set": False}
 
     async def upload_zip(request, body):
+        not_in_demo()
         dest = backup.uploaded()
         declared = request.headers.get("content-length")
         if declared and declared.isdigit() and int(declared) > MAX_UPLOAD:
@@ -129,6 +137,7 @@ def routes(page) -> list[tuple]:
         return {"ok": True, **summary}
 
     async def forget(request, body):
+        not_in_demo()
         await anyio.to_thread.run_sync(lambda: shutil.rmtree(backup.uploaded().parent, ignore_errors=True))
         await page._helper({"op": "restore_forget", "code": body["code"]})
         return {"ok": True}

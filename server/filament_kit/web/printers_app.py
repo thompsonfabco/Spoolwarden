@@ -59,6 +59,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
+from .. import demo
 from .errors import Problem
 from .slots import LABEL, SlotError
 
@@ -524,15 +525,27 @@ class PrintersApp:
         return Response(data, media_type=HLS_TYPES[m.group(1)], headers={"Cache-Control": "no-cache"})
 
     # ---------- Web Push (only with web.push) ----------
+    @staticmethod
+    def _in_demo() -> Response | None:
+        """The stop of the demo for every push route: 409 "Not in the demo." (the page's shape: error, code), the key,
+        the subscriptions and the test alert all being the real Hub's."""
+        if demo.is_on():
+            return JSONResponse({"error": demo.NOT_IN_DEMO, "code": demo.NOT_IN_DEMO_CODE}, 409)
+        return None
+
     def _sendable(self) -> None:
         if not self.push.available():
             raise Problem(self.push.NOT_INSTALLED)
 
     async def push_key(self, request: Request):
+        if (stop := self._in_demo()) is not None:
+            return stop
         self._sendable()
         return {"key": (await anyio.to_thread.run_sync(self.push.vapid))[1]}
 
     async def push_subscribe(self, request: Request):
+        if (stop := self._in_demo()) is not None:
+            return stop
         b = await self._body(request)
         try:
             info = self.push.check_subscription(b.get("subscription"))
@@ -543,12 +556,16 @@ class PrintersApp:
         return {"ok": True}
 
     async def push_unsubscribe(self, request: Request):
+        if (stop := self._in_demo()) is not None:
+            return stop
         ep = (await self._body(request)).get("endpoint")
         if isinstance(ep, str):
             await anyio.to_thread.run_sync(self.push_store.remove, ep)
         return {"ok": True}
 
     async def push_test(self, request: Request):
+        if (stop := self._in_demo()) is not None:
+            return stop
         self._sendable()
         now = time.monotonic()
         if now - self.last_test < self.push.TEST_EVERY:

@@ -33,7 +33,7 @@ import logging
 import time
 from pathlib import Path
 
-from . import config, library, local_reader, locks, modules, read_confidence, tagsources
+from . import config, demo, library, local_reader, locks, modules, read_confidence, tagsources
 from .profiles import builds, lines, statexml
 from .spoolman import Spoolman
 
@@ -213,6 +213,7 @@ class ReadCap:
 
     def take(self, device: str | None = None) -> str:
         """Use one read; returns the ticket that may give it back (`refund`)."""
+        demo.stop()                     # no read is made in the demo: none is counted in the real cap file
         with self._lock:
             now = time.time()
             stamps = self._load(now)
@@ -226,6 +227,7 @@ class ReadCap:
     def refund(self, ticket, device: str | None = None) -> None:
         """Give back the read `ticket` took (one that never reached Claude). Refused, changing nothing, unless the
         ticket is live, unused and this device's."""
+        demo.stop()
         if not isinstance(ticket, str) or not ticket:
             raise RefundRefused("a refund needs the ticket its take returned")
         with self._lock:
@@ -379,6 +381,7 @@ def _api_key() -> str:
 def _cloud(cfg: dict, fils: list[dict], vendors: list[dict], images: list[bytes], hint: str, tag: dict | None,
            when: str, client, orders: list[dict] | None) -> dict:
     """One read by Claude: {items, questions, usage}, items as the model wrote them (post-processing in _finish)."""
+    demo.stop()                          # the cloud is never called in the demo, whatever client is given
     import anthropic
     if client is None:
         client = anthropic.Anthropic(api_key=_api_key(), timeout=CLAUDE_TIMEOUT, max_retries=CLAUDE_RETRIES)
@@ -526,6 +529,7 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
     `revise` (the intake history's "correct it": (the saved values, the owner's note)): the local reader gets its
     /v1/revise call; the cloud gets `hint` (the prompt with both). A local reader that cannot revise is a failed
     local read, so the cloud may still answer."""
+    demo.stop()                          # no label reader (Claude's cloud or the local one) is asked in the demo
     cfg = config.load()
     order = list(readers) if readers is not None else (reader_order(cfg) or ["cloud"])
     fils, vendors = sm.get("/filament"), sm.get("/vendor")
@@ -658,6 +662,7 @@ def read_labels(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | Non
     station's GET /state (its `last_weight` may become an opened spool's `gross`). `fresh_tag`: the reader's last
     tag when it is fresh and unknown (`tagsources.fresh_unknown_tag`); `tag_uid` (from the app) wins over it.
     `readers` / `charge`: as `_call` (the reader order, and the daily cap taken only for a cloud read)."""
+    demo.stop()                          # before anything is swept or kept under state/failed
     _sweep_failed()
     rid = read_id or secrets.token_hex(6)
     try:
@@ -685,6 +690,7 @@ def is_kept(read_id: str) -> bool:
 
 def retry(read_id: str, sm: Spoolman, client=None, *, orders: list[dict] | None = None, charge=None) -> dict:
     """Re-run a failed read from its kept photos (the tag it was sent with; no station weight, which is stale)."""
+    demo.stop()
     if not is_kept(read_id):
         raise ReadError("not_found", "those photos are no longer kept (24 h); send them again")
     d = _failed_dir() / read_id
