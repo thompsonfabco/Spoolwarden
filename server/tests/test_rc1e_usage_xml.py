@@ -423,13 +423,13 @@ def test_on_a_fresh_old_log_the_line_is_written_before_the_marker(monkeypatch):
     assert [e["id"] for e in usage.entries(SERIAL, days=30)] == [r["id"]]      # and a lost marker costs no double
 
 
-def _holder(d):
-    """A process that holds usage/.lock until its stdin is closed."""
+def _holder(d, name=".lock"):
+    """A process that holds usage/.lock (or another lock file of that folder) until its stdin is closed."""
     (d / "usage").mkdir(parents=True, exist_ok=True)
     h = subprocess.Popen(
         [sys.executable, "-I", "-c",
          "import fcntl,sys;f=open(sys.argv[1],'a');fcntl.flock(f,fcntl.LOCK_EX);print('held',flush=True);sys.stdin.read()",
-         str(d / "usage" / ".lock")], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+         str(d / "usage" / name)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     assert h.stdout.readline().strip() == "held"
     return h
 
@@ -682,3 +682,83 @@ def test_a_month_file_that_parses_as_broken_is_set_aside_and_older_copies_are_ke
     assert names == ["2026-11.xml.unreadable", "2026-11.xml.unreadable.1", "2026-11.xml.unreadable.2"]
     assert [(month.parent / n).read_bytes() for n in names] == [b"<usage version='1'>broken %d" % i for i in range(3)]
     assert month.is_file() and len(usage.entries(SERIAL, days=30)) == 1
+
+
+@needs_flock
+def test_a_lock_timeout_after_a_permanent_loss_does_not_weaken_the_note(monkeypatch):
+    def full(serial, rec):
+        raise OSError(errno.ENOSPC, "No space left on device")
+    with monkeypatch.context() as m:
+        m.setattr(usage, "_old_form", lambda serial, rec: False)
+        m.setattr(usage, "_pend", full)
+        usage.append(SERIAL, {"job": "lost"})
+    assert any("cannot be kept current" in p for p in statexml.problems())
+    monkeypatch.setattr(usage, "LOCK_WAIT", 0.3, raising=False)
+    holder = _holder(_dir())
+    try:
+        t, out = _in_thread(usage.append, SERIAL, {"job": "later"})
+        t.join(5)
+        assert "r" in out
+    finally:
+        _release(holder)
+    notes = [p for p in statexml.problems() if "rollback" in p]
+    assert notes and all("cannot be kept current" in p for p in notes)          # was: rewritten as "not kept current ... yet"
+
+
+def test_a_pending_lock_that_stays_taken_does_not_hold_the_write_for_ever(monkeypatch):
+    monkeypatch.setattr(usage, "PEND_WAIT", 0.3, raising=False)
+    monkeypatch.setattr(usage, "_old_form", lambda serial, rec: False)          # the line goes to the pending file
+    usage._pend_lock.acquire()                  # a thread that stays in the pending guard
+    try:
+        t, out = _in_thread(usage.append, SERIAL, {"job": "x"})
+        t.join(5)
+        assert "r" in out                       # was: waited for the lock with no limit
+        assert [e["id"] for e in usage.entries(SERIAL, days=30)] == [out["r"]["id"]]          # the month file has it
+        assert any("cannot be kept current" in p for p in statexml.problems())
+        assert not (_dir() / "usage" / usage.PENDING).exists()
+    finally:
+        usage._pend_lock.release()
+        usage._lost.clear()
+
+
+@needs_flock
+def test_a_pending_lock_held_by_another_process_is_waited_for_only_so_long(monkeypatch):
+    monkeypatch.setattr(usage, "PEND_WAIT", 0.3, raising=False)
+    monkeypatch.setattr(usage, "_old_form", lambda serial, rec: False)          # the line goes to the pending file
+    holder = _holder(_dir(), usage.PENDING_LOCK)
+    try:
+        t, out = _in_thread(usage.append, SERIAL, {"job": "x"})
+        t.join(5)
+        assert "r" in out
+        assert [e["id"] for e in usage.entries(SERIAL, days=30)] == [out["r"]["id"]]
+        assert any("cannot be kept current" in p for p in statexml.problems())
+        with pytest.raises(usage.PendTimeout):
+            usage._pend(SERIAL, _entry(E1, "2026-11-10T10:00:00Z"))
+    finally:
+        _release(holder)
+        usage._lost.clear()
+
+
+@needs_flock
+def test_one_process_draining_and_one_pending_at_once_lose_and_double_nothing():
+    ids = [f"{i:032x}" for i in range(1, 401)]
+    drain = os.linesep.join([
+        "import time", "from filament_kit.bridge import usage",
+        "for _ in range(1500):",
+        "    with usage._flocked('%s'):" % SERIAL,
+        "        usage._drain('%s')" % SERIAL,
+        "    time.sleep(0.0005)"])
+    pend = os.linesep.join([
+        "import sys, time", "from filament_kit.bridge import usage",
+        "for i in sys.argv[1:]:",
+        "    usage._pend('%s', {'id': i, 'at': '2026-11-12T10:00:00Z', 'job': 'j' + i, 'grams': 1.0, 'spool_id': 7, 'slot': 'A1', 'observe': False})" % SERIAL,
+        "    pass"])
+    procs = [subprocess.Popen([sys.executable, "-c", drain], env=_sub_env()),
+             subprocess.Popen([sys.executable, "-c", pend, *ids], env=_sub_env())]
+    assert [p.wait(120) for p in procs] == [0, 0]
+    with usage._flocked(SERIAL):                  # what the second process pended after the first one's last drain
+        assert usage._drain(SERIAL)
+    lines = [json.loads(x) for x in (_dir() / "usage.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert sorted(x["id"] for x in lines) == ids                      # each in usage.jsonl exactly once
+    assert sorted(e["id"] for e in usage.entries(SERIAL, days=10_000)) == ids        # and in the month file
+    assert not (_dir() / "usage" / usage.PENDING).exists() and not (_dir() / "usage" / usage.DRAINING).exists()
