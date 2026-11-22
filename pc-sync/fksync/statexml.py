@@ -15,6 +15,7 @@ import contextlib
 import errno
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -539,6 +540,7 @@ def _save(path: Path, data, tag: str | None, mode: int | None, state_owned: bool
         try:
             _keep_old(path, data, m, state_owned, old_name, old_format)
         except (OSError, TypeError, ValueError) as e:      # the XML form is saved; the old form is a rollback aid
+            logging.getLogger(__name__).warning("%s: old form could not be written: %s", jp, e)
             note_problem(jp, f"old form could not be written: {e}")
         else:
             clear_problem(jp)
