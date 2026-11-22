@@ -903,6 +903,7 @@ _ITEMS = {i.id: i for i in (
     _Item("address", "Address", "text", "local_intake.url"),
     _Item("tier", "Tier", "choice", "local_intake.tier", choices=_TIERS),
     _Item("keep", "Records kept", "int", "intake.history_keep", low=0, high=500, words="0 to 500"),
+    _Item("share_corrections", "Share corrections", "bool", "label_reader.share_corrections"),
     _Item("days", "Keep nightly backups for", "int", "backup.keep_days", low=1, high=365, words="1 to 365"),
     _Item("public", "Public address", "text", "web.public_url"),
     _Item("station", "Weigh Station address", "text", "station.url"),
@@ -929,7 +930,7 @@ _GROUPS = (("appearance", "Appearance"), ("general", "General"), ("storage", "St
 _GROUP_ITEMS = {"appearance": ("theme",), "general": ("name", "spoolman"),
                 "storage": ("storage",),
                 "alerts": tuple("alert_" + k for k in alerts.KEYS) + ("alert_last", "alert_low", "alert_warn"),
-                "reader": ("engine", "apikey", "model", "reads", "address", "tier", "keep"),
+                "reader": ("engine", "apikey", "model", "reads", "address", "tier", "keep", "share_corrections"),
                 "backups": ("days",), "network": ("public", "station", "hosts", "changes"),
                 "passphrase": ("passphrase",), "catalog": (),
                 "voice": ("voice", "voice_speech", "voice_speaker", "voice_speed", "voice_volume")}
@@ -981,6 +982,7 @@ class _ConfigMenu:
         self.sm_factory = None                # Spoolman for how full the storage locations are and for renames
         self._voice, self._voice_asked = None, False   # the Hub's voice values (voice_cli.view), asked when first needed
         self._storage = None                  # the Storage locations screens (locations_cli.StorageEditor), made when opened
+        self._delete_waiting = False          # Share corrections off: delete waiting corrections on save
 
     # ----- values
     def stored(self, it: _Item, cfg: dict | None = None):
@@ -1093,6 +1095,24 @@ class _ConfigMenu:
             return self.edit_secret(it)
         if it.kind == "bool":
             new = not bool(self.value(it))
+            if it.id == "share_corrections":
+                from . import share_corrections as sc
+                ui.say(output.fill(_cli_text("cli_config_share_corrections_desc"), command=spools_cli.COMMAND))
+                if new:
+                    why = sc.refusal(self.cfg)
+                    if why:
+                        ui.error(why)
+                        return
+                    self._delete_waiting = False
+                else:
+                    count = sc.state(self.cfg).get("count") or 0
+                    if count > 0:
+                        yes = ui.yesno(output.fill(_cli_text("cli_config_share_corrections_delete_ask"), count=count))
+                        if yes is None:
+                            raise _Ended
+                        self._delete_waiting = bool(yes)
+                    else:
+                        self._delete_waiting = False
             self.stage(it, new)
             return
         if it.kind == "choice":
@@ -1206,14 +1226,22 @@ class _ConfigMenu:
                                   grams=self.value(it["alert_low"]), warn=self.value(it["alert_warn"])).replace(
                 " · ", sep), False
         if gid == "reader":
-            from . import intake
+            from . import intake, share_corrections as sc
             order = intake.reader_order(cfg)
+            sc_st = sc.state(cfg)
+            sc_count = sc_st.get("count") or 0
             if not order:
+                if sc_count > 0:
+                    return f"off: only Records kept{sep}{output.fill(_cli_text('cli_status_share_corrections_off_waiting'), count=sc_count)}", True
                 return "off: only Records kept", True
             names = {"local": "On this Hub", "cloud": "Cloud (Claude)"}
             text = " then ".join(names[r] for r in order)
             if "cloud" in order:
                 text += f"{sep}{self.value(it['reads'])} reads a day{sep}key {'set' if self.key_set() else 'not set'}"
+            if sc_st.get("saved"):
+                text += f"{sep}{output.fill(_cli_text('cli_status_share_corrections_on'), count=sc_count)}"
+            elif sc_count > 0:
+                text += f"{sep}{output.fill(_cli_text('cli_status_share_corrections_off_waiting'), count=sc_count)}"
             return text, False
         if gid == "backups":
             return f"Nightly backups kept {self.value(it['days'])} days", False
@@ -1289,6 +1317,10 @@ class _ConfigMenu:
             use = _history_use()
             add("keep", ("Recently added",), f"  Now {use['count']} record{'' if use['count'] == 1 else 's'}, "
                 f"{use['photo_bytes'] / 1e6:.1f} MB of photos")
+            from . import share_corrections as sc
+            sc_count = sc.state(self.cfg).get("count") or 0
+            add("share_corrections", ("Share corrections",),
+                f"  {output.fill(_cli_text('cli_config_share_corrections_waiting_extra'), count=sc_count)}" if sc_count > 0 else "")
         else:
             for iid in _GROUP_ITEMS[gid]:
                 if iid == "spoolman" and not ("server" in on and "spoolman" not in on):
@@ -1367,7 +1399,7 @@ class _ConfigMenu:
             on = self.features_on()
             sc, targets = self.group_screen(gid)
             if gid == "reader" and not ({"ai_intake", "local_intake"} & on):
-                sc.rows, targets = sc.rows[-1:], targets[-1:]
+                sc.rows, targets = sc.rows[-2:], targets[-2:]
             ev = ui.choose(sc, show)
             show = False
             if ev[0] == "eof":
@@ -1490,8 +1522,29 @@ class _ConfigMenu:
             ui.error(f"not everything was saved: {str(e).rstrip('.')}. The settings are as before{kept}. Your changes "
                      "are still here.")
             return
-        self.cfg, self.staged = new, {}
+        share_changed = "share_corrections" in self.staged
+        share_want = bool(self.staged.get("share_corrections"))
+        share_delete = self._delete_waiting
+        self.cfg, self.staged, self._delete_waiting = new, {}, False
         ui.say(f"Saved {_changes_word(len(saved))}: {', '.join(saved)}.")
+        if share_changed:
+            from . import local_reader, share_corrections as sc
+            with ui.suspended():
+                if not share_want:
+                    waiting_n = sc.state(new).get("count") or 0
+                    if share_delete:
+                        try:
+                            n_del = sc.delete_waiting(new)
+                            output.out(output.fill(_cli_text("cli_config_share_corrections_deleted" if n_del != 1
+                                                             else "cli_config_share_corrections_deleted_one"), count=n_del))
+                        except (sc.DeleteFailed, local_reader.LocalReaderError) as e:
+                            ui.error(str(e))
+                    elif waiting_n > 0:
+                        output.out(output.fill(_cli_text("cli_config_share_corrections_kept"), count=waiting_n))
+                try:
+                    sc.apply(new, say=output.out)
+                except sc.ShareError as e:
+                    ui.error(str(e))
         if renamed:
             ui.say(renamed)
         if applies or restarts:
@@ -3690,6 +3743,31 @@ def _hub() -> _Hub:
     return _Hub(_server_api())
 
 
+def _page_call():
+    """In-process caller for the Hub page's device routes (setup_console/device_tab), without a bearer token."""
+    import asyncio
+    from types import SimpleNamespace
+    from .setup_console import device_tab
+    from .setup_page import Refused
+    from .web.slots import SlotError
+    page = _hub().page
+    routes = [(m, re.compile("^" + re.sub(r"\{(\w+)\}", r"(?P<\1>[^/]+)", p.lstrip("/")) + "$"), fn)
+              for p, fn, m in device_tab.routes(page)]
+
+    def call(method: str, path: str, body: dict | None = None) -> dict:
+        for m, rx, fn in routes:
+            match = rx.fullmatch(path) if m == method else None
+            if match:
+                req = SimpleNamespace(path_params=match.groupdict(), headers={}, client=None)
+                try:
+                    return asyncio.run(fn(req, body or {}))
+                except Refused as e:
+                    raise SlotError(e.status, e.message, body={"error": e.code or "refused", "message": e.message}) from e
+        raise SlotError(404, f"unknown route: {method} {path}")
+
+    return call
+
+
 _STATE_WORD = {"connected": "connected", "unknown_model": "connected", "offline": "offline", "connecting": "offline",
                "wrong_code": "wrong Access Code", "cert_changed": "certificate changed", "unknown": "unknown",
                "not_configured": "not set up"}
@@ -4346,6 +4424,20 @@ def _dispatch_printer(a, manager_factory) -> int:
     if c == "add":
         return cmd_printer_add(klipper=a.klipper, address=a.address, port=a.port, name=a.name, serial=a.serial,
                                access_code=a.access_code, api_key=a.api_key, manager_factory=manager_factory)
+    if c == "show" and getattr(a, "watch", False):
+        if not output.terminal() and not output.json_mode():
+            output.error(_cli_text("cli_watch_no_terminal"),
+                         output.fill(_cli_text("cli_watch_no_terminal_fix"), command=spools_cli.COMMAND))
+            return output.USAGE
+        row = _printer_named(a.printer, found=True)
+        if row is None:
+            return output.USAGE
+        return klipper_cli.cmd_printer_watch(_server_api(), row)
+    if c in ("load", "unload", "clear", "usage"):
+        row = _printer_named(a.printer)
+        if row is None:
+            return output.USAGE
+        return klipper_cli.run_printer(a, _server_api(), row)
     simple = {"show": cmd_printer_show, "test": cmd_printer_test, "detect": cmd_printer_detect,
               "reports": cmd_printer_reports, "live": cmd_printer_live}
     if c in simple:
@@ -6335,8 +6427,6 @@ def cmd_local_intake_corrections_list() -> int:
     """The corrections waiting to be shared (the setup page's Corrections waiting): count, size and one line each.
     `--json` is the global switch: the document is the route's answer."""
     from . import reader_corrections
-    if not _require_root():
-        return output.NEEDS_SUDO
     try:
         got = reader_corrections.waiting(config.load())
     except reader_corrections.CorrectionsError as e:
@@ -6404,8 +6494,6 @@ def cmd_local_intake_corrections_retry(records: list[str]) -> int:
 def cmd_local_intake_corrections_package(dest: str) -> int:
     """Save the exact zip that send would send, to `dest` (a file name, or a folder to put the usual name in)."""
     from . import reader_corrections
-    if not _require_root():
-        return output.NEEDS_SUDO
     try:
         data, name = reader_corrections.package(config.load())
     except reader_corrections.CorrectionsError as e:
@@ -6576,7 +6664,8 @@ _HELP_GROUPS = [('Everyday',
 
 _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check', '{nav_overview}'),
  ('`printer list`', 'All printers, set up and found', '{nav_printers}'),
- ('`printer show <printer>`', 'One printer: details and slots', '{nav_printers}, expanded row'),
+ ('`printer show <printer> [--watch]`', 'One printer: details and slots; `--watch` shows live state and temperatures',
+  '{nav_printers}, expanded row'),
  ('`printer test <printer>`', 'Test connection', '{printers_test}'),
  ('`printer add [--klipper] [options]`', 'Add a printer; asks for what is missing', '{printers_add}'),
  ('`printer use <printer>`', 'Add a Klipper printer that a scan found', '{printers_use}'),
@@ -6598,6 +6687,14 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`printer forget-certificate <printer>`', 'Forget certificate (Bambu)', '{printers_forget_cert}'),
  ('`printer forget <printer>`', 'Forget printer', '{printers_forget}'),
  ('`printer live <printer>`', 'Prints where the live view is', '{printers_live_view}'),
+ ('`printer load <printer> <slot> <spool>`',
+  'Load a spool into a slot (asks); with `auto`, into whichever slot gets a spool next; `--stop` ends waiting',
+  '{nav_printers}, slot load'),
+ ('`printer unload <printer> <slot>`', 'Unload the spool of a slot (asks)', '{nav_printers}, slot unload'),
+ ('`printer clear <printer> <slot>`', 'Clear slot: the Hub forgets the spool recorded there (asks)',
+  '{nav_printers}, clear slot'),
+ ('`printer usage <printer> [--days N]`', 'Filament used by the printer, newest first',
+  '{nav_printers}, filament used'),
  ('`printer menu`', 'The Printers screen', '{nav_printers}'),
  ('`klipper add-on`', 'Prints the commands that install the Klipper add-on', '{printers_addon_title}'),
  ('`recent` (same as `recent history`)', 'Recently added records', '{nav_recently_added}'),
@@ -6617,10 +6714,16 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`spool empty <n> [-y]`', 'Mark a spool empty (asks)', '{nav_spools}'),
  ('`spool return <n>`', 'Send a checked-out spool back to its home (undoable, so it asks nothing)', '{nav_spools}'),
  ('`spool home <n> <location> [-y]`', 'Change the home of a checked-out spool (asks)', '{nav_spools}'),
+ ('`spool label <number>... [--size 62x29\\|50x30\\|a4-63x34\\|a4-70x37\\|letter-66x25] --out <file.svg>`',
+  'Write the labels of these spools as one SVG file', '{nav_spools}, Print a label'),
  ('`events [--since ID\\|TIME] [--kind PREFIX] [--follow]`',
   "The Hub's events, newest last; `--follow` keeps printing new ones",
   '{nav_settings} > {settings_group_alerts} > {settings_alerts_recent} (alerts only)'),
  ('`devices` (same as `devices list`)', 'Paired devices', '{nav_devices}'),
+ ('`devices show <device>`', "One device's detail; for a Weigh Station its status and settings",
+  '{nav_devices}, {devices_open}'),
+ ('`devices set <device> <setting> <value>`', 'Change a Weigh Station setting through the Hub (previews, asks)',
+  '{nav_devices}, {devices_settings_title}'),
  ('`devices forget <device>`', 'Unpair a device', '{devices_unpair}'),
  ('`pair [--slicer-sync \\| --weigh-station] [--text] [--no-wait]`',
   'Pairing code, QR and fingerprint',
@@ -6680,6 +6783,10 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`catalog update [--scheduled]`', 'Update now', '{settings_catalog_update}'),
  ('`catalog rollback`', 'Go back to the version before', '{settings_catalog_back}'),
  ('`catalog add <file \\| ->`', 'Add your own entry', '{settings_catalog_entry_add}'),
+ ('`catalog add --ask`', 'Add your own entry: asks Brand, Name, Material and the optional values',
+  '{settings_catalog_entry_add}'),
+ ('`catalog local`', 'Your own entries', '{settings_catalog_see_entries}'),
+ ('`catalog local remove <id>`', 'Remove one of your own entries (asks)', '{common_remove}'),
  ('`catalog adopt <folder>`', 'Take over a catalog folder from an older install', '(none)'),
  ('`catalog token [--remove]`', 'Set, replace or remove the catalog token', '{settings_catalog_token}'),
  ('`backup create [--out DIR]`', 'Back up now', '{settings_backups_now}'),
@@ -6703,7 +6810,36 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`add`', 'Prints where spools are added', '(none)'),
  ('`help [<command> \\| aliases \\| --markdown]`',
   'Help; `--markdown` prints the command table for the user guide',
-  '(none)')]
+  '(none)'),
+ ('`activity [--spool N] [--who WHO] [--days N]`', 'Show what was done on the Hub', '{nav_logs}'),
+ ('`undo [<event id>] [-y]`', 'Undo a spool or slot change (root; asks)', '(none)'),
+ ('`usage [--by month] [--printer PRINTER]`', 'Show filament used by printers', '(none)'),
+ ('`export <dataset> [--out FILE] [--days N] [--printer PRINTER]`', 'Export Hub data as CSV (root)', '{nav_spools}'),
+ ('`import spools\\|locations <file> [-y]`', 'Import spools or locations from CSV (root; asks)', '{nav_spools}'),
+ ('`report [--out FILE]`', 'Collect a redacted Hub report (root)', '{nav_logs}'),
+ ('`status --history [--days 7\\|30]`', 'Show check changes in the last 7 or 30 days', '(none)'),
+ ('`pair --home-assistant [--text] [--no-wait]`', 'Pair Home Assistant (viewer role): print the code and link', '(none)'),
+ ('`local-intake status`', 'Does the local reader answer, which tiers it can use, the reader order', '(none)'),
+ ('`local-intake install [--tier auto\\|cpu\\|gpu] [--version VERSION] [--planned] [-y]`',
+  'Install or upgrade the local reader from its signed release on this machine (root; sizes are shown first)', '(none)'),
+ ('`local-intake share-corrections [on\\|off] [--delete-waiting] [--status]`',
+  'Share corrections: `on` or `off` sets it (root); no word sets the reader to the saved value; `--status` shows both',
+  '(none)'),
+ ('`local-intake token [--remove]`',
+  "Set the local reader's bearer token (root; asked hidden, never shown), or remove it", '(none)'),
+ ('`local-intake plan`', 'What installing the latest reader release needs, per tier (saved when run as root)', '(none)'),
+ ('`local-intake remove [-y]`',
+  'Uninstall the local reader from this machine and switch the local reader off (root; its settings are kept)', '(none)'),
+ ('`local-intake test <photo>...`',
+  'Read photos with the local reader only and print the result (nothing saved)', '(none)'),
+ ('`label-reader corrections [list]`', 'The corrections waiting to be shared', '(none)'),
+ ('`label-reader corrections remove <id>...`', 'Take corrections out of the list; nothing is sent (root)', '(none)'),
+ ('`label-reader corrections retry <record>...`',
+  'Queue the corrections of records again that `list` shows as not waiting (root)', '(none)'),
+ ('`label-reader corrections package <file>`',
+  'Save the exact zip that `send` would send, to look at it first', '(none)'),
+ ('`label-reader corrections send`',
+  'Ask the Label Reader to send the corrections waiting (it does the upload)', '(none)')]
 
 _ALIASES = [('pair --pc', 'pair --slicer-sync'),
  ('pair --station', 'pair --weigh-station'),
@@ -6761,6 +6897,10 @@ def _hub_catalogue() -> dict:
     return json.loads(re.sub(r",\s*}$", "}", text[text.index("{"):text.rindex("}") + 1]))
 
 
+def _cli_text(key: str) -> str:
+    return _hub_catalogue()[key]
+
+
 def _hub_place(cell: str) -> str:
     """A place cell of the command table: each {key} is the catalogue text the Hub page shows for that button or section."""
     cat = _hub_catalogue()
@@ -6814,8 +6954,16 @@ def _add_catalog(sub, name: str, *, alias: bool) -> None:
     _add_yes(lsub.add_parser("rollback", help="go back to the catalog version before the last update"))
     la = lsub.add_parser("adopt", help="keep the catalog an older program version bundled (used by the installer)")
     la.add_argument("folder", help="the old library_data folder (index.json and library/)")
-    la = lsub.add_parser("add", help="add or replace your own entry from a JSON file ('-' reads stdin)")
-    la.add_argument("file")
+    la = lsub.add_parser("add", help="add or replace your own entry from a JSON file ('-' reads stdin) or with --ask")
+    la.add_argument("file", nargs="?")
+    la.add_argument("--ask", action="store_true", help="ask for each field at the terminal")
+    _add_yes(la)
+    lc = lsub.add_parser("local", help="your own catalog entries: list or remove one")
+    lcsub = lc.add_subparsers(dest="local_cmd", required=False)
+    lcsub.add_parser("list", help="list your own entries (also what catalog local alone shows)")
+    lcr = lcsub.add_parser("remove", help="remove one of your own entries (asks)")
+    lcr.add_argument("id", help="the entry's id, as catalog local shows it")
+    _add_yes(lcr)
     if not alias:
         lt = lsub.add_parser("token", help="set, replace or remove the token the catalog downloads with (root)")
         lt.add_argument("--remove", action="store_true", help="remove it (asks first)")
@@ -7117,9 +7265,16 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_weigh_station(sub, "weigh-station", alias=False)
     _add_weigh_station(sub, "station", alias=True)
     pp.add_argument("--text", action="store_true", help="print the pairing link and code without the QR code")
-    dv = sub.add_parser("devices", help="the paired devices; devices forget unpairs one")
+    dv = sub.add_parser("devices", help="the paired devices; show, set, or forget one")
     dsub = dv.add_subparsers(dest="devices_cmd")
     dsub.add_parser("list", help="the paired devices (also what devices alone shows)")
+    dsh = dsub.add_parser("show", help="one device's details; a Weigh Station's status and settings too")
+    dsh.add_argument("device", help="its name or id (or the start of its name)")
+    dst = dsub.add_parser("set", help="change one setting of a Weigh Station")
+    dst.add_argument("device", help="its name or id (or the start of its name)")
+    dst.add_argument("setting", help="the setting's id, as devices show lists it")
+    dst.add_argument("value", help="its new value")
+    _add_yes(dst)
     dfg = dsub.add_parser("forget", help="unpair a device, after asking")
     dfg.add_argument("device", help="its name or ID (or the start of its name)")
     _add_yes(dfg)
@@ -7166,7 +7321,11 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     PRINTER = dict(metavar="printer", help="its name, serial or id (or the start of its name)")
     SECRET = dict(type=klipper_cli.dash, metavar="-", help="give - and type the secret on standard input")
     psub.add_parser("list", help="every printer, set up or found, with its state")
-    for name, text in (("show", "one printer: its fields and its slots"), ("test", "check that a printer answers"),
+    psh = psub.add_parser("show", help="one printer: its fields and its slots")
+    psh.add_argument("printer", **PRINTER)
+    psh.add_argument("--watch", action="store_true",
+                     help="redraw every 2 seconds with live state and temperatures until Ctrl-C")
+    for name, text in (("test", "check that a printer answers"),
                        ("detect", "ask a Klipper printer what it is (read only)"),
                        ("reports", "the printer reports kept for a Bambu Lab printer"),
                        ("live", "where the camera and the controls are")):
@@ -7222,6 +7381,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     pf = psub.add_parser("forget", help="stop using a printer and delete what is kept for it")
     pf.add_argument("printer", **PRINTER)
     _add_yes(pf)
+    klipper_cli.add_printer_parsers(psub)
     psub.add_parser("menu", help="the Printers screen")
     _add_catalog(sub, "catalog", alias=False)
     _add_catalog(sub, "library", alias=True)
@@ -7488,6 +7648,10 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return (cmd_station_pairing_state(old_spelling=getattr(args, "old_spelling", False))
                 if args.station_cmd == "pairing-state" else cmd_station_pair())
     if args.cmd == "devices":
+        if args.devices_cmd == "show":
+            return spools_cli.cmd_devices_show(_page_call(), args.device)
+        if args.devices_cmd == "set":
+            return spools_cli.cmd_devices_set(_page_call(), args.device, args.setting, args.value, yes=args.yes)
         return cmd_devices(yes=getattr(args, "yes", False), forget=args.device if args.devices_cmd == "forget" else None)
     if args.cmd == "config":
         if args.config_cmd == "show":
@@ -7544,6 +7708,16 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
             return cmd_library_rollback(yes=args.yes)
         if args.library_cmd == "adopt":
             return cmd_library_adopt(args.folder)
+        if args.library_cmd == "local":
+            if getattr(args, "local_cmd", None) == "remove":
+                return spools_cli.cmd_catalog_local_remove(_server_api(), args.id, yes=args.yes)
+            return spools_cli.cmd_catalog_local(_server_api())
+        if getattr(args, "ask", False):
+            return spools_cli.cmd_catalog_add_ask(_server_api(), yes=args.yes)
+        if not args.file:
+            output.error(_cli_text("cli_catalog_add_missing_arg"),
+                         output.fill(_cli_text("cli_catalog_add_missing_arg_fix"), command=spools_cli.COMMAND))
+            return output.USAGE
         return cmd_library_add(args.file)
     if args.cmd == "presets":
         which = args.presets_cmd

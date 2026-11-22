@@ -26,8 +26,16 @@ SPOOLMAN_PORT = 7912
 HUB_PAGE_PATH = "/setup/"
 CHECK_STATES = {"ok": "ok", "fail": "look", "info": "note"}     # status.Row.state -> the contract's; detail rows go
 KINDS = ("phone", "pc", "station", "web", "reader", "builtin")
+CLIENT_KINDS = {"android": "phone", "slicer-sync": "pc", "weigh-station": "station", "web": "web"}
 BACKUP_PAGES = 20                                               # pages of 1000 events read for the last backup
 _HOST = re.compile(r"[A-Za-z0-9.\-]{1,253}|\[[0-9A-Fa-f:.]{2,45}\]")
+
+
+def _phone_offer() -> str | None:
+    try:
+        return (config.paths().opt / "app" / "version.txt").read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
 
 
 def iso(t) -> str | None:
@@ -167,9 +175,11 @@ def devices(cfg: dict, this_device: str | None = None, hub_version: str | None =
     hub_version = hub_version or __version__
     rows = []
     for d in paired if paired is not None else pairing.devices():
-        kind = d.get("kind") if d.get("kind") in KINDS else ("station" if d.get("type") == "station" else None)
+        raw_kind = CLIENT_KINDS.get(d.get("kind"), d.get("kind"))
+        kind = raw_kind if raw_kind in KINDS else ("station" if d.get("type") == "station" else None)
         version = d.get("version") if isinstance(d.get("version"), str) and d.get("version") else None
-        late = kind in ("station", "pc") and older(version, hub_version)
+        offer = _phone_offer() if kind == "phone" else (hub_version if kind in ("station", "pc") else None)
+        late = bool(offer and older(version, offer))
         rows.append({"name": redact.text(str(d.get("name") or ""), redact.known_values(cfg)), "kind": kind,
                      **({"version": version} if version else {}), "last_seen": iso(d.get("last_seen")),
                      "out_of_date": bool(late or d.get("out_of_date") is True), "this": d.get("id") == this_device})
@@ -199,6 +209,15 @@ def nightly_enabled(cfg: dict) -> bool:
         return r.returncode == 0
     except (OSError, subprocess.SubprocessError):
         return "backup" in modules.enabled(cfg)
+
+
+def getting_started_counts(cfg: dict | None = None) -> dict:
+    """The first-run panel's counts for `GET /api/hub`, using `last_backup()` from the event store so the root-only
+    backups folder is never listed."""
+    from . import getting_started
+    cfg = cfg if cfg is not None else config.load()
+    done_backup = bool(_safe("the last backup", last_backup, None))
+    return _safe("getting started", lambda: getting_started.view(cfg, backup_done=done_backup), {})
 
 
 def build(cfg: dict | None = None, *, host: str | None = None, this_device: str | None = None,

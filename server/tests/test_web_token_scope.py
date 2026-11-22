@@ -81,9 +81,9 @@ def test_every_listed_route_lets_the_web_token_through(app):
 
 
 def _calls_in_web() -> set[str]:
-    """Every /api/ path written in filament_kit/web, with what a format string fills in as 1."""
+    """Every /api/ path written in filament_kit/web (and reader_tokens), with what a format string fills in as 1."""
     out = set()
-    for f in WEB.glob("*.py"):
+    for f in [*WEB.glob("*.py"), WEB.parent / "reader_tokens.py"]:
         for literal in re.findall(r"""f?["'](/api/[^"'?]*)""", f.read_text(encoding="utf-8")):
             out.add(re.sub(r"\{[^}]*\}", "1", literal))
     return out
@@ -114,11 +114,11 @@ def test_every_listed_route_is_one_the_web_unit_writes():
     """The other way: nothing stays listed once the web unit stops calling it."""
     from filament_kit.web import slots
     calls = _calls_in_web() | {slots.printer_path("1"), slots.load_path("1", "1"), "/api/printers/1/slots/1/unload",
-                               "/api/printers/1/camera/1", "/api/events/1/undo"}
+                               "/api/printers/1/camera/1", "/api/events/1/undo", "/api/library/local/1"}
     for method, template in api.WEB_ROUTES:
         if (method, template) in LISTED_BEFORE_THE_WEB_UNIT_CALLS_THEM:
             continue
-        rx = re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", template)).replace("[^/]+.csv", "[^/]+"))
+        rx = re.compile(re.sub(r"\{\w+(?::int)?\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", template)).replace("[^/]+.csv", "[^/]+"))
         assert any(rx.fullmatch(c) for c in calls), (method, template)
 
 
@@ -143,13 +143,8 @@ def test_a_route_listed_ahead_of_the_web_unit_is_not_yet_called_by_it():
 # refusal. The mount step lists the route in WEB_ROUTES and deletes its line here; the tests below make that so.
 UNDO_CALL = "/api/events/{quote(event, safe="
 CALLED_BEFORE_THE_HUB_MOUNTS_THEM = {
-    ("POST", "/api/printers/{id}/slots/{label}/clear"),
-    ("GET", "/api/library/local"),
-    ("POST", "/api/library/local/form"),
-    ("DELETE", "/api/library/local/{id}"),
     ("GET", "/api/languages"),                              # RC2 builds it, RC9 mounts it
     ("GET", "/api/strings/{code}"),                         # the texts of a language, `<code>.js`
-    ("GET", "/api/spools/{id}/label.svg"),                  # RC8
     ("POST", "/api/demo/leave"),                            # RC6
 }
 _CALLED_BEFORE_THE_HUB_MOUNTS_THEM_RX = [

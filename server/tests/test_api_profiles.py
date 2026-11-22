@@ -75,8 +75,9 @@ ROUTES = [("GET", "/api/sync/state"), ("PUT", "/api/sync/live"), ("PUT", "/api/s
           ("POST", "/api/sync/rebuild"), ("GET", "/api/sync/build?stamp=20270115-080000"),
           ("POST", "/api/sync/installed"), ("GET", "/api/profiles/status"), ("GET", "/api/profiles/lines"),
           ("PATCH", f"/api/profiles/lines/{LID}"), ("GET", "/api/profiles/parents?material=PLA"),
-          ("POST", "/api/profiles/propose"), ("POST", "/api/library/local"), ("GET", "/api/profiles/updates"),
-          ("POST", "/api/sync/heartbeat")]
+          ("POST", "/api/profiles/propose"), ("GET", "/api/library/local"), ("POST", "/api/library/local"),
+          ("POST", "/api/library/local/form"), ("DELETE", "/api/library/local/x"),
+          ("GET", "/api/profiles/updates"), ("POST", "/api/sync/heartbeat")]
 
 
 def test_every_route_needs_a_token(c):

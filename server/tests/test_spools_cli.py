@@ -227,7 +227,7 @@ def test_catalog_local_empty(capsys):
     api = FakeApi({"GET /api/library/local": {"entries": []}})
     assert spools_cli.cmd_catalog_local(api) == 0
     out = capsys.readouterr().out
-    assert "No entries of your own yet." in out and "Add one: spoolwarden catalog add --ask" in out
+    assert "No entries of your own yet." in out and "Add one: sudo spoolwarden catalog add --ask" in out
 
 
 def test_catalog_remove_asks_with_the_hub_text(capsys, terminal):
