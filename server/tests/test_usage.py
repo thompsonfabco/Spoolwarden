@@ -607,8 +607,8 @@ def test_new_state_dirs_and_usage_log_go_to_the_state_owner(env, monkeypatch):
     assert any(c[0] == "<open temp file>" for c in calls)           # the month file, handed over before its rename
     calls.clear()
     usage.append(SERIAL, {"job": "y"})                     # existing dirs and old log: only the rewritten month file
-    assert [os.path.relpath(c[0], state) for c in calls if c[0][0] != "<"] == [
-        os.path.join("printers", SERIAL, "usage", ".lock")]          # the lock file is handed over each time it is opened
+    assert [os.path.relpath(c[0], state) for c in calls if c[0][0] != "<"] == (
+        [os.path.join("printers", SERIAL, "usage", ".lock")] if usage.fcntl else [])    # the lock file, each time it is opened
     assert [c[1:] for c in calls if c[0] == "<open temp file>"] == [(st.st_uid, st.st_gid)]
 
 
