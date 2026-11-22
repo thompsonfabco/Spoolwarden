@@ -1,7 +1,7 @@
 """Checks of the shared component files of design step S0.11 (the design, build order):
 web-shared/components.css and web-shared/components.js, and the additions components-jobs.css, components-media.css,
 components-media.js and components-lock.js (the Hub page's lock chip and unlock dialog), and alerts.css and alerts.js (the alert banner host,
-the Alerts list, the events poller and the notification helper; R80 EA5).
+the Alerts list, the events poller and the notification helper).
 
 The size limits of foundations 12 rule 7, every class the script uses is drawn by the stylesheet, every catalogue key
 the script names is in strings/en.json, and the page audit (AUT-5, tests/page_audit.js) is a script that parses. The

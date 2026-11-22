@@ -85,7 +85,7 @@ class ApiPickBackend(private val current: () -> Api) : PickBackend {
     override suspend fun undoEvent(id: Long) = current().undoEvent(id)
 }
 
-/** The Undo the Hub offers for a load that went through (R84 3.3): the event it wrote and how to undo it, after the pick screen has gone. */
+/** The Undo the Hub offers for a load that went through: the event it wrote and how to undo it, after the pick screen has gone. */
 class LoadUndo(val event: ActivityEvent, val run: suspend (ActivityEvent) -> UndoOutcome)
 
 /** The dry run of a load into this slot: what the Hub says it would do, before the real load. */
@@ -186,8 +186,8 @@ class PickSpoolViewModel(
     }
 
     /**
-     * A tag held to the phone picks the spool it is linked to (05 9.6), as a tap on its row would. A tag linked to no
-     * spool picks nothing and says so. A load being written holds the tap (05 2.6): the screen says so, and the tag
+     * A tag held to the phone picks the spool it is linked to, as a tap on its row would. A tag linked to no
+     * spool picks nothing and says so. A load being written holds the tap: the screen says so, and the tag
      * opens when the load ends.
      */
     fun onTag(uid: String) = onTag(uid, notSpool = null)
@@ -327,7 +327,7 @@ class PickSpoolViewModel(
         else -> UNREADABLE.say() to null
     }
 
-    /** Whether the real load's failure leaves its outcome unknown: no answer, or one the app cannot read (05 7.6). */
+    /** Whether the real load's failure leaves its outcome unknown: no answer, or one the app cannot read. */
     private fun unknownAnswer(e: Exception): Boolean = when {
         e is FingerprintMismatch -> false
         e is ApiError -> e.code != "unauthorized" && printerProblem(e).let { it == Problem.Unreachable || it == Problem.Unexpected }
@@ -515,7 +515,7 @@ private fun PreviewDialog(
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        // an answer nobody could read: the load may have gone through, so it is not offered again (05 7.6)
+        // an answer nobody could read: the load may have gone through, so it is not offered again
         if (p.dropped) {
             p.problem?.let {
                 NoticeCard(

@@ -1,4 +1,4 @@
-"""RC1a (R85 section 1.4-1.5): config.py reads config.xml first, falls back to config.json, and saves both forms."""
+"""RC1a: config.py reads config.xml first, falls back to config.json, and saves both forms."""
 import json
 import os
 import stat
@@ -328,7 +328,7 @@ def test_install_sh_reads_and_owns_both_forms():
     t = _text("install/install.sh")
     assert 'config.xml" ] || [ -f "$ETC/config.json"' in t                  # the first-install test
     assert "for cf in config.xml config.json; do" in t and 'chmod 640 "$ETC/$cf"' in t
-    assert "config.load_raw()" in t and "ElementTree" not in t        # the Hub's Python reads the XML (R85 1.6)
+    assert "config.load_raw()" in t and "ElementTree" not in t        # the Hub's Python reads the XML
 
 
 def test_the_cli_script_reads_the_xml_state_then_the_json_one():

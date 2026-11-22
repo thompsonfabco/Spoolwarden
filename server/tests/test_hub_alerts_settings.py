@@ -1,4 +1,4 @@
-"""EA6 phase A, Settings > Alerts on the Hub page (03 10.13): the eight switches, last-spool-only, Running low under, Storage warning at,
+"""EA6 phase A, Settings > Alerts on the Hub page: the eight switches, last-spool-only, Running low under, Storage warning at,
 one Save ("Saved: <field names>."), the unsaved-changes guard, and the part "On this device" (the browser switch kept in this browser with
 its Blocked and cannot-show states, Send a test alert, Recent alerts), in a real headless browser. The Hub is the stub of
 hub_alerts_stub.py (api/alerts, settings/alerts and alerts/test are the server step's); the group is registered by the page-side stand-in

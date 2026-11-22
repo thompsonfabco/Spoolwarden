@@ -1,4 +1,4 @@
-"""Spool labels on the Hub page (R85 section 5 and 6.2): one spool's label as SVG, and the print page. Nothing here
+"""Spool labels on the Hub page: one spool's label as SVG, and the print page. Nothing here
 changes anything, so no code is asked for. The drawing and the page are `labels.py`; this file gives the Hub page's routes.
 
     GET  spools/{id}/label.svg {size}      image/svg+xml: the label (size 62x29 | 50x30 | a4-63x34 | a4-70x37 |

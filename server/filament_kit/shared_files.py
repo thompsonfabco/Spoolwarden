@@ -1,4 +1,4 @@
-"""The design's shared files, served to the Hub page and the web app from one place (design 08 section 1, N29/N30).
+"""The design's shared files, served to the Hub page and the web app from one place (the design, platform mapping, N29/N30).
 
 `shared_static/` is generated (tokens/build_tokens.py copies tokens.css, theme-init.js, strings.js, sprite.svg and every
 file of web-shared/ into it); each page serves it under `<its own address>/shared/<file>`. The sprite also goes inline

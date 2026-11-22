@@ -1,4 +1,4 @@
-"""The Hub at a glance (R83 s5, hub_view.py): the shape of GET /api/hub, its redaction and its fallbacks."""
+"""The Hub at a glance (hub_view.py): the shape of GET /api/hub, its redaction and its fallbacks."""
 import json
 
 import pytest

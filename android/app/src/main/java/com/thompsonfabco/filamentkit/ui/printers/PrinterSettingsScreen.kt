@@ -63,7 +63,7 @@ fun PrinterSettingsScreen(
         printerVm.onHubOk = { edit?.clearHubNotice() }
         edit?.onHubOk = printerVm::clearHubNotice
     }
-    // a refused Access Code opens here with Replace Access Code already open (05 9.1), once
+    // a refused Access Code opens here with Replace Access Code already open, once
     var asked by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(edit, state.printer, openAccessCode) {
         val p = state.printer
@@ -135,7 +135,7 @@ private fun settingValue(field: EditField, p: Printer): String? = when (field) {
     EditField.API_KEY -> null
 }
 
-/** "Set" once the Hub holds an Access Code for the printer, "Not set" until then (05 9.9). */
+/** "Set" once the Hub holds an Access Code for the printer, "Not set" until then. */
 @androidx.annotation.StringRes
 internal fun accessCodeValue(p: Printer): Int =
     if (p.configured) R.string.status_set else R.string.status_not_set

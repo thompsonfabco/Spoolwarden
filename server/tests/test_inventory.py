@@ -824,7 +824,7 @@ def test_open_spool_weight_is_capped_at_a_full_spool_like_the_edit(sm):
     assert inventory.open_spool(sm, s["id"], UID, RULES, remaining=4000, dry=False)["remaining_weight"] == 1000
 
 
-# ---------- the spool view's `loaded` and `low`, the search `filter` (R83 s10.1) ----------
+# ---------- the spool view's `loaded` and `low`, the search `filter` ----------
 
 @pytest.fixture
 def printers(tmp_path, monkeypatch):

@@ -21,7 +21,7 @@ function densityFor(material) {
 const MAX_EDGE = 1568, QUALITY = 0.85; // Claude reads labels well at this size; keeps uploads ~300 KB per photo
 const app = document.getElementById("app");
 
-// The phone's status bar and the home-screen manifest follow the active appearance (F5, 08 13): both theme-color metas
+// The phone's status bar and the home-screen manifest follow the active appearance (F5, the design, platform mapping): both theme-color metas
 // take the computed --surface, and the manifest link points at the light or dark manifest, at load, whenever the
 // appearance attribute changes (a stored or new choice) and whenever the phone's own setting changes.
 const darkQuery = matchMedia("(prefers-color-scheme: dark)");
@@ -54,7 +54,7 @@ function h(tag, props, ...kids) {
 }
 
 // The Hub request helper is the shared one (SW.api, base set with SW.configure below). A request that gets no answer within the
-// time of 04 3.6 (30 s; 90 s for a label read; 180 s for a preset build) is a request that cannot reach the Hub.
+// time of the design, web app (30 s; 90 s for a label read; 180 s for a preset build) is a request that cannot reach the Hub.
 const waitFor = (path) => (/^read$|\/revise$/.test(path) ? 90000 : path === "generate" ? 180000 : 30000);
 async function api(path, opts = {}) {
   const stop = new AbortController(), timer = setTimeout(() => stop.abort(), waitFor(path));
@@ -63,7 +63,7 @@ async function api(path, opts = {}) {
   finally { clearTimeout(timer); }
 }
 
-// ---------- the storage list (R79 4): the places in fill order, with how full each one is ----------
+// ---------- the storage list: the places in fill order, with how full each one is ----------
 // GET storage answers {locations: [{name, type, limit, count, used, free, default_overflow, sealed, ...}]}. A Hub without that route
 // (or one that does not answer) leaves STORAGE empty, and every list falls back to the plain names of data-locations.
 let STORAGE = null;
@@ -81,7 +81,7 @@ function placeLabel(l) {
   if (sets) return SW.t("storage_option_containers_free", { name, free: l.free ?? 0 });
   return limit != null ? SW.t("storage_option_limit", { name, used, limit }) : SW.t("storage_option_plain", { name, count: used });
 }
-// "<place> (<why>)" for an item that named no place: the places the Hub chose, and the rule that chose the first (R79 5)
+// "<place> (<why>)" for an item that named no place: the places the Hub chose, and the rule that chose the first
 function whereAndWhy(r, it) {
   const ps = r.placements && r.placements.length ? r.placements : [{ location: r.location }];
   const place = ps.map((p) => (ps.length > 1 ? SW.t("add_preview_placement", { spools: p.spools, location: p.location }) : p.location)).join(", ");
@@ -97,17 +97,17 @@ function placeEntries() {
 
 const ago = (s) => s < 60 ? `${s} s ago` : s < 3600 ? `${Math.floor(s / 60)} min ago` : `${Math.floor(s / 3600)} h ago`;
 
-// ---------- results, errors, reasons and loading in place (04 3.2 to 3.6) ----------
-// The inline result line (02 8.6) is under the control that asked; it exists before it is written, as a live region.
+// ---------- results, errors, reasons and loading in place ----------
+// The inline result line is under the control that asked; it exists before it is written, as a live region.
 const resultLine = () => h("p", { class: "result result--block", role: "status" });
-// The Hub's own text under the line that sums it up (04 3.2): a code block that wraps and scrolls inside itself (02 7.7).
+// The Hub's own text under the line that sums it up: a code block that wraps and scrolls inside itself.
 const codeBlock = (text) => h("figure", { class: "code" },
   h("pre", { class: "code__text code__text--log", tabindex: "0", "aria-label": SW.t("common_result_hub_text"), textContent: text }));
 function answer() {                                          // the line, and room for the Hub's text under it
   const line = resultLine(), code = h("div");
   return { el: h("div", {}, line, code), line, code };
 }
-// A failed request as a sentence (04 3.6). What the Hub says is shown as it came; only an answer without text, a crash and
+// A failed request as a sentence. What the Hub says is shown as it came; only an answer without text, a crash and
 // a request that did not reach the Hub get the page's own words. `kept`: a 502 from a label read adds that nothing is lost.
 function says(e, o = {}) {
   let text;
@@ -126,7 +126,7 @@ function offer(e, again) {
   return undefined;
 }
 function failed(line, e, again, o = {}) {
-  line.setAttribute("role", o.alert ? "alert" : "status");   // a failed destructive action interrupts (02 8.6)
+  line.setAttribute("role", o.alert ? "alert" : "status");   // a failed destructive action interrupts
   SW.result(line, "bad", says(e, o), { action: offer(e, again) });
 }
 // A line that keeps its place while the same thing is said again (a poll must not be announced every time).
@@ -136,12 +136,12 @@ function put(line, kind, text) {
   SW.result(line, kind, text);
 }
 const clear = (line) => { if (line.dataset.state) { line._said = null; SW.result(line, null); } };
-// live data that stopped arriving keeps what was shown and says how old it is (04 3.5); `at` is when it last arrived
+// live data that stopped arriving keeps what was shown and says how old it is; `at` is when it last arrived
 function stale(line, at) {
   const text = SW.t("common_last_update", { age: ago(Math.round((Date.now() - at) / 1000)) }), said = line.querySelector(".result__text");
   if (line.dataset.state === "warn" && said) { said.textContent = text; line._said = text; } else put(line, "warn", text);
 }
-// A press that talks to the Hub (04 3.2, 3.5): its button shows the working form, `box` (a result line, or answer()) says what is
+// A press that talks to the Hub: its button shows the working form, `box` (a result line, or answer()) says what is
 // under way and then what came of it. fn gives nothing (the line is cleared), a text or node (it worked), or
 // { kind, text, code, action } (code: the Hub's own text). A failure is the Hub's words and, where it helps, Try again.
 async function act(box, label, fn, o = {}) {
@@ -162,7 +162,7 @@ async function act(box, label, fn, o = {}) {
   } catch (e) { failed(line, e, o.again || (() => act(box, label, fn, o)), o); }   // o.again: Try again starts something larger than fn
   finally { if (b) SW.idle(b); }
 }
-// Data that loads for a block (04 3.5): a skeleton until the first data (none when `quiet`: the old data stays until the new
+// Data that loads for a block: a skeleton until the first data (none when `quiet`: the old data stays until the new
 // arrives), then the content; a failure is a line with Try again. A later load of the same region wins.
 async function fill(region, thing, fn, o = {}) {
   if (region._load && !region._load.quiet) region._load.done();   // a skeleton still showing: its timers stop
@@ -179,7 +179,7 @@ async function fill(region, thing, fn, o = {}) {
     load.done(line); failed(line, e, () => fill(region, thing, fn, o));
   }
 }
-// A button that cannot be pressed yet keeps its place and says why (04 3.4); pressing it moves focus to what blocks it.
+// A button that cannot be pressed yet keeps its place and says why; pressing it moves focus to what blocks it.
 function disabled(b, reason, blocker) {
   b._blocker = blocker || null;
   SW.disable(b, reason);
@@ -189,11 +189,11 @@ window.addEventListener("click", (e) => {                    // in the capture p
   const to = b && b._reason && b.getAttribute("aria-busy") !== "true" && b._blocker && b._blocker();
   if (to) to.focus();
 }, true);
-// a short state sentence that starts with its shape (04 3.3): never colour alone
+// a short state sentence that starts with its shape: never colour alone
 const note = (kind, text) => h("p", { class: "result", role: "status", "data-state": kind }, SW.shape({ ok: "s-filled", bad: "s-octagon", warn: "s-triangle", info: "s-diamond", neutral: "s-hollow" }[kind]),
   h("span", { class: "result__text" }, text));
 
-// ---------- "Cannot reach the Hub" marks (04 10.3): each screen says what needs the Hub, the shell switches the marks on and off ----------
+// ---------- "Cannot reach the Hub" marks: each screen says what needs the Hub, the shell switches the marks on and off ----------
 // needsHub(button): while the Hub cannot be reached the shell gives the button aria-disabled and the reason "Needs the Hub." (reach:
 // "The Hub cannot be reached.", for Read labels and Preview). hubGroup(group, at): the group keeps its last data and says "Last update
 // <age>: the Hub did not answer."; `at` is a function that gives when its data last arrived (without it, when the Hub last answered).
@@ -202,8 +202,8 @@ let hubGone = false;                                         // the shell's offl
 const needsHub = (b, reach) => { b.dataset.needsHub = reach ? "reach" : "1"; return b; };
 const hubGroup = (g, at) => { g.dataset.hubGroup = ""; g._hubAt = at || null; return g; };
 
-// ---------- Recently added (04 7): the newest additions with their photos; check, correct by hand or by the Label Reader, undo ----------
-// The fields of a record in the four groups of 04 7.2. kind: text (required: the Hub wants it), colour, range, whole, number.
+// ---------- Recently added: the newest additions with their photos; check, correct by hand or by the Label Reader, undo ----------
+// The fields of a record in the four groups of the design, web app. kind: text (required: the Hub wants it), colour, range, whole, number.
 const REC_FIELDS = [
   { key: "vendor", label: "common_field_brand", group: "identity", kind: "text", required: true },
   { key: "name", label: "common_field_name", group: "identity", kind: "text", required: true },
@@ -247,7 +247,7 @@ function recSame(f, was, now) {
   return (was || null) === (now || null);
 }
 const recWhen = (at) => String(at || "").slice(0, 16).replace("T", " ");
-// the relative time of the list (04 7.1); a day or more shows the date
+// the relative time of the list; a day or more shows the date
 function recAge(at) {
   const s = Math.round((Date.now() - Date.parse(at)) / 1000);
   if (!(s >= 0)) return recWhen(at);
@@ -268,10 +268,10 @@ function recNames(spools) {
   return spools.length > 1 ? SW.t("recent_name_many", { name: base, count: spools.length }) : base;
 }
 const recSpools = (ids) => (ids.length ? SW.t("recent_spool_label", { count: ids.length, ids: ids.join(", ") }) : SW.t("recent_no_spools"));
-// the state of a record is a status badge: a shape and a word (04 3.3); a state the badges do not know is shown as the Hub gave it
+// the state of a record is a status badge: a shape and a word; a state the badges do not know is shown as the Hub gave it
 const HIST_WORD = { detected: "as_detected", revised_ai: "revised_ai", edited: "edited" };
 const histMark = (state) => (HIST_WORD[state] ? SW.status(HIST_WORD[state], { small: true }) : h("span", { textContent: state }));
-// what a change did to the filaments, as the sentences of 04 7.2 (an undo puts the spools back on the filament they had)
+// what a change did to the filaments, as the sentences of the design, web app (an undo puts the spools back on the filament they had)
 function recFilaments(what, rev) {
   const fl = rev.filaments || {};
   const use = (id, isNew) => SW.t(isNew ? "recent_result_filament_new" : "recent_now_use", isNew ? { filament: id } : { id });
@@ -282,7 +282,7 @@ function recFilaments(what, rev) {
 // the changes of a revision, one per field
 const recChanges = (rev) => [...new Map((rev.changes || []).map((c) => [c.field, c])).values()];
 
-// Share corrections (04 7.5): whether it is on and how many wait, from GET share-corrections (the twin of GET api/intake/share-corrections;
+// Share corrections: whether it is on and how many wait, from GET share-corrections (the twin of GET api/intake/share-corrections;
 // a Hub without it: sharing is not offered here). Recently added's link and the Add spools read summary read it the same way.
 let SHARE = null;
 async function readShare() {
@@ -333,7 +333,7 @@ function historyTab() {
   const notTaken = (r) => (reasonOf(r) ? tt("corr_not_taken", { reason: reasonOf(r) }) : tt("corr_not_taken_plain"));
   const notWaiting = (r) => (reasonOf(r) ? tt("corr_not_waiting", { reason: reasonOf(r) }) : tt("corr_not_waiting_plain"));
   // the entry's own thumbnail as a same-origin picture: the page allows images from itself and blob: only (img-src 'self' blob:),
-  // so a base64 thumbnail becomes a blob and one from elsewhere (https:) is not shown (R574 13)
+  // so a base64 thumbnail becomes a blob and one from elsewhere (https:) is not shown
   function thumbSrc(t) {
     if (typeof t !== "string" || !t) return null;
     if (t.startsWith(`${BASE}/api/`)) return t;
@@ -366,7 +366,7 @@ function historyTab() {
   function corrCard(e, kept) {
     const c = e.corrected || {}, name = [c.vendor || c.brand, c.name].filter(Boolean).join(" ") || String(e.id);
     const rec = e.record && kept.has(e.record) ? e.record : null;
-    // the reader's entry as the Hub passes it on (R87 00:30.1): `thumbnail_b64` and `created_at` (R574 13)
+    // the reader's entry as the Hub passes it on: `thumbnail_b64` and `created_at`
     const img = rec && e.photos ? photo(rec, 1) : thumbSrc(e.thumbnail_b64);
     const when = e.created_at;
     const line = h("p", { class: "result", role: "status" });
@@ -448,7 +448,7 @@ function historyTab() {
         col("status", SW.t("common_field_state")), col("spool", SW.t("recent_col_spool")))),
       ...records.map(row));
     SW.collection(box, { name: "recent" });
-    // the expand button and the address say the same thing (04 2.4): opening a record names it, closing it leaves it
+    // the expand button and the address say the same thing: opening a record names it, closing it leaves it
     new MutationObserver((ms) => {
       for (const m of ms) {
         const x = m.target, it = x.closest(".coll__item");
@@ -515,7 +515,7 @@ function historyTab() {
       h("p", { class: "page-head__meta" }, h("time", { class: "mono", datetime: r.at, textContent: recWhen(r.at) }),
         h("span", { textContent: recSource(r) }), h("span", { class: "mono", textContent: recSpools(r.spools.map((s) => s.spool_id)) })));
     reg._body = h("div");
-    reg.append(reg._body);                                     // one label at a time here: Print labels for several is the Hub page's (R85 22:45.6)
+    reg.append(reg._body);                                     // one label at a time here: Print labels for several is the Hub page's
     return reg;
   }
   // the edit forms of the list with unsaved values; reloading the list drops them, so it asks first (the shell's guard, 6.1)
@@ -684,7 +684,7 @@ function historyTab() {
     }
     return group;
   }
-  // the before-and-after change list (02 7.9): nothing changes until Accept
+  // the before-and-after change list: nothing changes until Accept
   function proposal(c, p, res, prop, text) {
     const tid = SW.uid("prop");
     const sr = (key) => h("span", { class: "sr", textContent: SW.t(key) });
@@ -716,7 +716,7 @@ function historyTab() {
       h("div", { class: "actions" }, discard, accept));
   }
 
-  // ----- revisions with undo (7.2, 02 7.10) -----
+  // ----- revisions with undo (7.2, the design, components) -----
   function revisions(c) {
     const live = c.rec.revisions.filter((v) => !v.undone), last = live[live.length - 1];
     const one = (v) => {
@@ -744,7 +744,7 @@ function historyTab() {
       : h("p", { class: "muted", textContent: SW.t("revision_empty") }));
   }
 
-  // ----- the photo viewer (02 7.6): one photo, Previous and Next, Escape closes -----
+  // ----- the photo viewer: one photo, Previous and Next, Escape closes -----
   function viewer(c, from, opener) {
     const total = c.rec.photos, name = recNames(c.rec.spools);
     let n = from;
@@ -773,7 +773,7 @@ function historyTab() {
     SW.openModal(dlg, opener);
   }
 
-  // ----- the address (04 2.4): #recent/<id> opens the record in place under its row -----
+  // ----- the address: #recent/<id> opens the record in place under its row -----
   async function open(id) {
     const it = item(id);
     if (!it) { missing.replaceChildren(goneNote()); return; }
@@ -782,7 +782,7 @@ function historyTab() {
     ensure(it);
     it.scrollIntoView({ block: "start" });
     reg.querySelector(".detail__title").focus({ preventScroll: true });
-    shellView.paint(false);                                   // the page title names the record (04 2.4)
+    shellView.paint(false);                                   // the page title names the record
   }
   async function go(rest) {
     missing.replaceChildren();
@@ -817,7 +817,7 @@ function historyTab() {
   return { el, go, title, enter(rest) { if (!dirtySlots().length && !(hubGone && records.length)) ready = load(); return go(rest); }, leave() { addr = ""; } };
 }
 
-// ---------- the shell (04 2 and 9): top bar, bottom bar (a rail on tablets), More, Settings; the places and their addresses ----------
+// ---------- the shell: top bar, bottom bar (a rail on tablets), More, Settings; the places and their addresses ----------
 const PRINTERS = document.body.dataset.printers === "1";   // the printers module is on (printers.js is loaded)
 const HISTORY = document.body.dataset.history === "1";     // the kit's own page: the intake history is here
 const PRESETS = document.body.dataset.presets === "1";     // Slicer presets are on
@@ -825,13 +825,13 @@ const PUSH = document.body.dataset.push === "1";           // print alerts can b
 const HUB = document.body.dataset.hub || "";               // the Hub's name; empty until the Hub reports one
 const HUB_PAGE = document.body.dataset.hubPage || "";      // the Hub page's address; absent on the public address
 const PRODUCT = SW.t("app_name");
-SW.configure({ lock: false, hub: HUB || PRODUCT, base: BASE + "/api/" });   // no lock in the web app: the home network is the gate (04 1.1)
+SW.configure({ lock: false, hub: HUB || PRODUCT, base: BASE + "/api/" });   // no lock in the web app: the home network is the gate
 refreshStorage();
 
-// a destination whose Feature is off, or that this address does not serve, opens a page that says so (04 6.10, 7.4)
+// a destination whose Feature is off, or that this address does not serve, opens a page that says so
 const hubLink = () => HUB_PAGE ? h("a", { class: "btn", href: HUB_PAGE }, SW.t("common_open_hub_page")) : null;
 const notice = (icon, title, text, link) => ({ el: h("section", { class: "hidden" }, SW.empty({ icon, title, text, actions: link ? hubLink() : null })) });
-const settingsPage = h("section", { class: "hidden" });    // Settings as a page, from 601 px (04 2.3)
+const settingsPage = h("section", { class: "hidden" });    // Settings as a page, from 601 px
 const tabs = {
   add: addTab(),
   spools: openTab(),
@@ -865,12 +865,12 @@ function show(key) {
   } else tabs[key].go?.(rest);
   place = key;
   page.dataset.section = key;
-  pageTitle.textContent = (tabs[key].heading && tabs[key].heading()) || SW.t(TITLES[key]);   // one printer fills the page: its name (04 6.2)
-  if (key !== "settings") { try { localStorage.setItem(PLACE_KEY, key); } catch {} }   // #settings is never the stored place (04 2.4)
+  pageTitle.textContent = (tabs[key].heading && tabs[key].heading()) || SW.t(TITLES[key]);   // one printer fills the page: its name
+  if (key !== "settings") { try { localStorage.setItem(PLACE_KEY, key); } catch {} }   // #settings is never the stored place
   paintMore();
 }
 
-// ----- addresses (04 2.4): #<place>[/<more>]; #settings is a sheet over the place on phones and a page from 601 px -----
+// ----- addresses: #<place>[/<more>]; #settings is a sheet over the place on phones and a page from 601 px -----
 function route(initial) {
   const raw = location.hash.slice(1), head = raw.split(/[/?]/)[0], name = ALIAS[head] || head;
   if (name !== head) history.replaceState(history.state, "", "#" + name + raw.slice(head.length));
@@ -888,7 +888,7 @@ function route(initial) {
   show(keep);
 }
 
-// ----- sheets: Back closes them (04 2.4). More and the other sheets keep the address and push a same-address entry;
+// ----- sheets: Back closes them. More and the other sheets keep the address and push a same-address entry;
 // the Settings sheet is a place of its own, so its entry is the #settings one. -----
 const sheets = [];
 let settling = 0, settingsRec = null;
@@ -945,7 +945,7 @@ function goFrom(rec, hash) {
   shellView.paint(true);
 }
 
-// ----- appearance (02 3.3, F5): the three choices on this device, applied at once and kept by the shared script -----
+// ----- appearance (the design, components, F5): the three choices on this device, applied at once and kept by the shared script -----
 const APPEARANCE = [["light", "sun"], ["dark", "moon"], ["system", "half-circle"]];
 const appearanceNow = () => { const v = document.documentElement.getAttribute("data-theme"); return v === "light" || v === "dark" ? v : "system"; };
 const appearanceControl = (o = {}) => SW.segmented({ legend: SW.t("appearance_title"), legendSr: true, cls: "appearance", value: appearanceNow(),
@@ -961,9 +961,9 @@ window.addEventListener("storage", (e) => {                 // another tab chose
   SW.setAppearance(v === "light" || v === "dark" ? v : "system");
 });
 
-// ----- the Settings sheet or page (04 9.2) -----
+// ----- the Settings sheet or page -----
 const installed = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-let installPrompt = null;                                    // a browser that offers installing (04 10.1)
+let installPrompt = null;                                    // a browser that offers installing
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; });
 // wide: Settings as a page, which also holds "Add to Home Screen" (the More sheet is not there)
 function settingsBody(wide) {
@@ -984,7 +984,7 @@ function settingsBody(wide) {
 function addToHome(opener) {
   if (installPrompt) { installPrompt.prompt(); installPrompt = null; } else installSheet(opener);
 }
-function installSheet(opener, reuse) {                       // the steps for an iPhone (04 10.1)
+function installSheet(opener, reuse) {                       // the steps for an iPhone
   const dlg = SW.sheet({ title: SW.t("install_title", { product: PRODUCT }),
     body: [h("ol", { class: "install" }, [1, 2, 3].map((n) => h("li", {}, SW.t("install_step_" + n)))),
       SW.banner({ kind: "info", text: SW.t("install_note"), inline: true })],
@@ -992,7 +992,7 @@ function installSheet(opener, reuse) {                       // the steps for an
   openHere(dlg, opener, reuse);
 }
 
-// ----- More (04 9.1): Slicer presets, Settings, Add to Home Screen, Open the Hub page -----
+// ----- More: Slicer presets, Settings, Add to Home Screen, Open the Hub page -----
 const moreBtn = h("button", { class: "nav__more", type: "button", "aria-haspopup": "dialog", "aria-expanded": "false" },
   SW.icon("more", "nav__icon"), h("span", { class: "nav__label" }, SW.t("nav_more")), h("span", { class: "sr nav__more-current" }));
 function moreRow(icon, name, summary, props, run) {
@@ -1049,14 +1049,14 @@ function topBar() {
       appearanceControl({ name: "appearance" }), appearanceButton()));
 }
 function navItem([key, name, icon], tab) {
-  const label = key === "recent"                             // the bar shows the short name; the full one is read (02 2.4)
+  const label = key === "recent"                             // the bar shows the short name; the full one is read
     ? h("span", { class: "nav__label" }, h("span", { class: "nav__label-full" }, SW.t("nav_recently_added")), h("span", { class: "nav__label-short", "aria-hidden": "true" }, SW.t("nav_recent")))
     : h("span", { class: "nav__label" }, SW.t(name));
   const a = h("a", { class: "nav__item", href: "#" + key }, SW.icon(icon, "nav__icon"), label);
   if (tab) a.setAttribute("data-tab", "");
   const off = key === "printers" && !PRINTERS ? SW.t("nav_printers_off") : key === "recent" && !HISTORY ? SW.t("nav_recent_public")
     : key === "presets" && !PRESETS ? SW.t("nav_slicer_presets") + SW.t("nav_off_suffix") : null;
-  if (off) { a.dataset.state = "off"; a.setAttribute("aria-label", off); }   // dimmed, and the name says why (04 2.1)
+  if (off) { a.dataset.state = "off"; a.setAttribute("aria-label", off); }   // dimmed, and the name says why
   return h("li", {}, a);
 }
 function navigation() {
@@ -1080,7 +1080,7 @@ function navigation() {
   matchMedia("(max-width: 600px)").addEventListener("change", () => route());   // Settings: a sheet or a page
 }
 
-// ----- Alerts (R80 section 5, EA7): the banners at the top of the page, the Alerts list, a toast per new alert. The shared script
+// ----- Alerts: the banners at the top of the page, the Alerts list, a toast per new alert. The shared script
 // (shared/alerts.js, EA5) is loaded here so the page's own markup stays as it is; a Hub that does not serve it, or has no events
 // route yet, shows no banner and nothing else changes. -----
 // Texts of this step that the string catalogue does not hold yet (the catalogue step lists them in the keys file); the catalogue's own
@@ -1167,11 +1167,11 @@ function tt(key, vars) {
 }
 const alertHost = h("div", { class: "alert-host" });
 page.prepend(alertHost);
-if (document.body.dataset.demo === "1") {                   // R85 4.5: every screen shows it, above the alert banners, with no Dismiss
+if (document.body.dataset.demo === "1") {                   // every screen shows it, above the alert banners, with no Dismiss
   page.prepend(SW.banner({ kind: "info", text: tt("demo_banner"), actions: [SW.btn(tt("demo_leave"), { action: "leave-demo", run: (e) => leaveDemo(e.currentTarget) })] }));
 }
 // where an alert's action goes in this app (null: no button): the printer and the running-low list are here; storage use and Devices
-// are Hub page places and are left out on an address that has no Hub page link (R80 section 11)
+// are Hub page places and are left out on an address that has no Hub page link
 function alertHref(a) {
   const hubPage = HUB_PAGE ? HUB_PAGE.replace(/#.*$/, "") : "";
   if (a.place === "printer") return PRINTERS ? "#printers" + (a.id ? "/" + encodeURIComponent(a.id) : "") : null;
@@ -1180,7 +1180,7 @@ function alertHref(a) {
   if (a.place === "devices") return hubPage ? hubPage + "#devices" : null;
   return null;
 }
-// The page closes the notifications of conditions that are over (R80 20:48 point 4): a condition's notification carries the tag
+// The page closes the notifications of conditions that are over: a condition's notification carries the tag
 // "sw-condition-<key>"; when an answer's `conditions` no longer holds the key, the notification goes. Needs no push.
 async function closeStaleNotifications(conditions, registration) {
   try {
@@ -1213,7 +1213,7 @@ function alertsGroup(group) {
   return panel || recent ? group(SW.t("settings_alerts_title"), panel, recent) : null;
 }
 
-// ----- The Hub at a glance (R83 5), Open Spoolman (R83 7), the Hub page link (R83 8). GET hub is the kit's overview of the Hub; a Hub
+// ----- The Hub at a glance, Open Spoolman, the Hub page link. GET hub is the kit's overview of the Hub; a Hub
 // that does not have the route yet answers 404 and every place below says nothing. Only at home: the public address has no Hub page link. -----
 let hubCache = null;                                         // {at, data}: one answer is kept for 30 s, so the More sheet and its screens ask once
 async function hubInfo(fresh) {
@@ -1224,7 +1224,7 @@ async function hubInfo(fresh) {
 }
 // a time from the Hub: seconds since 1970 (as every kit route gives one), or text
 function whenText(v) {
-  // a time of the Hub is ISO 8601 with an offset (R83 10); whole seconds since 1970 (a number or its text) are read too
+  // a time of the Hub is ISO 8601 with an offset; whole seconds since 1970 (a number or its text) are read too
   if (v == null || v === "") return "";
   if (typeof v === "string" && /^\d+(\.\d+)?$/.test(v.trim())) v = Number(v);
   const d = typeof v === "number" ? new Date(v < 1e12 ? v * 1000 : v) : new Date(v);
@@ -1266,7 +1266,7 @@ function hubSheet(opener, reuse) {
     ];
   });
 }
-// ----- History (R84 sections 2, 3, 4): Undo after an action, a spool's last ten events, the check history, downloads -----
+// ----- History: Undo after an action, a spool's last ten events, the check history, downloads -----
 // The Hub's answers: `activity` = {events: [{id, at, title, text, actor: {name}, undo: {possible, until?, why_not?}, undone}]}; Undo = POST events/<id>/undo.
 // Hub refusals put the code in error; older twins put the sentence there and the code beside it.
 const undoWhy = (x) => {
@@ -1279,7 +1279,7 @@ async function undoEvent(id) {
   catch (x) { SW.toast(undoWhy(x), "bad"); return false; }
 }
 // After an action on a spool the toast says what happened and, when the Hub can put it back, offers Undo (10 s; the toast holds it for people
-// who asked for no time limits). The action's answer names the event (`event_id`, R84 21:48 point 4); an older Hub's answer has none, and then
+// who asked for no time limits). The action's answer names the event (`event_id`); an older Hub's answer has none, and then
 // the spool's newest event is asked for. Returns true when Undo was offered, so a screen with an Undo of its own can leave it out.
 // `done` runs after a put back, to draw the spool again.
 async function offerUndo(spoolId, text, done, eventId) {
@@ -1296,7 +1296,7 @@ function eventRow(e) {
   return h("li", { class: "history__row" }, h("span", { class: "history__text" }, (e.text || e.title || e.kind || "") + (e.undone ? " " + tt("history_undone") : "")),
     h("span", { class: "history__when muted mono" }, whenText(e.at) + who));
 }
-// a spool's last ten events (R84 2.3); the list is read again when something was changed
+// a spool's last ten events; the list is read again when something was changed
 // A Hub with no activity route (an older one), or one that does not answer, shows no list at all: `load` answers whether there is one.
 function historyBox(id) {
   const box = h("div", { class: "history" });
@@ -1308,9 +1308,9 @@ function historyBox(id) {
   };
   return { box, load };
 }
-// the downloads of a phone (R84 6.5): the files come from the Hub through the twin, with the name the Hub gives
+// the downloads of a phone: the files come from the Hub through the twin, with the name the Hub gives
 const downloadLink = (key, label, query) => h("a", { class: "btn btn--ghost", href: `${BASE}/api/export/${key}.csv${query ? "?" + query : ""}`, download: `${key}.csv`, "data-action": "download-" + key }, label);
-// the check history (R84 4): the changes as a table (never colour alone), 7 days or 30
+// the check history: the changes as a table (never colour alone), 7 days or 30
 function healthTable(days, region) {
   return fill(region, tt("health_title"), async () => {
     const r = await api(`health?days=${days}`), rows = r.changes || [];
@@ -1332,7 +1332,7 @@ function historyGroup() {
 window.SW_HISTORY = { offerUndo, undoEvent, downloadLink };           // printers.js uses these
 window.SW_LANG = { code: () => document.documentElement.lang || "en" };   // printers.js sends it with the push subscription
 
-// ----- Checked out (R88 1.6, 01:55, 02:00 point 5, 02:05; 04 5.4, 5.5): a spool with a remembered home, its Home line and its Return. Shown
+// ----- Checked out: a spool with a remembered home, its Home line and its Return. Shown
 // only when the Hub's answer of GET spools names `checked_out` in its top-level `filters`: an answer without them is an older Hub, and then
 // nothing of it is shown. The twins: GET spools?filter=checked_out, POST spools/<id>/return, and `home` on the spool editing twin. -----
 // (functions, not constants: the tabs are built before this part of the script has run)
@@ -1353,21 +1353,21 @@ function returnedText(r) {
   const s = r && r.spool, at = s && ((s.view && s.view.location) || s.location);
   return at ? tt("checked_out_returned_to", { location: at }) : tt("checked_out_returned");
 }
-// sends the spool back at once and asks nothing; the toast offers Undo through the event the answer names (R84 3). `done` runs after a put back.
+// sends the spool back at once and asks nothing; the toast offers Undo through the event the answer names. `done` runs after a put back.
 async function returnSpool(id, done) {
   const r = await api(`spools/${encodeURIComponent(id)}/return`, { body: {} });
   const text = returnedText(r);
   offerUndo(id, text, done, r.event_id).then((offered) => { if (!offered) SW.toast(text); });
   return { r, text };
 }
-// The chip "Checked out (<n>)" and its list (04 5.5). o: {box: the results, open(id, opener): the spool sheet, toggle(on): the chip pressed,
+// The chip "Checked out (<n>)" and its list. o: {box: the results, open(id, opener): the spool sheet, toggle(on): the chip pressed,
 // known(): the gate may have changed (an open sheet paints its Home line again)}
 function checkedOutFilter(o) {
   const st = { known: false, on: false, rows: null, total: 0 };
   const chip = h("button", { class: "btn spools__low hidden", type: "button", "aria-pressed": "false", "data-action": "checked-out", on: { click: () => o.toggle(!st.on) } });
   const paint = () => {
     chip.classList.toggle("hidden", !st.known);               // shown also at 0, while the Hub knows the filter
-    chip.textContent = tt("checked_out_chip", { count: st.total });   // the list's `total` (R88 02:30)
+    chip.textContent = tt("checked_out_chip", { count: st.total });   // the list's `total`
     chip.setAttribute("aria-pressed", String(st.on));
   };
   let stamp = 0;
@@ -1411,14 +1411,14 @@ function checkedOutFilter(o) {
   return { chip, st, load, draw, paint };
 }
 
-// ----- Weigh Station voice (R88 01:35 point 5, 01:50, 02:00 point 2; 04 9.2): Speak, Voice (read only), Speaker, Speed, Volume and Test, each
+// ----- Weigh Station voice: Speak, Voice (read only), Speaker, Speed, Volume and Test, each
 // row applying when its control is let go, with no Save. The twins GET voice, PATCH voice and POST voice/test; a Hub without them (404), or
 // without a Weigh Station (`station: false`), shows no panel. On the public address the panel is read only and says so. While the Hub is
 // away the panel is still drawn (the values last read, or the line that the Hub cannot be reached) and every control is marked as needing
-// the Hub (04 9.2, 10.3; R88 01:35 points 4 and 5); it is read again when the Hub answers. -----
+// the Hub (the design, web app points 4 and 5); it is read again when the Hub answers. -----
 // (functions, and the state on voiceGroup itself: Settings can be drawn before this part of the script has run)
 function voiceAway(e) { return e instanceof SW.HubError && (!!e.unreachable || [e.data?.error, e.data?.code].includes("unreachable")); }
-function voiceTestText(e) {                                  // Test's refusals in the words of 03 10.10; anything else is the Hub's own
+function voiceTestText(e) {                                  // Test's refusals in the words of the design, Hub page; anything else is the Hub's own
   const words = { busy: "voice_test_busy", off: "voice_test_off", no_answer: "voice_test_no_answer" };
   const c = e instanceof SW.HubError ? [e.data?.error, e.data?.code, e.error].find((k) => words[k]) : null;
   return c ? tt(words[c]) : says(e);
@@ -1482,7 +1482,7 @@ function voiceGroup(group) {
       finally { SW.idle(button); }
     }
     return [speak,
-      // the Voice row is read only; where it is changed depends on `remote` (R88 04:15, 04:20)
+      // the Voice row is read only; where it is changed depends on `remote`
       h("p", { class: "voice__name" }, tt("voice_name", { voice: now.voice || "" })), h("p", { class: "muted" }, tt(now.remote === true ? "voice_chosen_on_station" : "voice_change_on_hub")),
       speaker,
       slider(tt("voice_speed"), "speed", 50, 200, 10, (v) => tt("voice_speed_value", { value: v })),
@@ -1519,7 +1519,7 @@ function voiceGroup(group) {
   return sec;
 }
 
-// ----- the language (R85 3.7; 04 9.2) and leaving the demo (R85 4.6) -----
+// ----- the language and leaving the demo -----
 // The choice is kept on the phone (`localStorage` spoolwarden.language) and in a cookie of the same name, because the Hub chooses the
 // texts the page loads with (Automatic is the phone's language when the Hub has that pack, else the Hub's).
 const LANG_KEY = "spoolwarden.language", LANG_COOKIE = "spoolwarden_lang";
@@ -1585,7 +1585,7 @@ async function leaveDemo(opener) {
   if (done) location.reload();
 }
 
-// The own entries of the Filament Catalog (R83 4): one form (Brand, Name, Material; the rest under "More (optional)") and the list with Remove.
+// The own entries of the Filament Catalog: one form (Brand, Name, Material; the rest under "More (optional)") and the list with Remove.
 const CATALOG_MATERIALS = ["PLA", "PLA+", "PETG", "ABS", "ASA", "TPU", "PC", "PA", "PA-CF", "PVA", "HIPS"];   // the fallback until the Hub lists the materials it knows
 function catalogGroup() {
   const res = resultLine(), listBox = h("div", { class: "catalog__list" });
@@ -1627,7 +1627,7 @@ function catalogGroup() {
     if (notes._control.value.trim()) body.notes = notes._control.value.trim();
     return act(res, SW.t("common_adding"), async () => {
       try { await api("library/local", { body }); }
-      catch (err) {                                          // the Hub names the fields it refused (R83 10.1)
+      catch (err) {                                          // the Hub names the fields it refused
         const problems = err instanceof SW.HubError && err.data && Array.isArray(err.data.problems) ? err.data.problems : [];
         for (const p of problems) { const f = (p.field === "material" && !other.hidden ? other : fields[p.field]); if (f) SW.fieldError(f, p.text); }
         throw err;
@@ -1661,7 +1661,7 @@ function catalogGroup() {
     h("div", { class: "group__body" }, brand, name, material, other, more, h("div", {}, add), res, see));
 }
 
-// ----- the shell kept by sw.js, and "Cannot reach the Hub" (04 10.2, 10.3) -----
+// ----- the shell kept by sw.js, and "Cannot reach the Hub" -----
 // A request that gets no answer (SW.configure down/up) shows the Offline chip and the banner under the top bar; the Hub is tried
 // again every 10 s while the page is visible, and at once on Try now; when it answers the banner goes and the open lists are read again.
 // The worker's registration is the one whose scope is the app's path. A phone that came from 0.5.x also has one for <path>/: it is
@@ -1704,7 +1704,7 @@ if ("serviceWorker" in navigator) {
     banner.querySelector(".icon").replaceWith(SW.icon("wifi-off"));
     document.getElementById("main").prepend(banner);
   }
-  // the marks (04 10.3): every [data-needs-hub] button and [data-hub-group] group on the page, redrawn screens included
+  // the marks: every [data-needs-hub] button and [data-hub-group] group on the page, redrawn screens included
   const reasonOf = (b) => SW.t(b.dataset.needsHub === "reach" ? "shell_hub_cannot_be_reached" : "shell_needs_hub");
   function markButton(b, on) {
     let r = b._hubWhy;
@@ -1787,10 +1787,10 @@ if ("serviceWorker" in navigator) {
 }
 
 
-// ---------- Add spools (04 4) ----------
+// ---------- Add spools ----------
 // What is being added is `items`, one object per card, in the shape the Hub takes (keys that start with "_" are the page's own
 // and never leave it). Each card is drawn once and an edit changes only what it touches, so a field in use is never redrawn.
-// Nothing is written until the person previews and then adds; the unfinished add is kept on the phone as a draft (04 4.7).
+// Nothing is written until the person previews and then adds; the unfinished add is kept on the phone as a draft.
 function addTab() {
   // the constants and helpers are inside: this function runs while the page's script is still building the tabs, before the
   // top-level constants below it exist
@@ -1819,7 +1819,7 @@ function addTab() {
   };
   const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 
-  // the record summary of 02 7.2, for the levels of one or more items: the level, then the fields at each level
+  // the record summary of the design, components, for the levels of one or more items: the level, then the fields at each level
   function addSummary(levelsList) {
     const out = { low: [], medium: [], not_on_label: [] };
     let unrated = false, any = false;
@@ -1851,7 +1851,7 @@ function addTab() {
     return parts.length ? line : null;
   }
 
-  const tabId = (() => {                                        // which tab wrote the draft (04 4.7)
+  const tabId = (() => {                                        // which tab wrote the draft
     try { let v = sessionStorage.getItem("spoolwarden.tab"); if (!v) sessionStorage.setItem("spoolwarden.tab", v = Math.random().toString(36).slice(2)); return v; }
     catch { return Math.random().toString(36).slice(2); }
   })();
@@ -1876,12 +1876,12 @@ function addTab() {
   const previewBox = h("div");
   const vendorList = h("datalist", { id: "addVendors" });
   const ans = answer();                                         // the answer to Preview and Add: the line, and the Hub's own text under it
-  const itemsBox = h("div", { class: "add__results" });         // what the preview says each spool does (04 4.6)
+  const itemsBox = h("div", { class: "add__results" });         // what the preview says each spool does
   const extras = h("div", { class: "add__extras" });            // the buttons after an Add
   ans.el.insertBefore(itemsBox, ans.code);
   ans.el.append(extras);
 
-  // the line that starts with its shape and is not cleared when the person leaves the page (04 3.3); `result` lines are
+  // the line that starts with its shape and is not cleared when the person leaves the page; `result` lines are
   const line = (kind, text) => h("p", { class: "add__line", "data-state": kind },
     SW.shape({ ok: "s-filled", bad: "s-octagon", warn: "s-triangle", info: "s-diamond", neutral: "s-hollow" }[kind]), h("span", {}, text));
   const group = (title, ...kids) => { const id = SW.uid("g"); return h("section", { class: "group add__group", "aria-labelledby": id }, h("header", { class: "group__head" },
@@ -1927,10 +1927,10 @@ function addTab() {
   }
   const wire = (it) => {                                        // what the Hub gets: the item without the page's own keys
     const w = Object.fromEntries(Object.entries(it).filter(([k]) => k[0] !== "_"));
-    if (Number(w.count) > 1 || w.sealed !== false) delete w.gross;   // a weight with the spool counts for one opened spool only (04 4.5)
+    if (Number(w.count) > 1 || w.sealed !== false) delete w.gross;   // a weight with the spool counts for one opened spool only
     return w;
   };
-  // what the local reader said about the colour, as a read fact (02 7.2); it goes when the colour is edited
+  // what the local reader said about the colour, as a read fact; it goes when the colour is edited
   const colourFact = (it) => {
     if (!it.color_name && !it.color_family) return "";
     const name = it.color_name && it.color_name !== "unknown" ? it.color_name : "";
@@ -1943,14 +1943,14 @@ function addTab() {
       _open: undefined, _read: !!read, _edited: false, _fact: colourFact(it) });
   };
 
-  // ============ the draft (04 4.7) ============
+  // ============ the draft ============
   const store = {
     get(key = ADD_DRAFT) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; } },
     put(text, key = ADD_DRAFT) { try { localStorage.setItem(key, text); return true; } catch { return false; } },
     drop(key = ADD_DRAFT) { try { localStorage.removeItem(key); } catch { /* nothing to drop */ } },
     works() { try { localStorage.setItem(ADD_DRAFT + ".probe", "1"); localStorage.removeItem(ADD_DRAFT + ".probe"); return true; } catch { return false; } },
   };
-  // a stored draft is only used when it has the shape this page writes; whatever else is in it is left out (04 4.7)
+  // a stored draft is only used when it has the shape this page writes; whatever else is in it is left out
   // one stored item: the text fields are text (null is empty), a number field is a number or stays as typed in `_text`
   function tidy(it) {
     const out = { ...it }, typed = isObj(it._text) ? { ...it._text } : {};
@@ -2044,7 +2044,7 @@ function addTab() {
     SW.toast(SW.t("add_draft_discarded"));
     if (items.length || noteField._control.value) save();
   }
-  // the badge on the Add destination while an add is unfinished (04 2.1)
+  // the badge on the Add destination while an add is unfinished
   function paintBadge() {
     const a = document.querySelector('.nav__item[href="#add"]');
     if (!a) return;
@@ -2064,7 +2064,7 @@ function addTab() {
     paintBar(); saveSoon(); paintBadge();
   }
 
-  // ============ From label photos (04 4.3) ============
+  // ============ From label photos ============
   const takeIn = h("input", { type: "file", accept: "image/*", capture: "environment", hidden: true, "aria-labelledby": "add-take-label", on: { change: () => addFiles(takeIn) } });
   const pickIn = h("input", { type: "file", accept: "image/*", multiple: true, hidden: true, "aria-labelledby": "add-pick-label", on: { change: () => addFiles(pickIn) } });
   const takeBtn = SW.btn(SW.t("add_photos_take"), { icon: "camera", run: () => takeIn.click() });
@@ -2118,7 +2118,7 @@ function addTab() {
       return h("div", { class: "add__photo" }, thumb, off);
     }));
     photoCount.textContent = photos.length ? SW.t("add_photo_count", { count: photos.length, max: ADD_MAX_PHOTOS }) : "";
-    for (const b of [takeBtn, pickBtn]) {                       // a full set: both buttons say why (04 3.4)
+    for (const b of [takeBtn, pickBtn]) {                       // a full set: both buttons say why
       if (full) { b.setAttribute("aria-disabled", "true"); b.setAttribute("aria-describedby", photoLimit.id); }
       else { b.removeAttribute("aria-disabled"); b.removeAttribute("aria-describedby"); }
     }
@@ -2139,7 +2139,7 @@ function addTab() {
       clearTimeout(drop); if (photos.length < ADD_MAX_PHOTOS) { photos.splice(i, 0, p); drawPhotos(i); } else URL.revokeObjectURL(p.url);
     } } });
   }
-  function openPhoto(i, opener) {                               // the photo large, with Remove and Close (04 4.3)
+  function openPhoto(i, opener) {                               // the photo large, with Remove and Close
     const p = photos[i];
     const dlg = SW.sheet({ title: SW.t("photo_position", { number: i + 1, total: photos.length }),
       body: h("img", { class: "add__big", src: p.url, alt: "" }),
@@ -2181,7 +2181,7 @@ function addTab() {
     }, { button: readBtn, kept: true, busy: SW.t("common_reading"), again: read });
     working = null; paintBar(); readable();
   }
-  // what the Label Reader said, above the cards (04 4.4)
+  // what the Label Reader said, above the cards
   function drawFound() {
     if (!found) { foundBox.replaceChildren(); return; }
     const f = found, kids = [line(f.count ? "ok" : "warn", f.count ? SW.t("add_found_result", { count: f.count, photos: f.photos }) : SW.t("add_found_none"))];
@@ -2200,12 +2200,12 @@ function addTab() {
     const u = f.usage, used = u && u.input_tokens != null ? SW.t("add_found_usage", { tokens_in: u.input_tokens, tokens_cached: u.cached || 0, tokens_out: u.output_tokens || 0 })
       : u && u.ms != null ? SW.t("add_found_usage_time", { seconds: (u.ms / 1000).toFixed(1) }) : "";
     if (used) kids.push(h("details", { class: "add__details" }, h("summary", { textContent: SW.t("common_details") }), h("p", { class: "mono", textContent: used })));
-    // read from photos while Share corrections is on: what is changed here waits to be shared (04 7.5)
+    // read from photos while Share corrections is on: what is changed here waits to be shared
     if (f.count && sharing()) kids.push(h("p", { class: "muted add__share" }, SW.icon("info", "icon--s"), " ", tt("corr_add_on")));
     foundBox.replaceChildren(group(SW.t("add_found_title"), ...kids));
   }
 
-  // ============ By hand (04 4.2) ============
+  // ============ By hand ============
   const searchField = SW.field({ type: "search", label: SW.t("add_search_label"), placeholder: SW.t("common_search_placeholder"), onSearch: (q) => find(q) });
   searchField.classList.add("add__search");
   searchField.querySelector(".field__box").append(needsHub(SW.iconBtn("search", SW.t("common_search"), { run: () => find(searchField._control.value.trim()) })));
@@ -2269,7 +2269,7 @@ function addTab() {
     if (focus) findBox.querySelector(".add__row")?.focus();
   }
 
-  // ============ The spool list and its cards (04 4.5) ============
+  // ============ The spool list and its cards ============
   const needsLook = (it) => missing(it).length > 0 || ["low", "medium"].some((l) => Object.values(it._levels).includes(l));
   function drawList() {
     count.textContent = items.length ? String(spoolsOf()) : "";
@@ -2382,7 +2382,7 @@ function addTab() {
         const m = mark(key); if (m) label.append(" ", m);
       }
     }
-    function problems(list) {                                   // the Hub's sentences at their fields (04 4.6)
+    function problems(list) {                                   // the Hub's sentences at their fields
       it._problems = {};
       for (const p of list) it._problems[p.field || "_"] = p.message;
       for (const [k, f] of Object.entries(fields)) SW.fieldError(f, sentence(it, k));
@@ -2445,7 +2445,7 @@ function addTab() {
     return { el, open, problems, showErrors, paint, refill, place: (text) => { placeNote.textContent = text || ""; }, control: (k) => (fields[k] ? fields[k]._control : null) };
   }
 
-  // ============ The action bar: Preview, then Add (04 4.6) ============
+  // ============ The action bar: Preview, then Add ============
   const barText = h("p", { class: "add__bar-text", id: SW.uid("bar") });
   const barBtn = h("button", { class: "btn btn--primary add__bar-btn", type: "button", "aria-describedby": barText.id, on: { click: () => (previewed && !working ? submit(false) : submit(true)) } }, SW.t("common_preview"));
   needsHub(barBtn, true); barBtn._repaint = () => paintBar();    // Preview and Add; paintBar says again what it decides for itself
@@ -2479,7 +2479,7 @@ function addTab() {
     if (off || working) barBtn.setAttribute("aria-disabled", "true"); else barBtn.removeAttribute("aria-disabled");
     if (working && working !== "read") barBtn.setAttribute("aria-disabled", "true");
   }
-  // what the preview says each spool does: existing or new filament, how many spools, where (04 4.6, N18)
+  // what the preview says each spool does: existing or new filament, how many spools, where (the design, web app, N18)
   function drawResults(list) {
     itemsBox.replaceChildren(...list.map((r) => {
       const where = (r.placements || []).map((p) => (r.placements.length > 1 ? SW.t("add_preview_placement", { spools: p.spools, location: p.location }) : p.location)).join(", ") || r.location;
@@ -2489,7 +2489,7 @@ function addTab() {
         r.new_vendor ? [" · ", SW.t("add_preview_new_vendor")] : null);
     }));
   }
-  function showProblems(list) {                                 // every sentence at its field; the first spool that has one opens (04 4.6)
+  function showProblems(list) {                                 // every sentence at its field; the first spool that has one opens
     const by = new Map();
     for (const p of list) { const it = items[p.item]; if (it) by.set(it, [...(by.get(it) || []), p]); }
     for (const it of items) cards.get(it._id).problems(by.get(it) || []);
@@ -2551,7 +2551,7 @@ function addTab() {
     const g = group(title, dry ? h("p", { class: "add__sub muted", textContent: SW.t("add_preview_nothing_saved") }) : null, ans.el);
     return g;
   }
-  // everything of the add is cleared after an Add: cards, photos, note, tag, search (04 4.6)
+  // everything of the add is cleared after an Add: cards, photos, note, tag, search
   function everything(sent) {
     for (const it of sent) dropCard(it);
     items = items.filter((it) => !sent.includes(it));          // a card that was not sent stays
@@ -2588,9 +2588,9 @@ function addTab() {
   } };
 }
 
-// ---------- Open spool, now Spools (04 5): the last tag, search, and the spool sheet ----------
+// ---------- Open spool, now Spools: the last tag, search, and the spool sheet ----------
 function openTab() {
-  const EDIT = document.body.dataset.spoolEdit === "1";      // the Hub offers spool editing to the web app (04 14)
+  const EDIT = document.body.dataset.spoolEdit === "1";      // the Hub offers spool editing to the web app
   const SEALED_KEY = "spoolwarden.sealedOnly", PAGE = 50;
   let sealedOnly = true;
   try { sealedOnly = localStorage.getItem(SEALED_KEY) !== "0"; } catch {}   // on by default; a browser without storage keeps the default
@@ -2611,7 +2611,7 @@ function openTab() {
   const grams = (v) => Math.round(Number(v) || 0);
   const nameOf = (v) => [v.vendor, v.name].filter(Boolean).join(" ");
 
-  // ----- Last tag (04 5.2): GET tag every 3 s while the screen is on show and the page is visible -----
+  // ----- Last tag: GET tag every 3 s while the screen is on show and the page is visible -----
   const tagBody = h("div", { class: "spools__tag" }), tagLine = resultLine(), tagFirst = resultLine();
   const linkedBox = h("div", { class: "spools__linked" });
   const tagKids = (t) => {
@@ -2661,7 +2661,7 @@ function openTab() {
   const startPoll = () => { stopPoll(); poll(); timer = setInterval(poll, 3000); };
   document.addEventListener("visibilitychange", () => { if (shown) { if (document.hidden) stopPoll(); else startPoll(); } });   // not while the page is hidden or the phone locked
 
-  // ----- Search (04 5.3) -----
+  // ----- Search -----
   const searchField = SW.field({ type: "search", label: SW.t("spools_find_label"), placeholder: SW.t("common_search_placeholder"), onSearch: (q) => find(q) });
   searchField.classList.add("spools__search");
   searchField.querySelector(".field__label").classList.add("sr");
@@ -2674,10 +2674,10 @@ function openTab() {
   });
   let foundAt = 0;                                           // when the list last came from the Hub
   const findLine = resultLine(), resultsBox = hubGroup(h("div", { class: "spools__results" }), () => foundAt);
-  // ----- Running low (R80 section 7): a filter chip with the count; on, the list is the Hub's spools/low (least filament first) -----
+  // ----- Running low: a filter chip with the count; on, the list is the Hub's spools/low (least filament first) -----
   let low = false, lowRows = null;
   const lowBtn = h("button", { class: "btn spools__low hidden", type: "button", "aria-pressed": "false", on: { click: () => setLow(!low) } });
-  // Checked out (R88 1.6; 04 5.5): a second chip beside it, only while the Hub knows the filter; one of the two chips is on at a time
+  // Checked out: a second chip beside it, only while the Hub knows the filter; one of the two chips is on at a time
   const co = checkedOutFilter({ box: resultsBox, open: (id, opener) => openSheet(id, opener), toggle: (on) => setCo(on),
     known: () => { if (sheet && sheet.co) sheet.co(); } });
   function paintLow() {
@@ -2766,7 +2766,7 @@ function openTab() {
     if (focus) resultsBox.querySelector(".spools__row")?.focus();
   }
 
-  // ----- The spool sheet (04 5.4): address #spools/<id>; how: "push" (a row was pressed), "entry" (the address is already in
+  // ----- The spool sheet: address #spools/<id>; how: "push" (a row was pressed), "entry" (the address is already in
   // the history), "direct" (the page was loaded at it) -----
   function closeSheet() { if (sheet) { sheet.rec.popped = true; sheet.dlg.close(); } }
   function openSheet(id, opener, how = "push") {
@@ -2784,7 +2784,7 @@ function openTab() {
       return [SW.swatch(hexOf(v.color_hex), { size: "l" }), h("div", { class: "spools__sum-text" }, h("b", { textContent: nameOf(v) }),
         h("span", { class: "muted", textContent: detail }))];
     };
-    // -- Home (R88 01:55 point 1; 04 5.4): under the summary while the spool is checked out and the Hub knows the filter; "Change home" saves
+    // -- Home: under the summary while the spool is checked out and the Hub knows the filter; "Change home" saves
     // the chosen storage location at once through the spool editing twin (`home`), with the inline result and no toast --
     const homeText = h("span", { class: "spools__home-text" }), homeAns = resultLine();
     const homeBtn = needsHub(SW.btn(tt("checked_out_change_home"), { cls: "btn--ghost", action: "change-home" }));
@@ -2843,9 +2843,9 @@ function openTab() {
     const ans = answer();             // the answer to Preview and Link: the line, and the Hub's own text under it
     const previewBtn = needsHub(SW.btn(SW.t("common_preview"), { run: (e) => submit(true, e.currentTarget) }), true);
     const linkBtn = needsHub(SW.btn(SW.t("spool_sheet_link"), { cls: "btn--primary", run: (e) => submit(false, e.currentTarget) }));
-    // Link waits for a Preview of what is on the form; an edit makes the last Preview stale (04 3.4)
+    // Link waits for a Preview of what is on the form; an edit makes the last Preview stale
     // rev counts what changes the form or the tag; a Preview answer counts only if rev is what it was when the Preview went out, and
-    // Link sends exactly the body that was previewed (R345)
+    // Link sends exactly the body that was previewed
     let linkKey = "spool_sheet_reason_preview_first", rev = 0, working = false, shot = null;   // shot: { rev, body } of the last good Preview
     const gone = () => !!view && view.state === "empty";
     // Preview and Link stay off until the spool is read, and for an empty one
@@ -2884,7 +2884,7 @@ function openTab() {
           }
           if (dry && mine !== rev) { link(STALE[lastKind]); return null; }   // an edit or a newer tag came meanwhile: this answer is for what was
           previewed = dry && !res.exit_code; problem = !!res.exit_code;
-          if (previewed) { stale = false; if (dry && res.nfc_id) { seenId = uidOf(res.nfc_id); seenKey = tapKey(res.nfc_id, res.read_at); } }   // the tap the Hub used is seen: a poll that brings it is nothing new, and a re-tap is "again" (R345)
+          if (previewed) { stale = false; if (dry && res.nfc_id) { seenId = uidOf(res.nfc_id); seenKey = tapKey(res.nfc_id, res.read_at); } }   // the tap the Hub used is seen: a poll that brings it is nothing new, and a re-tap is "again"
           // Link names the tap the Hub used for this preview, also when the page showed no tag (null: an explicit "no tag")
           shot = previewed ? { rev: mine, body: dry ? { ...body, nfc_id: res.nfc_id ?? null, read_at: res.read_at ?? null } : body } : null;
           link(previewed ? null : problem ? "spool_sheet_reason_problem" : "spool_sheet_reason_preview_first");
@@ -2909,7 +2909,7 @@ function openTab() {
     const moveBtn = needsHub(SW.btn(SW.t("spool_move"), {}));
     const loadBtn = needsHub(SW.btn(SW.t("spool_load"), { run: () => pickPrinter() }));
     const emptyBtn = needsHub(SW.btn(SW.t("spool_mark_empty"), { cls: "btn--danger", run: (e) => markEmpty(e.currentTarget) }));
-    // the print page opens in a new tab: the size choice, the Hub's label, Print (04 5.4); it changes nothing, so it asks for nothing
+    // the print page opens in a new tab: the size choice, the Hub's label, Print; it changes nothing, so it asks for nothing
     const printBtn = SW.btn(tt("labels_button_one"), { action: "print-label", run: () => window.open(`${BASE}/labels?ids=${id}&size=62x29`, "_blank", "noopener") });
     function paintActions() {
       const empty = gone(), why = SW.t("spool_sheet_reason_empty");
@@ -2962,7 +2962,7 @@ function openTab() {
           }
           changed = true; applyView(r.view); wf._control.value = ""; wWas = false; wShot = null; wRev++; wLock("spool_weight_need_preview"); showWeight(false);
           const wt = SW.t("spool_result_weight", { left });
-          offerUndo(id, wt, refresh, r.event_id).then((offered) => { if (!offered) SW.toast(wt); });         // Undo when the Hub can put it back (R84 3)
+          offerUndo(id, wt, refresh, r.event_id).then((offered) => { if (!offered) SW.toast(wt); });         // Undo when the Hub can put it back
           SW.result(actAns, "ok", wt);
           return null;
         }, { button });
@@ -2984,14 +2984,14 @@ function openTab() {
           if (!back) { if (undoFrom == null || Date.now() > undoUntil) undoFrom = r.before.location || null; undoUntil = Date.now() + 5000; }   // a second move in the window keeps the first place
           changed = true; applyView(r.view); refreshStorage();
           const text = SW.t("spool_result_moved", { location: r.view && r.view.location || l });
-          if (!back && await offerUndo(id, text, () => { refresh(); refreshStorage(); }, r.event_id)) { undoFrom = null; return text; }     // the Hub puts it back (R84 3); the 5 s Undo below is for a Hub that cannot
+          if (!back && await offerUndo(id, text, () => { refresh(); refreshStorage(); }, r.event_id)) { undoFrom = null; return text; }     // the Hub puts it back; the 5 s Undo below is for a Hub that cannot
           if (back || !undoFrom) { undoFrom = null; return text; }
           setTimeout(() => { if (stamp === undoStamp && actAns.querySelector(".btn")) SW.result(actAns, "ok", text); }, 5000);   // Undo goes after 5 s
           return { text: SW.t("spool_result_moved_undo", { location: r.view && r.view.location || l, was: undoFrom }), action: { label: SW.t("common_undo"), run: () => moveTo(undoFrom, true) } };
         });
       } finally { moving = false; }
     }
-    // Mark empty: asks first (04 12.1)
+    // Mark empty: asks first
     async function markEmpty(opener) {
       let emptied = null;                                      // the Hub's event for it, for Undo
       const name = view ? nameOf(view) : SW.t("spool_title", { id });
@@ -3006,7 +3006,7 @@ function openTab() {
         SW.result(actAns, "ok", et);
       }
     }
-    // Load into a printer: the printers, then the slots, then the plan and Load (the routes of the load sheet of 04 6.5)
+    // Load into a printer: the printers, then the slots, then the plan and Load (the routes of the load sheet of the design, web app)
     const loadBox = h("div", { class: "spools__load", hidden: true });
     const enc = encodeURIComponent;
     const closeLoad = () => { loadBox.hidden = true; loadBox.replaceChildren(); loadBtn.focus(); };
@@ -3029,7 +3029,7 @@ function openTab() {
         const slots = ((r.status || {}).ams || []).flatMap((u) => u.slots || []);
         const head = h("h4", { class: "spools__step", textContent: SW.t("spool_load_which_slot", { printer: p.name || p.id }) });
         if (!slots.length && !p.auto_possible) return [head, h("p", { class: "muted", textContent: SW.t("spool_load_no_slots") }), stepFoot(pickPrinter)];
-        if (p.auto_possible) {                       // ONE list: Automatic first and selected, then the slots (R83 01:06 point 2)
+        if (p.auto_possible) {                       // ONE list: Automatic first and selected, then the slots
           // tapping a slot goes on at once, exactly as before Auto existed; leaving Automatic selected and going on (Continue, or a tap on its row) is the new way
           const go = SW.btn(tt("auto_continue"), { cls: "btn--primary", action: "slot-continue", run: () => plan(p, { label: "auto" }) });
           const autoRow = pickRow([h("span", { class: "spools__row-text" }, h("b", { textContent: tt("auto_option") }), h("span", { class: "muted", textContent: tt("auto_option_hint") }))], () => plan(p, { label: "auto" }));
@@ -3115,7 +3115,7 @@ function openTab() {
       if (!fresh || !tapped || tapped === seenKey) return;       // a poll that brings no tap, or the tap the sheet already knows (shown or previewed): nothing is out of date
       seenKey = tapped;
       tagNote.textContent = "";
-      if (key !== spentKey && onScale(t) && !weightTyped) {   // a new station tap: that spool is on the scale (04 5.2)
+      if (key !== spentKey && onScale(t) && !weightTyped) {   // a new station tap: that spool is on the scale
         weight._control.value = t.scale.grams; weight._hint.textContent = SW.t("spools_scale_filled", { seconds: t.scale.age_seconds });
       }
       const again = uidOf(t.nfc_id) === seenId; seenId = uidOf(t.nfc_id);       // the same tag tapped again, or another one
@@ -3156,7 +3156,7 @@ function openTab() {
       if (!co.st.on) co.load();                                // the Checked out chip and its count (find reads it while it is on)
     },
     leave() { shown = false; stopPoll(); closeSheet(); },
-    address(more, initial) {                                   // #spools or #spools/<id> (04 2.4)
+    address(more, initial) {                                   // #spools or #spools/<id>
       const id = /^\d+$/.test(more) ? Number(more) : null;
       if (more === "low") { closeSheet(); if (!low) setLow(true); }      // #spools/low: an alert's "Show running low"
       else if (id == null) closeSheet(); else openSheet(id, null, initial ? "direct" : "entry");
@@ -3165,7 +3165,7 @@ function openTab() {
   };
 }
 
-// ---------- Presets (04 8) ----------
+// ---------- Presets ----------
 function presetsTab() {
   const box = h("div");
   const gen = answer();        // the answer to Build presets now: the line, and the Hub's own text under it

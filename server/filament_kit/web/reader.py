@@ -446,7 +446,7 @@ class Reader:
         return PlainTextResponse("ok")
 
     async def fw(self, request: Request):
-        if demo.is_on():                  # no firmware goes to a device in the demo (R85 4.3: flash a device)
+        if demo.is_on():                  # no firmware goes to a device in the demo (flash a device)
             return reply(409, "error", demo.NOT_IN_DEMO)
         name = request.path_params["name"]
         path = fw_dir() / name

@@ -1,6 +1,6 @@
-"""The Analytics section (R84 section 5): filament used over the last months, from the printers' filament-used logs.
+"""The Analytics section: filament used over the last months, from the printers' filament-used logs.
 
-    GET  analytics?months=12&printer=<id>    as the kit route GET /api/analytics (R84 9.2): {months: [{month, grams, prints,
+    GET  analytics?months=12&printer=<id>    as the kit route GET /api/analytics: {months: [{month, grams, prints,
                                          unfinished_prints, unfinished_grams, logged_only_grams, no_weight_prints,
                                          by_printer: [{id, name, grams, prints}], by_material: [{material, grams}],
                                          top_material?}], insights: [{key, text}], notes: [text]}. `months` is 1 to 13

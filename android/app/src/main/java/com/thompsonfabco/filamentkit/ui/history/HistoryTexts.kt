@@ -7,7 +7,7 @@ package com.thompsonfabco.filamentkit.ui.history
  * text, a health check's text) are shown as the Hub sent them and never built here.
  */
 object HistoryTexts {
-    /** What an undo answers (R84 3.3); "Put back." is followed by the Hub's note when it sends one. */
+    /** What an undo answers; "Put back." is followed by the Hub's note when it sends one. */
     const val PUT_BACK = "Put back."
 
     /** The refusals, used only when a 409 carries no `text` of its own (R84 3.3 gives the first). */
@@ -22,14 +22,14 @@ object HistoryTexts {
     /** Undo did not reach the Hub, or the Hub failed without saying why. */
     const val UNDO_FAILED = "Nothing was undone. Try again."
 
-    /** The title of a spool's last events (R84 section 2). */
+    /** The title of a spool's last events. */
     const val ACTIVITY_TITLE = "Recent activity"
 
-    /** The Filament used panel's other view (R84 5.7) and the way back to the list. */
+    /** The Filament used panel's other view and the way back to the list. */
     const val BY_MONTH = "By month"
     const val LAST_DAYS = "Last 7 days"
 
-    /** "Download as CSV" (R84 6.5): the printer's filament used, through the phone's share sheet. */
+    /** "Download as CSV": the printer's filament used, through the phone's share sheet. */
     const val DOWNLOAD_CSV = "Download as CSV"
     const val DOWNLOADING = "Downloading…"
 

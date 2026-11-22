@@ -1,4 +1,4 @@
-// The console's Logs section (03 13; R84 2, 3.3, 8). Loaded after setup.js; everything from the server goes in through textContent, as there.
+// The console's Logs section (the design, Hub page). Loaded after setup.js; everything from the server goes in through textContent, as there.
 // Logs hold addresses and serial numbers, so reading them takes the setup code; nothing is kept on the page once it locks.
 // It opens on Activity (what was done on this Hub: it holds no addresses or serials, so reading it needs no code); Service logs
 // are the logs as they were, behind the code. Undo and Collect a Hub report change something or hand a file out: they take the code.
@@ -122,7 +122,7 @@ function logsView(units) {
   return h("div", { class: "logs" }, locked, controls, out);
 }
 
-// ----- Activity (R84 2): time, who, what, a link to the thing; an undoable row keeps Undo while the Hub allows it -----
+// ----- Activity: time, who, what, a link to the thing; an undoable row keeps Undo while the Hub allows it -----
 const ACT_ALIAS = { printer: "printers", spool: "spools", storage: "overview/storage-use", "storage-use": "overview/storage-use",
   "running-low": "overview/running-low", record: "recent" };
 // where an event's action goes: the Hub page's own addresses; a place this page does not have has no link
@@ -246,7 +246,7 @@ function activityView() {
   return h("div", { class: "logs__activity" }, controls, said, out);
 }
 
-// ----- Collect a Hub report (R84 8): the job strip follows the job, Download hands the newest one over -----
+// ----- Collect a Hub report: the job strip follows the job, Download hands the newest one over -----
 function reportBar() {
   const box = boxFor("report");
   const collect = SW.btn(actT("report_collect"), { cls: "btn--primary", action: "collect-report", run: () => needCode(async () => {
@@ -286,7 +286,7 @@ function logsTab() {
       catch (e) { if (e.locked) throw e; SW.toast(actT("activity_csv_failed", { reason: hubText(e.message) }), "bad"); }
     }),
   });
-  // the one page menu (03 3.8): Open the web app and Download as CSV in it, so the shell adds no second "more" button
+  // the one page menu: Open the web app and Download as CSV in it, so the shell adds no second "more" button
   const actMore = SW.iconBtn("more", SW.t("common_page_actions"), { cls: "logs__actmore" });
   actMore.dataset.pageMenu = "1";
   SW.menu(actMore, () => [

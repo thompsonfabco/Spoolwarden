@@ -977,7 +977,7 @@ def test_the_tab_script_never_uses_innerhtml_or_talks_elsewhere():
              for ln in (STATIC / name).read_text(encoding="utf-8").splitlines()]
     src = " ".join(ln for ln in lines if not ln.lstrip().startswith("//"))
     assert not re.search(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|fetch\(", src)
-    # the one thing kept in the browser is the language choice (R85 3), under its own key; nothing else
+    # the one thing kept in the browser is the language choice, under its own key; nothing else
     assert "sessionStorage" not in src
     assert re.findall(r"localStorage\.\w+\(([^,)]*)", src) == ["SET_LANG_KEY"] * 3 and src.count("localStorage") == 3
     assert 'SET_LANG_KEY = "spoolwarden.language"' in src

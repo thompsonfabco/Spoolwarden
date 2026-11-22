@@ -16,7 +16,7 @@ const hubJobs = () => hubJobsMade || (hubJobsMade = SW_JOBS.create({
   banners: () => document.querySelector("main"),
   onEnd: () => refresh(),
   onBack: () => refresh(),
-  // read only when pressed, it can be long (03 2.1); while Locked it asks for the code in place
+  // read only when pressed, it can be long; while Locked it asks for the code in place
   wholeLog: async (box) => {
     let text = null;
     await coded(box, async () => {

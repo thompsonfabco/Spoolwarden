@@ -55,7 +55,7 @@ private fun change(at: String, key: String, text: String, from: String, to: Stri
 private fun health(since: String? = null, changes: List<HealthChange> = emptyList()) =
     HealthAnswer("2026-11-11T00:00:00Z", "2026-11-18T00:00:00Z", since, listOf(HealthCheck("printer:p-3", "Printers", "Workshop X1", "ok")), changes)
 
-/** The check history table of the Hub screen (R84 4.3): its rows, its footnote, its days. */
+/** The check history table of the Hub screen: its rows, its footnote, its days. */
 class HealthTableTest {
     private val utc = ZoneId.of("UTC")
     private val words = HealthWords(ok = "Fine", look = "Look")

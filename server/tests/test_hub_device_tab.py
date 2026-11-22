@@ -741,7 +741,7 @@ return { sent: sentTo("device/d3/settings") };
 
 def test_a_station_without_a_certificate_has_its_settings_changed_with_the_proof_but_no_ticket_over_http(env_hub, tmp_path, monkeypatch):
     """R559 01 #4 + D14: a Weigh Station that told the Hub no certificate (not updated, or it could not make one) is called over
-    plain HTTP for a settings change (R82 2026-11-18 00:28 point 1), which carries the proof (R83 01:10). The Hub does NOT fetch a
+    plain HTTP for a settings change (R82 2026-11-18 00:28 point 1), which carries the proof. The Hub does NOT fetch a
     page ticket over plain HTTP: it refuses with the not-pinned text and no ticket request leaves. The station is the real handler."""
     from http.server import ThreadingHTTPServer
     import http.client

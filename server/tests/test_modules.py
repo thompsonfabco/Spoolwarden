@@ -230,7 +230,7 @@ def test_validate_checks_web_lan_entries_are_networks():
     validate(cfg)                               # only checked while web is on
 
 
-# ---------- checklist menu (R2) ----------
+# ---------- checklist menu ----------
 
 def test_menu_lines_generic_and_marks_needs():
     from filament_kit import modules

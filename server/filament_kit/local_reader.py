@@ -28,10 +28,10 @@ The kit sends no order history, prices, comments or spool data. `local_intake.ur
 GPU tier wants a GPU the kit server usually lacks); an optional bearer token (`<etc>/local_intake_token`) protects
 that link, and it is sent on reads only, never logged.
 
-HTTPS (R82 section 2 point 6): a reader on another machine is to be at an https address. The Hub pins its certificate
+HTTPS: a reader on another machine is to be at an https address. The Hub pins its certificate
 at Test (`test`: trust on first use, the fingerprint in the result) and every call after that accepts only that
 certificate (a changed one: `LocalReaderError("cert_changed")`; Test again with `trust=True` takes the new one). The
-reader's own repository has to serve HTTPS first (R82 section 10 point 6; ruled 2026-11-17 21:12). While
+reader's own repository has to serve HTTPS first (ruled 2026-11-17 21:12). While
 `ENFORCE_HTTPS` is False an `http://` address on another machine is accepted and used as today and `https_row` gives
 the one Checks row (state note, no fix). From the release that turns it on, saving such an address is refused
 (`check_url`), a stored one keeps working and its row becomes "needs a look" with a fix. Not a setting.

@@ -10,7 +10,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 
 /**
- * The texts of "Checked out" (R88 section 1) that are not in the string catalogue yet. Only the catalogue step opens
+ * The texts of "Checked out" that are not in the string catalogue yet. Only the catalogue step opens
  * `strings/en.json`; each text has a proposed key in the CO6 report and moves there with it.
  */
 object CheckedOutTexts {
@@ -48,7 +48,7 @@ fun JsonObject.checkedOutInfo(): CheckedOutInfo? {
 /** The toast of a Return: [text], with Undo when the Hub offers one ([event], found after the return). */
 data class ReturnToast(val text: String, val event: ActivityEvent?)
 
-/** The pure rules of the Checked out filter, the rows and Return (R88 section 1.6). */
+/** The pure rules of the Checked out filter, the rows and Return. */
 object CheckedOutRules {
     /** The kind of event a Return writes; undone as an unload is (the Hub's record only). */
     const val RETURNED_KIND = "spool.returned"
@@ -56,11 +56,11 @@ object CheckedOutRules {
     /** The filter name in a list answer's `filters`. */
     const val FILTER = "checked_out"
 
-    /** Whether the Hub applies the filter: its list answer names `checked_out` in `filters`; no `filters` is an older Hub (R88 01:55). */
+    /** Whether the Hub applies the filter: its list answer names `checked_out` in `filters`; no `filters` is an older Hub. */
     fun supported(filters: List<String>?): Boolean = filters?.contains(FILTER) == true
 
     /**
-     * The count of "Checked out (<n>)": the `total` of the list answer for `filter=checked_out` (R88 02:30), with the
+     * The count of "Checked out (<n>)": the `total` of the list answer for `filter=checked_out`, with the
      * rows of the answer when it carries no `total`; null for a Hub that does not apply the filter.
      */
     fun count(answer: SpoolsAnswer): Int? = if (supported(answer.filters)) answer.total ?: rows(answer.spools).size else null
@@ -81,7 +81,7 @@ object CheckedOutRules {
 
     /**
      * Whether the spool screen offers the Home line, Return and Change home: the spool's own answer carried `checked_out`
-     * (R88 1.7: every list row and `GET /api/spools/{id}` do on a Hub that applies the filter). Nothing outlives the answer,
+     * (every list row and `GET /api/spools/{id}` do on a Hub that applies the filter). Nothing outlives the answer,
      * so another Hub cannot inherit it. An answer without the fields (an older Hub, or a route that omits them) offers none.
      */
     fun offered(s: SpoolSummary): Boolean = s.checkedOutKnown

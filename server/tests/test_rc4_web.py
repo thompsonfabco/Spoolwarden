@@ -43,7 +43,7 @@ class RcKit(ManagingKit):
         if path == "/api/demo/leave":
             self._check()
             self.calls.append(("POST", path, body))
-            if not self.demo:                                           # as the Hub's route (R85 22:45.1): 409 when the demo is off
+            if not self.demo:                                           # as the Hub's route: 409 when the demo is off
                 raise SlotError("The demo is not on.", code="not_in_demo", http=409)
             self.demo = False
             return {"demo": False}
@@ -83,7 +83,7 @@ def test_the_page_follows_the_phones_language_when_the_hub_has_the_pack(env):
 
 def test_a_non_english_page_keeps_a_working_catalogue_when_the_hub_goes_down(env):
     """R574 HIGH 4: the page chose German while the Hub answered; with the Hub down its German script answers 502, and the page
-    still loads the English catalogue before it, so no screen shows bare keys (R85 3.5)."""
+    still loads the English catalogue before it, so no screen shows bare keys."""
     kit = RcKit()
     c = signed(make_app(env, kit))
     h = {"Accept-Language": "de"}
@@ -182,7 +182,7 @@ def test_the_languages_and_their_texts_come_from_the_hub(env):
         assert c.get("/intake/api/strings/" + bad).status_code == 404, bad
 
 
-FIVE = ("62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25")      # R85 00:50 point 6
+FIVE = ("62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25")
 BAD_SIZE = "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25."
 
 
@@ -197,7 +197,7 @@ def test_a_label_is_the_hubs_svg_at_one_of_the_five_sizes(env):
         assert asked(kit, f"/api/spools/214/label.svg?size={size}")
     for bad in ("sheet24", "a4", "A4-63X34"):                          # sheet24 never shipped and is dropped (00:50 point 1)
         r = c.get(f"/intake/api/spools/214/label.svg?size={bad}")
-        assert r.status_code == 400 and r.json() == {"error": "bad_request", "message": BAD_SIZE}, bad      # the twins' shape (R574 5)
+        assert r.status_code == 400 and r.json() == {"error": "bad_request", "message": BAD_SIZE}, bad      # the twins' shape
     assert signed(make_app(env, kit), AWAY).get("/intake/api/spools/214/label.svg").status_code == 403
 
 
@@ -237,7 +237,7 @@ def test_the_print_page(env, monkeypatch):
     assert js.status_code == 200 and b"label.svg" in js.content and b"window.print()" in js.content
     kit.demo = True
     demo = signed(make_app(env, kit)).get("/intake/labels?ids=3").text
-    assert "data-demo='1'" in demo                                       # the demo banner on the print page too (R85 4.5)
+    assert "data-demo='1'" in demo                                       # the demo banner on the print page too
 
 
 def test_the_print_page_states_its_paper(env):
@@ -259,7 +259,7 @@ def _rule(css: str, selector: str) -> dict:
 
 
 def test_a_sheet_lays_its_labels_by_the_tables_margins_and_pitches():
-    """02 7.13's table (R85 00:50 point 2): left and top margin, pitch across and down, label size, 3 across, page size, no padding
+    """the design, components's table: left and top margin, pitch across and down, label size, 3 across, page size, no padding
     of the page's own at print; the print page's script offers the five sizes in a select with the line for a sheet."""
     from pathlib import Path
     static = Path(__file__).resolve().parents[1] / "filament_kit" / "web" / "static"
@@ -303,7 +303,7 @@ def test_a_subscription_keeps_the_phones_language(tmp_path):
 
 
 class LangEventKit:
-    """GET api/events as the Hub answers it, and with `lang` the same event in that language (R85 3.8); `fail` languages raise."""
+    """GET api/events as the Hub answers it, and with `lang` the same event in that language; `fail` languages raise."""
 
     def __init__(self, events, fail=()):
         self.events, self.fail, self.asked = list(events), set(fail), []

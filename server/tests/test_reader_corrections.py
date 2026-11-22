@@ -57,7 +57,7 @@ def test_the_list_passes_the_entries_through_with_count_size_opt_in_and_capabili
     out = r.json()
     assert [e["id"] for e in out["entries"]] == [a, b]
     assert out["entries"][0]["corrected"] == {"vendor": "Polymaker"}
-    assert "record" not in out["entries"][0] and out["entries"][0]["photos"] == 0     # "r1" is no kept record (R87)
+    assert "record" not in out["entries"][0] and out["entries"][0]["photos"] == 0     # "r1" is no kept record
     assert out["count"] == 2 and out["opt_in"] is True and out["bytes"] == round(out["bundle_mb"] * 1048576)
     assert out["capabilities"]["feedback"] is True and out["capabilities"]["known_from"] == "health"
 

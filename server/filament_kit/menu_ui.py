@@ -41,7 +41,7 @@ class Row:
     value: str = ""
     mark: str | None = None         # a checklist row: "x" on, " " off; None in a menu
     dim: bool = False               # a row that cannot be opened now (its value says why)
-    before: tuple[str, ...] = ()    # heading lines drawn above the row (06 8.3 sub-headings)
+    before: tuple[str, ...] = ()    # heading lines drawn above the row (the design, command line sub-headings)
     note: str = ""                  # the footer's first line while the cursor is on this row
     detail: str = ""                # said after the value in the numbered variant only (a checklist row's needs)
 
@@ -253,7 +253,7 @@ def row_text(screen: Screen, i: int, width: int, *, cursor: bool = False) -> str
 def numbered_lines(screen: Screen) -> list[str]:
     """The screen as lines for the numbered variant: the header, the rows, the keys under them. Long rows wrap at
     spaces under their label; below 60 columns each row is a block (the number and label, then its value on the lines
-    under it, 06 6.3) so the value keeps a readable width."""
+    under it, the design, command line) so the value keeps a readable width."""
     lines = [screen.header(), *screen.intro]
     if screen.rows or not screen.intro:
         lines.append("")
@@ -539,7 +539,7 @@ def _stdout_tty() -> bool:
 
 
 def fullscreen_wanted(raw: bool = False) -> bool:
-    """06 8.1: not `--numbered` / `--plain`, TERM set and not `dumb`, input and output both terminals (with `raw`, the
+    """the design, command line: not `--numbered` / `--plain`, TERM set and not `dumb`, input and output both terminals (with `raw`, the
     output is captured and the screen goes to /dev/tty)."""
     if output.numbered():
         return False
@@ -564,7 +564,7 @@ def _start_errors() -> tuple[type[BaseException], ...]:
 
 @contextlib.contextmanager
 def open_ui(ask: Callable[[str], str | None], secret: Callable[[str], str] | None = None, *, raw: bool = False):
-    """The screens' interface: full-screen when 06 8.1 allows it, otherwise numbered (`ask` reads its lines). When only
+    """The screens' interface: full-screen when the design, command line allows it, otherwise numbered (`ask` reads its lines). When only
     the size says no, one `Note:` line says why. The terminal is put back on every way out (Ctrl-C included)."""
     if not fullscreen_wanted(raw):
         yield NumberedUi(ask, secret)

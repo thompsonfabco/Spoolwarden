@@ -782,7 +782,7 @@ class PrinterViewModelTest {
         vm.stop()
     }
 
-    // --- Undo on the Hub (R84 3) ---
+    // --- Undo on the Hub ---
 
     private fun event(id: Long, kind: String, subject: String) =
         ActivityEvent(id, "2026-11-17T04:00:00Z", null, kind, "Pixel", "x", subject, UndoState(true, null, null), false, null)
@@ -834,7 +834,7 @@ class PrinterViewModelTest {
         vm.stop()
     }
 
-    // --- Filament used by month and as CSV (R84 5.7, 6.5) ---
+    // --- Filament used by month and as CSV ---
 
     @Test fun byMonthReadsTheMonthsOnceAndTheWayBackKeepsThem() = runTest(dispatcher) {
         backend.months = listOf(UsageMonth("2026-11", 1840.0, 15, 1, "PA6"))

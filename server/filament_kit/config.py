@@ -95,7 +95,7 @@ DEFAULTS: dict = {
                 "panel_swap": False,  # the panel's yellow and red are wired to each other's pins
                 "page_from": "home",  # who the unit admits for the page: home, subnets or allowed (apply.page_ranges)
                 "speaker_volume": 50,   # the C3 panel's speaker, percent
-                "panel_link": "usb", "panel_port": 5004},   # how the panel reaches the station, and its Wi-Fi listener (R88 4.4)
+                "panel_link": "usb", "panel_port": 5004},   # how the panel reaches the station, and its Wi-Fi listener
     # merge-ops: web unit, remote access, orders file, tag readers, slot service, slicer/presets/intake extras
     "web": {"port": 8101, "public_url": None, "push": False,   # push: Web Push alerts (needs internet egress)
             "lan": ["192.168.0.0/16", "10.0.0.0/8"]},   # not 172.16/12: Docker's bridges live there (A-M6)
@@ -112,8 +112,8 @@ DEFAULTS: dict = {
     # the local label reader (local_intake module): its address, here or on another machine, and its tier
     "local_intake": {"url": "http://127.0.0.1:7915", "tier": "auto"},
     "web_instructions": None,
-    "appearance": {"theme": "console"},     # the theme for devices that have not chosen one (design 01 6.2)
-    "events": {"keep_days": 400},           # how long the event store keeps its month files (R80 section 1)
+    "appearance": {"theme": "console"},     # the theme for devices that have not chosen one (the design, foundations)
+    "events": {"keep_days": 400},           # how long the event store keeps its month files
 }
 
 KEEP_DAYS_MIN, KEEP_DAYS_MAX = 30, 3650
@@ -135,7 +135,7 @@ PANEL_LINKS = ("usb", "wifi")
 
 
 def panel_link(cfg: dict) -> str:
-    """`station.panel_link` (R88 4.4): `usb` or `wifi`; `usb` when it is missing or anything else."""
+    """`station.panel_link`: `usb` or `wifi`; `usb` when it is missing or anything else."""
     st = cfg.get("station")
     v = st.get("panel_link") if isinstance(st, dict) else None
     return v if v in PANEL_LINKS else DEFAULTS["station"]["panel_link"]
@@ -147,7 +147,7 @@ def panel_port(cfg: dict) -> int:
     return _whole_in(st.get("panel_port") if isinstance(st, dict) else None, 1, 65535, DEFAULTS["station"]["panel_port"])
 
 
-LOOKS = ("console", "workbench", "palette", "panes")    # the four themes, Console first (design 01 section 6)
+LOOKS = ("console", "workbench", "palette", "panes")    # the four themes, Console first (the design, foundations)
 
 
 def look(cfg: dict) -> str:
@@ -290,7 +290,7 @@ def _set_aside(xf: Path) -> None:
 
 
 def save(cfg: dict) -> None:
-    """Both forms (R85 section 1.5: the JSON form stays for one release, for `update --rollback`)."""
+    """Both forms (the JSON form stays for one release, for `update --rollback`)."""
     from .profiles import statexml
     xf = _xml_file()
     if any(x.startswith(f"{xf} (") for x in statexml.problems()) and xf.exists() and _parses_broken(xf):

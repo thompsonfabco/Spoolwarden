@@ -487,7 +487,7 @@ def test_turning_off_a_reader_without_the_queue_does_nothing(fake_reader, tmp_pa
 # ---------------------------------------------------------------- the command line (parity)
 
 def cli_json(capsys, *args, **kw):
-    """The command under the global --json (06 6.8): the one document on standard output, and the exit code."""
+    """The command under the global --json: the one document on standard output, and the exit code."""
     output.configure(json=True)
     try:
         rc = output.run_json(lambda: cli.cmd_local_intake_share(*args, **kw))

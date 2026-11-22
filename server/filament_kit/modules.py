@@ -88,7 +88,7 @@ MODES: dict[str, frozenset[str]] = {
     "all-in-one": frozenset(MODULES) - OPT_IN,
 }
 
-# The setup names of the Hub page and the command line (design 06 section 9.6, N27) beside the old words; the old
+# The setup names of the Hub page and the command line (the design, command line, N27) beside the old words; the old
 # word stays the canonical one (what the code and every stored value use).
 MODE_ALIASES = {"hub": "server", "weigh-station": "station", "hub-with-weigh-station": "all-in-one"}
 
@@ -208,7 +208,7 @@ def validate(cfg: dict) -> None:
                 if dep not in on:
                     why = f" ({MODULES[n].needs_text})" if n == "orders" else ""
                     raise ModuleError(f"{n} needs {dep}{why}")
-    if "remote" in on and hubport.remote_conflict(cfg):       # R82 s1 point 6: refused before anything is changed
+    if "remote" in on and hubport.remote_conflict(cfg):       # refused before anything is changed
         raise ModuleError(f"{hubport.TEXT_REMOTE_REFUSAL_SHORT}; fix: {hubport.TEXT_REMOTE_FIX}")
     if needs_spoolman_url(on, cfg):
         raise ModuleError(

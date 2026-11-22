@@ -1,4 +1,4 @@
-"""Demo mode (R85 section 4, docs/design 03 section 3.9): the whole product on made-up data with pretend printers.
+"""Demo mode: the whole product on made-up data with pretend printers.
 
 The demo is on while `<state>/demo/demo.xml` exists. Everything the demo makes lives in `<state>/demo/` (the inventory,
 the events, the usage log, the storage locations, Recently added: `recorded(name)` is the path of one of them), and
@@ -7,7 +7,7 @@ or the outside: the pieces that would answer `NotInDemo` (message "Not in the de
 
 Pieces: `inventory` (the demo's Spoolman, which `spoolman.Spoolman` calls while the demo is on), `printers` (the
 pretend printers and the scripted alert), `routes` (the route list RC9 mounts). The sample set is `sample.xml`
-(docs/design mockups/CONTENT-SPEC.md, "Workshop hub": 64 spools of 23 filaments, three printers and one found).
+(docs/the example-data rules, "Workshop hub": 64 spools of 23 filaments, three printers and one found).
 No JSON is stored.
 """
 from __future__ import annotations
@@ -55,7 +55,7 @@ class NotEmpty(DemoError):
 
 
 class CannotTell(DemoError):
-    """Spoolman does not answer, so whether the Hub holds spools is not known: the demo does not start (R85 4.2)."""
+    """Spoolman does not answer, so whether the Hub holds spools is not known: the demo does not start."""
 
     code = "cannot_tell_if_empty"
 

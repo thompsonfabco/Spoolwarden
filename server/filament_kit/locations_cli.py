@@ -1,4 +1,4 @@
-"""`spoolwarden locations` (06 9.15) and the Storage locations screen of `config` (06 8.3).
+"""`spoolwarden locations` and the Storage locations screen of `config`.
 
 Both change the list the way the Hub page does: the whole list goes through `storage_api.save` (the same checks, the
 same refusals, the same rename of the spools, the same job for a rename of more than 20 spools), so a refusal reads the
@@ -141,7 +141,7 @@ def _view(sm) -> dict:
 
 
 def cmd_list(sm_factory) -> int:
-    """`locations` (06 9.15): the list in fill order; `--json` is the answer of GET api/storage."""
+    """`locations`: the list in fill order; `--json` is the answer of GET api/storage."""
     try:
         view = _view(_sm(sm_factory))
     except SpoolmanError as e:
@@ -452,7 +452,7 @@ def run(args, sm_factory=None) -> int:
             "sealed": lambda: cmd_sealed(args, sm_factory)}[which]()
 
 
-# ---------- the screens of `config` > Storage locations (06 8.3) ----------
+# ---------- the screens of `config` > Storage locations ----------
 
 class NoSpools:
     """The spools of a machine that has none yet (the installer's first-run question asks before Spoolman exists)."""

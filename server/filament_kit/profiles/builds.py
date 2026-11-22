@@ -183,7 +183,7 @@ def _state_obj(path: Path) -> dict:
 
 
 def _write_json(path: Path, obj) -> None:
-    """Save a state file as XML (R85 section 1, RC1c); the JSON form of an older Hub stays as it was at the move."""
+    """Save a state file as XML; the JSON form of an older Hub stays as it was at the move."""
     statexml.write(path, obj)
 
 

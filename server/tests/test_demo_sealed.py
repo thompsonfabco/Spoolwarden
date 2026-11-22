@@ -152,7 +152,7 @@ KIT_BODY = {"action": "pause", "spool_id": 152, "dry_run": False, "slot": "A1", 
             "serial": "00M00A000000002", "name": "Renamed", "mode": "on", "subnet": "192.0.2.0/24"}
 
 
-# Files a paired device legitimately changes: "Pairing a phone or a PC works" (R85 4.3), so the demo can be seen on them.
+# Files a paired device legitimately changes: "Pairing a phone or a PC works", so the demo can be seen on them.
 PAIRING = re.compile(r"(^|/)[^/]*(devices|pairing|token|trusted|lockout|audit|pending|spent)[^/]*$|\.lock$|\.tmp$|(^|/)logs?(/|$)", re.I)
 
 
@@ -664,7 +664,7 @@ def not_mountable_yet(mountable: bool, lists: dict[str, object]) -> list[str]:
 
 
 def test_the_demo_is_not_mountable_while_a_leak_list_is_not_empty():
-    """The seal is not complete while any leak list here is not empty (R85 assumption 5): `demo.MOUNTABLE` (what RC9's
+    """The seal is not complete while any leak list here is not empty: `demo.MOUNTABLE` (what RC9's
     mount consults) stays False until they are all empty, and whoever flips it with a list left fails this test."""
     assert not_mountable_yet(demo.MOUNTABLE, leak_lists()) == [], "empty the leak lists before demo.MOUNTABLE = True"
 
@@ -851,7 +851,7 @@ def test_push_stops_in_the_demo(tmp_path, monkeypatch, mountable):
     assert snapshot(tmp_path) == before
 
 
-# ---- the event streams (R85 assumption 5, item 1) -------------------------------------------------------------------
+# ---- the event streams -------------------------------------------------------------------
 
 def open_stream(c, path: str, take: int = 1, timeout: float = 20.0) -> tuple[int, list[bytes]]:
     """GET `path` from the app and read the first `take` chunks of a response that never ends, then the client goes away
@@ -917,7 +917,7 @@ def test_the_event_streams_serve_the_demos_events_only(hub, tmp_path):
     assert snapshot(tmp_path) == before
 
 
-# ---- pairing (R85 assumption 5, item 2) -----------------------------------------------------------------------------
+# ---- pairing -----------------------------------------------------------------------------
 
 def test_pairing_in_the_demo_touches_only_the_pairing_files(hub, tmp_path):
     """R85 4.3: pairing a phone or a PC works in the demo, and it writes the pairing files of the real state and etc folders
@@ -948,7 +948,7 @@ def test_pairing_in_the_demo_touches_only_the_pairing_files(hub, tmp_path):
 PAIRING_FILE = re.compile(r"(etc|state)/(devices|pending|spent|setup_lockout|trusted|pairing)[\w.-]*")
 
 
-# ---- a printer family started before the demo (R85 assumption 5, item 5) ---------------------------------------------
+# ---- a printer family started before the demo ---------------------------------------------
 
 class FakeMqtt:
     """A paho client as the Bambu `Manager` drives it (it connects and publishes through this): every call is logged and a
@@ -1094,7 +1094,7 @@ def test_a_klipper_family_started_before_the_demo_goes_quiet_when_it_starts(tmp_
             demo.leave()
 
 
-# ---- the root helper, the apply and the update (R85 assumption 5, item 6) ---------------------------------------------
+# ---- the root helper, the apply and the update ---------------------------------------------
 
 def test_the_root_helper_and_the_system_jobs_refuse_before_any_process(tmp_path, monkeypatch, mountable):
     """R85 4.3: with the real paths on (no FK_NO_SYSTEMD: systemctl, apt, the job runner), every op of the root helper but the
@@ -1144,7 +1144,7 @@ def test_the_root_helper_and_the_system_jobs_refuse_before_any_process(tmp_path,
     assert snapshot(tmp_path) == before
 
 
-# ---- the command line (R85 assumption 5, item 7) ----------------------------------------------------------------------
+# ---- the command line ----------------------------------------------------------------------
 
 def cli_commands() -> list[tuple[list[str], bool]]:
     """Every command of the command line, read from the argparse tree `cli._main` builds (nothing is typed here): the words

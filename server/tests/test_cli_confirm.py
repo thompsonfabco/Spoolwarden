@@ -1,4 +1,4 @@
-"""S5.2: confirmations (06 7), AUT-9 for every destructive command that exists today. Each command, run three ways:
+"""S5.2: confirmations, AUT-9 for every destructive command that exists today. Each command, run three ways:
 piped with no `--yes` (exit 2, standard output empty, `Error:` and `Fix:` on standard error, nothing done); answered
 no, with an empty answer, or at the end of input (exit 5, `Nothing changed.`, nothing done); and with `--yes` (the
 action runs and the question is never printed). A `y` or `yes` in any case goes on. The commands are run through

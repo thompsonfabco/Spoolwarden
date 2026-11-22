@@ -1,4 +1,4 @@
-"""AF5: `spoolwarden port` (06 9.19), the Getting started block of `status` (06 9.1) and the addresses without a port."""
+"""AF5: `spoolwarden port`, the Getting started block of `status` and the addresses without a port."""
 from __future__ import annotations
 
 import json

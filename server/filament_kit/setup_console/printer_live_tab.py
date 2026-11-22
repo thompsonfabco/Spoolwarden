@@ -1,4 +1,4 @@
-"""The live printer view of the Printers tab (R83 section 2 and 3, the 20:58 ruling point 3): what an open printer shows in its
+"""The live printer view of the Printers tab (the 20:58 ruling point 3): what an open printer shows in its
 Detail region. The page's own routes call the same printer code as the kit routes, in the Hub's process; they never call the web
 app's routes (the page's lock must apply, and the web app may be switched off). Serials are the path's `serial`, as the other
 Printers routes have them.

@@ -21,7 +21,7 @@ object PrinterTexts {
     /** What Unload adds when a spool that was waiting for the slot is waiting no more. */
     const val UNLOAD_WAITING_ENDED = "The spool waiting for this slot is not waiting any more."
 
-    /** The guided add (R82 section 5). "Add a printer", "Use this printer", "Looking…" and "Back" are catalogue texts. */
+    /** The guided add. "Add a printer", "Use this printer", "Looking…" and "Back" are catalogue texts. */
     const val GUIDE_FOUND = "Found on your network"
     const val GUIDE_NONE = "None found. Type its address in the next step."
     const val GUIDE_BY_ADDRESS = "Type a Klipper printer's address"
@@ -42,7 +42,7 @@ object PrinterTexts {
     private const val CLEAR_PRINTER_CLEARED = "The slot's setting on the printer is cleared too."
     private const val PREVIOUS_PLACE = "its previous place"
 
-    /** R83 point 2: on a Bambu Lab printer Clear slot changes only the Hub's record. Proposed key `printer_clear_bambu_note`. */
+    /** on a Bambu Lab printer Clear slot changes only the Hub's record. Proposed key `printer_clear_bambu_note`. */
     const val CLEAR_BAMBU_NOTE = "The printer still shows the old filament for this slot until a spool is loaded."
 
     /**

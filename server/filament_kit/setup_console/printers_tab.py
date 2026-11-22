@@ -298,7 +298,7 @@ def routes(page) -> list[tuple]:
         return {"ok": True}
 
     async def change_address(request, body):
-        """`access_code` (Bambu Lab only, optional): saved with the new address, as `PATCH /api/printers` does (03 15):
+        """`access_code` (Bambu Lab only, optional): saved with the new address, as `PATCH /api/printers` does:
         the page, the web app and the app all ask for it, so every interface behaves the same."""
         serial = page._serial(request)
         access = page._access_code(body) if "access_code" in body else None
@@ -495,7 +495,7 @@ def routes(page) -> list[tuple]:
         return {"ok": True}
 
     async def states(request, body):
-        """Every printer's state, job and slots in one read (03 2.7): what the Hub already holds, no new connection."""
+        """Every printer's state, job and slots in one read: what the Hub already holds, no new connection."""
         return {"printers": await anyio.to_thread.run_sync(lambda: printer_states(page))}
 
     async def export_csv(request, body):

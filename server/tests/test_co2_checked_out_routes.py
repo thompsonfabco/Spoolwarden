@@ -554,7 +554,7 @@ def test_the_editing_twin_changes_a_home_and_refuses_as_the_hub_does(sm, printer
         assert w.post(f"/intake/api/spools/{plain['id']}", json={"remaining": 450, "dry_run": False}, headers=ORIGIN).status_code == 200
 
 
-# ---------- the command line's requests (R682), replayed ----------
+# ---------- the command line's requests, replayed ----------
 
 def test_the_command_lines_requests_find_every_field_they_read(c, sm):
     s = _out(sm, home="Rack 1", name="Out one")

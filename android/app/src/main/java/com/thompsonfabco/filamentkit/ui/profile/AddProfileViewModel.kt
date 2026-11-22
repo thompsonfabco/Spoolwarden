@@ -32,7 +32,7 @@ interface ProfileApi {
     /** The old way, kept for a Hub without the form route (404): the app builds the entry itself. */
     suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult
 
-    /** The form's values go to the Hub, which builds the entry (R83 section 4). A backend without it answers as an older Hub (404). */
+    /** The form's values go to the Hub, which builds the entry. A backend without it answers as an older Hub (404). */
     suspend fun addLocalEntryForm(values: JsonObject): LocalEntry = throw ApiError(NOT_FOUND, "not_found", "Not found")
 
     /** The owner's own entries; 404 from an older Hub. */
@@ -76,7 +76,7 @@ enum class ProfileField(val required: Boolean = false, val number: Boolean = fal
     Notes,
 }
 
-/** Why a save did not go through, when it is not a refused entry; the screen words it (05 8, 3.4). */
+/** Why a save did not go through, when it is not a refused entry; the screen words it. */
 enum class SaveFailure { CertificateChanged, NotPaired, Unreachable, Unknown, Message }
 
 /**
@@ -117,7 +117,7 @@ data class AddProfileUiState(
     /** Not again while saving or after the old way saved (a second tap would post the same entry). */
     val canSave: Boolean get() = !saving && !saved && filled
 
-    /** Something was typed: leaving asks first (05 2.5 rule 1). */
+    /** Something was typed: leaving asks first. */
     val dirty: Boolean get() = !saved && values.filterValues { it.isNotBlank() } != opened
 }
 
@@ -352,7 +352,7 @@ internal fun fieldOf(problem: String): ProfileField? {
 }
 
 /**
- * The values the form sends (R83 section 10.1): brand, name and material, and each optional one that was typed. A
+ * The values the form sends: brand, name and material, and each optional one that was typed. A
  * number goes as a number when it reads as one; anything else goes as typed, so the Hub says what is wrong with it.
  * The app never builds the entry's text.
  */

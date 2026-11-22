@@ -42,7 +42,7 @@ interface LoadBackend {
 }
 
 /**
- * Whether a load is being written, for the whole app: a tag tapped meanwhile waits (05 2.6) and the load screen ignores
+ * Whether a load is being written, for the whole app: a tag tapped meanwhile waits and the load screen ignores
  * Back (2.5 rule 2). The load's own screen sets it; it is one value because only one load runs at a time.
  */
 class LoadGate {
@@ -89,7 +89,7 @@ private const val AUTO_NOT_POSSIBLE = "auto_not_possible"
 /** How a spool is named in a sentence: its brand and name, else its number. */
 internal fun spoolWords(spool: SpoolSummary): String = spool.title.ifBlank { "Spool ${spool.id}" }
 
-/** The printers that can take a load now: set up and connected (05 7.6). */
+/** The printers that can take a load now: set up and connected. */
 internal fun canTakeLoad(p: Printer): Boolean = p.configured && p.state == Printer.STATE_CONNECTED
 
 /** Step 1: the printers; [printers] is null while they load. */
@@ -172,7 +172,7 @@ class LoadSlotsViewModel(private val printerId: String, private val backend: Loa
 }
 
 /**
- * Step 3 (05 7.6): [plan] is the dry run's answer; while [writing] the load is being sent. [finished] is the result the
+ * Step 3: [plan] is the dry run's answer; while [writing] the load is being sent. [finished] is the result the
  * spool screen shows once it is back on screen; [dropped] and [pairingRefused] are the two writes that end on this step.
  */
 data class LoadPreviewUi(
@@ -186,7 +186,7 @@ data class LoadPreviewUi(
     val failure: HubFailure? = null,
     val pairingRefused: Boolean = false,
     val dropped: Boolean = false,
-    /** [failure] came from the write: the Hub refused it, so it is shown with no Try again (05 7.6). */
+    /** [failure] came from the write: the Hub refused it, so it is shown with no Try again. */
     val failedWrite: Boolean = false,
     val finished: SpoolResult? = null,
 ) {

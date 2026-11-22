@@ -44,7 +44,7 @@
 // until the set-up lines above stored a network and a station; then a link task (panel_net.h, the state machine in
 // lib/panel_core/src/panel_link.h) joins the network, dials the station service over TLS, checks the station certificate's
 // fingerprint against the stored one BEFORE sending anything, says "HELLO intake-panel <version> esp32c3 <token>" and then
-// carries the same lines as USB, with "K" every 500 ms when it has nothing else to say (R88 4.3). The panel is on one
+// carries the same lines as USB, with "K" every 500 ms when it has nothing else to say. The panel is on one
 // carrier at a time and USB wins: a line from the station on USB within the last 5 s keeps the Wi-Fi link closed.
 // While the station is not there over Wi-Fi the display says "No Weigh Station service" and the Wi-Fi state, or
 // "Wrong certificate" / "Set up again by USB" when the pin did not match.

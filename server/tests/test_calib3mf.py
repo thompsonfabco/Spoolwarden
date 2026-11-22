@@ -590,7 +590,7 @@ THEIRS = {"gcode_state": "PREPARE", "subtask_name": "grandmas-vase", "task_id": 
 ])
 def test_another_job_starting_in_the_window_is_never_stopped(fake_ftp, printer, extra):
     """R1: another print that starts (and heats / loads) while we wait for ours is not stopped; the calibration
-    is abandoned, our file deleted, the slots restored (R9), and its filament load is not held against us."""
+    is abandoned, our file deleted, the slots restored, and its filament load is not held against us."""
     m = OtherJobManager(fake_ftp.root, {**THEIRS, **extra})
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert "stop" not in commands(m), m.published

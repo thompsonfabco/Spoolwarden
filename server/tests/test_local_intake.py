@@ -414,7 +414,7 @@ def test_cli_status_and_test(sm, spoolman_url, fake_reader, dead_url, capsys, tm
 
 
 def test_cli_config_label_reader(monkeypatch):
-    """5 Label Reader with both readers on: 1 Engine order, 5 Address, 6 Tier (06 8.3)."""
+    """5 Label Reader with both readers on: 1 Engine order, 5 Address, 6 Tier."""
     import io
     import sys
     from filament_kit import cli, config

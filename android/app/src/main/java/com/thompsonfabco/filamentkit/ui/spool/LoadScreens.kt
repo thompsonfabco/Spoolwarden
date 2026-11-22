@@ -83,7 +83,7 @@ private fun statusOf(p: Printer): StatusKind = when (p.state) {
     else -> StatusKind.NeedsLook
 }
 
-/** What to do about a printer that is not connected, in the catalogue's words (05 9.1); null when nothing is wrong. */
+/** What to do about a printer that is not connected, in the catalogue's words; null when nothing is wrong. */
 @StringRes
 internal fun fixText(state: String): Int? = when (state) {
     Printer.STATE_OFFLINE -> R.string.printers_fix_offline
@@ -98,7 +98,7 @@ private const val NEEDS_DEVELOPER_MODE = "needs_developer_mode"
 private const val CERT_CHANGED = "cert_changed"
 
 /**
- * Load into a printer, step 1 (05 7.6): the configured printers. One that cannot take a load now is shown off with the
+ * Load into a printer, step 1: the configured printers. One that cannot take a load now is shown off with the
  * reason. With exactly one that can, the step is skipped ([onPick] with `skipped` true replaces this step).
  */
 @Composable
@@ -121,7 +121,7 @@ fun LoadPrintersScreen(
         Header(stringResource(R.string.spool_load_which_printer))
         HubNoticeOf(ui.failure, onPairAgain)
         val printers = ui.printers
-        // the states every Hub screen has (05 3.2); the skeleton rows are the loading state of this list
+        // the states every Hub screen has; the skeleton rows are the loading state of this list
         ScreenState(
             loaded = printers != null,
             loading = ui.loading,
@@ -192,7 +192,7 @@ private fun slotLine(s: AmsSlot): String = listOfNotNull(
 ).joinToString(DOT)
 
 /**
- * Load into a printer, step 2 (05 7.6): the slots the printer reports, grouped by unit. [skipped] says step 1 was
+ * Load into a printer, step 2: the slots the printer reports, grouped by unit. [skipped] says step 1 was
  * skipped, so the printer is named here.
  */
 @Composable
@@ -350,7 +350,7 @@ private fun PlanRows(plan: LoadResult) {
 private const val DEFAULT_NOZZLE_MM = "0.4"
 
 /**
- * Load into a printer, step 3 (05 7.6): the Hub's preview, then the load. While it is written Back, the back arrow and
+ * Load into a printer, step 3: the Hub's preview, then the load. While it is written Back, the back arrow and
  * every other way out are ignored with the toast of 2.5 rule 2. [onFinished] runs once it is written (the spool
  * screen shows the result); [onDone] leaves after the connection dropped; [onOpenPrinter] opens the printer's screen.
  */
@@ -383,11 +383,11 @@ fun LoadPreviewScreen(
         }
         if (ui.checking) Text(stringResource(R.string.common_checking), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
         HubNoticeOf(ui.failure, onPairAgain)
-        // the states every Hub screen has (05 3.2); Try again asks the preview again, or sends the load again
+        // the states every Hub screen has; Try again asks the preview again, or sends the load again
         ScreenState(
             loaded = ui.ready,
             loading = ui.checking,
-            // a refused or unknown write is never offered again as Try again (05 7.6)
+            // a refused or unknown write is never offered again as Try again
             error = ui.failure?.takeIf { !ui.failedWrite }?.let { hubFailureText(it) },
             onTryAgain = vm::check,
             offline = !online,

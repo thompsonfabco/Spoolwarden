@@ -1,4 +1,4 @@
-// The Recently added section (03 6; 02 6.1 to 6.3, 7.2, 7.6, 7.9, 7.10): the newest spool additions with the photos that were
+// The Recently added section: the newest spool additions with the photos that were
 // taken, to check them, correct a record by hand or with the Label Reader, and undo a correction. Loaded after setup.js;
 // everything from the Hub goes in through textContent, as there. The list is `#recent`, one record `#recent/<id>`.
 //
@@ -24,7 +24,7 @@ const REC_FIELDS = [
 const REC_GROUPS = [["identity", "common_group_identity"], ["weights", "recent_group_weights"], ["temps", "common_group_temperatures"], ["other", "common_group_other"]];
 const REC_UNIT = { g: "unit_g", density: "unit_g_cm3", c: "unit_c", range: "unit_c" };
 const REC_STATE = { detected: "as_detected", revised_ai: "revised_ai", edited: "edited" };     // the status badge words
-const REC_LEVELS = ["low", "not_rated", "medium", "not_on_label"];                           // the lowest level first (02 7.2)
+const REC_LEVELS = ["low", "not_rated", "medium", "not_on_label"];                           // the lowest level first
 const REC_PAGE = 50;
 const REC_FIELD = Object.fromEntries(REC_FIELDS.map((f) => [f[0], f]));
 let recentFilter = "all";           // the list's filter: all, or the records to check
@@ -101,7 +101,7 @@ function recReading(rec, item) {
   for (const [k, v] of Object.entries(read.confidence_levels)) levels[k] = v === "high" && !rated ? null : v;
   return { levels, rated, filled: read.confidence_filled || [], sure: typeof read.confidence === "number" ? Math.round(read.confidence * 100) : null };
 }
-// a fields's mark (02 7.2): none for a high or unrated one, and none once a revision changed the field
+// a fields's mark: none for a high or unrated one, and none once a revision changed the field
 function recMark(reading, field, changed) {
   const lv = reading && !changed.has(field) ? reading.levels[field] : null;
   if (!lv || lv === "high") return null;
@@ -122,7 +122,7 @@ function intakeTab() {
   return [body];
 }
 
-// ----- Download as CSV (R84 6): the file the Hub gives for GET export/recent.csv, unlocked as a file leaves the Hub -----
+// ----- Download as CSV: the file the Hub gives for GET export/recent.csv, unlocked as a file leaves the Hub -----
 // Texts the catalogue does not have yet (only HD2 opens it): the catalogue's own wins once the key is there.
 const REC_STUB = { recent_download_csv: "Download as CSV", recent_csv_failed: "Could not download the file: {reason}", recent_print_labels: "Print labels" };
 const recT = (key, vars) => {
@@ -140,7 +140,7 @@ async function recDownloadCsv(set, fallback) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
-// ----- Print labels (R85 5.3): the Hub's print page for the record's spools opens in a new tab; open, so no code -----
+// ----- Print labels: the Hub's print page for the record's spools opens in a new tab; open, so no code -----
 const recPrintAt = (ids) => window.open(`/setup/api/labels?${new URLSearchParams({ ids: ids.join(","), size: "62x29" })}`, "_blank", "noopener");
 function recListMore() {
   if (!hubCanExport("recent")) return null;
@@ -151,7 +151,7 @@ function recListMore() {
   return more;
 }
 
-// ----- the list (03 6.2) -----
+// ----- the list -----
 function listPage(body, d, page) {
   recentAt = null;
   recentView = null;
@@ -175,7 +175,7 @@ function listPage(body, d, page) {
   };
   fill(body, meta, filter ? h("div", { class: "coll__toolbar" }, filter) : null, list);
   paint();
-  if (page > 1) { const a = list.querySelector(".coll__title"); if (a) a.focus({ preventScroll: true }); }      // another page: its first title (02 6.1)
+  if (page > 1) { const a = list.querySelector(".coll__title"); if (a) a.focus({ preventScroll: true }); }      // another page: its first title
 }
 
 function recCollection(recs, paged) {
@@ -220,7 +220,7 @@ function recRow(r) {
     cell("go", null, SW.icon("chevron", "icon--s"))));
 }
 
-// the record's confidence in one line (02 7.2 "Record summary")
+// the record's confidence in one line (the design, components "Record summary")
 function recSummary(r) {
   const c = r.confidence;
   if (c === undefined) return null;
@@ -235,13 +235,13 @@ function recSummary(r) {
   return h("p", { class: "confidence__summary" }, parts.flatMap((p, i) => (i ? [" · ", p] : [p])));
 }
 
-// ----- one record (03 6.3) -----
+// ----- one record -----
 function recordPage(body, d, rec, id) {
   if (recentAt !== id) {                             // another record: the results of the last one go
     for (const [k, b] of Object.entries(boxes)) if (k.startsWith("record:") && b.dataset.state) SW.result(b, null);
     recentAt = id;
   }
-  const tab = (name) => { document.title = SW.t("shell_title", { page: `${name} · ${SW.t("nav_recently_added")}`, hub: S.server_name }); };   // each record has its own title (07 SR-2)
+  const tab = (name) => { document.title = SW.t("shell_title", { page: `${name} · ${SW.t("nav_recently_added")}`, hub: S.server_name }); };   // each record has its own title
   if (!rec) { tab(SW.t("recent_record_title")); fill(body, recGone(d)); return; }
   tab(recNames(rec.spools) || SW.t("recent_no_spools"));
   const view = recentView && recentView.id === id ? Object.assign(recentView, { d }) : (recentView = { d, id, item: null, editing: false, proposal: null, note: "" });
@@ -298,7 +298,7 @@ function recItems(items, view, again) {
   return h("div", { class: "recent__items" }, seg, s ? h("p", { class: "muted" }, SW.t("recent_item_line", { ids: s.spool_ids.join(", "), filament: s.filament_id })) : null);
 }
 
-// the photos and the viewer (02 7.6)
+// the photos and the viewer
 function recPhotos(rec, id, name) {
   const n = rec.photos;
   const open = (i, opener) => recViewer(id, n, i, name, opener);
@@ -340,7 +340,7 @@ function recViewer(id, n, start, name, opener) {
     } });
 }
 
-// ----- the fields (03 6.3 "Fields") -----
+// ----- the fields (the design, Hub page "Fields") -----
 function recFields(rec, s, view, box, redraw) {
   const reading = s ? recReading(rec, s.item) : null, changed = recChanged(rec);
   const group = (key, name, rows) => h("div", { class: "recent__group" }, h("h4", { class: "kv__heading" }, SW.t(name)), rows);
@@ -398,7 +398,7 @@ function recFields(rec, s, view, box, redraw) {
   return card(null, note, form);
 }
 
-// "Saved 2 changes: Empty spool weight, Nozzle." and the filament sentences of the Hub (03 6.4)
+// "Saved 2 changes: Empty spool weight, Nozzle." and the filament sentences of the Hub
 function recSaved(rec, sent) {
   const f = recChanged1(rec, sent);      // what the revision changed (an edit that joins a filament changes more than was sent)
   return [SW.t("recent_saved", { count: f.length, fields: f.map(recLabel).join(", ") }), ...recFilament(rec)].join(" ");
@@ -428,7 +428,7 @@ function recPost(box, path, body, done, view, fail) {      // `view`: a write th
       if (e.locked) SW.result(box, null);
       if (e.data && (e.data.reason === "stale" || e.data.reason === "not_found") && body.proposal) e.message = SW.t("recent_answer_dropped");      // the Hub no longer holds the answer it was asked to accept
       if (fail) fail(e);
-      if (e.data && e.data.reason === "no_photo") e.message = SW.t("recent_error_no_photo");      // 409: only the On this Hub engine, and no photo kept (03 6.4)
+      if (e.data && e.data.reason === "no_photo") e.message = SW.t("recent_error_no_photo");      // 409: only the On this Hub engine, and no photo kept
       throw e;
     } finally { if (view) view.out.delete(n); }
     if (view) recDataChanged(view, n);           // it succeeded: the data changed
@@ -436,7 +436,7 @@ function recPost(box, path, body, done, view, fail) {      // `view`: a write th
   }).finally(() => { recFlight.delete(path); if (view) recRelease(view); });
 }
 
-// ----- ask the Label Reader, the suggestion (03 6.3) -----
+// ----- ask the Label Reader, the suggestion -----
 function recAsk(rec, s, view, box, redraw) {
   const card = (...kids) => h("section", { class: "card", "aria-labelledby": "recent-ask" }, h("h3", { class: "detail__heading", id: "recent-ask" }, SW.t("recent_ask_title")), ...kids);
   if (!view.d.ai) return card(h("p", { class: "muted" }, SW.t("recent_reader_off")), h("div", { class: "actions" }, h("a", { class: "btn", href: "#features" }, SW.t("nav_features"))), box);
@@ -472,7 +472,7 @@ function recAsk(rec, s, view, box, redraw) {
       p.no_photo ? h("p", { class: "muted" }, SW.t("recent_ask_no_photo")) : null,
       recReread(p), p.note ? h("p", { class: "muted" }, p.note) : null, list, h("p", { class: "changes__note" }, SW.t("changes_note")), h("div", { class: "actions" }, discard, accept)));
     if (view.editing) SW.disable(accept, SW.t("recent_accept_while_editing"));      // Accept writes the Hub's values over the form: what is typed is not lost without a word
-    if (focus) accept.focus();           // when it arrives, not when the record is drawn again (02 7.9)
+    if (focus) accept.focus();           // when it arrives, not when the record is drawn again
   };
   // an answer that comes later: it takes the focus only when the focus is not in another control (an edit form that is open keeps it)
   view.dropped = () => { if (!view.proposal) fill(sug, h("p", { class: "muted" }, SW.t("recent_answer_dropped"))); };      // into the card as it is drawn now; never over a suggestion that is shown
@@ -486,7 +486,7 @@ const recEngine = (p) => {
   return e.model ? SW.t("recent_engine", { engine: name, model: e.model }) : name;
 };
 const recReread = (p) => h("p", { class: "muted" }, SW.t(typeof p.confidence === "number" ? "recent_reread_sure" : "recent_reread", { engine: recEngine(p), percent: Math.round((p.confidence || 0) * 100) }));
-// one change: the field, the old value struck through, the new one (02 7.9)
+// one change: the field, the old value struck through, the new one
 function recChange(k, before, after) {
   const f = REC_FIELD[k], kind = f ? f[4] : "line", old = recShow(kind, before), now = recShow(kind, after);
   return h("li", { class: "changes__item" }, h("span", { class: "changes__key" }, recLabel(k)),
@@ -495,7 +495,7 @@ function recChange(k, before, after) {
     h("span", { class: "changes__new mono" }, h("span", { class: "sr" }, SW.t("changes_becomes")), now == null ? SW.t("common_field_empty_value") : now));
 }
 
-// ----- the revisions and undo (02 7.10) -----
+// ----- the revisions and undo -----
 function recRevisions(rec, view, box, redraw) {
   const revs = rec.revisions || [], live = revs.filter((v) => !v.undone), last = live[live.length - 1];
   const list = h("ol", { class: "revisions__list", reversed: true, "aria-labelledby": "recent-revisions" }, [...revs].reverse().map((v) => {
@@ -523,7 +523,7 @@ function recRevisions(rec, view, box, redraw) {
     revs.length ? list : h("p", { class: "muted" }, SW.t("revision_empty")), box);
 }
 
-// the Record card and the read facts (02 7.2 "Read facts"): plain lines, left out when the Hub does not give their value
+// the Record card and the read facts (the design, components "Read facts"): plain lines, left out when the Hub does not give their value
 function recFacts(rec, s, ids) {
   const reading = s ? recReading(rec, s.item) : null, lines = [];
   if (reading) {

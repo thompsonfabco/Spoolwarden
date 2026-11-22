@@ -1,4 +1,4 @@
-"""The pretend printers (R85 section 4.4): a Bambu-like and a Klipper-like family that answer the printer-family
+"""The pretend printers: a Bambu-like and a Klipper-like family that answer the printer-family
 interface (`bridge.family.PrinterFamily`) from the sample set, with no network and no real printer.
 
 They move: the Bambu-like "Workshop X1" prints `bracket-v3.3mf` from 42 %; the Klipper-like "Garage Voron" starts a

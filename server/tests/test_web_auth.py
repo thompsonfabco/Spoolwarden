@@ -423,7 +423,7 @@ def test_login_page_headers_and_escaping(store, passfile):
     assert h["content-security-policy"] == (
         "default-src 'none'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; "
         "form-action 'self' " + " ".join(sorted(auth.CALLBACKS)))
-    # 04 11.2: the web app's stylesheet and the Show button's script, no style inside the page (AUT-2, N24)
+    # the design, web app: the web app's stylesheet and the Show button's script, no style inside the page (AUT-2, N24)
     assert "<style" not in page.text and " style=" not in page.text
     for f in ("intake/shared/theme-init.js", "intake/shared/tokens.css", "intake/shared/components.css",
               "intake/app.css", "intake/signin.js"):
@@ -454,7 +454,7 @@ def test_login_wrong_passphrase_then_lockout(store, passfile, clock):
         cid = _register(c).json()["client_id"]
         r, rid = _sign_in(c, cid, _pkce()[1], passphrase="nope")
         assert r.status_code == 401
-        # 04 11.2: the form again, the error under the field, the field empty and focused
+        # the design, web app: the form again, the error under the field, the field empty and focused
         assert "<p class=field__error id=pass-error>Wrong passphrase.</p>" in r.text
         assert "aria-describedby=pass-error aria-invalid=true" in r.text and "autofocus" in r.text
         assert "nope" not in r.text and "name=passphrase" in r.text
@@ -513,7 +513,7 @@ def test_lan_only_blocks_outsiders(store, passfile, path):
 
 
 def test_outsiders_get_the_refusal_page_and_its_files(store, passfile):
-    """04 11.1: /intake outside the home network is the refusal page; the files it links answer anyone, the rest does
+    """the design, web app: /intake outside the home network is the refusal page; the files it links answer anyone, the rest does
     not."""
     with TestClient(_app(store, passfile), client=AWAY) as c:
         page = c.get("/intake")

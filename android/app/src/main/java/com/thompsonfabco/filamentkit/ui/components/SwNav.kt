@@ -323,7 +323,7 @@ internal fun SwPills(
                 .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
                 .then(if (name != null) Modifier.semantics { contentDescription = name } else Modifier)
                 .then(
-                    // a button that opens a menu: its state and the action that toggles it (the has-popup and expanded of 02 2.3)
+                    // a button that opens a menu: its state and the action that toggles it (the has-popup and expanded of the design, components)
                     if (popup) {
                         Modifier.semantics {
                             stateDescription = menuState

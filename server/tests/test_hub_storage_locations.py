@@ -1,4 +1,4 @@
-"""Settings > Storage locations on the Hub page (DECISIONS R79 section 3, 03 10.4), in a real headless browser: the list of
+"""Settings > Storage locations on the Hub page, in a real headless browser: the list of
 locations in fill order with Add, Edit, Move up and down, Make default overflow, Sealed spools go here and Remove, the
 "Where a new spool goes" panel built from the unsaved list, one Save with the dirty mark, the field and dialog texts of R79
 section 5, and the list readable in all four looks at 1280, 1776, 1024, 768 and 390 px (no summary squeezed to a sliver or
@@ -126,7 +126,7 @@ out.dirty = dirty();
     assert page["panelTitle"] == T("storage_panel_title")
     assert page["panel"] == ["PLA: Rack 1, then Overflow, then Dry shelf", "PETG: Rack 2, then Overflow, then Dry shelf", "ABS: Rack 2, then Overflow, then Dry shelf",
                              "Everything else: Storage box (containers), then Overflow, then Dry shelf"]
-    # R79 C1: two overflow places and no limit on the default: the notice says the other one is never reached
+    # two overflow places and no limit on the default: the notice says the other one is never reached
     assert page["notice"] == {"shown": True, "text": T("storage_notice_default_overflow_no_limit")} and page["converted"] is True
     assert page["save"] == T("settings_storage_save") and page["dirty"] == {"form": None, "link": False, "foot": False}
 
@@ -231,7 +231,7 @@ out.noticeAfter = shown($("#set-storage .banner[data-notice=\"default_overflow_n
     assert page["focus"] == T("settings_storage_edit_name", name="Dry box")
     assert page["dirtyAfterAdd"] == {"form": "dirty", "link": True, "foot": True} and page["summary"] == T("settings_state_storage", count=6)     # the summary is the saved list's
     assert page["panelAfterAdd"][-1] == "Everything else: Storage box (containers), then Overflow, then Dry shelf, then Dry box"
-    assert "PETG: Rack 2, then Dry box, then Overflow, then Dry shelf" in page["panelAfterAdd"]     # an overflow place that names a material is an own place (R79 C2)
+    assert "PETG: Rack 2, then Dry box, then Overflow, then Dry shelf" in page["panelAfterAdd"]     # an overflow place that names a material is an own place
     assert "pla+: Dry box, then Overflow, then Dry shelf" in page["panelAfterAdd"] and any(line.startswith("pla+: ") for line in page["panelAfterAdd"])
     assert page["editTitle"] == "Rack 2" and page["editButton"] == T("storage_save_location")
     assert page["typeFixed"] == [False, True] and page["typeFixedHint"] == [T("storage_error_type_fixed")]

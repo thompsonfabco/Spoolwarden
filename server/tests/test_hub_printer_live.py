@@ -1,4 +1,4 @@
-"""The live printer view of the Hub page (R83 sections 2 and 3, the 20:58 ruling point 3): setup_console/printer_live_tab.py (the page's
+"""The live printer view of the Hub page (the 20:58 ruling point 3): setup_console/printer_live_tab.py (the page's
 routes, against a stub Hub: no printer, no Spoolman) and setup_static/setup_printer_live.js and .css (a real headless browser, the Hub
 page's own scripts and styles, the view mounted by the test because the printer detail does not call it yet; the page routes it asks are
 a stub in the page, the Hub's own are tested here in Python). The same skip rules as the page audit: no Node 22 or no browser is a skip

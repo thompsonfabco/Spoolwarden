@@ -265,7 +265,7 @@ def test_a_reader_entry_not_in_the_hubs_map_is_found_by_the_readers_own_key(sm, 
     assert e["record"] == hid and e["photos"] == 1
 
 
-# ---------------------------------------------------------------- RC1d: the state as XML (R85 section 1)
+# ---------------------------------------------------------------- RC1d: the state as XML
 
 def _state_dir(hid):
     d = intake_history._dir(hid)

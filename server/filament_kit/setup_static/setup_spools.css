@@ -1,4 +1,4 @@
-/* Spools (R83 section 1; 03 section 5a) */
+/* Spools */
 /* the header: the count, and the way to Spoolman's own page */
 .spools-head { justify-content: space-between; margin: 0 0 var(--s3); }
 .spools-count { font-weight: var(--fw-label); color: var(--text); }
@@ -13,7 +13,7 @@
 .coll--spools .coll__cell[data-col="state"] > .coll__sub { flex: 1 1 100%; }
 /* Panes lists the rows in a narrow pane: the state keeps a block of its own and wraps to the next line instead of squeezing */
 :root[data-look="panes"] .coll--spools .coll__cell[data-col="state"] { min-width: calc(var(--s7) * 3); }
-/* a checked-out row (R88): the place, the home, since when and Return under the spool's name; each wraps, none squeezes (Panes keeps the block's own width) */
+/* a checked-out row: the place, the home, since when and Return under the spool's name; each wraps, none squeezes (Panes keeps the block's own width) */
 .coll--spools .coll__cell[data-col="title"] { min-width: 0; overflow-wrap: anywhere; }
 .spools-co { display: block; }
 .spools-co:empty { display: none; }
@@ -26,7 +26,7 @@
 .spools-homeline .btn { white-space: normal; text-align: left; }
 .spools-homesheet { display: grid; gap: var(--s3); }
 .spools-expand__label { display: none; }
-/* the selection (02 6.1): the checkbox is the first cell and never shrinks; the header checkbox and its label show in every look (the
+/* the selection: the checkbox is the first cell and never shrinks; the header checkbox and its label show in every look (the
    others hide a head without a sort button), the label as text where there are no column headers (Workbench, Palette, Panes, phones) */
 .coll--spools .coll__item .coll__cell[data-col="select"] { width: auto; flex: none; }
 /* the page's `:where(.page) input:is([type="checkbox"])` resets the width of every checkbox to auto (13 px, taller than wide): the square of the component is kept here */

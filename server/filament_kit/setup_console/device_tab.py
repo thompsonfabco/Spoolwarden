@@ -71,7 +71,7 @@ def _offer(kind: str) -> str | None:
 
 
 def _advice(kind: str, version: str, newest: str) -> str:
-    """The row's out-of-date sentence (R83 section 9.4); the page words it from the same fields."""
+    """The row's out-of-date sentence; the page words it from the same fields."""
     return {"station": f"Out of date ({version}; the Hub is {newest}). On that machine: sudo spoolwarden update",
             "pc": f"Out of date ({version}). Install the current Slicer Sync on that PC.",
             "phone": "Out of date. The app offers the update when it is opened.",
@@ -132,7 +132,7 @@ def rows() -> list[dict]:
                "built_in": built_in, "page": kind == "station"}
         if d["id"] in reach:
             row["reachable"] = reach[d["id"]]
-        if kind == "station":       # R88 4.5: how its panel is connected
+        if kind == "station":       # how its panel is connected
             panel = station_client.station_panel(_station_url(cfg))      # the station's own /state; nothing when it is silent
             if panel:
                 row["panel"] = panel_setup.TEXT_DEVICES_WIFI if panel == "wifi" else panel_setup.TEXT_DEVICES_USB

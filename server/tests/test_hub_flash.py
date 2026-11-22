@@ -35,7 +35,7 @@ def test_the_pages_hub_step_names_are_the_ones_reader_setup_writes():
 
 def test_flash_a_device_audits_clean_at_each_address_without_an_allow_list(hub):
     """S2.16 rebuilt the section on the shared components: no line of the allow-list is left for it, at its own address and at the
-    two devices' addresses (03 1.2: #flash/tag-reader, #flash/display), light and dark, 1280 and 320 px. The title is the section's at
+    two devices' addresses (the design, Hub page: #flash/tag-reader, #flash/display), light and dark, 1280 and 320 px. The title is the section's at
     each address, so each address is a run of its own (the audit asks the views of one run to have different titles)."""
     for view in ("#flash", "#flash/tag-reader", "#flash/display"):
         run = _run("--url", hub, "--views", view)

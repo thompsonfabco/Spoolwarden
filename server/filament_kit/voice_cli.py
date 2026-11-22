@@ -1,7 +1,7 @@
-"""The command line's part of the Weigh Station's voice (R88 VO6): `weigh-station voice-test` and the four values of the
+"""The command line's part of the Weigh Station's voice: `weigh-station voice-test` and the four values of the
 `config` group "Weigh Station voice" (Speak, Speaker, Speed, Volume).
 
-The commands run as root and never read or write voice.xml: the kit service is the one writer (R88 01:50). Everything here
+The commands run as root and never read or write voice.xml: the kit service is the one writer. Everything here
 goes through its routes, `GET` / `PATCH /api/voice` and `POST /api/voice/test`, with the command line's own token over
 loopback (`api` is cli's `_server_api`, which gives None when no service answers). The ranges below are only for the
 sentence said before a value is sent; the service checks them again.

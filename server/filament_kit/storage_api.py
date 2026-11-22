@@ -1,4 +1,4 @@
-"""The storage list over HTTP (ruling R79 section 4): the data of `GET api/storage` and its web twin, and the whole-list
+"""The storage list over HTTP: the data of `GET api/storage` and its web twin, and the whole-list
 save of the Hub page (`POST settings/storage`), with its preview of an unsaved list and the rename job.
 
     view(st, taken)        {locations, order_by_material, everything_else, notices}: ONE function, so the app token's
@@ -112,7 +112,7 @@ def _apply_plan(st: Storage, plan: dict) -> Storage:
     """`st` with the renames of a recorded plan applied to the names (and prefixes) they were planned for, all at once
     (a swap swaps). The list is only written after its spools were renamed, so while a plan is pending the saved list
     still has the old names: this is the list the unfinished save was making. An existing set's prefix only follows its
-    name (R79 C3), so a containers rename also renames the set when its prefix was its name plus a space."""
+    name, so a containers rename also renames the set when its prefix was its name plus a space."""
     out = storage.copy_of(st)
     for x in out.locations:
         for old, new, containers in plan["renames"]:
@@ -229,7 +229,7 @@ def _and(names: list[str]) -> str:
 
 
 def check_change(before: Storage, after: Storage, taken) -> list[Problem]:
-    """What the spools and the saved list forbid about this change (R79 section 3): fewer containers than the highest
+    """What the spools and the saved list forbid about this change: fewer containers than the highest
     in use, the type while spools are in it, and removing the default overflow or the sealed-spools location."""
     out: list[Problem] = []
     old = {x.id: x for x in before.locations if x.id}

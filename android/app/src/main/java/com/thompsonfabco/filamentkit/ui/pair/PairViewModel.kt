@@ -35,7 +35,7 @@ sealed interface PairMessage {
     data class Res(@StringRes val id: Int, val args: List<String> = emptyList()) : PairMessage
     data class Raw(val text: String) : PairMessage
 
-    /** The app may not use the local network: shown as the notice of 05 3.3, and gone once access is granted. */
+    /** The app may not use the local network: shown as the notice of the design, Android app, and gone once access is granted. */
     data object LocalNetwork : PairMessage
 }
 

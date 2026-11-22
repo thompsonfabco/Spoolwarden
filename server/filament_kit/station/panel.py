@@ -22,7 +22,7 @@ lamp on red's pins) sets station.panel_swap (STATION_PANEL_SWAP=1): the buttons'
 here, so the wiring never needs a reflash. Firmware 9 reports both buttons alike for that; a long press on red
 cancels like a short one.
 
-The same lines also run over Wi-Fi (R88 4.3; `panel_net`): the panel dials the station's TLS port and says `HELLO
+The same lines also run over Wi-Fi (`panel_net`): the panel dials the station's TLS port and says `HELLO
 intake-panel <version> <chip> <token>`. A panel on USB wins over one on Wi-Fi.
 """
 from __future__ import annotations

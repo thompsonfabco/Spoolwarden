@@ -1,4 +1,4 @@
-"""The watcher: writes the events of both printer families' listeners, and the Hub's 5-minute loop (R80 sections 2, 6, 7).
+"""The watcher: writes the events of both printer families' listeners, and the Hub's 5-minute loop.
 
 Printer events (`Watcher`): it listens to the Bambu `Manager` (report listener) and the `KlipperFamily` (`status`
 and `job_ended` events) through their existing hooks and writes print.started / paused / runout / resumed /
@@ -6,7 +6,7 @@ finished / failed, printer.error and printer.offline / online with their conditi
 after the Hub starts writes nothing (it only learns the state; a condition left raised by an earlier run is cleared
 as `reconciled` if it is no longer true), and neither do the kit's own slot-mapping (calibration) jobs.
 
-How runout is told from another pause (R80 assumption 3): Bambu, the stage "Paused: filament runout"; Klipper, a
+How runout is told from another pause: Bambu, the stage "Paused: filament runout"; Klipper, a
 filament switch or motion sensor reporting no filament, or the filament system's active slot reporting none, at the
 pause. A pause is decided when the answer is clear or `PAUSE_SETTLE` seconds after it began (Moonraker and Bambu may
 send the state and the stage or sensor in separate messages); where the Hub cannot tell, the event is print.paused
@@ -388,7 +388,7 @@ class Watcher:
 
 # ---------------------------------------------------------------- the 5-minute loop
 
-EVERY = 300.0               # seconds between rounds (R80 section 6)
+EVERY = 300.0               # seconds between rounds
 PRUNE_EVERY = 86400.0       # old month files are deleted once a day
 FIRST_AFTER = 30.0          # seconds after the Hub starts until the first round (services are still starting)
 
@@ -404,7 +404,7 @@ def _raised(sink, base: str) -> dict:
 
 
 def check_disk(sink, settings: dict | None = None) -> None:
-    """storage.low / storage.ok from the disk in the worst state (R80 section 6): one event per limit passed; the
+    """storage.low / storage.ok from the disk in the worst state: one event per limit passed; the
     disk falling from bad back to warn writes storage.low again, severity warn, `direction` down (never an alert)."""
     s = settings or alerts.load()
     fs = alerts.worst(alerts.filesystems(s))
@@ -460,7 +460,7 @@ def check_low(sm, sink=None, settings: dict | None = None) -> None:
 
 def check_devices(sink, station_url: str | None, devices: list[dict]) -> None:
     """device.down / device.up for the Weigh Station, when the Hub can ask it (its address is set and exactly one
-    station is paired: the known limit of 0.6.2). Tag Readers are not covered (R80 E3)."""
+    station is paired: the known limit of 0.6.2). Tag Readers are not covered."""
     from .station_client import station_reach
     reach = station_reach(devices, station_url)
     by_id = {d["id"]: d for d in devices}

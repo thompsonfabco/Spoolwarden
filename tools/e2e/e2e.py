@@ -1379,7 +1379,7 @@ class E2E:
             run.check(sc, "after the restore: the printer is back in the kit", code_ == 200 and
                       SERIAL in [p.get("id") for p in plist.get("printers", [])], str(plist)[:400])
 
-    # ---- i) the installer's port (R82 section 1): 443 when free, 8710 when taken
+    # ---- i) the installer's port: 443 when free, 8710 when taken
     def i_install_port(self, sc="i") -> None:
         rel, run = self.rel, self.run
         self._v1_on_server()

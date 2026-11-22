@@ -2,7 +2,7 @@
 revoked by `spoolwarden reader token | tokens | revoke` and the server's /setup page, checked by the web unit's
 reader API (web/reader.py, which re-exports these). No `mcp` import here: the kit server uses it too.
 
-What a reader tells us (R83 s9.2): the build number in its `X-Reader-Build` header and when it last called. The web
+What a reader tells us: the build number in its `X-Reader-Build` header and when it last called. The web
 unit (the only one a reader talks to) hands both to the Hub (`SeenBuffer`, `flush`; the Hub's `record_seen` and
 `SeenStore`, see below). `offered_build` is the firmware the kit serves to readers (reader-fw/manifest.json)."""
 from __future__ import annotations

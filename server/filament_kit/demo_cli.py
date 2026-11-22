@@ -1,8 +1,8 @@
-"""`spoolwarden demo [status]`, `sudo spoolwarden demo on|off` (06 9.28), and the line "Demo data." every result has.
+"""`spoolwarden demo [status]`, `sudo spoolwarden demo on|off`, and the line "Demo data." every result has.
 
     add_parsers(sub)     the command for cli.py's parser (RC9 mounts it)
-    run_demo(args)       the command; the exit codes of 06 6.7
-    announce()           "Demo data." above a result while the demo is on (06 6.4): standard output, also with `--quiet`;
+    run_demo(args)       the command; the exit codes of the design, command line
+    announce()           "Demo data." above a result while the demo is on: standard output, also with `--quiet`;
                          with `--json` standard error, so that standard output stays the one document
 
 The texts are plain constants until RC9 puts them in the catalogue (keys in the comments).

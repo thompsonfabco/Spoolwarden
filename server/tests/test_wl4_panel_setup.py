@@ -1,4 +1,4 @@
-"""WL4 (R88 section 4.4 and 4.5): the panel set-up functions, the keys and the drop-in, the Devices and Checks rows.
+"""WL4: the panel set-up functions, the keys and the drop-in, the Devices and Checks rows.
 The panel is a stub: `send` takes a line and answers one."""
 from __future__ import annotations
 
@@ -245,7 +245,7 @@ def test_station_panel_reads_the_state_and_says_nothing_when_it_is_silent(monkey
     assert sc.station_panel("http://h") is None and sc.station_panel(None) is None
 
 
-# ---- the answers, the version, the caps (R88 03:10) ----
+# ---- the answers, the version, the caps ----
 
 def test_unasked_lines_before_the_answer_are_skipped(env):
     panel = Panel()

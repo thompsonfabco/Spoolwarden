@@ -289,7 +289,7 @@ def _extruder(report: dict, ams_id: int) -> int | None:
 
 
 def _nozzle(report: dict, ams_id: int) -> tuple[float, bool]:
-    """(nozzle mm, assumed) for the slot's unit (ruling R10): the top-level `nozzle_diameter`; else
+    """(nozzle mm, assumed) for the slot's unit: the top-level `nozzle_diameter`; else
     `device.nozzle.info[].diameter` of the unit's extruder (id 0 when the report does not say which); else 0.4,
     assumed."""
     p = status._d(report)
@@ -507,11 +507,11 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: 
             **({"event_id": ev["id"], "event": ev} if ev else {})}
 
 
-STILL_SHOWS = "The printer still shows the old filament for this slot until a spool is loaded."   # R83, ruled 20:33
+STILL_SHOWS = "The printer still shows the old filament for this slot until a spool is loaded."   # R83
 
 
 def clear(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: str = SEALED) -> dict:
-    """Clear slot `label` of printer `serial`: the Hub forgets which spool is in it (R83 s3). Whatever spool is
+    """Clear slot `label` of printer `serial`: the Hub forgets which spool is in it. Whatever spool is
     recorded there goes back where it was, exactly as `unload` moves it; no spool recorded is not an error. Nothing
     is sent to a Bambu Lab printer (no recorded printer answer shows a command that resets a slot's setting without
     moving anything), so `printer_cleared` is False and the slot keeps showing its old filament. Refused for the
@@ -550,7 +550,7 @@ def clear(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: s
 
 
 def clear_view(r: dict, waiting_ended: bool) -> dict:
-    """`clear`'s result as the kit route answers it (R83 s10.1): `slot` the label, `spool` its spool view and
+    """`clear`'s result as the kit route answers it: `slot` the label, `spool` its spool view and
     `moved_back` the place it goes back to (None without a spool); `text` (Bambu Lab: the printer keeps showing the old
     filament, `STILL_SHOWS`) only when the result has one."""
     moved = r.get("moved_back") or []

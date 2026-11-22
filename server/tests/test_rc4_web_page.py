@@ -1,6 +1,6 @@
 """RC4's page scripts run in Node without a browser (review R574): Leave demo that fails, Remove on Corrections waiting, the not-queued
 cards and their reasons, the thumbnails the page's policy lets through, Try again when the reader does not answer, the Corrections link,
-the Add spools line of 04 7.5, the push subscription sent again in the language the page is in, the Klipper test's answer, and the
+the Add spools line of the design, web app, the push subscription sent again in the language the page is in, the Klipper test's answer, and the
 service worker keeping a language's texts. The page's own functions are cut out of the scripts and given stubs for the DOM, `api` and `SW`."""
 from __future__ import annotations
 
@@ -350,9 +350,9 @@ def test_the_push_subscription_is_sent_again_in_the_language_the_page_is_in(tmp_
 def test_a_klipper_printer_that_does_not_answer_is_not_added_without_asking(tmp_path):
     pj = (STATIC / "printers.js").read_text(encoding="utf-8")
     out = _node(tmp_path, KLIPPER_HARNESS % {"klipper": _cut(pj, "    async function klipperTest(v) {", "    async function submit(force) {")})
-    assert out == [False, True, True, True]                         # {reachable: false} is the printer's answer (R87 1)
+    assert out == [False, True, True, True]                         # {reachable: false} is the printer's answer
     which = _cut(pj, '      if (step === "which") {', '      } else if (step === "details") {')
-    assert "family-bambu" not in which and "family-klipper" not in which       # no family choice (R87 00:55)
+    assert "family-bambu" not in which and "family-klipper" not in which       # no family choice
     assert which.index('"type-bambu"') < which.index('"type-klipper"')          # the two buttons, Bambu Lab first
     assert "printer_guided_type_bambu: \"Type a Bambu Lab printer's address\"" in pj
     assert "printer_guided_type_klipper: \"Type a Klipper printer's address\"" in pj

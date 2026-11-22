@@ -1,4 +1,4 @@
-"""The slicer-preset state files as XML (R85 section 1, step RC1c), and the one way every reader and writer of them goes.
+"""The slicer-preset state files as XML (step RC1c), and the one way every reader and writer of them goes.
 
 A state file that was `name.json` is `name.xml` (the root element is the lower-case stem: `lines`, `installed`,
 `owner-edits`, `build`, `slicer`, `kept`, ...). The form follows the one `printers.xml` and `storage.xml` use:

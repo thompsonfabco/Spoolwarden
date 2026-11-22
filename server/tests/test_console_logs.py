@@ -127,7 +127,7 @@ def test_the_page_has_the_tab():
 
 
 def test_the_section_is_the_designed_one():
-    """03 13: a labelled service select, Lines as a segmented 50 | 100 | 200, the log in a code block with Copy, the
+    """the design, Hub page: a labelled service select, Lines as a segmented 50 | 100 | 200, the log in a code block with Copy, the
     locked line and Unlock and show; its texts come from the catalogue (no literal in the script)."""
     src = (STATIC / "setup_logs.js").read_text(encoding="utf-8")
     assert "SW.field(" in src and 'type: "select"' in src and "SW.segmented(" in src

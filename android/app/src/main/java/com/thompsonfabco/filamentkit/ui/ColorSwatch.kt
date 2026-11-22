@@ -30,7 +30,7 @@ internal sealed interface SwatchLook {
     /** Nothing there: a dashed ring around nothing. */
     data object Empty : SwatchLook
 
-    /** A slot that waits for its spool to load: the spool's colour with a dashed ring (R83 3.5) instead of the solid outline. */
+    /** A slot that waits for its spool to load: the spool's colour with a dashed ring instead of the solid outline. */
     data class Waiting(val color: Color) : SwatchLook
 }
 

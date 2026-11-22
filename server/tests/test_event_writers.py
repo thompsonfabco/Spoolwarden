@@ -1,4 +1,4 @@
-"""Spool and usage events written by the code that changes things, through the event sink (R80 sections 2, E1, E5)."""
+"""Spool and usage events written by the code that changes things, through the event sink."""
 import pytest
 
 from filament_kit import event_sink, inventory, storage

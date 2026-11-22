@@ -76,12 +76,12 @@ def waiting(cfg: dict) -> dict:
 
 
 def _kept(d) -> bool:
-    """The record's folder holds its record: `record.xml` (R85 section 1) or, from before the move, `record.json`."""
+    """The record's folder holds its record: `record.xml` or, from before the move, `record.json`."""
     return (d / "record.xml").is_file() or (d / "record.json").is_file()
 
 
 def _with_records(entries: list[dict]) -> list[dict]:
-    """Each entry gets `record` and `photos` (R87): the record the Hub queued it from, by the entry ids the share queue
+    """Each entry gets `record` and `photos`: the record the Hub queued it from, by the entry ids the share queue
     keeps (else by the reader's own key, `<record>` or `<record>.<n>`); a record that is gone leaves no `record`."""
     from . import intake_history, share_queue
     known = share_queue.entry_records()

@@ -433,7 +433,7 @@ def test_the_reader_command_writes_five_numbered_steps(env, monkeypatch, capsys)
         "Reaching the Hub"]
 
 
-# ---------------------------------------------------------------- the question before writing (06 7)
+# ---------------------------------------------------------------- the question before writing
 def test_plain_setup_asks_before_it_overwrites_the_board(usb, monkeypatch, capsys):
     run, _ = _run()
     asked = []

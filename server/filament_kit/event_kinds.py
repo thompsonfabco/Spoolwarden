@@ -1,10 +1,10 @@
-"""The catalogue of event kinds (ruling R80 section 2, the design, Hub page).
+"""The catalogue of event kinds (the design, Hub page).
 
 A published contract from the first release that has it: kinds and value names are added, never renamed or removed
 (the Home Assistant integration and `--json` readers rely on it; test_event_kinds.py pins every name). The catalogue
 holds no texts: titles and sentences are built by each interface from the kind and the values (EA3).
 
-A kind may carry a condition (R80 section 3): `raises` a lasting state, or `clears` one. The key of a condition is
+A kind may carry a condition: `raises` a lasting state, or `clears` one. The key of a condition is
 its `base`, plus ":<subject id>" when the kind is `keyed` (print-paused:<printer id>, spool-low:<spool id>); the
 `check` kinds take the row key instead of the subject id.
 """
@@ -40,10 +40,10 @@ _SPOOL_CHANGE = ("spool", "before_location", "after_location", "before_grams", "
                  "before_slot", "after_slot", "before_tag", "after_tag", "before_archived",
                  "before_since",      # when it was checked out, so an undo of an unload or return puts the time back
                  "before_home",       # its home then ("" when it came from no place), so that undo restores the mark exactly
-                 "batch",      # batch: all spool events of one request (R80 E5)
+                 "batch",      # batch: all spool events of one request
                  # what opening a spool by linking its tag changed, so an undo can put it back
                  "before_first_used", "before_comment", "took_tag_from")
-# Every print.* event of one print run and its usage.recorded carry `run`; Klipper ones also `printer_job` (R80 E5).
+# Every print.* event of one print run and its usage.recorded carry `run`; Klipper ones also `printer_job`.
 _RUN = ("run", "printer_job")
 
 
@@ -71,7 +71,7 @@ def _kinds() -> dict[str, Kind]:
         add(f"spool.{name}", "info", _SPOOL_CHANGE + (("auto",) if name == "loaded" else ()))
     add("storage.low", ("warn", "bad"), ("free", "total", "percent", "direction"), RAISES, "storage-low", keyed=False)
     add("storage.ok", "ok", ("free", "total"), CLEARS, "storage-low", keyed=False)
-    # a later raise replaces the stored condition (R80 E2); `direction` = down when the disk fell from bad to warn
+    # a later raise replaces the stored condition; `direction` = down when the disk fell from bad to warn
     add("condition.cleared", "info", ("key", "reason"), CLEARS, None, keyed=False, key_from_data=True,
         choices=(("reason", ("reconciled", "subject_removed", "feature_off")),))
     add("location.renamed", "info", ("from", "to", "spools"))

@@ -1,4 +1,4 @@
-/* Spoolwarden shared alerts (DECISIONS R80 section 5): the banner host at the top of the main area and the Alerts list, loaded
+/* Spoolwarden shared alerts: the banner host at the top of the main area and the Alerts list, loaded
 after components.css by every interface that shows alerts. The banner, the toast and the dialog are components.css's own. */
 .alert-host{margin-bottom:var(--s4)}
 .alert-host:empty{display:none}

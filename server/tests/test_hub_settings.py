@@ -1,4 +1,4 @@
-"""Settings on the Hub page (design 09 S2.19, 03 section 10), in a real headless browser: nine groups in a fixed order with
+"""Settings on the Hub page (design 09 S2.19, the design, Hub page), in a real headless browser: nine groups in a fixed order with
 the sub-navigation, one Save per group that sends its changed keys in one request (N2), the unsaved marks and the leave
 guard, the restart question, and on a phone the list of groups and one group at a time. The AUT-5 audit passes on every
 group at 320 and 1280 px, light and dark. The page is served with the data of test_hub_page_audit.py. The same skip rules

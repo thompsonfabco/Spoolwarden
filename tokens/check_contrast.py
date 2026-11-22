@@ -3,14 +3,14 @@
 
 Implements AUT-1 (the design, accessibility section 15) and test 3 of the design, platform mapping 3.4.
 Every pair below is required, for every theme in light and dark (eight token sets), on the unrounded ratio:
-  4.5:1  text, muted, accent-text, ok, warn, bad, info   on bg, surface, surface-2   (07 3.1)
-  4.5:1  ok/ok-soft, warn/warn-soft, bad/bad-soft, info/info-soft; on-accent on accent; on-bad on bad   (07 3.1)
-  3.0:1  border-strong and focus on surface and bg; focus on surface-2   (07 3.1)
-  4.5:1  the text pairs of 07 3.2 (surface-3, code, accent-hover, accent-soft, the tooltip pair)
-  3.0:1  border-strong on surface-2; focus on code and surface-3   (07 3.2)
-  Material roles (07 CON-8; 08 3.4 test 3), read from SpoolwardenTokens.kt: onSurface and onSurfaceVariant on
+  4.5:1  text, muted, accent-text, ok, warn, bad, info   on bg, surface, surface-2
+  4.5:1  ok/ok-soft, warn/warn-soft, bad/bad-soft, info/info-soft; on-accent on accent; on-bad on bad
+  3.0:1  border-strong and focus on surface and bg; focus on surface-2
+  4.5:1  the text pairs of the design, accessibility (surface-3, code, accent-hover, accent-soft, the tooltip pair)
+  3.0:1  border-strong on surface-2; focus on code and surface-3
+  Material roles, read from SpoolwardenTokens.kt: onSurface and onSurfaceVariant on
   surface and surfaceContainerHighest; primary on surface and surfaceContainerHighest and onPrimary on primary
-  (primary = accent-text, onPrimary = surface; 08 4.1); onError on error; outline on surface at 3:1;
+  (primary = accent-text, onPrimary = surface; the design, platform mapping); onError on error; outline on surface at 3:1;
   onPrimaryContainer on primaryContainer; onErrorContainer on errorContainer; inverseOnSurface on inverseSurface.
 Translucent colours (scrim) are skipped. A missing token is a failure.
 
@@ -32,7 +32,7 @@ SOFT = [("ok", "ok-soft"), ("warn", "warn-soft"), ("bad", "bad-soft"), ("info", 
 ON = [("on-accent", "accent"), ("on-bad", "bad")]
 NONTEXT = ["border-strong", "focus"]
 NONTEXT_GROUNDS = ["surface", "bg"]
-# 07 3.2 and the two former advisory pairs: (foreground, background, required ratio)
+# the design, accessibility and the two former advisory pairs: (foreground, background, required ratio)
 ADDED = [
     ("focus", "surface-2", 3.0),
     ("accent-text", "accent-soft", 4.5), ("text", "surface-3", 4.5),
@@ -47,8 +47,8 @@ MATERIAL = [
     ("onSurface", "surfaceContainerHighest", "text", "surface-2", 4.5),
     ("onSurfaceVariant", "surface", "muted", "surface", 4.5),
     ("onSurfaceVariant", "surfaceContainerHighest", "muted", "surface-2", 4.5),
-    # Material primary is --accent-text and onPrimary is --surface (08 4.1, 07 CON-8): --accent is a labelled fill only
-    # (07 3.2), used as Material's extended colours with --on-accent, which ON above checks
+    # Material primary is --accent-text and onPrimary is --surface: --accent is a labelled fill only
+    #, used as Material's extended colours with --on-accent, which ON above checks
     ("primary", "surface", "accent-text", "surface", 4.5),
     ("primary", "surfaceContainerHighest", "accent-text", "surface-2", 4.5),
     ("onPrimary", "primary", "surface", "accent-text", 4.5),

@@ -8,7 +8,7 @@ private const val HOUR_MS = 3_600_000L
 /** A notification older than this is not worth showing (the phone was off, or the Hub unreachable, for a long time). */
 const val NOTIFY_MAX_AGE_MS = 24 * HOUR_MS
 
-/** The banners show moments (an event without a condition) for at most this long (R80 section 5). */
+/** The banners show moments (an event without a condition) for at most this long. */
 const val MOMENT_BANNER_MS = 24 * HOUR_MS
 
 /** At most this many banners at once; the rest become "<n> more alerts". */
@@ -147,7 +147,7 @@ fun alertsList(conditions: List<AlertEvent>, events: List<AlertEvent>, nowMillis
 
 // ---- where an action goes ----
 
-/** Where an alert's action opens in the app (R80 17:00 ruling: a place the app has no screen for opens the Alerts list). */
+/** Where an alert's action opens in the app (a place the app has no screen for opens the Alerts list). */
 sealed interface AlertTarget {
     data class Printer(val id: String) : AlertTarget
     data object RunningLow : AlertTarget

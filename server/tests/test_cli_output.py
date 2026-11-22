@@ -1,4 +1,4 @@
-"""S5.1: how the command line writes (06 6.1 to 6.7, 07 CLI-1 to CLI-10). The first block is AUT-9 for `status` and a
+"""S5.1: how the command line writes. The first block is AUT-9 for `status` and a
 failing command, run with COLUMNS=80: no line over 79 characters, no escape byte without colour, ASCII and no CR in
 `--plain`, a failing command with an empty standard output and an error that starts "Error: ". The rest holds the
 pieces: the glyph set, colour, tables, wrapping, the progress line and the exit codes."""
@@ -51,7 +51,7 @@ def lines_of(text: str) -> list[str]:
 
 def check_width(*texts):
     """No line over 79 columns, but one word that is longer than that (the test machine's long temporary path) stays
-    whole on its own line: a path or address cut in two cannot be used (06 6.3)."""
+    whole on its own line: a path or address cut in two cannot be used."""
     for text in texts:
         assert "`" not in text and chr(2) not in text and chr(3) not in text, text     # no mark is ever printed
         for line in lines_of(text):
@@ -106,7 +106,7 @@ def test_no_escape_byte_without_colour(cfg, capsys, monkeypatch, how):
 
 
 def test_colour_paints_the_glyph_and_word_and_resets_each_line(cfg, capsys, monkeypatch):
-    monkeypatch.setenv("NO_COLOR", "1")                      # --color always comes first (06 6.2 rule 1)
+    monkeypatch.setenv("NO_COLOR", "1")                      # --color always comes first
     rc, out, _ = run(capsys, "status", "--color", "always")
     assert f"{ESC}[33m! needs a look{ESC}[0m" in out
     assert f"{ESC}[32m+ OK{ESC}[0m" in out
@@ -404,7 +404,7 @@ def test_plain_mode_asks_for_the_numbered_menu_not_the_full_screen_one(monkeypat
     assert menu_ui.fullscreen_wanted() is False
 
 
-# ---------- waits (06 6.6) ----------
+# ---------- waits ----------
 
 class Tty(io.StringIO):
     def isatty(self):

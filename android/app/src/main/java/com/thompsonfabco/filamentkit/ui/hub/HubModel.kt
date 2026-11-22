@@ -21,10 +21,10 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
-/** `hub-glance`: the read-only Hub screen (R83 section 5), on the stack of the selected tab. */
+/** `hub-glance`: the read-only Hub screen, on the stack of the selected tab. */
 @Serializable data object HubGlanceRoute
 
-/** The groups of the Hub screen, in the order it shows them (R83 section 5.1). */
+/** The groups of the Hub screen, in the order it shows them. */
 enum class HubGroup(val title: String) {
     Status(HubTexts.GROUP_STATUS),
     GettingStarted(HubTexts.GROUP_GETTING_STARTED),

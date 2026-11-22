@@ -1,4 +1,4 @@
-"""The event sink: the actor and batch of a request, the run book, the store sink (R80 E1, E5)."""
+"""The event sink: the actor and batch of a request, the run book, the store sink."""
 import pytest
 
 from filament_kit import event_sink

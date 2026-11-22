@@ -1,4 +1,4 @@
-"""S5.1 (06 6.3, 6.5): a text is a plain string; `output.wrap` (what every command prints through) recognises a command
+"""S5.1: a text is a plain string; `output.wrap` (what every command prints through) recognises a command
 by pattern, keeps it whole on one line and, when it does not fit the rest of the line, gives it a line of its own five
 spaces in. Nothing marks a command in a text: no control byte or marker is in any text, so the setup page and the
 Hub, which show the same texts, see plain strings. The scan reads the modules' own string literals with the syntax
@@ -216,7 +216,7 @@ def test_the_texts_the_review_found_split_stay_whole_at_80_and_40_columns(monkey
     assert all(len(x) <= 79 for x in lines), lines
 
 
-# ---------- a command that does not fit goes on its own line (06 6.5) ----------
+# ---------- a command that does not fit goes on its own line ----------
 
 def test_06_6_5_example_is_reproduced_at_80_columns(monkeypatch):
     """`Fix: check ... test it:` and the command on a line of its own, five spaces in, no quotes or braces added."""

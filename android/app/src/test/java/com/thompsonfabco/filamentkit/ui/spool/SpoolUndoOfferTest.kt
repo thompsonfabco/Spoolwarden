@@ -21,7 +21,7 @@ import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
-/** The spool screen's Undo toast (R84 3.3): which actions offer it, what it looks for, and what Undo does. */
+/** The spool screen's Undo toast: which actions offer it, what it looks for, and what Undo does. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SpoolUndoOfferTest {
     private val dispatcher = StandardTestDispatcher()
@@ -110,7 +110,7 @@ class SpoolUndoOfferTest {
         assertNull(vm.state.value.result)
     }
 
-    // ---- the spool's last ten events (R84 section 2) ----
+    // ---- the spool's last ten events ----
 
     private fun row(id: Long, kind: String = UndoKinds.MOVED, possible: Boolean = false) =
         ActivityEvent(id, "2026-11-17T04:00:00Z", now - 500, kind, "Pixel", "Moved to Shelf B.", "spool:214", UndoState(possible, null, null), false, null)

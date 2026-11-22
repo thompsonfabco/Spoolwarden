@@ -1,4 +1,4 @@
-"""The Slicer presets section of the Hub page (design 09 S2.10, 03 section 8), pressed in a real headless browser through
+"""The Slicer presets section of the Hub page (design 09 S2.10, the design, Hub page), pressed in a real headless browser through
 tests/page_drive.mjs: each control reaches the same Hub route as before (the Hub's own functions are watched, in order), and
 the page says what the catalogue says. The page is served with the data of test_hub_page_audit.py (a first install and a
 rebuild with an update waiting). The same skip rules as the page audit: no Node 22 or no browser is a skip (a failure with

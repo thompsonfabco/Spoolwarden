@@ -24,7 +24,7 @@ import kotlinx.serialization.json.JsonObject
 data class WeightPreview(val becomes: Double?, val now: Double?)
 
 /**
- * The Update weight sheet (05 7.3). [text] is what was typed; [preview] belongs to [previewOf] and is dropped when the
+ * The Update weight sheet. [text] is what was typed; [preview] belongs to [previewOf] and is dropped when the
  * text changes. [failure] is a dry run or a save the Hub refused ([failedSave] says which, for Try again). [leaving] is
  * the "Leave without saving?" question being asked.
  */
@@ -40,7 +40,7 @@ data class WeightUi(
 ) {
     val grams: Double? get() = parseWeight(text)
 
-    /** Something was typed: leaving asks first (05 2.5 rule 1). */
+    /** Something was typed: leaving asks first. */
     val dirty: Boolean get() = text.isNotBlank()
 
     /** Typed, but not grams above 0. */
@@ -50,7 +50,7 @@ data class WeightUi(
     val canSave: Boolean get() = !saving && grams != null && preview != null && previewOf == text
 }
 
-/** The Move sheet (05 7.4): [locations] null while they load; [movingTo] is the row being saved, [lastTry] the one that failed. */
+/** The Move sheet: [locations] null while they load; [movingTo] is the row being saved, [lastTry] the one that failed. */
 data class MoveUi(
     val locations: List<String>? = null,
     /** The same locations with how full each is; names only from an older Hub. */
@@ -60,7 +60,7 @@ data class MoveUi(
     val lastTry: String? = null,
 )
 
-/** The Home sheet (R88 1.6): the storage locations to choose the spool's home from; [locations] null while they load. */
+/** The Home sheet: the storage locations to choose the spool's home from; [locations] null while they load. */
 data class HomeUi(
     val locations: List<String>? = null,
     /** The same locations with how full each is; names only from an older Hub. */
@@ -80,7 +80,7 @@ sealed interface Retry {
 }
 
 /**
- * The spool screen (05 7.2). It opens with the summary it was given ([initial]) and, with none (after a restart), asks
+ * The spool screen. It opens with the summary it was given ([initial]) and, with none (after a restart), asks
  * the Hub for it; after every change it shows the Hub's answer. [openedByTag] is the tag that led here, if one did.
  */
 data class SpoolUi(
@@ -97,13 +97,13 @@ data class SpoolUi(
     val confirmEmpty: Boolean = false,
     val emptying: Boolean = false,
     val moveToast: MoveToast? = null,
-    /** What the last action offers to undo on the Hub (R84 3.3); the screen shows its toast and calls [SpoolViewModel.offerShown]. */
+    /** What the last action offers to undo on the Hub; the screen shows its toast and calls [SpoolViewModel.offerShown]. */
     val undoOffer: UndoOffer? = null,
-    /** The spool's last events, newest first (R84 section 2); empty on an older Hub, which leaves the section out. */
+    /** The spool's last events, newest first; empty on an older Hub, which leaves the section out. */
     val activity: List<ActivityEvent> = emptyList(),
     /** The event whose Undo is being asked of the Hub. */
     val undoing: Long? = null,
-    /** Checked out (R88 1.6): the Home sheet, a Return on its way, and the toast the screen shows once for a finished one. */
+    /** Checked out: the Home sheet, a Return on its way, and the toast the screen shows once for a finished one. */
     val home: HomeUi? = null,
     val returning: Boolean = false,
     val returnToast: ReturnToast? = null,
@@ -247,7 +247,7 @@ class SpoolViewModel(
         if (w.failedSave) saveWeight() else setWeight(w.text)
     }
 
-    /** Back, the scrim or Cancel on the sheet: typed text asks first (05 2.5 rule 1); a save in flight is waited for. */
+    /** Back, the scrim or Cancel on the sheet: typed text asks first; a save in flight is waited for. */
     fun askLeaveWeight() {
         val w = _state.value.weight ?: return
         if (w.saving) return
@@ -357,7 +357,7 @@ class SpoolViewModel(
         _state.update { it.copy(move = null) }
     }
 
-    // --- Checked out: Return and Home (R88 1.6) ---
+    // --- Checked out: Return and Home ---
 
     /** "Return to <home>": asks nothing; the toast offers Undo through the activity. A refusal says the Hub's own words. */
     fun returnToHome() {
@@ -453,7 +453,7 @@ class SpoolViewModel(
         }
     }
 
-    // --- Undo on the Hub (R84 3) ---
+    // --- Undo on the Hub ---
 
     /** An action that the Hub can undo was written: the screen shows its toast. */
     private fun offerUndo(result: SpoolResult) {
@@ -521,7 +521,7 @@ class SpoolViewModel(
     companion object {
         const val PREVIEW_PAUSE_MS = 400L
 
-        /** How many events the spool screen shows (R84 section 2). */
+        /** How many events the spool screen shows. */
         const val ACTIVITY_LIMIT = 10
 
         /** The saved-state key a finished load puts its [SpoolResult.encode]d result under. */

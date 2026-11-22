@@ -1,4 +1,4 @@
-"""Print a label and Print labels on the Hub page (R85 5.3): a spool's detail in Spools, the selected spools in Spools (03 16.2, 02 6.1), and a
+"""Print a label and Print labels on the Hub page: a spool's detail in Spools, the selected spools in Spools, and a
 Recently added record's spools. Each opens the Hub's print page (`GET labels?ids=<n,n,...>&size=62x29`, an open route, built by RC8) in a new tab. The route is
 a stub here: the page's `window.open` is replaced and records what it was asked for, and every request the page makes is recorded with the
 setup code it carried (none for these entries). Covered in all four looks at 1280 and 390 px: the selection (a checkbox per row, the header

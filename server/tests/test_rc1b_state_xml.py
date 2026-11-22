@@ -1,4 +1,4 @@
-"""RC1b (R85 section 1): the Tag Reader's pending setup answers (`reader-setup`) and a kept failed read's note (`meta`)
+"""RC1b: the Tag Reader's pending setup answers (`reader-setup`) and a kept failed read's note (`meta`)
 as XML. The moves of the other RC1b files (pairing, reads, station requests, the Label Reader's record and plan) wait
 for the shared helper to take a top-level list and a root-only store (see the step's handoff)."""
 import json

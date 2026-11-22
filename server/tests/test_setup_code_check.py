@@ -1,6 +1,6 @@
 """S1.4: the setup code check that changes nothing (`POST code/check`: right, wrong with `tries_left`, too many with `retry_at`,
 the lockout the same as on any gated call), the trusted computer's expiry in `GET trust`, and `field` in the error replies of
-the setup page's endpoints that check input (07 section 17)."""
+the setup page's endpoints that check input."""
 from __future__ import annotations
 
 import re

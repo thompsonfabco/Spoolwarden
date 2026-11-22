@@ -1,4 +1,4 @@
-"""The storage list over HTTP (R79 section 4, SL2): the contract of GET api/storage (and the web app's twin), the Hub
+"""The storage list over HTTP: the contract of GET api/storage (and the web app's twin), the Hub
 page's P settings/storage with its preview, a container set's name as a spool's location, the reasons, and the readers
 that moved off the five old keys. The contract tests pin every field name and its null-ness: the Hub page, the web app
 and the Android app are built against them."""

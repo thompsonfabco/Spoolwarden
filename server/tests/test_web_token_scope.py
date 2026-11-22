@@ -122,7 +122,7 @@ def test_every_listed_route_is_one_the_web_unit_writes():
         assert any(rx.fullmatch(c) for c in calls), (method, template)
 
 
-# The events and alerts routes (R80 E1, EA3) are listed for the web unit before it calls them: its side (EA4: the
+# The events and alerts routes are listed for the web unit before it calls them: its side (EA4: the
 # hand-over, the push sender, the web twins) comes after. The next test makes EA4 delete each line here once its code
 # calls the route, so this list cannot outlive the gap. The events and alert reads (EA4, EA7) now call all of them but
 # the alerts test, which only the push twin of the web app sends.
@@ -143,12 +143,12 @@ def test_a_route_listed_ahead_of_the_web_unit_is_not_yet_called_by_it():
 # refusal. The mount step lists the route in WEB_ROUTES and deletes its line here; the tests below make that so.
 UNDO_CALL = "/api/events/{quote(event, safe="
 CALLED_BEFORE_THE_HUB_MOUNTS_THEM = {
-    ("POST", "/api/printers/{id}/slots/{label}/clear"),     # R83 10.1
-    ("GET", "/api/library/local"),                          # R83 10.1
-    ("POST", "/api/library/local/form"),                    # R83 10.1
-    ("DELETE", "/api/library/local/{id}"),                  # R83 10.1
+    ("POST", "/api/printers/{id}/slots/{label}/clear"),
+    ("GET", "/api/library/local"),
+    ("POST", "/api/library/local/form"),
+    ("DELETE", "/api/library/local/{id}"),
     ("GET", "/api/languages"),                              # R85 6.1 (RC2 builds it, RC9 mounts it)
-    ("GET", "/api/strings/{code}"),                         # R85 6.1: the texts of a language, `<code>.js`
+    ("GET", "/api/strings/{code}"),                         # the texts of a language, `<code>.js`
     ("GET", "/api/spools/{id}/label.svg"),                  # R85 6.1 (RC8)
     ("POST", "/api/demo/leave"),                            # R85 6.1 (RC6)
 }
@@ -168,7 +168,7 @@ def test_a_route_the_hub_has_not_mounted_is_refused_to_the_web_token_until_it_is
 
 
 def test_the_ruled_routes_stay_off_the_web_token_for_every_other_method():
-    """The ruling names a method for each: the others stay refused (R84 9.2: not the imports)."""
+    """The ruling names a method for each: the others stay refused (not the imports)."""
     for method, path in (("POST", "/api/hub"), ("GET", "/api/printers/1/slots/1/clear"), ("PUT", "/api/library/local/1"),
                          ("POST", "/api/import/spools"), ("POST", "/api/import/locations"), ("POST", "/api/export/usage.csv")):
         assert not api._web_may(method, path), (method, path)

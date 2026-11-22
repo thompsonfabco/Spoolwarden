@@ -1,4 +1,4 @@
-"""Storage locations (R79): the storage.xml model, the migration from the old keys, the placement rule, how full,
+"""Storage locations: the storage.xml model, the migration from the old keys, the placement rule, how full,
 and the rename job. (amended by design review R457, changes C1 to C5)."""
 import copy
 import os

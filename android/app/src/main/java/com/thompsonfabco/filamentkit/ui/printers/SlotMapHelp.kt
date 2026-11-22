@@ -190,7 +190,7 @@ object SlotMapHelp {
 enum class MainButton { None, PauseResume, MapByLoading, MapSlots, Report }
 
 /**
- * Which button is filled when several could be, in the order of 05 9.7: Pause / Resume while a print runs or is
+ * Which button is filled when several could be, in the order of the design, Android app: Pause / Resume while a print runs or is
  * paused, "Map by loading filament" when automatic mapping can't confirm the numbering, "Map slots" / "Map slots
  * again" when the Hub's reason calls for a new mapping, "Collect a report" when the Hub says it would help. A button
  * that is disabled never counts.

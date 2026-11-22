@@ -1,4 +1,4 @@
-// The Analytics section (R84 section 5): the six insight sentences, filament used per month as bars (inline SVG, no chart
+// The Analytics section: the six insight sentences, filament used per month as bars (inline SVG, no chart
 // library) or a table, and a table per material for one month. Loaded after setup.js; everything from the server goes in
 // through textContent, as there. The section is opened by the registry (TABS in setup.js), which is not this file's.
 "use strict";
@@ -117,7 +117,7 @@ function anMaterials(m) {
     list.map((x) => [x.material, anGrams(x.grams), anT("analytics_share", { percent: Math.round((x.grams / sum) * 100) })]));
 }
 
-// the notes under the bars: the Hub's own (R84 5.5), else the same two drawn from the months
+// the notes under the bars: the Hub's own, else the same two drawn from the months
 function anNotes(data, rows) {
   const given = (data.notes || []).filter(Boolean);
   if (given.length) return given;

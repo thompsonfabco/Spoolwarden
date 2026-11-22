@@ -5,7 +5,7 @@
 let T = { enabled: false, trusted: false, id: null, name: null, expires: null };
 const day = (t) => { const d = new Date(t * 1000), p = (n) => String(n).padStart(2, "0"); return t ? `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` : ""; };
 
-// The lock chip follows `GET trust` (02 3.1): Trusted computer while the cookie holds; otherwise Locked, or Unlocked while
+// The lock chip follows `GET trust`: Trusted computer while the cookie holds; otherwise Locked, or Unlocked while
 // this tab holds the code. "Trust this computer" is offered in the unlock dialog only while the feature is on. Until the
 // first answer the chip shows Locked with a loading hint; if the Hub does not answer, it stays Locked and works.
 let trustKnown = false;
@@ -34,7 +34,7 @@ function trustGone() {
   SW.toast(SW.t("lock_trust_gone"), "warn");
 }
 
-// ----- Trusted computers (03 7.6): a card that follows the trust state in place (a switch pressed here does not redraw it, so its
+// ----- Trusted computers: a card that follows the trust state in place (a switch pressed here does not redraw it, so its
 // result stays), a list read once the page is open, and each row and Revoke all say their result under their own control -----
 function trustCard() {
   const box = boxFor("trust"), all = boxFor("trust:all");

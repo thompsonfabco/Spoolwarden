@@ -1,4 +1,4 @@
-"""RC1a (R85 section 1.6): the settings file as XML, kept in both forms for one release. What the web unit's side
+"""RC1a: the settings file as XML, kept in both forms for one release. What the web unit's side
 (web_access) does with it: reads config.xml first and config.json when there is no readable XML, and keeps the web
 unit's read on both files. The fixture pair in data/settings_xml is the tag and field map of every settings key, for
 config.py (the wave's file) to apply."""

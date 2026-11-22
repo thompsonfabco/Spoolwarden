@@ -1,8 +1,8 @@
-"""The demo's routes as a LIST for RC9 to mount (R85 6.1, 6.2, section 11 item 1); nothing here is mounted.
+"""The demo's routes as a LIST for RC9 to mount; nothing here is mounted.
 
 Each `Route` has a plain handler `fn(body: dict) -> (status, answer)`; the answer is the JSON object, a refusal is
 `{"error": code, "message": sentence}`; the page route's refusal has the page's shape `{"error": sentence, "code": code}`
-(R86 01:28). `who` says who may call it: "page" (the Hub page, unlocked), "paired" (any paired
+. `who` says who may call it: "page" (the Hub page, unlocked), "paired" (any paired
 phone or PC), "web" (the web app's twin: a web token). `web_token` says whether the web unit's token may call the kit
 route (`api.WEB_ROUTES` gets `("POST", "/api/demo/leave")`). The kit routes `GET /api/info` and `GET /api/hub` gain
 `demo: bool` from `hub_state()`.

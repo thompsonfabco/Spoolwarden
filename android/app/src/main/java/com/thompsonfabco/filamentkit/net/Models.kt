@@ -39,7 +39,7 @@ data class ServerInfo(
     val modules: List<String>? = null,
     /** The Hub's default theme for devices that have not chosen (`console`, `workbench`, `palette`, `panes`); null from an older Hub. */
     val look: String? = null,
-    /** The Hub runs in demo (R85 section 3): the app shows the demo notice (05-android-app 3.7); false from an older Hub. */
+    /** The Hub runs in demo: the app shows the demo notice (05-android-app 3.7); false from an older Hub. */
     @Serializable(with = LenientBool::class) val demo: Boolean = false,
     /** The Hub's own language code (`en`), or null from an older Hub. */
     val language: String? = null,
@@ -709,7 +709,7 @@ data class LoadResult(
     val problems: List<String> = emptyList(),
     /** Spools now in that slot that go back to their previous place (not in the contract; shown when sent). */
     @SerialName("moved_back") val movedBack: List<MovedBack> = emptyList(),
-    /** A Bambu Lab load that has not happened yet: the spool is assigned to the slot and waits for it (phase 3, R83 3.5). */
+    /** A Bambu Lab load that has not happened yet: the spool is assigned to the slot and waits for it (phase 3). */
     @Serializable(with = LenientBool::class) val pending: Boolean = false,
 )
 
@@ -1041,7 +1041,7 @@ data class ManualMapState(
 @Serializable
 data class ManualOfferAnswer(val share: Boolean = false, val message: String = "")
 
-// ---- phase 3 (R83 section 10.1): clear a slot, the Hub at a glance, the owner's own catalog entries, spools --------
+// ---- phase 3: clear a slot, the Hub at a glance, the owner's own catalog entries, spools --------
 // Read leniently: unknown keys are ignored and an absent or null optional part is its default, so an older or newer Hub
 // never crashes the app.
 
@@ -1127,7 +1127,7 @@ data class HubAnswer(
 
 /**
  * One of the owner's own Filament Catalog entries (`GET /api/library/local`). [added] is a plain date `YYYY-MM-DD` as the
- * Hub gives it (R83 section 10); `hubDay` reads that, ISO text and whole seconds since 1970.
+ * Hub gives it; `hubDay` reads that, ISO text and whole seconds since 1970.
  */
 data class LocalEntry(val id: String, val brand: String, val name: String, val material: String, val added: String?)
 
@@ -1264,7 +1264,7 @@ object KitWire {
     private fun JsonObject.objects(key: String): List<JsonObject> = (this[key] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
 }
 
-// ---- history and data (R84 section 9): events with undo, health, usage by month ----
+// ---- history and data: events with undo, health, usage by month ----
 // Parsed leniently like the rest of KitWire: a missing field is a default, so an older Hub never crashes the app.
 
 /** Why the Hub refuses an undo (`why_not`, also the `error` of a 409 `POST api/events/{id}/undo`). */

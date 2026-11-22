@@ -81,7 +81,7 @@ def _unit_gone(age: float) -> bool:
 def _progress(data: bytes, done: bool, exit_code: int | None) -> tuple[float | None, dict | None]:
     """(the fraction, the step) of the newest complete step line in `data`; (None, None) when there is none (or it says
     0 steps). The fraction is (K - 1) / N, and 1 for a job that ended with exit 0. Only lines with 1 <= K <= N count, and
-    only those with the N of the job's first step line (02 8.4: N is fixed before the first line and never changes)."""
+    only those with the N of the job's first step line (the design, components: N is fixed before the first line and never changes)."""
     found = [m for m in _STEP.finditer(data) if 1 <= int(m.group(1)) <= int(m.group(2))]
     if found:
         first_n = found[0].group(2)

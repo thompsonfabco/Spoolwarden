@@ -1,4 +1,4 @@
-"""Getting started (R82 section 4): which steps there are, which are done, and the object `GET start` answers.
+"""Getting started: which steps there are, which are done, and the object `GET start` answers.
 
 What cannot be computed is kept in firstrun.py (hidden, finished, and the name, storage and features questions that were
 answered). Everything else is read where it lives at the moment the view is asked: the features, the reader's install
@@ -32,7 +32,7 @@ TARGETS = {"name": "#settings/general", "storage": "#settings/storage", "feature
            "slots": "#printers//map", "phone": "#devices/pair", "passphrase": "#settings/passphrase", "pc": "#devices/pair",
            "spool": "web:add", "backup": "#settings/backups"}
 
-# The command that does each step (06 9.1), under the line of the Next step in `status`: `{command}` is the program.
+# The command that does each step, under the line of the Next step in `status`: `{command}` is the program.
 COMMANDS = {"name": "sudo {command} config", "storage": "sudo {command} locations", "features": "sudo {command} features",
             "reader": "sudo {command} local-intake install", "key": "sudo {command} config",
             "printer": "sudo {command} printer add", "slots": 'sudo {command} printer map "{printer}"',

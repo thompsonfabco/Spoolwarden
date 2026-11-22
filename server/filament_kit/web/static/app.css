@@ -11,7 +11,7 @@ p { margin: var(--s1) 0; }
 a { color: var(--accent-text); }
 .muted { font-size: var(--fs-m); }
 
-/* fields (the field control look); 16 px on phones so Safari does not zoom the page (08 13) */
+/* fields (the field control look); 16 px on phones so Safari does not zoom the page */
 input, select, textarea { width: 100%; min-height: var(--ctl); padding: 0 var(--s3); border: 1px solid var(--border-strong);
                           border-radius: var(--r); background: var(--surface); color: var(--text); font-size: var(--fs-b); }
 textarea { min-height: calc(var(--s7) + var(--s4)); padding: var(--s2) var(--s3); resize: vertical; }
@@ -37,7 +37,7 @@ button.danger { border-color: var(--bad); background: transparent; color: var(--
 }
 button { min-width: var(--btn-min, 0); }                     /* a button that is working keeps the width it had (the shared script sets --btn-min) */
 button:disabled, button[aria-disabled="true"]:not([aria-busy="true"]) { border-color: var(--border); background: var(--surface-2); color: var(--muted); cursor: not-allowed; }
-.btn__reason { flex: 1 1 100%; }                              /* the reason a button cannot be pressed yet sits under it, on its own line (04 3.4) */
+.btn__reason { flex: 1 1 100%; }                              /* the reason a button cannot be pressed yet sits under it, on its own line */
 
 /* layout */
 .row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
@@ -53,13 +53,13 @@ label { display: block; font-size: var(--fs-s); color: var(--muted); }
 label > input, label > select, label > textarea { margin-top: var(--s1); color: var(--text); }
 
 /* the shell (S3.3): components.css lays out the top bar, the bottom bar and the rail; these are the page's own parts */
-.page { max-width: calc(var(--s7) * 21 + var(--s5) - var(--s2)); margin: 0 auto; }   /* 1024 px, centred (04 2.3) */
+.page { max-width: calc(var(--s7) * 21 + var(--s5) - var(--s2)); margin: 0 auto; }   /* 1024 px, centred */
 .page-head__title, .sheet__title, .empty__title, .nav__heading { margin: 0; }   /* the h1 and h2 rules above are for the tab contents */
 .topbar__brand { flex-wrap: wrap; row-gap: 0; }
 .topbar__hub { overflow-wrap: anywhere; }
 .toggle__input { min-height: 0; padding: 0; }
 
-/* the More sheet (04 9.1): rows of 56 px with a name, a one-line summary and a chevron */
+/* the More sheet: rows of 56 px with a name, a one-line summary and a chevron */
 .more { display: grid; gap: var(--s2); }
 .more__row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 var(--s3); align-items: center; justify-content: stretch;
              width: 100%; min-height: calc(var(--s7) + var(--s2)); padding: 0 var(--s3); border: 0; border-radius: var(--r);
@@ -74,7 +74,7 @@ label > input, label > select, label > textarea { margin-top: var(--s1); color: 
 .more__row[data-state="off"] { color: var(--muted); }
 @media (hover: hover) { .more__row:hover { background: var(--surface-2); } }
 
-/* the Settings sheet and page (04 9.2) */
+/* the Settings sheet and page */
 .settings { display: grid; gap: var(--s4); }
 .settings__group { display: grid; gap: var(--s2); padding-top: var(--s4); border-top: 1px solid var(--border); }
 .settings__group:first-child { padding-top: 0; border-top: 0; }
@@ -128,7 +128,7 @@ body .hidden { display: none; }      /* outranks a screen's own `.add { display:
 /* Printers tab */
 .cam { display: block; width: 100%; height: auto; min-height: calc(var(--s7) * 2); border-radius: var(--r); background: var(--surface-3); }
 
-/* Recently added (04 7): the list is the shared collection; a record opens in place under its row */
+/* Recently added: the list is the shared collection; a record opens in place under its row */
 .coll--recent { grid-template-columns: auto auto minmax(0, 3fr) max-content minmax(0, 1fr); }
 .coll--recent .coll__cell[data-col="visual"] { padding-inline: 0; }
 .coll__sub { display: block; }
@@ -150,7 +150,7 @@ label.filebtn.wide { display: flex; }
 label.filebtn.wide > button { flex: 1 1 auto; }
 .row.spaced { margin-top: var(--s2); }
 
-/* the refusal and sign-in pages (04 11): one centred column, no navigation */
+/* the refusal and sign-in pages: one centred column, no navigation */
 main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4))); max-width: none; margin: 0 auto;
                   padding: var(--s5); }
 .standalone__brand { display: flex; gap: var(--s2); align-items: center; margin: var(--s5) 0;
@@ -161,7 +161,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .standalone__form { display: grid; gap: var(--s4); margin-top: var(--s5); }
 .standalone__wide { width: 100%; }
 
-/* Slicer presets (04 8): groups, filament cards and the new-line disclosure */
+/* Slicer presets: groups, filament cards and the new-line disclosure */
 .group__title, .group__desc { margin: 0; }
 .cards { display: grid; gap: var(--s4); }
 .cards > .group { margin-top: 0; }
@@ -172,7 +172,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 @media (prefers-reduced-motion: reduce) { .disclosure__chevron { transition: none; } }
 .presets__updates { margin-top: var(--s4); }
 .disclosure__body { display: grid; gap: var(--s3); padding-top: var(--s3); }
-/* Printers (04 6): the list of cards, the printer's page, its slot rows, Filament used, the load and mapping sheets */
+/* Printers: the list of cards, the printer's page, its slot rows, Filament used, the load and mapping sheets */
 .printers__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); margin: var(--s2) 0 var(--s3); }
 .printers__count { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); margin: 0; color: var(--muted); font-size: var(--fs-m); }
 .printers__heading { margin: var(--s5) 0 var(--s2); }
@@ -217,7 +217,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .printer__controls { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .printer__controls:empty { display: none; }
 .printer__stop { display: flex; flex: 0 0 auto; justify-content: flex-end; margin-left: auto; }
-@media (max-width: 600px) { .printer__stop { flex: 1 1 100%; } }                       /* Stop print on its own line, right-aligned (04 6.4) */
+@media (max-width: 600px) { .printer__stop { flex: 1 1 100%; } }                       /* Stop print on its own line, right-aligned */
 .printer__buttons { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .printer__days { margin-left: auto; font-size: var(--fs-s); }
 .printer .group__title { margin: 0; }
@@ -267,7 +267,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .pmanual__heading { margin: 0; color: var(--muted); font-size: var(--fs-s); }
 .pmanual__foot { display: flex; flex: 1; gap: var(--s2); }
 .pmanual__foot > * { flex: 1 1 0; }
-/* Add spools (S3.8): the groups, the photo strip, the spool cards and the action bar (04 4) */
+/* Add spools (S3.8): the groups, the photo strip, the spool cards and the action bar */
 .add { display: grid; gap: var(--s4); }
 .add p { margin: 0; }
 .add > * { min-width: 0; }
@@ -361,17 +361,17 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .add__extras { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: var(--s2); }
 .add__extras:empty { display: none; }
 
-/* the action bar: sticky above the bottom bar on a phone, at the bottom of the column from 601 px (04 4.6) */
+/* the action bar: sticky above the bottom bar on a phone, at the bottom of the column from 601 px */
 .add__bar { position: sticky; bottom: var(--s2); z-index: 5; display: flex; align-items: center; gap: var(--s3); padding: var(--s3); border: var(--hairline) solid var(--border-strong);
             border-radius: var(--r); background: var(--surface); box-shadow: var(--e2); }
 @media (max-width: 600px) { .add__bar { bottom: calc(var(--tab) + env(safe-area-inset-bottom) + var(--s2)); } }
 .add__bar-text { flex: 1 1 0; min-width: 0; font-size: var(--fs-m); }
 .add__bar-btn { flex: none; }
 
-/* the number of spools waiting, on the Add destination (04 2.1) */
+/* the number of spools waiting, on the Add destination */
 .nav__badge { position: absolute; top: var(--s1); left: calc(50% + var(--s1)); display: grid; place-items: center; min-width: var(--s4); height: var(--s4); padding: 0 var(--s1);
               border: var(--hairline) solid var(--accent-text); border-radius: var(--s3); background: var(--accent-soft); color: var(--accent-text); font-size: var(--fs-xs); font-weight: var(--fw-label); }
-/* Spools (S3.10): the last tag, the search, the rows and the spool sheet (04 5) */
+/* Spools (S3.10): the last tag, the search, the rows and the spool sheet */
 .spools { display: grid; gap: var(--s4); }
 .spools p { margin: 0; }
 .spools > * { min-width: 0; }
@@ -387,9 +387,9 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .spools__linked:empty { display: none; }
 .spools__find { display: grid; gap: var(--s2); }
 .spools__low { justify-self: start; }
-.spools__low[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); }      /* the chosen chip: 02 5.7 */
+.spools__low[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); }      /* the chosen chip: the design, components */
 .spools__last { color: var(--warn); font-weight: var(--fw-label); }
-/* Checked out (R88 1.6; 04 5.4, 5.5): the second chip, a row with its own Return under it, the Home line of the sheet */
+/* Checked out: the second chip, a row with its own Return under it, the Home line of the sheet */
 .spools__chips { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .spools__chips:empty { display: none; }
 .spools__co { display: grid; gap: var(--s1); }
@@ -397,7 +397,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .spools__home { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); }
 .spools__home[hidden] { display: none; }
 .spools__home .result { flex-basis: 100%; }
-/* Weigh Station voice (R88 01:35 point 5; 04 9.2): a slider with its value beside it */
+/* Weigh Station voice: a slider with its value beside it */
 .voice { display: grid; gap: var(--s3); }
 .voice p { margin: 0; }
 .voice__row { display: grid; gap: var(--s1); }
@@ -452,7 +452,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .add__bar > .btn__reason { flex: 1 1 100%; }
 .btn__reason[hidden] { display: none; }
 
-/* EV6a (R83): the Hub page link in the top bar, the Hub screen, the catalog entries */
+/* EV6a: the Hub page link in the top bar, the Hub screen, the catalog entries */
 .more__row[hidden] { display: none; }
 .more__row--off { padding: var(--s3); }
 .topbar__hubpage { display: inline-flex; align-items: center; min-height: var(--s7); padding: 0 var(--s3); color: var(--accent-text); text-decoration: none; font-size: var(--fs-s); }
@@ -463,10 +463,10 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .catalog__entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
 .spools__spoolman { margin: 0 0 var(--s2); }
 
-/* The slot step with Automatic (R83 01:06 point 2): Automatic is the selected row when the step opens */
+/* The slot step with Automatic: Automatic is the selected row when the step opens */
 .spools__row--selected > .spools__row { background: var(--accent-soft); color: var(--accent-text); }
 
-/* The print page (R85 5.3 and 00:50; 02 7.13, 03 16.5): the labels the Hub draws, at their printed size. A roll size prints one label
+/* The print page: the labels the Hub draws, at their printed size. A roll size prints one label
    to a page of its own size; a sheet size lays the labels on the sheet by its own margins and pitches (left and top margin as padding,
    the pitch less the label as the gap), 24 or 30 to a page; the paper itself is stated by labels/page.css. Printing hides everything
    but the labels and adds no padding of its own. */
@@ -491,7 +491,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
   .labels__img--62x29, .labels__img--50x30, .labels__page { break-after: page; }
 }
 
-/* Share corrections (04 7.5): the link under the intro, the lines at Save and Accept, the page of what waits */
+/* Share corrections: the link under the intro, the lines at Save and Accept, the page of what waits */
 .recent__corr { margin: 0 0 var(--s3); }
 .recent__corr[hidden], .corr[hidden] { display: none; }
 .corr__note { flex: 1 1 100%; margin: 0; font-size: var(--fs-m); }

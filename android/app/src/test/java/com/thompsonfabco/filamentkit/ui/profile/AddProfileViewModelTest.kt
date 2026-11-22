@@ -246,7 +246,7 @@ class AddProfileViewModelTest {
         assertNull(vm.state.value.failure)
     }
 
-    // --- the Hub builds the entry (R83 section 4) ---
+    // --- the Hub builds the entry ---
 
     @Test fun theFormSendsValuesAndTheHubBuildsTheEntry() = runTest(dispatcher) {
         api.formEnabled = true

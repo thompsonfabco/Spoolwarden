@@ -82,7 +82,7 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 /**
  * Slicer presets (05-android-app 11.2): the build status and Build presets now, the filaments without a preset line (add to
  * a line or start one), the Product lines panel with "Change parent", the Updates panel, and a way to the Filament Catalog.
- * The shell draws the top bar. [onAddCatalogLine] opens the catalog form (05 8). [updates] is the Updates list (null: no
+ * The shell draws the top bar. [onAddCatalogLine] opens the catalog form. [updates] is the Updates list (null: no
  * Updates panel). [nowMillis] is the time ages count from (null: the clock). [pairing] is the session's pairing count: when
  * the phone pairs again (also with the same Hub) it is another one and the screen reads everything again.
  */
@@ -236,7 +236,7 @@ private fun StatusPanel(s: PresetsUiState, vm: PresetsViewModel, now: Long, onPa
             }
         }
         if (s.buildMissing) {
-            // a Hub without the build route: no button (05 11.2)
+            // a Hub without the build route: no button
             NoticeCard(NoticeKind.Info, stringResource(R.string.presets_build_elsewhere))
         } else {
             SwButton(

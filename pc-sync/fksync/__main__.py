@@ -56,7 +56,7 @@ def _grouped(fp: str) -> str:
 
 
 def _at(host: str, port: int) -> str:
-    """How an address is written: the web address's own port (443) is left off (R82 1.4); an IPv6 host keeps its brackets with a port."""
+    """How an address is written: the web address's own port (443) is left off; an IPv6 host keeps its brackets with a port."""
     host = f"[{host}]" if ":" in host else host
     return host if port == 443 else f"{host}:{port}"
 

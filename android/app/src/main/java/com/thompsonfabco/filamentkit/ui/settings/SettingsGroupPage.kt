@@ -19,7 +19,7 @@ internal class SettingsActions(
     val onLook: (Look) -> Unit = {},
     val alerts: AlertsActions = AlertsActions(),
     val voice: VoiceActions = VoiceActions(),
-    /** Opens the Hub at a glance screen (R83 section 5). */
+    /** Opens the Hub at a glance screen. */
     val onOpenHubGlance: () -> Unit = {},
 )
 

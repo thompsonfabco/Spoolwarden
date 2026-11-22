@@ -24,9 +24,9 @@ internal class SettingsFacts(
     val developer: Boolean,
     /** The theme in use: the phone's choice, else the Hub's default, else Console. */
     val look: Look = Look.Console,
-    /** Alerts on this phone (R80); the default is the switch off with nothing to ask. */
+    /** Alerts on this phone; the default is the switch off with nothing to ask. */
     val alerts: AlertsFacts = AlertsFacts(),
-    /** The Weigh Station voice (R88): the group exists only while the Hub says it has a Weigh Station. */
+    /** The Weigh Station voice: the group exists only while the Hub says it has a Weigh Station. */
     val voice: VoiceUi = VoiceUi(),
 )
 

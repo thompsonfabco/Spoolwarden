@@ -22,7 +22,7 @@ object VoiceTexts {
     /** Under the Speaker row; [speakers] is how many the voice has (the range's last number plus one). */
     fun speakerHint(speakers: Int) = "This voice has $speakers speakers. Try a few with Test."
 
-    /** The results of Test (R88 2.2). */
+    /** The results of Test. */
     const val TEST_PLAYED = "Played on the Weigh Station."
     const val TEST_NO_ANSWER = "The Weigh Station did not answer."
     const val TEST_BUSY = "The Weigh Station is in use. Try again when it is idle."

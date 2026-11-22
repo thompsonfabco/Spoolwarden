@@ -122,7 +122,7 @@ async function main() {
       // the sheet's Back lands late (as on a slow phone): an address set before it lands is taken back with it
       await evaluate(`{ const back = history.back.bind(history); history.back = () => { setTimeout(back, 700); }; 1 }`);
       facts.cardsBefore =await evaluate(`document.querySelectorAll(".pitem").length`);
-      // the guided sheet (R82 section 5): a found printer opens it at its details, Add klipper at "Which printer?"; Add printer, then "Map its slots now?"
+      // the guided sheet: a found printer opens it at its details, Add klipper at "Which printer?"; Add printer, then "Map its slots now?"
       if (flow === "add-found") {
         facts.opened = await click(`[data-action="add-found"]`);
         await until(`!!document.querySelector("dialog[open] [data-action=add]")`);

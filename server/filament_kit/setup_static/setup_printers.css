@@ -1,5 +1,5 @@
 /* Printers (S2.4) */
-/* the header: the counts, and the three ways to the rest (03 5.1) */
+/* the header: the counts, and the three ways to the rest */
 .printers-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); margin: 0 0 var(--s3); }
 .printers-head > .page-head__meta { flex: 1 1 auto; margin: 0; }
 .printers-head > .page-head__actions { margin-left: auto; }

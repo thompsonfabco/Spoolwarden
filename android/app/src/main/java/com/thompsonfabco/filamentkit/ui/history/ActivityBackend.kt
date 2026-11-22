@@ -8,7 +8,7 @@ import com.thompsonfabco.filamentkit.net.UsageMonth
 import java.io.File
 
 /**
- * The Hub's activity and undo calls (R84 9.1) as the spool and printer screens need them. The defaults answer like an
+ * The Hub's activity and undo calls as the spool and printer screens need them. The defaults answer like an
  * older Hub (no events, 404 on undo), so a backend or a test fake that does not know them compiles and offers no Undo.
  */
 interface ActivityBackend {

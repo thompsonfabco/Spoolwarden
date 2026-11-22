@@ -294,7 +294,7 @@ def test_wait_returns_at_once_for_news_and_after_the_time_for_none(hub, store):
     assert body["events"] == [] and body["next"] == 1 and 0.8 < time.monotonic() - t < 4
 
 
-# ---------------------------------------------------------------- the test alert (R80 E4)
+# ---------------------------------------------------------------- the test alert
 
 def test_a_test_alert_is_given_once_to_the_caller_that_asked_and_stores_nothing(hub, store):
     mine, other = phone(), phone()
@@ -355,7 +355,7 @@ def test_alerts_view_is_the_contract(hub):
 
 
 def test_no_route_lets_a_phone_change_the_alerts(hub):
-    """The types and limits are edited on the Hub page or the command line, not by a paired phone (R80 section 8)."""
+    """The types and limits are edited on the Hub page or the command line, not by a paired phone."""
     assert hub.post("/api/alerts", json={"running_low_g": 50}, headers=phone()).status_code == 405
     assert hub.put("/api/alerts", json={}, headers=phone()).status_code == 405
 
@@ -424,7 +424,7 @@ def test_storage_use_is_the_contract(hub):
     assert hub.get("/api/storage", headers=phone()).json().get("locations") is not None     # api/storage is the other
 
 
-# ---------------------------------------------------------------- the web unit (R80 E1)
+# ---------------------------------------------------------------- the web unit
 
 def test_the_web_unit_may_read_and_hand_over_and_a_phone_may_not_hand_over(hub, store):
     for path in ("/api/events", "/api/alerts", "/api/spools/low", "/api/storage-use"):

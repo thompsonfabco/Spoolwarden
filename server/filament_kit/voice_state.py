@@ -183,7 +183,7 @@ def _write(got: dict) -> None:
 
 
 def _set_aside() -> None:
-    """A voice.xml that is not valid (XML or schema) is kept as `voice.xml.unreadable` and noted (R85 1.4), never written
+    """A voice.xml that is not valid (XML or schema) is kept as `voice.xml.unreadable` and noted, never written
     over. A symbolic link is not moved: `_write` refuses it. A passing read error (OSError: a lock, a permission blip)
     does not move a good file: it is raised, `save` writes nothing and says False."""
     f = _file()

@@ -1,4 +1,4 @@
-// The Settings section's Storage locations group (DECISIONS R79; 03 10.4). Loaded after setup.js and setup_settings.js;
+// The Settings section's Storage locations group. Loaded after setup.js and setup_settings.js;
 // everything from the Hub goes in through textContent. The list is ONE ordered list: the page edits a copy of it (adds, edits,
 // moves and removes change only that copy and the "Where a new spool goes" panel) and one Save sends the whole list.
 "use strict";
@@ -20,7 +20,7 @@ async function saveStorage(list) {
   }
 }
 
-// ----- Download as CSV (R84 6): the file the Hub gives for GET export/locations.csv, unlocked as a file leaves the Hub -----
+// ----- Download as CSV: the file the Hub gives for GET export/locations.csv, unlocked as a file leaves the Hub -----
 // Texts the catalogue does not have yet (only HD2 opens it): the catalogue's own wins once the key is there.
 const ST_STUB = { storage_download_csv: "Download as CSV", storage_csv_failed: "Could not download the file: {reason}" };
 const stT = (key, vars) => {
@@ -75,7 +75,7 @@ function storageGroup({ st }) {
       ...[["title", "settings_storage_col_location"], ["full", "settings_storage_col_full"], ["takes", "settings_storage_col_takes"]]
         .map(([col, key]) => h("div", { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": 1, textContent: SW.t(key) })),
       h("div", { class: "coll__cell", role: "columnheader", "data-col": "actions" }, h("span", { class: "sr", textContent: SW.t("common_actions") })))));
-  // what the Hub says about the list (the converted list; R79 C1: two or more overflow places and no limit on the default)
+  // what the Hub says about the list (the converted list: two or more overflow places and no limit on the default)
   const notices = h("div", { class: "storage__notices" });
   let panelData = st, previewing = 0, timer = 0;
   const add = SW.btn(SW.t("storage_add_location"), { cls: "btn--primary", icon: "plus", run: (e) => openEditor(null, e.currentTarget) });

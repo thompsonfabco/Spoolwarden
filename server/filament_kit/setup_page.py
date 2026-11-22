@@ -520,7 +520,7 @@ class SetupPage:
             "<script src='/setup/shared/theme-init.js'></script><script defer src='/setup/shared/strings.js'></script>"
             "<script defer src='/setup/shared/components.js'></script><script defer src='/setup/shared/components-lock.js'></script>"
             "<script defer src='/setup/shared/components-jobs.js'></script><script defer src='/setup/shared/alerts.js'></script>"
-            # the shell turns the title into "<Page title> · <Hub name>" (03 1.2); the Hub name is all it needs from here
+            # the shell turns the title into "<Page title> · <Hub name>"; the Hub name is all it needs from here
             f"<title>{name}</title><link rel=stylesheet href='/setup/shared/tokens.css'>"
             "<link rel=stylesheet href='/setup/shared/components.css'><link rel=stylesheet href='/setup/shared/components-jobs.css'><link rel=stylesheet href='/setup/shared/alerts.css'>"
             "<link rel=stylesheet href='/setup/setup.css'>"

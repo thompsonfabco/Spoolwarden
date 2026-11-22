@@ -1,4 +1,4 @@
-// The sign-in page's Show / Hide passphrase button (04 11.2, 02 5.3). The page is rendered by the Hub with no other
+// The sign-in page's Show / Hide passphrase button. The page is rendered by the Hub with no other
 // script; without this file the field stays a plain password field and the button stays hidden.
 "use strict";
 (() => {

@@ -1,4 +1,4 @@
-"""What a Tag Reader tells us (R83 s9.2, ruled 20:33): the web unit keeps the newest build and call time per reader in
+"""What a Tag Reader tells us: the web unit keeps the newest build and call time per reader in
 memory and hands them to the Hub on POST /api/readers/web/seen; the Hub keeps the newest in its own file."""
 import json
 import threading

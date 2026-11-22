@@ -9,7 +9,7 @@ object SearchTexts {
 }
 
 /**
- * The address of Spoolman's own page as the Hub gave it (`spoolman_url`, R83 section 7), or null when there is none or
+ * The address of Spoolman's own page as the Hub gave it (`spoolman_url`), or null when there is none or
  * it is not a web address: the item is then not offered. The app never builds the address itself.
  */
 internal fun spoolmanLink(url: String?): String? {

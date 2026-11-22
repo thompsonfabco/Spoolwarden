@@ -24,7 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** The Undo toast of a load started from a printer slot (R84 3.3, 9.1). */
+/** The Undo toast of a load started from a printer slot. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PickSpoolUndoTest {
     private val dispatcher = StandardTestDispatcher()

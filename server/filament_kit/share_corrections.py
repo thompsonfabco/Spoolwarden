@@ -1,4 +1,4 @@
-"""The "Share corrections" setting (`label_reader.share_corrections`, design 03 section 10.5.1): whether corrections
+"""The "Share corrections" setting (`label_reader.share_corrections`, the design, Hub page): whether corrections
 to label readings wait on the local reader to be shared, and the root job that sets the reader the same way.
 
 The setting is the Hub's; the reader keeps its own copy (`feedback-opt-in` in its service_config.xml), and the
@@ -74,7 +74,7 @@ def actual_opt_in(cfg: dict, h: dict | None = None) -> bool | None:
 
 
 def state(cfg: dict, h: dict | None = None) -> dict:
-    """What the Label Reader status shows for the switch (03 10.5.1):
+    """What the Label Reader status shows for the switch:
         {"saved": bool, "actual": bool|None, "differs": bool, "count": int|None,
          "reason": None | "off" | "not_installed" | "too_old" | "no_answer"}
     `reason` is why the switch is disabled (the page words it); `differs`: the reader is set differently from the

@@ -1,4 +1,4 @@
-"""RC1c (R85 section 1): Slicer Sync's own files as XML, and the build manifest in either form."""
+"""RC1c: Slicer Sync's own files as XML, and the build manifest in either form."""
 import base64
 import io
 import json

@@ -42,7 +42,7 @@ import com.thompsonfabco.filamentkit.ui.settings.SettingsPanel
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
 /**
- * The Hub at a glance (R83 section 5): what the Hub says about itself, read-only, group by group. Each group ends with
+ * The Hub at a glance: what the Hub says about itself, read-only, group by group. Each group ends with
  * "Change this on the Hub page." and, where the Hub gave an address for it, "Open the Hub page". [online] false keeps
  * what was read under the offline notice. An older Hub (404) says to update it.
  */
@@ -53,7 +53,7 @@ internal fun HubScreen(
     onTryAgain: () -> Unit,
     modifier: Modifier = Modifier,
     nowMillis: Long = System.currentTimeMillis(),
-    /** The check history table (R84 4.3), under Status; null leaves it out (a Hub without it, or no Hub). */
+    /** The check history table, under Status; null leaves it out (a Hub without it, or no Hub). */
     health: HealthUi? = null,
     onHealthDays: (Int) -> Unit = {},
     onHealthTryAgain: () -> Unit = {},
@@ -105,7 +105,7 @@ internal fun HubScreen(
 }
 
 /**
- * The check history (R84 4.3): when each check changed, from and to as words (never colour alone), newest first, for 7 days
+ * The check history: when each check changed, from and to as words (never colour alone), newest first, for 7 days
  * and 30 on request, with "No history before <date>." when the Hub's record starts later. Left out on an older Hub.
  */
 @Composable

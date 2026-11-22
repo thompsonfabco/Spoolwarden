@@ -520,7 +520,7 @@ def test_an_older_hub_without_speak_is_spoken_from_the_display_lines(rig):
     assert rig.said[-1] == "Recognised Elegoo PLA Galaxy Blue. Put it on the scale."
 
 
-# --- CO3: a checked-out spool opens the weigh step in returning mode (R88 1.5) ---------------------------------------------
+# --- CO3: a checked-out spool opens the weigh step in returning mode ---------------------------------------------
 
 OUT = "4:cc:dd"
 OUT_SPOOL = {**SPOOL, "checked_out": True, "home": "Rack 1", "slot": "H2D - AMS 1"}
@@ -693,7 +693,7 @@ def test_a_late_return_after_a_new_scan_is_dropped(rig):
     assert rig.step() == "weigh" and flow.flow["returning"] is False and flow.flow["spool"]["id"] == 123
 
 
-# ---------- a Weigh Station without a scale (R88 4.2, WL3) ----------
+# ---------- a Weigh Station without a scale ----------
 
 def no_computer_scale(monkeypatch):
     monkeypatch.setattr(station_scale, "find_scale", lambda: None)

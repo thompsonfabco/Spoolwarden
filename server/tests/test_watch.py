@@ -1,4 +1,4 @@
-"""The event watcher: what both printer families' listeners turn into events (R80 sections 2 and 10, assumption 3)."""
+"""The event watcher: what both printer families' listeners turn into events."""
 import json
 import time
 from pathlib import Path

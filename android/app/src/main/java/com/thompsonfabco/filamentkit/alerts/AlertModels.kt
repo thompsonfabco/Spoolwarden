@@ -11,7 +11,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
 
-// The Hub's events and alerts as the app reads them (R80 section 8 and E4). Parsing is lenient: unknown keys are
+// The Hub's events and alerts as the app reads them. Parsing is lenient: unknown keys are
 // ignored and a missing optional field is a default, so an older or newer Hub never crashes the app.
 
 /** An event's `severity`; the order is the order of seriousness. */

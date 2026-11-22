@@ -18,7 +18,7 @@ import com.thompsonfabco.filamentkit.ui.spool.DOT
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
 /**
- * The By month table of a printer's Filament used (R84 5.7): a row per month, newest first. The month and the grams
+ * The By month table of a printer's Filament used: a row per month, newest first. The month and the grams
  * come first, then the prints, those that did not finish and the most used material. The panel around it is the caller's.
  */
 @Composable

@@ -64,7 +64,7 @@ internal fun SpoolPanel(modifier: Modifier = Modifier, content: @Composable Colu
 
 private val NUMBER = Regex("[0-9][0-9.,]*")
 
-/** [text] with its numbers in the mono face (05 7.1: "numbers `--mono`"). */
+/** [text] with its numbers in the mono face (the design, Android app: "numbers `--mono`"). */
 @Composable
 internal fun monoNumbers(text: String): AnnotatedString {
     val mono = SpoolwardenTheme.type.data.fontFamily ?: FontFamily.Monospace
@@ -174,7 +174,7 @@ internal fun SpoolRow(spool: SpoolSummary, modifier: Modifier = Modifier, onClic
     }
 }
 
-/** A failed Hub call as its notice (05 3.4, 3.5); [onTryAgain] adds the button to the ones that are about reaching the Hub. */
+/** A failed Hub call as its notice; [onTryAgain] adds the button to the ones that are about reaching the Hub. */
 @Composable
 internal fun HubFailureNotice(
     failure: HubFailure,
@@ -194,7 +194,7 @@ internal fun HubFailureNotice(
 }
 
 /**
- * A failure as the words of 05 3.5, for the shared error card of 3.2 (with its Try again); null for the two Hub notices,
+ * A failure as the words of the design, Android app, for the shared error card of 3.2 (with its Try again); null for the two Hub notices,
  * which have their own card ([HubFailureNotice]).
  */
 @Composable
@@ -206,7 +206,7 @@ internal fun hubFailureText(failure: HubFailure): String? = when (failure) {
     is HubFailure.Message -> failure.text
 }
 
-/** The Hub notice of a failure that is one (05 3.4); nothing for the other failures. */
+/** The Hub notice of a failure that is one; nothing for the other failures. */
 @Composable
 internal fun HubNoticeOf(failure: HubFailure?, onPairAgain: () -> Unit) {
     if (failure != null && failure.isNotice) HubFailureNotice(failure, onPairAgain)

@@ -1,5 +1,5 @@
-"""A fake Hub for the command-line tests of the spool, catalog, device and printer slot commands (R83 10.5): answers
-built from the contract's field lists (R83 section 10), no network. Example names only."""
+"""A fake Hub for the command-line tests of the spool, catalog, device and printer slot commands: answers
+built from the contract's field lists, no network. Example names only."""
 from __future__ import annotations
 
 import json
@@ -42,7 +42,7 @@ class FakeApi:
 
 
 class FakePage:
-    """`page(method, route, body=None)` as the Hub page's routes (R83 10.2) are called by the device commands."""
+    """`page(method, route, body=None)` as the Hub page's routes are called by the device commands."""
 
     def __init__(self, answers: dict):
         self.answers, self.calls = dict(answers), []

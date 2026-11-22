@@ -95,7 +95,7 @@ def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=Non
 
 
 def as_phone(endpoint):
-    """The phone web app's changes: the spool events written while `endpoint` runs are the phone's (R80 E5); the
+    """The phone web app's changes: the spool events written while `endpoint` runs are the phone's; the
     connector's tools, which run outside it, are handed over without an actor and the Hub names its pairing."""
     async def acting(request: Request):
         with event_sink.acting(event_outbox.ACTOR_PHONE):

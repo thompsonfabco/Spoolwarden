@@ -371,7 +371,7 @@ def test_the_tab_and_its_assets_are_served(app):
         assert r.status_code == 200 and r.headers["content-type"].startswith("text/javascript")
     js = (STATIC / "setup.js").read_text(encoding="utf-8")
     assert 'flash: ["nav_flash_device", "flash", () => [flashTab]]' in js
-    # the job strip titles the station setup job from the catalogue (02 8.4)
+    # the job strip titles the station setup job from the catalogue
     assert '"reader_setup"' in (ROOT / "web-shared" / "components-jobs.js").read_text(encoding="utf-8")
     assert '"job_title_reader_setup": "Setting up a Tag Reader"' in (ROOT / "strings" / "en.json").read_text(encoding="utf-8")
 
@@ -487,7 +487,7 @@ def test_the_browser_provisioning_against_a_fake_board(tmp_path, scenario, ok, c
 ])
 def test_a_late_or_cut_short_report_from_a_reader_that_joined_the_wifi_never_says_wifi(tmp_path, line):
     """Reproduces the owner's wrong text. On 58731d34 these gave "report" or "hub_unreachable" ("did not report back" or
-    "could not reach the Hub"); the page's answer for a report that does not come is its own "late" (R17)."""
+    "could not reach the Hub"); the page's answer for a report that does not come is its own "late"."""
     script = tmp_path / "fake.js"
     script.write_text(FAKE_SERIAL, encoding="utf-8")
     out = subprocess.run([shutil.which("node"), str(script), str(STATIC / "setup_flash.js"), json.dumps({"line": line})],
@@ -529,7 +529,7 @@ def test_the_hub_unreachable_text_names_the_home_address_it_tried(tmp_path):
 
 
 def test_every_text_the_flash_section_says_is_in_the_catalogue():
-    """The section says nothing of its own (S2.16): each key it asks the catalogue for exists, with the words 03 11 gives."""
+    """The section says nothing of its own (S2.16): each key it asks the catalogue for exists, with the words the design, Hub page gives."""
     import re
     js = (STATIC / "setup_flash.js").read_text(encoding="utf-8")
     texts = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))

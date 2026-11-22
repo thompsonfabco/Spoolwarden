@@ -749,7 +749,7 @@ def _app_js():
 
 
 def test_a_link_can_open_a_place_by_its_hash():
-    """The setup page's "Open the live printer view" links /intake#printers; today's addresses keep working (04 2.4)."""
+    """The setup page's "Open the live printer view" links /intake#printers; today's addresses keep working."""
     src = _app_js()
     assert 'const PLACES = ["add", "spools", "printers", "recent", "presets"];' in src
     assert 'const ALIAS = { open: "spools", history: "recent" };' in src          # #open and #history redirect
@@ -1013,7 +1013,7 @@ def test_spools_remember_sealed_only_under_its_key_and_wrap_storage():
 def test_spools_other_actions_follow_what_the_hub_offers():
     src = _spools_src()
     assert 'document.body.dataset.spoolEdit === "1"' in src
-    # editing, Return (only while checked out, R88 1.6), Print a label (always), Load with the Printers Feature
+    # editing, Return (only while checked out), Print a label (always), Load with the Printers Feature
     assert "EDIT ? weightBtn : null, EDIT ? moveBtn : null, retBtn, printBtn, PRINTERS ? loadBtn : null" in src
     assert "const other = part(" in src and "EDIT ? h(\"div\", { class: \"spools__danger\" }, emptyBtn)" in src
     assert "history.pushState({ sheet: true }, \"\", `#spools/${id}`)" in src and "document.title" not in src   # the title comes from the shell
@@ -1114,7 +1114,7 @@ def test_web_open_preview_shows_the_weight_spoolman_will_keep(app, env, sm):
     with _client(app) as c:
         r = c.post("/intake/api/open", json={"spool": sid, "gross": "4800", "dry_run": True}, headers={"Origin": ORIGIN})
         assert r.status_code == 200 and r.json()["spool"]["remaining_g"] == 1000                           # a full spool at most
-# ---- S3.15 (04 10.2): the service worker keeps the shell, never the API ----
+# ---- S3.15: the service worker keeps the shell, never the API ----
 
 STATIC = Path(web_app.__file__).parent / "static"
 
@@ -1302,7 +1302,7 @@ const reg = { getNotifications: async () => [n("sw-condition-print-paused:p-3"),
     assert json.loads(run.stdout) == ["sw-condition-print-paused:p-3"]
 
 class LibraryKit(CapKit):
-    """The kit's Hub overview and own-entry routes (R83 10.1), recording what the twins pass on."""
+    """The kit's Hub overview and own-entry routes, recording what the twins pass on."""
 
     def __init__(self):
         self.calls = []

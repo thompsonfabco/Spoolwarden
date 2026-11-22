@@ -118,8 +118,8 @@ def test_the_ruled_texts_of_round_3():
         "If this machine's network has changed, run: sudo spoolwarden features apply"         # R83 2026-11-21 22:26
     assert c["devices_station_allow_list_only"] == "This Weigh Station answers only the addresses on its allow-list."
     assert c["cli_activity_empty_ever"] == "Nothing has been done yet."                       # R86 22:42.3c
-    assert "200" not in c["cli_activity_more"]                                                   # R86 22:35.4
-    for key in ("station_page_unreachable", "station_settings_remove_failed"):                  # R83 00:52: no bare "station"
+    assert "200" not in c["cli_activity_more"]
+    for key in ("station_page_unreachable", "station_settings_remove_failed"):                  # no bare "station"
         assert re.sub(r"Weigh Station", "", c[key]).lower().count("station") == 0, key
     assert "intake" not in c["station_page_step"].lower()
     for key in ("station_page_no_photo", "station_page_on", "station_page_off"):              # nothing shows them

@@ -1,4 +1,4 @@
-"""WL1 (R88 section 4): the panel over Wi-Fi. A fake panel dials the station's real TLS listener (station/panel_net.py):
+"""WL1: the panel over Wi-Fi. A fake panel dials the station's real TLS listener (station/panel_net.py):
 the token, the same protocol as on USB, USB wins, the keep-alive, `W` lines for the scale, and everything that must not
 take the station down (wrong token, bad hello, long lines, a drop and a return, a second panel)."""
 from __future__ import annotations

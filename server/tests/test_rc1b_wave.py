@@ -1,4 +1,4 @@
-"""RC1b, the files that waited for the list API (R85 section 1): the pairing files (`devices`, `pending`, `spent`),
+"""RC1b, the files that waited for the list API: the pairing files (`devices`, `pending`, `spent`),
 `station-requests`, the label read cap (`reads`) and the Label Reader's record and plan (`installed`, `plan`) as XML."""
 import errno
 import json

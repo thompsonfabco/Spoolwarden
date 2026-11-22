@@ -1,5 +1,5 @@
 """EA3 (c): `spoolwarden alerts`, `events`, `spools low`, the Alerts group of `config`, and the Storage and Running low
-rows of `status` (06 9.1, 9.16 to 9.18, 8.3), against the real store and a fake Spoolman."""
+rows of `status`, against the real store and a fake Spoolman."""
 from __future__ import annotations
 
 import io

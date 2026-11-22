@@ -1,4 +1,4 @@
-"""The catalog form (R83 s4): one function builds the owner's entry from Brand, Name and Material (and the optional
+"""The catalog form: one function builds the owner's entry from Brand, Name and Material (and the optional
 values), the catalog fills what is left out, and the owner's entries are listed and removed."""
 import json
 import threading

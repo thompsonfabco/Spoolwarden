@@ -12,7 +12,7 @@ import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
-/** Open Spoolman (R83 section 7): offered only with the address the Hub gave. */
+/** Open Spoolman: offered only with the address the Hub gave. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchSpoolmanTest {
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())

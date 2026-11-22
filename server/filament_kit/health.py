@@ -1,4 +1,4 @@
-"""Health history view built from the event store's check conditions (docs/design 03 s4.2, 09 Stage 13 HD1)."""
+"""Health history view built from the event store's check conditions (the design, Hub page s4.2, 09 Stage 13 HD1)."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from . import events
 from .alerts_api import say
 
-# the conditions the history follows (R84 4.1): a check row, a printer offline, a device down, storage low; each
+# the conditions the history follows: a check row, a printer offline, a device down, storage low; each
 # kind's condition key starts with its base, and the group names what the row is about
 GROUPS = {"check": "checks", "printer-offline": "printers", "device-down": "devices", "storage-low": "storage"}
 

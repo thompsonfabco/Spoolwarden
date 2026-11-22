@@ -1,4 +1,4 @@
-"""alerts.xml: the eight switches, thresholds, the state-folder file, what is an alert (R80 section 3)."""
+"""alerts.xml: the eight switches, thresholds, the state-folder file, what is an alert."""
 import os
 import stat
 
@@ -39,7 +39,7 @@ def test_save_writes_xml_in_the_state_folder_and_reads_back(state):
     s = alerts.load()
     assert s["types"]["finished"] is True and s["types"]["runout"] is False and s["types"]["paused"] is True
     assert (s["running_low_g"], s["last_spool_only"], s["storage_warn_percent"]) == (200, True, 80)
-    assert "<device" not in text                              # no per-device entries (R80 E4)
+    assert "<device" not in text                              # no per-device entries
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX modes")

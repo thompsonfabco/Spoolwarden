@@ -846,7 +846,7 @@ def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, rem
 
 def _report_update(sm: Spoolman, before: dict, after: dict, patch: dict, empty: bool) -> None:
     """The events of an edit: spool.emptied, or spool.weighed when the weight changed, and spool.moved when the
-    location did (R80 section 2); then the running-low check right after a weight change."""
+    location did; then the running-low check right after a weight change."""
     sid = before.get("id")
     grams = {"before_grams": before.get("remaining_weight"), "after_grams": patch.get("remaining_weight")}
     with event_sink.batch_scope():
@@ -1160,7 +1160,7 @@ def _run_plan(sm: Spoolman, plan: dict, step) -> dict:
             sm.patch(f"spool/{sid}", {"location": new})
     items = [storage.Rename(o, n, c) for o, n, c in plan["renames"]]
     storage.set_rename_plan(None)
-    for r in items:                          # one event per rename, not one spool.moved per spool (R80 E5)
+    for r in items:                          # one event per rename, not one spool.moved per spool
         n = sum(1 for _sid, old, new in plan["spools"] if _renamed(old or "", [r]) == new)
         event_sink.emit("location.renamed", {"type": "location", "id": r.new, "name": r.new},
                         {"from": r.old, "to": r.new, "spools": n})

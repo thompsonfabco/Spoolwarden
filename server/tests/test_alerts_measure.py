@@ -1,4 +1,4 @@
-"""The Hub's disk measurement and the running-low list (R80 sections 6 and 7)."""
+"""The Hub's disk measurement and the running-low list."""
 from collections import namedtuple
 
 import pytest

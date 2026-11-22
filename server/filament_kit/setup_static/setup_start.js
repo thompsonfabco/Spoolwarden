@@ -1,5 +1,5 @@
 // The Getting started checklist card shown on Overview until every step is done or hidden. Also the demo's two parts of the
-// page (R85 4): "Just looking? Try the demo" in the card, and the demo banner with Leave demo that setup.js keeps on every section.
+// page: "Just looking? Try the demo" in the card, and the demo banner with Leave demo that setup.js keeps on every section.
 (() => {
   "use strict";
 
@@ -97,7 +97,7 @@
     return r;
   }
 
-  // the banner on every section (R85 4.5): kept in `main` while the Hub's state says `demo: true`, gone when it does not
+  // the banner on every section: kept in `main` while the Hub's state says `demo: true`, gone when it does not
   let demoHost = null;
   function demoBar(on, main) {
     if (!on || !main) {
@@ -209,7 +209,7 @@
 
     // after Hide, Show or Keep the pressed button is gone with the card it was in: the focus goes to the control in its place
     // (Show after Hide; the Next step's button, else Hide, after Show or Keep; the title when all is set), never to the top of
-    // the page (07 KEY-7), and the new count is announced (SR-12)
+    // the page, and the new count is announced (SR-12)
     function settle(data) {
       const pick = (sel) => mount.querySelector(sel);
       const target = data.show

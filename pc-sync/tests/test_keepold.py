@@ -147,7 +147,7 @@ def test_the_pair_aside_is_compact_json_like_v062_and_follows_the_waiting_mark(t
         assert _mode(d.pair_aside) == 0o600
 
 
-# ---------- deleted by an older Sync: the file is gone (R605 M1) ----------
+# ---------- deleted by an older Sync: the file is gone ----------
 
 def test_a_marker_that_an_older_sync_deleted_is_gone(tmp_path):
     d = _dirs(tmp_path)

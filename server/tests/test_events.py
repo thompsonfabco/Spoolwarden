@@ -1,4 +1,4 @@
-"""The event store (R80 section 1): files, ids, torn tails, conditions, cursor, wait, two processes, retention."""
+"""The event store: files, ids, torn tails, conditions, cursor, wait, two processes, retention."""
 import multiprocessing
 import os
 import stat

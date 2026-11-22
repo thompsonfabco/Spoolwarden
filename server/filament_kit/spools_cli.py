@@ -1,11 +1,11 @@
-"""The spool, catalog and device commands of the command line (R83 10.5, idea B5), each a thin client of the Hub's routes:
+"""The spool, catalog and device commands of the command line (idea B5), each a thin client of the Hub's routes:
 
     spools [<words>] [--sealed|--opened|--loaded|--low]    `GET /api/spools?q=&filter=`
     spool show <n>                                         `GET /api/spools/<n>`
     spool weigh <n> <grams with the spool>                 `PATCH /api/spools/<n>` {gross}
     spool move <n> <location|auto>                         `PATCH /api/spools/<n>` {location} or {auto_location: true}
     spool empty <n>                                        `PATCH /api/spools/<n>` {empty: true}
-    spools --checked-out                                   `GET /api/spools?filter=checked_out` (R88 1.6; the count is `total`)
+    spools --checked-out                                   `GET /api/spools?filter=checked_out` (the count is `total`)
     spool return <n>                                       `POST /api/spools/<n>/return` {} (asks nothing: undoable)
     spool home <n> <location>                              `PATCH /api/spools/<n>` {home}, a dry run first
     catalog local | local remove <id> | add --ask          `GET /api/library/local`, `DELETE /api/library/local/<id>`,
@@ -13,12 +13,12 @@
     devices show <id|name> | set <id|name> <setting> <value>   the Hub page's `GET device/<id>`, `POST device/<id>/settings`
 
 Every changing command asks the Hub for a dry run, shows what would change, asks, and then does it; `-y` skips the
-asking, and `--json` never asks (output.confirm). `spool return` is undoable (R88 1.6), so it asks nothing and has
+asking, and `--json` never asks (output.confirm). `spool return` is undoable, so it asks nothing and has
 no `-y`; its result line names `sudo spoolwarden undo <id>`. Every command gives `output.emit` the object of its route.
 
 `api` is the kit API client (`cli._server_api()`: `get`, `patch`, `post`, `delete`, raising web.slots.SlotError), or
 None when no Hub answers. `page` for the device commands is `page(method, route, body=None) -> dict`, one of the Hub
-page's routes under `/setup/api/` (R83 10.2), raising SlotError like `api`. cli.py hooks the parsers in with
+page's routes under `/setup/api/`, raising SlotError like `api`. cli.py hooks the parsers in with
 `add_parser` and runs them with `run`; the printer commands are in klipper_cli.py.
 
 The texts are the module constants named CLI_*: each is a catalogue key in capitals (`cli_spools_empty`), moved
@@ -232,7 +232,7 @@ def home_cell(view: dict) -> str:
 
 
 def _checked_out_list(r: dict, rows: list) -> int:
-    """The Checked out list (R88 1.6): where each spool is, its home, since when; the count is the answer's `total`."""
+    """The Checked out list: where each spool is, its home, since when; the count is the answer's `total`."""
     if not rows:
         output.out(CLI_CHECKED_OUT_EMPTY)
         return 0
@@ -509,7 +509,7 @@ def cmd_catalog_add_ask(api, *, ask=input, yes: bool = False) -> int:
 # ---------- devices ----------
 
 def kind_word(kind: str | None) -> str:
-    """The word for a device row's kind (R83 9.1); empty when it has none."""
+    """The word for a device row's kind; empty when it has none."""
     return _KINDS.get(kind or "", "")
 
 

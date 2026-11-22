@@ -412,13 +412,13 @@ class ServerApi:
         return self._call("POST", "/api/station/save", json.dumps(body).encode(), "application/json")
 
     def return_spool(self, uid: str, spool_id) -> tuple[int, dict]:
-        """A checked-out spool goes back to its home without a weighing (R88 1.7: 409 `not_checked_out` if it is not)."""
+        """A checked-out spool goes back to its home without a weighing (409 `not_checked_out` if it is not)."""
         return self._call("POST", "/api/station/return", json.dumps({"uid": uid, "spool_id": spool_id}).encode(),
                           "application/json")
 
 
 def hello_values(fp: str | None, port: int, plain: str | None = None) -> dict:
-    """The three values of the hello call (R82 section 2.3): the SHA-256 of the station's certificate, its port, and
+    """The three values of the hello call: the SHA-256 of the station's certificate, its port, and
     the station software's version. The Hub keeps them with the station's pairing (pairing.record_station_hello).
     A station that could not make its certificate (`fp` None) sends `plain=<reason>` instead of `fp`: its plain-HTTP
     port, and why, so the Hub can tell "plain by necessity" from an older station that says nothing."""
@@ -459,7 +459,7 @@ def announce(api_of, fp: str | None, port: int, tries: int = 20, wait: float = 3
 
 
 
-CHECKIN_SECONDS = 300  # R83 section 9 point 3: the Hub's "last seen" for a station means "running", not "last used"
+CHECKIN_SECONDS = 300  # the Hub's "last seen" for a station means "running", not "last used"
 
 
 def checkin(api_of, fp: str | None, port: int, every: float = CHECKIN_SECONDS, sleep=time.sleep, rounds: int | None = None,

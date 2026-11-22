@@ -55,7 +55,7 @@ internal fun AlertItem.sentenceFor(nowMillis: Long): String {
 }
 
 /**
- * The alert banner (R80 section 5; one component with one data shape): kind `warn` or `bad`, bold title, one sentence,
+ * The alert banner (one component with one data shape): kind `warn` or `bad`, bold title, one sentence,
  * the time, one action that goes to the fix, and Dismiss. At most two are shown, then one line "<n> more alerts" that
  * opens the Alerts list.
  */

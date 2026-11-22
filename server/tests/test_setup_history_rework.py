@@ -57,7 +57,7 @@ def test_csv_routes_use_real_export_and_import_contract(app):
 
 
 def test_activity_takes_newest_and_refuses_it_beside_since(app):
-    """D1 on the Hub page's route (asked by the page's spool events, R560 M11): `newest=N` is the newest N, oldest first;
+    """D1 on the Hub page's route (asked by the page's spool events): `newest=N` is the newest N, oldest first;
     with `since` it is refused in a catalogue sentence."""
     from filament_kit.station.page import say
     c = client(app)

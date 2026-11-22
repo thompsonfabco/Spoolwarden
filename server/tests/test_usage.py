@@ -867,7 +867,7 @@ def test_usage_map_save_is_dropped_when_the_map_changed_meanwhile(env):
     assert ams.load_map(SERIAL).learned == {"4000": "HT-A"}
 
 
-# ---------------------------------------------------------------- events (R80 section 2, E5)
+# ---------------------------------------------------------------- events
 
 @pytest.fixture
 def collected():

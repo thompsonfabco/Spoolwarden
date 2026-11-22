@@ -1,4 +1,4 @@
-"""Event undo rules and execution (docs/design 03 section 2.9, 09 Stage 13 HD1)."""
+"""Event undo rules and execution (the design, Hub page Stage 13 HD1)."""
 from __future__ import annotations
 
 import json

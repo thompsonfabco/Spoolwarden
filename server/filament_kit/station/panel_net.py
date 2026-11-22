@@ -1,4 +1,4 @@
-"""The panel over Wi-Fi (R88 4.3): the same line protocol as on USB (see `panel`), carried by TLS.
+"""The panel over Wi-Fi: the same line protocol as on USB (see `panel`), carried by TLS.
 
 The station listens on `station.panel_port` (5004) with its own certificate (the panel pins its fingerprint) when
 `station.panel_link` is `wifi`. The panel dials in and its first line is `HELLO intake-panel <version> <chip> <token>`;

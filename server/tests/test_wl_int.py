@@ -1,4 +1,4 @@
-"""The two halves of the panel's Wi-Fi link together (R88 section 4): `panel_setup` (WL4) writes the token, `panel_net`
+"""The two halves of the panel's Wi-Fi link together: `panel_setup` (WL4) writes the token, `panel_net`
 (WL1) reads it, and the Devices and Checks rows read what the station's /state says. The fake panel is WL1's."""
 from __future__ import annotations
 

@@ -168,7 +168,7 @@ def routes(page) -> list[tuple]:
         return {"ok": True, "port": port_num, "job": "port_change"}
 
     def not_in_demo() -> None:
-        """The demo asks no reader (R85 4.3): nothing is probed, no certificate pin is kept."""
+        """The demo asks no reader: nothing is probed, no certificate pin is kept."""
         if demo.is_on():
             raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
 

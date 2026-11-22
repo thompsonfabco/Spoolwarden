@@ -1,4 +1,4 @@
-"""The first-run file (R82 section 4 point 6): what the Getting started panel needs that cannot be computed.
+"""The first-run file: what the Getting started panel needs that cannot be computed.
 
 One XML file, `firstrun.xml`, in the Hub's STATE folder (never beside the config file: the Hub cannot write there):
 

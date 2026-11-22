@@ -1,4 +1,4 @@
-"""The web app's two standalone pages (design 04 section 11): the refusal page served outside the home network (or at
+"""The web app's two standalone pages (the design, web app): the refusal page served outside the home network (or at
 an address the Hub refuses) and the head shared with the sign-in page. Both use the web app's stylesheet and the
 appearance script only, carry no navigation and no Hub data, and take their words from the string catalogue.
 
@@ -59,7 +59,7 @@ def brand(files: dict[str, bytes], cat: dict[str, str]) -> str:
 def strings_scripts(prefix: str, strings_src: str | None) -> str:
     """The catalogue's scripts: English always first (it is inside the product), then the language in use, whose texts replace it
     when they load. A language script that does not load (the Hub down, the phone offline) leaves the page in English, never
-    with bare keys (R85 3.5; 04 10.2)."""
+    with bare keys."""
     p = html.escape(prefix, quote=True)
     return f"<script src='{p}/shared/strings.js'></script>" + (
         f"<script src='{html.escape(strings_src, quote=True)}'></script>" if strings_src else "")
@@ -67,7 +67,7 @@ def strings_scripts(prefix: str, strings_src: str | None) -> str:
 
 def labels_body(prefix: str, ids: str, size: str, strings_src: str | None, files: dict[str, bytes], *, address: str = "",
                 demo: bool = False) -> str:
-    """The print page's body (R85 5.3): its own script (`labels.js`) draws the size choice and the labels from the Hub's
+    """The print page's body: its own script (`labels.js`) draws the size choice and the labels from the Hub's
     `spools/<id>/label.svg`; the print rules in app.css hide everything but the labels, and `labels/page.css` states the paper.
     `address` is the Hub's home address the codes hold; `demo` shows the demo banner. `ids` and `size` are checked by the
     caller."""
@@ -84,7 +84,7 @@ def labels_body(prefix: str, ids: str, size: str, strings_src: str | None, files
             f"<script src='{p}/labels.js'></script></body>")
 
 
-# the paper of each label size (R85 00:50 point 5; 02 7.13): a roll prints each label on a page of its own size, a sheet on its paper
+# the paper of each label size: a roll prints each label on a page of its own size, a sheet on its paper
 LABEL_PAPER = {"62x29": "62mm 29mm", "50x30": "50mm 30mm", "a4-63x34": "A4", "a4-70x37": "A4", "letter-66x25": "letter"}
 
 
@@ -94,7 +94,7 @@ def labels_page_css(size: str) -> str:
 
 
 def refusal(files: dict[str, bytes], prefix: str, client: str, *, reason: str | None = None) -> str:
-    """The refusal page (04 11.1). Without `reason`: outside the home network, with the IPv6 hint when the request came
+    """The refusal page. Without `reason`: outside the home network, with the IPv6 hint when the request came
     over IPv6. With `reason` (the Hub's refusal of the address the page was opened at): "Not at this address"."""
     cat = catalogue(files)
     if reason is None:

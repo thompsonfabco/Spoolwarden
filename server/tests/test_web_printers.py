@@ -1030,7 +1030,7 @@ def test_add_edit_and_forget_go_to_the_kit_with_only_their_keys(managing):
 
 
 def test_scan_test_and_clear_pass_to_the_kit_with_only_their_keys(managing):
-    """EV6b (R83 10.3): the guided add's Klipper search and test, and Clear slot, are twins of the kit's routes."""
+    """EV6b: the guided add's Klipper search and test, and Clear slot, are twins of the kit's routes."""
     app, kit = managing
     with TestClient(app, base_url=ORIGIN, client=HOME) as c:
         c.post(P + "/scan", headers=H, json={"subnet": "10.9.9.0/24"})
@@ -1272,7 +1272,7 @@ def test_a_failed_manual_map_poll_backs_off_and_keeps_polling():
 
 
 def test_confirmations_and_questions_are_sheets_not_native_dialogs():
-    """S3.5: the five confirmations and the seven questions of 04 12 are SW.ask sheets, opened through app.js's
+    """S3.5: the five confirmations and the seven questions of the design, web app are SW.ask sheets, opened through app.js's
     openHere (Back closes them); a secret is a secret field and the stored text comes from the catalogue."""
     src = (STATIC / "printers.js").read_text(encoding="utf-8")
     code = " ".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("//"))
@@ -1408,7 +1408,7 @@ def test_the_printer_page_has_load_a_spool_the_notice_and_automatic_first():
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     for words in ("p.auto_possible", "const autoRow = pickRow(", 'aria-current", "true"', "plan(p, { label: \"auto\" })", "plan(p, sl)"):
         assert words in app, words
-    # R83 01:06 point 2: no step in front of the slot list, so no segmented control with a Continue that a named slot would need
+    # no step in front of the slot list, so no segmented control with a Continue that a named slot would need
     assert 'name: "spools-target"' not in app and "let chosen" not in app
 
 

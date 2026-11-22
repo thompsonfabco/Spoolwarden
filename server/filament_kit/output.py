@@ -10,15 +10,15 @@ the environment and from what `configure` was given, so a test that sets `NO_COL
     err(text)                                 a line of running text on standard error
     note(text) / error(what, fix=, cmd=)      standard error: `Note: ...`, `Error: ...` and its `Fix: ...` line
     need_sudo(cmd) -> 3                       the error of a command that needs root, and its exit code
-    confirm(question, yes=, doing=, rerun=)   the question of 06 7: None to go on, else the exit code (5 after no, 2 with
+    confirm(question, yes=, doing=, rerun=)   the question of the design, command line: None to go on, else the exit code (5 after no, 2 with
                                               no terminal and no --yes)
     state(word) -> str                        a status word with its glyph and colour (`● OK`)
-    status_row(word, text, fix) -> [str]      the lines of one status row (06 9.1)
-    table(headers, rows, long=, right=)       a table as lines (06 6.3)
+    status_row(word, text, fix) -> [str]      the lines of one status row
+    table(headers, rows, long=, right=)       a table as lines
     wrap(text, indent=, first=) -> [str]      running text at the width; a command in it is never split
-    wait(text)                                a progress line once 2 seconds pass with no other output (06 6.6);
+    wait(text)                                a progress line once 2 seconds pass with no other output;
                                               `paused()` holds it while the command asks a question
-    json_mode() / quiet()                     `--json` and `--quiet` (06 6.8); `emit(doc)` gives the JSON document of a
+    json_mode() / quiet()                     `--json` and `--quiet`; `emit(doc)` gives the JSON document of a
                                               command, `run_json(fn)` runs one so standard output holds that document alone,
                                               `muted()` drops the standard output of a command that only reports results
                                               and `shown()` lets a question through it
@@ -35,13 +35,13 @@ import sys
 import threading
 import time
 
-# 06 6.7
+# the design, command line
 SUCCESS, FAILED, USAGE, NEEDS_SUDO, HUB_DOWN, CANCELLED, INTERRUPTED = 0, 1, 2, 3, 4, 5, 130
 
 PROGRESS_AFTER = 2.0        # seconds without other output before a progress line shows
 PLAIN_EVERY = 10.0          # --plain: one more whole line this often
 STOP_HINT_AFTER = 5         # at a terminal the line adds "(Ctrl-C stops)" after this many seconds
-STATE_WORD_WIDTH = 12       # 06 9.1: the state word is padded to this
+STATE_WORD_WIDTH = 12       # the design, command line: the state word is padded to this
 
 _switches = {"color": "auto", "plain": False, "no_progress": False, "json": False, "quiet": False,
              "numbered": False}
@@ -70,12 +70,12 @@ def reset() -> None:
 
 
 def json_mode() -> bool:
-    """`--json`: standard output holds one JSON document and nothing else, and nothing asks (06 6.8)."""
+    """`--json`: standard output holds one JSON document and nothing else, and nothing asks."""
     return bool(_switches["json"])
 
 
 def quiet() -> bool:
-    """`-q` / `--quiet`: only what the command exists to print (06 6.8)."""
+    """`-q` / `--quiet`: only what the command exists to print."""
     return bool(_switches["quiet"])
 
 
@@ -115,12 +115,12 @@ def plain() -> bool:
 
 
 def numbered() -> bool:
-    """Menus and checklists as numbered lines, never full-screen (06 8.1): `--numbered`, `SPOOLWARDEN_MENU=numbered`,
-    and the screen-reader mode, which implies it (07 CLI-3)."""
+    """Menus and checklists as numbered lines, never full-screen: `--numbered`, `SPOOLWARDEN_MENU=numbered`,
+    and the screen-reader mode, which implies it."""
     return bool(_switches["numbered"]) or os.environ.get("SPOOLWARDEN_MENU") == "numbered" or plain()
 
 
-# ---------- glyphs and symbols (06 6.1, 6.2) ----------
+# ---------- glyphs and symbols ----------
 
 # meaning -> (Unicode, ASCII, colour token)
 _GLYPHS = {"good": ("●", "+", "ok"), "off": ("○", "o", "muted"), "offline": ("○", "o", "bad"),
@@ -164,7 +164,7 @@ def sym(name: str) -> str:
     return _SYMBOLS[name][0 if unicode_glyphs() else 1]
 
 
-# ---------- colour (06 6.2) ----------
+# ---------- colour ----------
 
 def _is_tty(stream) -> bool:
     try:
@@ -209,14 +209,14 @@ def state(word: str, stream=None) -> str:
 
 
 def glyph(meaning: str) -> str:
-    """The glyph of a status meaning (`good`, `working`, ...) in the set in use; empty in plain mode (07 CLI-2)."""
+    """The glyph of a status meaning (`good`, `working`, ...) in the set in use; empty in plain mode."""
     if plain():
         return ""
     uni, asc, _ = _GLYPHS[meaning]
     return uni if unicode_glyphs() else asc
 
 
-# ---------- width, wrapping, tables (06 6.3) ----------
+# ---------- width, wrapping, tables ----------
 
 def width() -> int:
     """The terminal's width (`COLUMNS`, then the terminal size), 80 when unknown. A line is one less at most."""
@@ -231,7 +231,7 @@ def _visible(s: str) -> int:
     return len(re.sub(r"\x1b\[[0-9;]*m", "", s))
 
 
-# What `wrap` takes for a command (06 6.3, 6.5): it starts at one of these programs and runs to the end of its clause,
+# What `wrap` takes for a command: it starts at one of these programs and runs to the end of its clause,
 # so it is never split over two lines. The texts themselves are plain strings; nothing marks a command in them.
 _KIT = frozenset(("apply", "backup", "catalog", "cert", "certificate", "config", "devices", "ensure-fields", "features",
                   "help", "intake", "klipper", "label-reader", "library", "local-intake", "locations", "logs", "modules", "pair",
@@ -317,9 +317,9 @@ def wrap(text: str, *, indent: int = 0, first: int | None = None) -> list[str]:
     """`text` as lines of at most width - 1 characters, wrapped at spaces outside a command. The first line starts at
     column `first` (default `indent`), the others at `indent`, so a continuation lines up with where the text began.
     Newlines in `text` start a new line. A word, number, address, path or command longer than a line stays whole on a
-    line of its own (06 6.3): a command or address cut in two cannot be copied. A command (one of the programs a text
+    line of its own: a command or address cut in two cannot be copied. A command (one of the programs a text
     names, to the end of its clause) that does not fit on the rest of the line goes on a line of its own, five spaces
-    in from where the text began (06 6.5). Backticks are printed as they are."""
+    in from where the text began. Backticks are printed as they are."""
     limit = width() - 1
     first = indent if first is None else first
     lines: list[str] = []
@@ -369,7 +369,7 @@ def table(headers: list[str], rows: list[list], *, long: int = 0, right: tuple[i
     return lines + ["  ".join(cell(i, v) for i, v in enumerate(r)).rstrip() for r in rows]
 
 
-# ---------- writing (06 6.5) ----------
+# ---------- writing ----------
 
 _lock = threading.RLock()
 _waits: list["wait"] = []
@@ -469,7 +469,7 @@ def out_lines(lines: list[str]) -> None:
 
 
 def result(text: str = "") -> None:
-    """A result: one line in the past tense on standard output (06 6.5). `--quiet` drops it."""
+    """A result: one line in the past tense on standard output. `--quiet` drops it."""
     if not quiet():
         out(text)
 
@@ -481,7 +481,7 @@ def err(text: str) -> None:
 
 def note(text: str, *, old_name: bool = False) -> None:
     """A note that is not a result: on standard error, `Note: ` first. `--quiet` drops it, but for the old-name line
-    (`old_name`, 06 2), which says what a command is called now."""
+    (`old_name`, the design, command line), which says what a command is called now."""
     if quiet() and not old_name:
         return
     _write(sys.stderr, wrap("Note: " + text, indent=6, first=0))
@@ -516,7 +516,7 @@ def need_sudo(cmd: str) -> int:
     return NEEDS_SUDO
 
 
-# ---------- confirmations (06 7) ----------
+# ---------- confirmations ----------
 
 def terminal() -> bool:
     """Is standard input a terminal: can a question be answered. Never under `--json`, which does not ask."""
@@ -541,7 +541,7 @@ def confirm(question: str, *, yes: bool = False, doing: str = "", rerun: str | N
     own, or a test's): it is not checked for a terminal."""
     if yes:
         return None
-    if json_mode():                     # --json never asks (06 6.8)
+    if json_mode():                     # --json never asks
         return no_terminal(doing, rerun)
     if ask is None:
         if not terminal():
@@ -562,7 +562,7 @@ def confirm(question: str, *, yes: bool = False, doing: str = "", rerun: str | N
     return CANCELLED
 
 
-# ---------- --json and --quiet (06 6.8) ----------
+# ---------- --json and --quiet ----------
 
 _doc: list = []             # the document a command gave `emit`
 _failure: list = []         # (what, fix) of the last `error`, for the error document
@@ -742,7 +742,7 @@ def muted():
         sys.stdout = real
 
 
-# ---------- status rows (06 9.1) ----------
+# ---------- status rows ----------
 
 def status_row(word: str, text: str, fix: str = "", stream=None) -> list[str]:
     """The lines of one row: two spaces, the glyph, the state word padded to 12, two spaces, the text. A word
@@ -770,7 +770,7 @@ def status_row(word: str, text: str, fix: str = "", stream=None) -> list[str]:
     return lines
 
 
-# ---------- waits (06 6.6) ----------
+# ---------- waits ----------
 
 class wait:
     """`with output.wait("Checking…"):` shows `◐ Checking… 3 s` on standard error once 2 seconds pass with no other

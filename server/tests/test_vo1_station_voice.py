@@ -1,4 +1,4 @@
-"""VO1 (R88 section 2): the Weigh Station's voice settings. Speaker and speed in both engines (piper-tts 1.8.0 `SynthesisConfig`
+"""VO1: the Weigh Station's voice settings. Speaker and speed in both engines (piper-tts 1.8.0 `SynthesisConfig`
 length scale 100 / speed and speaker id; espeak-ng words per minute 165 x speed / 100), the live values over the drop-in's,
 `POST /voice`, `POST /voice/test` and the `voice` of the hello answer (station/speech.py, state.py, http.py, server_api.py)."""
 from __future__ import annotations

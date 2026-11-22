@@ -11,7 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** The calls and models of HD9 (R84 section 9) against a fake Hub: activity, undo, health, usage by month, CSV download. */
+/** The calls and models of HD9 against a fake Hub: activity, undo, health, usage by month, CSV download. */
 class ApiHistoryTest {
     private val hub = FakeHub()
     private val api = hub.api()

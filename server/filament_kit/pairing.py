@@ -244,7 +244,7 @@ def _old_json(obj: list) -> bytes:
 
 def _read(name: str) -> list:
     """A state list file (`devices.json`, `pending.json`, `spent.json`, `station-requests.json`), given by its JSON name:
-    its XML form when there is one, else the JSON form (moved to XML on the way, R85 s1); a JSON that an older release
+    its XML form when there is one, else the JSON form (moved to XML on the way); a JSON that an older release
     changed after this code wrote it wins once."""
     from .profiles import statexml
     f = config.paths().state / name
@@ -276,7 +276,7 @@ def _refuse_links(paths) -> None:
 
 def _write(name: str, obj: list) -> None:
     """Save the list as its XML form (0600, the state's owner), then as the JSON file an older release reads (the same
-    shape as v0.6.2, a hash beside it): `update --rollback` keeps the pairings and the open codes (R85 s1.5). An older
+    shape as v0.6.2, a hash beside it): `update --rollback` keeps the pairings and the open codes. An older
     release's change to the JSON wins once on the next read."""
     from .profiles import statexml
     state = config.paths().state
@@ -512,7 +512,7 @@ def devices() -> list[dict]:
 
 
 def record_station_hello(device_id: str, fp, port, version, plain=None) -> bool:
-    """What a Weigh Station says on `GET /api/station/hello` (R82 section 2.3): the SHA-256 of its certificate, its HTTPS
+    """What a Weigh Station says on `GET /api/station/hello`: the SHA-256 of its certificate, its HTTPS
     port and its software version, kept with that station's pairing in devices.json (`fp`, `port`, `version`,
     `hello_at` on its record; the file is JSON today, so these keys join it as they are). False, nothing stored, for a
     device that is no station or a value that is not what it should be (the older station sends none: it stays on plain

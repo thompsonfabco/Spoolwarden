@@ -1,4 +1,4 @@
-"""The catalogue of event kinds is a published contract (R80 section 2): these tests pin every name, so renaming or
+"""The catalogue of event kinds is a published contract: these tests pin every name, so renaming or
 removing one fails here. Adding a kind or a value name is fine (the sets below are checked as "at least")."""
 import pytest
 

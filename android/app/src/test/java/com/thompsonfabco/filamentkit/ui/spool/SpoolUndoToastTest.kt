@@ -29,7 +29,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The spool screen end to end (R84 3.3): the action's toast with Undo, what Undo answers, and the list's Undo. */
+/** The spool screen end to end: the action's toast with Undo, what Undo answers, and the list's Undo. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w411dp-h8000dp")
 class SpoolUndoToastTest {

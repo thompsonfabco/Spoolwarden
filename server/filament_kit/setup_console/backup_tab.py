@@ -34,7 +34,7 @@ def routes(page) -> list[tuple]:
     w = lambda fn: page.guard(fn, write=True)  # noqa: E731
 
     def not_in_demo() -> None:
-        """The demo restores no backup (R85 4.3): an upload is not written, a pending one is not dropped, before the
+        """The demo restores no backup: an upload is not written, a pending one is not dropped, before the
         helper (which refuses as well) is asked."""
         if demo.is_on():
             raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)

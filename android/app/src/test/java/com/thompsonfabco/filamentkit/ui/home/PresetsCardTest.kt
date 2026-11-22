@@ -112,7 +112,7 @@ class PresetsCardTest {
         assertEquals(PresetActions(canBuild = true, hints = emptyList()), presetActions(ProfileStatus(), res))
         val withPc = presetActions(ProfileStatus(pc = PcInfo("pc-1", null)), res)
         assertEquals(false, withPc.canBuild)
-        // no hint about where to build: the card's header opens Slicer presets (R61)
+        // no hint about where to build: the card's header opens Slicer presets
         assertEquals(emptyList<String>(), withPc.hints)
     }
 

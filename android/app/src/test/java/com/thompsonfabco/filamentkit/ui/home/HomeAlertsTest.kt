@@ -28,7 +28,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** Home's alert banners and its "<n> spools running low" line (R80 sections 5 and 7). */
+/** Home's alert banners and its "<n> spools running low" line. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w411dp-h8000dp")
 class HomeAlertsTest {

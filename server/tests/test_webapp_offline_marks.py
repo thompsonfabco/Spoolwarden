@@ -1,4 +1,4 @@
-"""S3.17 (design 04 10.3, third point): while the Hub cannot be reached every screen of the web app keeps its last data with
+"""S3.17 (the design, web app, third point): while the Hub cannot be reached every screen of the web app keeps its last data with
 "Last update <age>: the Hub did not answer.", and every button that needs the Hub gets aria-disabled and the reason "Needs the
 Hub." ("Read labels" and "Preview" say "The Hub cannot be reached."). Run in a headless Chrome, Edge or Chromium already on the
 machine (tests/page_drive.mjs for the presses, tests/aut5_run.mjs for the audit), with the Hub stopped by the page itself: its
@@ -347,7 +347,7 @@ def test_the_printers_screen_marks_what_needs_the_hub(served_printers, tmp_path,
 
 @pytest.mark.parametrize("served_web", ["waiting"], indirect=True)
 def test_the_page_audit_passes_on_four_screens_with_the_hub_stopped(served_web):
-    """AUT-5 (07 section 15) with the Hub stopped on Add spools, Spools, Recently added and Slicer presets: 4 views x 1280/320 x light/dark."""
+    """AUT-5 with the Hub stopped on Add spools, Spools, Recently added and Slicer presets: 4 views x 1280/320 x light/dark."""
     run = _run("--url", served_web.url, "--views", "#add,#spools,#recent,#presets", "--allow", str(ALLOW), "--ready", READY_OFFLINE, "--settle", "300")
     assert run.returncode == 0, run.stdout + run.stderr
     out = json.loads(run.stdout)

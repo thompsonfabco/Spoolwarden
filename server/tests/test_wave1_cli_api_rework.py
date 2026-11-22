@@ -97,7 +97,7 @@ def _shown(out: str) -> list[int]:
 
 
 def test_activity_without_days_shows_the_newest_50_newest_first(capsys):
-    """R86 22:35 point 4 (06 9.22): `newest=50`, not the newest 200 cut by 7 days. This test pinned the newest 200
+    """R86 22:35 point 4: `newest=50`, not the newest 200 cut by 7 days. This test pinned the newest 200
     before; it now pins the ruled behaviour."""
     hub = HubApi(token())                                    # its pairing is an Activity event too: the oldest here
     old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=30)
@@ -257,7 +257,7 @@ def _answer_yes(monkeypatch) -> list[str]:
 
 
 def test_backup_password_is_set_shown_and_removed_through_the_helper(capsys, monkeypatch):
-    """06 9.10, 7, 8.7 (R559 03 M4): this test pinned other texts before; it now pins the design's."""
+    """the design, command line (R559 03 M4): this test pinned other texts before; it now pins the design's."""
     monkeypatch.setattr(secret_input, "ask", lambda prompt: "correct horse battery")
     assert run(capsys, ["backup", "password", "--show"])[1] == "Backup password is not set.\n"
     assert _words(run(capsys, ["backup", "password"])[1]) == _words(SET_LINES)

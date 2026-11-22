@@ -396,7 +396,7 @@ def test_station_stays_read_only():
     try:
         for method in ("PUT", "DELETE"):
             assert _fetch(base + "/photo", method)[0] == 501  # no do_<method> on the handler
-        # the only POST routes are the ticket, session and settings ones (R83 section 10.4; test_ev3_station_page.py): a
+        # the only POST routes are the ticket, session and settings ones (test_ev3_station_page.py): a
         # read route takes none, and a station made with no settings store has no settings route
         for path in ("/photo", "/state", "/last-tag", "/settings"):
             assert _fetch(base + path, "POST")[0] == 404

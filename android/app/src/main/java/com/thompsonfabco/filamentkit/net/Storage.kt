@@ -8,7 +8,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 
 /**
- * One storage location of `GET api/storage` (ruling R79 section 4). Every field is optional on the wire: the Hub's
+ * One storage location of `GET api/storage`. Every field is optional on the wire: the Hub's
  * answer may still change its key names, so all of them are read here ([StorageWire]) and nowhere else.
  */
 data class StorageLocation(

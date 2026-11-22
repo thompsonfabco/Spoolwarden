@@ -22,7 +22,7 @@ PRESS_ALLOWLIST = TESTS / "allowlists" / "press"
 WORDS_ALLOWLIST = TESTS / "allowlists" / "words"
 ACCENT_ALLOWLIST = TESTS / "allowlists" / "accent"
 
-# The field component (07 AUT-4): inside this file only the bodies of these builders may create fields; each renders a
+# The field component: inside this file only the bodies of these builders may create fields; each renders a
 # visible label.
 FIELD_COMPONENT_FILE = "web-shared/components.js"
 FIELD_BUILDERS = ("field", "check", "toggle", "segmented")
@@ -235,7 +235,7 @@ WORD = re.compile(r"[a-zA-Z]+")
 LENGTH = re.compile(r"(?<![\w.#-])-?(?:\d+\.?\d*|\.\d+)(?:px|rem|em|vh|vw|dvh|dvw|svh|lvh|ch|pt|cm|mm|in)\b")
 TIME = re.compile(r"(?<![\w.#-])(?:\d+\.?\d*|\.\d+)(?:ms|s)\b")
 FUNC_LENGTH = re.compile(r"\b(?:calc|min|max|clamp)\(")
-LENGTH_OK = {"0", "1px", "2px", "3px"}                  # hairline, focus ring and its offset, active mark (02 1.2)
+LENGTH_OK = {"0", "1px", "2px", "3px"}                  # hairline, focus ring and its offset, active mark
 LINE_HEIGHT_OK = {"1.45", "1.25"}                       # foundations 4.2
 DURATION_PROPS = ("transition", "animation")
 CSS_RULE = re.compile(r"([^{}]*)\{([^{}]*)\}")
@@ -347,7 +347,7 @@ def _last_compound(sel):
 def _focus_exempt(selector, rings):
     """A :focus rule that hides the outline is fine when every selector of its list either focuses a heading or main
     (the focused element is the last compound: `main a:focus` is a link), or has a :focus-visible twin that draws a
-    ring (07 KEY-3). Any other [tabindex="-1"] needs the twin."""
+    ring. Any other [tabindex="-1"] needs the twin."""
     sels = _selector_list(selector)
     for sel in sels:
         if not FOCUS_PLAIN.search(_last_compound(sel)):
@@ -433,8 +433,8 @@ def test_no_literal_values_in_components():
 # ---- AUT-2 / CON-9: --accent only as the fill of a labelled part ----
 
 ACCENT_USE = re.compile(r"var\(\s*--accent\s*[,)]")
-# the labelled fills of 07 CON-9, by their class in the design, components: the main button, the skip link, the icon tile of
-# the current section in the list navigation (the chosen segment is --accent-soft with --accent-text, 02 5.7)
+# the labelled fills of the design, accessibility CON-9, by their class in the design, components: the main button, the skip link, the icon tile of
+# the current section in the list navigation (the chosen segment is --accent-soft with --accent-text, the design, components)
 LABELLED_FILLS = ("btn--primary", "skip", "nav__icon")
 LABELLED_FILL = re.compile(r"\.(?:" + "|".join(re.escape(c) for c in LABELLED_FILLS) + r")(?![\w-])")
 
@@ -555,7 +555,7 @@ def test_assertive_announcements_are_reported():
 # ---- AUT-7: the words lint ----
 
 # Internal words (LNG-1), the old names of the "Was" column of foundations 2, "color" (LNG-7) and the "Never" column of
-# the shared wording table (08 section 12). (finding, pattern); matched on whole words inside a string literal.
+# the shared wording table. (finding, pattern); matched on whole words inside a string literal.
 BANNED = [
     ("ai_intake", r"ai_intake"), ("gcode_state", r"gcode_state"), ("module", r"modules?"), ("endpoint", r"endpoints?"),
     ("job id", r"job[ _-]?ids?"), ("dry run", r"dry[ _-]?runs?"),

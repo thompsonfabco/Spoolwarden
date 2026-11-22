@@ -1,4 +1,4 @@
-// The Settings section's Backups and restore group (03 10.6). Loaded after setup.js and setup_settings.js; everything from
+// The Settings section's Backups and restore group. Loaded after setup.js and setup_settings.js; everything from
 // the server goes in through textContent. A backup holds every secret of the Hub: listing, downloading and restoring take
 // the setup code (or this computer's trust, as every change does).
 "use strict";
@@ -100,7 +100,7 @@ function backupList(r) {
   return table;
 }
 
-// The backup password (R84 7): typed twice, never shown again; the Hub keeps it where only root reads it. `said(text)` reads the list
+// The backup password: typed twice, never shown again; the Hub keeps it where only root reads it. `said(text)` reads the list
 // again and says the result in the new pane
 function passwordPane(r, said, result) {
   const set = !!r.password_set, res = sbox(), state = h("p", { class: "muted", tabindex: "-1", textContent: bkT(set ? "settings_backups_password_is_set" : "settings_backups_password_none") });
@@ -173,7 +173,7 @@ function unlockRestore(opener) {
     } });
 }
 
-// the typed-word confirm (03 10.11): the summary in short, what a restore does, and for a backup from another machine and for an
+// the typed-word confirm: the summary in short, what a restore does, and for a backup from another machine and for an
 // encrypted one the sentence each needs
 function restoreAsk(s, opener) {
   const para = (text) => h("p", { class: "dialog__text", textContent: text });
@@ -196,7 +196,7 @@ function restoreAsk(s, opener) {
     } });
 }
 
-// Restore: three steps the person goes through (02 8.2)
+// Restore: three steps the person goes through
 function restoreSteps() {
   const rbox = boxFor("restore"), sum = h("div", { class: "settings__summary" }), actions = h("div", { class: "actions" });
   const file = SW.field({ type: "file", label: SW.t("settings_restore_file"), accept: ".zip,.enc,application/zip", attrs: { "aria-required": "false" } });

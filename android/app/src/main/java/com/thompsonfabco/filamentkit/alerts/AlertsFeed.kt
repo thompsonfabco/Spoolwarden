@@ -36,7 +36,7 @@ data class AlertsUi(
 }
 
 /**
- * The app's own reading of the events while it is open (R80 section 4: "one request style for all"): the same
+ * The app's own reading of the events while it is open ("one request style for all"): the same
  * `GET api/events?alert=1`, with `wait=0` and `since_at` a day back for the banners, seven days back for the list.
  * It shows nothing as an Android notification except the test alert the Hub hands out ([onTest]); alerts are
  * the watching service's. [api] is asked at each call, so a re-pair needs no new feed.

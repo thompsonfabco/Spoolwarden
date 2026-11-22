@@ -74,7 +74,7 @@ def test_missing_folder_is_no_files_and_no_sprite(tmp_path, monkeypatch):
 
 
 def test_the_inline_sprite_takes_no_room_on_either_page():
-    """A zero-size inline <svg> still makes a line box (R242): each page's own stylesheet takes it out of the flow
+    """A zero-size inline <svg> still makes a line box: each page's own stylesheet takes it out of the flow
     until the page links components.css (S1.1 for the Hub page, S3.2 for the web app)."""
     rule = re.compile(r"svg\.sprite\s*\{[^}]*position:\s*absolute[^}]*\}")
     for css in (SERVER / "filament_kit" / "setup_static" / "setup.css",):

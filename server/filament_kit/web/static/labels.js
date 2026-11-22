@@ -1,4 +1,4 @@
-// The web app's print page (R85 5.3 and 00:50; 04 5.4, 03 16.5, 02 7.13): the size choice, the labels the Hub draws, the one line about
+// The web app's print page: the size choice, the labels the Hub draws, the one line about
 // the printed address and Print, which opens the browser's own print dialog. The page draws no label of its own: each one is the Hub's
 // `spools/<id>/label.svg`, shown as an image (it runs nothing) and printed as it is. A sheet size lays the labels on the sheet by its own
 // margins and pitches (app.css), 24 or 30 to a page, and states its paper (labels/page.css).
@@ -11,7 +11,7 @@ const ids = root.dataset.ids.split(",").map(Number);
 let size = root.dataset.size;
 const $ = (s) => root.querySelector(s);
 
-// the five sizes (02 7.13): two for a label roll, three for a sheet (`per`: labels to a page)
+// the five sizes: two for a label roll, three for a sheet (`per`: labels to a page)
 const SIZES = [{ value: "62x29" }, { value: "50x30" }, { value: "a4-63x34", per: 24 }, { value: "a4-70x37", per: 24 }, { value: "letter-66x25", per: 30 }];
 const sizeOf = (v) => SIZES.find((s) => s.value === v) || SIZES[0];
 
@@ -45,7 +45,7 @@ const print = $(".labels__print");
 print.textContent = tx("labels_print");
 print.addEventListener("click", () => window.print());
 
-// the demo banner is on every screen, this one too (R85 4.5); it is not printed
+// the demo banner is on every screen, this one too; it is not printed
 if (root.dataset.demo === "1") {
   const leave = SW.btn(tx("demo_leave"), { action: "leave-demo", run: async (e) => {
     const done = await SW.ask({ kind: "destructive", title: tx("demo_leave_title"), text: tx("demo_leave_text"), confirm: tx("demo_leave"), opener: e.currentTarget, run: async () => {
@@ -65,7 +65,7 @@ if (root.dataset.demo === "1") {
 }
 
 let drawn = 0, urls = [];
-// what the preview's text says (02 7.13): the number, the filament, its material and net weight, read from the spool
+// what the preview's text says: the number, the filament, its material and net weight, read from the spool
 function ariaOf(id, v) {
   const name = v && [v.vendor, v.name].filter(Boolean).join(" ");
   if (!name || !v.material || typeof v.net_g !== "number") return tx("labels_aria_plain", { number: id });
@@ -88,7 +88,7 @@ async function one(id) {
   }
   return { id, url: URL.createObjectURL(await r.blob()), label: ariaOf(id, view) };
 }
-function image(g, cls) {                                    // an img with role img and the text of what is on it (02 7.13)
+function image(g, cls) {                                    // an img with role img and the text of what is on it
   const i = el("img", { className: cls, src: g.url, alt: g.label });
   i.setAttribute("role", "img");
   i.setAttribute("aria-label", g.label);
@@ -131,7 +131,7 @@ function follow() {                                         // the paper the bro
   actual.hidden = !sizeOf(size).per;
   if (paper) paper.href = `${base}/labels/page.css?size=${encodeURIComponent(size)}`;
 }
-// the size: a select (five entries are too many for a segmented choice; 03 16.5)
+// the size: a select (five entries are too many for a segmented choice; the design, Hub page)
 const pick = SW.field({ type: "select", label: tx("labels_size"), value: size,
   options: SIZES.map((s) => ({ value: s.value, label: tx("labels_size_" + s.value.replace(/-/g, "_")) })) });
 pick._control.addEventListener("change", () => {

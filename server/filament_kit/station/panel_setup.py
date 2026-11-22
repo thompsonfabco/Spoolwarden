@@ -1,4 +1,4 @@
-"""Setting up the wireless panel (R88 section 4.4): the plain functions under `spoolwarden weigh-station panel-wifi`.
+"""Setting up the wireless panel: the plain functions under `spoolwarden weigh-station panel-wifi`.
 
 Over USB, once, the caller hands in the Wi-Fi name and password and the station's address, port and certificate
 fingerprint; `enable` makes a new token, writes the two set-up lines to the panel, keeps the token in the station's state

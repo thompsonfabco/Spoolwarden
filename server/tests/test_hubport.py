@@ -1,4 +1,4 @@
-"""AF1: the Hub's port (R82 section 1): first-install offer, the taken test, the capability drop-in, the refusals,
+"""AF1: the Hub's port: first-install offer, the taken test, the capability drop-in, the refusals,
 and the port change."""
 import socket
 

@@ -1,4 +1,4 @@
-"""CSV export and import for Hub data and Spoolman files (HD5, docs/design 03 section 2.10).
+"""CSV export and import for Hub data and Spoolman files (HD5, the design, Hub page).
 
 Exports (`export_csv`):
 - `usage` (`days`, `printer`)
@@ -337,7 +337,7 @@ def _export_activity(*, days: float = 30) -> str:
 
 def export_printer_name(name: str, kind: str, serial: str, addresses: tuple[str, ...]) -> str:
     """The printer's name in printers.csv (the kit's, the command line's and the Hub page's export alike): as the owner
-    chose it, or "" when it is an address or the serial (R84 6.2: no address, serial or code). An address is an IP
+    chose it, or "" when it is an address or the serial (no address, serial or code). An address is an IP
     literal, a dotted host name, the printer's own address, or a Klipper name that reads as the host it was added at
     (a Klipper name defaults to the host, which may have changed since): one lower-case DNS label with a dash, such as
     "workshop-voron". A name with a capital ("Ender-3", "Voron") was typed by the owner; a Bambu Lab name never

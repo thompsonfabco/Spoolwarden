@@ -50,7 +50,7 @@ def test_old_rule_main_variant():
     where = {(n, i): loc for n, i, loc in got}
     assert where[("E2E PLA Red", 1)] == where[("E2E PLA Red", 2)] == where[("E2E PLA+ Blue", 1)] == "PLA rack"
     assert where[("E2E Sealed PETG White", 1)] == where[("E2E Sealed PLA Gold", 1)] == "Sealed shelf"
-    # five opened non-PLA spools into three boxes: PETG 01 02, ABS 03, then TPU hits the overflow twice
+    # five opened non-PLA spools into three boxes: PETG the design, foundations, ABS 03, then TPU hits the overflow twice
     assert [where[("E2E PETG Black", 1)], where[("E2E PETG Black", 2)], where[("E2E ABS Grey", 1)]] == \
         ["Dry box 01", "Dry box 02", "Dry box 03"]
     assert where[("E2E TPU Green", 1)] == where[("E2E TPU Green", 2)] == "Overflow bin"

@@ -1,4 +1,4 @@
-"""Spool labels and the short address (RC8, R85 section 5 and contracts 6.1 and 6.2): what a label says, how it is drawn,
+"""Spool labels and the short address (RC8 and contracts 6.1 and 6.2): what a label says, how it is drawn,
 that its QR code reads back as the spool's address at every size, the print page, and the routes' answers."""
 import re
 import xml.etree.ElementTree as ET

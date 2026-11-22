@@ -1,4 +1,4 @@
-"""The Hub page's alerts (03 2.8, 4.2, 10.13, 15): the same answers as the kit routes of api.py, from the same code
+"""The Hub page's alerts: the same answers as the kit routes of api.py, from the same code
 (alerts_api), under /setup/api/. Nothing here decides what an alert says.
 
     GET  events [since|since_at, wait, kinds, limit, alert, client]   alerts_api.events_answer; `client` is the browser's id

@@ -1,4 +1,4 @@
-"""The Hub's port (R82 section 1): which port a first install takes, whether a port is taken, the capability drop-in
+"""The Hub's port: which port a first install takes, whether a port is taken, the capability drop-in
 that lets a unit bind a port below 1024, and the sentences the installer and the port change use.
 
 The code's fallback stays 8710 (`config.DEFAULTS["port"]` is not changed). A first install writes `port` into the config
@@ -16,7 +16,7 @@ import errno
 import socket
 import sys
 
-# ---- the rules the owner may still change (R82 section 12, open points 1, 2 and 5): each is one place
+# ---- the rules the owner may still change (open points 1, 2 and 5): each is one place
 
 # open point 1: Remote access's nginx owns 443, so a Hub on 443 and Remote access cannot share a machine.
 # True: switching Remote access on is refused while the Hub holds 443, and a first install that chooses Remote access
@@ -31,7 +31,7 @@ HTTP_REDIRECT_PORT: int | None = None
 
 NEW_INSTALL_PORT = 443        # what a first install of the Hub takes when it is free
 FALLBACK_PORT = 8710          # what it takes otherwise; also the code's own default (config.DEFAULTS)
-STATION_NEW_INSTALL_PORT = 443    # a new Weigh Station install (R82 section 2 point 2)
+STATION_NEW_INSTALL_PORT = 443    # a new Weigh Station install
 STATION_FALLBACK_PORT = 5003      # the station's code default, and what it takes beside a Hub or when 443 is taken
 LOW_LIMIT = 1024              # below it a unit needs CAP_NET_BIND_SERVICE
 HIGH_LIMIT = 65535
@@ -49,7 +49,7 @@ TEXT_REMOTE_REFUSAL = ("Remote access needs port 443, and the Hub is using it. M
 TEXT_REMOTE_REFUSAL_SHORT = "Remote access needs port 443, and the Hub is using it"   # the command line's Error text
 TEXT_REMOTE_ON_443 = "Remote access is on and uses port 443, so the Hub cannot take it."
 TEXT_REMOTE_FIX = "sudo spoolwarden port 8710"
-# What each paired device needs after a port change. Proof 3 (R82 s10) failed: the Android app tries discovered hosts on
+# What each paired device needs after a port change. Proof 3 failed: the Android app tries discovered hosts on
 # its stored port only (Discovery.hosts() drops the port) and Slicer Sync never browses, so the fallback sentence holds.
 # After AF7 and AF8 land and a phone is seen finding a moved Hub, TEXT_PAIRED_FOUND replaces its first sentence.
 TEXT_PAIRED_FOUND = "Phones and the Slicer Sync PC find the Hub again on your network."
@@ -185,7 +185,7 @@ def offer(remote: bool, *, state=port_state) -> tuple[str, int]:
 
 
 def station_offer(hub_here: bool, *, state=port_state) -> tuple[str, int]:
-    """The same for a new Weigh Station install (R82 section 2 point 2): ("beside", 5003) on a machine that also runs
+    """The same for a new Weigh Station install: ("beside", 5003) on a machine that also runs
     the Hub (443 is the Hub's: no question), ("free", 443), or (kind, 5003 or the next free port above it)."""
     if hub_here:
         return "beside", STATION_FALLBACK_PORT
@@ -215,7 +215,7 @@ def needs_capability(port) -> bool:
 def capability_lines(port) -> str:
     """The two lines that give a unit exactly CAP_NET_BIND_SERVICE (bounding and ambient), or "" for a port of 1024 or
     more. Proven on a real systemd: the unit then binds 443 as its unprivileged user with NoNewPrivileges=yes and
-    the rest of its hardening kept (R82 s10 item 1)."""
+    the rest of its hardening kept."""
     if not needs_capability(port):
         return ""
     return f"CapabilityBoundingSet={CAPABILITY}\nAmbientCapabilities={CAPABILITY}\n"

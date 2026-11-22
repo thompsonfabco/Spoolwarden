@@ -1,4 +1,4 @@
-"""Statexml extensions (R85 section 1, step RC1c follow-up): list files, mode and owner, read-only reads, tag=,
+"""Statexml extensions (step RC1c follow-up): list files, mode and owner, read-only reads, tag=,
 quarantine. The same tests run on the Hub copy and the Slicer Sync copy."""
 import errno
 import json
@@ -44,7 +44,7 @@ def test_a_list_json_is_read_once_moved_and_the_xml_wins(tmp_path):
     assert statexml.read_list(p) == [{"id": "a"}, {"id": "b"}]
     assert (tmp_path / "reads.xml").is_file() and p.is_file() and not list(tmp_path.glob("*.moving"))
     p.write_text(json.dumps([{"id": "stale"}]), encoding="utf-8")        # an older release changed it after a rollback
-    assert statexml.read_list(p) == [{"id": "stale"}]                    # it wins once (R85 1.5, see test_statexml_keepjson)
+    assert statexml.read_list(p) == [{"id": "stale"}]                    # it wins once (see test_statexml_keepjson)
     assert statexml.read_list(p) == [{"id": "stale"}] and statexml.loads_list((tmp_path / "reads.xml").read_bytes(), "reads") == [{"id": "stale"}]
     statexml.write_list(p, [{"id": "new"}])
     assert statexml.read_list(p) == [{"id": "new"}]

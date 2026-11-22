@@ -142,7 +142,7 @@ const unlock = () => SW.setLock("unlocked", { code: "__CODE__" });
 
 @pytest.fixture
 def hub_stub(hub_app):  # noqa: F811
-    """(the stub Hub, the page's address): the real test Hub behind the stub routes of docs 03 section 15."""
+    """(the stub Hub, the page's address): the real test Hub behind the stub routes of docs the design, Hub page."""
     app = StubHub(AsHttps(hub_app[0]))
     running = _serve(app, hub_app[1])
     try:

@@ -1,4 +1,4 @@
-"""AF5 (carry 3): the hello route keeps what a Weigh Station tells the Hub about itself (R82 section 2.3)."""
+"""AF5 (carry 3): the hello route keeps what a Weigh Station tells the Hub about itself."""
 import pytest
 from starlette.testclient import TestClient
 

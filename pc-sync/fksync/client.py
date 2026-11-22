@@ -139,7 +139,7 @@ class _PinnedConnection(http.client.HTTPSConnection):
             raise _Mismatch(actual)
 
 
-CLIENT_HEADER = f"slicer-sync/{__version__}"      # sent on every call: the Hub shows the PC's kind and version in Devices (R83 10.1)
+CLIENT_HEADER = f"slicer-sync/{__version__}"      # sent on every call: the Hub shows the PC's kind and version in Devices
 HUB_PORTS = (443, DEFAULT_PORT)     # a bare host: the web address's own port first, then the Hub's older one
 
 

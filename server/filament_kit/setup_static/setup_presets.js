@@ -1,4 +1,4 @@
-// The Slicer presets section (03 8). Loaded after setup.js; everything from the server goes in through textContent, as there.
+// The Slicer presets section. Loaded after setup.js; everything from the server goes in through textContent, as there.
 // Add or accept only: the one thing here that replaces a preset in a slicer is Accept, and Slicer Sync does that.
 "use strict";
 
@@ -43,7 +43,7 @@ async function accept(box, shown) {
   });
 }
 
-// Set parent: reads the parents Slicer Sync reported for the line's material, then asks in a dialog (03 8.2)
+// Set parent: reads the parents Slicer Sync reported for the line's material, then asks in a dialog
 async function setParent(line, target, box, opener) {
   const name = SW.t("presets_line_title", { vendor: line.vendor, line: line.product });
   working(box, SW.t("common_reading"));
@@ -59,7 +59,7 @@ async function setParent(line, target, box, opener) {
     (values) => ({ parent: values[0], target }), () => say(box, SW.t("presets_parent_saved"), true));
 }
 
-// ----- Download as CSV (R84 6): the file the Hub gives for GET export/lines.csv, unlocked as a file leaves the Hub -----
+// ----- Download as CSV: the file the Hub gives for GET export/lines.csv, unlocked as a file leaves the Hub -----
 // Texts the catalogue does not have yet (only HD2 opens it): the catalogue's own wins once the key is there.
 const PRESETS_STUB = { presets_download_csv: "Download as CSV", presets_csv_failed: "Could not download the file: {reason}" };
 const presetsT = (key, vars) => {
@@ -86,7 +86,7 @@ function presetsHeadMore() {
   return more;
 }
 
-// ----- the section header (02 2.1): a line under the title and the main action at the right -----
+// ----- the section header: a line under the title and the main action at the right -----
 function drawHead(v) {
   if (!v.on) { pageHead(); return; }
   const b = v.build, orca = v.orca_presets;
@@ -132,7 +132,7 @@ function updatesCard(v) {
   return el;
 }
 
-// ----- Product lines: a collection (02 6.1); the parents of a narrow screen are in the row's expansion -----
+// ----- Product lines: a collection; the parents of a narrow screen are in the row's expansion -----
 const sortHead = (col, label) => h("div", { class: "coll__cell", role: "columnheader", "data-col": col, "aria-sort": col === "title" ? "ascending" : undefined },
   h("button", { class: "coll__sort", type: "button", "data-sort": col }, label, SW.icon("chevron", "icon--s")));
 const plainHead = (col, label, prio) => h("div", { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": prio }, label);

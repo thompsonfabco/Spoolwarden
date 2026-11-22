@@ -1,5 +1,5 @@
 /* Features (S2.12) */
-/* the setup choice cards (02 5.7, cards variant): the radio is the card's own marker */
+/* the setup choice cards (the design, components, cards variant): the radio is the card's own marker */
 .segmented--cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(calc(var(--s7) * 5),1fr));gap:var(--s2);padding:0;border:0;margin:0 0 var(--s3)}
 .segmented--cards .segmented__option{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:var(--s1);
   min-height:0;padding:var(--s3);border:var(--hairline) solid var(--border-strong);border-radius:var(--r);white-space:normal;text-align:left}

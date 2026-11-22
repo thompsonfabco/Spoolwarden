@@ -55,7 +55,7 @@ private fun PageHeader(text: String) {
 }
 
 /**
- * The tag screen (05 7.7). A tag linked to a spool replaces this screen with the spool screen ([onLinked]); one linked to
+ * The tag screen. A tag linked to a spool replaces this screen with the spool screen ([onLinked]); one linked to
  * none offers [onLink] and [onAddNew]; a failed lookup says why with Try again.
  */
 @Composable
@@ -79,7 +79,7 @@ fun TagScreen(
         }
         val failure = (ui as? TagUi.Failed)?.failure
         HubNoticeOf(failure, onPairAgain)
-        // the states every Hub screen has (05 3.2)
+        // the states every Hub screen has
         ScreenState(
             loaded = ui is TagUi.NotLinked,
             loading = ui is TagUi.Looking || ui is TagUi.Linked,
@@ -99,7 +99,7 @@ fun TagScreen(
 }
 
 /**
- * Link a tag to a sealed spool, find step (05 7.8): search sealed spools and, optionally, type the weight with the
+ * Link a tag to a sealed spool, find step: search sealed spools and, optionally, type the weight with the
  * spool. A row opens the preview with the typed weight ([onPick] gets the spool and the weight text).
  */
 @Composable
@@ -164,7 +164,7 @@ fun LinkFindScreen(
 }
 
 /**
- * The link preview (05 7.8): the tag and the spool, "Link tag"; or, when the tag is in use, who has it and the button
+ * The link preview: the tag and the spool, "Link tag"; or, when the tag is in use, who has it and the button
  * that moves it. [onBack] returns to the find step; [onDone] runs once the link is written (the spool screen shows it).
  */
 @Composable
@@ -186,7 +186,7 @@ fun LinkPreviewScreen(
     TagPage(modifier) {
         val conflict = ui.conflict
         if (conflict != null) {
-            // 05 7.8 "Tag already in use": the spool that has the tag, then the button that moves it
+            // the design, Android app "Tag already in use": the spool that has the tag, then the button that moves it
             if (ui.other != null) {
                 NoticeCard(NoticeKind.Warn, stringResource(R.string.tag_in_use))
                 SpoolRow(ui.other!!)
@@ -212,7 +212,7 @@ fun LinkPreviewScreen(
         }
         PageHeader(stringResource(R.string.tag_link_title))
         HubNoticeOf(ui.failure, onPairAgain)
-        // the states every Hub screen has (05 3.2)
+        // the states every Hub screen has
         ScreenState(
             loaded = !ui.checking,
             loading = ui.checking,

@@ -1,4 +1,4 @@
-"""RC6: demo mode (R85 section 4): the sample set, the demo's own folder, the inventory behind Spoolman's client, the
+"""RC6: demo mode: the sample set, the demo's own folder, the inventory behind Spoolman's client, the
 pretend printers and the scripted alert, the routes and the command line, and that nothing real is reached."""
 from __future__ import annotations
 

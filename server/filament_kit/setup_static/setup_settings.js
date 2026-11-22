@@ -1,4 +1,4 @@
-// The Settings section (03 10): nine groups in a fixed order, each a form group (02 5.11) with one Save that sends its
+// The Settings section: nine groups in a fixed order, each a form group with one Save that sends its
 // changed keys. Loaded after setup.js; everything from the server goes in through textContent, as there.
 // The section is one region. Its groups read their data once when it opens (settings/general is read once for all of
 // them), and a save reads only its own group again, so what is typed in another group stays. The Backups group is in
@@ -10,7 +10,7 @@ const SET_GROUPS = [
   ["appearance", "settings_group_appearance", "half-circle", groupAppearance, null],
   ["general", "settings_group_general", "settings", groupGeneral, "general"],
   ["storage", "settings_group_storage", "spool", (d) => storageGroup(d), "storage"],
-  ALERTS_GROUP,                                                  // setup_alerts.js: fourth (03 10.1)
+  ALERTS_GROUP,                                                  // setup_alerts.js: fourth
   ["label-reader", "settings_group_label_reader", "camera", groupLabelReader, "general"],
   ["backups", "settings_group_backups", "download", (d) => backupsGroup(d), null],
   ["network", "settings_group_network", "plug", groupNetwork, "general"],
@@ -131,7 +131,7 @@ function setGroup(id, o) {
     head, h("div", { class: "group__body" }, ...o.body), foot);
 }
 
-// ----- saving (02 5.11, N2) -----
+// ----- saving (the design, components, N2) -----
 // The keys that go through settings/general are sent together, one request for the keys of one effect (none, then the
 // ones that restart the Hub, as the Hub page's order is: plain, applies, restarts); `own` names the keys with an
 // endpoint of their own. The shared form group calls this once per changed key, in its order.
@@ -326,7 +326,7 @@ function markDirty() {
   }
 }
 
-// the one-line state of each group, on the phone's list (03 10.1)
+// the one-line state of each group, on the phone's list
 function listState(id) {
   const g = setSeen.g, v = g && g.values, lib = setSeen.lib;
   if (id === "appearance") return SW.t("settings_state_appearance", { mode: SW.t("appearance_" + appearanceNow()),
@@ -353,7 +353,7 @@ function paintList() {
   for (const [id] of SET_GROUPS) { const s = setEl.querySelector(`.settings__row[data-id="${id}"] .settings__state`); if (s) s.textContent = listState(id); }
 }
 
-// ----- the sub-navigation and the address (03 10.1) -----
+// ----- the sub-navigation and the address -----
 function markCurrent(id) {
   if (!setEl) return;
   for (const a of setEl.querySelectorAll(".subnav__link, .settings__row")) { if (a.dataset.id === id) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current"); }
@@ -414,7 +414,7 @@ window.addEventListener("hashchange", () => {
   }
 });
 
-// ----- Appearance (03 10.2): this device, applied at once; Theme for new devices (10.2) has its own button -----
+// ----- Appearance: this device, applied at once; Theme for new devices (10.2) has its own button -----
 function groupAppearance() {
   const res = sbox(), hint = h("p", { class: "field__hint", textContent: SW.t("settings_appearance_mode_hint") });
   const choice = SW.segmented({ legend: SW.t("settings_appearance_mode"), cls: "appearance", name: "appearance-device", value: appearanceNow(),
@@ -425,7 +425,7 @@ function groupAppearance() {
   return setGroup("appearance", { desc: SW.t("settings_appearance_desc"), body: [h("div", { class: "settings__choice" }, choice, hint, res),
     h("div", { class: "settings__choice" }, look, sbox()), setLangChoice(), newDevices()] });
 }
-// Theme for new devices (03 10.2): the Hub's own default, saved with its own button, which needs the setup code
+// Theme for new devices: the Hub's own default, saved with its own button, which needs the setup code
 const NEW_LOOKS = ["console", "workbench", "palette", "panes"];
 function newDevices() {
   let saved = (S.appearance && S.appearance.theme) || "console";
@@ -448,7 +448,7 @@ function newDevices() {
   return h("div", { class: "settings__choice" }, pick, h("div", { class: "actions" }, save), box);
 }
 
-// ----- General (03 10.3) -----
+// ----- General -----
 function groupGeneral({ g }) {
   const v = g.values;
   const fields = [requiredField({ name: "server_name", label: SW.t("settings_general_name"), value: v.server_name == null ? "" : String(v.server_name),
@@ -471,7 +471,7 @@ function groupGeneral({ g }) {
   return el;
 }
 
-// ----- Language (R85 3): the Hub's languages in General, this browser's choice in Appearance, the page's `lang` -----
+// ----- Language: the Hub's languages in General, this browser's choice in Appearance, the page's `lang` -----
 // Reads `languages` ({hub, languages: [{code, name, reviewed, installed, complete}], available: [...], problem?}); English is
 // always there, listed here when the Hub's list leaves it out.
 const SET_LANG_KEY = "spoolwarden.language";
@@ -596,7 +596,7 @@ function setLangChoice() {
       setLangKeep(pick._control.value);
       if (setLangSeen) document.documentElement.lang = setLangPick(setLangSeen);
       const one = have.find((l) => l.code === pick._control.value);
-      SW.announce(setT("settings_language_done", { name: one ? one.name : setT("settings_language_auto") }));       // no visible result: the change is the feedback (03 10.2)
+      SW.announce(setT("settings_language_done", { name: one ? one.name : setT("settings_language_auto") }));       // no visible result: the change is the feedback
     });
     holder.replaceChildren(pick, res);
   };
@@ -605,7 +605,7 @@ function setLangChoice() {
   return holder;
 }
 
-// ----- Label Reader (03 10.5) -----
+// ----- Label Reader -----
 const ORDERS = [["auto", "auto"], ["local-then-cloud", "local_cloud"], ["cloud-then-local", "cloud_local"], ["cloud", "cloud"], ["local", "local"]];
 function groupLabelReader({ g }) {
   const v = g.values, cloud = !!g.ai_intake_on, local = !!g.local_intake_on, hist = g.intake_history || {};
@@ -625,7 +625,7 @@ function groupLabelReader({ g }) {
     keyField = SW.field({ row: true, type: "secret", mono: true, label: SW.t("settings_reader_key_new"), placeholder: SW.t("settings_reader_key_placeholder"),
       attrs: { "aria-required": "false", autocomplete: "new-password" } });
     // the form group sends its fields in the order they stand: a hidden field named `key` at the end of the form stands for
-    // the typed key, so it goes after Records kept (03 10.5) and can be cleared on its own once it was accepted
+    // the typed key, so it goes after Records kept and can be cleared on its own once it was accepted
     keyProxy = SW.field({ name: "key", label: SW.t("settings_reader_key_new"), attrs: { "aria-required": "false" } });
     keyProxy.hidden = true;
     keyField._control.oninput = () => { keyProxy._control.value = keyField._control.value; };
@@ -690,7 +690,7 @@ function readerBadge(into) {
   api("settings/local-intake").then((r) => into.replaceChildren(SW.t("settings_reader_badge_local"), " ", r.ok ? SW.status("ok", { small: true }) : SW.status("needs_look", { small: true }), r.ok ? "" : " " + SW.t("settings_reader_local_down")),
     () => into.replaceChildren(SW.t("settings_reader_badge_local"), " ", SW.status("needs_look", { small: true }), " " + SW.t("settings_reader_local_down")));
 }
-// Test (03 10.5): the saved address without the code; an address typed and not saved after unlocking in place, saved nowhere
+// Test: the saved address without the code; an address typed and not saved after unlocking in place, saved nowhere
 async function testReader(out, fpBox, addr, tier, saved) {
   const url = addr._control.value.trim();
   const formatFp = (fp) => (String(fp || "").replace(/\s+/g, "").match(/.{1,4}/g) || []).join(" ");
@@ -708,7 +708,7 @@ async function testReader(out, fpBox, addr, tier, saved) {
       } catch (e) { if (e.locked) throw e; failed(e); }
     }, () => { SW.result(out, null); fpBox.replaceChildren(); });
   };
-  // a changed certificate (03 10.5, D4): the error with the old and the new fingerprint, each under its label; Trust asks first
+  // a changed certificate (the design, Hub page, D4): the error with the old and the new fingerprint, each under its label; Trust asks first
   // (10.11) and only then sends trust; afterwards the focus goes to Test, as the button goes away with the error
   const fpRows = (r) => [["settings_reader_cert_old", r.pinned], ["settings_reader_cert_new", r.fp]].filter(([, fp]) => fp)
     .map(([key, fp]) => h("div", { class: "settings__fp-row" }, h("span", { class: "muted", textContent: setT(key) }), " ", h("span", { class: "mono settings__fp-code", textContent: formatFp(fp) })));
@@ -784,7 +784,7 @@ function readerInstall(g) {
       set ? SW.btn(SW.t("common_remove"), { cls: "btn--ghost btn--danger", action: "remove-token", run: () => settingAct(tokBox, "local_intake_token/remove", {}, () => loadGroup("label-reader", { quiet: true, fresh: true })) }) : null), tokBox);
 }
 
-// ----- Network and addresses (03 10.7) -----
+// ----- Network and addresses -----
 function waitNewPort(newPort, box, previous) {
   const next = new URL(location.href);
   next.port = newPort;
@@ -858,7 +858,7 @@ function openPortDialog(curPort, remoteOn, opener, portBox) {
     if (h2) h2.textContent = SW.t("port_dialog_title", { port: /^\d+$/.test(raw) ? raw : curPort });
   };
   return SW.ask({
-    kind: "entry",                       // a form dialog: the Port field has the focus, its value selected (07 SR-20, SR-23)
+    kind: "entry",                       // a form dialog: the Port field has the focus, its value selected
     title: SW.t("port_dialog_title", { port: curPort }),
     text: SW.t("port_dialog_body"),
     fields: [portField],
@@ -925,7 +925,7 @@ function remoteBlock(g) {
         text: SW.t("settings_certificate_body"), confirm: SW.t("settings_network_certificate"), opener: e.currentTarget }) })), box, rules);
 }
 
-// ----- Web passphrase (03 10.8) -----
+// ----- Web passphrase -----
 function groupPassphrase() {
   const set = S.passphrase.set, one = SW.field({ row: true, type: "secret", name: "passphrase", label: SW.t("settings_passphrase_new"), hint: SW.t("settings_passphrase_new_hint"),
     attrs: { autocomplete: "new-password", minlength: "12" }, check: (x) => (x.length >= 12 ? null : SW.t("settings_passphrase_new_error", { count: x.length })) });
@@ -943,7 +943,7 @@ function groupPassphrase() {
   return el;
 }
 
-// ----- Filament Catalog (03 10.9) -----
+// ----- Filament Catalog -----
 function openCustomEntriesDialog(opener, onChanged) {
   const id = SW.uid("cat-entries");
   const body = h("div", { class: "settings__cat-dialog-body" });
@@ -1019,7 +1019,7 @@ function openCustomEntriesDialog(opener, onChanged) {
               SW.result(res, "ok", setT("settings_catalog_removed"));
               if (typeof onChanged === "function") onChanged();
               await loadList();
-              // the pressed Remove went with its row: the focus goes to the Remove now in its place, else to Close (07 KEY-7)
+              // the pressed Remove went with its row: the focus goes to the Remove now in its place, else to Close
               const left = body.querySelectorAll('[data-action="remove-local-entry"]');
               (left[Math.min(at, left.length - 1)] || closeBtn).focus();
             }

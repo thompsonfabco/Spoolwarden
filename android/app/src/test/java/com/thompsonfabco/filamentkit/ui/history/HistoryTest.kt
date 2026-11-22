@@ -738,7 +738,7 @@ class HistoryTest {
         assertEquals(before, vm.state.value.record)
     }
 
-    // ---- Download as CSV (R84 6.5) ----
+    // ---- Download as CSV ----
 
     @Test fun downloadAsCsvAsksForTheRecentSetAndHandsTheFileToTheScreen() = runTest(dispatcher) {
         val list = HistoryListViewModel(fake)

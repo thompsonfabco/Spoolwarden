@@ -330,7 +330,7 @@ def _read_json(path: Path):
 
 def _read_state(name: str):
     """library/<name> (current.json, previous.json, last_check.json, rolled_back.json) as its XML form; a file that
-    only exists as JSON is read and moved to XML (R85 section 1)."""
+    only exists as JSON is read and moved to XML."""
     from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
     return statexml.read(_dir() / name, keep_version=True)
 

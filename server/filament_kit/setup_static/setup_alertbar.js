@@ -1,4 +1,4 @@
-// The Hub page's alerts, shared parts (03 2.8): the texts of the alert places (a stub table until the string catalogue holds
+// The Hub page's alerts, shared parts: the texts of the alert places (a stub table until the string catalogue holds
 // them, as web-shared/alerts.js does) and the banner host, mounted once in the page frame. Loaded after setup.js. The banners,
 // the toast with Show, the Alerts list and the browser notifications are SW_ALERTS (web-shared/alerts.js); nothing here writes
 // to the Hub. Everything from the Hub goes in through textContent, as in setup.js.
@@ -32,8 +32,8 @@ const axSize = (n) => {
   return v.toFixed(0) + " B";
 };
 
-// ----- the banner host (03 2.8): mounted once, above the page header and below the "cannot reach the Hub" banner -----
-// An alert's action goes to the page's own addresses (03 1.2): a printer's row by its key, the two places of Overview, Devices.
+// ----- the banner host: mounted once, above the page header and below the "cannot reach the Hub" banner -----
+// An alert's action goes to the page's own addresses: a printer's row by its key, the two places of Overview, Devices.
 const AX_HREF = { "storage-use": "#overview/storage-use", storage: "#overview/storage-use", "running-low": "#overview/running-low", devices: "#devices" };
 const alertHref = (a) => (a.place === "printer" ? "#printers" + (a.id ? "/" + encodeURIComponent(a.id) : "") : AX_HREF[a.place] || null);
 let alertsHost = null;
@@ -44,7 +44,7 @@ function mountAlerts(main) {
   main.prepend(alertsHost);
   // the page's own api(): a refusal or a missing route is a quiet no-alerts; the Hub-not-answering banner stays the page's
   const first = SW_ALERTS.start({ host: alertsHost, interval: 10000, href: alertHref, api: (path) => api(path), onError: () => {} });
-  // a tab that is shown again reads at once (03 2.7); the poll itself keeps its rhythm while hidden, as alerts.js runs it
+  // a tab that is shown again reads at once; the poll itself keeps its rhythm while hidden, as alerts.js runs it
   document.addEventListener("visibilitychange", () => { if (!document.hidden) SW_ALERTS.poll(); });
   return first;
 }

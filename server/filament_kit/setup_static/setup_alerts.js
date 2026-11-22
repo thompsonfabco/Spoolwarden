@@ -1,11 +1,11 @@
-// The Settings section's Alerts group (03 10.13): eight switches, the last-spool-only switch, Running low under, Storage warning
+// The Settings section's Alerts group: eight switches, the last-spool-only switch, Running low under, Storage warning
 // at (one Save, the Hub's alerts.xml) and the part "On this device" (the browser switch kept in this browser, Send a test alert,
 // Recent alerts) that applies at once. Loaded after setup_settings.js and setup_alertbar.js (its texts, axt). It is the pattern of
 // setup_storage.js: loadAlerts() is the group's read, alertsGroup(data) its builder, ALERTS_GROUP its row for SET_GROUPS.
 // Everything from the Hub goes in through textContent.
 "use strict";
 
-// ----- the data: the Hub's own routes (03 15) -----
+// ----- the data: the Hub's own routes -----
 // GET alerts answers {types: [{key, title, on}] (the eight fixed keys), last_spool_only, running_low_g, storage_warn_percent,
 // storage_bad_percent}; POST settings/alerts (code) takes the same fields; POST alerts/test (no code) takes {client}.
 const ALERT_TYPES = ["runout", "paused", "failed", "printer_error", "finished", "storage", "running_low", "device_down"];
@@ -13,12 +13,12 @@ const loadAlerts = () => api("alerts");
 // the group's row of SET_GROUPS: id, catalogue key of the name, icon, builder, the read it needs
 const ALERTS_GROUP = ["alerts", "settings_group_alerts", "warning", (d) => alertsGroup(d), "alerts"];
 const alertsOnCount = (al) => (al.types || []).filter((x) => x.on).length;
-// the phone list's one-line state and the title-row badge (03 10.13)
+// the phone list's one-line state and the title-row badge
 const alertsState = (al) => axt("settings_alerts_summary", { count: alertsOnCount(al) });
 
 const alertsRange = (min, max) => (v) => (/^\d+$/.test(v.trim()) && +v >= min && +v <= max ? null : axt("alerts_error_whole", { low: min, high: max }));
 
-// ----- On this device (03 10.13): applies at once, needs no code, kept in this browser -----
+// ----- On this device: applies at once, needs no code, kept in this browser -----
 function alertsDevice() {
   const N = () => SW_ALERTS.notifications;
   const res = sbox(), note = h("div", { class: "alerts__state", role: "status" });
@@ -49,7 +49,7 @@ function alertsDevice() {
       say(res, axt("settings_alerts_sent"), true);
       SW_ALERTS.poll();                                       // it arrives in the next events answer: ask now, not in 10 s
     } catch (e) {
-      if (e.status === 404 || e.status === 405) test.hidden = true;       // an older Hub: the button is hidden (03 15)
+      if (e.status === 404 || e.status === 405) test.hidden = true;       // an older Hub: the button is hidden
       else say(res, hubText(e.message), false);
     } finally { SW.idle(test); }
   } });

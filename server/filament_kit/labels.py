@@ -1,4 +1,4 @@
-"""Spool labels and the short address (R85 section 5; contracts 6.1 and 6.2; design 02 section 7.13, 03 section 16.5).
+"""Spool labels and the short address (contracts 6.1 and 6.2; design 02 section 7.13, 03 section 16.5).
 
 The Hub draws a label as SVG: the QR code of the spool's short address (`https://<name>.local[:port]/s/<number>`), the
 spool's number large, brand, name, material, a box in the filament's colour with its hex value, the net weight, the lot,
@@ -60,7 +60,7 @@ LETTER = (215.9, 279.4)
 SHEETS = {"a4-63x34": Sheet("A4", A4, 3, 8, 7.25, 12.9, 66.0, 33.9), "a4-70x37": Sheet("A4", A4, 3, 8, 0.0, 0.5, 70.0, 37.0),
           "letter-66x25": Sheet("letter", LETTER, 3, 10, 4.7625, 12.7, 69.85, 25.4)}
 MAX_LABELS = 100            # one request
-MIN_MODULE_MM = 0.4         # the smallest dark square the drawing may have (R85 assumption 6; labels_test holds it)
+MIN_MODULE_MM = 0.4         # the smallest dark square the drawing may have (labels_test holds it)
 PAGE_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; "
             "form-action 'none'; frame-ancestors 'none'")
 PAGE_HEADERS = {"Content-Security-Policy": PAGE_CSP, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
@@ -92,7 +92,7 @@ TEXT_TOO_MANY = "Ask for at most {limit} labels at a time."
 TEXT_SHEET_FULL = "A sheet of this size holds {count} labels. Ask for fewer, or choose another size."
 TEXT_NO_CODE = "The Hub's address is too long for a QR code."
 TEXT_SPOOLMAN_DOWN = "Spoolman is not reachable."
-# the command line's lines (06 section 9.21), for the registry step
+# the command line's lines, for the registry step
 TEXT_CLI_WROTE = "Wrote {count} {noun} ({size}) to {file}."
 TEXT_CLI_NOTE = ("Note: the codes hold this Hub's address ({example}). If the Hub is renamed or moves to another port, old "
                  "labels stop opening from a phone's camera; the Spoolwarden app's scanner still reads them.")

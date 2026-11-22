@@ -1,4 +1,4 @@
-"""The event sink: where the code that changes things reports what happened (R80 E1).
+"""The event sink: where the code that changes things reports what happened.
 
 `inventory.py`, the loading code, the usage code and the watcher never call the event store themselves: they call
 `emit(...)`, which hands the event to the sink in force. In the Hub the sink is the store (`StoreSink`), in the
@@ -8,8 +8,8 @@ event store. A sink never raises into the code that reports to it: an event that
 dropped (a spool change must not fail because its history could not be kept).
 
 Who did it (`actor`) and which request it was part of (`batch`) are set by whoever handles the request, once, with
-`with acting({"type": "page"}): ...`; spool events written inside carry that actor and one `batch` value (R80 E5).
-Without it the actor is the Hub itself. `runs` keeps the `run` value of each printer's print run (R80 E5).
+`with acting({"type": "page"}): ...`; spool events written inside carry that actor and one `batch` value.
+Without it the actor is the Hub itself. `runs` keeps the `run` value of each printer's print run.
 """
 from __future__ import annotations
 
@@ -146,7 +146,7 @@ def set_weight_hook(fn) -> None:
 
 
 def weight_changed(sm) -> None:
-    """A spool's weight was changed by the Hub: check running low right away (R80 section 7). Never raises."""
+    """A spool's weight was changed by the Hub: check running low right away. Never raises."""
     if _weight_hook is not None:
         try:
             _weight_hook(sm)
@@ -253,7 +253,7 @@ def emit_spool(kind: str, spool: dict | None, spool_id=None, *, undo_of: int | N
 
 
 class RunBook:
-    """The `run` value of each printer's print run (R80 E5): made when the first event of the run is written
+    """The `run` value of each printer's print run: made when the first event of the run is written
     (`r-<id the first event gets>`; the guess is the next id, which is the id unless another writer was first by a
     hair, and every event of the run carries the same value either way). The run stays known after it ends, for the
     `usage.recorded` that settles later."""

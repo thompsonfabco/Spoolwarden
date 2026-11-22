@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 /**
- * What this phone keeps for alerts (R80 E4: the switch is stored on the device, the Hub stores nothing about it): the
+ * What this phone keeps for alerts (the switch is stored on the device, the Hub stores nothing about it): the
  * switch "Alerts on this phone", the last event the watching service has seen (with the Hub it belongs to), and the banners this phone dismissed.
  * Its own DataStore, so the pairing's store is never touched.
  */

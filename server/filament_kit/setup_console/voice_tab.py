@@ -1,4 +1,4 @@
-"""The Weigh Station's voice settings (R88 section 2, the rulings of 2026-11-22 01:35 and 01:50): the logic behind the
+"""The Weigh Station's voice settings (the rulings of 2026-11-22 01:35 and 01:50): the logic behind the
 three kit routes (`GET` / `PATCH /api/voice`, `POST /api/voice/test`; api.py only mounts them) and the page's routes.
 
     GET  station/voice                                        the view read, no code: `get_voice`
@@ -135,7 +135,7 @@ def check_values(body, cfg: dict) -> dict:
 
 
 def save_voice(body, *, load=None) -> dict:
-    """The one writer (R88 01:50 point 2): check every field, write voice.xml, hand the values to the station, answer as
+    """The one writer: check every field, write voice.xml, hand the values to the station, answer as
     `get_voice`. Nothing is written when a field is bad. Used by `PATCH /api/voice`, its twin, the page route and the
     command line."""
     cfg = (load or config.load)()

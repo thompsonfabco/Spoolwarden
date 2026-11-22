@@ -718,7 +718,7 @@ def test_calibrated_external_missing_from_the_report_keeps_kind_ext(rig):
     assert loading._address(SERIAL, {"ams": {"ams": []}}, "A9") == (9, 0, None, None)
 
 
-# ---------------------------------------------------------------- events (R80 section 2, E5)
+# ---------------------------------------------------------------- events
 
 @pytest.fixture
 def evstore(tmp_path):

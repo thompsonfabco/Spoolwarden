@@ -290,7 +290,7 @@ def test_a_new_setup_code_keeps_trusted_computers_and_says_so(app, helper, monke
     assert cli.main(["setup-code", "--new", "--yes"]) == 0
     out = capsys.readouterr().out
     assert "The old setup code no longer works." in out
-    # the line wraps at the terminal width (06 6.3); compare the words, and keep the command on one line
+    # the line wraps at the terminal width; compare the words, and keep the command on one line
     assert "Trusted computers stay trusted (1): revoke them in Devices on the setup page, or with sudo spoolwarden setup-code --revoke-trusted." in " ".join(out.split())
     assert any("sudo spoolwarden setup-code --revoke-trusted" in line for line in out.splitlines())
     assert _change(c).status_code == 200 and _change(c, code=CODE).status_code == 403     # cookie yes, old code no
@@ -307,7 +307,7 @@ def test_a_new_setup_code_keeps_trusted_computers_and_says_so(app, helper, monke
 def test_the_page_and_the_guide_say_a_new_code_keeps_trusted_computers():
     from pathlib import Path
     import json
-    # 03 7.6: the card's sentence is in the catalogue (the command line's --revoke-trusted is in the guide)
+    # the design, Hub page: the card's sentence is in the catalogue (the command line's --revoke-trusted is in the guide)
     texts = json.loads((Path(__file__).resolve().parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
     assert "keeps trusted computers trusted" in texts["devices_trusted_explain"]
     guide = (Path(__file__).resolve().parents[2] / "docs" / "user-guide.md").read_text(encoding="utf-8")

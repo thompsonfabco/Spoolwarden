@@ -38,7 +38,7 @@ SETUP_TMPFILES = "/etc/tmpfiles.d/filament-kit-setup.conf"
 SETUP_TMPFILES_TEXT = "d /run/filament-kit-setup 0750 root filament-kit -\n"
 DROPIN = "/etc/systemd/system/filament-kit-station.service.d/kit.conf"
 SPOOLMAN_DROPIN = "/etc/systemd/system/spoolman.service.d/kit.conf"
-# station.page_from (R83 01:14): which addresses the station's unit admits for its page, besides station.allow
+# station.page_from: which addresses the station's unit admits for its page, besides station.allow
 PAGE_FROM = ("home", "subnets", "allowed")
 LOOPBACK_RANGES = ("127.0.0.0/8", "::1/128")
 HOME_RANGES = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "fc00::/7", "fe80::/10",
@@ -173,7 +173,7 @@ def _volume(v) -> int:
 
 
 def _panel_link(st: dict) -> str:
-    """station.panel_link: `usb` or `wifi` (R88 4.4); anything else stops the apply, as a bad page_from does."""
+    """station.panel_link: `usb` or `wifi`; anything else stops the apply, as a bad page_from does."""
     v = st.get("panel_link", "usb")
     if v not in config.PANEL_LINKS:
         raise ModuleError(f"station.panel_link is {v!r}; fix: use one of {', '.join(config.PANEL_LINKS)}")
@@ -475,13 +475,13 @@ def _tty() -> bool:
 
 
 def _guided() -> bool:
-    """Guided Setup was chosen at the installer's first question (R82 section 3): nothing else is asked, and the
+    """Guided Setup was chosen at the installer's first question: nothing else is asked, and the
     install ends with the address and the setup code. install.sh sets FK_GUIDED=1 for this one run."""
     return os.environ.get("FK_GUIDED") == "1"
 
 
 def _can_ask() -> bool:
-    """Can a question be asked: a terminal, and not `--json`, which never asks (06 6.8)."""
+    """Can a question be asked: a terminal, and not `--json`, which never asks."""
     from . import output  # output does not import apply; imported here as cli's imports of apply are
     return _tty() and not output.json_mode()
 

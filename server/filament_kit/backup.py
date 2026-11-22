@@ -70,7 +70,7 @@ class BackupError(Exception):
 
 
 class InDemo(BackupError):
-    """The demo makes and restores no backup (R85 4.3): the message is the demo's "Not in the demo."."""
+    """The demo makes and restores no backup: the message is the demo's "Not in the demo."."""
 
     def __init__(self):
         super().__init__(demo.NOT_IN_DEMO)
@@ -947,7 +947,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
         _stop_kit(run)
         step("Putting the backup in place")
         kept_password = _password_bytes()   # a restore never replaces the Hub's backup password (it is not in the backup)
-        last_event = _last_event_id()       # the ids this Hub has given: the restored store must go on above them (R80 E6)
+        last_event = _last_event_id()       # the ids this Hub has given: the restored store must go on above them
         here = dict(roots())
         folders = {}            # each root folder's owner and mode on this install: the restored one keeps them
         for name, target in here.items():
