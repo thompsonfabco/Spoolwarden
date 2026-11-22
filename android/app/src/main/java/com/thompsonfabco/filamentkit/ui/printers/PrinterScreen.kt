@@ -595,7 +595,7 @@ private fun SlotRow(slot: AmsSlot, onClick: () -> Unit) {
             slot.label, Modifier.width(SpoolwardenTheme.sizes.slotLabel),
             style = SpoolwardenTheme.type.data,
         )
-        ColorSwatch(slot.colorHex.ifBlank { spool?.colorHex }, empty = empty)
+        ColorSwatch(slot.colorHex.ifBlank { spool?.colorHex }, empty = empty && !waiting, waiting = waiting)
         Column(Modifier.weight(1f)) {
             Text(headline, style = MaterialTheme.typography.bodyLarge)
             if (left != null) Text(left, color = colors.muted, style = SpoolwardenTheme.type.dataSmall)
