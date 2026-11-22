@@ -54,15 +54,27 @@ def _check_extra(store: dict, entity: str, extra: Any) -> JSONResponse | None:
     if not isinstance(extra, dict):
         return _err("extra must be an object", 422)
     keys = {f["key"] for f in store["fields"][entity]}
+    types = {f["key"]: f.get("field_type", "text") for f in store["fields"][entity]}
     for k, v in extra.items():
         if k not in keys:
             return _err(f"Unknown extra field {k}", 422)
         try:
             if not isinstance(v, str):
                 raise ValueError
-            json.loads(v)
+            data = json.loads(v)
         except ValueError:
             return _err(f"Extra field {k} value is not a JSON string", 422)
+        # like Spoolman's extra_field_registry.validate_extra_field_value: the decoded value must fit the field type
+        t = types[k]
+        if t == "text" and not isinstance(data, str):
+            return _err(f"Extra field {k}: Value is not a string.", 400)
+        if t == "float" and (isinstance(data, bool) or not isinstance(data, (int, float))):
+            return _err(f"Extra field {k}: Value is not a float.", 400)
+        if t == "datetime":
+            try:
+                datetime.fromisoformat(str(data).replace("Z", "+00:00"))
+            except ValueError:
+                return _err(f"Extra field {k}: Value is not a datetime.", 400)
     return None
 
 

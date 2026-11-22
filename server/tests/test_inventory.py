@@ -934,7 +934,7 @@ def test_prev_location_is_read_with_and_without_since():
     # the new form: prev_location is the plain place exactly as 0.6.x wrote it (json.dumps(home)), the time beside it
     x1 = inventory.prev_extra("Rack 1", SINCE)
     assert x1["prev_location"] == json.dumps("Rack 1") == b5908_prev_text("Rack 1")
-    assert json.loads(x1["prev_since"]) == {"location": "Rack 1", "since": SINCE}
+    assert json.loads(json.loads(x1["prev_since"])) == {"location": "Rack 1", "since": SINCE}
     assert inventory.prev_entry({"extra": x1}) == ("Rack 1", SINCE)
     assert inventory.prev_extra("Rack 1")["prev_location"] == json.dumps("Rack 1")
     assert inventory.prev_entry({"extra": inventory.prev_extra("Rack 1")}) == ("Rack 1", None)
@@ -955,7 +955,7 @@ def test_a_checked_out_spool_stays_readable_by_the_older_release_and_send_back_e
     s = _out(sm, home="Rack 2")
     ex = sm.get(f"spool/{s['id']}")["extra"]
     assert ex["prev_location"] == json.dumps("Rack 2")                       # the old form, untouched by the new data
-    assert json.loads(ex["prev_since"]) == {"location": "Rack 2", "since": SINCE}
+    assert json.loads(json.loads(ex["prev_since"])) == {"location": "Rack 2", "since": SINCE}
     old = {"extra": {"prev_location": ex["prev_location"]}}                  # all the older release looks at
     assert inventory.prev_entry(old) == ("Rack 2", None)
     assert inventory.spool_view({**sm.get(f"spool/{s['id']}"), **old})["checked_out"] is True
@@ -1030,7 +1030,7 @@ def test_a_checked_out_spools_home_can_be_changed(sm, printers):
     d = inventory.edit_spool(sm, s["id"], home="Rack 1", dry=True, rules=RULES)
     ex = sm.get(f"spool/{s['id']}")["extra"]
     assert d["view"]["home"] == "Rack 1" and ex["prev_location"] == json.dumps("Overflow")    # the dry run wrote nothing
-    assert json.loads(ex["prev_since"]) == {"location": "Overflow", "since": SINCE}
+    assert json.loads(json.loads(ex["prev_since"])) == {"location": "Overflow", "since": SINCE}
     with pytest.raises(inventory.SpoolEditError) as e:
         inventory.edit_spool(sm, s["id"], home="Nowhere", dry=False, rules=RULES)
     assert e.value.field == "home"
@@ -1077,7 +1077,7 @@ def test_a_spool_loaded_from_no_place_is_checked_out_with_no_home(sm, printers):
     s = _out_no_home(sm, name="No place")
     got = sm.get(f"spool/{s['id']}")
     assert got["extra"]["prev_location"] == json.dumps("")                   # the old form: empty with no place
-    assert json.loads(got["extra"]["prev_since"]) == {"location": "", "since": SINCE}
+    assert json.loads(json.loads(got["extra"]["prev_since"])) == {"location": "", "since": SINCE}
     v = inventory.spool_view(got)
     assert (v["checked_out"], v["home"], v["checked_out_since"]) == (True, None, SINCE)
     assert inventory.prev_entry(got) == ("", SINCE)
@@ -1117,3 +1117,46 @@ def test_return_of_a_spool_with_no_home_and_no_place_for_it_clears_the_mark_and_
     assert (r["spool"].get("location") or "") == "" and "after_location" not in r["event"]["data"]
     got = sm.get(f"spool/{s['id']}")
     assert inventory.spool_view(got)["checked_out"] is False and inventory.prev_entry(got) == ("", None)
+
+
+# ---------- prev_since is a Spoolman "text" extra: its value must be a JSON string, never an object ----------
+
+@pytest.mark.parametrize("home", ["Rack 1", "", 'He said "hi"', "a|b|c", "Regal üß – 日本", "{\"x\": 1}", "back\\slash"])
+def test_prev_since_round_trips_as_a_json_string(home):
+    ex = inventory.prev_extra(home, SINCE)
+    assert isinstance(json.loads(ex["prev_since"]), str)                      # what Spoolman's text validator demands
+    assert inventory.prev_entry({"extra": ex}) == (home, SINCE)
+    assert inventory.checked_out({"extra": ex})
+
+
+def test_prev_since_old_shapes_still_read():
+    pl = json.dumps("Rack 1")
+    obj = json.dumps({"location": "Rack 1", "since": SINCE})                  # written directly by the broken builds
+    assert inventory.prev_entry({"extra": {"prev_location": pl, "prev_since": obj}}) == ("Rack 1", SINCE)
+    assert inventory.prev_entry({"extra": {"prev_location": pl}}) == ("Rack 1", None)   # 0.6.x: plain prev_location only
+    assert inventory.prev_entry({"extra": {"prev_location": pl, "prev_since": json.dumps("")}}) == ("Rack 1", None)
+    assert inventory.prev_entry({"extra": {"prev_location": pl, "prev_since": json.dumps("not json")}}) == ("Rack 1", None)
+
+
+def test_the_load_patch_passes_a_validating_spoolman(sm, printers):
+    """The fake now validates extra values by the registered type like Spoolman 0.27.0: the load's PATCH is accepted."""
+    s = _out(sm, home="Rack 2")
+    ex = sm.get(f"spool/{s['id']}")["extra"]
+    assert inventory.prev_entry({"extra": ex}) == ("Rack 2", SINCE)
+
+
+def test_every_extra_the_kit_writes_matches_its_registered_type():
+    import datetime
+    types = {k: t for _e, k, t in EXTRA_FIELDS}
+    written = {"nfc_id": json.dumps("04A1"), "box_humidity": json.dumps(38.5), "humidity_checked": json.dumps(inventory._now()),
+               "nozzle_range": json.dumps("190-230"), "bed_range": json.dumps("50-60"), "line": json.dumps("PLA Basic"),
+               **inventory.prev_extra("Rack 1", SINCE)}
+    assert set(written) == set(types)
+    for k, v in [*written.items(), ("prev_since", inventory.prev_extra("")["prev_since"])]:
+        data = json.loads(v)
+        if types[k] == "text":
+            assert isinstance(data, str), k
+        elif types[k] == "float":
+            assert isinstance(data, (int, float)) and not isinstance(data, bool), k
+        elif types[k] == "datetime":
+            assert isinstance(data, str) and datetime.datetime.fromisoformat(data.replace("Z", "+00:00")), k
