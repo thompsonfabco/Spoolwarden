@@ -172,7 +172,9 @@ def test_the_route_list():
 def test_post_demo(env, monkeypatch):
     assert routes.post_demo({"on": "yes"})[0] == 400 and routes.post_demo({})[0] == 400
     monkeypatch.setattr(demo, "real_data", lambda *a: "spools")
-    assert routes.post_demo({"on": True}) == (409, {"error": "not_empty", "message": demo.NOT_EMPTY})
+    assert routes.post_demo({"on": True}) == (409, {"error": demo.NOT_EMPTY, "code": "not_empty"})
+    assert routes.post_demo({"on": 1}) == (400, {"error": routes.BAD_ON, "code": "bad_request"})
+    assert routes.post_leave({})[1] == {"error": "not_in_demo", "message": "The demo is not on."}    # the kit's shape stays
     monkeypatch.setattr(demo, "real_data", lambda *a: None)
     assert routes.post_demo({"on": True}) == (200, {"demo": True})
     assert routes.post_demo({"on": False}) == (200, {"demo": False})
