@@ -498,3 +498,22 @@ def test_tag_not_linked_keeps_the_spool_and_the_retry_sends_it(rig):
     assert rig.step() == "done"
     saves = [c[1] for c in rig.api.calls if c[0] == "save"]
     assert len(saves) == 2 and saves[1] == {"uid": "4:bb:bb", "gross_g": 1098.0, "spool_id": 124}
+
+
+def test_recognise_says_the_hubs_speak_text_when_there_is_one(rig, monkeypatch):
+    real = rig.api.recognize
+
+    def with_speak(jpeg, uid=None):
+        status, r = real(jpeg, uid)
+        return status, {**r, "speak": "Recognised Elegoo P L A Galaxy Blue"}
+    monkeypatch.setattr(rig.api, "recognize", with_speak)
+    nfc.on_tag("4:bb:bb")
+    panel.on_line(b"P H")
+    assert rig.row(1) == "Elegoo PLA Galaxy Blu"  # the screen keeps "PLA"
+    assert rig.said[-1] == "Recognised Elegoo P L A Galaxy Blue. Put it on the scale."
+
+
+def test_an_older_hub_without_speak_is_spoken_from_the_display_lines(rig):
+    nfc.on_tag("4:bb:bb")
+    panel.on_line(b"P H")
+    assert rig.said[-1] == "Recognised Elegoo PLA Galaxy Blue. Put it on the scale."

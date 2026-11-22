@@ -133,7 +133,9 @@ def recognise(seq, nfc_id):
     if status == 200:  # low confidence too: its "?" is in the display, and the save still goes through
         if go("weigh", seq, filament=r.get("item"), display=d):
             beep.beep("hold")
-            speech.say(" ".join(d[:2]) + ". Put it on the scale." if d else "Recognised. Put it on the scale.")
+            # the server's `speak` (the material spelled for the voice); an older Hub sends none: the display lines
+            said = r.get("speak") or " ".join(d[:2])
+            speech.say(said + ". Put it on the scale." if said else "Recognised. Put it on the scale.")
     elif status == 409:  # no recognizer: ai_intake is off
         if go("phone", seq, display=d):
             speech.say("No recognition available. Use the phone.")
