@@ -33,14 +33,16 @@ SENTENCE = "This is the Weigh Station. P L A, 812 grams."  # the one phrase `POS
 
 speech = {"text": None, "opts": None}  # opts: this phrase's own speaker / speed / volume (a test), else the live ones
 speech_ready = threading.Event()
+speech_lock = threading.Lock()  # a phrase's text and its opts are written and read as one pair
 
 
 def say(text, opts=None):
     """Speak text on the panel's speaker; a newer phrase cuts off the one playing. `opts` ({speaker, speed, volume},
     any subset) replaces the live values for this phrase only."""
     if st.voice_value("speech"):
-        speech["opts"] = opts
-        speech["text"] = text
+        with speech_lock:
+            speech["opts"] = opts
+            speech["text"] = text
         speech_ready.set()
 
 
@@ -175,6 +177,12 @@ def speak(text, opts=None):
             wire.panel_send("V %d" % st.voice_value("volume"))
 
 
+def next_phrase():
+    """`(text, opts)` of the phrase `say` left: always one phrase's own pair, never one's text with another's opts."""
+    with speech_lock:
+        return speech["text"], speech["opts"]
+
+
 def speech_loop():
     """Speak each phrase `say` leaves, newest only."""
     if st.voice_value("speech"):
@@ -183,7 +191,7 @@ def speech_loop():
         speech_ready.wait()
         speech_ready.clear()
         try:
-            speak(speech["text"], speech["opts"])
+            speak(*next_phrase())
         except (OSError, subprocess.TimeoutExpired) as e:  # aplay missing or the output hung
             log.warning("speech: %s", e)
 

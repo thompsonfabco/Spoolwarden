@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import sys
+import threading
 import types
 import wave
 
@@ -462,3 +463,25 @@ def test_a_speed_on_the_steps_of_ten_is_taken(hub, speed):
 def test_a_hello_speed_off_the_steps_is_skipped():
     speech.apply_hello({"voice": {"speed": 95, "volume": 10}})
     assert st.live == {"volume": 10}
+
+
+# ---- R594 L5: a phrase's text and its own values are taken as one pair
+
+def test_a_phrase_is_never_read_with_another_phrases_values(monkeypatch):
+    class Racing(dict):
+        """The moment the loop has read the text, a newer phrase (a test, with its own volume) arrives."""
+        fired = False
+
+        def __getitem__(self, key):
+            value = super().__getitem__(key)
+            if key == "text" and not Racing.fired:
+                Racing.fired = True
+                t = threading.Thread(target=speech.say, args=("test sentence", {"volume": 90}))
+                t.start()
+                t.join(0.3)             # with the lock the newer phrase waits until the pair is taken
+            return value
+
+    monkeypatch.setattr(speech, "speech", Racing(text="Cancelled.", opts=None))
+    pair = speech.next_phrase()
+    assert pair == ("Cancelled.", None)
+    assert speech.next_phrase() == ("test sentence", {"volume": 90})
