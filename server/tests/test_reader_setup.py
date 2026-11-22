@@ -129,12 +129,14 @@ def test_home_settings_without_the_certificate_say_so(tmp_path, monkeypatch):
         rs.home_settings()
 
 
-def test_secrets_h_carries_the_hubs_certificate_only_when_given(hub):
+def test_secrets_h_carries_the_hubs_certificate_and_address_only_when_given(hub):
     text = rs.secrets_h("Home", "pw", BASE, TOKEN, KEY, home=rs.home_settings())
     assert f'READER_ROOT_CA R"CERT({hub})CERT"' in text
-    assert "READER_HUB_IP" not in text and "READER_PRINTER" not in text      # FK-SET fields only: the firmware reads no macro
+    assert '#define READER_HUB_IP "192.0.2.7"\n' in text
+    assert "READER_PRINTER" not in text
     plain = rs.secrets_h("Home", "pw", BASE, TOKEN, KEY)
     assert "READER_ROOT_CA" not in plain
+    assert "READER_HUB_IP" not in plain
 
 
 def _usb(sysfs, name, vid, tty, product="USB JTAG/serial debug unit"):

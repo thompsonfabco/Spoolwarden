@@ -82,6 +82,18 @@ def test_the_listing_offers_the_printers_by_name_and_none_with_the_feature_off(a
     assert client(app).get("/setup/api/firmware").json()["printers"] == []
 
 
+def test_the_listing_warns_about_the_certificate_before_flashing(app, home):
+    c = client(app)
+    assert c.get("/setup/api/firmware").json()["tag_reader_warning"] is None
+    (config.paths().etc / "cert.pem").unlink()
+    listing = c.get("/setup/api/firmware")
+    assert listing.status_code == 200
+    refused = post(c, "flash/provision", {})
+    assert refused.status_code == 409
+    assert listing.json()["tag_reader_warning"] == refused.json()["error"]
+    assert "no .local name" in listing.json()["tag_reader_warning"]
+
+
 def test_an_image_is_served_whole_from_the_kit_and_only_to_the_home_network(app):
     for dev in ("printer-station", "intake-panel"):
         r = client(app).get(f"/setup/api/firmware/{dev}.bin")
@@ -211,7 +223,7 @@ def test_all_three_ways_refuse_a_printer_the_hub_does_not_have_with_one_text(app
     # the command line: the pending answers, and the option
     rf.write_pending({**ANSWERS, "port": "/dev/ttyACM1", "printer": "01P00A000000009"})
     capsys.readouterr()
-    assert cli._reader_setup_usb(_args(base=None), _no_ask, _no_ask, run=_run) == 1
+    assert cli._reader_setup_usb(_args(base=None), _no_ask, _no_ask, run=_run) == 2
     assert text in capsys.readouterr().err
     with pytest.raises(rs.SetupError) as e:
         rs.home_settings("x" * 70)                                  # too long for the firmware: the same refusal, not FK-ERR

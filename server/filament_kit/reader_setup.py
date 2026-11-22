@@ -35,6 +35,10 @@ class SetupError(Exception):
     pass
 
 
+class UnknownPrinter(SetupError):
+    pass
+
+
 @dataclass
 class Reader:
     port: str           # /dev/ttyACM0
@@ -94,8 +98,8 @@ def cert_local_name() -> str:
         names = []
     local = [n for n in names if n.endswith(".local") and len(n) > len(".local")]
     if not local:
-        raise SetupError("The Hub's certificate has no .local name, so a Tag Reader could not check it. The certificate "
-                         "is made once, when the Hub is installed, and this version has no command that renews it.")
+        from .cli import _hub_catalogue
+        raise SetupError(_hub_catalogue()["flash_no_local_name"])
     mine = f"{pairing.short_hostname().lower()}.local"
     return mine if mine in local else local[0]
 
@@ -146,7 +150,7 @@ def check_printer(printer: str, cfg: dict | None = None) -> str:
     """`printer` when it is "" (choose on the reader) or one of hub_printers(); SetupError(UNKNOWN_PRINTER) otherwise.
     The one check every way of flashing a reader makes (the browser, the Hub's USB, the command line)."""
     if printer and printer not in [p["id"] for p in hub_printers(cfg)]:
-        raise SetupError(UNKNOWN_PRINTER)
+        raise UnknownPrinter(UNKNOWN_PRINTER)
     return printer
 
 
@@ -181,8 +185,8 @@ def secrets_h(ssid: str, password: str, base: str, token: str, key_pem: str, buz
               home: dict | None = None) -> str:
     """secrets.h for the build. `buzzer_active_low`: the buzzer is a "Buzzer with driver board" (low-triggered); the
     default is a bare, high-triggered buzzer (reader/src/main.cpp, Buzzer). `home`: home_settings() for a reader that calls
-    the Hub at its home address: its root_ca is compiled in (READER_ROOT_CA); hub_ip and printer are FK-SET fields only
-    (the firmware keeps no compiled-in copy). None keeps the base's own (public) certificate."""
+    the Hub at its home address: its root_ca and hub_ip are compiled in; printer is a FK-SET field.
+    None keeps the base's own (public) certificate."""
     if not ssid or len(ssid.encode()) > 32:
         raise SetupError("the Wi-Fi name must be 1 to 32 bytes")
     if len(password.encode()) > 63:
@@ -198,7 +202,9 @@ def secrets_h(ssid: str, password: str, base: str, token: str, key_pem: str, buz
             f"static const char* READER_TOKEN = {c_string(token)};\n"
             f'static const char* OTA_PUBKEY = R"KEY({key_pem})KEY";\n'
             f"#define READER_BUZZER_ACTIVE_LOW {1 if buzzer_active_low else 0}\n"
-            + ("" if not home else f'#define READER_ROOT_CA R"CERT({home["root_ca"]})CERT"\n'))
+            + ("" if not home else
+               f'#define READER_ROOT_CA R"CERT({home["root_ca"]})CERT"\n'
+               f'#define READER_HUB_IP {c_string(home["hub_ip"])}\n'))
 
 
 def write_private(path: Path, text: str) -> None:

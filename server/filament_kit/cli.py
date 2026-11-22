@@ -5306,6 +5306,9 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
         home = None if a.base else rs.home_settings(getattr(a, "printer", None) or "")
         key_pem, real_key = rs.pubkey(Path(a.ota_pubkey).read_text(encoding="utf-8") if a.ota_pubkey else None)
         token = Path(a.token_file).read_text(encoding="utf-8").strip() if a.token_file else None
+    except rs.UnknownPrinter as e:
+        _err_line(str(e))
+        return output.USAGE
     except (rs.SetupError, OSError) as e:
         _err_line(str(e))
         return 1
@@ -5462,6 +5465,9 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         home = None if a.base else rs.home_settings(getattr(a, "printer", None) or "")
         key_pem, real_key = rs.pubkey(Path(a.ota_pubkey).read_text(encoding="utf-8") if a.ota_pubkey else None)
         token = Path(a.token_file).read_text(encoding="utf-8").strip() if a.token_file else None
+    except rs.UnknownPrinter as e:
+        _err_line(str(e))
+        return output.USAGE
     except (rs.SetupError, OSError) as e:
         _err_line(str(e))
         return 1
