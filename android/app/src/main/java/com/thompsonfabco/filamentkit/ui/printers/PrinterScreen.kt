@@ -638,7 +638,7 @@ private fun SlotSheet(
                     Row(horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically) {
                         ColorSwatch(slot.colorHex.ifBlank { spool.colorHex }, empty = false)
                         Column {
-                            Text(PrinterHelp.spoolName(spool), style = MaterialTheme.typography.bodyLarge)
+                            Text(spoolHeadline(PrinterHelp.spoolName(spool)), style = MaterialTheme.typography.bodyLarge)
                             spool.remainingWeight?.let {
                                 Text(
                                     stringResource(R.string.printer_slot_left, it.roundToInt()),
