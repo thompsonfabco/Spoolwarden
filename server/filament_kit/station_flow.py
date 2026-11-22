@@ -23,8 +23,20 @@ import textwrap
 import unicodedata
 
 from . import intake, inventory, spoken, tags
+from .station.page import catalogue_text as _t
 
 log = logging.getLogger(__name__)
+
+# the Weigh Station's texts for a checked-out spool (R88 1.5, 02:05): the string catalogue's, the English as the fallback
+TEXT_RETURNED = _t("station_returned", "Returned")
+TEXT_HOME = _t("station_home", "Home: {home}")
+TEXT_HOME_NONE = _t("station_home_none", "not recorded")
+TEXT_RETURN_TO = _t("station_return_to", "to {location}")
+TEXT_RETURN_LEFT = _t("station_return_left", "{grams} g left")
+TEXT_WOULD_RETURN = _t("station_would_return", "Would return")
+TEXT_NOT_CHECKED_OUT = _t("station_not_checked_out", "Not checked out")
+SAID_RETURNED_TO = _t("station_said_returned_to", "Returned to {location}.")
+SAID_RETURNED = _t("station_said_returned", "Returned.")
 
 # SSD1306 128x64: a bold title row (~16 chars), body rows of 21 chars; the station uses body rows 3-4 itself
 DISPLAY_LINES, TITLE_WIDTH, DISPLAY_WIDTH = 3, 16, 21
@@ -79,9 +91,16 @@ def tag_info(sm, uid: str) -> dict:
         return {"known": False, "uid": uid, "display": lines("New Tag Scanned"),
                 "speak": spoken.speak("New Tag Scanned")}
     v = _spool_view(s)
+    out = inventory.spool_view(s)
+    # a checked-out spool (loaded into a printer, not yet returned) is coming back: the station weighs it and returns it,
+    # or returns it unweighed (R88 1.5); `slot` is the slot's label while the Hub still has the spool there
+    v = {**v, "checked_out": out["checked_out"], "home": out["home"], "slot": (out["loaded"] or {}).get("slot")}
+    speak = spoken.speak(v["name"] or "Spool", v["vendor"], spoken.material(v["material"]), mat=v["material"])
+    if v["checked_out"]:
+        return {"known": True, "uid": uid, "spool": v, "speak": speak,
+                "display": lines(v["name"] or "Spool", TEXT_HOME.format(home=v["home"] or TEXT_HOME_NONE))}
     left = f"{v['remaining_g']:.0f} g left" if isinstance(v["remaining_g"], (int, float)) else ""
-    return {"known": True, "uid": uid, "spool": v,
-            "speak": spoken.speak(v["name"] or "Spool", v["vendor"], spoken.material(v["material"]), mat=v["material"]),
+    return {"known": True, "uid": uid, "spool": v, "speak": speak,
             "display": lines(v["name"] or "Spool", f"{v['vendor'] or ''} {v['material'] or ''}".strip(),
                              f"{left} {v['location'] or ''}".strip())}
 
@@ -145,8 +164,58 @@ def sealed_by_weight(item: dict, gross: float) -> bool:
     return full > 0 and gross >= full - SEALED_TOLERANCE
 
 
-def save(sm, rules: dict, body: dict) -> dict:
-    """The long press: update the tag's spool's weight, or add a new spool and link the tag."""
+def _returner(sm, rules, returner):
+    """The function that sends a spool back: the caller's (the Hub's route, which tells a Klipper printer too), else the
+    inventory's (the Hub's record only)."""
+    return returner or (lambda sid, **kw: inventory.return_spool(sm, sid, rules=rules, **kw))
+
+
+def _not_checked_out() -> FlowError:
+    return FlowError(409, "not_checked_out", inventory.NOT_CHECKED_OUT, [_ascii(TEXT_NOT_CHECKED_OUT)[:TITLE_WIDTH]])
+
+
+def returned_answer(name: str, out: dict, grams=None, dry: bool = False) -> dict:
+    """What the station shows and says after a return: ["Returned", name, "to <location>", "<n> g left"] (a row only when it
+    has something to say: the place the Hub's answer gives, the weight when it was weighed); `location` is None when the
+    rules place the spool nowhere (R88 02:05: then "Returned.")."""
+    where = (out.get("view") or {}).get("location") or None
+    rows = [name or ""]
+    if where:
+        rows.append(TEXT_RETURN_TO.format(location=where))
+    if isinstance(grams, (int, float)) and not isinstance(grams, bool):
+        rows.append(TEXT_RETURN_LEFT.format(grams=f"{grams:.0f}"))
+    title = TEXT_WOULD_RETURN if dry else TEXT_RETURNED
+    return {"location": where, "speak": SAID_RETURNED_TO.format(location=where) if where else SAID_RETURNED,
+            "display": [_ascii(title)[:TITLE_WIDTH], *[_ascii(r)[:DISPLAY_WIDTH] for r in rows]],
+            **({"event_id": out["event_id"]} if out.get("event_id") is not None else {})}
+
+
+def return_spool(sm, rules: dict, body: dict, returner=None) -> dict:
+    """`POST /api/station/return {uid, spool_id}`: a checked-out spool goes back without a weighing (the long press)."""
+    if not isinstance(body, dict):
+        raise FlowError(400, "bad_request", "body must be an object", lines("Bad request"))
+    uid = body.get("uid")
+    if not isinstance(uid, str) or not uid.strip():
+        raise FlowError(400, "bad_request", "uid is required", lines("No tag", "scan a tag first"))
+    sid = body.get("spool_id")
+    if not isinstance(sid, int) or isinstance(sid, bool):
+        raise FlowError(400, "bad_request", "spool_id must be a whole number", lines("Bad request"))
+    uid = tags.normalize_uid(uid)
+    linked = inventory.by_tag(sm, uid)
+    if linked is None or linked["id"] != sid:
+        raise FlowError(409, "tag_mismatch", f"tag {uid} is not linked to spool {sid}", lines("Tag mismatch", "scan again"))
+    if not inventory.checked_out(linked):
+        raise _not_checked_out()
+    try:
+        out = _returner(sm, rules, returner)(sid)
+    except inventory.NotCheckedOut:
+        raise _not_checked_out() from None
+    return {"spool_id": sid, **returned_answer(_spool_view(linked)["name"], out)}
+
+
+def save(sm, rules: dict, body: dict, returner=None) -> dict:
+    """The long press: update the tag's spool's weight, or add a new spool and link the tag. `return: true` (a checked-out
+    spool, R88 1.5) weighs it and then sends it back (409 not_checked_out, before anything is written, if it is not)."""
     if not isinstance(body, dict):
         raise FlowError(400, "bad_request", "body must be an object", lines("Bad request"))
     uid = body.get("uid")
@@ -155,6 +224,9 @@ def save(sm, rules: dict, body: dict) -> dict:
     uid = tags.normalize_uid(uid)
     gross = _number(body.get("gross_g"), "gross_g")
     dry = body.get("dry_run") is True
+    back = body.get("return")
+    if back is not None and not isinstance(back, bool):
+        raise FlowError(400, "bad_request", "return must be true or false", lines("Bad request", "return"))
     if gross <= 0:
         raise FlowError(422, "no_weight", "no weight on the scale", lines("No weight", "put the spool on the scale"))
     linked = inventory.by_tag(sm, uid)
@@ -163,6 +235,8 @@ def save(sm, rules: dict, body: dict) -> dict:
         if linked is not None and linked["id"] != sid:
             raise FlowError(409, "tag_mismatch", f"tag {uid} is not linked to spool {sid}",
                             lines("Tag mismatch", "scan again"))
+        if back and (linked is None or not inventory.checked_out(linked)):
+            raise _not_checked_out()
         sealed_now = False
         if linked is None:
             # the retry after `tag_not_linked`: that save made spool `sid` but its link failed. Link the free tag to
@@ -185,6 +259,13 @@ def save(sm, rules: dict, body: dict) -> dict:
         except ValueError as e:
             raise FlowError(422, "weight_out_of_range", str(e), lines("Weight too low", "check the scale")) from e
         v = _spool_view(s)
+        if back:    # weighed, now sent back: the answer is the return's, with the weight (and the place it went to)
+            try:
+                out = _returner(sm, rules, returner)(sid, grams=v["remaining_g"], dry=dry)
+            except inventory.NotCheckedOut:
+                raise _not_checked_out() from None
+            return {"spool_id": sid, "created": False, "dry": dry, "returned": True, "remaining_g": v["remaining_g"],
+                    **returned_answer(v["name"], out, v["remaining_g"], dry)}
         return {"spool_id": sid, "created": False, "dry": dry, "remaining_g": v["remaining_g"],
                 "location": v["location"], "speak": spoken.speak("Saved" if not dry else "Would save", v["name"], mat=v["material"]),
                 "display": lines("Saved" if not dry else "Would save", v["name"] or "",
