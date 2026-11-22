@@ -150,7 +150,21 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
             if not 0 <= n <= page.MAX_BODY:
                 self._error(413, "too_big")
                 return None
+            self._taken = True
             return self.rfile.read(n)
+
+        def _drain(self):
+            """Read what a refusal left of the request body (at most 64 KiB) before the connection closes: a socket closed with
+            request bytes unread makes Windows send a reset (10054) or an abort (10053) that can destroy the 403 / 404 the caller
+            has not read yet."""
+            if getattr(self, "_taken", False):
+                return
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                if n > 0:
+                    self.rfile.read(min(n, 16 * page.MAX_BODY))
+            except (ValueError, OSError):
+                pass
 
         def _json(self, raw):
             try:
@@ -168,6 +182,13 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
             return origin is None or (host is not None and origin in (f"https://{host}", f"http://{host}"))
 
         def do_POST(self):
+            self._taken = False
+            try:
+                self._post()
+            finally:
+                self._drain()
+
+        def _post(self):
             path = self.path.split("?")[0]
             caller = self._caller()
             if not guard.allowed(caller, "POST", path, self._session()):

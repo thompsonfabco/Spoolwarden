@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import socket
+import time
 
 import pytest
 
@@ -130,6 +131,40 @@ def test_anything_else_is_403_for_a_home_address_and_404_for_the_allow_list(stat
     status, d, _ = with_session.json("POST", "/state", {}, cookie)               # a read route takes no POST from a session
     assert status == 403
     refusal_ok(d)
+
+
+def refused_with_a_late_body(station, path, body, cookie=None):
+    """POST `path` the way a slow caller does: the headers first, the body only after the station has answered. The status line
+    and body must still be readable to the end: a station that closed with the body unread would get a reset (Windows: 10054, or
+    10053 under load) that destroys the answer."""
+    head = f"POST {path} HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: {len(body)}\r\n"
+    with socket.create_connection(("127.0.0.1", station.port), timeout=10) as c:
+        c.sendall((head + (f"Cookie: {cookie}\r\n" if cookie else "") + "\r\n").encode())
+        time.sleep(0.3)
+        c.sendall(body)
+        time.sleep(0.1)
+        got = b""
+        while chunk := c.recv(65536):
+            got += chunk
+    status = int(got.split(b" ", 2)[1])
+    return status, json.loads(got.split(b"\r\n\r\n", 1)[1])
+
+
+def test_a_refusal_is_readable_when_the_body_arrives_after_the_answer(stations):
+    listed, home = stations({"127.0.0.1"}, "l"), stations(set(), "h")
+    for _ in range(3):
+        status, d = refused_with_a_late_body(home, "/nope", b"{}")                    # the guard refuses before the route is known
+        assert status == 403
+        refusal_ok(d)
+        status, d = refused_with_a_late_body(listed, "/nope", b"{}")                  # the allow-list: no such route
+        assert status == 404
+        refusal_ok(d)
+        status, d = refused_with_a_late_body(home, "/settings", b"x" * (page.MAX_BODY + 1))   # too big to take, still read to the end
+        assert status == 403
+        refusal_ok(d)
+        status, d = refused_with_a_late_body(listed, "/session", b"x" * (page.MAX_BODY + 1))
+        assert status == 413
+        refusal_ok(d)
 
 
 def test_every_error_the_station_gives_has_error_and_message(stations):
