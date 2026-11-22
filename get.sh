@@ -225,7 +225,7 @@ NOT_IN_DEMO = "Not in the demo."      # the same sentence as filament_kit.demo.N
 
 
 def _demo_on() -> bool:
-    """The Hub's demo is on while <state>/demo/demo.xml is a file (not a link); the demo downloads nothing."""
+    """The Hub's demo is on while <state>/demo/demo.xml is a file (not a link): the demo downloads nothing."""
     marker = Path(os.environ.get("FK_STATE", "/var/lib/filament-kit")) / "demo" / "demo.xml"
     try:
         return marker.is_file() and not marker.is_symlink()
