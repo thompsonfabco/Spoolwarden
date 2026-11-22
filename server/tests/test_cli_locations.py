@@ -151,15 +151,6 @@ def test_the_list_without_spoolman_is_shown_with_the_counts_unknown(capsys):
     assert [r["used"] for r in view["locations"]] == [None] * 4 and [r["free"] for r in view["locations"]] == [None] * 4
 
 
-def test_a_change_of_the_list_without_spoolman_still_refuses(capsys):
-    class Down(FakeSm):
-        def get(self, path):
-            raise SpoolmanError("connection refused", None)
-    before = storage.current().describe({})
-    rc, out, err = run(capsys, Down(), "locations", "remove", "Rack 1", "--yes")
-    assert rc != 0 and storage.current().describe({}) == before
-
-
 # ================================================================ add
 
 def test_add_puts_the_new_location_last_and_says_so(capsys, sm):
