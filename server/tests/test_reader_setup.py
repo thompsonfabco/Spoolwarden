@@ -402,11 +402,15 @@ def test_out_never_replaces_a_path_that_is_not_the_callers_file(tmp_path):
 def test_setup_refuses_an_out_path_it_must_not_replace(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     monkeypatch.setattr(rs, "owner", lambda: rs.Owner("someone", os.getuid() + 1, os.getgid(), tmp_path))
-    victim = tmp_path / "hosts"
-    victim.write_text("127.0.0.1 localhost\n")
-    assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 1
-    assert victim.read_text() == "127.0.0.1 localhost\n" and reader_tokens.TokenStore().list() == []
-    assert "not a file of yours" in capsys.readouterr().err
+    for pad in range(40):       # the error is wrapped at 80 columns: a path of any length may split the words, so the folder's name grows
+        victim = tmp_path / ("d" * pad) / "hosts"
+        victim.parent.mkdir(exist_ok=True)
+        victim.write_text("127.0.0.1 localhost\n")
+        assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 1
+        assert victim.read_text() == "127.0.0.1 localhost\n" and reader_tokens.TokenStore().list() == []
+        err = capsys.readouterr().err
+        assert "not a file of yours" in " ".join(err.split())      # on one line or two
+        assert str(victim) in err                                  # the path is never cut by the wrapping (06 6.3: breaks only at spaces)
 
 
 # ---------- the buzzer's trigger (reader/src/main.cpp: no line in secrets.h = the older low-triggered module) ----------

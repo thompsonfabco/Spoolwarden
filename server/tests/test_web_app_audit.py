@@ -1624,6 +1624,7 @@ SP_READY = {
   await until('the remaining', () => reason(button('Save weight')) === null);
   button('Save weight').click();
   await until('saved', () => out('Weight updated: 812 g left.'));
+  await until('the toast', () => text('.toasts').includes('Weight updated: 812 g left.'));        // after the result line: the page first asks the Hub whether Undo can be offered, and under load that answer is late
   need('the summary follows and the form is closed', text('.spools__sum-text').includes('812 g left') && $('.spools__form').hidden && text('.toasts').includes('Weight updated: 812 g left.'));
 """,
     "sheet_weight_refused": r"""
