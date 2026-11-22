@@ -1054,6 +1054,15 @@ internal class FakeIntakeApi : IntakeApi {
 
     override suspend fun vendors(): List<VendorChoice> = vendorList
 
+    /** What Share corrections says (null: a Hub that has none); [shareFailure] makes the question fail. */
+    var share: com.thompsonfabco.filamentkit.net.ShareState? = null
+    var shareFailure: Exception? = null
+
+    override suspend fun shareCorrections(): com.thompsonfabco.filamentkit.net.ShareState? {
+        shareFailure?.let { throw it }
+        return share
+    }
+
     /** The total the Hub reports for the picker (null: as many as the list holds). */
     var filamentTotal: Int? = null
 

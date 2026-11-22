@@ -117,6 +117,7 @@ import com.thompsonfabco.filamentkit.nav.PrinterSettingsRoute
 import com.thompsonfabco.filamentkit.nav.PrintersGraph
 import com.thompsonfabco.filamentkit.nav.PrintersRoute
 import com.thompsonfabco.filamentkit.nav.RecentGraph
+import com.thompsonfabco.filamentkit.nav.RecentCorrectionsRoute
 import com.thompsonfabco.filamentkit.nav.RecentRoute
 import com.thompsonfabco.filamentkit.nav.RecordEditRoute
 import com.thompsonfabco.filamentkit.nav.RecordPhotoRoute
@@ -210,6 +211,8 @@ import android.view.accessibility.AccessibilityManager
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
 import com.thompsonfabco.filamentkit.ui.history.HistoryEditEntry
+import com.thompsonfabco.filamentkit.ui.history.CorrectionsEntry
+import com.thompsonfabco.filamentkit.ui.history.CorrectionsTexts
 import com.thompsonfabco.filamentkit.ui.history.HistoryListEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryPhotoEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
@@ -1350,6 +1353,7 @@ internal fun FilamentKitApp(
                         HistoryListEntry(
                             ::currentApi, a,
                             onOpen = { nav.navigate(RecordRoute(it)) },
+                            onOpenCorrections = { nav.navigate(RecentCorrectionsRoute) },
                             onPairAgain = app.router::pairAgain,
                             recordDetail = { hid, embedded, onClose ->
                                 HistoryRecordEntry(
@@ -1363,11 +1367,30 @@ internal fun FilamentKitApp(
                                         SpoolCache.put(spool)
                                         nav.navigate(SpoolRoute(spool.id))
                                     },
+                                    onOpenCorrections = { nav.navigate(RecentCorrectionsRoute) },
                                     onPairAgain = app.router::pairAgain,
                                     embedded = embedded,
                                 )
                             },
                             onSummary = { sectionSummaries = sectionSummaries + (Tab.Recent to it) },
+                        )
+                    }
+
+                    composable<RecentCorrectionsRoute> {
+                        val a = api
+                        if (a == null) {
+                            HubNoticePage(::pushPairing)
+                            return@composable
+                        }
+                        CorrectionsEntry(
+                            ::currentApi, a,
+                            onOpenRecord = { hid -> nav.navigate(RecordRoute(hid)) },
+                            // the viewer opens over the record, which keeps the photos' owner on the back stack
+                            onOpenPhoto = { hid, n ->
+                                nav.navigate(RecordRoute(hid))
+                                nav.navigate(RecordPhotoRoute(hid, n))
+                            },
+                            onPairAgain = app.router::pairAgain,
                         )
                     }
 
@@ -1390,6 +1413,7 @@ internal fun FilamentKitApp(
                                 SpoolCache.put(spool)
                                 nav.navigate(SpoolRoute(spool.id))
                             },
+                            onOpenCorrections = { nav.navigate(RecentCorrectionsRoute) },
                             onPairAgain = app.router::pairAgain,
                         )
                     }
@@ -1549,6 +1573,7 @@ private fun placeTitle(destination: NavDestination?, entry: NavBackStackEntry?, 
             return SpoolCache.title(id) ?: stringResource(R.string.spool_title, id.toString())
         }
         entry != null && tagUidOf(entry) != null -> return stringResource(R.string.common_tag, tagUidOf(entry).orEmpty())
+        destination?.hasRoute(RecentCorrectionsRoute::class) == true -> return CorrectionsTexts.TITLE
     }
     return stringResource(
     when {
