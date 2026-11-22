@@ -23,6 +23,11 @@ object PrinterTexts {
     const val GUIDE_FOUND = "Found on your network"
     const val GUIDE_NONE = "None found. Type its address in the next step."
     const val GUIDE_BY_ADDRESS = "Type its address"
+
+    /** EV7d: the Klipper test before an add. [address] is "host:port". Reuses the Hub's texts (address_texts.py). */
+    fun klipperNotReached(address: String): String = "The Hub could not reach a Klipper printer at $address."
+    const val TRY_AGAIN = "Try again"
+    const val ADD_ANYWAY = "Add anyway"
     const val MAP_TITLE = "Map its slots now?"
     const val MAP_BODY = "Mapping tells the Hub which slot is which. Nothing heats or moves."
     const val MAP_NOW = "Map slots"

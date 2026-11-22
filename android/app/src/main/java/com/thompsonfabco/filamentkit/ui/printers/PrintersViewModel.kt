@@ -28,7 +28,8 @@ import kotlinx.serialization.json.jsonPrimitive
 sealed interface Problem {
     data object Unreachable : Problem
     data object Unexpected : Problem
-    data class HubSaid(val text: String) : Problem
+    /** [field] is the form field the Hub names (`address`, `port`, `api_key`, ...), highlighted by the form. */
+    data class HubSaid(val text: String, val field: String? = null) : Problem
 
     /** The Hub's [module] (`klipper` or `bambu`) is switched off. */
     data class FeatureOff(val module: String) : Problem
@@ -48,7 +49,7 @@ internal fun problemOf(e: ApiError): Problem = when (e.code) {
     "offline", "local_network" -> Problem.Unreachable
     "bad_response" -> Problem.Unexpected
     "module_off" -> Problem.FeatureOff(e.extra["module"]?.jsonPrimitive?.contentOrNull.orEmpty())
-    else -> Problem.HubSaid(e.message)
+    else -> Problem.HubSaid(e.message, e.extra["field"]?.jsonPrimitive?.contentOrNull)
 }
 
 /**
@@ -80,10 +81,8 @@ data class KlipperDialog(
     val addressMissing: Boolean = false,
     val portInvalid: Boolean = false,
     val problem: Problem? = null,
-    /** The printer is added but its API key was refused: the form stays for the key only. */
-    val createdId: String? = null,
-    val createdName: String = "",
-    val keyProblem: Problem? = null,
+    /** The Hub's test found no printer at this address (`host:port`): the notice offers Try again and Add anyway. */
+    val notReached: String? = null,
     val guided: Boolean = false,
 )
 
@@ -251,61 +250,53 @@ class PrintersViewModel(
         val k = _state.value.klipper
         if (k?.busy == true) return
         _state.update { it.copy(klipper = null) }
-        // a printer that is already added cannot be taken back to the guide: the list is read again instead
-        if (k?.guided == true && k.createdId == null) openGuide() else if (k?.createdId != null) refresh()
+        if (k?.guided == true) openGuide()
     }
 
     /**
-     * Adds a Klipper printer by its Moonraker address; [port] is the form's text, blank meaning the default 7125. The
-     * Hub's add route takes no API key, so a typed [apiKey] is set on the new printer right after.
+     * "Add printer" on the Klipper form: the Hub tests the address first (nothing saved) and the printer is added only
+     * when one answers. [port] is the form's text, blank meaning the default 7125. A test that finds nothing leaves
+     * [KlipperDialog.notReached] for the form's Try again and Add anyway (R87 section 1).
      */
-    fun submitAddKlipper(host: String, port: String, name: String, apiKey: String = "") {
+    fun submitAddKlipper(host: String, port: String, name: String, apiKey: String = "") = startAddKlipper(host, port, name, apiKey, test = true)
+
+    /** "Add anyway": the add itself, without the test. */
+    fun addKlipperAnyway(host: String, port: String, name: String, apiKey: String = "") = startAddKlipper(host, port, name, apiKey, test = false)
+
+    private fun startAddKlipper(host: String, port: String, name: String, apiKey: String, test: Boolean) {
         val d = _state.value.klipper ?: return
         if (d.busy) return
-        val key = apiKey.trim()
+        val key = apiKey.trim().ifEmpty { null }
         val address = host.trim()
         val portNumber = port.trim().ifEmpty { DEFAULT_KLIPPER_PORT.toString() }.toIntOrNull()?.takeIf { it in 1..65535 }
-        // once the printer is added only its key is left to set, so the address and port are no longer checked
-        if (d.createdId == null && (address.isEmpty() || portNumber == null)) {
+        if (address.isEmpty() || portNumber == null) {
             _state.update {
-                it.copy(klipper = d.copy(addressMissing = address.isEmpty(), portInvalid = portNumber == null, problem = null))
+                it.copy(klipper = d.copy(addressMissing = address.isEmpty(), portInvalid = portNumber == null, problem = null, notReached = null))
             }
             return
         }
         _state.update {
-            it.copy(
-                klipper = d.copy(busy = true, addressMissing = false, portInvalid = false, problem = null, keyProblem = null),
-            )
+            it.copy(klipper = d.copy(busy = true, addressMissing = false, portInvalid = false, problem = null, notReached = null))
         }
         viewModelScope.launch {
             guard(onError = { p -> _state.update { s -> s.copy(klipper = s.klipper?.copy(busy = false, problem = p)) } }) {
-                val id: String
-                val shown: String
-                if (d.createdId != null) {
-                    id = d.createdId
-                    shown = d.createdName
-                } else {
-                    val p = backend.addKlipperPrinter(address, portNumber!!, name.trim().ifBlank { null })
-                    id = p.id
-                    shown = p.name
-                    settleLater()
-                    _state.update { it.copy(klipper = it.klipper?.copy(createdId = p.id, createdName = p.name)) }
+                if (test && !reached(address, portNumber, key)) {
+                    _state.update { it.copy(klipper = it.klipper?.copy(busy = false, notReached = "$address:$portNumber")) }
+                    return@guard
                 }
-                if (key.isNotEmpty()) {
-                    try {
-                        backend.setApiKey(id, key)
-                    } catch (e: ApiError) {
-                        if (e.code == "unauthorized") throw e
-                        // the printer exists now: the form stays for the key, with the Hub's reason under it
-                        _state.update { it.copy(klipper = it.klipper?.copy(busy = false, keyProblem = problemOf(e))) }
-                        load()
-                        return@guard
-                    }
-                }
-                _state.update { it.copy(klipper = null, added = shown, mapOffer = MapOffer(id, shown)) }
+                val p = backend.addKlipperPrinter(address, portNumber, name.trim().ifBlank { null }, key)
+                settleLater()
+                _state.update { it.copy(klipper = null, added = p.name, mapOffer = MapOffer(p.id, p.name)) }
                 load()
             }
         }
+    }
+
+    /** The Hub's test; a Hub without the route (404) is taken as "answers", so the add goes on as it did before. */
+    private suspend fun reached(address: String, port: Int, key: String?): Boolean = try {
+        backend.testKlipperPrinter(address, port, key)
+    } catch (e: ApiError) {
+        if (e.code == "not_found") true else throw e
     }
 
     /** The Hub's first connection to a new printer takes a moment: the list is read again once it has settled. */

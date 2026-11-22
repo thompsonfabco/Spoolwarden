@@ -613,8 +613,10 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
     var port by remember(d.host, d.port) { mutableStateOf(d.port.toString()) }
     var name by remember(d.host, d.port) { mutableStateOf("") }
     var key by remember(d.host, d.port) { mutableStateOf("") }
-    // once the printer is added only the key is left to set
-    val fixed = d.busy || d.createdId != null
+    val fixed = d.busy
+    // a refusal that names a field is shown under that field, not as a notice
+    val field = (d.problem as? Problem.HubSaid)?.field?.takeIf { it in setOf("host", "address", "port", "api_key") }
+    val fieldText = d.problem?.takeIf { field != null }?.let { problemText(it) }
     SwDialog(
         title = stringResource(R.string.common_add_klipper_printer),
         onClose = { if (!d.busy) viewModel.cancelAddKlipper() },
@@ -625,7 +627,7 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
             busy = d.busy,
         ),
         cancel = SwAction(
-            stringResource(if (d.guided && d.createdId == null) R.string.common_back else R.string.common_cancel),
+            stringResource(if (d.guided) R.string.common_back else R.string.common_cancel),
             viewModel::cancelAddKlipper,
         ),
         cancelEnabled = !d.busy,
@@ -633,20 +635,29 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
         FormField(
             host, { host = it }, stringResource(R.string.common_address), enabled = !fixed, mono = true,
             placeholder = stringResource(R.string.printer_klipper_address_placeholder), keyboard = KeyboardType.Uri,
-            error = if (d.addressMissing) stringResource(R.string.common_error_address) else null,
+            error = if (d.addressMissing) stringResource(R.string.common_error_address) else if (field == "host" || field == "address") fieldText else null,
         )
         FormField(
             port, { port = it }, stringResource(R.string.printer_field_port), enabled = !fixed, mono = true,
             keyboard = KeyboardType.Number,
-            error = if (d.portInvalid) stringResource(R.string.common_error_port) else null,
+            error = if (d.portInvalid) stringResource(R.string.common_error_port) else if (field == "port") fieldText else null,
         )
         FormField(name, { name = it }, stringResource(R.string.common_field_name_optional), enabled = !fixed)
         FormField(
             key, { key = it }, stringResource(R.string.printers_key_optional), secret = true,
             enabled = !d.busy, hint = stringResource(R.string.printer_moonraker_key_hint),
-            error = d.keyProblem?.let { problemText(it) },
+            error = if (field == "api_key") fieldText else null,
         )
-        d.problem?.let { ProblemNotice(it, onPairAgain) }
+        d.notReached?.let {
+            NoticeCard(
+                NoticeKind.Bad, PrinterTexts.klipperNotReached(it),
+                actions = listOf(
+                    SwAction(PrinterTexts.TRY_AGAIN) { viewModel.submitAddKlipper(host, port, name, key) },
+                    SwAction(PrinterTexts.ADD_ANYWAY) { viewModel.addKlipperAnyway(host, port, name, key) },
+                ),
+            )
+        }
+        if (field == null) d.problem?.let { ProblemNotice(it, onPairAgain) }
         if (d.busy) BusyReason(R.string.common_busy_wait)
     }
 }

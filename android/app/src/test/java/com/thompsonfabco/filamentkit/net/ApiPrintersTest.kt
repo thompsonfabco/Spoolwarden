@@ -187,6 +187,38 @@ class ApiPrintersTest {
         assertEquals("port must be between 1 and 65535", e.message)
     }
 
+    @Test fun addKlipperPrinterSendsTheApiKeyWhenGiven() = runBlocking {
+        json("""{"printer":$printerJson}""")
+        api.addKlipperPrinter("printer.example.com", 7125, null, "s3cret")
+        assertEquals("s3cret", take().bodyJson()["api_key"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun testKlipperPrinterPostsToTheTestRouteAndReadsReachable() = runBlocking {
+        json("""{"reachable":true}""")
+        assertTrue(api.testKlipperPrinter("printer.example.com", 7126, "s3cret"))
+        val r = take()
+        assertEquals("POST", r.method)
+        assertEquals("/api/printers/test", r.url.encodedPath)
+        val b = r.bodyJson()
+        assertEquals("klipper", b["family"]!!.jsonPrimitive.content)
+        assertEquals("printer.example.com", b["host"]!!.jsonPrimitive.content)
+        assertEquals(7126, b["port"]!!.jsonPrimitive.int)
+        assertEquals("s3cret", b["api_key"]!!.jsonPrimitive.content)
+        json("""{"reachable":false}""")
+        assertFalse(api.testKlipperPrinter("192.0.2.10", 7125, " "))
+        assertFalse(take().bodyJson().containsKey("api_key"))
+    }
+
+    @Test fun testKlipperPrinterMapsARefusalAndAnUnreadableAnswer() {
+        json("""{"error":"bad_request","message":"That address is not valid","field":"host"}""", 400)
+        val e = failure { api.testKlipperPrinter("bad host", 7125, null) }
+        assertEquals(400, e.status)
+        assertEquals("That address is not valid", e.message)
+        assertEquals("host", e.extra["field"]!!.jsonPrimitive.content)
+        json("""{"ok":true}""")
+        assertEquals(ApiError.BAD_RESPONSE, failure { api.testKlipperPrinter("192.0.2.10", 7125, null) }.code)
+    }
+
     @Test fun printerDetailDecodesFullStatus()= runBlocking {
         json("""{"printer":$printerJson,"status":{"gcode_state":"RUNNING","stage":"Printing","job":"Benchy",
             "percent":42,"layer":12,"total_layers":200,"remaining_min":31,"eta":"2026-11-01T14:10-05:00",
