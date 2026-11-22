@@ -360,6 +360,8 @@ async function refresh(at, sent) {
   hubVersion.replaceChildren(SW.h("span", { class: "sr", text: SW.t("topbar_version_prefix") }), S.version);
   SW.configure({ hub: S.server_name, noCode: !S.code_set });
   hubReadHistorySummaries();
+  window.startDemoBar(S.demo === true, page.parentElement);    // setup_start.js: the demo banner with Leave demo on every section (R85 4.5)
+  setLangApply();                                       // setup_settings.js: the page's `lang`, from the Language choice (R85 3.11)
   if (!at) render();
   else if (r && r.isConnected) {
     const also = r._make.also && [...sections.children].find((x) => x._make === r._make.also);

@@ -49,6 +49,22 @@ const SET_STUB = {
   settings_catalog_remove_body: "This custom entry is removed from the catalog and slicer presets will be rebuilt.",
   settings_catalog_removed: "Removed.",
   settings_catalog_entries_error: "Could not load custom entries.",
+  settings_language_title: "Language",
+  settings_language_hub_hint: "The Hub's language. Each browser can choose its own in Appearance.",
+  settings_language_in_use: "In use",
+  settings_language_use: "Use for the Hub",
+  settings_language_remove: "Remove",
+  settings_language_machine: "{name} (machine-translated)",
+  settings_language_complete: "{percent} % translated",
+  settings_language_more: "Get more languages",
+  settings_language_get: "Get",
+  settings_language_none_more: "No more languages are on offer.",
+  settings_language_error: "Could not read the languages.",
+  settings_language_remove_title: "Remove {name}?",
+  settings_language_remove_text: "Its texts are deleted from the Hub.",
+  settings_language_device: "Language",
+  settings_language_auto: "Automatic",
+  settings_language_device_hint: "Automatic is this browser's language if the Hub has it, else the Hub's language. Kept in this browser.",
 };
 const setT = (key, vars) => {
   const got = SW.t(key, vars);
@@ -394,7 +410,7 @@ function groupAppearance() {
   const look = SW.themePicker({ legend: true });    // built from the root's data-look each time, so a redraw keeps the choice
   look.addEventListener("change", () => setTimeout(paintList, 0));
   return setGroup("appearance", { desc: SW.t("settings_appearance_desc"), body: [h("div", { class: "settings__choice" }, choice, hint, res),
-    h("div", { class: "settings__choice" }, look, sbox()), newDevices()] });
+    h("div", { class: "settings__choice" }, look, sbox()), setLangChoice(), newDevices()] });
 }
 // Theme for new devices (03 10.2): the Hub's own default, saved with its own button, which needs the setup code
 const NEW_LOOKS = ["console", "workbench", "palette", "panes"];
@@ -426,6 +442,7 @@ function groupGeneral({ g }) {
     check: (x) => (x.trim() ? null : SW.t("settings_general_name_required")) })];
   if (g.spoolman_external) fields.push(plainField({ name: "spoolman", label: SW.t("settings_general_spoolman"), mono: true, value: g.spoolman_url || "",
     placeholder: SW.t("settings_general_spoolman_placeholder"), hint: SW.t("settings_general_spoolman_hint"), effect: "applies" }));
+  fields.push(setLangBlock());
   const el = setGroup("general", { desc: SW.t("settings_general_desc"), save: SW.t("settings_general_save"), body: fields });
   const own = {
     spoolman: async (value) => {
@@ -439,6 +456,75 @@ function groupGeneral({ g }) {
   o.send = sender(() => el, () => o.group, own);
   wireGroup(el, "general", o);
   return el;
+}
+
+// ----- Language (R85 3): the Hub's languages in General, this browser's choice in Appearance, the page's `lang` -----
+// Reads `languages` ({hub, languages: [{code, name, reviewed, installed, complete}], available: [...], problem?}); English is
+// always there, listed here when the Hub's list leaves it out.
+const SET_LANG_KEY = "spoolwarden.language";
+let setLangSeen = null;
+const setLangStored = () => { try { return localStorage.getItem(SET_LANG_KEY) || ""; } catch { return ""; } };
+const setLangKeep = (code) => { try { if (code) localStorage.setItem(SET_LANG_KEY, code); else localStorage.removeItem(SET_LANG_KEY); } catch { /* storage refused: the choice lasts until the page closes */ } };
+const setLangName = (l) => (l.reviewed === false ? setT("settings_language_machine", { name: l.name }) : l.name);
+const setLangHave = (d) => [{ code: "en", name: "English", reviewed: true, installed: true, complete: 100 }, ...d.languages.filter((l) => l.installed && l.code !== "en")];
+// the code the page speaks: this browser's choice if installed, else (Automatic) the browser's language if installed, else the Hub's
+function setLangPick(d) {
+  const have = new Set(setLangHave(d).map((l) => l.code)), own = setLangStored(), dev = String(navigator.language || "").toLowerCase().split("-")[0];
+  return have.has(own) ? own : have.has(dev) ? dev : have.has(d.hub) ? d.hub : "en";
+}
+// reads the languages (again when `fresh`) and sets the page's `lang`; a Hub without the route leaves it as it is
+async function setLangApply(fresh) {
+  if (!setLangSeen || fresh) {
+    try { setLangSeen = await api("languages"); } catch { return null; }
+  }
+  document.documentElement.lang = setLangPick(setLangSeen);
+  return setLangSeen;
+}
+// Settings > General: the list, Get more languages, remove, and the Hub's language; none of it is part of the group's Save
+function setLangBlock() {
+  const body = h("div", { class: "settings__lang" }, h("span", { class: "skeleton__line", "aria-hidden": "true" })), box = sbox();
+  const row = (l, d) => {
+    const here = l.code === d.hub, info = [l.complete != null && l.code !== "en" ? setT("settings_language_complete", { percent: l.complete }) : null];
+    const acts = here ? [SW.status("ok", { small: true, text: setT("settings_language_in_use") })] : [
+      SW.btn(setT("settings_language_use"), { cls: "btn--ghost btn--small", action: "language-use-" + l.code, run: () => settingAct(box, "settings/language", { hub: l.code }, () => paint(true)) }),
+      l.code === "en" ? null : SW.btn(setT("settings_language_remove"), { cls: "btn--ghost btn--small", action: "language-remove-" + l.code,
+        run: () => confirmed({ kind: "destructive", title: setT("settings_language_remove_title", { name: l.name }), text: setT("settings_language_remove_text"), confirm: setT("settings_language_remove") },
+          "languages/" + encodeURIComponent(l.code) + "/remove", {}, () => paint(true)) })];
+    return h("li", { class: "settings__lang-row", "data-code": l.code }, h("span", { class: "settings__name", textContent: setLangName(l) }),
+      h("span", { class: "muted" }, ...info), h("span", { class: "actions" }, ...acts));
+  };
+  const more = (l) => h("li", { class: "settings__lang-row", "data-code": l.code }, h("span", { class: "settings__name", textContent: setLangName(l) }),
+    h("span", { class: "muted" }, l.complete != null ? setT("settings_language_complete", { percent: l.complete }) : null),
+    h("span", { class: "actions" }, SW.btn(setT("settings_language_get"), { cls: "btn--ghost btn--small", action: "language-get-" + l.code,
+      run: () => settingAct(box, "languages/" + encodeURIComponent(l.code) + "/install", {}, () => { SW.result(box, null); followApply(true); }) })));
+  const paint = async (fresh) => {
+    let d;
+    try { d = await setLangApply(fresh); if (!d) throw new Error(setT("settings_language_error")); } catch (e) { body.replaceChildren(h("p", { class: "muted", textContent: hubText(e.message) })); return; }
+    const offered = (d.available || []).filter((l) => !(d.languages || []).some((x) => x.code === l.code && x.installed));
+    body.replaceChildren(h("h3", { class: "settings__heading", textContent: setT("settings_language_title") }),
+      h("p", { class: "field__hint", textContent: setT("settings_language_hub_hint") }),
+      h("ul", { class: "settings__lang-list" }, setLangHave(d).map((l) => row(l, d))),
+      h("h3", { class: "settings__heading", textContent: setT("settings_language_more") }),
+      d.problem ? h("p", { class: "muted", textContent: hubText(d.problem) }) : offered.length ? h("ul", { class: "settings__lang-list" }, offered.map(more))
+        : h("p", { class: "muted", textContent: setT("settings_language_none_more") }), box);
+  };
+  later(paint(true));
+  return body;
+}
+// Settings > Appearance: this browser's language, "Automatic" by default, kept in this browser (localStorage) and applied at once
+function setLangChoice() {
+  const holder = h("div", { class: "settings__choice" }), res = sbox();
+  const paint = (d) => {
+    const have = d ? setLangHave(d) : [{ code: "en", name: "English", reviewed: true }];
+    const pick = SW.field({ type: "select", name: "appearance.language", label: setT("settings_language_device"), hint: setT("settings_language_device_hint"),
+      value: have.some((l) => l.code === setLangStored()) ? setLangStored() : "", optional: false,
+      options: [{ value: "", label: setT("settings_language_auto") }, ...have.map((l) => ({ value: l.code, label: setLangName(l) }))] });
+    pick._control.addEventListener("change", () => { setLangKeep(pick._control.value); if (setLangSeen) document.documentElement.lang = setLangPick(setLangSeen); say(res, SW.t("common_saved"), true); });
+    holder.replaceChildren(pick, res);
+  };
+  paint(setLangSeen);
+  if (!setLangSeen) later(setLangApply().then((d) => { if (d && holder.isConnected && !holder.contains(document.activeElement)) paint(d); }));
+  return holder;
 }
 
 // ----- Label Reader (03 10.5) -----
