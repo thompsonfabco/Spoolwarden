@@ -70,7 +70,7 @@ def test_append_writes_one_xml_file_per_month_and_reads_back():
 def test_months_are_separate_files_and_all_are_read(monkeypatch):
     for at, eid in (("2026-09-30T23:00:00Z", E1), ("2026-11-01T00:00:01Z", E2)):
         usage._write_line(SERIAL, _entry(eid, at))
-    names = sorted(p.name for p in (_dir() / "usage").iterdir() if p.name != ".lock")
+    names = sorted(p.name for p in (_dir() / "usage").iterdir() if not p.name.startswith("."))
     assert names == ["2026-09.xml", "2026-11.xml"]
     got = usage.entries(SERIAL, days=10_000, by="month")["months"]
     assert [m["month"] for m in got] == ["2026-11", "2026-09"]
@@ -250,12 +250,12 @@ def test_two_processes_making_the_first_appends_lose_nothing():
     d.mkdir(parents=True)
     (d / "usage.jsonl").write_text(json.dumps(_entry(E1, "2026-11-10T10:00:00Z")) + "\n", encoding="utf-8")
     code = ("import sys\nfrom filament_kit.bridge import usage\n"
-            "for i in range(6): usage.append('%s', {'job': sys.argv[1] + str(i), 'at': '2026-11-12T10:00:00Z'})\n" % SERIAL)
+            "for i in range(30): usage.append('%s', {'job': sys.argv[1] + str(i), 'at': '2026-11-12T10:00:00Z'})\n" % SERIAL)
     procs = [subprocess.Popen([sys.executable, "-c", code, tag], env=_sub_env()) for tag in ("p", "q")]
     assert [p.wait(60) for p in procs] == [0, 0]
     recs, _ = usage._read(SERIAL)
-    assert sorted(r["job"] for r in recs if r["id"] != E1) == sorted(t + str(i) for t in "pq" for i in range(6))
-    assert len({r["id"] for r in recs}) == 13
+    assert sorted(r["job"] for r in recs if r["id"] != E1) == sorted(t + str(i) for t in "pq" for i in range(30))
+    assert len({r["id"] for r in recs}) == 61
 
 
 def _v062_read(serial):
