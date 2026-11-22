@@ -438,3 +438,34 @@ def test_with_no_bridge_the_loop_still_runs(tmp_path, monkeypatch):
     m.main()
     assert seen["mgr"] is None and isinstance(seen["kw"]["loop"], watch.Loop)
     event_sink.set_sink(None)
+
+
+def test_holding_ssdp_ports_without_reuseaddr_blocks_discovery_listener_cleanly(tmp_path):
+    import socket
+    import sys
+    from pathlib import Path
+    from filament_kit.bridge import discovery
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools" / "e2e"))
+    try:
+        import e2e
+    finally:
+        sys.path.pop(0)
+
+    # Bind an ephemeral UDP port without SO_REUSEADDR (same mechanism as e2e.E2E.hold_discovery)
+    holder = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        holder.bind(("127.0.0.1", 0))
+        port = holder.getsockname()[1]
+        with pytest.raises(OSError):
+            discovery.Listener(lambda _info: None, port=port, host="127.0.0.1", multicast_port=None)
+    finally:
+        holder.close()
+
+    # Verify E2E.hold_discovery / release_discovery cleanly acquires and releases UDP sockets
+    inst = e2e.E2E(e2e.Run(tmp_path), e2e.Releases(e2e.Run(tmp_path)), None, [])
+    inst.hold_discovery()
+    try:
+        assert all(s.getsockname()[1] in (2021, 1990) for s in inst._discovery_socks)
+    finally:
+        inst.release_discovery()
+    assert inst._discovery_socks == []
