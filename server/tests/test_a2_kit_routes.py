@@ -18,7 +18,7 @@ from filament_kit.spoolman import Spoolman
 from test_inventory import RULES, item
 
 ROOT = Path(__file__).resolve().parents[2]
-API_KT = ROOT / "android" / "app" / "src" / "main" / "java" / "com" / "thompsonfabco" / "filamentkit" / "net" / "Api.kt"
+API_KT = ROOT / "android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt"
 SERVER_FK = ROOT / "server" / "filament_kit"
 
 # Routes intentionally not mounted yet (A4 labels / Wave H demo & languages).
