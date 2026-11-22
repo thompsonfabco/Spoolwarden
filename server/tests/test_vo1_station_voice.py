@@ -326,7 +326,7 @@ def test_test_cannot_be_made_to_say_anything_else(hub):
     assert speech.speech["opts"] == {"speed": 100}                    # the text and `speech` are not read
 
 
-@pytest.mark.parametrize("step", ["weigh", "ready", "camera", "recognise", "phone", "done", "pairing"])
+@pytest.mark.parametrize("step", ["weigh", "ready", "camera", "recognising", "phone", "done", "pairing"])
 def test_test_is_busy_while_a_step_is_open(hub, monkeypatch, step):
     monkeypatch.setitem(st.flow, "step", step)
     status, d = post(hub, "/voice/test", {})
