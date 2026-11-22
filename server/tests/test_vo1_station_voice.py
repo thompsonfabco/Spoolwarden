@@ -419,3 +419,28 @@ def test_the_station_says_the_test_sentence_end_to_end(hub, piper):
     assert text == speech.SENTENCE and (cfg.speaker_id, cfg.length_scale) == (77, 0.5)
     with wave.open(io.BytesIO(wav)) as w:
         assert w.getnframes() == 10
+
+
+# ---- R594: the texts are the catalogue's (D13)
+
+def _state_copy():
+    """A second copy of station/state.py, read fresh, so its texts are resolved again against the page's catalogue."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("filament_kit.station.state_copy", st.__file__)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_voice_refusal_sentences_come_from_the_catalogue_with_the_english_as_fallback(monkeypatch):
+    from filament_kit.station import page
+    english = {"bad_speech": "speech must be true or false.",
+               "bad_speaker": "speaker must be a whole number from 0 to 903.",
+               "bad_speed": "speed must be a whole number from 50 to 200.",
+               "bad_volume": "volume must be a whole number from 0 to 100.",
+               "busy": "The Weigh Station is in use. Try again when it is idle.",
+               "off": "Speaking is switched off."}
+    monkeypatch.setattr(page, "_CATALOGUE", {})                       # no catalogue key yet: the English
+    assert _state_copy().VOICE_TEXTS == english
+    monkeypatch.setattr(page, "_CATALOGUE", {f"station_voice_{k}": f"[{k}]" for k in english})
+    assert _state_copy().VOICE_TEXTS == {k: f"[{k}]" for k in english}  # a catalogue key wins

@@ -33,14 +33,15 @@ def int_from_env(name: str, default: int, low: int, high: int) -> int:
 # the live voice values (R88 2.5): the ranges the station takes, and where each one sits in `settings`
 VOICE_RANGES = {"speaker": (0, 903), "speed": (50, 200), "volume": (0, 100)}
 VOICE_KEYS = {"speech": "speech", "speaker": "voice_speaker", "speed": "voice_speed", "volume": "speaker_volume"}
-# the sentences of the voice routes' refusals (plain constants; the string catalogue takes them later, RC9 / RG1)
+# the sentences of the voice routes' refusals (the string catalogue's, the English as the fallback: RC9 / RG1 add the keys)
+_t = _station_page.catalogue_text
 VOICE_TEXTS = {
-    "bad_speech": "speech must be true or false.",
-    "bad_speaker": "speaker must be a whole number from 0 to 903.",
-    "bad_speed": "speed must be a whole number from 50 to 200.",
-    "bad_volume": "volume must be a whole number from 0 to 100.",
-    "busy": "The Weigh Station is in use. Try again when it is idle.",
-    "off": "Speaking is switched off.",
+    "bad_speech": _t("station_voice_bad_speech", "speech must be true or false."),
+    "bad_speaker": _t("station_voice_bad_speaker", "speaker must be a whole number from 0 to 903."),
+    "bad_speed": _t("station_voice_bad_speed", "speed must be a whole number from 50 to 200."),
+    "bad_volume": _t("station_voice_bad_volume", "volume must be a whole number from 0 to 100."),
+    "busy": _t("station_voice_busy", "The Weigh Station is in use. Try again when it is idle."),
+    "off": _t("station_voice_off", "Speaking is switched off."),
 }
 
 
