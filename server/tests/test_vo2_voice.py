@@ -453,7 +453,7 @@ def test_the_voice_calls_carry_a_proof_the_station_accepts(wire, send):
     send()
     path, headers, body = seen[0]
     access = page.Access(lambda: key)
-    assert access.proof_ok("settings", headers.get(page.PROOF_HEADER), body)
+    assert access.proof_ok("voice", headers.get(page.PROOF_HEADER), body)
 
 
 @pytest.mark.parametrize("send", [lambda: station_client.send_voice("http://h", {"speed": 90}),
@@ -475,9 +475,26 @@ def test_a_proof_made_for_other_values_or_another_key_is_not_good(wire):
     seen, key, _ = wire
     station_client.send_voice("http://h", {"speed": 90})
     _, headers, body = seen[0]
-    assert not page.Access(lambda: key).proof_ok("settings", headers[page.PROOF_HEADER], b'{"speed": 200}')
+    assert not page.Access(lambda: key).proof_ok("voice", headers[page.PROOF_HEADER], b'{"speed": 200}')
     assert not page.Access(lambda: page.token_key("another token 0123456789")).proof_ok(
-        "settings", headers[page.PROOF_HEADER], body)
+        "voice", headers[page.PROOF_HEADER], body)
+
+
+@pytest.mark.parametrize("send", [lambda: station_client.send_voice("http://h", {"speed": 90}),
+                                  lambda: station_client.voice_test("http://h", {"speed": 90})])
+def test_the_sender_proof_passes_the_station_check_of_both_voice_routes(wire, send):
+    """Cross-check with the station's own verifier (station.page.Access.proof_ok). The station's routes on branch
+    vo1-station-voice (server/filament_kit/station/http.py:203, 10f2386c) accept a /voice or /voice/test call only when
+    `caller == guard.LISTED and proof is not None and access.proof_ok("voice", proof, raw)`, `raw` being the exact body
+    bytes; the same call is made here with the sender's proof. A proof of purpose "settings" is not good there."""
+    from filament_kit.station import page
+    seen, key, _ = wire
+    send()
+    path, headers, body = seen[0]
+    proof = headers.get(page.PROOF_HEADER)
+    assert proof is not None
+    assert not page.Access(lambda: key).proof_ok("settings", proof, body)
+    assert page.Access(lambda: key).proof_ok("voice", proof, body)
 
 
 # ---- the read answer the Hub page's group and the apps use ----
