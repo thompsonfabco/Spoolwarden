@@ -473,7 +473,10 @@ class IntakeApp:
     STUB_TEXTS = {"labels_bad_size": "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25.",
                   "labels_bad_ids": "Give the spool numbers as ids=<n,n,...>, whole numbers of 1 or more.",
                   "web_answer_too_large": "The Hub's answer is too large to pass on.",
-                  "language_not_found": "There is no such language."}
+                  "language_not_found": "There is no such language.",
+                  "activity_newest_number": "newest must be a whole number of 1 or more.",
+                  "activity_since_or_newest": "Give since or newest, not both.",
+                  "activity_limit_number": "limit must be a whole number."}
 
     def _say(self, key: str, **values: str) -> str:
         """A text of the catalogue the pages load (pages.text), or its stub until the catalogue has the key."""
@@ -943,13 +946,13 @@ class IntakeApp:
         q = {k: request.query_params[k] for k in self.ACTIVITY_PARAMS if k in request.query_params}
         if "newest" in q:
             if not q["newest"].isdigit() or int(q["newest"]) < 1:
-                return self._bad("newest must be a number")
+                return self._refuse("bad_request", "activity_newest_number")
             if "since" in q:
-                return self._bad("give since or newest, not both")
+                return self._refuse("bad_request", "activity_since_or_newest")
             q["newest"] = str(min(int(q["newest"]), 200))
         else:
             if "limit" in q and not q["limit"].isdigit():
-                return self._bad("limit must be a number")
+                return self._refuse("bad_request", "activity_limit_number")
             q["limit"] = str(min(int(q.get("limit") or 50), 200))
         return await self._hub_get("/api/events?" + urlencode({"activity": "1", **q}))
 

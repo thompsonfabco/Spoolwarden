@@ -373,3 +373,11 @@ def test_the_scripts_hold_the_new_places():
         assert words in text, words
     # one label at a time in the web app; Print labels for several is the Hub page's (R85 22:45.6; R574 MED 10)
     assert 'action: "print-labels"' not in text and "labels_button_many" not in text
+
+
+def test_the_activity_twin_refuses_in_the_twins_shape(env):
+    """R663: a bad `newest`, `limit` or since+newest is {error: code, message: sentence}, not {error: sentence}."""
+    c = signed(make_app(env, RcKit()))
+    for q in ("newest=abc", "newest=0", "newest=5&since=3", "limit=ten"):
+        r = c.get("/intake/api/activity?" + q)
+        assert r.status_code == 400 and r.json()["error"] == "bad_request" and r.json()["message"].endswith("."), (q, r.text)

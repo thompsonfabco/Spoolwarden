@@ -347,7 +347,7 @@ def test_the_web_app_lists_and_removes_on_the_kits_own_page(hub):
     r = wc.post(f"/intake/api/label-reader/corrections/{a}/remove", json={}, headers=H)
     assert r.status_code == 200 and data["queue"] == []
     r = wc.post(f"/intake/api/label-reader/corrections/{a}/remove", json={}, headers=H)
-    assert r.status_code == 404 and r.json()["reason"] == "not_found"
+    assert r.status_code == 404 and r.json()["code"] == "not_found"
 
 
 def test_the_web_app_says_when_the_reader_is_off_and_the_public_page_has_no_routes(hub):
@@ -356,7 +356,7 @@ def test_the_web_app_says_when_the_reader_is_off_and_the_public_page_has_no_rout
     cfg["modules"]["local_intake"] = False
     config.save(cfg)
     r = _web().get("/intake/api/label-reader/corrections")
-    assert r.status_code == 409 and r.json()["reason"] == "no_reader"
+    assert r.status_code == 409 and r.json()["code"] == "no_reader"
     assert _web("https://example.test/f").get("/intake/api/label-reader/corrections").status_code in (404, 405)
 
 
@@ -593,8 +593,6 @@ def test_no_refusal_of_the_apps_api_carries_a_reason(phone):
         assert "reason" not in r.json() and r.json()["error"] and r.json()["message"], r.text
 
 
-@pytest.mark.xfail(strict=True, reason="web/intake_app.py (the wave's file) still answers {error, reason}; its owner "
-                                       "switches it to {error: code, message} and drops this mark")
 def test_no_refusal_of_the_web_apps_corrections_routes_carries_a_reason(hub):
     wc = _web()
     cfg = config.load()
