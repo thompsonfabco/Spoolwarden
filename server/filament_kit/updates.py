@@ -508,6 +508,16 @@ def job_refusal(name: str, *, verified: str | None = None) -> str | None:
 
 def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | None = None,
            run: Callable[[list[str]], int] = default_run, now: float | None = None) -> int:
+    """`update`; the timer's `update --scheduled` is an automatic job, so what it records is done by `hub` (R84 1.2),
+    not by the command line it runs through."""
+    if not scheduled:
+        return _update(cfg, scheduled=False, fetcher=fetcher, run=run, now=now)
+    with event_sink.acting("hub"):
+        return _update(cfg, scheduled=True, fetcher=fetcher, run=run, now=now)
+
+
+def _update(cfg: dict, *, scheduled: bool, fetcher: release.Fetcher | None,
+            run: Callable[[list[str]], int], now: float | None) -> int:
     now = time.time() if now is None else now
     if scheduled and MODULE not in modules.enabled(cfg):
         print("the updates module is off; nothing to do")

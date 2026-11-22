@@ -43,6 +43,7 @@ MAX_PHOTO = station_client.MAX_PHOTO
 STATION_TIMEOUT = station_client.STATION_TIMEOUT
 DROPPED_NOTE = "Some of this device's settings could not be shown."
 clean_settings = station_client.clean_settings
+PAGE_FROM = ("home", "subnets", "allowed")      # the station's `station.page_from` values
 
 
 # ---------- what the Hub offers (out of date is a comparison with these) ----------
@@ -217,11 +218,14 @@ def routes(page) -> list[tuple]:
             out["status"] = clean_status(status)
             out["photo"] = status.get("photo") is True
             try:
-                settings_list, dropped = station_client.read_settings(url)
+                got = station_client.call_json(url, "GET", "/settings")
             except station_client.StationCallError:
                 out["device"] = {**row, "reachable": False}
                 return out
+            settings_list, dropped = clean_settings(got.get("settings"))
             out["settings"] = settings_list
+            if got.get("page_from") in PAGE_FROM:      # who may open its page (R83 2026-11-18 01:14 point 1); the page
+                out["page_from"] = got["page_from"]     # says devices_station_allow_list_only under the link for `allowed`
             if dropped:
                 out["settings_dropped"] = True
         return out
@@ -277,10 +281,8 @@ def routes(page) -> list[tuple]:
             raise Refused(404, "this device has no page of its own")
         url = _station_for(device_id)
         try:
-            endpoint = station_client.station_endpoint(url)
+            endpoint = station_client.station_endpoint(url)       # plain HTTP only for a station that told no certificate
             base = own_page(endpoint, hub_host)
-            if endpoint[2] is None:
-                return {"address": base}
             got = station_client.ticket(url, endpoint=endpoint)
         except station_client.StationCallError as e:
             raise Refused(e.status or 502, e.message) from None

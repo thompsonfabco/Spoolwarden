@@ -735,3 +735,45 @@ await until(() => sentTo("device/d3/settings").length === 1, "the save");
 return { sent: sentTo("device/d3/settings") };
 """, 1280, "console")
     assert page["sent"] == [{"length": "b", "item": "b", "code": CODE}]
+
+
+def test_a_station_without_a_certificate_has_its_settings_changed_and_gives_a_ticket_with_the_proof(env_hub, tmp_path):
+    """R559 01 #4: a Weigh Station that told the Hub no certificate (not updated, or it could not make one) is called over
+    plain HTTP (R82 2026-11-18 00:28 point 1), and its change and its ticket carry the proof, which is what guards them
+    (R83 01:10): neither is refused for the missing pin. The station is the real handler."""
+    from http.server import ThreadingHTTPServer
+    import http.client
+    from filament_kit.station import settings as station_settings
+    c, st = env_hub
+    store = station_settings.Store(tmp_path / "settings.xml", {"beep": True, "speech": True, "tts": "auto",
+                                                               "speaker_volume": 50, "panel_swap": False}, {})
+    access = station_page.Access(lambda: station_page.token_key(TOKEN))
+    from test_wave1_round3_station import _view as view
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), station_http.make_handler(view, {"127.0.0.1"}, access, store))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        _pair_station(st, pinned=False)
+        cfg = config.load()
+        cfg["station"] = {**cfg["station"], "url": f"http://127.0.0.1:{srv.server_port}"}
+        config.save(cfg)
+        assert c.get("/setup/api/device/d3").json()["page_from"] == "home"      # the station's page access, for Devices
+        r = SP.post(c, "device/d3/settings", {"beep": False})
+        assert r.status_code == 200, r.text
+        assert next(s for s in r.json()["settings"] if s["id"] == "beep")["value"] is False
+        assert store.listing()[0] == {**store.listing()[0], "id": "beep", "value": False}
+        opened = SP.post(c, "device/d3/open")
+        assert opened.status_code == 200, opened.text
+        base, _, ticket = opened.json()["address"].partition("#ticket=")
+        assert base == f"http://{SP.HOSTNAME}:{srv.server_port}/" and ticket
+        conn = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=5)
+        try:
+            conn.request("POST", "/session", body=json.dumps({"ticket": ticket}), headers={"Content-Type": "application/json"})
+            assert conn.getresponse().status == 200            # the station took the ticket the Hub was given
+        finally:
+            conn.close()
+        # a pinned station is still never called plain: with a certificate told, the same plain listener is refused
+        _pair_station(st, fp="ab" * 32, port=srv.server_port)
+        assert SP.post(c, "device/d3/settings", {"beep": True}).status_code == 502
+    finally:
+        srv.shutdown()
+        srv.server_close()

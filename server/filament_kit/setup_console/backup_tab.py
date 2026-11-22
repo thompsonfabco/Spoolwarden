@@ -23,6 +23,7 @@ import anyio
 from starlette.responses import StreamingResponse
 
 from .. import backup, backup_crypt, config
+from .texts import say
 
 MAX_UPLOAD = 2 * 2**30
 
@@ -61,7 +62,7 @@ def routes(page) -> list[tuple]:
     async def password_set(request, body):
         pw = body.get("password")
         if not isinstance(pw, str) or len(pw) < backup.MIN_PASSWORD_LEN:
-            raise Refused(400, f"Backup password must be at least {backup.MIN_PASSWORD_LEN} characters.",
+            raise Refused(400, say("hub_backup_password_short", count=backup.MIN_PASSWORD_LEN),
                           code="too_short", field="password")
         try:
             await page._helper({"op": "backup_password_set", "code": body["code"], "password": pw})

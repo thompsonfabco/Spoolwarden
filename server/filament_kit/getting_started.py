@@ -155,15 +155,35 @@ def _step(sid: str, cfg: dict, fr: firstrun.FirstRun, backup_done: bool | None =
             return False, say("start_line_spool_unknown")
         return has, say("start_line_spool_done" if has else "start_line_spool_open")
     if sid == "backup":
-        has = backup_done if backup_done is not None else any(e.kind != "pre-restore" for e in backup.listing())
+        has = backup_done if backup_done is not None else _backup_made()
         return has, say("start_line_backup_done" if has else "start_line_backup_open")
     raise ValueError(sid)
+
+
+def _backup_made(helper=None) -> bool:
+    """Whether a backup other than one made before a restore exists. Who may read the backups folder (root) lists it;
+    anyone else, as `spoolwarden status` without sudo runs as the Hub's service account, asks the root helper (D6),
+    whose `backup_last` says only when the newest was made. `helper` stands in for the helper's client (a test)."""
+    import os
+    from . import backup
+    folder = backup.backups_dir()
+    if not folder.is_dir() or os.access(folder, os.R_OK | os.X_OK):
+        return any(e.kind != "pre-restore" for e in backup.listing(folder))
+    if helper is None:
+        from .setup_page import HelperClient
+        helper = HelperClient(timeout=10)
+    try:
+        r = helper({"op": "backup_last"})
+    except Exception as e:  # noqa: BLE001 - the step is open when no one can tell
+        log.warning("getting started: the root helper did not say when the last backup was made: %s", e)
+        return False
+    return bool(r.get("ok") and r.get("last"))
 
 
 def view(cfg: dict | None = None, *, backup_done: bool | None = None) -> dict:
     """The object of `GET start`. Never raises. `backup_done`: whether a backup (other than one made before a restore)
     exists, as the root helper says; the Hub page's service gives it, since it cannot list the root-only backups folder.
-    None (root, the command line): the folder is listed here."""
+    None (the command line): the folder is listed here when it can be read, else the root helper is asked."""
     cfg = cfg if cfg is not None else config.load()
     fr = firstrun.load()
     steps = []

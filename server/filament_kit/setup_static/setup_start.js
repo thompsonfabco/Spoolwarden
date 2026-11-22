@@ -152,11 +152,27 @@
         if (!fresh) return;
         paint(fresh);
         notify(fresh);
+        settle(fresh);
       } catch (e) {
         if (errBox) showResult(errBox, "bad", e.message);
       } finally {
         busy = false;
         if (trigger && trigger.isConnected) trigger.disabled = false;
+      }
+    }
+
+    // after Hide, Show or Keep the pressed button is gone with the card it was in: the focus goes to the control in its place
+    // (Show after Hide; the Next step's button, else Hide, after Show or Keep; the title when all is set), never to the top of
+    // the page (07 KEY-7), and the new count is announced (SR-12)
+    function settle(data) {
+      const pick = (sel) => mount.querySelector(sel);
+      const target = data.show
+        ? pick(".start__step--next .start__act") || pick('[data-action="start-hide"]') || pick(".start__title")
+        : pick('[data-action="start-show"]');
+      if (target) target.focus();
+      const s = sw();
+      if (typeof s.announce === "function" && data.total) {
+        s.announce(t(data.show ? "start_count" : "start_line", { done: data.done, total: data.total }));
       }
     }
 
@@ -256,7 +272,7 @@
         el(
           "div",
           { class: "start__head-text" },
-          el("h2", { class: "start__title", textContent: t("start_title") }),
+          el("h2", { class: "start__title", tabindex: "-1", textContent: t("start_title") }),
           el("span", { class: "muted start__count", textContent: t("start_count", { done: data.done, total: data.total }) })
         ),
         !allSet

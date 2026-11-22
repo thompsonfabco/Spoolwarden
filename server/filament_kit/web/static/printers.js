@@ -516,7 +516,7 @@ function printersTab() {
     if (!g.camOn) g.camBtn.hidden = !g.camKind();       // the list may learn of a camera later
   }
   // ----- Auto (R83 addition, contract A6): the waiting notice with Stop waiting, and the choice when two slots were loaded -----
-  const autoSpool = (a) => { const s = (a && a.spool) || {}; return `${s.vendor || ""} ${s.name || ""}`.trim() || t("spool_title", { id: (a && a.spool_id) ?? s.id ?? "?" }); };
+  const autoSpool = (a) => { const s = (a && a.spool) || {}, sid = (a && a.spool_id) ?? s.id; return `${s.vendor || ""} ${s.name || ""}`.trim() || (sid != null ? t("spool_title", { id: sid }) : tg("auto_the_spool")); };
   function paintAuto(p, auto) {
     const g = page;
     const sig = JSON.stringify([auto || null, g.up]);
@@ -767,8 +767,8 @@ function printersTab() {
         if (spool !== s || target !== label) return;     // another spool or another target was picked meanwhile
         if (auto) {                                      // Automatic: the Hub watches the slots; nothing is loaded yet (contract A6)
           if (dry) {
-            const rep = r.replaces ? tg("auto_replaces", { spool: r.replaces.name || t("spool_title", { id: r.replaces.spool_id ?? "?" }) }) : "";
-            SW.result(plan, "ok", lineNodes([tg("auto_plan", { spool: spoolTitle(s), slots: (r.watching || []).join(", ") || "?" }), rep].filter(Boolean)));
+            const rep = r.replaces ? tg("auto_replaces", { spool: r.replaces.name || (r.replaces.spool_id != null ? t("spool_title", { id: r.replaces.spool_id }) : tg("auto_the_spool")) }) : "";
+            SW.result(plan, "ok", lineNodes([tg("auto_plan_load", { spool: spoolTitle(s), printer: nameOf(g.id) }), tg("auto_plan_watching", { slots: (r.watching || []).join(", ") }), rep].filter(Boolean)));
             disabled(go, null);
           } else {
             dlg.close();

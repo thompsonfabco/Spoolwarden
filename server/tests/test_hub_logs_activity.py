@@ -446,6 +446,7 @@ const downloads = [];
 HTMLAnchorElement.prototype.click = function () { if (this.hasAttribute("download")) { downloads.push(this.getAttribute("download")); return; } return HTMLElement.prototype.click.call(this); };
 const more = () => $(".logs__actmore");
 out.label = more().getAttribute("aria-label");
+out.pageMenus = $$('button[aria-label="More actions for this page"]').length;       // one page menu (03 3.8), no second one
 more().click();
 await until(() => $(".menu__heading"), "the activity menu");
 out.heading = text($(".menu__heading"));
@@ -480,7 +481,7 @@ $('.menu__item[data-action="download-csv-7"]').click();
 await until(() => $(".toast__text"), "refusal toast");
 out.refused = text($(".toast__text"));
 """)
-    assert page["label"] == "More actions for Activity"
+    assert page["label"] == "More actions for this page" and page["pageMenus"] == 1
     assert page["heading"] == "Download as CSV" and page["items"] == ["Last 7 days", "Last 30 days", "Last 12 months"]
     assert page["locked"] == {"dialog": True, "lock": "locked"}
     assert page["files"] == ["activity.csv", "activity.csv", "activity.csv"]

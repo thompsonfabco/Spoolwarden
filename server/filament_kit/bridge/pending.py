@@ -9,6 +9,8 @@ then keeps watching: when the AMS wipes the slot again (type empty) it is sent a
 Ends (one log line each: pending / applied / dropped):
 - TTL (15 min) after it was made;
 - a newer assignment for the same slot (loaded at once or waiting) replaces it;
+- one spool, one pending placement (D12): a newer named assignment or an Auto for the same spool on any slot of any
+  printer ends it, and so does a load of that spool anywhere (`cancel_for_spool`);
 - the slot is unloaded or cleared (`unload`, `clear_slot`);
 - the slot loads with a spool whose own RFID identifies it (`rfid`): that is not overridden;
 - after it was applied: the filament is taken out, or another setting is on the slot (the user set it);
@@ -100,6 +102,20 @@ class Store:
         if job is not None:
             log.info("dropped %s %s spool %s: %s", serial, label, job.spool_id, why)
         return job is not None
+
+    def cancel_for_spool(self, spool_id, *, keep: tuple[str, str] | None = None,
+                         why: str = "the spool was placed elsewhere") -> int:
+        """Forget every assignment of `spool_id` except the one of slot `keep` (D12), waiting or watched. Under the
+        spool lock, so a send of that spool in progress finishes first; a send checks its job under the slot lock."""
+        from . import auto_slot
+        sid = int(spool_id)
+        with auto_slot.default_store().spool_lock(sid), self._lock:
+            gone = [(k, j) for k, j in self._jobs.items() if j.spool_id == sid and k != keep]
+            for k, _ in gone:
+                self._jobs.pop(k)
+        for k, j in gone:
+            log.info("dropped %s %s spool %s: %s", k[0], k[1], j.spool_id, why)
+        return len(gone)
 
     def jobs(self) -> dict[tuple[str, str], Job]:
         with self._lock:
@@ -208,7 +224,8 @@ class Store:
                 return self._end(key, job, f"refused: {e}")
             except Exception as e:  # noqa: BLE001 - busy, offline, slot in use ...: not a send, try again
                 return self._wait(key, job, type(e).__name__, f"{type(e).__name__}: {e}")
-            auto.cancel_for_spool(job.spool_id)
+            auto.cancel_for_spool(job.spool_id)             # loaded here: the spool's other waits end (D12)
+            self.cancel_for_spool(job.spool_id, keep=key, why=f"loaded into {serial} {label}")
             job.waiting = None
             job.sends += 1
             p = (r or {}).get("preset") or {}
@@ -248,7 +265,8 @@ def load_or_wait(manager, sm, serial: str, label: str, spool_id, dry: bool, *, s
             store.add(manager, sm, serial, lab, spool_id, **kw)
             result = {**plan, "dry_run": False, "pending": True, "confirmed": None,
                       "message": f"waiting for the spool to load in slot {lab}"}
-        auto.cancel_for_spool(spool_id)
+        auto.cancel_for_spool(spool_id)                     # one spool, one pending placement (D12)
+        store.cancel_for_spool(spool_id, keep=(serial, lab), why="a newer assignment of the spool")
         return result
 
 

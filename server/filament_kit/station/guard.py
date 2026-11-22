@@ -33,6 +33,10 @@ TEXTS = {
         "station_refusal_too_many_wrong_tickets", "Too many wrong tickets from this address. Try again in a minute."),
     "bad_request": _station_page.catalogue_text("station_refusal_bad_request", "The request is not valid."),
     "too_big": _station_page.catalogue_text("station_refusal_too_big", "The request is too big."),
+    "too_many_waiting_tickets": _station_page.catalogue_text(
+        "station_refusal_too_many_waiting_tickets", "Too many tickets are waiting. Try again in a minute."),
+    "not_json": _station_page.catalogue_text("station_refusal_not_json", "The request is not a JSON object."),
+    "ticket_not_valid": _station_page.catalogue_text("station_refusal_ticket_not_valid", "That ticket is not valid."),
 }
 
 

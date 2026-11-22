@@ -23,8 +23,12 @@ const SET_ICON = Object.fromEntries(SET_GROUPS.map((g) => [g[0], g[2]]));
 
 const SET_STUB = {
   settings_reader_cert_fp: "Certificate fingerprint",
-  settings_reader_cert_changed: "The reader's certificate changed. Trust the new certificate to use this address.",
-  settings_reader_trust: "Trust certificate",
+  settings_reader_cert_changed: "The Label Reader's certificate changed.",
+  settings_reader_cert_old: "Old fingerprint",
+  settings_reader_cert_new: "New fingerprint",
+  settings_reader_trust: "Trust the new certificate",
+  settings_reader_trust_title: "Trust the new certificate of the Label Reader?",
+  settings_reader_trust_body: "The Hub accepts the certificate the Label Reader at {address} shows now, in place of the one it saved. Do this only after the reader was reinstalled or moved.",
   settings_network_port_hint: "443, or 1024 to 65535.",
   settings_network_port_empty: "Enter a port number.",
   settings_catalog_other: "Other",
@@ -45,8 +49,8 @@ const SET_STUB = {
   settings_catalog_entries_title: "Custom catalog entries",
   settings_catalog_entries_empty: "You have no entries of your own yet.",
   settings_catalog_col_added: "Added",
-  settings_catalog_remove_title: "Remove {brand} {name}?",
-  settings_catalog_remove_body: "This custom entry is removed from the catalog and slicer presets will be rebuilt.",
+  settings_catalog_remove_title: "Remove {brand} {name} from your own entries?",
+  settings_catalog_remove_body: "Slicer presets are rebuilt.",
   settings_catalog_removed: "Removed.",
   settings_catalog_entries_error: "Could not load custom entries.",
 };
@@ -544,18 +548,29 @@ async function testReader(out, fpBox, addr, tier, saved) {
       } catch (e) { if (e.locked) throw e; failed(e); }
     }, () => { SW.result(out, null); fpBox.replaceChildren(); });
   };
+  // a changed certificate (03 10.5, D4): the error with the old and the new fingerprint, each under its label; Trust asks first
+  // (10.11) and only then sends trust; afterwards the focus goes to Test, as the button goes away with the error
+  const fpRows = (r) => [["settings_reader_cert_old", r.pinned], ["settings_reader_cert_new", r.fp]].filter(([, fp]) => fp)
+    .map(([key, fp]) => h("div", { class: "settings__fp-row" }, h("span", { class: "muted", textContent: setT(key) }), " ", h("span", { class: "mono settings__fp-code", textContent: formatFp(fp) })));
   const show = (r) => {
     fpBox.replaceChildren();
-    paintFp(r);
     if (r.pin === "changed") {
-      say(out, r.warning || setT("settings_reader_cert_changed"), "warn");
-      fpBox.append(SW.btn(setT("settings_reader_trust"), {
-        cls: "btn--small",
+      say(out, setT("settings_reader_cert_changed"), false);
+      fpBox.append(...fpRows(r), SW.btn(setT("settings_reader_trust"), {
         action: "trust-reader-cert",
-        run: () => { working(out, SW.t("settings_reader_testing")); runRemoteTest(true); },
+        run: async (e) => {
+          const yes = await SW.ask({ kind: "confirm", opener: e.currentTarget, title: setT("settings_reader_trust_title"),
+            text: setT("settings_reader_trust_body", { address: url }), body: h("div", { class: "settings__fp" }, ...fpRows(r)), confirm: setT("settings_reader_trust") });
+          if (!yes) return;
+          working(out, SW.t("settings_reader_testing"));
+          await runRemoteTest(true);
+          const again = addr.parentElement && addr.parentElement.querySelector('[data-action="test-reader"]');
+          if (again) again.focus();
+        },
       }));
       return;
     }
+    paintFp(r);
     const tiers = Object.entries(r.tiers || {}).filter(([, t1]) => t1.usable).map(([k]) => k.toUpperCase());
     const list = new Intl.ListFormat("en", { type: "conjunction" }).format(tiers);
     if (!r.ok) { say(out, SW.t("settings_reader_test_none", { address: url }), false); return; }
@@ -683,7 +698,7 @@ function openPortDialog(curPort, remoteOn, opener, portBox) {
     if (h2) h2.textContent = SW.t("port_dialog_title", { port: /^\d+$/.test(raw) ? raw : curPort });
   };
   return SW.ask({
-    kind: "confirm",
+    kind: "entry",                       // a form dialog: the Port field has the focus, its value selected (07 SR-20, SR-23)
     title: SW.t("port_dialog_title", { port: curPort }),
     text: SW.t("port_dialog_body"),
     fields: [portField],
@@ -811,7 +826,7 @@ function openCustomEntriesDialog(opener, onChanged) {
         h("th", { scope: "col", textContent: SW.t("common_field_material") }),
         h("th", { scope: "col", textContent: setT("settings_catalog_col_added") }),
         h("th", { scope: "col", textContent: SW.t("common_actions") }))),
-      h("tbody", {}, ...entries.map((row) => h("tr", {},
+      h("tbody", {}, ...entries.map((row, at) => h("tr", {},
         h("td", { textContent: row.brand || "" }),
         h("td", { textContent: row.name || "" }),
         h("td", { textContent: row.material || "" }),
@@ -844,6 +859,9 @@ function openCustomEntriesDialog(opener, onChanged) {
               SW.result(res, "ok", setT("settings_catalog_removed"));
               if (typeof onChanged === "function") onChanged();
               await loadList();
+              // the pressed Remove went with its row: the focus goes to the Remove now in its place, else to Close (07 KEY-7)
+              const left = body.querySelectorAll('[data-action="remove-local-entry"]');
+              (left[Math.min(at, left.length - 1)] || closeBtn).focus();
             }
           },
         }))))));
@@ -917,8 +935,8 @@ function groupCatalog({ lib }) {
   const nozzleMax = plainField({ name: "nozzle_max", type: "number", mono: true, label: setT("settings_catalog_nozzle_max"), attrs: { step: "any" } });
   const bedMin = plainField({ name: "bed_min", type: "number", mono: true, label: setT("settings_catalog_bed_min"), attrs: { step: "any" } });
   const bedMax = plainField({ name: "bed_max", type: "number", mono: true, label: setT("settings_catalog_bed_max"), attrs: { step: "any" } });
-  const densityField = plainField({ name: "density", type: "number", mono: true, label: SW.t("common_field_density"), attrs: { step: "any" } });
-  const mvsField = plainField({ name: "max_volumetric_speed", type: "number", mono: true, label: setT("settings_catalog_mvs"), attrs: { step: "any" } });
+  const densityField = plainField({ name: "density", type: "number", decimal: true, mono: true, label: SW.t("common_field_density"), attrs: { step: "any" } });
+  const mvsField = plainField({ name: "max_volumetric_speed", type: "number", decimal: true, mono: true, label: setT("settings_catalog_mvs"), attrs: { step: "any" } });
   const parentField = plainField({ name: "bambu_parent", label: SW.t("common_field_bambu_parent") });
   const notesField = plainField({ name: "notes", type: "textarea", cls: "settings__cat-notes", label: SW.t("common_field_notes") });
   const moreDetails = h("details", { class: "coll settings__cat-more" },

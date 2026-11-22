@@ -8,6 +8,7 @@ from __future__ import annotations
 import anyio
 
 from .. import firstrun, getting_started
+from .texts import say
 
 
 def _view(page) -> dict:
@@ -27,16 +28,16 @@ def routes(page) -> list[tuple]:
         has_hide = "hide" in body
         has_keep = "keep" in body
         if has_hide == has_keep:
-            raise Refused(400, "give either hide or keep")
+            raise Refused(400, say("hub_start_hide_or_keep"))
 
         if has_hide:
             hide = body["hide"]
             if not isinstance(hide, bool):
-                raise Refused(400, "hide must be true or false")
+                raise Refused(400, say("hub_start_hide_bool"))
 
             def run() -> dict:
                 if not firstrun.set_hidden(hide):
-                    raise Refused(500, "could not save the checklist state")
+                    raise Refused(500, say("hub_start_not_saved"))
                 return _view(page)
 
             view = await anyio.to_thread.run_sync(run)
@@ -45,11 +46,11 @@ def routes(page) -> list[tuple]:
 
         keep = body["keep"]
         if not isinstance(keep, str) or keep not in firstrun.MARKS:
-            raise Refused(400, "keep must be name, storage, or features")
+            raise Refused(400, say("hub_start_keep_which"))
 
         def run() -> dict:
             if not firstrun.mark(keep):
-                raise Refused(500, "could not save the checklist state")
+                raise Refused(500, say("hub_start_not_saved"))
             return _view(page)
 
         view = await anyio.to_thread.run_sync(run)

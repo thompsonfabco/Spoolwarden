@@ -140,7 +140,10 @@ class LoadsMixin:
             self._seen[pid] = {l: s for l, s in cur.items() if (l, s) not in todo}
             for label, sid in todo:
                 with self._slot_lock(pid, label):
-                    failed |= not self._follow_slot(pid, label, sid)
+                    ok = self._follow_slot(pid, label, sid)
+                failed |= not ok
+                if ok:
+                    self._placed(sid)
             if not failed:
                 self._follow_fail.pop(pid, None)
             return
@@ -151,9 +154,23 @@ class LoadsMixin:
                 now = self._current(pid).get(label)
                 if self._seen.get(pid, {}).get(label, "unset") == now:
                     continue
-                failed |= not self._follow_slot(pid, label, now)
+                ok = self._follow_slot(pid, label, now)
+            failed |= not ok
+            if ok:
+                self._placed(now)
         if not failed:
             self._follow_fail.pop(pid, None)
+
+    def _placed(self, spool_id) -> None:
+        """Follow mode put spool `spool_id` into a slot: every Auto and named wait for it ends, on every printer (D3).
+        Called with no slot lock held (the spool lock comes first in the lock order)."""
+        if spool_id is None:
+            return
+        from .. import auto_slot
+        try:
+            auto_slot.spool_placed(spool_id)
+        except Exception:  # noqa: BLE001 - the move is made; a wait left behind expires
+            log.exception("klipper follow: cannot end the waits for spool %s", spool_id)
 
     def _follow_slot(self, pid: str, label: str, spool_id) -> bool:
         """One slot's move; a failure (Spoolman down, a 4xx) is logged and leaves the slot unseen for the next update,

@@ -947,9 +947,11 @@ def test_history_cli_commands_are_wired(capsys, monkeypatch):
     rc, out, _ = run(capsys, ["report"])
     assert rc == 0 and out.startswith("Hub report written:")
     assert run(capsys, ["backup", "password", "--show"])[1] == "Backup password is not set.\n"
-    assert run(capsys, ["backup", "password"])[1] == "Backup password saved.\n"
-    assert run(capsys, ["backup", "password", "--show"])[1] == "Backup password is set.\n"
-    assert run(capsys, ["backup", "password", "--remove"])[1] == "Backup password removed.\n"
+    assert run(capsys, ["backup", "password"])[1].endswith("Backup password set. Every backup is now encrypted.\n")
+    assert run(capsys, ["backup", "password", "--show"])[1] == "correct horse battery\n"     # 06 9.10: the password
+    monkeypatch.setattr(output, "terminal", lambda *a, **k: True)                          # --remove asks first (7)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "y")
+    assert run(capsys, ["backup", "password", "--remove"])[1].endswith("Removed the backup password.\n")
     assert any(c[1].startswith("/api/events?activity=1") for c in calls)
     assert any(c[1].startswith("/api/analytics?") for c in calls)
     assert not [c for c in calls if "/setup/api" in c[1] or "/api/export" in c[1]]      # no page route, no export route

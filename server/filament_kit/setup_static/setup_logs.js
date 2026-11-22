@@ -286,13 +286,16 @@ function logsTab() {
       catch (e) { if (e.locked) throw e; SW.toast(actT("activity_csv_failed", { reason: hubText(e.message) }), "bad"); }
     }),
   });
-  const actMore = SW.iconBtn("more", SW.t("common_more_actions_for", { name: actT("logs_activity") }), { cls: "logs__actmore" });
+  // the one page menu (03 3.8): Open the web app and Download as CSV in it, so the shell adds no second "more" button
+  const actMore = SW.iconBtn("more", SW.t("common_page_actions"), { cls: "logs__actmore" });
+  actMore.dataset.pageMenu = "1";
   SW.menu(actMore, () => [
+    ...(S.passphrase.web ? [hubWebMenuItem()] : []),
     { heading: actT("activity_download_csv") },
     actCsvItem(7, "activity_csv_7", "download-csv-7"),
     actCsvItem(30, "activity_csv_30", "download-csv-30"),
     actCsvItem(365, "activity_csv_365", "download-csv-365"),
-  ], { label: SW.t("common_actions_for", { name: actT("logs_activity") }) });
+  ], { label: SW.t("common_page_actions") });
   const actHead = h("div", { class: "page-head__actions" }, actMore);
   const syncHead = () => pageHead(null, logsShows === "activity" && hubCanExport("activity") ? actHead : null);
   syncHead();

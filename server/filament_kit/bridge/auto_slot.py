@@ -5,6 +5,10 @@ TTL). `start` records each watchable slot's baseline (`present is False` vs load
 slot that was seen empty and then stays loaded and read for `SETTLE` s (neither an RFID spool nor feeding an active
 print), then applies a real load with `auto="yes"` on the `spool.loaded` event. If a second watchable slot also
 qualifies before a load applies, the assignment enters `state="choose"` and waits for `choose` (or `cancel` / TTL).
+
+One spool, one pending placement (D3, D12): starting Auto for a spool ends every earlier wait for it, Auto or named,
+on every printer; a named wait or load of it ends its Auto everywhere; a load of it, any way (Auto, named, Klipper's
+follow mode), ends the rest (`spool_placed`). A slot that waits for a named spool is never taken by Auto.
 """
 from __future__ import annotations
 
@@ -333,9 +337,13 @@ class Store:
             spool_id=sid, spool_name=spool_name, spool=spool_info,
             at=now, expires_at=expires_at, seen_empty=seen_empty, load_kw=load_kw,
         )
-        with self.spool_lock(sid), self._send_lock(serial), self._lock:
-            old = self._active_unlocked(serial, now)
-            self._jobs[serial] = job
+        with self.spool_lock(sid), self._send_lock(serial):
+            with self._lock:
+                old = self._active_unlocked(serial, now)
+                self._jobs[serial] = job
+            # the newest scan wins (D12): earlier waits for this spool elsewhere, Auto or named, end
+            self.cancel_for_spool(sid, keep=serial, why="Auto started for it on another printer")
+            pending.STORE.cancel_for_spool(sid, why="Auto started for it")
         log.info("auto %s spool %s: waiting on %s%s", serial, sid, ", ".join(watching),
                  f" (replaces spool {old.spool_id})" if old is not None else "")
         self._ensure_thread()
@@ -363,7 +371,7 @@ class Store:
                 spool_id = job.spool_id
                 load_kw = dict(job.load_kw)
             res = _load_into_slot(manager, sm, serial, chosen, spool_id, **load_kw)
-            self.cancel_for_spool(spool_id)
+            spool_placed(spool_id)
             log.info("auto chose %s %s spool %s", serial, chosen, spool_id)
             return res
 
@@ -377,16 +385,16 @@ class Store:
         log.info("auto dropped %s spool %s: cancelled", serial, job.spool_id)
         return {"cancelled": True}
 
-    def cancel_for_spool(self, spool_id: int) -> int:
-        """Cancel any active Auto assignment waiting for `spool_id` (loaded into a named slot elsewhere)."""
+    def cancel_for_spool(self, spool_id: int, *, keep: str | None = None, why: str = "loaded into a named slot") -> int:
+        """Cancel any active Auto assignment waiting for `spool_id` (placed elsewhere), except the one of `keep`."""
         sid = int(spool_id)
         removed = 0
         with self.spool_lock(sid), self._lock:
             for serial, job in list(self._jobs.items()):
-                if job.spool_id == sid:
+                if job.spool_id == sid and serial != keep:
                     self._jobs.pop(serial, None)
                     removed += 1
-                    log.info("auto dropped %s spool %s: loaded into a named slot", serial, sid)
+                    log.info("auto dropped %s spool %s: %s", serial, sid, why)
         return removed
 
     def drop_printer(self, serial: str) -> bool:
@@ -527,7 +535,7 @@ class Store:
                 return self._end(serial, job, f"refused: {e}")
             except Exception as e:  # noqa: BLE001 - SlotInUse while printing, offline, mapping running: retry
                 return self._wait(serial, job, type(e).__name__, f"{type(e).__name__}: {e}")
-            self.cancel_for_spool(job.spool_id)
+            spool_placed(job.spool_id)
             p = (r or {}).get("preset") or {}
             log.info("auto applied %s %s spool %s: %s%s", serial, label, job.spool_id, p.get("name"),
                      "" if (r or {}).get("confirmed") else " (not confirmed yet)")
@@ -540,13 +548,23 @@ def default_store() -> Store:
     return STORE
 
 
+def spool_placed(spool_id, *, keep_slot: tuple[str, str] | None = None) -> None:
+    """Spool `spool_id` was loaded or given a named placement (D3, D12): every Auto waiting for it ends, and every
+    named wait for it except the one of `keep_slot` (printer serial, slot label), on every printer. Takes the spool
+    lock (re-entrant), so a send of that spool in progress elsewhere finishes first; hold no printer's slot lock."""
+    default_store().cancel_for_spool(spool_id)
+    pending.STORE.cancel_for_spool(spool_id, keep=keep_slot)
+
+
 def load_named_klipper(kf, sm, serial: str, label: str, spool_id: int, dry: bool, **kw) -> dict:
-    """Serialize a named Klipper write against Auto for this spool. A refusal leaves Auto waiting."""
+    """Serialize a named Klipper write against Auto for this spool. A real load the printer has not confirmed yet is
+    still the spool's newest placement (follow mode settles it), so it ends Auto and the named waits for the spool on
+    every printer (D12); a load that raises (offline, printing, no such slot) leaves them."""
     store = default_store()
     with nullcontext() if dry else store.spool_lock(spool_id):
         result = kf.load(sm, serial, label, spool_id, dry, **kw)
-        if not dry and result.get("confirmed"):
-            store.cancel_for_spool(spool_id)
+        if not dry:
+            spool_placed(spool_id)
         return result
 
 

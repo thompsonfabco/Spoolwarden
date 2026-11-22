@@ -1095,7 +1095,7 @@ async function undoEvent(id) {
 async function offerUndo(spoolId, text, done, eventId) {
   let e = eventId != null ? { id: eventId, undo: { possible: true } } : null;
   if (!e) {
-    try { e = ((await api(`activity?subject=spool:${spoolId}&limit=1`)).events || [])[0]; } catch (x) { return false; }     // an older Hub has no activity: no Undo
+    try { e = ((await api(`activity?subject=spool:${spoolId}&newest=1`)).events || []).slice(-1)[0]; } catch (x) { return false; }     // an older Hub has no activity: no Undo
   }
   if (!e || !e.undo || !e.undo.possible) return false;
   SW.toast(text, "ok", { action: { label: SW.t("common_undo"), run: async () => { if (await undoEvent(e.id) && done) done(); } } });
@@ -1112,7 +1112,7 @@ function historyBox(id) {
   const box = h("div", { class: "history" });
   const load = async () => {
     let list;
-    try { list = (await api(`activity?subject=spool:${id}&limit=10`)).events || []; } catch (x) { box.replaceChildren(); return false; }
+    try { list = ((await api(`activity?subject=spool:${id}&newest=10`)).events || []).slice().reverse(); } catch (x) { box.replaceChildren(); return false; }   // the answer is oldest first: the sheet shows the newest first
     box.replaceChildren(list.length ? h("ul", { class: "history__list" }, list.map(eventRow)) : h("p", { class: "muted" }, tt("history_none")));
     return true;
   };
@@ -2537,15 +2537,17 @@ function openTab() {
         const slots = ((r.status || {}).ams || []).flatMap((u) => u.slots || []);
         const head = h("h4", { class: "spools__step", textContent: SW.t("spool_load_which_slot", { printer: p.name || p.id }) });
         if (!slots.length && !p.auto_possible) return [head, h("p", { class: "muted", textContent: SW.t("spool_load_no_slots") }), stepFoot(pickPrinter)];
-        if (p.auto_possible) {                       // one list: Automatic first and selected, then the slots; Continue goes on (R83 addition A5)
-          let chosen = "auto";
-          const entries = [{ value: "auto", label: tt("auto_option") }, ...slots.map((sl) => ({
-            value: sl.label, label: [sl.label, sl.spool ? sl.spool.name || SW.t("spool_title", { id: sl.spool.id }) : sl.type || SW.t("spool_sheet_slot_empty")].join(" · "),
-          }))];
-          const go = SW.btn(tt("auto_continue"), { cls: "btn--primary", action: "slot-continue", run: () => plan(p, chosen === "auto" ? { label: "auto" } : slots.find((sl) => sl.label === chosen)) });
-          const seg = SW.segmented({ legend: tt("auto_where"), legendSr: true, name: "spools-target", cls: "slot-targets", wide: true, value: chosen, options: entries });
-          seg.addEventListener("change", (ev) => { chosen = ev.target.value; });
-          return [head, seg, h("p", { class: "muted", textContent: tt("auto_option_hint") }), h("div", { class: "spools__buttons" }, go), stepFoot(pickPrinter)];
+        if (p.auto_possible) {                       // ONE list: Automatic first and selected, then the slots (R83 01:06 point 2)
+          // tapping a slot goes on at once, exactly as before Auto existed; leaving Automatic selected and going on (Continue, or a tap on its row) is the new way
+          const go = SW.btn(tt("auto_continue"), { cls: "btn--primary", action: "slot-continue", run: () => plan(p, { label: "auto" }) });
+          const autoRow = pickRow([h("span", { class: "spools__row-text" }, h("b", { textContent: tt("auto_option") }), h("span", { class: "muted", textContent: tt("auto_option_hint") }))], () => plan(p, { label: "auto" }));
+          autoRow.querySelector("button").setAttribute("aria-current", "true");     // selected when the step opens
+          autoRow.classList.add("spools__row--selected");
+          const slotRows = slots.map((sl) => pickRow([SW.swatch(hexOf(sl.color_hex)),
+            h("span", { class: "spools__row-text" }, h("b", { class: "mono", textContent: sl.label }),
+              h("span", { class: "muted", textContent: sl.spool ? [sl.spool.name, sl.spool.remaining_weight != null ? SW.t("common_grams", { grams: grams(sl.spool.remaining_weight) }) : null].filter(Boolean).join(" · ")
+                : (sl.type || SW.t("spool_sheet_slot_empty")) }))], () => plan(p, sl)));
+          return [head, h("ul", { class: "spools__rows" }, autoRow, ...slotRows), h("div", { class: "spools__buttons" }, go), stepFoot(pickPrinter)];
         }
         return [head, h("ul", { class: "spools__rows" }, slots.map((sl) => pickRow([SW.swatch(hexOf(sl.color_hex)),
           h("span", { class: "spools__row-text" }, h("b", { class: "mono", textContent: sl.label }),
@@ -2571,8 +2573,9 @@ function openTab() {
             const name = view ? nameOf(view) : SW.t("spool_title", { id });
             if (dry) {
               disabled(go, null);
-              return { kind: "ok", text: h("span", {}, ...lines([tt("auto_plan", { spool: name, slots: (r.watching || []).join(", ") || "?" }),
-                r.replaces ? tt("auto_replaces", { spool: r.replaces.name || SW.t("spool_title", { id: r.replaces.spool_id ?? "?" }) }) : ""].filter(Boolean))) };
+              return { kind: "ok", text: h("span", {}, ...lines([tt("auto_plan_load", { spool: name, printer: p.name || p.id }),
+                tt("auto_plan_watching", { slots: (r.watching || []).join(", ") }),
+                r.replaces ? tt("auto_replaces", { spool: r.replaces.name || (r.replaces.spool_id != null ? SW.t("spool_title", { id: r.replaces.spool_id }) : tt("auto_the_spool")) }) : ""].filter(Boolean))) };
             }
             const said = r.message || tt("auto_started", { spool: name, printer: p.name || p.id });
             closeLoad(); changed = true; refresh();

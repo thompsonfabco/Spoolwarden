@@ -539,9 +539,12 @@ function facts(p, box) {
     [SW.t("common_field_access_code"), null, { node: E("span", null, p.configured ? SW.t("common_saved_hidden") : null), badge: p.configured ? null : SW.status("not_set") }],
     [SW.t("printers_fact_certificate"), SW.t(p.pinned ? "printers_cert_pinned_short" : "printers_cert_not_pinned_short")]]);
 }
-function stopRowLives() {
-  for (const v of rowViews.values()) {
-    if (v.live && typeof v.live.stop === "function") v.live.stop();
+// the live views a redraw for Lock now or Unlock carries over by serial: a page that is locked again does not cut a running picture (R83 22:10.3)
+let keptLives = null;
+function stopRowLives(keep) {
+  for (const [serial, v] of rowViews) {
+    if (keep && v.live) keep.set(serial, v.live);
+    else if (v.live && typeof v.live.stop === "function") v.live.stop();
     v.live = null;
     if (v.region) v.region._live = null;
   }
@@ -551,7 +554,8 @@ function detailRegion(p, box, acts) {
   const hasLive = typeof window.printerLive === "function";
   let slotsBox = null, live = null;
   if (hasLive) {
-    live = window.printerLive(p);
+    live = (keptLives && keptLives.get(p.serial)) || window.printerLive(p);
+    if (keptLives) keptLives.delete(p.serial);
     view.live = live;
   } else {
     slotsBox = E("div", "printers-slots");
@@ -792,9 +796,16 @@ function header(found) {
       find, SW.btn([SW.icon("plus", "icon--s"), SW.t("printers_add")], { cls: "btn--primary", run: () => openAdd() }), printersMenu()));
 }
 
-function drawList(body) {
+function drawList(body, keepLive = false) {
+  keptLives = keepLive ? new Map() : null;
+  try { drawListNow(body); } finally {
+    if (keptLives) for (const l of keptLives.values()) if (typeof l.stop === "function") l.stop();      // a printer that is gone
+    keptLives = null;
+  }
+}
+function drawListNow(body) {
   const P = S.printers, found = P.list.filter((p) => klipperOf(p) && !p.configured), configured = P.list.filter((p) => !(klipperOf(p) && !p.configured));
-  stopRowLives();
+  stopRowLives(keptLives);
   rowViews = new Map();
   for (const o of watchers) o.disconnect();
   watchers.clear();
@@ -844,11 +855,11 @@ function poll() {
     poll();
   }, 10000);
 }
-// Lock now and Unlock draw the list again at once: addresses and serials go away or come back (03 2.1). An address that names a printer
+// Lock now and Unlock draw the list again at once, keeping each live view and its picture: addresses and serials go away or come back (03 2.1). An address that names a printer
 // (#printers/<serial>) still opens its row while Locked, as the person typed it; the serial is never written into the page or the address by this script then
 document.addEventListener("sw:lock", () => {
   if (tabNow() !== PRINTERS || !listEl || !listEl.isConnected || !listEl._drawn || lockedNow() === drawnLocked) return;
-  drawList(listEl);
+  drawList(listEl, true);
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden || tabNow() !== PRINTERS || !listEl || !listEl.isConnected) return;
