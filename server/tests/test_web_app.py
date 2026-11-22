@@ -1012,8 +1012,9 @@ def test_spools_remember_sealed_only_under_its_key_and_wrap_storage():
 def test_spools_other_actions_follow_what_the_hub_offers():
     src = _spools_src()
     assert 'document.body.dataset.spoolEdit === "1"' in src
-    assert "EDIT ? weightBtn : null, EDIT ? moveBtn : null, PRINTERS ? loadBtn : null" in src     # editing, and Load with the Printers Feature
-    assert "const other = EDIT || PRINTERS ?" in src and "EDIT ? h(\"div\", { class: \"spools__danger\" }, emptyBtn)" in src
+    # editing, Return (only while checked out, R88 1.6), Print a label (always), Load with the Printers Feature
+    assert "EDIT ? weightBtn : null, EDIT ? moveBtn : null, retBtn, printBtn, PRINTERS ? loadBtn : null" in src
+    assert "const other = part(" in src and "EDIT ? h(\"div\", { class: \"spools__danger\" }, emptyBtn)" in src
     assert "history.pushState({ sheet: true }, \"\", `#spools/${id}`)" in src and "document.title" not in src   # the title comes from the shell
 
 
@@ -1140,10 +1141,12 @@ def test_the_service_worker_cache_is_named_after_the_version_and_older_ones_go()
 
 
 def test_the_service_worker_never_answers_or_stores_an_api_request():
+    """Only a listed shell file is handled, and of the Hub's api only the texts of a language (R85 3.5, RC4: the app opens offline
+    in the language last used); test_rc4_web runs the worker on both."""
     code = _sw_code()
     guard = re.search(r'if \((.*?)\) return;', code.split('addEventListener("fetch"')[1], re.S).group(1)
-    assert 'r.method !== "GET"' in guard and "!SHELL.includes(u.pathname)" in guard      # only a listed shell file is handled
-    assert "/api" not in code and "api/" not in code
+    assert 'r.method !== "GET"' in guard and "SHELL.includes(u.pathname) || isStrings(u.pathname)" in guard
+    assert re.findall(r'"[^"\n]*api[^"\n]*"', code) == ['"/api/strings/"'] and code.count("api/") == 1
     puts = re.findall(r"\.put\(([^)]*)\)", code)
     assert puts == ["u, resp", "u.pathname, copy"]            # the install and the fetch handler store, nothing else does
     assert "resp.ok && !resp.redirected" in code               # a redirect to the sign-in page is not the shell

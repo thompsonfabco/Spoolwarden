@@ -232,8 +232,8 @@ function printersTab() {
     printer_guided_title: "Add a printer", printer_guided_which: "Which printer?", printer_guided_found: "Found on your network",
     printer_guided_looking: "Looking…", printer_guided_none: "None found. Type its address in the next step.", printer_guided_use: "Use this",
     printer_guided_back: "Back", printer_guided_access_hint: "On the printer: Settings > Network/LAN > Access Code",
-    printer_guided_serial: "Serial number", printer_guided_serial_hint: "Printed on the printer; needed when the address was typed.",
-    printer_guided_serial_missing: "Type the printer's serial number.",
+    printer_guided_found_at: "Found on the network at {address}.",
+    printer_guided_type_bambu: "Type a Bambu Lab printer's address", printer_guided_type_klipper: "Type a Klipper printer's address",
     printer_guided_testing: "Testing…", printer_guided_test_failed: "The Hub could not reach a Klipper printer at {address}.",
     printer_guided_add_anyway: "Add anyway", printer_guided_try_again: "Try again",
     printer_guided_map_title: "Map its slots now?", printer_guided_map_body: "Mapping tells the Hub which slot is which. Nothing heats or moves.",
@@ -268,7 +268,6 @@ function printersTab() {
       bAddr: addressField(t("common_address"), t("printer_address_bambu_help"), ""),
       bCode: codeField(tg("printer_guided_access_hint")),
       bName: SW.field({ label: t("common_field_name_optional"), optional: true }),
-      bSerial: SW.field({ label: tg("printer_guided_serial"), hint: tg("printer_guided_serial_hint"), mono: true, optional: true, attrs: { autocapitalize: "characters", spellcheck: "false" } }),
       kAddr: addressField(t("common_address"), t("printer_address_klipper_help"), ""), kPort: portField("7125"),
       kName: SW.field({ label: t("common_field_name_optional"), optional: true }), kKey: keyField({ optional: true, hint: t("printer_address_key_help") }),
     };
@@ -292,13 +291,14 @@ function printersTab() {
           ...k.filter((p) => !p.configured).map((p) => row(p.name || p.host, `${p.host}:${p.port}`, () => useKlipper(p)))];
         body.replaceChildren(h("h3", { class: "pguided__heading" }, tg("printer_guided_found")),
           rows.length ? h("ul", { class: "pfound" }, rows) : h("p", { class: "muted" }, st.scan === "running" ? tg("printer_guided_looking") : tg("printer_guided_none")),
-          h("h3", { class: "pguided__heading" }, tg("printer_guided_which")),
-          h("div", { class: "pguided__choice" }, SW.btn(t("common_bambu_lab"), { action: "family-bambu", run: () => pickFamily("bambu") }),
-            SW.btn(t("common_klipper"), { action: "family-klipper", run: () => pickFamily("klipper") })));
+          // no family choice (R87 00:55; 04 6.9): a printer that was not found is typed, under the list, always shown, in this order
+          h("div", { class: "pguided__choice" }, SW.btn(tg("printer_guided_type_bambu"), { action: "type-bambu", run: () => typeBambu() }),
+            SW.btn(tg("printer_guided_type_klipper"), { action: "type-klipper", run: () => typeKlipper() })));
         foot.replaceChildren(cancel);
       } else if (step === "details") {
         const bambu = st.family === "bambu";
-        body.replaceChildren(...(bambu ? [f.bAddr, f.bCode, f.bName, f.bSerial] : [f.kAddr, f.kPort, f.kName, f.kKey]), line);
+        body.replaceChildren(...(bambu ? [...(st.foundAt ? [h("p", { class: "muted", textContent: tg("printer_guided_found_at", { address: st.foundAt }) })] : []), f.bAddr, f.bCode, f.bName]
+          : [f.kAddr, f.kPort, f.kName, f.kKey]), line);
         foot.replaceChildren(back, go_, anyway);
         const first = bambu ? f.bAddr : f.kAddr;
         if (!first._control.value) first._control.focus(); else if (bambu) f.bCode._control.focus();
@@ -308,14 +308,29 @@ function printersTab() {
       }
     }
     function pickFamily(fam) { st.family = fam; go("details"); }
+    function typeBambu() {                                  // step 2's Bambu Lab form with an empty address: nothing of a found row goes along
+      if (st.foundAt && f.bAddr._control.value.trim() === st.foundAt) f.bAddr._control.value = "";
+      st.serial = ""; st.foundAt = "";
+      pickFamily("bambu");
+    }
     function useBambu(p) {
       st.family = "bambu";
-      f.bAddr._control.value = p.ip || ""; if (p.id) f.bSerial._control.value = p.id;
+      f.bAddr._control.value = p.ip || ""; st.serial = p.id || ""; st.foundAt = p.ip || "";
       go("details");
+    }
+    function typeKlipper() {                                // the same for Klipper: what a found row filled in and was not changed goes
+      const k = st.kFound;
+      if (k && f.kAddr._control.value.trim() === k.host) f.kAddr._control.value = "";
+      if (k && f.kPort._control.value.trim() === k.port) f.kPort._control.value = "7125";
+      if (k && k.name && f.kName._control.value.trim() === k.name) f.kName._control.value = "";
+      st.kFound = null;
+      pickFamily("klipper");
     }
     function useKlipper(p) {
       st.family = "klipper"; f.kAddr._control.value = p.host || ""; f.kPort._control.value = (p.port ? String(p.port) : "7125");
-      if (p.name && !f.kName._control.value) f.kName._control.value = p.name;
+      const named = !!p.name && !f.kName._control.value;
+      if (named) f.kName._control.value = p.name;
+      st.kFound = { host: f.kAddr._control.value, port: f.kPort._control.value, name: named ? p.name : "" };
       go("details");
     }
     function invalid(fields) {
@@ -323,12 +338,12 @@ function printersTab() {
       if (bad.length) bad[0]._control.focus();
       return bad.length > 0;
     }
-    // the test route answers 200 {ok: false} for a printer that does not answer; any other failure (a Hub without the route yet, a
-    // request that did not get through) is not the printer's answer, so the add goes on and says its own result
+    // the test route answers 200 {reachable: false} for a printer that does not answer (R87 1); any other failure (a Hub without the
+    // route yet, a request that did not get through) is not the printer's answer, so the add goes on and says its own result
     async function klipperTest(v) {
       try {
         const r = await pj("test", { family: "klipper", host: v(f.kAddr), port: parsePort(v(f.kPort)), ...(v(f.kKey) ? { api_key: v(f.kKey) } : {}) });
-        return !r || r.ok !== false;
+        return !(r && r.reachable === false);
       } catch (e) {
         return true;
       }
@@ -336,7 +351,6 @@ function printersTab() {
     async function submit(force) {
       const bambu = st.family === "bambu", v = (x) => x._control.value.trim();
       if (invalid(bambu ? [f.bAddr, f.bCode] : [f.kAddr, f.kPort])) return;
-      if (bambu && !v(f.bSerial)) { SW.fieldError(f.bSerial, tg("printer_guided_serial_missing")); f.bSerial._control.focus(); return; }
       if (!SW.busy(go_, t("printer_add_connecting"))) return;
       anyway.hidden = true;
       try {
@@ -349,7 +363,10 @@ function printersTab() {
           }
         }
         clear(line);
-        const sent = bambu ? { serial: v(f.bSerial), host: v(f.bAddr), access_code: v(f.bCode), ...(v(f.bName) ? { name: v(f.bName) } : {}) }
+        // a Bambu Lab printer is added by the address typed (R87 2): the Hub checks it and the Access Code and reads the serial from the
+        // printer; a found row's serial goes along when the address is still the one it was found at
+        const sent = bambu ? { address: v(f.bAddr), access_code: v(f.bCode), ...(v(f.bName) ? { name: v(f.bName) } : {}),
+            ...(st.serial && v(f.bAddr) === st.foundAt ? { serial: st.serial } : {}) }
           : { family: "klipper", host: v(f.kAddr), port: parsePort(v(f.kPort)), ...(v(f.kName) ? { name: v(f.kName) } : {}), ...(v(f.kKey) ? { api_key: v(f.kKey) } : {}) };
         added_ = await pj("add", sent);
         go("map");
@@ -1170,7 +1187,7 @@ function alertsPanel(addToHome) {
     await navigator.serviceWorker.ready;
     const key = (await pj("push/key")).key;
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
-    await pj("push/subscribe", { subscription: sub.toJSON() });
+    await pj("push/subscribe", { subscription: sub.toJSON(), lang: window.SW_LANG ? window.SW_LANG.code() : undefined });
   }
   async function unsubscribe() {
     const reg = await ownReg();

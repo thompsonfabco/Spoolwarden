@@ -142,8 +142,8 @@ async function main() {
         await click(`dialog[open] [data-action=add-anyway]`);
       } else {
         facts.opened = await click(`[data-action="add-klipper"]`);
-        await until(`!!document.querySelector("dialog[open] [data-action=family-klipper]")`);
-        await click(`dialog[open] [data-action=family-klipper]`);
+        await until(`!!document.querySelector("dialog[open] [data-action=type-klipper]")`);
+        await click(`dialog[open] [data-action=type-klipper]`);
         await until(`!!document.querySelector("dialog[open] [data-action=add]")`);
         await fill(0, "192.0.2.77");
       }
