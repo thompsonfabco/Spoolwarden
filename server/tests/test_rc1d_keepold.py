@@ -134,11 +134,12 @@ def test_a_pending_read_keeps_read_json_as_v062_wrote_it_and_both_forms_go_when_
     if hasattr(os, "geteuid"):
         assert stat.S_IMODE(os.stat(jp).st_mode) == 0o600
     older = {**body, "hint": "changed by v0.6.2"}
-    jp.write_text(json.dumps(older), encoding="utf-8")
-    assert statexml.read(jp)["hint"] == "changed by v0.6.2"                   # an older change wins once
+    want = json.dumps(older).encode("utf-8")
+    jp.write_bytes(want)                                                      # v0.6.2 changed it: only the JSON form has it
+    assert jp.read_bytes() == want and "changed by v0.6.2" not in statexml.xml_path(jp).read_text(encoding="utf-8")
     saved = [{"values": {"vendor": "SUNLU"}, "spool_ids": [1], "filament_id": 2}]
-    rid = intake_history.record_save(saved, source="phone", read_id="r1")
-    assert intake_history._load(rid)["read"]["hint"] == "changed by v0.6.2"
+    rid = intake_history.record_save(saved, source="phone", read_id="r1")     # record_save is the first reader of the change
+    assert intake_history._load(rid)["read"]["hint"] == "changed by v0.6.2"   # an older change wins once, through record_save
     assert not pend.exists()                                                  # read.xml, read.json and its hash go together
 
 
@@ -185,8 +186,11 @@ def test_a_catalog_pointer_and_hold_changed_and_deleted_by_v062_win_and_the_next
     assert library.rolled_back_from() is None
     assert not statexml.xml_path(d / "rolled_back.json").exists()                  # the hold is gone, not revived
     assert (d / "rolled_back.xml.unreadable").is_file()                            # kept aside for the owner
-    library._write_state("last_check.json", {"at": 3.0, "ok": True, "error": None, "last_ok_at": 3.0})
+    assert statexml.read(d / "current.json", keep_version=True, keep_old_form=False)["version"] == 8  # the XML form was written from it
+    cur = library._read_state("current.json")
+    library._write_state("current.json", {**cur, "at": 3.0})                       # the next save of current.json itself
     assert json.loads((d / "current.json").read_text(encoding="utf-8"))["version"] == 8    # the next save keeps it
+    assert statexml.read(d / "current.json", keep_version=True, keep_old_form=False)["version"] == 8
     assert library._read_state("current.json")["version"] == 8
 
 
@@ -203,7 +207,8 @@ def test_an_owner_entry_changed_by_v062_survives_the_next_save_and_a_deleted_one
     jp = library._local_dir() / "sunlu" / "pla-plus-2-0.json"
     jp.write_text(library.dumps({**e, "colors": ["Blue"]}), encoding="utf-8")       # v0.6.2 edited it
     assert [x["colors"] for x in library._load_local()] == [["Blue"]]
-    again = {**v062_entry(), "colors": ["Blue"], "material": "PETG"}                # the next save, from what was read
+    again = {**library._load_local()[0], "material": "PETG"}                        # the next save, from what was read
+    assert again["colors"] == ["Blue"] and v062_entry()["colors"] == ["Red"]        # Blue came only from v0.6.2's change
     library.add_local(json.dumps(again).encode("utf-8"))
     assert json.loads(jp.read_text(encoding="utf-8"))["colors"] == ["Blue"]
     jp.unlink()                                                                       # v0.6.2 deleted it
