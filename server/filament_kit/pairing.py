@@ -11,6 +11,7 @@ import os
 import re
 import secrets
 import socket
+import stat
 import subprocess
 import tempfile
 import threading
@@ -247,11 +248,29 @@ def _read(name: str) -> list:
     changed after this code wrote it wins once."""
     from .profiles import statexml
     f = config.paths().state / name
-    for p in (f, statexml.xml_path(f)):
-        if p.is_symlink():      # never through a link: root (modules apply) reads these too, in a folder the service user owns
-            raise OSError(errno.ELOOP, "a state file is a link", str(p))
+    # never through a link: root (modules apply) reads these too, in a folder the service user owns
+    names = (f, statexml.xml_path(f), f.with_name(f.name + ".sha256"))
+    _refuse_links(names)
     out = statexml.read_list(f, mode=0o600, state_owned=True)
+    _refuse_links(names)        # a link swapped in while the helper read: its answer is not used
     return [] if out is None else out
+
+
+def _refuse_links(paths) -> None:
+    """OSError(ELOOP) when any of `paths` is a link. Opened with O_NOFOLLOW where the system has it (the open itself
+    refuses a link: no check, then a read); the lstat is the fallback."""
+    for p in paths:
+        try:
+            if getattr(os, "O_NOFOLLOW", 0):
+                os.close(os.open(p, os.O_RDONLY | os.O_NOFOLLOW))
+            elif stat.S_ISLNK(os.lstat(p).st_mode):
+                raise OSError(errno.ELOOP, "a state file is a link", str(p))
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            if e.errno == errno.ELOOP:
+                raise OSError(errno.ELOOP, "a state file is a link", str(p)) from None
+            raise
 
 
 def _write(name: str, obj: list) -> None:

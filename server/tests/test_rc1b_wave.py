@@ -3,6 +3,7 @@
 import errno
 import json
 import os
+import pathlib
 import stat
 import sys
 import time
@@ -121,6 +122,36 @@ def test_a_state_file_that_is_a_link_is_never_followed(tmp_path):
     secret = tmp_path / "secret.xml"
     secret.write_text('<devices version="1" as="list"/>', encoding="utf-8")
     os.symlink(secret, state("devices.xml"))
+    with pytest.raises(OSError):
+        pairing._read("devices.json")
+
+
+@POSIX
+def test_a_link_swapped_in_after_a_check_is_not_followed(tmp_path, monkeypatch):
+    """The old check-then-read: is_symlink said no, then the read followed a link. The open itself refuses it now."""
+    outside = tmp_path / "outside.json"
+    outside.write_text(json.dumps(DEVICES), encoding="utf-8")
+    state("devices.json").symlink_to(outside)
+    state("devices.json.sha256").write_text("0" * 64 + "\n", encoding="ascii")
+    monkeypatch.setattr(pathlib.Path, "is_symlink", lambda self: False)
+    with pytest.raises(OSError):
+        pairing._read("devices.json")
+    assert not state("devices.xml").exists()
+
+
+@POSIX
+def test_a_link_swapped_in_while_the_helper_reads_is_not_used(tmp_path, monkeypatch):
+    pairing._write("devices.json", DEVICES)
+    outside = tmp_path / "outside.json"
+    outside.write_text(json.dumps(DEVICES[:1]), encoding="utf-8")
+    real = statexml.read_list
+
+    def swapped(*a, **k):
+        state("devices.xml").unlink()
+        state("devices.xml").symlink_to(tmp_path / "x.xml")
+        return real(*a, **k)
+
+    monkeypatch.setattr(statexml, "read_list", swapped)
     with pytest.raises(OSError):
         pairing._read("devices.json")
 
