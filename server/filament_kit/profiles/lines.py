@@ -564,6 +564,8 @@ def load() -> LineSet:
     path = _path()
     xp = statexml.xml_path(path)
     data = None
+    if xp.exists():
+        statexml.read(path, keep_version=True)      # a lines.json that an older Hub changed after our last write wins once
     try:
         raw = xp.read_bytes()
     except FileNotFoundError:
