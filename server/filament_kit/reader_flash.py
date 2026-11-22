@@ -90,7 +90,7 @@ def device_image(device: str) -> tuple[Path, str] | None:
 # and starts the job `reader_setup` (`reader setup --pending`), which takes them and deletes the file at once. Job
 # arguments are never secret (they show in systemctl), so the Wi-Fi password travels this way.
 PENDING = "reader-setup.xml"
-OLD_PENDING = "reader-setup.json"      # what an earlier version left: read once if it is there, never written
+OLD_PENDING = "reader-setup.json"      # the old form, written beside the XML one for one release; read when there is no XML
 PENDING_MAX_AGE = 15 * 60
 
 
@@ -106,6 +106,11 @@ def write_pending(answers: dict) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
     with os.fdopen(fd, "wb") as fh:
         fh.write(statexml.dumps(statexml.tag_of(path), answers))
+    # the old form beside it, as v0.6.2 wrote it (compact, 0600): a job run by an older release reads that. Both go
+    # together in take_pending, which deletes them at once.
+    fd = os.open(path.with_name(OLD_PENDING), os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w") as fh:
+        json.dump(answers, fh)
 
 
 def take_pending() -> dict | None:

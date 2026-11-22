@@ -168,6 +168,11 @@ def _stamps(raw) -> list[dict]:
     return out
 
 
+def _old_stamps(rows: list) -> bytes:
+    """reads.json as v0.6.2 wrote it: compact, a bare number for a stamp with no ticket."""
+    return json.dumps([e if "ticket" in e else e["t"] for e in rows]).encode("utf-8")
+
+
 def _read_stamps(path: Path):
     """What reads.xml holds (reads.json, a JSON list, is moved to it on the way), or None."""
     return statexml.read_list(Path(path), mode=0o644, state_owned=True)
@@ -204,7 +209,7 @@ class ReadCap:
         """Written as reads.xml (atomic, 0644, the state's owner), so a crash never resets the cap. The kit's own file:
         the web unit takes its reads through the kit API (/api/intake/cap/take)."""
         statexml.write_list(self.path, [{k: e[k] for k in ("t", "ticket", "device") if k in e} for e in stamps],
-                            0o644, state_owned=True)
+                            0o644, state_owned=True, old_format=_old_stamps)
 
     def take(self, device: str | None = None) -> str:
         """Use one read; returns the ticket that may give it back (`refund`)."""
@@ -351,6 +356,8 @@ def _keep(read_id: str, images: list[bytes], hint: str, tag_uid: str | None) -> 
     for i, data in enumerate(images):
         _write_new(d / f"photo{i}.jpg", data)
     _write_new(d / META, statexml.dumps(statexml.tag_of(Path(META)), {"hint": hint, "tag_uid": tag_uid}))
+    # the old form beside it (a write-once file, so no hash): `update --rollback` retries a kept read with its hint
+    _write_new(d / OLD_META, json.dumps({"hint": hint, "tag_uid": tag_uid}).encode("utf-8"))
 
 
 def _forget(read_id: str) -> None:
