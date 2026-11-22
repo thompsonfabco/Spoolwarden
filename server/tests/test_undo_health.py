@@ -305,3 +305,27 @@ def test_undo_of_an_unload_and_a_return_puts_back_the_time_it_was_checked_out(st
                      now=now)
     undo.undo_event(ev["id"], sm, store=store, now=now + timedelta(hours=1))
     assert inventory.prev_entry(sm.spools[2]) == ("Shelf A", None)               # no time recorded: none
+
+
+def test_undo_of_an_unload_return_or_clear_of_a_spool_with_no_home_restores_the_checked_out_mark(store):
+    now = datetime.now(timezone.utc)
+    since = "2026-11-20T10:00:00Z"
+    for kind in ("spool.unloaded", "spool.returned", "slot.cleared"):
+        sm = _StubSM([_spool(1, weight=500.0, location="Rack 3")])        # where the rules placed it
+        ev = store.write(kind, {"type": "spool", "id": "1"}, "page",
+                         {"spool": "1", "before_location": "X1 \u00b7 A1", "after_location": "Rack 3",
+                          "before_slot": "A1", "before_home": "", "before_since": since}, now=now)
+        assert undo.undo_event(ev["id"], sm, store=store, now=now + timedelta(hours=1))["undone"] is True
+        got = sm.spools[1]
+        assert inventory.prev_entry(got) == ("", since) and inventory.spool_view(got)["checked_out"] is True
+        assert inventory.spool_view(got)["home"] is None                  # Rack 3 was not its home
+
+
+def test_undo_of_a_load_from_no_place_clears_the_mark(store):
+    now = datetime.now(timezone.utc)
+    sm = _StubSM([_spool(1, weight=500.0, location="X1 \u00b7 A1")])
+    sm.spools[1]["extra"] = inventory.prev_extra("", "2026-11-20T10:00:00Z")
+    ev = store.write("spool.loaded", {"type": "spool", "id": "1"}, "page",
+                     {"spool": "1", "before_location": "", "after_location": "X1 \u00b7 A1", "after_slot": "A1"}, now=now)
+    assert undo.undo_event(ev["id"], sm, store=store, now=now + timedelta(hours=1))["undone"] is True
+    assert inventory.spool_view(sm.spools[1])["checked_out"] is False

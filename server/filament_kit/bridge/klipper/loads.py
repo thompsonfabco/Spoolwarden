@@ -40,8 +40,8 @@ FOLLOW_BACKOFF = (2.0, 30.0)        # a printer's Spoolman calls pause this long
 
 
 def _slot_location(s: dict, cur: str) -> bool:
-    """`cur` is a printer slot: loading's rule, or a kit-placed spool (prev_location set) whose printer was renamed."""
-    return loading._is_slot_location(cur) or bool(loading.prev_location(s))
+    """`cur` is a printer slot: loading's rule, or a kit-placed spool (checked out) whose printer was renamed."""
+    return loading._is_slot_location(cur) or loading.checked_out(s)
 
 
 def _patch(s: dict, loc: str) -> dict:

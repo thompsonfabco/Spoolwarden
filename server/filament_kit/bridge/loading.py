@@ -25,7 +25,8 @@
      does: `inventory.send_back`) and its prev_location is cleared (placed nowhere: it has no location and the
      answer names none); the spool moves to that location with its previous
      location and the time of the load in `extra.prev_since` beside it (a spool coming from another printer slot
-     keeps the prev_location and the time it already had). A spool is checked out while that is set.
+     keeps the prev_location and the time it already had). A spool is checked out from the load until it is sent
+     back, whether or not it had a place: the time in `prev_since` marks it (`inventory.checked_out`).
   `sealed_location` (load, unload, clear) is kept for callers and no longer used: a spool with no home is placed by
   the placement rules, not put in "Sealed stock".
   Loads into the same printer slot are serialised (a lock per (serial, label)): the last one wins on the printer
@@ -326,6 +327,10 @@ def _prev(s: dict) -> str:
     return inventory.prev_entry(s)[0]
 
 
+def checked_out(s: dict) -> bool:
+    return inventory.checked_out(s)
+
+
 def _is_slot_location(loc: str) -> bool:
     """A printer slot: a Bambu AMS location, or "<Klipper printer name> – <label>"."""
     loc = loc or ""
@@ -352,14 +357,14 @@ def _send_back(sm, spools: list[dict], dry: bool, *, kind: str = "spool.unloaded
     for s in sorted(spools, key=lambda s: s["id"]):
         dest = inventory.send_back(sm, s, dry=dry)
         if not dry:
-            since = inventory.prev_entry(s)[1]
+            home, since = inventory.prev_entry(s)
             if kind == "slot.cleared":
                 event_sink.emit_spool("slot.cleared", s, s["id"], slot=slot or _slot_from_location(s.get("location")),
                                       before_location=s.get("location"), after_location=dest or None,
-                                      before_since=since)
+                                      before_since=since, before_home=home)
             else:
                 event_sink.emit_spool("spool.unloaded", s, s["id"], before_location=s.get("location"),
-                                      after_location=dest or None, before_since=since,
+                                      after_location=dest or None, before_since=since, before_home=home,
                                       before_slot=slot or _slot_from_location(s.get("location")))
         out.append({"id": s["id"], "location": dest})
     return out

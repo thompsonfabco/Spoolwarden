@@ -39,6 +39,7 @@ class Kind:
 _SPOOL_CHANGE = ("spool", "before_location", "after_location", "before_grams", "after_grams",
                  "before_slot", "after_slot", "before_tag", "after_tag", "before_archived",
                  "before_since",      # when it was checked out, so an undo of an unload or return puts the time back
+                 "before_home",       # its home then ("" when it came from no place), so that undo restores the mark exactly
                  "batch",      # batch: all spool events of one request (R80 E5)
                  # what opening a spool by linking its tag changed, so an undo can put it back
                  "before_first_used", "before_comment", "took_tag_from")

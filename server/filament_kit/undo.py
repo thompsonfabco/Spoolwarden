@@ -56,6 +56,12 @@ def _slots_of(ev: dict) -> set[str]:
     return out
 
 
+def _home(data: dict, after_loc: str) -> str:
+    """The home the spool had before the unload, return or clear: the event's `before_home` ("" for a spool that came
+    from no place); an event written before it was recorded took the place it went to as the home."""
+    return data["before_home"] if "before_home" in data else after_loc
+
+
 def _location(data: dict, side: str) -> str | None:
     """The location before or after a change; a side the event left out was empty when the other side is given
     (the store drops an empty value), None when the event holds neither (it cannot be put back)."""
@@ -229,19 +235,19 @@ def _apply(ev: dict, sm, st, now, actor) -> dict:
     elif kind == "spool.loaded":
         patch = {"location": before_loc}
         if not data.get("before_slot"):                    # from a shelf: it has no earlier place to go back to
-            patch["extra"] = {**(cur.get("extra") or {}), "prev_location": json.dumps("")}
+            patch["extra"] = {**(cur.get("extra") or {}), **inventory.prev_extra("")}
         new_data.update(before_location=data.get("after_location"), after_location=before_loc,
                         before_slot=data.get("after_slot", ""), after_slot=data.get("before_slot", ""))
     elif kind in ("spool.unloaded", "spool.returned"):
         after_loc = data.get("after_location", "")
         patch = {"location": before_loc,
-                 "extra": {**(cur.get("extra") or {}), **inventory.prev_extra(after_loc, data.get("before_since"))}}
+                 "extra": {**(cur.get("extra") or {}), **inventory.prev_extra(_home(data, after_loc), data.get("before_since"))}}
         new_data.update(before_location=after_loc, after_location=before_loc,
                         before_slot=data.get("after_slot", ""), after_slot=data.get("before_slot", ""))
     elif kind == "slot.cleared":
         after_loc = data.get("after_location", "")
         patch = {"location": before_loc,
-                 "extra": {**(cur.get("extra") or {}), **inventory.prev_extra(after_loc, data.get("before_since"))}}
+                 "extra": {**(cur.get("extra") or {}), **inventory.prev_extra(_home(data, after_loc), data.get("before_since"))}}
         new_data.update(slot=data.get("slot", ""), before_location=after_loc, after_location=before_loc)
 
     sm.patch(f"spool/{sid}", patch)

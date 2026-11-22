@@ -98,7 +98,7 @@ class SpoolEditError(ValueError):
 
 
 class NotCheckedOut(Exception):
-    """The spool is not checked out (no remembered home): it cannot be returned and has no home to change."""
+    """The spool is not checked out (not loaded into a printer by the Hub): it cannot be returned and has no home to change."""
 
     def __init__(self, message: str = NOT_CHECKED_OUT):
         super().__init__(message)
@@ -145,10 +145,19 @@ def prev_entry(s: dict) -> tuple[str, str | None]:
     return (home if isinstance(home, str) else ""), (since if isinstance(since, str) and since else None)
 
 
+def checked_out(s: dict) -> bool:
+    """A spool is checked out from the load into a printer until it is returned, with or without a recorded home: a
+    remembered home (`prev_location`, the older release's own signal) or the time of the load (`prev_since`)."""
+    home, since = prev_entry(s)
+    return bool(home or since)
+
+
 def prev_extra(home: str, since: str | None = None) -> dict:
-    """The `extra` entries for a remembered `home` (empty: not checked out, both emptied). `prev_location` stays the
-    plain place, as older Hubs wrote it, so a rolled-back Hub still finds the home; the time goes in `prev_since`."""
-    if not home:
+    """The `extra` entries for a checked-out spool: its `home` ("" when it came from no place) and the time of the load.
+    `prev_location` stays the plain place, as older Hubs wrote it (empty with no place), so a rolled-back Hub still
+    finds the home; the checked-out mark and its time go in `prev_since` ({"location", "since"}, the location being
+    that same home, possibly ""). Neither home nor time: not checked out, both emptied."""
+    if not home and not since:
         return {"prev_location": json.dumps(""), "prev_since": json.dumps("")}
     return {"prev_location": json.dumps(home),
             "prev_since": json.dumps({"location": home, "since": since} if since else "")}
@@ -753,8 +762,9 @@ def spool_view(s: dict, ctx: ViewContext | None = None) -> dict:
     """One spool as the phones read it (GET spools/{id}, and `view` / `before` of an edit): location, remaining, net and
     empty spool weight, tag, state, filament (number, brand, name, material, colour) and lot, and two more: `loaded`
     ({printer_id, printer, slot} when the spool is recorded in a printer's slot, else None) and `low` (opened and at
-    or under the running-low threshold), and the checked-out trio: `checked_out` (a remembered home is set), `home`
-    (that place, else None) and `checked_out_since` (the time of the load; None for an older entry). Weights are grams. Give `ctx` (`view_context()`) when viewing a list."""
+    or under the running-low threshold), and the checked-out trio: `checked_out` (loaded into a printer and not yet
+    returned, home or no home), `home` (the place it came from, else None) and `checked_out_since` (the time of the
+    load; None for an older entry). Weights are grams. Give `ctx` (`view_context()`) when viewing a list."""
     ctx = ctx or view_context()
     f = s.get("filament") or {}
     tare = s.get("spool_weight")
@@ -770,7 +780,7 @@ def spool_view(s: dict, ctx: ViewContext | None = None) -> dict:
             "filament_id": f.get("id"), "vendor": (f.get("vendor") or {}).get("name"), "name": f.get("name"),
             "material": f.get("material"), "color_hex": f.get("color_hex"), "lot": s.get("lot_nr"),
             "loaded": ctx.slot_of(s.get("location")), "low": low,
-            "checked_out": bool(home), "home": home or None, "checked_out_since": since if home else None}
+            "checked_out": bool(home or since), "home": home or None, "checked_out_since": since}
 
 
 def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, remaining: float | None = None,
@@ -811,8 +821,8 @@ def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, rem
                 raise SpoolEditError(str(e), "location") from None
         patch["location"] = location
     if home is not None:
-        cur_home, since = prev_entry(spool)
-        if not cur_home:
+        _cur_home, since = prev_entry(spool)
+        if not checked_out(spool):
             raise NotCheckedOut()
         if not isinstance(home, str) or not home.strip():
             raise SpoolEditError("home must be one of the Hub's storage locations", "home")
@@ -869,7 +879,7 @@ def auto_place(sm: Spoolman, spool: dict, rules) -> tuple[str, str]:
 
 def send_back(sm: Spoolman, spool: dict, *, rules=None, dry: bool = False) -> str:
     """The one way a spool goes back (Unload, Clear, a replacing load and Return): its location becomes its home
-    (`prev_location`); with no home recorded it is placed as `auto_location` places it (`rules`, else the storage list
+    (`prev_location`); with no home recorded (a spool loaded from no place) it is placed as `auto_location` places it (`rules`, else the storage list
     in force; an opened spool is not sealed stock); `prev_location` (and `prev_since`) is emptied. Where the rules place
     it nowhere (no rule, no free container) it does not fail: the location is emptied and "" is returned (the return
     ends with "Returned." and no place). Returns the new location; `dry` writes nothing. The caller holds `_LOCK` and
@@ -890,15 +900,15 @@ def send_back(sm: Spoolman, spool: dict, *, rules=None, dry: bool = False) -> st
 def return_spool(sm: Spoolman, spool_id: int, *, grams: float | None = None, rules=None, dry: bool = False) -> dict:
     """Send a checked-out spool back that was taken out of the printer by hand: `send_back`, so its location (the Hub's
     record of the slot) becomes its home; the printer itself is not told here (a Klipper printer is, by
-    `LoadsMixin.return_spool`). NotCheckedOut for a spool with no remembered home. `grams` (the weight just taken at
+    `LoadsMixin.return_spool`). NotCheckedOut for a spool that is not checked out (a spool with no home is). `grams` (the weight just taken at
     the Weigh Station, already saved by the caller) is only recorded as `after_grams`. Reports spool.returned
     (`before_location`, `after_location` (left out when the rules place it nowhere), `before_slot`, `after_grams`,
-    `before_since`). Answers `spool` (Spoolman's, after), `view`,
+    `before_since`, `before_home`). Answers `spool` (Spoolman's, after), `view`,
     `before`, `dry`, `event_id` and `event`."""
     with event_sink.capture() as cap:
         with event_sink.held(), _LOCK:
             before = sm.get(f"spool/{spool_id}")
-            if not prev_entry(before)[0]:
+            if not checked_out(before):
                 raise NotCheckedOut()
             dest = send_back(sm, before, rules=rules, dry=dry)
             if dry:
@@ -910,7 +920,7 @@ def return_spool(sm: Spoolman, spool_id: int, *, grams: float | None = None, rul
                 with event_sink.batch_scope():
                     event_sink.emit_spool("spool.returned", before, spool_id, before_location=before.get("location"),
                                           after_location=dest or None, before_slot=slot, after_grams=grams,
-                                          before_since=prev_entry(before)[1])
+                                          before_since=prev_entry(before)[1], before_home=prev_entry(before)[0])
     out = {"spool": final, "view": spool_view(final), "before": spool_view(before), "dry": dry}
     if cap:
         out["event_id"] = cap[-1]["id"]
@@ -980,7 +990,7 @@ class FilterError(ValueError):
 
 def search(sm: Spoolman, q: str, sealed_only: bool, flt: str | None = None) -> list[dict]:
     """`find`, narrowed by `flt` (GET /api/spools `filter`): sealed, opened, loaded (recorded in a printer slot) or
-    low (running low) or checked_out (has a remembered home). None: every spool that is not empty. Each row is Spoolman's spool plus `view`, its
+    low (running low) or checked_out (loaded into a printer, not yet returned). None: every spool that is not empty. Each row is Spoolman's spool plus `view`, its
     `spool_view`."""
     if flt not in (None, "") and flt not in FILTERS:
         raise FilterError(f"filter must be one of {', '.join(FILTERS)}")

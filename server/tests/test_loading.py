@@ -891,3 +891,43 @@ def test_a_replacing_load_over_a_spool_with_no_home_when_the_rules_place_it_nowh
     assert r["moved_back"] == [{"id": old["id"], "location": ""}] and _unplaced(sm, old)
     assert sm.get(f"spool/{new['id']}")["location"] == LOC_A2
 
+
+def test_a_spool_loaded_from_no_place_is_checked_out_and_unload_and_clear_send_it_back_by_the_rules(rig, sm, fil):
+    m, printer, client = rig
+    a = spool(sm, fil, "")
+    loading.load(m, sm, SERIAL, "A2", a["id"], False, preset_for=FakePresets())
+    got = sm.get(f"spool/{a['id']}")
+    v = inventory.spool_view(got)
+    assert got["location"] == LOC_A2 and v["checked_out"] is True and v["home"] is None and v["checked_out_since"]
+    assert [x["id"] for x in inventory.search(sm, "", False, "checked_out")] == [a["id"]]
+    assert inventory.filter_counts(sm)["checked_out"] == 1
+    goes = inventory.auto_place(sm, got, storage.current())[0]
+    r = loading.unload(m, sm, SERIAL, "A2", False)
+    assert r["moved_back"] == [{"id": a["id"], "location": goes}]
+    got = sm.get(f"spool/{a['id']}")
+    assert got["location"] == goes and inventory.spool_view(got)["checked_out"] is False
+    loading.load(m, sm, SERIAL, "A2", a["id"], False, preset_for=FakePresets())
+    assert inventory.spool_view(sm.get(f"spool/{a['id']}"))["checked_out"] is True
+    r = loading.clear(m, sm, SERIAL, "A2", False)
+    assert r["moved_back"][0]["location"] == goes
+    assert inventory.spool_view(sm.get(f"spool/{a['id']}"))["checked_out"] is False
+
+
+def test_return_of_a_spool_loaded_from_no_place_places_it_by_the_rules(rig, sm, fil, evstore):
+    m, printer, client = rig
+    a = spool(sm, fil, "")
+    loading.load(m, sm, SERIAL, "A2", a["id"], False, preset_for=FakePresets())
+    goes = inventory.auto_place(sm, sm.get(f"spool/{a['id']}"), storage.current())[0]
+    r = inventory.return_spool(sm, a["id"])
+    assert r["spool"]["location"] == goes and r["event"]["data"]["after_location"] == goes
+    assert inventory.spool_view(sm.get(f"spool/{a['id']}"))["checked_out"] is False
+
+
+def test_a_replacing_load_over_a_spool_loaded_from_no_place_sends_it_back_by_the_rules(rig, sm, fil):
+    m, printer, client = rig
+    a = spool(sm, fil, "")
+    b = spool(sm, fil, "Rack 2")
+    loading.load(m, sm, SERIAL, "A2", a["id"], False, preset_for=FakePresets())
+    goes = inventory.auto_place(sm, sm.get(f"spool/{a['id']}"), storage.current())[0]
+    r = loading.load(m, sm, SERIAL, "A2", b["id"], False, preset_for=FakePresets())
+    assert r["moved_back"] == [{"id": a["id"], "location": goes}]

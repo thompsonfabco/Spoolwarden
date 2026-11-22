@@ -938,7 +938,7 @@ def test_prev_location_is_read_with_and_without_since():
     assert inventory.prev_entry({"extra": x1}) == ("Rack 1", SINCE)
     assert inventory.prev_extra("Rack 1")["prev_location"] == json.dumps("Rack 1")
     assert inventory.prev_entry({"extra": inventory.prev_extra("Rack 1")}) == ("Rack 1", None)
-    assert inventory.prev_extra("", SINCE) == {"prev_location": json.dumps(""), "prev_since": json.dumps("")}
+    assert inventory.prev_extra("") == {"prev_location": json.dumps(""), "prev_since": json.dumps("")}
     # an older release moved the spool and rewrote prev_location alone: the stale time is not used
     assert inventory.prev_entry({"extra": {**x1, "prev_location": json.dumps("Rack 2")}}) == ("Rack 2", None)
     # an old-release spool: plain prev_location, no new field
@@ -1066,3 +1066,54 @@ def test_send_back_with_no_home_and_no_place_for_it_empties_the_location_and_doe
 
 def test_the_returned_sentence_without_a_place_is_just_returned_from_the_slot():
     assert inventory.RETURNED_TEXT_NO_HOME.format(spool="x", slot="A2") == "Returned x from A2."
+
+
+def _out_no_home(sm, **kw):
+    """An opened spool loaded into a printer slot from no recorded place: checked out, with no home."""
+    return _out(sm, home="", **kw)
+
+
+def test_a_spool_loaded_from_no_place_is_checked_out_with_no_home(sm, printers):
+    s = _out_no_home(sm, name="No place")
+    got = sm.get(f"spool/{s['id']}")
+    assert got["extra"]["prev_location"] == json.dumps("")                   # the old form: empty with no place
+    assert json.loads(got["extra"]["prev_since"]) == {"location": "", "since": SINCE}
+    v = inventory.spool_view(got)
+    assert (v["checked_out"], v["home"], v["checked_out_since"]) == (True, None, SINCE)
+    assert inventory.prev_entry(got) == ("", SINCE)
+    assert [x["id"] for x in inventory.search(sm, "", False, "checked_out")] == [s["id"]]
+    assert inventory.filter_counts(sm)["checked_out"] == 1
+
+
+def test_an_older_release_spool_still_reads_checked_out_and_an_empty_unmarked_one_does_not(sm, printers):
+    old = _opened(sm, 600, name="Older")
+    sm.patch(f"spool/{old['id']}", {"location": SLOT, "extra": {"prev_location": json.dumps("Rack 2")}})
+    v = inventory.spool_view(sm.get(f"spool/{old['id']}"))
+    assert (v["checked_out"], v["home"], v["checked_out_since"]) == (True, "Rack 2", None)
+    plain = _opened(sm, 600, name="Plain")
+    sm.patch(f"spool/{plain['id']}", {"location": SLOT, "extra": {"prev_location": json.dumps("")}})
+    v = inventory.spool_view(sm.get(f"spool/{plain['id']}"))
+    assert (v["checked_out"], v["home"], v["checked_out_since"]) == (False, None, None)
+    assert not inventory.search(sm, "Plain", False, "checked_out")
+
+
+def test_return_of_a_spool_with_no_home_places_it_by_the_rules_and_answers_that_place(sm, store):
+    from filament_kit import storage
+    s = _out_no_home(sm)
+    expect = inventory.auto_place(sm, sm.get(f"spool/{s['id']}"), storage.current())[0]
+    r = inventory.return_spool(sm, s["id"], grams=640)
+    assert r["spool"]["location"] == expect and r["view"]["checked_out"] is False
+    assert r["event"]["data"]["after_location"] == expect and r["before"]["checked_out"] is True
+    assert inventory.prev_entry(sm.get(f"spool/{s['id']}")) == ("", None)
+    with pytest.raises(inventory.NotCheckedOut):
+        inventory.return_spool(sm, s["id"])
+
+
+def test_return_of_a_spool_with_no_home_and_no_place_for_it_clears_the_mark_and_answers_no_place(sm, store, monkeypatch):
+    s = _out_no_home(sm)
+    monkeypatch.setattr(inventory, "auto_place", lambda *a, **k: (_ for _ in ()).throw(
+        inventory.SpoolEditError("no rule", "location")))
+    r = inventory.return_spool(sm, s["id"])
+    assert (r["spool"].get("location") or "") == "" and "after_location" not in r["event"]["data"]
+    got = sm.get(f"spool/{s['id']}")
+    assert inventory.spool_view(got)["checked_out"] is False and inventory.prev_entry(got) == ("", None)
