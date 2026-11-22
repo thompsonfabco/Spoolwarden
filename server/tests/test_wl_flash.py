@@ -17,6 +17,14 @@ class Done:
     returncode, stdout, stderr = 0, b"", b""
 
 
+@pytest.fixture(autouse=True)
+def settings_stay_as_they_were():
+    """A test here must leave st.settings exactly as it found it (a hand-made key would leak into later tests)."""
+    before = dict(st.settings)
+    yield
+    assert st.settings == before
+
+
 @pytest.fixture
 def fw(tmp_path, monkeypatch):
     (tmp_path / pf.WHOLE_IMAGE).write_bytes(b"\xe9whole")
@@ -67,18 +75,22 @@ def test_the_whole_image_is_used_when_the_program_image_is_missing(fw):
     assert _written(fw.calls[0]) == ("0x0", pf.WHOLE_IMAGE)
 
 
-def test_the_wifi_notice_only_after_a_from_scratch_flash_on_wifi(fw):
+def test_the_wifi_notice_only_after_a_from_scratch_flash_on_wifi(fw, monkeypatch):
     assert pf.flash("/dev/ttyACM1", "12", "13", link="wifi").notice == pf.WIFI_LOST_NOTICE
     assert pf.flash("/dev/ttyACM1", "12", "13", link="usb").notice is None
     assert pf.flash("/dev/ttyACM1", "12", "13", link=None).notice is None
     assert pf.flash("/dev/ttyACM1", "13", "14", link="wifi").notice is None     # program image: Wi-Fi survives
-    st.settings["panel_link"] = "wifi"
-    try:
-        assert pf.flash("/dev/ttyACM1", None, "13").notice == pf.WIFI_LOST_NOTICE   # link read from the settings
-    finally:
-        del st.settings["panel_link"]
+    monkeypatch.setitem(st.settings, "panel_link", "wifi")
+    assert pf.flash("/dev/ttyACM1", None, "13").notice == pf.WIFI_LOST_NOTICE   # link read from the settings
     assert pf.WIFI_LOST_NOTICE == ("The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
                                    "Run: sudo spoolwarden weigh-station panel-wifi")
+
+
+def test_the_notice_test_leaves_a_real_panel_link_setting_alone(fw, monkeypatch):
+    monkeypatch.setitem(st.settings, "panel_link", "usb")       # a default that exists once the link setting lands
+    test_the_wifi_notice_only_after_a_from_scratch_flash_on_wifi(fw, monkeypatch)
+    assert st.settings["panel_link"] == "wifi"                  # the inner monkeypatch is this test's own
+    monkeypatch.undo()
 
 
 def test_no_notice_when_the_flash_failed(fw, monkeypatch):
