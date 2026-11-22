@@ -124,3 +124,21 @@ def test_the_devices_row_of_a_station_shows_the_notice_only_when_the_state_carri
 def test_the_devices_page_draws_the_notice_line_on_the_row():
     src = (SP.STATIC / "setup_devices.js").read_text(encoding="utf-8")
     assert "panel_notice: r.panel_notice" in src and "d.panel_notice" in src
+
+
+def test_the_devices_page_draws_the_panel_text_and_nothing_when_it_is_null():
+    from test_hub_devices import _missing, _node
+    node = _node()
+    if not node:
+        _missing("needs Node 22 or later")
+    src = (SP.STATIC / "setup_devices.js").read_text(encoding="utf-8")
+    fn = re.search(r"^function devPanelLine\(d\) \{.*?^\}", src, re.M | re.S).group(0)
+    rows = [{"panel": "Panel: on Wi-Fi"}, {"panel": "Panel: on USB"}, {"panel": None}, {}]
+    prog = ("const h = (tag, o) => ({ tag, ...o });" + fn
+            + ";console.log(JSON.stringify(" + json.dumps(rows) + ".map(devPanelLine)))")
+    run = subprocess.run([node, "-e", prog], capture_output=True, encoding="utf-8", timeout=60)
+    assert run.returncode == 0, run.stderr
+    wifi, usb, null, absent = json.loads(run.stdout)
+    assert wifi["textContent"] == "Panel: on Wi-Fi" and usb["textContent"] == "Panel: on USB"
+    assert null is None and absent is None
+    assert "panel: r.panel," in src and "devPanelLine(d)" in src
