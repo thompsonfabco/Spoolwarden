@@ -58,7 +58,7 @@ TEXT_FIRMWARE_OLD = _t("panel_setup_firmware_old", "This panel's firmware is too
 TEXT_NO_ANSWER_USB = _t("panel_setup_no_answer_usb", "The panel did not answer over USB. Check the cable and try again.")
 TEXT_NOT_ACCEPTED = _t("panel_setup_not_accepted", "The panel did not accept the Wi-Fi settings.")
 TEXT_PANEL_STORE = _t("panel_setup_panel_store", "The panel could not save the Wi-Fi settings. Run this again; if it fails again, "
-                      "flash the panel: sudo spoolwarden weigh-station flash-display")
+                      "flash the panel: sudo {command} weigh-station flash-display")
 TEXT_TIMEOUT = _t("panel_setup_timeout", "The panel did not answer in time.")
 TEXT_NOT_SAVED = _t("panel_setup_not_saved", "The panel took the Wi-Fi settings, but the station could not save them. "
                     "Run the set-up again.")
