@@ -197,3 +197,66 @@ def test_the_station_refuses_a_tampered_body_or_the_settings_purpose(hub, sender
     assert status in (401, 403) and "speed" not in st.live
     voice = {page.PROOF_HEADER: page.make_proof(hub.key, "voice", body, now=hub.clock())}   # control: the right purpose
     assert hub.call("POST", path, headers=voice, raw=body)[0] == 200 and st.live["speed"] == 120
+
+
+# ---- the page's gate stays with the handler when the unit lets the home ranges through for a Wi-Fi panel ----
+
+def _page_server(allow, page_from, ranges):
+    import http.client
+    import threading as _threading
+    from http.server import ThreadingHTTPServer
+    from filament_kit.station import http as station_http
+    from test_ev3_station_page import view
+    handler = station_http.make_handler(view, allow, page_ranges=" ".join(ranges), page_from=page_from)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    _threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def get(path):
+        c = http.client.HTTPConnection("127.0.0.1", server.server_address[1], timeout=5)
+        try:
+            c.request("GET", path)
+            r = c.getresponse()
+            r.read()
+            return r.status
+        finally:
+            c.close()
+    return server, get
+
+
+@pytest.mark.parametrize("page_from", ["allowed", "home", "subnets"])   # the allow-list only / home ranges / own networks
+def test_the_page_listener_keeps_page_from_whatever_the_unit_lets_through(page_from):
+    from filament_kit import apply
+    from filament_kit.station import guard
+    cfg = json.loads(json.dumps(config.DEFAULTS))
+    cfg["station"].update(page_from=page_from, panel_link="wifi")
+    unit = apply.station_dropin(cfg, ["127.0.0.1"], subnets=lambda: ["10.20.30.0/24"])
+    allow_line = [l for l in unit.splitlines() if l.startswith("IPAddressAllow=")][0]
+    assert "192.168.0.0/16" in allow_line                      # the unit's door is open to the home ranges either way
+    _, ranges = apply.page_ranges(cfg, lambda: ["10.20.30.0/24"])     # what the service is handed as STATION_PAGE_RANGES
+    nets = guard.page_networks(" ".join(ranges))
+    listed = {"203.0.113.9"}
+    assert guard.caller_class("192.168.1.50", listed, nets) == ("home" if page_from == "home" else "outside")
+    assert guard.caller_class("10.20.30.7", listed, nets) == ("outside" if page_from == "allowed" else "home")
+    assert guard.caller_class("203.0.113.9", listed, nets) == "listed"
+
+
+def test_with_wifi_on_and_page_from_allowed_the_page_refuses_a_home_address_and_the_panel_port_still_takes_the_token():
+    from filament_kit import apply
+    cfg = json.loads(json.dumps(config.DEFAULTS))
+    cfg["station"].update(page_from="allowed", panel_link="wifi")
+    _, ranges = apply.page_ranges(cfg)
+    assert ranges == []                                        # STATION_PAGE_RANGES is empty: no address is a home address
+    server, get = _page_server({"203.0.113.9"}, "allowed", ranges)     # the caller (loopback) is off the allow-list
+    try:
+        assert get("/state") == 403 and get("/") == 403       # refused before anything else, the page's files too
+        listed_server, get2 = _page_server({"127.0.0.1"}, "allowed", ranges)
+        try:
+            assert get2("/") == 200                            # control: the same request from the allow-list is let in
+        finally:
+            listed_server.shutdown()
+            listed_server.server_close()
+    finally:
+        server.shutdown()
+        server.server_close()
+    connect(token=ps.stored_token() or set_up())              # the panel port's gate is the token and the pin
+    assert link() is not None
