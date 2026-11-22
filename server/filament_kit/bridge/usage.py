@@ -37,7 +37,7 @@ until `mapping.LayoutWatch` re-maps the printer when it is idle (`mapping.reques
 slots all agreed resets the streak. Without a start layout (no AMS in the report) nothing is learned or checked.
 
 Log: `state/printers/<serial>/usage/<yyyy-mm>.xml`, one XML file per month per printer (tag `usage`, through
-`statexml`), written under a module lock and a file lock (`usage/.lock`), so the root CLI and the service do not collide. Each file
+`statexml`), written under a module lock and a file lock (`usage/.lock`, waited for at most LOCK_WAIT s), so the root CLI and the service do not collide. Each file
 holds `entries` (a list of entry records) and `undone` (a list of {entry, at}):
   entry:  {"id", "at", "job", "grams", "spool_id", "slot", "observe"[, "error"]} and the newer fields, in the month of
           its `at`
@@ -111,6 +111,7 @@ FILE = "usage.jsonl"            # the log of the release before: its new lines a
 DIR = "usage"
 MIGRATED = ".migrated"           # says how many bytes of usage.jsonl were taken in
 TAKEN = re.compile(r"usage\.jsonl taken in: (\d+) ([0-9a-f]{64})\n")
+LOCK_WAIT = 5.0                 # seconds to wait for usage/.lock
 MONTH_FILE = re.compile(r"\d{4}-(?:0[1-9]|1[0-2])\.xml")
 TAG = "usage"
 UNDO_DAYS = 7
@@ -245,9 +246,14 @@ def _forget(path: Path) -> None:
     _reported.discard(str(path))
 
 
+class LockTimeout(OSError):
+    """usage/.lock stayed with another process for LOCK_WAIT seconds."""
+
+
 @contextmanager
 def _flocked(serial: str):
-    """The module lock, and usage/.lock (flock) so the root CLI and the service do not move or write at once."""
+    """The module lock, and usage/.lock (flock) so the root CLI and the service do not move or write at once. The wait for
+    the file lock is bounded (LockTimeout): a stopped holder must not hold up every printer's writes."""
     with _lock:
         if fcntl is None or serial in _held:
             yield
@@ -255,7 +261,15 @@ def _flocked(serial: str):
         folder = _dir(serial) / DIR
         make_state_dir(folder)
         with open_lock(folder / ".lock") as fh:
-            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            deadline = time.monotonic() + LOCK_WAIT
+            while True:
+                try:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise LockTimeout(f"{folder / '.lock'} is held by another process") from None
+                    time.sleep(0.05)
             _held.add(serial)
             try:
                 yield
@@ -425,9 +439,13 @@ def _move(serial: str) -> tuple[list[dict], dict[str, str]] | None:
 def _write_line(serial: str, rec: dict) -> None:
     """Store an entry, or an {"undo": id, "at"} / {"undo_failed": id, "at"} record, in its month's file, and (for one
     release) as a line of the old usage.jsonl, so a rollback finds the history current."""
-    with _flocked(serial):
-        _store(serial, rec)
-        _old_form(serial, rec)
+    try:
+        with _flocked(serial):
+            _store(serial, rec)
+            _old_form(serial, rec)
+    except LockTimeout as e:            # another process holds usage/.lock: the record is kept, the rollback copy is skipped
+        _report(_copy_key(serial), f"not kept current for a rollback: {e}")
+        _store(serial, rec, move=False)
 
 
 def _copy_key(serial: str) -> Path:

@@ -421,3 +421,30 @@ def test_on_a_fresh_old_log_the_line_is_written_before_the_marker(monkeypatch):
     assert [x["id"] for x in _v062_read(SERIAL)[0]] == [r["id"]]        # the rollback copy has the entry
     monkeypatch.setattr(usage, "_write_atomic", real)
     assert [e["id"] for e in usage.entries(SERIAL, days=30)] == [r["id"]]      # and a lost marker costs no double
+
+
+@needs_flock
+def test_a_lock_held_too_long_skips_the_old_form_instead_of_hanging(monkeypatch):
+    d = _dir()
+    d.mkdir(parents=True)
+    (d / "usage.jsonl").write_text(json.dumps(_entry(E1, "2026-11-10T10:00:00Z")) + "\n", encoding="utf-8")
+    (d / "usage").mkdir()
+    monkeypatch.setattr(usage, "LOCK_WAIT", 0.3, raising=False)
+    holder = subprocess.Popen(
+        [sys.executable, "-I", "-c",
+         "import fcntl,sys;f=open(sys.argv[1],'a');fcntl.flock(f,fcntl.LOCK_EX);print('held',flush=True);sys.stdin.read()",
+         str(d / "usage" / ".lock")], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "held"
+        out = {}
+        worker = threading.Thread(target=lambda: out.update(r=usage.append(SERIAL, {"job": "new"})), daemon=True)
+        worker.start()
+        worker.join(5)
+        assert "r" in out                                  # was: waited for the holder with no limit
+        assert sorted(e["id"] for e in usage.entries(SERIAL, days=10_000)) == sorted([E1, out["r"]["id"]])
+        assert [x["id"] for x in _v062_read(SERIAL)[0]] == [E1]              # the rollback copy was skipped
+        assert any("usage.jsonl" in p and "rollback" in p for p in statexml.problems())
+    finally:
+        holder.stdin.close()
+        holder.wait(10)
+        worker.join(10)
