@@ -254,8 +254,10 @@ def save(sm, rules: dict, body: dict, returner=None) -> dict:
                 raise FlowError(502, "tag_not_linked", str(e), lines(f"Saved #{sid}", "tag not linked:",
                                                                      "link it on the phone"), spool_id=sid) from e
         try:
-            # a sealed spool keeps its net weight (its bag weighs too), as when it was first saved
-            s = sm.get(f"spool/{sid}") if sealed_now else inventory.update_spool(sm, sid, gross=gross, dry=dry)
+            # a sealed spool keeps its net weight (its bag weighs too), as when it was first saved. With `return` the weight is
+            # only checked here (dry) and written after the return went through: a spool that stopped being checked out
+            # between the check above and the return is refused with nothing written (R88 CO2 follow-up 2)
+            s = sm.get(f"spool/{sid}") if sealed_now else inventory.update_spool(sm, sid, gross=gross, dry=dry or bool(back))
         except ValueError as e:
             raise FlowError(422, "weight_out_of_range", str(e), lines("Weight too low", "check the scale")) from e
         v = _spool_view(s)
@@ -264,6 +266,8 @@ def save(sm, rules: dict, body: dict, returner=None) -> dict:
                 out = _returner(sm, rules, returner)(sid, grams=v["remaining_g"], dry=dry)
             except inventory.NotCheckedOut:
                 raise _not_checked_out() from None
+            if not dry and not sealed_now:
+                inventory.update_spool(sm, sid, gross=gross, dry=False)
             return {"spool_id": sid, "created": False, "dry": dry, "returned": True, "remaining_g": v["remaining_g"],
                     **returned_answer(v["name"], out, v["remaining_g"], dry)}
         return {"spool_id": sid, "created": False, "dry": dry, "remaining_g": v["remaining_g"],

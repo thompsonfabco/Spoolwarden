@@ -315,6 +315,22 @@ def test_save_with_return_of_a_spool_that_is_not_checked_out_writes_nothing(stc,
     assert ok.status_code == 200 and "returned" not in ok.json()
 
 
+def test_save_with_return_that_loses_a_race_writes_no_weight(stc, sm, monkeypatch):
+    """The spool is sent home by someone else between the checked-out check and the return: 409, and the weight was not written."""
+    s = _out(sm, home="Rack 2", name="Raced")
+    uid = _own_tag(sm, s)
+    before = sm.get(f"spool/{s['id']}")["remaining_weight"]
+    real = inventory.return_spool
+
+    def raced(sm_, spool_id, **kw):
+        sm_.patch(f"spool/{spool_id}", {"location": "Rack 2", "extra": {**(sm_.get(f"spool/{spool_id}").get("extra") or {}), **inventory.prev_extra("")}})
+        return real(sm_, spool_id, **kw)
+    monkeypatch.setattr(inventory, "return_spool", raced)
+    r = stc.post("/api/station/save", json={"uid": uid, "gross_g": 600, "return": True})
+    assert r.status_code == 409 and r.json()["error"] == "not_checked_out"
+    assert sm.get(f"spool/{s['id']}")["remaining_weight"] == before
+
+
 def test_save_with_return_and_no_place_for_the_spool_says_returned_alone(stc, sm, monkeypatch):
     s = _out(sm, home="", name="No place")
     uid = _own_tag(sm, s)
