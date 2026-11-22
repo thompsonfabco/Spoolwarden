@@ -80,6 +80,12 @@ fixed.
     needs 443 for itself, so switching it on is refused. Choose Remote access in the installer to give the Hub 8710.
     An existing Hub keeps its port.
 
+## Weigh Station
+
+22. **The panel over Wi-Fi has not been tried on a real panel.** `sudo spoolwarden weigh-station panel-wifi` and the
+    panel's firmware 14 are covered by the automated tests only; whether the panel keeps its link while it speaks is
+    unconfirmed. It is off unless you turn it on, and the USB cable keeps working.
+
 ## How this was first checked (v0.2.0)
 
 On WSL Ubuntu 26.04: a tarball built from main with `tools/make_release.sh` (`FK_NO_APP=1`), `sudo ./install.sh`

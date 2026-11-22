@@ -119,7 +119,7 @@ real time, 0.25 s ahead, between the lamp lines. A newer phrase cuts the current
 The C3 plays the bytes over I2S to the MAX98357. Each byte is a sample with 128 as silence; the panel converts it to
 signed 16-bit, applies the volume from the `V` line, and writes it to both channels. The samples wait in a ring buffer
 (1 s). When the stream runs dry, the panel fades to silence over 50 ms instead of holding the last sample, so there is
-no click. Wi-Fi and Bluetooth are never started on the panel.
+no click. Bluetooth is never started. Wi-Fi is off unless the panel was set up for it with `sudo spoolwarden weigh-station panel-wifi` (firmware 14); until then the panel only talks over its USB cable.
 
 For an older ESP8266 panel the station keeps its original speech path: a headset driver in open air, so everything
 below 450 Hz is cut, 2.5 kHz is lifted 8 dB and the result is compressed hard. The bytes are a PWM duty (16-240
