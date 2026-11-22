@@ -11,7 +11,8 @@ edit or an accepted suggestion) and `undo`. All three come to `sync`, which make
 values: queue what differs, delete the entry of an item that no longer differs. It runs in a background thread and
 never raises into the save.
 
-The record keeps `share.json` beside record.json (so retention removes it with the record):
+The record keeps `share.xml` beside its record (so retention removes it with the record; R85 section 1: it was
+`share.json`, which is read when there is no XML yet and moved once, by profiles/statexml.py):
     {"entries": {key: reader entry id | None}, "failed": {"reason": str, "at": iso} | None}
 and `state(rid)` is what a record's reply shows: {"state": "waiting" | "not_queued" | "none", "reason": str | None,
 "entries": int}. "not_queued" is a failure to talk to the reader (it did not answer, refused, was too small ...);
@@ -21,15 +22,15 @@ are "none", never an error. `retry(rid)` runs `sync` again at once and returns t
 No address is ever in a request body (local_reader._check_body)."""
 from __future__ import annotations
 
-import json
 import logging
 import threading
 
 from . import config, local_reader
+from .profiles import statexml
 
 log = logging.getLogger(__name__)
 
-FILE = "share.json"
+FILE = "share.json"                 # the name statexml goes by: the state is share.xml, an old file share.json
 INLINE = False                      # tests: run the queueing in the caller's thread
 _LOCKS: dict[str, threading.Lock] = {}
 _LOCKS_LOCK = threading.Lock()
@@ -47,8 +48,8 @@ def _path(rid: str):
 
 def _read(rid: str) -> dict:
     try:
-        d = json.loads(_path(rid).read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001 - no file, a bad id or a bad file: nothing waits
+        d = statexml.read(_path(rid))
+    except Exception:  # noqa: BLE001 - a bad id or a bad file: nothing waits
         return {"entries": {}, "failed": None}
     ent = d.get("entries") if isinstance(d, dict) and isinstance(d.get("entries"), dict) else {}
     failed = d.get("failed") if isinstance(d, dict) and isinstance(d.get("failed"), dict) else None
@@ -56,12 +57,11 @@ def _read(rid: str) -> dict:
 
 
 def _write(rid: str, st: dict) -> None:
-    from .pairing import _write_atomic
     p = _path(rid)
     if not st["entries"] and not st["failed"]:
-        p.unlink(missing_ok=True)
+        statexml.unlink(p)                  # both forms: a left-over share.json would be read back
         return
-    _write_atomic(p, json.dumps(st, indent=1).encode("utf-8"), 0o600, state_owned=True)
+    statexml.write(p, st, mode=0o600, state_owned=True)
 
 
 def state(rid: str) -> dict:
@@ -76,7 +76,7 @@ def state(rid: str) -> dict:
 
 
 def entry_records() -> dict[str, str]:
-    """{reader entry id: the record's id} for every kept record that has queued entries (what share.json holds)."""
+    """{reader entry id: the record's id} for every kept record that has queued entries (what share.xml holds)."""
     from . import intake_history
     out: dict[str, str] = {}
     try:
