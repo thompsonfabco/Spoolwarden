@@ -486,7 +486,7 @@ class _Run:
         m = {"stamp": stamp, "backup": backup.name, "at": self.now, "orca": with_orca}
         if accept:
             m["accept"] = accept
-        statexml.write(marker_path(self.d), m)
+        statexml.write(marker_path(self.d), m, old_format={})      # v0.6.2: compact json.dumps, no newline
 
     def accepted(self, server: dict, stamp: str) -> dict:
         """The updates the owner accepted for build `stamp` ({"base"|"orca": [names]}, only the non-empty ones;
@@ -810,7 +810,7 @@ class _Run:
             m = {"stamp": stamp, "backup": backup.name, "at": self.now}
             if accept:
                 m["accept"] = accept
-            statexml.write(marker_path(sd), m)
+            statexml.write(marker_path(sd), m, old_format={})
 
         try:
             res = self.install_fn(build_dir, f, sd, running=self.running,

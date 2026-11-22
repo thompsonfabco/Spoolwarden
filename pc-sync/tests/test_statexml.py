@@ -88,8 +88,8 @@ def test_config_is_written_in_both_forms_and_xml_is_read_first(tmp_path):
     store.save_config(d, cfg)
     assert json.loads(d.config.read_text(encoding="utf-8")) == cfg          # an older Sync still finds its pairing
     assert statexml.xml_path(d.config).is_file() and store.load_config(d) == cfg
-    d.config.write_text(json.dumps({"server": "stale"}), encoding="utf-8")
-    assert store.load_config(d) == cfg
+    d.config.write_text(json.dumps({"server": "changed by an older Sync"}), encoding="utf-8")
+    assert store.load_config(d) == {"server": "changed by an older Sync"}     # keep-old-form: it wins once, over the recorded hash
     statexml.xml_path(d.config).write_bytes(b"<config")
     with pytest.raises(ValueError):
         store.load_config(d)
