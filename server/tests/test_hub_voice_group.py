@@ -334,3 +334,12 @@ out.after = calls.length;
     assert page["before"] == 0
     assert page["calls"] == [["test", {"speaker": 0, "speed": 100, "volume": 50}]]
     assert page["after"] == 1
+
+
+def test_the_speaker_hint_counts_the_speakers_of_the_voice_the_hub_reports(hub, tmp_path):
+    page = _drive_voice(hub, tmp_path, r"""
+voice.speaker_range = [0, 99];
+await redraw();
+out.hint = text($(".field__hint", speakerEl().closest(".field")));
+""")
+    assert page["hint"] == "This voice has 100 speakers. Try a few with Test."

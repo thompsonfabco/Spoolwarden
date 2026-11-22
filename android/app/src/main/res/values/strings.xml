@@ -5549,7 +5549,8 @@
     <string name="voice_off">Speaking is switched off.</string>
     <string name="voice_played">Played on the Weigh Station.</string>
     <string name="voice_remote">Chosen on the Weigh Station\'s own computer: spoolwarden config.</string>
-    <string name="voice_speaker_hint">This voice has 904 speakers. Try a few with Test.</string>
+    <!-- 1=count -->
+    <string name="voice_speaker_hint">This voice has %1$d speakers. Try a few with Test.</string>
     <string name="station_returned">Returned</string>
     <!-- 1=home -->
     <string name="station_home">Home: %1$s</string>

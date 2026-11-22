@@ -18,7 +18,6 @@ const VOICE_STUB = {
   settings_voice_choice_espeak: "espeak-ng, robotic, no download",
   settings_voice_remote: "Chosen on the Weigh Station's own computer: spoolwarden config.",
   settings_voice_speaker: "Speaker",
-  settings_voice_speaker_hint: "This voice has 904 speakers. Try a few with Test.",
   settings_voice_speed: "Speed",
   settings_voice_speed_unit: "%",
   settings_voice_volume: "Volume",
@@ -46,6 +45,8 @@ const SLIDING = "input";                                         // the event a 
 const VOICE_SPEAKERS = 903;                                      // the many-speaker voice has the speakers 0 to 903
 const voiceChoiceOf = (v) => (v["station.tts"] === "espeak" ? "espeak" : v["station.voice"] === "en_US-ljspeech-medium" ? "one" : "many");
 const voiceNumber = (v, key, dflt) => (v[key] == null || v[key] === "" || Number.isNaN(Number(v[key])) ? dflt : Number(v[key]));
+// the speakers the answer's `speaker_range` [first, last] counts; the many-speaker voice's own when the answer has none
+const voiceSpeakerCount = (a) => (Array.isArray(a.speaker_range) ? a.speaker_range[1] - a.speaker_range[0] + 1 : VOICE_SPEAKERS + 1);
 const voiceSpeaker = (v) => (/^\d+$/.test(String(v).trim()) && +v >= 0 && +v <= VOICE_SPEAKERS ? null : SW.t("field_error_range", { min: 0, max: VOICE_SPEAKERS }));
 
 
@@ -115,7 +116,7 @@ function voiceRows(v, a) {
     options: VOICE_CHOICES.map(([value, key]) => ({ value, label: voT(key) })) });
   const remoteLine = remote ? h("p", { class: "voice__remote", textContent: voT("settings_voice_remote") }) : null;
 
-  const speaker = SW.field({ row: true, type: "number", mono: true, label: voT("settings_voice_speaker"), hint: voT("settings_voice_speaker_hint"), value: String(saved.speaker) });
+  const speaker = SW.field({ row: true, type: "number", mono: true, label: voT("settings_voice_speaker"), hint: SW.t("voice_speaker_hint", { count: voiceSpeakerCount(a) }), value: String(saved.speaker) });
   speaker.classList.add("voice__speaker");
   const slider = (key, min, max, step, value, unit) => {
     const f = SW.field({ row: true, type: "range", mono: true, label: voT(key), value: String(value), unit: unit || String(value), attrs: { min, max, step } });

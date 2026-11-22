@@ -1293,7 +1293,7 @@ class _ConfigMenu:
                 if iid == "voice_speaker" and (self.value(_ITEMS["voice"]) == "espeak"
                                                or not self.voice_view().get("speaker_range")):
                     continue
-                add(iid, extra=f"  {voice_cli.speaker_hint()}" if iid == "voice_speaker" else "")
+                add(iid, extra=f"  {voice_cli.speaker_hint(self.voice_view()['speaker_range'][1] + 1)}" if iid == "voice_speaker" else "")
         if gid == "backups":
             after = ["Back up now: sudo spoolwarden backup create", "Restore: sudo spoolwarden restore <zip>"]
         elif gid == "catalog":

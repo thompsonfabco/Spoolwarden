@@ -4326,7 +4326,7 @@
   "voice_off": "Speaking is switched off.",
   "voice_played": "Played on the Weigh Station.",
   "voice_remote": "Chosen on the Weigh Station's own computer: {command} config.",
-  "voice_speaker_hint": "This voice has 904 speakers. Try a few with Test.",
+  "voice_speaker_hint": "This voice has {count} speakers. Try a few with Test.",
   "station_returned": "Returned",
   "station_home": "Home: {home}",
   "station_home_none": "not recorded",

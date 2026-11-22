@@ -93,6 +93,6 @@ def _played() -> str:
     return catalogue_text("voice_played", "Played on the Weigh Station.")
 
 
-def speaker_hint() -> str:
-    """The line beside the Speaker row."""
-    return catalogue_text("voice_speaker_hint", "This voice has 904 speakers. Try a few with Test.")
+def speaker_hint(count: int = SPEAKER_MAX + 1) -> str:
+    """The line beside the Speaker row; `count` is the speakers of the voice (its `speaker_range` is 0 to count - 1)."""
+    return catalogue_text("voice_speaker_hint", "This voice has {count} speakers. Try a few with Test.", count=str(count))
