@@ -17,6 +17,7 @@ import pytest
 import uvicorn
 
 from fakes import serving
+from filament_kit.profiles import statexml
 from filament_kit import config, library, pairing
 from filament_kit.api import create_app
 from filament_kit.bridge import registry
@@ -239,7 +240,7 @@ def test_full_cycle(tmp_path, server, monkeypatch):
     st = pc.client.state()
     assert st["installed"]["stamp"] == b1["stamp"]
     assert st["live_hash"] == builds.tree_hash(pc.folders.user_filament)     # re-uploaded after the install
-    assert json.loads((pc.dirs.installed / "BUILD.json").read_text(encoding="utf-8"))["stamp"] == b1["stamp"]
+    assert statexml.read(pc.dirs.installed / "BUILD.json")["stamp"] == b1["stamp"]
     assert pc.run() == "up_to_date"
 
     # 5. preset_for: the line's generated P id with int temps, never a Generic or system id
@@ -466,13 +467,13 @@ def test_interrupted_install_is_resumed(tmp_path, server, monkeypatch):
         _crash_after(m, 2)                       # the first preset's .json + .info, then the disk is full
         with pytest.raises(OSError):
             pc.run()
-    assert sync.marker_path(pc.dirs).exists()
+    assert statexml.exists(sync.marker_path(pc.dirs))
     first, *rest = sorted(p["name"] for p in manifest(b2["stamp"])["presets"])
     assert pc.preset(first)["filament_density"] == ["1.31"]
     assert all(pc.preset(n)["filament_density"] != ["1.31"] for n in rest)
 
     assert pc.run() == "installed"               # resumed: the same build, no live-hash gate
-    assert not sync.marker_path(pc.dirs).exists()
+    assert not statexml.exists(sync.marker_path(pc.dirs))
     assert pc.client.state()["installed"]["stamp"] == b2["stamp"]
     for n in [first, *rest]:
         assert pc.preset(n)["filament_density"] == ["1.31"], n
@@ -501,7 +502,7 @@ def test_interrupted_install_values_are_not_inapp_edits(tmp_path, server, monkey
     pc.write(edited, cfg)
     _density(sm, 1.35)                            # and Spoolman changed again meanwhile
     assert pc.run() == "rebuild_requested"
-    assert not sync.marker_path(pc.dirs).exists()
+    assert not statexml.exists(sync.marker_path(pc.dirs))
     b3 = build(sm)
     accept_all()
     out = pc.run()

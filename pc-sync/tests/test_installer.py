@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 import studio_fixture
+from fksync import statexml
 from fksync import inapp, installer
 from fksync.store import AppDirs
 from fksync.treehash import tree_hash
@@ -434,9 +435,9 @@ def test_before_write_not_called_when_refused(tmp_path):
 # --- final review I3: refusals that would repeat forever ---------------------------------------------
 
 def _manifest(build: Path, **fields) -> None:
-    m = json.loads((build / "BUILD.json").read_text(encoding="utf-8"))
+    m = statexml.read(build / "BUILD.json")
     m.update(fields)
-    (build / "BUILD.json").write_text(json.dumps(m), encoding="utf-8")
+    statexml.write_plain(build / "BUILD.json", m)
 
 
 def test_gcode_already_installed_once_is_trusted(tmp_path):

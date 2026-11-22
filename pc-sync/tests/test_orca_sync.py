@@ -7,6 +7,7 @@ import pytest
 
 import orca_fixture
 import studio_fixture
+from fksync import statexml
 from fksync import client, installer, store, sync, treehash
 from test_sync import INFO, PRESET, STAMP, T0, FakeClient
 
@@ -253,13 +254,13 @@ def test_interrupted_install_not_resumed_after_orca_edit(env):
                    _zip(live_hash=live, orca_live_hash=olive))
     with pytest.raises(OSError):
         _run(c, folders, orca, dirs, install=crashing_install)
-    assert sync.marker_path(dirs).exists()
+    assert statexml.exists(sync.marker_path(dirs))
     data = json.loads((orca.user_filament / f"{N}.json").read_text())
     data["filament_flow_ratio"] = ["0.9"]                       # edited in Orca after the crash
     (orca.user_filament / f"{N}.json").write_text(json.dumps(data))
     c.calls.clear()
     _run(c, folders, orca, dirs, now=T0 + 60)
-    assert not sync.marker_path(dirs).exists()
+    assert not statexml.exists(sync.marker_path(dirs))
     assert "edited in Orca Slicer since" in _log(dirs)
 
 
@@ -405,7 +406,7 @@ def test_resumed_install_reports_the_trees_it_was_started_with(env):
                    _zip(live_hash=live, orca_live_hash="older"))
     with pytest.raises(OSError):
         _run(c, folders, orca, dirs, install=crashing_install)
-    assert json.loads(sync.marker_path(dirs).read_text())["orca"] is False
+    assert statexml.read(sync.marker_path(dirs))["orca"] is False
     assert _run(c, folders, orca, dirs, now=T0 + 60) == "installed"
     assert c.trees == [["base"]]
     assert json.loads((orca.user_filament / f"{N}.json").read_text())["nozzle_temperature"] == ["215"]

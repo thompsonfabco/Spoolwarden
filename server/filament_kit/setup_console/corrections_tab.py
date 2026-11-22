@@ -11,7 +11,7 @@ to the reader's queue (reader_corrections.py). Reads need no code; Remove and Se
     POST label-reader/corrections/send {code}   start the job `corrections_send` (the job strip follows it; the
                                                 reader does the upload) after a look that something waits
 
-A refusal is `{error: <the Hub's text>, reason: <code>}` (reader_corrections.CorrectionsError)."""
+A refusal is `{error: <the Hub's text>, code: <code>}` (reader_corrections.CorrectionsError)."""
 from __future__ import annotations
 
 import anyio
@@ -27,7 +27,7 @@ def routes(page) -> list[tuple]:
         try:
             return fn(config.load(), *a)
         except reader_corrections.CorrectionsError as e:
-            raise Refused(e.status, str(e), reason=e.code, **e.extra) from None
+            raise Refused(e.status, str(e), code=e.code, **e.extra) from None
 
     async def listing(request, body):
         return await anyio.to_thread.run_sync(lambda: call(reader_corrections.waiting))
@@ -57,7 +57,7 @@ def routes(page) -> list[tuple]:
     async def send(request, body):
         waiting = await anyio.to_thread.run_sync(lambda: call(reader_corrections.waiting))
         if not waiting["count"]:
-            raise Refused(409, reader_corrections.EMPTY, reason="empty")
+            raise Refused(409, reader_corrections.EMPTY, code="empty")
         await page._helper({"op": "job", "code": body["code"], "name": "corrections_send"})
         page.audit(request, "job corrections_send started")
         return {"ok": True, "name": "corrections_send", "count": waiting["count"]}

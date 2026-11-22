@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from filament_kit.profiles import statexml
 from filament_kit import config, library, pairing, profiles
 from filament_kit.profiles import inapp as inapp_mod
 from filament_kit.bridge import registry
@@ -119,7 +120,7 @@ def test_upload_live_stores_and_hashes(env):
     h = builds.store_upload("live", io.BytesIO(data), device_id="a", user_id="123")
     live = profiles_dir() / "live" / "user"
     assert h == builds.tree_hash(live) and (live / "base" / "x.info").is_file()
-    meta = json.loads((profiles_dir() / "live" / "meta.json").read_text(encoding="utf-8"))
+    meta = statexml.read(profiles_dir() / "live" / "meta.json")
     assert meta["live_hash"] == h and meta["user_id"] == "123" and meta["owner"] == "a"
     assert builds.owner() == "a"
 
@@ -166,7 +167,7 @@ def test_upload_rejects_bomb_and_count(env):
         builds.store_upload("live", io.BytesIO(big_one), device_id="a", user_id="1")
     live = profiles_dir() / "live"
     assert not (live / "user").exists() and not (live / "system").exists()
-    leftovers = [p for p in profiles_dir().rglob("*") if p.is_file() and p.name not in ("meta.json",)
+    leftovers = [p for p in profiles_dir().rglob("*") if p.is_file() and p.name not in ("meta.xml",)
                  and not p.name.endswith(".lock")]
     assert leftovers == []
 
@@ -222,7 +223,7 @@ def test_good_build(env):
     assert r["ok"] is True and r["error"] is None and isinstance(r["problems"], list)
     cur = builds.current()
     assert cur["stamp"] == r["stamp"] == "20270115-080000"
-    manifest = json.loads((profiles_dir() / "builds" / r["stamp"] / "BUILD.json").read_text(encoding="utf-8"))
+    manifest = statexml.read(profiles_dir() / "builds" / r["stamp"] / "BUILD.json")
     assert TG.sunlu(TG.H2D, "0.4") in {p["name"] for p in manifest["presets"]}
     assert manifest["filaments"] == {"3": "sunlu--pla-plus-2-0", "17": "sunlu--pla-plus-2-0"}
     view = builds.state_view("a")
@@ -231,7 +232,7 @@ def test_good_build(env):
     st = builds.status()
     assert st["lines"] == 1 and st["presets"] == len(manifest["presets"])
     # the saved lines carry the build's filament_id
-    lid = json.loads((profiles_dir() / "lines.json").read_text(encoding="utf-8"))["lines"][0]["filament_id"]
+    lid = statexml.read(profiles_dir() / "lines.json", keep_version=True)["lines"][0]["filament_id"]
     assert manifest["lines"]["sunlu--pla-plus-2-0"]["filament_id"] == lid
 
 
@@ -671,7 +672,7 @@ def test_new_sync_pc_starts_like_a_first_install(env):
     builds.record_installed(b1, "a")
     tick()
     builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1", partial=b1)
-    (profiles_dir() / "deleted.json").write_text(json.dumps({"deleted_before": ["Old one"]}), encoding="utf-8")
+    builds._write_json(profiles_dir() / "deleted.json", {"deleted_before": ["Old one"]})
     pair("b")                                                   # a unpaired, b paired
     names = sorted(p.stem for p in (profiles_dir() / "builds" / b1 / "base").glob("*.json"))
     assert len(names) >= 4                                      # one gone is not an app reset
@@ -681,7 +682,7 @@ def test_new_sync_pc_starts_like_a_first_install(env):
     view = builds.state_view("b")
     assert view["owner"] == "b" and view["installed"] is None
     assert "partial" not in builds.meta()
-    assert not (profiles_dir() / "installed.json").exists()
+    assert not statexml.exists(profiles_dir() / "installed.json")
     assert builds.status()["installed"] is None
     r = builds.run_build(env, now=TG.NOW + 1)
     assert r["ok"] is True, r
@@ -695,8 +696,7 @@ def test_installed_json_of_another_device_is_ignored(env):
     b1 = builds.run_build(env, now=TG.NOW)["stamp"]
     builds.record_installed(b1, "a")
     assert builds.state_view("a")["installed"]["stamp"] == b1
-    (profiles_dir() / "installed.json").write_text(json.dumps({"stamp": b1, "at": 1.0, "device_id": "zz"}),
-                                                   encoding="utf-8")
+    builds._write_json(profiles_dir() / "installed.json", {"stamp": b1, "at": 1.0, "device_id": "zz"})
     assert builds.state_view("a")["installed"] is None
 
 
@@ -756,7 +756,7 @@ def test_repaired_pc_keeps_the_owners_inapp_edits_and_notes(env):
     assert lines_[-3:-1] == [inapp_mod.MARK, "dry 8 h first"] and lines_[-1].startswith("Spoolman filament ids:")
     # once the new PC installs that build, its record carries them on (owner-edits.json is no longer needed)
     builds.record_installed(b3["stamp"], "b")
-    assert not (profiles_dir() / "owner-edits.json").exists()
+    assert not statexml.exists(profiles_dir() / "owner-edits.json")
     tick()
     builds.store_upload("live", io.BytesIO(_live_zip_of(b3["stamp"])), device_id="b", user_id="1")
     b4 = builds.run_build(env, now=TG.NOW + 3)["stamp"]

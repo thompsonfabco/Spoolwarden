@@ -20,7 +20,7 @@ import sys
 import time
 from pathlib import Path
 
-from fksync import __version__, client, store, studio, sync, timer  # absolute: PyInstaller runs this file as a script
+from fksync import __version__, client, statexml, store, studio, sync, timer  # absolute: PyInstaller runs this file as a script
 
 BUSY_PAIR = "A sync run is in progress; try again in a minute. Nothing was changed."
 APP = "filament-kit-sync"
@@ -463,10 +463,7 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
         _out(f"Scheduled task:  '{TASK_NAME}' is not registered, so nothing runs the sync by itself; run "
              f"install_task.ps1 from the install folder (or install again)")
     stamp = None
-    try:
-        stamp = json.loads((dirs.installed / "BUILD.json").read_text(encoding="utf-8")).get("stamp")
-    except (OSError, ValueError, AttributeError):
-        pass
+    stamp = (statexml.read(dirs.installed / "BUILD.json") or {}).get("stamp")
     _out(f"Installed build: {stamp or 'none yet'}")
     if f is not None:
         _differ_line(f.variant, st.get("differing"))
@@ -503,7 +500,7 @@ def cmd_unpair(dirs: store.AppDirs) -> int:
     except ValueError:
         cfg = {}
     dirs.token.unlink(missing_ok=True)
-    dirs.config.unlink(missing_ok=True)
+    statexml.unlink(dirs.config)
     store.drop_pair_aside(dirs)
     store.log(dirs, "unpaired this PC (token and config removed)")
     dev = cfg.get("device")
