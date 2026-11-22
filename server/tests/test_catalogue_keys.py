@@ -99,7 +99,7 @@ def test_every_catalogue_fallback_is_the_catalogue_text():
     found = list(_calls())
     unnamed = [f"{rel}:{n}" for rel, n, _, fb, has, line in found if has and fb is None and not _allowed(rel, line)]
     assert not unnamed, f"a fallback that is not a literal and not in ALLOWED_DYNAMIC: {unnamed}"
-    drift = sorted((key, f"{rel}:{n}", fb, CATALOGUE[key]) for rel, n, key, fb, _, _ in found
+    drift = sorted((key, f"{rel}:{n}", fb, CATALOGUE.get(key)) for rel, n, key, fb, _, _ in found
                    if key is not None and fb is not None and CATALOGUE.get(key) != fb)
     assert not drift, f"a fallback that strings/en.json lacks or says differently (key, where, fallback, catalogue): {drift}"
 
