@@ -40,15 +40,15 @@ ADDED = [
     ("surface", "text", 4.5), ("text", "code", 4.5), ("muted", "code", 4.5),
     ("border-strong", "surface-2", 3.0), ("focus", "code", 3.0), ("focus", "surface-3", 3.0),
 ]
-# 07 CON-8 and 08 3.4 test 3: (Material roles, foreground token, background token, ratio); the Kotlin field of a
+# CON-8: (Material roles, foreground token, background token, ratio); the Kotlin field of a
 # token is its name in camel case (surface-2 -> surface2)
 MATERIAL = [
     ("onSurface", "surface", "text", "surface", 4.5),
     ("onSurface", "surfaceContainerHighest", "text", "surface-2", 4.5),
     ("onSurfaceVariant", "surface", "muted", "surface", 4.5),
     ("onSurfaceVariant", "surfaceContainerHighest", "muted", "surface-2", 4.5),
-    # Material primary is --accent-text and onPrimary is --surface: --accent is a labelled fill only
-    #, used as Material's extended colours with --on-accent, which ON above checks
+    # Material primary is --accent-text and onPrimary is --surface: --accent is a labelled fill only,
+    # used as Material's extended colours with --on-accent, which ON above checks
     ("primary", "surface", "accent-text", "surface", 4.5),
     ("primary", "surfaceContainerHighest", "accent-text", "surface-2", 4.5),
     ("onPrimary", "primary", "surface", "accent-text", 4.5),

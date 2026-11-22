@@ -463,7 +463,7 @@ def test_the_filament_system_is_read_only_for_a_pause(klipper, monkeypatch):
 # ---------------------------------------------------------------- R475 LOW 2: a flapping HMS code is not news every time
 
 def test_a_hms_code_that_goes_and_comes_back_is_told_once_in_half_an_hour(bambu, sink, store):
-    """R80 s2 says "a new printer error code appears" and is silent on repeats; a code that clears and returns (a notice
+    """The alert rules say "a new printer error code appears" and is silent on repeats; a code that clears and returns (a notice
     that flaps) wrote one alert each time. Smallest reading: the same code of the same printer is told again only after
     watch.ERROR_REPEAT seconds."""
     now = [1000.0]

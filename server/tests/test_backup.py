@@ -706,7 +706,7 @@ def test_the_apply_inside_a_restore_writes_no_step_lines_of_its_own(kit, monkeyp
 
 
 def test_a_second_steps_in_the_same_process_stays_quiet_and_k_stops_at_n(monkeypatch):
-    """the design, components: one N per job log, and K never passes N (drift J1, J2)."""
+    """The design, components: one N per job log, and K never passes N (drift J1, J2)."""
     from filament_kit import steps
     lines = []
     first = steps.Steps(2, out=lines.append)

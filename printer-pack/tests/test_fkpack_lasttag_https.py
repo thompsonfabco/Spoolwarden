@@ -1,4 +1,4 @@
-"""AF2b: the lasttag service's unit. A new install may take port 443 (R82 section 2 point 5; a unit below 1024 gets
+"""AF2b: the lasttag service's unit. A new install may take port 443 (a unit below 1024 gets
 exactly CAP_NET_BIND_SERVICE), an existing install keeps its port, and an install made before the service served
 HTTPS gets its unit rewritten (once) so it can keep a certificate. systemd is simulated as in test_fkpack_reinstall."""
 import fkpack  # noqa: F401  (test_fkpack puts the pack on sys.path)

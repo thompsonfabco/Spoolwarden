@@ -1,4 +1,4 @@
-"""The Weigh Station's four voice values: Speak, Speaker, Speed, Volume (R88, ruled 2026-11-22 01:50).
+"""The Weigh Station's four voice values: Speak, Speaker, Speed, Volume.
 
 One XML file, `voice.xml`, in the Hub's STATE folder:
 

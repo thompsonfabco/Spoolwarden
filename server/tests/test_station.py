@@ -122,7 +122,7 @@ def test_state_and_last_tag_shapes():
         code, st = _get(base + "/state")
         assert code == 200
         assert set(st) == {"tag", "scale", "last_weight", "panel", "panel_version", "panel_nfc", "air", "photo",
-                       "flow", "version", "settings_changed"}   # the last two: R83 section 10.4
+                       "flow", "version", "settings_changed"}   # the last two
         iso = station_http.iso(now - 10)
         tag = {"status": "ok", "nfc_id": "a:b:c:d:e:f:1", "read_at": iso, "read_at_unix": now - 10, "held": False}
         _ages_near(st, {"tag": 10, "scale": 1, "last_weight": 2})

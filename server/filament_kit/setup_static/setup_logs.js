@@ -34,7 +34,7 @@ const actT = (key, vars) => {
   if (v !== key || !ACT_TEXT[key]) return v;
   return ACT_TEXT[key].replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m));
 };
-// Who: the `actor` the Hub page route takes (a type); What kind: the `kinds` it takes, a list of the kinds of R84 section 1
+// Who: the `actor` the Hub page route takes (a type); What kind: the `kinds` it takes, a list of kinds
 const ACT_WHO = [["", "activity_who_any"], ["page", "activity_who_page"], ["cli", "activity_who_cli"], ["hub", "activity_who_hub"],
   ["device", "activity_who_device"], ["connector", "activity_who_connector"]];
 const ACT_KINDS = {

@@ -1,4 +1,4 @@
-"""Workbench on the web (design 09 S6.4, 02 1.3, 08 9 and test 4 of 08), in a real headless browser where it matters: the three
+"""Workbench on the web (the design, components and platform mapping), in a real headless browser where it matters: the three
 profile groups `nav=sidebar`, `collection=cards` and `detail=card` of components.css are keyed on Workbench only (Console's groups
 do not mention it, Workbench's do not hold an unqualified rule); the Hub page shows Workbench (sidebar on a wide
 screen, the rail on a tablet, the bottom bar on a phone, cards in a grid) and the web app its colours and navigation

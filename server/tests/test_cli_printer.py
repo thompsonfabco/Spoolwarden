@@ -37,7 +37,7 @@ def kit(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def klipper_answers(monkeypatch):
-    """The test before a Klipper printer is saved (R82 s5 p3) finds the printer: the tests of the other commands add one
+    """The test before a Klipper printer is saved finds the printer: the tests of the other commands add one
     at an address nothing answers on. The guided order's own tests are in test_af5_printer_add.py."""
     monkeypatch.setattr(cli, "_klipper_test", lambda host, port, key: True)
     monkeypatch.setattr(discovery, "scan", lambda net, **kw: [])

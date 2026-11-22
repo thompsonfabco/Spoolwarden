@@ -1,4 +1,4 @@
-"""EA3 (b): the routes of events and alerts (R80 section 8 and E1/E4), the words the Hub builds for each event (section 5),
+"""EA3 (b): the routes of events and alerts (E1/E4), the words the Hub builds for each event,
 and the catalogue holding exactly the texts the server builds (the drift test)."""
 from __future__ import annotations
 
@@ -110,7 +110,7 @@ def test_every_server_text_is_built_somewhere_and_every_say_names_a_text():
 
 
 def test_the_titles_and_sentences_of_the_design_table():
-    """R80 section 5, row by row."""
+    """The alert table, row by row."""
     def view(kind, data, **kw):
         ev = {"id": 1, "at": "2026-11-17T04:12:09Z", "kind": kind, "severity": kw.get("severity", "warn"),
               "subject": kw.get("subject", {"type": "printer", "id": "p-3", "name": "Workshop X1"}),

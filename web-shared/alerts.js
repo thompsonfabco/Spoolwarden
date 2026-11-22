@@ -27,7 +27,7 @@ const pick = (d, names) => { for (const n of names) if (d[n] != null && d[n] !==
 // ----- texts: the catalogue's own (strings/en.json holds every alert_* key) -----
 const tx = t;
 
-// ----- what an event says: title, sentence and the place that fixes it (R80 section 5's table) -----
+// ----- what an event says: title, sentence and the place that fixes it -----
 const num = (n) => (n == null || n === "" ? null : n);
 const size = (n) => {
   const v = typeof n === "string" && /^\d+(\.\d+)?$/.test(n.trim()) ? Number(n) : n;          // a stored value is text

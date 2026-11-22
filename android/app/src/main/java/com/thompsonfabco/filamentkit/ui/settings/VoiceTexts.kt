@@ -1,7 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.settings
 
 /**
- * The texts of the Weigh Station voice group (R88 2026-11-22 01:35, VO5) that are not in the string catalogue yet. Only
+ * The texts of the Weigh Station voice group that are not in the string catalogue yet. Only
  * the catalogue step (RG1) opens `strings/en.json`; each text here has a proposed key in the VO5 report and moves
  * there with it. "Needs the Hub. Reconnecting…" is a catalogue text already; the sentence of a refused Test is the
  * Hub's own, shown as it sends it (the three results below are for a reply that carries no `message`).

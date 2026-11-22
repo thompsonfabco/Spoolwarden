@@ -394,7 +394,7 @@ class Feed(threading.Thread):
                  url=event_url(self.url.rstrip("/"), event), texts=lambda lang: self.texts_in(event, lang))
 
     def texts_in(self, event: dict, lang: str) -> tuple[str, str] | None:
-        """(title, body) of `event` in a phone's language: the same event asked of the Hub again with `lang` (R85 3.8: the Hub
+        """(title, body) of `event` in a phone's language: the same event asked of the Hub again with `lang` (the Hub
         writes its texts in the language asked, `?lang=<code>`). A Hub that does not translate yet answers its own words, and
         None (no such event in the answer) leaves the texts already built."""
         eid = event.get("id")

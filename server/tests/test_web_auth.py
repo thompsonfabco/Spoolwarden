@@ -513,7 +513,7 @@ def test_lan_only_blocks_outsiders(store, passfile, path):
 
 
 def test_outsiders_get_the_refusal_page_and_its_files(store, passfile):
-    """the design, web app: /intake outside the home network is the refusal page; the files it links answer anyone, the rest does
+    """The design, web app: /intake outside the home network is the refusal page; the files it links answer anyone, the rest does
     not."""
     with TestClient(_app(store, passfile), client=AWAY) as c:
         page = c.get("/intake")

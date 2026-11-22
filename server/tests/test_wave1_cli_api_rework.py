@@ -97,7 +97,7 @@ def _shown(out: str) -> list[int]:
 
 
 def test_activity_without_days_shows_the_newest_50_newest_first(capsys):
-    """R86 22:35 point 4: `newest=50`, not the newest 200 cut by 7 days. This test pinned the newest 200
+    """`newest=50`, not the newest 200 cut by 7 days. This test pinned the newest 200
     before; it now pins the ruled behaviour."""
     hub = HubApi(token())                                    # its pairing is an Activity event too: the oldest here
     old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=30)
@@ -210,7 +210,7 @@ def test_export_writes_the_csv_of_csv_io_and_needs_root(capsys, monkeypatch, tmp
 
 
 def test_sudo_export_printers_keeps_the_slot_columns(capsys, spoolman_url):
-    """R559 8 / R597 (Antigravity's point): `sudo spoolwarden export printers` goes through the command line (no live printers) and
+    """`sudo spoolwarden export printers` goes through the command line (no live printers) and
     still lists a slot's spool, read from the spools' Spoolman locations."""
     from filament_kit import spoolman
     from filament_kit.bridge import registry
@@ -257,7 +257,7 @@ def _answer_yes(monkeypatch) -> list[str]:
 
 
 def test_backup_password_is_set_shown_and_removed_through_the_helper(capsys, monkeypatch):
-    """the design, command line (R559 03 M4): this test pinned other texts before; it now pins the design's."""
+    """The design, command line: this test pinned other texts before; it now pins the design's."""
     monkeypatch.setattr(secret_input, "ask", lambda prompt: "correct horse battery")
     assert run(capsys, ["backup", "password", "--show"])[1] == "Backup password is not set.\n"
     assert _words(run(capsys, ["backup", "password"])[1]) == _words(SET_LINES)
@@ -304,7 +304,7 @@ def test_a_password_that_is_too_short_is_refused_with_the_designs_words(capsys, 
 
 
 def test_backup_password_from_the_command_line_is_recorded_as_cli(monkeypatch):
-    """R559 04 M1 (D8): the helper's settings.changed takes the actor of the command line, not a literal `page`."""
+    """The helper's settings.changed takes the actor of the command line, not a literal `page`."""
     monkeypatch.setattr(secret_input, "ask", lambda prompt: "correct horse battery")
     with event_sink.acting("cli"):
         assert history_cli.run_backup_password() == 0
@@ -315,7 +315,7 @@ def test_backup_password_from_the_command_line_is_recorded_as_cli(monkeypatch):
     assert events.read(kinds="settings.changed")["events"][-1]["actor"]["type"] == "page"
 
 
-# ---------- R559 03 M3: plain undo finds the newest change that can be undone ----------
+# ---------- plain undo finds the newest change that can be undone ----------
 
 def test_plain_undo_never_skips_to_an_older_change(capsys):
     """D15: plain `undo` is for the newest change of this command line. Once that one is undone, a second plain `undo` finds the
@@ -345,7 +345,7 @@ def test_plain_undo_says_so_when_the_newest_change_is_not_undoable(capsys):
     assert not events.store().get(older["id"]).get("undone") and sm.spools[1]["location"] == "Shelf B"
 
 
-# ---------- R559 03 M2: an automatic job is `hub` ----------
+# ---------- an automatic job is `hub` ----------
 
 def test_the_scheduled_update_is_recorded_as_the_hub(monkeypatch):
     from filament_kit import updates
@@ -357,7 +357,7 @@ def test_the_scheduled_update_is_recorded_as_the_hub(monkeypatch):
     assert seen == ["hub", "cli"]
 
 
-# ---------- R559 03 M6: `status` without sudo asks the root helper about backups ----------
+# ---------- `status` without sudo asks the root helper about backups ----------
 
 def test_the_backup_step_asks_the_root_helper_when_the_folder_is_closed(monkeypatch):
     import os
@@ -380,7 +380,7 @@ def test_the_backup_step_lists_the_folder_it_can_read():
     assert getting_started._backup_made(no_helper) is True
 
 
-# ---------- R559 02 L7: the nightly backup fails closed ----------
+# ---------- the nightly backup fails closed ----------
 
 def test_the_nightly_encrypt_fails_closed_when_the_password_file_cannot_be_read(tmp_path, monkeypatch):
     src, dst = tmp_path / "a.tar.gz", tmp_path / "a.tar.gz.enc"

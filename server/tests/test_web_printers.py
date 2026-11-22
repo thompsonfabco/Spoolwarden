@@ -791,7 +791,7 @@ def test_service_worker_caches_the_shell_and_never_the_api():
     src = (Path(web_app.__file__).parent / "static" / "sw.js").read_text(encoding="utf-8")
     listed = re.search(r"const SHELL = \[(.*?)\];", src, re.S).group(1)
     assert "api" not in listed.replace("app.", "") and '"app.js"' in listed and "BASE" in listed
-    # no API path in the code (comments aside) but the texts of a language, kept for offline (R85 3.5; R574 HIGH 4)
+    # no API path in the code (comments aside) but the texts of a language, kept for offline
     assert re.findall(r'"[^"\n]*/api[^"\n]*"', re.sub(r"//[^\n]*", "", src)) == ['"/api/strings/"']
 
 
@@ -1132,7 +1132,7 @@ def test_add_edit_and_forget_need_the_pages_origin_and_the_home_network(managing
 
 
 def test_at_the_public_address_printer_changes_are_off_by_default(env):
-    """Orchestrator ruling 2026-11-10: read-only at the web module's public address unless the owner turns it on."""
+    """Read-only at the web module's public address unless the owner turns it on."""
     kit = ManagingKit()
     with TestClient(make_app(env, kit), base_url=ORIGIN, client=HOME) as c:
         m = c.get(P + "/manage")

@@ -278,7 +278,7 @@ function devPairDialog(kind, first, known) {
 }
 
 // ----- Paired devices (the design, Hub page): kind, version and out of date, Open, and the Tag Readers as rows -----
-// the sentence of an out-of-date row, from the table of R83 section 9.4 (the Hub gives the same one as `advice`)
+// the sentence of an out-of-date row (the Hub gives the same one as `advice`)
 const devOod = (d) => (d.out_of_date && d.kind ? devT("devices_ood_" + d.kind, { version: d.version, newest: d.newest }) : null);
 // the line under a name: the kind and the version, "Version not known" when the device has not said; none for a pairing without a kind
 function devKindLine(d) {
@@ -446,7 +446,7 @@ function devOwnPage(d, address, pageFrom) {
   }) });
   return h("div", { class: "devdetail__page" }, h("p", { class: "mono", textContent: devT("devices_own_page", { address }) }),
     h("div", { class: "actions" }, go), h("p", { class: "muted", textContent: devT("devices_open_hint") }),
-    // R83 2026-11-18 01:14 point 1: a station set to the allow-list only says so under its link
+    // a station set to the allow-list only says so under its link
     pageFrom === "allowed" ? h("p", { class: "muted", textContent: devT("devices_station_allow_list_only") }) : null, res);
 }
 

@@ -1,4 +1,4 @@
-"""The live printer view of the Printers tab (the 20:58 ruling point 3): what an open printer shows in its
+"""The live printer view of the Printers tab: what an open printer shows in its
 Detail region. The page's own routes call the same printer code as the kit routes, in the Hub's process; they never call the web
 app's routes (the page's lock must apply, and the web app may be switched off). Serials are the path's `serial`, as the other
 Printers routes have them.
@@ -53,7 +53,7 @@ except ImportError:  # AS1 adds bridge/auto_slot.py beside this step
     auto_slot = None  # type: ignore[assignment]
 
 LABEL = re.compile(r"[A-Za-z0-9-]{1,16}")
-SESSION_COOKIE = "fk_setup_camera"      # R83 ruled 22:20; a session cookie (no Max-Age): the Hub's memory decides the end
+SESSION_COOKIE = "fk_setup_camera"      # a session cookie (no Max-Age): the Hub's memory decides the end
 MAX_DAYS = 366.0
 DAYS = 7.0
 OFFLINE = "the printer is offline; check that it is on and on the network"

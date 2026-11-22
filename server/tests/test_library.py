@@ -744,7 +744,7 @@ def test_load_keeps_the_parsed_library_until_a_file_changes(monkeypatch):
     assert again.lookup("Acme Plastics", "PLA Max").local is not None
 
 
-# ---------- R85 section 1: the catalog state and the owner's entries are XML ----------
+# ---------- the catalog state and the owner's entries are XML ----------
 
 def _local_entry(product="PLA Max"):
     return {"schema_version": 1, "vendor": "Acme", "product": product, "material": "PLA", "updated": "2026-11-02",

@@ -1998,7 +1998,7 @@ def test_spools_pages_of_fifty_pass_the_audit(spools_hub_paged):
 
 
 def test_the_tag_poll_runs_only_while_the_screen_is_shown_and_the_page_is_visible(spools_hub):
-    """the design, web app: GET tag every 3 s; it stops when the page is hidden or the screen is left, and starts again at once."""
+    """The design, web app: GET tag every 3 s; it stops when the page is hidden or the screen is left, and starts again at once."""
     script = r"""
   const calls = []; stub(/^tag$/, () => { calls.push(Date.now()); return reply(TAG({})); });
   await until('a first poll', () => calls.length >= 1);

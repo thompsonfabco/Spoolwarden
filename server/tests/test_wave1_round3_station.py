@@ -108,16 +108,16 @@ def test_the_station_answers_a_wrong_ticket_and_a_body_that_is_not_an_object_in_
 
 
 def test_the_ruled_texts_of_round_3():
-    """R560 4, 7, 8, 9 and the LOW wording: the texts as the rulings give them."""
+    """The texts as the rulings give them."""
     c = CATALOGUE
     readers = "Tag Readers set up for this Hub must be set up again."
     assert readers not in c["settings_certificate_body"]              # the public certificate: readers do not check it
-    assert c["cli_certificate_made"] == "Made a new certificate. " + readers                   # R86 2026-11-21 22:35.1
+    assert c["cli_certificate_made"] == "Made a new certificate. " + readers
     assert c["station_page_page_from_subnets_note"] == "If this machine's network has changed, run: sudo {command} features apply"
     assert page.TEXTS["station_page_page_from_subnets_note"] == \
-        "If this machine's network has changed, run: sudo spoolwarden features apply"         # R83 2026-11-21 22:26
+        "If this machine's network has changed, run: sudo spoolwarden features apply"
     assert c["devices_station_allow_list_only"] == "This Weigh Station answers only the addresses on its allow-list."
-    assert c["cli_activity_empty_ever"] == "Nothing has been done yet."                       # R86 22:42.3c
+    assert c["cli_activity_empty_ever"] == "Nothing has been done yet."
     assert "200" not in c["cli_activity_more"]
     for key in ("station_page_unreachable", "station_settings_remove_failed"):                  # no bare "station"
         assert re.sub(r"Weigh Station", "", c[key]).lower().count("station") == 0, key

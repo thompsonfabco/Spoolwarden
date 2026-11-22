@@ -236,7 +236,7 @@ def test_text_is_escaped_and_control_characters_are_dropped():
 
 @pytest.mark.parametrize("size", list(labels.SIZES))
 def test_the_code_reads_back_as_the_spools_address_at_every_size(size):
-    """R85 assumption 6, the part a test can hold: the drawn label's own path decodes (with a reader written from the
+    """The part a test can hold: the drawn label's own path decodes (with a reader written from the
     standard) to the spool's address, the code sits inside the label with its quiet zone, and one dark square is not
     smaller than MIN_MODULE_MM. That a phone camera reads it is inferred from the square's size, not tested."""
     w, h, box = labels.SIZES[size]

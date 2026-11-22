@@ -23,7 +23,7 @@ else the first `Generic ... @System` of that type in the index. With no Orca sto
 index) the hint is taken as is, else the static `Generic <type>`. Orca presets for Bambu printers inherit the BBL
 system preset of the line's Bambu parent instead (`OrcaStore.system_parent_for`).
 
-Line stability (ruling S12): each line records its member Spoolman filament ids. `group` keeps a filament in its
+Line stability: each line records its member Spoolman filament ids. `group` keeps a filament in its
 recorded line unless its `extra.line` is set and names another line (the move is reported). Lines are never
 deleted, members or not.
 

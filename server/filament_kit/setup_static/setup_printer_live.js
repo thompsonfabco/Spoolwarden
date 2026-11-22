@@ -1,4 +1,4 @@
-// The live printer view of the Printers section (the 20:58 ruling point 3): what an open printer shows in
+// The live printer view of the Printers section: what an open printer shows in
 // its Detail region. Loaded after setup.js; everything from the Hub goes in through textContent. It exports ONE function, printerLive(p, ctx),
 // which returns the view's element; the printer detail puts it in its region. The view asks `printers/{serial}/live` every 2 s while it
 // is on the page and the tab is visible, and stops by itself when it leaves the page. Looking (state, slots, usage) needs nothing; the

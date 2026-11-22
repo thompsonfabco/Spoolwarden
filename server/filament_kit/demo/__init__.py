@@ -32,7 +32,7 @@ NOT_IN_DEMO_CODE = "in_demo"            # the code of a stop (409); "not_in_demo
 SAMPLE = Path(__file__).with_name("sample.xml")
 # Whether the demo may be switched on: `start()` refuses (`NotMountable`) while this is False. Set True only when the seal test's leak lists (`server/tests/test_demo_sealed.py`)
 # are all empty: `test_the_demo_is_not_mountable_while_a_leak_list_is_not_empty` fails otherwise.
-# True only in the commit that proves the remaining parts of R85 assumption 5 (event stream, pairing, profiles routes, routes
+# True only in the commit that proves the remaining parts of the demo's stops (event stream, pairing, profiles routes, routes
 # with real bodies, a Manager started before the demo, root helper/systemd paths, the CLI beyond three stops): Bug-bash 1 owns that proof.
 MOUNTABLE = False
 

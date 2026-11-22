@@ -1,4 +1,4 @@
-"""R83 10.5: `spools`, `spool show|weigh|move|empty`, `catalog local|local remove|add --ask`, `devices show|set`, each
+"""`spools`, `spool show|weigh|move|empty`, `catalog local|local remove|add --ask`, `devices show|set`, each
 against a fake Hub built from the contract (hub_fakes.py): the human text, the --json document, the exit code, and
 what was sent (a dry run first, the real change only after a yes). Example names only."""
 from __future__ import annotations

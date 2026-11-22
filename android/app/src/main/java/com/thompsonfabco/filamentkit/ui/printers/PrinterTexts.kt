@@ -46,7 +46,7 @@ object PrinterTexts {
     const val CLEAR_BAMBU_NOTE = "The printer still shows the old filament for this slot until a spool is loaded."
 
     /**
-     * R83 20:58.1: Unload's question by printer family. A Bambu Lab printer's slot setting is not touched (the catalogue
+     * Unload's question by printer family. A Bambu Lab printer's slot setting is not touched (the catalogue
      * `printer_unload_body*`); on a Klipper printer it is cleared too. Proposed key `printer_unload_body_klipper`.
      */
     fun unloadKlipperBody(spool: String, slot: String, location: String): String {

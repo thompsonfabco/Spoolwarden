@@ -3,7 +3,7 @@ locations in fill order with Add, Edit, Move up and down, Make default overflow,
 "Where a new spool goes" panel built from the unsaved list, one Save with the dirty mark, the field and dialog texts of R79
 section 5, and the list readable in all four looks at 1280, 1776, 1024, 768 and 390 px (no summary squeezed to a sliver or
 wrapped past two lines, no sideways scrolling: the lesson of the Panes summary-width finding). The page runs against the Hub's
-real routes and storage.xml (R79 section 4 shapes) with spools in the fake Spoolman. The same skip rules as the page audit:
+real routes and storage.xml with spools in the fake Spoolman. The same skip rules as the page audit:
 no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
 

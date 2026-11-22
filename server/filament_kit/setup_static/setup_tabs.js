@@ -6,8 +6,7 @@ const fmtDate = (t) => (t ? new Date(t * 1000).toLocaleString() : null);
 const link = (tab, text) => h("a", { href: "#" + tab, textContent: text });
 
 // ----- a background job (apply, update, rollback, check): it outlives the server, so the page waits for it -----
-// The strip, the top-bar indicator, the restarting state and the not-answering banner are SW_JOBS' (02 8.4, 8.5; 03 3.5 to
-// 3.7); this is the page's part: its requests, the whole log behind the lock, and what is read again when a job ends.
+// The strip, the top-bar indicator, the restarting state and the not-answering banner are SW_JOBS'; this is the page's part: its requests, the whole log behind the lock, and what is read again when a job ends.
 let hubJobsMade = null;
 const hubJobs = () => hubJobsMade || (hubJobsMade = SW_JOBS.create({
   job: (from) => api(`job?from=${from}`),

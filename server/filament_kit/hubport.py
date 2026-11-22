@@ -23,7 +23,7 @@ import sys
 # takes 8710. False: no refusal, no offer (the alternative: the public address on another port, the router forwarding 443).
 REMOTE_EXCLUDES_HUB_443 = True
 
-# open point 2: a port that redirects plain http to the https address. None: nothing listens on port 80 (ruled).
+# open point 2: a port that redirects plain http to the https address. None: nothing listens on port 80.
 # A number: `firewall_ports` names it too (the redirect itself is not built here).
 HTTP_REDIRECT_PORT: int | None = None
 

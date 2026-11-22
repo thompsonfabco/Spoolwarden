@@ -355,7 +355,7 @@ def lamp_default(step) -> str:
 
 
 def lamp_modes(step, choice=None):
-    """(yellow, red) lamp modes for `step` when the owner chose `choice` for it on the station's page (R83 section 9: one
+    """(yellow, red) lamp modes for `step` when the owner chose `choice` for it on the station's page (one
     lamp per step of the intake). The table's own pattern stays (a blink is still a blink); only which lamp shows it
     changes: with one lamp chosen that lamp takes the step's pattern (the yellow lamp's, else the red's), "both" gives each
     lamp its own pattern (or the shared one where the table leaves it dark), "off" none. No choice: the table."""

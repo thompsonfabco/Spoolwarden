@@ -1529,7 +1529,7 @@ function setLangChoice(v) {
   document.cookie = `${LANG_COOKIE}=${encodeURIComponent(v)}; path=${BASE}; max-age=31536000; samesite=strict; secure`;
 }
 // A phone switched to another language sends its subscription again, with the language the page is NOW in: the reload after a change
-// gives it (Automatic is only known once the Hub chose the texts), so the check runs at every load (R85 3.8; R574 9).
+// gives it (Automatic is only known once the Hub chose the texts), so the check runs at every load.
 const PUSH_LANG_KEY = "spoolwarden.push_language";           // the language the subscription was last sent with
 async function resendPush(code) {
   try {

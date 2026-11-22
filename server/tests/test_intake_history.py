@@ -439,7 +439,7 @@ def test_the_intake_station_save_is_recorded_with_its_photo(sm, monkeypatch):
     assert rec["saved"][0]["spool_ids"] == [r["spool_id"]]
 
 
-# ---------------------------------------------------------------- R85 section 1: records as XML
+# ---------------------------------------------------------------- records as XML
 
 def test_a_record_and_a_pending_read_are_xml_files(sm):
     out = read(sm)

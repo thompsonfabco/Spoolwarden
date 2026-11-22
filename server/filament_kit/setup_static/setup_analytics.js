@@ -38,7 +38,7 @@ const AN_TEXT = {
 const anT = (key, vars) => (window.SW_TEXT && window.SW_TEXT[key] != null ? SW.t(key, vars)
   : AN_TEXT[key].replace(/\{([a-z]+)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m)));
 
-// the insights come in the order of R84 5.2, whatever order the Hub sends them in
+// the insights come in a fixed order, whatever order the Hub sends them in
 const AN_ORDER = ["total", "favourite_material", "busiest_printer", "unfinished", "biggest_print", "spools_finished"];
 const AN_MONTHS = 12;
 

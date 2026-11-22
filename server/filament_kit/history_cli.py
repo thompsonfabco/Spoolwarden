@@ -117,7 +117,7 @@ def _resolve_who(api, who: str) -> tuple[str | None, list[str]]:
 # ---------- activity ----------
 
 def cmd_activity(api, *, spool: int | None = None, who: str | None = None, days: int | None = None) -> int:
-    """the design, command line: without `days` the newest 50 (`newest=50`), newest first; with `days` the events
+    """The design, command line: without `days` the newest 50 (`newest=50`), newest first; with `days` the events
     from that time on (`since_at`), up to 1000, oldest first. `--json` prints the Hub's answer as it came."""
     if api is None:
         return down()
@@ -395,7 +395,7 @@ def read_password_file(path: str) -> str:
 
 
 def _ask_new_password() -> tuple[str | None, int]:
-    """the design, command line: the new password, typed twice (both secret). (password, 0) or (None, exit code after the error)."""
+    """The design, command line: the new password, typed twice (both secret). (password, 0) or (None, exit code after the error)."""
     from . import backup, secret_input
     first = secret_input.ask(CLI_BACKUP_PW_NEW)
     if len(first) < backup.MIN_PASSWORD_LEN:

@@ -1142,7 +1142,7 @@ def test_the_service_worker_cache_is_named_after_the_version_and_older_ones_go()
 
 
 def test_the_service_worker_never_answers_or_stores_an_api_request():
-    """Only a listed shell file is handled, and of the Hub's api only the texts of a language (R85 3.5, RC4: the app opens offline
+    """Only a listed shell file is handled, and of the Hub's api only the texts of a language (RC4: the app opens offline
     in the language last used); test_rc4_web runs the worker on both."""
     code = _sw_code()
     guard = re.search(r'if \((.*?)\) return;', code.split('addEventListener("fetch"')[1], re.S).group(1)
@@ -1238,7 +1238,7 @@ const click = (url) => handlers.notificationclick({ notification: { close() {}, 
 
 
 def test_the_service_worker_shows_every_alert_and_takes_a_window_to_the_place(tmp_path):
-    """R80 section 4 (EA7): one notification per alert with the Hub's title, line and tag (a kind when no tag), any alert type, not
+    """EA7: one notification per alert with the Hub's title, line and tag (a kind when no tag), any alert type, not
     only print states; a click takes an open window of the app to the place that fixes it, never another site's window."""
     import shutil
     import subprocess
@@ -1275,7 +1275,7 @@ def test_a_hidden_screen_stays_hidden_whatever_display_its_own_class_sets():
 
 
 def test_the_page_closes_the_notifications_of_conditions_that_are_over(tmp_path):
-    """R80 20:48 point 4 (EA7): an answer's conditions name what is still raised; a notification tagged sw-condition-<key> of a key that is no
+    """EA7: an answer's conditions name what is still raised; a notification tagged sw-condition-<key> of a key that is no
     longer there is closed by the page, everything else (a raised condition, a moment, another tag) is left."""
     import shutil
     import subprocess
@@ -1327,7 +1327,7 @@ class LibraryKit(CapKit):
 
 
 def test_the_twins_pass_the_hub_overview_and_the_own_catalog_entries_on(sm):
-    """R83 10.3: GET hub, GET and POST library/local (the form) and library/local/<id>/remove reach the kit routes unchanged."""
+    """GET hub, GET and POST library/local (the form) and library/local/<id>/remove reach the kit routes unchanged."""
     from starlette.applications import Starlette
     from filament_kit.web import mcp_tools
     from filament_kit.web.intake_app import IntakeApp
@@ -1347,7 +1347,7 @@ def test_the_twins_pass_the_hub_overview_and_the_own_catalog_entries_on(sm):
 
 
 def test_the_web_app_reads_the_hubs_iso_times_and_whole_seconds(tmp_path):
-    """R83 10: a time of the Hub is ISO 8601 with an offset (also Z); whole seconds since 1970 are read too, as a number or as text;
+    """A time of the Hub is ISO 8601 with an offset (also Z); whole seconds since 1970 are read too, as a number or as text;
     nothing readable is shown as it came, an empty value as nothing."""
     import shutil
     import subprocess
@@ -1380,7 +1380,7 @@ def test_running_low_draws_only_the_newest_answer():
 
 
 def test_the_spools_chips_are_drawn_in_the_ruled_order_checked_out_before_running_low():
-    """DECISIONS R88 (ruled 2026-11-22 08:35): Sealed, Opened, In a printer, Checked out, Running low in every interface."""
+    """Sealed, Opened, In a printer, Checked out, Running low in every interface."""
     from filament_kit.web import app as _app   # noqa: F401  (the module exists; the order is in its script)
     import pathlib
     src = (pathlib.Path(_app.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")

@@ -1,4 +1,4 @@
-"""The station's own page and who may use it (the re-ruling of 2026-11-17 21:22).
+"""The station's own page and who may use it.
 
 The page's own files (`GET /`, `/static/*`: this module's `static/` folder) are served to any address on the home network;
 they hold nothing but the page. Its data routes (`/state`, `/settings`, `/photo`, `/last-tag`) answer only the addresses on

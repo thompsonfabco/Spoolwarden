@@ -4,8 +4,7 @@ The list lives in `storage.xml` in the Hub's STATE folder (/var/lib/filament-kit
 owner of the folder, mode 0644, so the web unit reads it with its pass on the folder; atomic write under the Hub's
 cross-process lock, never through a link). A Hub that has none builds it once, at its start (`migrate_at_start`), from
 the old config keys (`migrate`) and writes it; those keys then stay in config.json untouched and are no longer read.
-Storage never stops a start: a list that cannot be written or read is placed from memory and `checks_row` says so
-(ruling 2026-11-17 01:12). The command line (root) writes the same file with `save`. The placement rule itself is in
+Storage never stops a start: a list that cannot be written or read is placed from memory and `checks_row` says so The command line (root) writes the same file with `save`. The placement rule itself is in
 placement.py; the rename of the spools stored under a renamed location is `inventory.rename_locations`.
 """
 from __future__ import annotations
@@ -145,8 +144,7 @@ class Storage:
                 for n in range(1, (loc.count or 0) + 1)]
 
     def describe(self, taken) -> list[dict]:
-        """One dict per location in fill order, the rows of `GET api/storage` (R79 section 4 and the 22:10 contract
-        change): `containers` ([{name, number, taken}]) and `prefix` are null for Bulk storage; a client never builds a
+        """One dict per location in fill order, the rows of `GET api/storage`: `containers` ([{name, number, taken}]) and `prefix` are null for Bulk storage; a client never builds a
         container name itself. (no other field; the web app's "Automatic" line comes from the preview.)"""
         return [{"id": x.id, "name": x.name, "type": x.type, "limit": x.limit, "count": x.count,
                  "used": self.used(x, taken), "free": self.free(x, taken), "fill": x.fill,

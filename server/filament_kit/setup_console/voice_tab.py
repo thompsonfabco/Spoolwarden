@@ -1,4 +1,4 @@
-"""The Weigh Station's voice settings (the rulings of 2026-11-22 01:35 and 01:50): the logic behind the
+"""The Weigh Station's voice settings: the logic behind the
 three kit routes (`GET` / `PATCH /api/voice`, `POST /api/voice/test`; api.py only mounts them) and the page's routes.
 
     GET  station/voice                                        the view read, no code: `get_voice`

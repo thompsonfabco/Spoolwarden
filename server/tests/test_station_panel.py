@@ -335,7 +335,7 @@ def test_state_air_and_photo():
         assert s["air"] == {"temp_c": 21.43, "rh": 45.2, "hpa": 1013.25, "age_seconds": 2}
         assert s["photo"] == {"url": "/photo", "taken_at": station_http.iso(now - 1), "age_seconds": 1}
         assert set(s) == {"tag", "scale", "last_weight", "panel", "panel_version", "panel_nfc", "air", "photo",
-                      "flow", "version", "settings_changed"}        # the last two: R83 section 10.4
+                      "flow", "version", "settings_changed"}        # the last two
         assert s["panel_version"] == "7"
         assert s["flow"] == {"step": "ready", "message": "", "spool": None, "filament": {"id": 45}}
         assert s["last_weight"] == {"grams": 1098.0, "age_seconds": 3, "held": True}

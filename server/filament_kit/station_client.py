@@ -440,7 +440,7 @@ def station_https_row(url: str | None) -> str | None:
 
 
 
-# ---- the Hub's checked calls to the station's own routes (R83 section 10.4 and the rulings of 2026-11-17 21:18 and 21:22) ----
+# ---- the Hub's checked calls to the station's own routes ----
 # What the Hub takes from a station is data, checked: JSON only (`application/json`), at most 256 KiB, one 5 second deadline
 # for the whole call, a redirect is an error, only the stored host with the port and certificate of that pairing (never plain
 # HTTP). A change or a ticket carries the proof of the pairing (station/page.py: an HMAC with a key both sides derive from the
@@ -550,7 +550,7 @@ def _call(endpoint, method, path, body, cap=MAX_JSON, timeout=STATION_TIMEOUT):
         # D14: the page ticket is the way into the station's own page: the Hub never asks for one over plain HTTP, whatever the proof
         raise StationPinMissing(503, TEXT_STATION_NO_PIN)
     if purpose:
-        # the proof, not HTTPS, guards a change (R83 2026-11-18 01:10); a station that told the Hub no certificate is called over
+        # the proof, not HTTPS, guards a change; a station that told the Hub no certificate is called over
         # plain HTTP for it (`station_endpoint` never goes plain for a pinned one)
         key = proof_key(pinned=fp is not None)
         if key is None:

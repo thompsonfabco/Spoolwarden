@@ -1,4 +1,4 @@
-"""Spool labels and the short address (contracts 6.1 and 6.2; design 02 section 7.13, 03 section 16.5).
+"""Spool labels and the short address (contracts 6.1 and 6.2; the design, components and Hub page).
 
 The Hub draws a label as SVG: the QR code of the spool's short address (`https://<name>.local[:port]/s/<number>`), the
 spool's number large, brand, name, material, a box in the filament's colour with its hex value, the net weight, the lot,

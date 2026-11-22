@@ -77,7 +77,7 @@ def test_size_limits(path):
     assert size < LIMITS[path], f"{path.name} is {size} bytes; the limit is {LIMITS[path]}"
 
 
-# 01 4.3, 02 1.2: hairlines and marks use --hairline and --nav-mark, never a bare 1px or 3px
+# hairlines and marks use --hairline and --nav-mark, never a bare 1px or 3px
 BARE_MARK = re.compile(r"(?<![\w.-])[13]px\b")
 
 

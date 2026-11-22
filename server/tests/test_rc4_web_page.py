@@ -366,7 +366,7 @@ def test_the_service_worker_keeps_a_languages_texts_for_offline(tmp_path):
 
 
 def test_the_corrections_page_reads_the_entry_the_reader_sends(tmp_path):
-    """R574 13 (re-review): the reader's entry, as the fake answers GET /v1/feedback and the Hub passes it on, carries
+    """The reader's entry, as the fake answers GET /v1/feedback and the Hub passes it on, carries
     `thumbnail_b64` and `created_at`; the card shows that thumbnail (as a blob, the page's policy) and that time."""
     import base64
 

@@ -659,7 +659,7 @@ def test_aut9_the_new_commands_hold_80_columns_no_escape_ascii_and_json(argv, ca
     assert isinstance(json.loads(js), dict)
 
 
-# ---------- the rework of S5.8 (brief 69) ----------
+# ---------- the rework of S5.8 ----------
 
 REAL_AUDIT = cli._hub_audit
 

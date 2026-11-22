@@ -1,4 +1,4 @@
-"""S7.1: the Hub's own message texts in the plain names (design 01 section 2, 06 section 4, 08 section 12): Fix texts of
+"""S7.1: the Hub's own message texts in the plain names (the design, foundations, command line and platform mapping): Fix texts of
 status.py, error texts of setup_console/*.py and setup_helper.py, no_preset and the busy-stream text of the web app's
 printers, the internal-error text of the phone web app. The command name in a text (`sudo filament-kit ...`) and its
 subcommand spellings wait for the rename (S5.9); reply keys, status codes and stored values are not texts."""

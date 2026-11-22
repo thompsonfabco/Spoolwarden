@@ -1,4 +1,4 @@
-"""RC6 / R85 assumption 5: the demo's stops are complete. The Hub's kit app runs in demo with every way out of the
+"""RC6: the demo's stops are complete. The Hub's kit app runs in demo with every way out of the
 process recorded (sockets, name lookups, Spoolman's client, child processes) and the real state, config and backups
 folders compared before and after each request; every route is walked and anything that reaches outside or writes
 outside the demo's folder is a missing stop.
@@ -574,7 +574,7 @@ def test_every_route_in_the_demo(hub, tmp_path):
 
 
 def test_firmware_download_and_the_per_printer_routes_with_bodies_stay_inside(hub, tmp_path):
-    """R587 M2 and M4, R609 N1: the firmware image is no download in the demo, and every per-printer page route for each
+    """The firmware image is no download in the demo, and every per-printer page route for each
     pretend printer (both Klipper ones, then the Bambu one), with a body that gets past the checks and the check gap
     out of the way, reaches nothing and writes nothing outside the demo's folder."""
     c, out, _ = hub
@@ -602,7 +602,7 @@ def test_firmware_download_and_the_per_printer_routes_with_bodies_stay_inside(hu
 
 
 def test_a_printer_edit_in_the_demo_answers_the_stop_not_an_internal_error(hub, tmp_path):
-    """R609 N3: every registry writer stops in the demo, and the page's routes answer 409 "Not in the demo." for it."""
+    """Every registry writer stops in the demo, and the page's routes answer 409 "Not in the demo." for it."""
     c, out, _ = hub
     before = snapshot(tmp_path)
     body = {"code": CODE, "name": "Renamed", "address": "192.0.2.99", "host": "192.0.2.99", "port": 7125, "api_key": "k",
@@ -617,7 +617,7 @@ def test_a_printer_edit_in_the_demo_answers_the_stop_not_an_internal_error(hub, 
 
 
 def test_map_slots_stops_in_the_demo(hub, tmp_path):
-    """R609 N2: Map slots has a stop (the slot test writes to a printer); nothing is written outside the demo's folder."""
+    """Map slots has a stop (the slot test writes to a printer); nothing is written outside the demo's folder."""
     c, out, (bambu, _) = hub
     before = snapshot(tmp_path)
     assert bambu.command("00M00A000000001", "stop")["ok"]              # the print is over, so the printer is idle
@@ -734,7 +734,7 @@ def test_the_local_reader_is_never_probed_in_the_demo(hub, tmp_path):
 
 
 def test_the_label_reader_stops_in_the_demo(hub, tmp_path):
-    """R85 4.3, assumption 5: no read goes to Claude (or the local reader) in the demo, and nothing is counted, swept or
+    """No read goes to Claude (or the local reader) in the demo, and nothing is counted, swept or
     kept under the real state folder; the phone web app's answer is the stop's sentence."""
     c, out, _ = hub
     sm = Spoolman("http://127.0.0.1:1")
@@ -759,7 +759,7 @@ def test_the_label_reader_stops_in_the_demo(hub, tmp_path):
 
 
 def test_backups_jobs_and_flashing_answer_the_stop_before_anything_is_written(hub, tmp_path):
-    """R85 4.3: a restore upload is not written, a pending one is not dropped, no job starts (update, backup, restore ...),
+    """A restore upload is not written, a pending one is not dropped, no job starts (update, backup, restore ...),
     no backup is listed, kept, downloaded or protected, no device is flashed; all answer 409 "Not in the demo."."""
     c, out, _ = hub
     before = snapshot(tmp_path)
@@ -801,7 +801,7 @@ class WebKit:
 
 
 def test_push_stops_in_the_demo(tmp_path, monkeypatch, mountable):
-    """R85 4.3 "sends no push": in the web unit the push routes (key, subscribe, unsubscribe, the test alert) answer 409
+    """The demo sends no push: in the web unit the push routes (key, subscribe, unsubscribe, the test alert) answer 409
     "Not in the demo.", the alert feed tells no phone, and the sender, the subscriptions file and the VAPID key are not
     touched; a subscription made before the demo is left as it was."""
     pytest.importorskip("mcp")
@@ -887,7 +887,7 @@ def open_stream(c, path: str, take: int = 1, timeout: float = 20.0) -> tuple[int
 
 
 def test_the_event_streams_serve_the_demos_events_only(hub, tmp_path):
-    """R85 4.3: the Hub's event feed (`GET /api/events`, with its long-poll, and the web twin) and the web app's live status
+    """The Hub's event feed (`GET /api/events`, with its long-poll, and the web twin) and the web app's live status
     stream of each printer serve the demo's own events and printers: an event the real log holds is not in them, the sink as
     `main()` sets it writes into the demo's log and not the real one, and nothing reaches outside or is written outside."""
     c, out, _ = hub
@@ -920,7 +920,7 @@ def test_the_event_streams_serve_the_demos_events_only(hub, tmp_path):
 # ---- pairing -----------------------------------------------------------------------------
 
 def test_pairing_in_the_demo_touches_only_the_pairing_files(hub, tmp_path):
-    """R85 4.3: pairing a phone or a PC works in the demo, and it writes the pairing files of the real state and etc folders
+    """Pairing a phone or a PC works in the demo, and it writes the pairing files of the real state and etc folders
     (a paired device stays paired when the demo is left) and nothing else: no file outside the demo's folder that is not a
     pairing file, no socket, no process beyond the local address lookup the pairing link needs."""
     c, out, _ = hub
@@ -1000,7 +1000,7 @@ def wait_for(check, seconds: float = 5.0, what: str = "the condition") -> None:
 
 
 def test_a_bambu_manager_started_before_the_demo_goes_quiet_when_it_starts(tmp_path, monkeypatch, mountable):
-    """R85 assumption 5: the real Bambu `Manager`, started and connected to a (fake) real printer BEFORE the demo is switched on
+    """The real Bambu `Manager`, started and connected to a (fake) real printer BEFORE the demo is switched on
     (as `main()` wires it, behind a `Switch`), keeps no connection open and sends the printer nothing once `demo.start()`
     returned, and `demo.leave()` puts the connection back for what the real registry holds. The fake client records every
     call: a call after the switch fails the test; before it, the calls prove the test sees a printer being talked to."""
@@ -1097,7 +1097,7 @@ def test_a_klipper_family_started_before_the_demo_goes_quiet_when_it_starts(tmp_
 # ---- the root helper, the apply and the update ---------------------------------------------
 
 def test_the_root_helper_and_the_system_jobs_refuse_before_any_process(tmp_path, monkeypatch, mountable):
-    """R85 4.3: with the real paths on (no FK_NO_SYSTEMD: systemctl, apt, the job runner), every op of the root helper but the
+    """With the real paths on (no FK_NO_SYSTEMD: systemctl, apt, the job runner), every op of the root helper but the
     page's own code check answers 409 "Not in the demo." before it starts anything; and the code that runs as root on its
     own (the apply, the update and its rollback, the backup and its timer, the job runner) refuses the same way. A process,
     a socket or a write outside the demo's folder fails the test."""
@@ -1209,7 +1209,7 @@ CLI_NOT_RUN: dict[str, str] = {
 
 
 def test_every_command_of_the_command_line_stays_inside_in_the_demo(tmp_path, monkeypatch, mountable):
-    """R85 4.3: every command the command line has (read from its argparse tree), alone and with `--yes` where it has one, run
+    """Every command the command line has (read from its argparse tree), alone and with `--yes` where it has one, run
     in the demo with Spoolman, Claude, the printers' clients, the sockets, the name lookups, the child processes and every
     write outside the demo's folder recorded and failing: nothing reaches outside."""
     demo.start(spoolman=type("E", (), {"get": lambda self, p: []})(), registry_load=lambda: {})

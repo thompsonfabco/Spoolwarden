@@ -1,4 +1,4 @@
-"""The keep-old-form write (orchestrator ruling 2026-11-22): every write of a state file also leaves the JSON form
+"""The keep-old-form write: every write of a state file also leaves the JSON form
 as the older release wrote it, so `update --rollback` finds files that are current. The same tests run on the Hub copy and
 the Slicer Sync copy (the Hub's file also holds the test that the shared block of the two is identical)."""
 import json

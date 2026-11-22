@@ -1,4 +1,4 @@
-"""Palette on the web (design 09 S6.6, 02 1.3, 08 9 and test 4 of 08), in a real headless browser where it matters: the three
+"""Palette on the web (the design, components and platform mapping), in a real headless browser where it matters: the three
 profile groups `nav=pills`, `collection=tiles` and `detail=sheet` of components.css are keyed on Palette only (Console's and
 Workbench's groups do not mention it, Palette's do not hold an unqualified rule or a Workbench one); the Hub page and the web app
 show Palette (pills under the top bar from tablet up, the bottom bar on a phone, tiles in a grid, the rounded system font, an open

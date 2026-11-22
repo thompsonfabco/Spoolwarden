@@ -894,7 +894,7 @@ def test_a_restore_without_the_file_migrates_from_the_restored_config(etc, state
     assert (state / "storage.xml").exists()
 
 
-# ---- R460 ruling 22:30: a role name that is a container name
+# ---- a role name that is a container name
 
 @pytest.mark.parametrize("role", ["pla_location", "overflow", "sealed_location"])
 def test_a_role_place_named_like_a_container_stays_one_bulk_place_beside_the_set(role):

@@ -106,7 +106,7 @@ PICK='print(next((str(a).strip() for a in allow if str(a).strip() not in ("127.0
 if [ -z "$SERVER_ADDR" ] && ! [ -t 0 ] && { [ "$MODE" = station ] || [ "$MODE" = custom ]; } \
         && { [ -f "$SAVED_DIR/config.xml" ] || [ -f "$SAVED_DIR/config.json" ]; }; then
     SAVED_ADDR=""
-    # The settings are read by the Hub's own Python (config.xml or config.json, whichever the program reads:).
+    # The settings are read by the Hub's own Python (config.xml or config.json, whichever the program reads).
     if [ -x "$VENV/bin/python" ]; then
         SAVED_ADDR=$(FK_ETC="$SAVED_DIR" "$VENV/bin/python" -I -c "
 from filament_kit import config

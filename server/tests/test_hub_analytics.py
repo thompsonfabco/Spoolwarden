@@ -55,7 +55,7 @@ ALL = {
         row(6, 300.0, 2, top_material="ABS", by_material=[{"material": "ABS", "grams": 300.0}]),
         row(11, 90.0, 1, top_material="PLA", by_material=[{"material": "PLA", "grams": 90.0}]),
     ],
-    # sent in the wrong order on purpose: the page keeps the order of R84 5.2
+    # sent in the wrong order on purpose: the page keeps its own order
     "insights": [
         {"key": "spools_finished", "text": "You finished 3 spools this month."},
         {"key": "biggest_print", "text": "The biggest print this month was Benchy (210 g)."},

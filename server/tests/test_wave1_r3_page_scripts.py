@@ -1,4 +1,4 @@
-"""Wave round 3 (review R560, lane B), the Hub page and station page scripts: static checks of the script text for the
+"""Wave round 3 the Hub page and station page scripts: static checks of the script text for the
 behaviour each finding asks for. The browser suites that drive these scripts are not run in this round."""
 from __future__ import annotations
 
@@ -156,7 +156,7 @@ def test_getting_started_keeps_the_focus_and_announces_after_hide_show_and_keep(
     assert 'el("h2", { class: "start__title", tabindex: "-1"' in src
 
 
-# ---- R560 MEDIUM (refuter-01): the catalog Remove texts are R83 4.3's and the command line's
+# ---- the catalog Remove texts are the Hub page's and the command line's
 
 def test_catalog_remove_texts_match_the_command_line():
     src = js("setup_settings.js")

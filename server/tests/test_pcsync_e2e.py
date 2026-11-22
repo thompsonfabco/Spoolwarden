@@ -155,7 +155,7 @@ def choose_parent(port: int, fp: str, parent: str) -> None:
 
 def uploaded_then_rebuild(pc: Pc) -> None:
     """The in-app change goes up and, although the installed build is current, the PC asks for a rebuild itself
-    (ruling S29b: its live hash differs from the one the install left)."""
+    (its live hash differs from the one the install left)."""
     assert pc.run() == "rebuild_requested"
     st = pc.client.state()
     assert st["live_hash"] == builds.tree_hash(pc.folders.user_filament)

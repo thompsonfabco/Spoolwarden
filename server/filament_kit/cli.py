@@ -163,7 +163,7 @@ PAIR_POLL = 1.0         # seconds between looks for the device while `pair` wait
 
 
 def _wait_for_device(device_id: str | None, expires: float, who: str, cmd: str) -> int:
-    """the design, command line: wait until the device has paired or the code runs out. Ctrl-C stops the wait; the code stays valid."""
+    """The design, command line: wait until the device has paired or the code runs out. Ctrl-C stops the wait; the code stays valid."""
     if device_id is None:               # the pairing is gone already (nothing to watch)
         return 0
     until = time.strftime("%H:%M", time.localtime(expires))
@@ -531,7 +531,7 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
             kw = {"yes": yes, "ask": ask, "out": say, "step": steps.Steps(backup.restore_steps()).next,
                   "password_file": Path(password_file) if password_file else None, "actor": _cli_actor()}
             rc = backup.restore(path, **kw)
-        if rc == 0:                     # R82 s4 p6: a restored Hub starts with Getting started hidden
+        if rc == 0:                     # a restored Hub starts with Getting started hidden
             firstrun.hide_after_restore()
         return rc
     finally:
@@ -666,7 +666,7 @@ def _iso(t) -> str | None:
 
 
 def _confirm(question: str, doing: str, *, yes: bool, word: str | None = None, ask=None) -> int | None:
-    """the design, command line: None to go on, else the exit code (5 after no, 2 with no terminal and no --yes, which names the command
+    """The design, command line: None to go on, else the exit code (5 after no, 2 with no terminal and no --yes, which names the command
     again with --yes)."""
     return output.confirm(question, yes=yes, doing=doing, rerun=_sudo_command("sudo spoolwarden <command>") + " --yes",
                           word=word, ask=ask)
@@ -697,7 +697,7 @@ def cmd_devices(yes: bool = False, forget: str | None = None) -> int:
 
 
 def _device_named(arg: str, rows: list[dict], unclaimed: list[dict]) -> dict | None:
-    """the design, command line: an exact id, else an exact name, else the start of exactly one name; ignoring case. A pairing nobody has
+    """The design, command line: an exact id, else an exact name, else the start of exactly one name; ignoring case. A pairing nobody has
     claimed yet (`unpair <id>` always removed one) is found by its exact id only. None after the error (exit 2)."""
     a = arg.strip().lower()
     hit = [r for r in rows + unclaimed if r["id"].lower() == a] if a else []
@@ -1904,7 +1904,7 @@ def _intake_url() -> str:
 
 
 def _pointer(where: str, sentence: str, url: str) -> int:
-    """the design, command line: one line saying where a thing the command line cannot do is, the address on the next line when the two do
+    """The design, command line: one line saying where a thing the command line cannot do is, the address on the next line when the two do
     not fit together; exit 0. `--json`: {"available": false, "where", "url"}."""
     output.emit({"available": False, "where": where, "url": url})
     if len(sentence) + 1 + len(url) <= output.width() - 1:
@@ -2451,7 +2451,7 @@ def _features_screen(ui, cfg: dict, on=None, raw_apply=None, fresh=False) -> tup
 
 
 def _need_terminal(what: str) -> int | None:
-    """the design, command line: a menu with no terminal to ask on (and no `--numbered`): exit 2 after its Error and Fix."""
+    """The design, command line: a menu with no terminal to ask on (and no `--numbered`): exit 2 after its Error and Fix."""
     if output.numbered() or menu_ui._stdin_tty():
         return None
     output.error(f"{what} is a menu, and there is no terminal to ask on.",
@@ -3713,7 +3713,7 @@ def _address_of(row: dict) -> str:
 
 
 def _printer_match(arg: str, rows: list[dict]) -> dict | None:
-    """the design, command line: an exact serial or id, else an exact name, else the start of exactly one name; ignoring case."""
+    """The design, command line: an exact serial or id, else an exact name, else the start of exactly one name; ignoring case."""
     a = arg.strip().lower()
     if not a:
         return None
@@ -3910,7 +3910,7 @@ _addr_say = address_texts.say
 
 
 def _found_printers(klipper: bool) -> tuple[str, int] | None:
-    """`printer add`, the found list (R82 s5 p1, the design, command line): at a terminal with no address given, the Klipper printers the
+    """`printer add`, the found list (the design, command line): at a terminal with no address given, the Klipper printers the
     Hub's search finds (`POST /printers/scan`), one per line to pick by number; Enter types an address instead. A Bambu
     Lab printer cannot be listed (the Hub does not hear them announce), so that case says so. (address, port) of the
     pick, or None."""
@@ -3943,7 +3943,7 @@ def _found_printers(klipper: bool) -> tuple[str, int] | None:
 
 
 def _klipper_test(host: str, port: int, key: str) -> bool:
-    """The test before a Klipper printer is saved (R82 s5 p3): the Hub asks the printer for its info. This is the
+    """The test before a Klipper printer is saved: the Hub asks the printer for its info. This is the
     existing probe (`Moonraker.info`) run from the command line's own process: the kit route `POST /api/printers/test`
     (EV1 part B) is not there yet."""
     from .bridge.klipper.moonraker import Moonraker, MoonrakerError
@@ -3955,7 +3955,7 @@ def _klipper_test(host: str, port: int, key: str) -> bool:
 
 
 def _map_offer(serial: str | None, manager_factory) -> int:
-    """`Map its slots now? [Y/n]` after an add at a terminal (R82 s5 p4): yes runs `printer map` (a Klipper printer's is
+    """`Map its slots now? [Y/n]` after an add at a terminal: yes runs `printer map` (a Klipper printer's is
     the one by loading), no says how to do it later."""
     p = registry.load().get(serial) if serial else None
     if p is None or not output.terminal():
@@ -4310,7 +4310,7 @@ def cmd_printer_reports(arg: str) -> int:
 
 
 def cmd_printer_live(arg: str) -> int:
-    """the design, command line: the camera and the controls need a screen; say where they are."""
+    """The design, command line: the camera and the controls need a screen; say where they are."""
     if _printer_named(arg) is None:
         return output.USAGE
     ips = pairing.local_ips()
@@ -5372,7 +5372,7 @@ def _kept_release() -> tuple[str, Path] | None:
 
 
 def _confirm_update(cfg: dict, *, rollback: bool, yes: bool) -> int | None:
-    """the design, command line for `update` and `update --rollback`: asked once there is something to install, with its version. Nobody
+    """The design, command line for `update` and `update --rollback`: asked once there is something to install, with its version. Nobody
     to ask (no terminal, no --yes) stops only then: without root, with an up-to-date kit, no kept version or a release
     that cannot be read the command says so itself, as it does at a terminal."""
     from . import release, updates
@@ -6743,7 +6743,7 @@ _ALIASES = [('pair --pc', 'pair --slicer-sync'),
  ('status --station-pairing` (hidden)', 'status --weigh-station-pairing` (hidden)')]
 
 def _top_help() -> str:
-    """the design, command line: the groups in the Hub page's order, what each command is for, and the switches every command takes."""
+    """The design, command line: the groups in the Hub page's order, what each command is for, and the switches every command takes."""
     lines = ["Spoolwarden on this Hub. Commands marked (sudo) in their own help need sudo.",
              "Usage: spoolwarden <command> [options]    More: spoolwarden <command> -h", ""]
     for group, items in _HELP_GROUPS:
@@ -7373,7 +7373,7 @@ def _cli_actor(args=None) -> str:
 
 
 def _old_spelling(args) -> None:
-    """the design, command line: the old groups and subcommands are the same commands as the new ones (silently, the design, command line)."""
+    """The design, command line: the old groups and subcommands are the same commands as the new ones (silently, the design, command line)."""
     if args.cmd == "station":
         args.cmd, args.old_spelling = "weigh-station", True
         if args.station_cmd == "flash-panel":
@@ -7403,7 +7403,7 @@ def _sub_of(a) -> str | None:
 
 
 def _json_refusal(a) -> int | None:
-    """the design, command line: the menus take no `--json`, and a command that needs typed answers has nothing to ask them on. The exit
+    """The design, command line: the menus take no `--json`, and a command that needs typed answers has nothing to ask them on. The exit
     code (2) when this is one of them, after its Error and Fix."""
     c, sub = a.cmd, _sub_of(a)
     if c == "config" and sub is None:

@@ -206,7 +206,7 @@ def test_changing_the_address_keeps_the_pin(both, manager):
 
 
 def test_a_new_address_with_the_access_code_saves_both_like_the_api(both, manager, kl):
-    """the design, Hub page: the page's Change address dialog sends the Access Code for a Bambu Lab printer; the Hub saves it with the
+    """The design, Hub page: the page's Change address dialog sends the Access Code for a Bambu Lab printer; the Hub saves it with the
     address and drops the old pin, as PATCH /api/printers does. A Klipper printer has no Access Code."""
     _bambu()
     registry.pin(SERIAL, "ab" * 32)
@@ -725,7 +725,7 @@ def test_the_row_says_when_a_report_would_help(mapped):
 
 
 def test_the_states_read_says_which_bambu_printers_hold_a_slot_map(both, kl):
-    """the design, Hub page: the Connection column says "Slots mapped" for a printer whose map the Hub holds. The read stays light (a file
+    """The design, Hub page: the Connection column says "Slots mapped" for a printer whose map the Hub holds. The read stays light (a file
     check, no connection) and a Klipper printer has no such field."""
     from filament_kit.bridge import ams
     _bambu()

@@ -13,7 +13,7 @@ from .address_texts import COMMAND, say
 
 
 def hub_address(cfg: dict | None = None, path: str = "/setup") -> str:
-    """The Hub's address as a person types it: no port with 443 (`https://192.0.2.10/setup`), else `:8710` (R82 s1 p4)."""
+    """The Hub's address as a person types it: no port with 443 (`https://192.0.2.10/setup`), else `:8710`."""
     cfg = cfg if cfg is not None else config.load()
     ips = pairing.local_ips()
     host = ips[0] if ips else f"{pairing.short_hostname()}.local"
@@ -27,7 +27,7 @@ def add_parser(sub) -> None:
 
 
 def cmd_port(number: str | None, yes: bool = False) -> int:
-    """the design, command line. Reading needs no sudo. A change is refused before anything is asked or changed when the port is not
+    """The design, command line. Reading needs no sudo. A change is refused before anything is asked or changed when the port is not
     allowed or is taken (exit 2, with the Fix for a taken port), asks the dialog's words, then runs
     `hubport.change_port` (config, drop-in, advert, station drop-in, restarts, the firewall line)."""
     from . import cli

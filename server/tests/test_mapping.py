@@ -678,7 +678,7 @@ class AmsManager(FakeManager):
 
 
 def test_after_a_manual_map_the_next_step_names_what_is_left():
-    """The orchestrator's 16:53 item: not "Map the slots." but the positions the owner has not confirmed."""
+    """Not "Map the slots." but the positions the owner has not confirmed."""
     _owner_map(time.strftime("%Y-%m-%dT%H:%M:%S%z"))
     v = mapping.Mapper(AmsManager()).view(SERIAL)
     assert v["outcome"] == "not_confirmed"

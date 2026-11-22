@@ -144,7 +144,7 @@ MESSAGES: dict[str, str | dict] = {
     "reader_not_installed": "The Label Reader is switched on but not installed.",
     "cli_next": "Next: {step}",
 
-    # ---- Checks rows of the satellites (R82 section 2 points 4 and 5, the design, command line)
+    # ---- Checks rows of the satellites (the design, command line)
     "check_station_not_https": "The Weigh Station {name} is not using HTTPS. Update it.",
     "check_station_not_https_fix": "Update it: on that machine run sudo {command} update.",
     "check_station_not_https_at": "The Weigh Station at {address} is not using HTTPS.",
@@ -173,7 +173,7 @@ MESSAGES: dict[str, str | dict] = {
 # What the code of AF1 and AF2 holds under a catalogue key: {key: (module, constant)}. The catalogue holds these texts
 # once for the Hub page and the apps; test_af5_texts keeps each constant equal to its key (a `{command}` filled in, a
 # `{text!r}` as `'{text}'`). The Checks rows read these constants (one text source), and the constants hold the wording
-# of the design (amend-39, accepted by the), so the tag-source rows are here too.
+# of the design, so the tag-source rows are here too.
 MIRRORED = {
     "port_error_not_a_number": ("hubport", "TEXT_NOT_A_NUMBER"),
     "port_error_range": ("hubport", "TEXT_RANGE"),

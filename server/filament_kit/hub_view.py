@@ -160,7 +160,7 @@ def devices(cfg: dict, this_device: str | None = None, hub_version: str | None =
     """Names, kind, version and last seen of what is paired, and the Tag Readers: no ids, no addresses.
 
     `paired` is `pairing.devices()` (each row may also carry `kind` and `version` where the pairing keeps them);
-    `readers` is `reader_tokens.readers()`. A row with no kind has the name alone. Out of date is R83 s9.4: a Weigh
+    `readers` is `reader_tokens.readers()`. A row with no kind has the name alone. Out of date means a Weigh
     Station or a Slicer Sync PC below the Hub's version; a Tag Reader below the firmware on offer; a phone only when
     the pairing says so (`out_of_date`)."""
     from . import pairing, reader_tokens

@@ -59,7 +59,7 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
 
 /**
- * "Add a line to the Filament Catalog" (05-android-app 8): Brand, Name and Material, and under the
+ * "Add a line to the Filament Catalog": Brand, Name and Material, and under the
  * closed "More (optional)" the other values; the Hub builds the entry from them and the slicer presets are rebuilt
  * from it. "See custom entries" lists the owner's own entries, each with Remove (asks first). [onBack] leaves without
  * adding; [onSaved] leaves after an add through a Hub that has no form route (the shell shows the snackbar); an add
@@ -302,8 +302,8 @@ private fun Group(@androidx.annotation.StringRes title: Int, s: AddProfileUiStat
 private const val BULLET = "• "
 
 /**
- * Material is a choice from the materials the form offers, with "Other" and a text field under it for anything else
- *. What is chosen or typed is the field's value; [error] shows under whichever is on screen.
+ * Material is a choice from the materials the form offers, with "Other" and a text field under it for anything else.
+ * What is chosen or typed is the field's value; [error] shows under whichever is on screen.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

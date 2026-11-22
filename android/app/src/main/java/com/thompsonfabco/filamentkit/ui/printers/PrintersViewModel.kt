@@ -53,8 +53,8 @@ internal fun problemOf(e: ApiError): Problem = when (e.code) {
 }
 
 /**
- * One slot of a printer as the list's swatch row draws it. A [waiting] slot has a spool assigned that has not loaded yet
- *: it shows the spool's colour when it is known, with the dashed ring.
+ * One slot of a printer as the list's swatch row draws it. A [waiting] slot has a spool assigned that has not loaded yet.
+ * It shows the spool's colour when it is known, with the dashed ring.
  */
 data class SlotLook(val hex: String, val empty: Boolean, val waiting: Boolean = false) {
     /** True when the swatch is the dashed ring of a free slot: empty, and not a waiting one whose colour is known. */
@@ -367,7 +367,7 @@ class PrintersViewModel(
         }
     }
 
-    // --- the guided add (R82 section 5, R83 section 6): which printer, its details, test then add, map its slots ---
+    // --- the guided add: which printer, its details, test then add, map its slots ---
 
     private var guideJob: Job? = null
 

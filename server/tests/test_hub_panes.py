@@ -1,4 +1,4 @@
-"""Panes on the web (design 09 S6.8, 02 1.3 and 2.3, 08 9 and test 4 of 08), in a real headless browser where it matters: the three
+"""Panes on the web (the design, components and platform mapping), in a real headless browser where it matters: the three
 profile groups `nav=list`, `collection=rows` and `detail=pane` of components.css are keyed on Panes only (no other look's group
 mentions it, Panes' hold no unqualified rule or another look's); the Hub page and the web app show Panes (the section list as the
 left pane from tablet up, rows with a chevron, an open detail as the third column on a desktop and covering its list below that)

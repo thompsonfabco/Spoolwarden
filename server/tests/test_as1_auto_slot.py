@@ -535,7 +535,7 @@ def test_a_named_load_that_is_sent_ends_the_other_named_waits_for_the_spool(rig,
 
 
 def test_an_applied_auto_ends_a_named_wait_for_the_spool_on_another_printer(rig, sm, astore, clock, monkeypatch):
-    """R559 05 M2: the named wait on the other printer must not send the spool there later."""
+    """The named wait on the other printer must not send the spool there later."""
     m, _, _ = rig
     waiting = pending.Store(clock, start_thread=False)
     monkeypatch.setattr(pending, "STORE", waiting)
@@ -554,7 +554,7 @@ def test_an_applied_auto_ends_a_named_wait_for_the_spool_on_another_printer(rig,
 
 
 def test_klipper_follow_mode_ends_every_wait_for_the_spool_it_loads(rig, moonraker, sm, astore, clock, monkeypatch):
-    """D3 on Klipper (R559 05 M1): a spool the printer shows in a lane (a tap, the touchscreen) ends the Auto and
+    """D3 on Klipper: a spool the printer shows in a lane (a tap, the touchscreen) ends the Auto and
     the named waits for it on every printer."""
     m, _, _ = rig
     waiting = pending.Store(clock, start_thread=False)

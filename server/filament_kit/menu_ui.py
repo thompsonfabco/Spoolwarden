@@ -539,7 +539,7 @@ def _stdout_tty() -> bool:
 
 
 def fullscreen_wanted(raw: bool = False) -> bool:
-    """the design, command line: not `--numbered` / `--plain`, TERM set and not `dumb`, input and output both terminals (with `raw`, the
+    """The design, command line: not `--numbered` / `--plain`, TERM set and not `dumb`, input and output both terminals (with `raw`, the
     output is captured and the screen goes to /dev/tty)."""
     if output.numbered():
         return False

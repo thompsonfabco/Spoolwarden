@@ -1,5 +1,4 @@
-"""Map by loading filament, for Klipper printers (brief 2026-11-09 13:01; API version 2 in the handoff
-2026-11-09-1330-all-in-one-manual-slot-mapping-api-v2.md, the same routes and state as bridge/manual.py for Bambu).
+"""Map by loading filament, for Klipper printers (the same routes and state as bridge/manual.py for Bambu).
 
 A Klipper printer's slots come from the printer and the kit's data file: a toolchanger's tool n is "extruder<n>" under
 the label klipper_hardware.xml gives it, AFC lanes and Happy Hare gates under the printer's own names. Those names can

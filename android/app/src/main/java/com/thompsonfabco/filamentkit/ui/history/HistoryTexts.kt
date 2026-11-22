@@ -10,7 +10,7 @@ object HistoryTexts {
     /** What an undo answers; "Put back." is followed by the Hub's note when it sends one. */
     const val PUT_BACK = "Put back."
 
-    /** The refusals, used only when a 409 carries no `text` of its own (R84 3.3 gives the first). */
+    /** The refusals, used only when a 409 carries no `text` of its own. */
     const val UNDO_CHANGED_SINCE = "This changed again since, so it cannot be undone."
     const val UNDO_TOO_OLD = "This is older than 7 days, so it cannot be undone."
     const val UNDO_ALREADY_UNDONE = "This was already undone."

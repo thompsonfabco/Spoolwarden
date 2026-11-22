@@ -3,7 +3,7 @@
 // the setup code (or this computer's trust, as every change does).
 "use strict";
 
-// Texts of R84 section 7 that the catalogue does not hold yet (only HD2 opens it): the catalogue's own text wins once the key is there.
+// Texts of the backup section that the catalogue does not hold yet (only HD2 opens it): the catalogue's own text wins once the key is there.
 const BK_TEXT = {
   settings_backups_password_heading: "Backup password",
   settings_backups_password_none: "No backup password is set. New backups are not encrypted.",

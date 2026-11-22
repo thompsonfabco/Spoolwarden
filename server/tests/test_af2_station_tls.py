@@ -1,5 +1,5 @@
 """AF2 (a): the Weigh Station's own certificate and HTTPS listener, the three values on its hello call, and what the
-Hub keeps of them with the station's pairing (R82 section 2 points 2 and 3)."""
+Hub keeps of them with the station's pairing."""
 import hashlib
 import http.client
 import json

@@ -58,7 +58,7 @@ class FakePage:
 
 
 def spool_view(n: int = 12, **kw) -> dict:
-    """The spool view of R83 10 (`inventory.spool_view` plus `loaded` and `low`)."""
+    """The spool view of the Hub (`inventory.spool_view` plus `loaded` and `low`)."""
     view = {"id": n, "location": "Shelf A", "remaining_g": 640.0, "net_g": 1000.0, "tare_g": 180.0, "tag": None,
             "state": "opened", "filament_id": 3, "vendor": "Acme", "name": "PLA Red", "material": "PLA",
             "color_hex": "cc0000", "lot": None, "loaded": None, "low": False}

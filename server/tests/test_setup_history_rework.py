@@ -118,7 +118,7 @@ def test_printers_csv_preserves_owner_chosen_klipper_name_but_omits_host(env, ma
 
 
 def test_printers_csv_keeps_owner_chosen_names_with_a_dash_as_the_kit_export_does(env, manager):
-    """R559 3: "Ender-3", "Prusa-MK4" (Klipper) and "X1C-Garage" (Bambu Lab) are the owner's names, not addresses; the
+    """"Ender-3", "Prusa-MK4" (Klipper) and "X1C-Garage" (Bambu Lab) are the owner's names, not addresses; the
     Hub page's export and the kit's give the same names."""
     from filament_kit import csv_io
     registry.add_klipper("Ender-3", "192.0.2.50", 7125)

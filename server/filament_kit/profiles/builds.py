@@ -8,7 +8,7 @@ State, all under `state/profiles/`:
   live/meta.json             {owner, user_id, live_hash, live_at, system_hash, system_at, system_presets,
                              partial, orca_user_id, orca_live_hash, orca_live_at, orca_partial, orca_system_hash,
                              orca_system_at, orca_system_presets}; `partial` = a build whose install stopped
-                             part-way on the PC (ruling S28, `PUT /api/sync/live?partial=<stamp>`), cleared by the
+                             part-way on the PC (`PUT /api/sync/live?partial=<stamp>`), cleared by the
                              next install report; `orca_partial` the same for the Orca tree (Ruling O)
   builds/<stamp>/            one build: BUILD.json (the manifest) + base/<name>.json|.info, and with the Orca
                              target (Task 6) a flat orca/<name>.json|.info tree; SLICER.json + held/ (each
@@ -23,7 +23,7 @@ State, all under `state/profiles/`:
                              the presets the PC wrote of those builds; the rest it kept, profiles.updates)
   deleted.json               {deleted_before: [preset names deleted in the app]} (+ orca_deleted_before)
   owner-edits.json           {stamp, inapp, notes} (+ orca_inapp, orca_notes): the owner's in-app record and note
-                             lines of the old PC's installed build, kept when the sync PC changes (ruling S34) until
+                             lines of the old PC's installed build, kept when the sync PC changes until
                              the new PC installs
   build-state.json           {last_attempt: {at, ok, error}, handled: {at, started}} (the builder's own record)
   pc-heartbeat.json          the sync PC's last heartbeat {device_id, at, outcome, waiting_since, app}:
@@ -40,7 +40,7 @@ entry before anything is extracted (at most MAX_ENTRIES entries, relative POSIX 
 drive letter, backslash, `..`, empty or `.` part; no symlink; a directory entry must be empty; only `.json` and
 `.info` files; no two names equal when casefolded; declared sizes within MAX_FILE / MAX_TOTAL), extracted inside
 a temp dir while counting the real bytes, and every live `.json` must parse. A system `.json` that does not parse
-(or is not an object) is kept and reported as a store problem by the builds (ruling S29a). Only then is the live folder swapped
+(or is not an object) is kept and reported as a store problem by the builds. Only then is the live folder swapped
 (under live.lock); a refused upload leaves the previous live folder as it was.
 
 One sync PC (Decision): the first paired device that uploads becomes the owner; other devices get 409
@@ -50,9 +50,9 @@ an installed.json written for another device than the owner is never read.
 
 Builds (Decision "build trigger and retention"): `run_build` holds build.lock, builds into builds/<stamp>.tmp,
 renames it, saves the lines, writes deleted.json and then current.json. The installed build (and the partial one,
-if any) is the in-app edit snapshot; its BUILD.json `inapp` is the record of edits that last (ruling S27). Any exception leaves current.json (the
+if any) is the in-app edit snapshot; its BUILD.json `inapp` is the record of edits that last. Any exception leaves current.json (the
 last good build) untouched. With no system presets uploaded yet it ends cleanly with `waiting: True`. So it does
-(ruling S32, WAIT_LIVE) when the install the PC reported is newer than its last live upload: the live folder then
+(WAIT_LIVE) when the install the PC reported is newer than its last live upload: the live folder then
 predates the install and would read the old values as in-app edits. That wait leaves the rebuild request pending
 (build-state `wait_live`); the next live upload renews the request, so the build runs on fresh live data. It runs
 again (at most MAX_RUNS times in all) while the rebuild request is newer than the run's start. The newest KEEP
@@ -339,7 +339,7 @@ def _written(installed: dict | None, key: str) -> list[str] | None:
 
 
 def _owner_record(stamp, orca_stamp=None) -> dict | None:
-    """The owner's part of an installed build (ruling S34): its BUILD.json `inapp` record and, per preset, the note
+    """The owner's part of an installed build: its BUILD.json `inapp` record and, per preset, the note
     lines below MARK; the Orca part (`orca_inapp`, `orca_notes`) from the build whose orca/ tree was installed
     (`orca_stamp`). None when that build is gone."""
     if not (isinstance(stamp, str) and STAMP_RE.fullmatch(stamp)):
@@ -383,7 +383,7 @@ def _forget_old_pc(meta: dict) -> None:
     """A new sync PC (the owner changes; also the same PC re-paired, which gets a new device id): the old PC's
     install snapshot (the basis for deletions and diffs), partial build and deletion record are dropped, so the new
     PC starts like a first install. The owner's in-app record and note lines of the installed build are theirs,
-    not the PC's: they are kept in owner-edits.json (ruling S34) and carried by the next builds until the new PC
+    not the PC's: they are kept in owner-edits.json and carried by the next builds until the new PC
     installs one. Called under live.lock before meta.json is written."""
     raw = _state_obj(_dir() / "installed.json")
     rec = _owner_record(raw.get("stamp"), raw.get("orca_stamp"))
@@ -600,8 +600,7 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
       orca_live    Orca Slicer's user `filament/` folder      -> live/orca/user/
       orca_system  `BBL/filament/**.json` + `OrcaFilamentLibrary/index.json` (Ruling L) -> live/orca/system/
     `user_id` (the slicer's user folder id) is kept for the two live kinds. `partial` (live kinds only) names the
-    build whose install stopped part-way in this live folder (ruling S28; meta `orca_partial` for orca_live, Ruling
-    O). `fresh` (kind live only): the PC's Bambu Studio folder changed (stable <-> Beta), so this live
+    build whose install stopped part-way in this live folder (meta `orca_partial` for orca_live). `fresh` (kind live only): the PC's Bambu Studio folder changed (stable <-> Beta), so this live
     folder is that folder's first sync: the install snapshot, deletions and partial build are forgotten exactly as for
     a new sync PC (`_forget_old_pc`; the owner's in-app record is kept). Raises OtherPc, BadZip or TooLarge; then
     nothing changed."""

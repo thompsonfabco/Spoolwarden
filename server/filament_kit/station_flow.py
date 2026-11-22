@@ -258,7 +258,7 @@ def save(sm, rules: dict, body: dict, returner=None) -> dict:
             # a sealed spool keeps its net weight (its bag weighs too), as when it was first saved. With `return` the weight is
             # only checked here (dry); the return writes it under its own lock, after its checked-out check and before its
             # event, so the return's Undo stays possible and a spool that stopped being checked out between the check above
-            # and the lock is refused with nothing written (R88 CO2 follow-up 2, R701)
+            # and the lock is refused with nothing written
             s = sm.get(f"spool/{sid}") if sealed_now else inventory.update_spool(sm, sid, gross=gross, dry=dry or bool(back))
         except ValueError as e:
             raise FlowError(422, "weight_out_of_range", str(e), lines("Weight too low", "check the scale")) from e

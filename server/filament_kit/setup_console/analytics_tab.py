@@ -20,7 +20,7 @@ EMPTY = {"months": [], "insights": [], "notes": []}
 
 
 def read(months: int, printer: str | None) -> dict:
-    """The kit's analytics for `months` months (one printer when `printer`), in the shape of R84 9.2. Until the kit has
+    """The kit's analytics for `months` months (one printer when `printer`), in the shape the Hub page reads. Until the kit has
     its analytics module (HD3) the answer is the shape with nothing in it, which the page shows as "No usage yet"."""
     view = getattr(_analytics, "view", None)
     return view(months=months, printer=printer) if callable(view) else dict(EMPTY)

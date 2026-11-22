@@ -1,4 +1,4 @@
-"""The camera ticket and camera session (camera_ticket.py): R83 20:58 and 22:10."""
+"""The camera ticket and camera session (camera_ticket.py)."""
 import threading
 
 import pytest

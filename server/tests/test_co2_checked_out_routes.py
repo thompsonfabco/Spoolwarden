@@ -1,4 +1,4 @@
-"""R88 CO2: the checked-out routes of the kit API (`filter=checked_out` and `filters` on GET /api/spools, `POST /api/spools/{id}/return`,
+"""The checked-out routes of the kit API (`filter=checked_out` and `filters` on GET /api/spools, `POST /api/spools/{id}/return`,
 `home` on PATCH /api/spools/{id}), the Weigh Station's three (tag, save with `return`, `POST /api/station/return`) and the web
 app's twins. Real inventory over the fake Spoolman; the Klipper printer is a recorder.
 
@@ -162,7 +162,7 @@ def test_return_caller_rules(sm, printers, store):  # noqa: F811
 
 
 def test_return_and_home_have_the_callers_of_the_spools_move_and_weight(sm, printers, store):  # noqa: F811
-    """Pins the orchestrator's ruling (CO2 follow-up 1): `return` and the `home` change are for the callers of the existing spool
+    """Pins that `return` and the `home` change are for the callers of the existing spool
     move / weight route (PATCH /api/spools/{id}). Compared by running both for every kind of token. The one difference is the
     web token, which the kit route refuses (the web app writes a move and a weight in its own process, through its twin) while
     the Return twin must reach the Hub, which tells a Klipper printer: that is why return is in WEB_ROUTES (HOME_WEB_ROUTES

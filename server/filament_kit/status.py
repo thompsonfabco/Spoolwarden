@@ -157,7 +157,7 @@ def _station_rows(url: str) -> Iterator[Row]:
 
 
 def satellite_rows(cfg: dict | None = None) -> Iterator[Row]:
-    """The rows about the satellites' HTTPS (R82 section 2 points 4 and 5; the design, command line), filed under Devices: a Weigh Station
+    """The rows about the satellites' HTTPS (the design, command line), filed under Devices: a Weigh Station
     that is not on HTTPS or whose certificate is not the pinned one, and a tag source that answers only on plain HTTP or
     whose certificate changed. None of the calls raises."""
     yield from _in("Devices", _satellite_rows(cfg if cfg is not None else config.load()))
@@ -186,7 +186,7 @@ def _satellite_rows(cfg: dict) -> Iterator[Row]:
     addr_say = address_texts.say
     url = (cfg.get("station") or {}).get("url")
     seen = station_client.station_https(url) if url else None
-    # R82 ruled 2026-11-18 00:28: a station on this machine is called as it answers (pinned HTTPS once it has given its
+    # a station on this machine is called as it answers (pinned HTTPS once it has given its
     # fingerprint, plain HTTP before) and the not-on-HTTPS row is never shown for it; the changed-certificate row is
     if seen == "plain" and not _loopback(url):
         address = _address_of(url)
@@ -542,14 +542,14 @@ def _local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
     from . import getting_started, intake, local_reader
     cfg = cfg if cfg is not None else config.load()
     https = local_reader.https_row(cfg)
-    if https:                       # a reader on another machine at an http address (R82 s2 p6)
+    if https:                       # a reader on another machine at an http address
         yield Row(FAIL if https["state"] == "needs_a_look" else INFO, https["text"],
                   https["fix"] or "", key="label-reader.https")
     if demo.is_on():
         yield Row(INFO, demo.NOT_IN_DEMO, key="label-reader.local")      # no reader is asked in the demo
         return
     h = local_reader.health(cfg)
-    if not h["ok"] and getting_started.reader_install_pending(cfg):     # R82 s6 p5: switched on, nothing installed here
+    if not h["ok"] and getting_started.reader_install_pending(cfg):     # switched on, nothing installed here
         _addr_say = address_texts.say
         yield Row(FAIL, _addr_say("reader_not_installed"), output.fill(
             getting_started.COMMANDS["reader"], command=address_texts.COMMAND), key="label-reader.not-installed")

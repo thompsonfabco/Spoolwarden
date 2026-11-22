@@ -31,7 +31,7 @@ The web process never talks to a printer. Everything goes to the kit server's ow
                                         {reachable: bool} - nothing is saved (the kit route is AP1's)
     POST printers/{id}/slots/{label}/clear  {[dry_run]}: the Hub forgets the slot's spool
     POST printers/add                   {serial, access_code[, name]} a Bambu printer the kit has seen, or
-                                        {address, access_code[, name, serial]} one typed (R87 2: the Hub checks the address
+                                        {address, access_code[, name, serial]} one typed (the Hub checks the address
                                         and the Access Code and reads the serial from the printer);
                                         {family: klipper, host[, port, name, api_key]} a Klipper printer
     POST printers/{id}/edit             {name?, address?, port?, access_code?, api_key?, unpin?}: the kit's PATCH
@@ -354,7 +354,7 @@ class PrintersApp:
 
     def changes_allowed(self) -> bool:
         """Printer changes (add, edit, forget): the page the kit server serves at home always; the web module's page
-        at its public address only when the owner turned it on (orchestrator ruling, 2026-11-10)."""
+        at its public address only when the owner turned it on."""
         if self.intake.origin is None:          # served by the kit server itself: home network only
             return True
         from .. import config

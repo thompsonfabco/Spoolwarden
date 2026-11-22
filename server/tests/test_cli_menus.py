@@ -741,7 +741,7 @@ def test_features_without_root_is_not_applied(monkeypatch, capsys):
     assert "administrator rights" in capsys.readouterr().err
 
 
-# ---------- brief 49: apply Spoolman, piped secrets, honest save, Features fresh, add questions ----------
+# ---------- apply Spoolman, piped secrets, honest save, Features fresh, add questions ----------
 
 def test_a_saved_spoolman_address_is_applied_like_the_hubs(monkeypatch):
     cfg = config.load()

@@ -234,7 +234,7 @@ void test_longest_lines_fit() {
   std::string w = wifi(std::string(32, 'n'), std::string(63, 'p'));
   std::string l = link(std::string(64, 'h'), "65535");
   CHECK(w.size() <= 256 && l.size() <= 256, "longest CFG WIFI %u, CFG LINK %u", (unsigned)w.size(), (unsigned)l.size());
-  // R88 03:10 says 200 and 178; counted here: CFG WIFI 200 and CFG LINK 177 (without the newline)
+  // the ruling said 200 and 178; counted here: CFG WIFI 200 and CFG LINK 177 (without the newline)
   CHECK(w.size() == 200 && l.size() == 177, "CFG WIFI %u, CFG LINK %u", (unsigned)w.size(), (unsigned)l.size());
   LineReader r;
   std::string got;

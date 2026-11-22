@@ -31,7 +31,7 @@ object ReportHelp {
     /** The server's own sentence for why a report would help; null when it gave none. */
     fun why(m: MapStatus?): String? = m?.reportWhy?.ifBlank { null }
 
-    /** The Hub says a report would help: the button is the main one (when nothing before it in the design, Android app is). */
+    /** The Hub says a report would help: the button is the main one (when nothing before it is). */
     fun wanted(m: MapStatus?): Boolean = m?.reportWanted != null
 
     /**

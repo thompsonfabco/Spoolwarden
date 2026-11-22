@@ -225,7 +225,7 @@ function printersTab() {
     if (addedId) location.hash = "#printers/" + enc(addedId);
   }
 
-  // ----- adding a printer, guided (R82 section 5, R83 section 5): which printer (the found list first), its details, the test and the add,
+  // ----- adding a printer, guided: which printer (the found list first), its details, the test and the add,
   // then "Map its slots now?". One sheet; Back keeps what was typed. The texts below are in the catalogue when EV2 lands (the keys file
   // lists them); until then the English here is shown. -----
   const GUIDED = {

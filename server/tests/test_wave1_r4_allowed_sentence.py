@@ -1,5 +1,5 @@
 """R597: the Devices page shows "This Weigh Station answers only the addresses on its allow-list." under a station's page link when the
-station's `page_from` is `allowed` (R83 2026-11-18 01:14 point 1); the Hub already passes `page_from` through (device_tab.py)."""
+station's `page_from` is `allowed`; the Hub already passes `page_from` through (device_tab.py)."""
 import json
 import shutil
 import subprocess

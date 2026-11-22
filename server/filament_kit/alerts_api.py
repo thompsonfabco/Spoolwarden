@@ -364,7 +364,7 @@ def _spool_name(ev: dict) -> str:
 
 
 def words(ev: dict) -> tuple[str, str]:
-    """(title, sentence) of an event in the Hub's language (R80 section 5's table for the alert kinds)."""
+    """(title, sentence) of an event in the Hub's language."""
     kind, sev = ev.get("kind", ""), ev.get("severity", "")
     sub = ev.get("subject") or {}
     if kind == "print.runout":

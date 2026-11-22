@@ -81,7 +81,7 @@ def say(key: str, **fill) -> str:
 
 def notices(st: Storage) -> list[dict]:
     """What the list says about itself, {code, text}: shown under it by the Hub page (warn notice) and by the command
-    line (`Note:` line). `converted`: the migration kept two roles apart; `default_overflow_no_limit`: R79 C1."""
+    line (`Note:` line). `converted`: the migration kept two roles apart; `default_overflow_no_limit`: the default overflow cannot hold a limit while it takes everything."""
     out = []
     if st.converted:
         out.append({"code": "converted", "text": storage.NOTICE})

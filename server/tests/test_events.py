@@ -401,7 +401,7 @@ def test_a_link_at_a_month_file_is_not_read_through(store, tmp_path):
     assert store.read()["events"] == []
 
 
-# ---------------------------------------------------------------- R464 items 2 to 6
+# ----------------------------------------------------------------
 
 def test_replace_is_retried_while_a_reader_holds_the_file(store, monkeypatch):          # item 2
     monkeypatch.setattr(events, "RETRY_REPLACE", True)
@@ -428,7 +428,7 @@ def test_replace_that_never_works_is_a_clear_error_and_writes_nothing(store, mon
     assert store.read()["events"] == [] and not list(store.root.glob("*.tmp"))
 
 
-def test_without_the_retry_a_permission_error_is_raised_as_it_is(store, monkeypatch):         # item 2: POSIX unchanged
+def test_without_the_retry_a_permission_error_is_raised_as_it_is(store, monkeypatch):         # POSIX unchanged
     monkeypatch.setattr(events, "RETRY_REPLACE", False)
     calls = []
     monkeypatch.setattr(os, "replace", lambda a, b: calls.append(1) or (_ for _ in ()).throw(PermissionError(13, "x")))

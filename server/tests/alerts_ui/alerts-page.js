@@ -1,5 +1,5 @@
-// The stub Hub of the alert tests (server/tests/test_alerts_ui.py): a fake GET api/events in the shape of DECISIONS R80
-// section 8, held in window.__hub (tests change it, then call SW_ALERTS.poll()), and the alert banner host started on it.
+// The stub Hub of the alert tests (server/tests/test_alerts_ui.py): a fake GET api/events in the shape the Hub gives it,
+// held in window.__hub (tests change it, then call SW_ALERTS.poll()), and the alert banner host started on it.
 // ?scenario=blank (nothing raised) | layout (two conditions, two moments, one more condition); ?manual=1 does not start the poller.
 (() => {
 "use strict";

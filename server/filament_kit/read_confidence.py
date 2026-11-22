@@ -5,8 +5,7 @@ The rule, one for every engine:
   - a field the reader guessed (named in the item's `estimates`) is "medium";
   - the local reader's own number for the field (`field_confidence`, else the item's `confidence`) gives "high" at
     HIGH or more, "medium" at MEDIUM or more, else "low";
-  - anything else (a reader that gives no number, the Cloud reader) is None: it is NOT RATED, never "high" (design
-    ruling R44). A reading is rated (`rated`) when any item carries a number.
+  - anything else (a reader that gives no number, the Cloud reader) is None: it is NOT RATED, never "high". A reading is rated (`rated`) when any item carries a number.
 `filled` names the fields the Hub or the reader filled in rather than read (medium, "filled in by the Hub").
 `summary` folds the levels of a record's items into the fields to check, lowest level first."""
 from __future__ import annotations

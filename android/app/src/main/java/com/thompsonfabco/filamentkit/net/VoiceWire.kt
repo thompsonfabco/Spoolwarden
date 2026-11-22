@@ -9,7 +9,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 
 /**
- * The Weigh Station's voice as `GET /api/voice` and `PATCH /api/voice` answer it (R88 2026-11-22 01:35). [station] is
+ * The Weigh Station's voice as `GET /api/voice` and `PATCH /api/voice` answer it. [station] is
  * false when the Hub has no Weigh Station (the app then shows nothing); [speakerRange] is null when the chosen voice has
  * one speaker. The server is not built yet, so a missing or odd field takes its default instead of failing the read.
  */

@@ -97,7 +97,7 @@ function say(box, text, ok) {
 }
 const working = (box, text) => say(box, text, "run");
 // after a change: when its control left with its row (a forgotten printer, a revoked token), the result is a toast
-//, and focus, lost with the row, goes to the page title
+// and focus, lost with the row, goes to the page title
 function gone(box) {
   if (box.isConnected || !box._said) return;
   SW.toast(box._said[1], box._said[0]);

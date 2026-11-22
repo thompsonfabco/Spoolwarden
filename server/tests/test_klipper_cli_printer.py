@@ -1,4 +1,4 @@
-"""R83 10.5, the printer commands that call the Hub: `printer load|unload|clear`, `printer usage`, `printer show --watch`
+"""The printer commands that call the Hub: `printer load|unload|clear`, `printer usage`, `printer show --watch`
 (klipper_cli.py), each against a fake Hub built from the contract (hub_fakes.py): text, --json document, exit code, and
 what was sent (always a dry run first). Plus the drift test of the catalogue texts the EV2 commands hold as constants
 until part B moves them into strings/en.json. Example names only."""
