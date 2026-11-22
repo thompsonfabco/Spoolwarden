@@ -192,7 +192,7 @@ def test_a_wifi_panel_that_is_not_there_needs_a_look():
 
 def test_a_flash_notice_from_the_station_is_a_checks_row_while_it_is_set():
     lost = ("The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
-            "Run: sudo spoolwarden weigh-station panel-wifi")
+            "On the Weigh Station's computer, run: sudo spoolwarden weigh-station panel-wifi")
     rows = list(ps.panel_rows(_cfg("usb"), {"panel": None, "flash_notice": "from the station"}))
     flash = [r for r in rows if r.key == "weigh-station.panel-flash"]
     assert len(flash) == 1 and flash[0].state == status.FAIL and flash[0].group == "Weigh Station" and flash[0].text == lost

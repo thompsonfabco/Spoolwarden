@@ -457,7 +457,7 @@ TEXT_STATION_NO_PIN = _catalogue_text("station_not_pinned")
 TEXT_STATION_SET_ON_HUB = _catalogue_text("station_voice_set_on_hub", "Speaking and volume are set on the Hub.")
 # after a from-scratch flash of a wireless panel the station says its Wi-Fi set-up is gone (`flash_notice`); the owner reads this
 TEXT_STATION_WIFI_LOST = _catalogue_text("station_panel_wifi_lost", "The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
-                                         "Run: sudo {command} weigh-station panel-wifi")
+                                         "On the Weigh Station's computer, run: sudo {command} weigh-station panel-wifi")
 
 
 class StationCallError(Exception):

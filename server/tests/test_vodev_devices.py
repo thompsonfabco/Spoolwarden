@@ -82,7 +82,7 @@ def test_the_form_reads_only_the_error_sentence_not_a_message_field():
 
 # ---- the flash notice: shown on the Weigh Station's Devices row while the station's /state carries it ----
 LOST = ("The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
-        "Run: sudo spoolwarden weigh-station panel-wifi")
+        "On the Weigh Station's computer, run: sudo spoolwarden weigh-station panel-wifi")
 
 
 def _fake_state(monkeypatch, answer):
@@ -142,3 +142,29 @@ def test_the_devices_page_draws_the_panel_text_and_nothing_when_it_is_null():
     assert wifi["textContent"] == "Panel: on Wi-Fi" and usb["textContent"] == "Panel: on USB"
     assert null is None and absent is None
     assert "panel: r.panel," in src and "devPanelLine(d)" in src
+
+
+def test_every_catalogue_key_of_the_station_and_hub_modules_is_in_the_catalogue_with_the_same_english():
+    import ast
+    root = SP.STATIC.parent
+    cat = json.loads((root.parent.parent / "strings" / "en.json").read_text(encoding="utf-8"))
+    seen = 0
+    for rel in ("station/panel_setup.py", "station/state.py", "station/panel_flash.py", "station_client.py"):
+        tree = ast.parse((root / rel).read_text(encoding="utf-8"))
+        consts = {t.targets[0].id: t.value for t in ast.walk(tree)
+                  if isinstance(t, ast.Assign) and isinstance(t.targets[0], ast.Name)}
+        for n in ast.walk(tree):
+            if not (isinstance(n, ast.Call) and getattr(n.func, "id", "") in ("_t", "_catalogue_text") and len(n.args) > 1):
+                continue
+            key = n.args[0].value if isinstance(n.args[0], ast.Constant) else None
+            if key is None:
+                continue
+            seen += 1
+            assert key in cat, f"{rel}:{n.lineno} key {key} is not in strings/en.json"
+            if not isinstance(n.args[1], ast.JoinedStr):
+                assert ast.literal_eval(n.args[1]) == cat[key], f"{rel}:{n.lineno} fallback of {key} differs from the catalogue"
+    flash = ast.parse((root / "station/panel_flash.py").read_text(encoding="utf-8"))
+    vals = {t.targets[0].id: ast.literal_eval(t.value) for t in ast.walk(flash)
+            if isinstance(t, ast.Assign) and isinstance(t.targets[0], ast.Name) and t.targets[0].id in ("WIFI_LOST_KEY", "WIFI_LOST_NOTICE")}
+    assert cat[vals["WIFI_LOST_KEY"]] == vals["WIFI_LOST_NOTICE"]
+    assert seen >= 25

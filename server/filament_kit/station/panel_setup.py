@@ -61,7 +61,7 @@ TEXT_TIMEOUT = _t("panel_setup_timeout", "The panel did not answer in time.")
 TEXT_NOT_SAVED = _t("panel_setup_not_saved", "The panel took the Wi-Fi settings, but the station could not save them. "
                     "Run the set-up again.")
 TEXT_WIFI_LOST = _t("station_panel_wifi_lost", "The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
-                    "Run: sudo {command} weigh-station panel-wifi")
+                    "On the Weigh Station's computer, run: sudo {command} weigh-station panel-wifi")
 TEXT_NOT_CONNECTED = _t("check_panel_not_connected", "The Weigh Station's panel is not connected.")
 TEXT_NOT_CONNECTED_FIX = _t("check_panel_not_connected_fix", "check the panel has power and is in Wi-Fi range; to go back to "
                             "the USB cable: sudo spoolwarden weigh-station panel-wifi --off")
