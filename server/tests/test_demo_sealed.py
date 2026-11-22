@@ -350,7 +350,8 @@ def test_a_printer_edit_in_the_demo_answers_the_stop_not_an_internal_error(hub, 
     for pid, what in (("00M00A000000001", "rename"), ("00M00A000000001", "address"), ("00M00A000000001", "unpin"),
                       ("garage-voron", "rename"), ("garage-voron", "address"), ("garage-voron", "api_key"),
                       ("garage-voron", "lane_data"), ("mainsailos", "connect")):
-        r = c.post(f"/setup/api/printers/{pid}/{what}", json=body)
+        sent = body if pid == "00M00A000000001" else {k: v for k, v in body.items() if k != "access_code"}   # Klipper: no code
+        r = c.post(f"/setup/api/printers/{pid}/{what}", json=sent)
         assert (r.status_code, r.json()) == (409, {"error": demo.NOT_IN_DEMO, "code": demo.NOT_IN_DEMO_CODE}), (pid, what)
     assert snapshot(tmp_path) == before
 
