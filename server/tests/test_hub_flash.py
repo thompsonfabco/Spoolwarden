@@ -1,4 +1,4 @@
-"""S2.16 Flash a device on the Hub page (design 09 S2.16): the section's audits, and its browser walk (tests/flash_walk.mjs) with a fake
+"""S2.16 Flash a device on the Hub page (step S2.16): the section's audits, and its browser walk (tests/flash_walk.mjs) with a fake
 board and a fake Hub job. The fixtures and helpers are test_hub_page_audit.py's."""
 from __future__ import annotations
 

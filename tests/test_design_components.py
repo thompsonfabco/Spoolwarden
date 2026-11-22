@@ -169,8 +169,8 @@ class _Quiet(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-# 09 S0.11 "Check": AUT-5 on the sample page at 1280 px and 320 px (touch), light and dark; every view has no finding.
-# One runner for every page (09 S1.11): tests/aut5_run.mjs, with no allow-list here.
+# S0.11 "Check": AUT-5 on the sample page at 1280 px and 320 px (touch), light and dark; every view has no finding.
+# One runner for every page (S1.11): tests/aut5_run.mjs, with no allow-list here.
 def test_page_audit_on_the_sample():
     node = _node()
     if not node:

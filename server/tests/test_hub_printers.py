@@ -1,4 +1,4 @@
-"""The Printers section of the Hub page (design 09 S2.4, the design, Hub page): the page audit of the collection, an open row and both
+"""The Printers section of the Hub page (step S2.4, the design, Hub page): the page audit of the collection, an open row and both
 drawers (AUT-5, through tests/aut5_run.mjs), and the section pressed in a real headless browser through tests/page_drive.mjs:
 mapping progress and Stop that stay, addresses and serials that follow the lock, drawers in every look, and nothing typed left
 behind. The page is served with the data of test_hub_page_audit.py plus printers in each state. The same skip rules as the

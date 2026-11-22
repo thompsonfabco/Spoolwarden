@@ -1,4 +1,4 @@
-// The console's Printers section (the design, Hub page; 09 S2.4). Loaded after setup.js; everything from the server goes in through textContent, as there.
+// The console's Printers section (the design, Hub page; S2.4). Loaded after setup.js; everything from the server goes in through textContent, as there.
 // A Klipper printer has no Access Code and a Bambu printer no API key: each family's words and controls appear only with its module on.
 // The collection, its rows and the drawers are this file's, and so are the Add a printer drawer, the scan (5.4, 5.8) and the Klipper add-on card.
 "use strict";

@@ -4,7 +4,7 @@ the design, platform mapping 3.4 test 5, one test function per lint.
 They read the web sources (`setup_static/*`, `web/static/*`, `web-shared/*`) and the app's Kotlin (see test_design_sources.py). Today's
 findings are in the allow-lists next to this file, one line each: `<path> | <finding> | <count> | <reason>`, the count
 being the number of findings of that kind in that file. A finding outside its allow-list fails, more findings than the
-count fail (a new `confirm()` in a listed file), and so do fewer, or none (the line must be lowered or dropped, 09 S0.7
+count fail (a new `confirm()` in a listed file), and so do fewer, or none (the line must be lowered or dropped, S0.7
 and open point 4), so a step that rewrites a file removes that file's lines.
 """
 import re

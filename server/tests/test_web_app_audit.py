@@ -1,4 +1,4 @@
-"""AUT-5 on the web app (design 09 S3.4, the design, accessibility): the page audit (tests/page_audit.js) in every view, Console
+"""AUT-5 on the web app (step S3.4, the design, accessibility): the page audit (tests/page_audit.js) in every view, Console
 light and dark, at 1280 px and 320 px, through tests/aut5_run.mjs in a headless Chrome, Edge or Chromium already on
 the machine. Example data only (the example-data rules: "Workshop hub", invented filaments).
 
@@ -456,7 +456,7 @@ def test_the_allow_list_names_a_later_step_and_a_count_on_every_line(allow):
             assert check and where and count.isdigit() and int(count) > 0 and "rebuilt by S3." in reason, line
 
 
-# ---- Add spools (design 09 S3.8): every state of the design, web app, driven in the page and audited -------------------------------------
+# ---- Add spools (step S3.8): every state of the design, web app, driven in the page and audited -------------------------------------
 # The Label Reader is not run here: the page's fetch answers `read` with a made-up reading (a small stand-in the state's
 # script puts in), everything else (find, vendors, preview, add) is the real Hub on a fake Spoolman. A state script throws
 # when the page is not in the state it names, then the runner audits that state at 1280 px and 320 px, light and dark.
@@ -1300,7 +1300,7 @@ def test_an_allow_list_line_with_a_view_covers_that_view_only(probe, tmp_path):
     assert ("#gone", "view did not open") in {(r["view"], f["check"]) for r in json.loads(run.stdout)["report"] for f in r["findings"]}
 
 
-# ---- Spools (design 09 S3.10): every state of the design, web app, driven in the page and audited ----------------------------------------
+# ---- Spools (step S3.10): every state of the design, web app, driven in the page and audited ----------------------------------------
 # The Hub is the real one on a fake Spoolman (find, spool read, weight, move, mark empty). What needs a tag on a reader, or a
 # printer, is answered by the state's script (the page's fetch is stood in for `tag`, `open`, `printers/...`). A state script
 # throws when the page is not in the state it names, then the runner audits that state at 1280 px and 320 px, light and dark.
