@@ -423,13 +423,13 @@ def test_on_a_fresh_old_log_the_line_is_written_before_the_marker(monkeypatch):
     assert [e["id"] for e in usage.entries(SERIAL, days=30)] == [r["id"]]      # and a lost marker costs no double
 
 
-def _holder(d):
-    """A process that holds usage/.lock until its stdin is closed."""
+def _holder(d, name=".lock"):
+    """A process that holds usage/.lock (or another lock file of that folder) until its stdin is closed."""
     (d / "usage").mkdir(parents=True, exist_ok=True)
     h = subprocess.Popen(
         [sys.executable, "-I", "-c",
          "import fcntl,sys;f=open(sys.argv[1],'a');fcntl.flock(f,fcntl.LOCK_EX);print('held',flush=True);sys.stdin.read()",
-         str(d / "usage" / ".lock")], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+         str(d / "usage" / name)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     assert h.stdout.readline().strip() == "held"
     return h
 
@@ -703,3 +703,35 @@ def test_a_lock_timeout_after_a_permanent_loss_does_not_weaken_the_note(monkeypa
         _release(holder)
     notes = [p for p in statexml.problems() if "rollback" in p]
     assert notes and all("cannot be kept current" in p for p in notes)          # was: rewritten as "not kept current ... yet"
+
+
+def test_a_pending_lock_that_stays_taken_does_not_hold_the_write_for_ever(monkeypatch):
+    monkeypatch.setattr(usage, "PEND_WAIT", 0.3, raising=False)
+    usage._pend_lock.acquire()                  # a thread that stays in the pending guard
+    try:
+        t, out = _in_thread(usage.append, SERIAL, {"job": "x"})
+        t.join(5)
+        assert "r" in out                       # was: waited for the lock with no limit
+        assert [e["id"] for e in usage.entries(SERIAL, days=30)] == [out["r"]["id"]]          # the month file has it
+        assert any("cannot be kept current" in p for p in statexml.problems())
+        assert not (_dir() / "usage" / usage.PENDING).exists()
+    finally:
+        usage._pend_lock.release()
+        usage._lost.clear()
+
+
+@needs_flock
+def test_a_pending_lock_held_by_another_process_is_waited_for_only_so_long(monkeypatch):
+    monkeypatch.setattr(usage, "PEND_WAIT", 0.3, raising=False)
+    holder = _holder(_dir(), usage.PENDING_LOCK)
+    try:
+        t, out = _in_thread(usage.append, SERIAL, {"job": "x"})
+        t.join(5)
+        assert "r" in out
+        assert [e["id"] for e in usage.entries(SERIAL, days=30)] == [out["r"]["id"]]
+        assert any("cannot be kept current" in p for p in statexml.problems())
+        with pytest.raises(usage.PendTimeout):
+            usage._pend(SERIAL, _entry(E1, "2026-11-10T10:00:00Z"))
+    finally:
+        _release(holder)
+        usage._lost.clear()

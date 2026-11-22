@@ -115,6 +115,7 @@ DIR = "usage"
 MIGRATED = ".migrated"           # says how many bytes of usage.jsonl were taken in
 TAKEN = re.compile(r"usage\.jsonl taken in: (\d+) ([0-9a-f]{64})\n")
 LOCK_WAIT = 5.0                 # seconds to wait for usage/.lock
+PEND_WAIT = 5.0                 # seconds to wait for the pending file's own lock
 PENDING_LOCK = ".pending.lock"  # guards the pending file's open and write against the drain's rename
 TAIL = 256 * 1024               # how much of the end of usage.jsonl is looked at for lines a drain already appended
 PENDING = ".pending-old"        # lines for usage.jsonl not appended yet (the lock was busy), in its form, one per line
@@ -256,6 +257,10 @@ def _forget(path: Path) -> None:
 
 class LockTimeout(OSError):
     """usage/.lock stayed with another process for LOCK_WAIT seconds."""
+
+
+class PendTimeout(OSError):
+    """The pending file's lock stayed taken for PEND_WAIT seconds."""
 
 
 @contextmanager
@@ -507,16 +512,28 @@ def _pend_guard(serial: str):
     close, and the drain's rename of it: a line cannot land in the file a drain has just renamed, read and removed."""
     folder = _dir(serial) / DIR
     make_state_dir(folder)
-    with _pend_lock:
+    deadline = time.monotonic() + PEND_WAIT
+    if not _pend_lock.acquire(timeout=PEND_WAIT):
+        raise PendTimeout(f"{folder / PENDING_LOCK} stayed taken for {PEND_WAIT:g} s")
+    try:
         if fcntl is None:
             yield
             return
         with open_lock(folder / PENDING_LOCK) as fh:
-            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)         # held for a rename or one line only
+            while True:                                     # held for a rename or one line only: the wait is bounded
+                try:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise PendTimeout(f"{folder / PENDING_LOCK} stayed taken for {PEND_WAIT:g} s") from None
+                    time.sleep(0.01)
             try:
                 yield
             finally:
                 fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    finally:
+        _pend_lock.release()
 
 
 def _pend(serial: str, rec: dict) -> None:
@@ -564,6 +581,9 @@ def _drain(serial: str) -> bool:
                     os.replace(d / PENDING, draining)   # a line added from now on goes to a new file
             except FileNotFoundError:
                 break
+            except PendTimeout as e:            # the lines stay where they are, noted; the next write drains them
+                _note_pending(serial, str(e))
+                return False
         recs = _pending_in(draining)
         for rec in recs:
             _store(serial, rec, dedupe=True)
