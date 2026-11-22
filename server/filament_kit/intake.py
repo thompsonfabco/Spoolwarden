@@ -168,13 +168,14 @@ def _stamps(raw) -> list[dict]:
     return out
 
 
+def _read_stamps(path: Path):
+    """What reads.xml holds (reads.json, a JSON list, is moved to it on the way), or None."""
+    return statexml.read_list(Path(path), mode=0o644, state_owned=True)
+
+
 def reads_today(path: Path) -> int:
-    """The reads taken in the last 24 h (`doctor`'s count and the tests'), in either format of reads.json."""
-    try:
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return 0
-    return sum(1 for e in _stamps(raw) if e["t"] > time.time() - 86400)
+    """The reads taken in the last 24 h (`doctor`'s count and the tests'), in either format of the reads file."""
+    return sum(1 for e in _stamps(_read_stamps(path)) if e["t"] > time.time() - 86400)
 
 
 class ReadCap:
@@ -190,12 +191,8 @@ class ReadCap:
         self._lock = locks.ProcessLock(self.path.with_name("reads.lock"))
 
     def _load(self, now: float) -> list[dict]:
-        try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return []
         out = []
-        for e in _stamps(raw):
+        for e in _stamps(_read_stamps(self.path)):
             if e["t"] <= now - 86400:
                 continue
             if "ticket" in e and e["t"] < now - TICKET_TTL:   # a dead ticket: keep only the stamp
@@ -204,16 +201,10 @@ class ReadCap:
         return out
 
     def _save(self, stamps: list[dict]) -> None:
-        """A temp file and a rename, so a crash never resets the cap. The kit's own file: the web unit takes its
-        reads through the kit API (/api/intake/cap/take)."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_name(self.path.name + ".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o644)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(json.dumps([e if "ticket" in e else e["t"] for e in stamps]))
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, self.path)
+        """Written as reads.xml (atomic, 0644, the state's owner), so a crash never resets the cap. The kit's own file:
+        the web unit takes its reads through the kit API (/api/intake/cap/take)."""
+        statexml.write_list(self.path, [{k: e[k] for k in ("t", "ticket", "device") if k in e} for e in stamps],
+                            0o644, state_owned=True)
 
     def take(self, device: str | None = None) -> str:
         """Use one read; returns the ticket that may give it back (`refund`)."""

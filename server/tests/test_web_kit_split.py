@@ -13,6 +13,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from filament_kit import api, config, intake, modules, pairing, web_access
+from filament_kit.profiles import statexml
 from filament_kit.spoolman import Spoolman
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -388,8 +389,8 @@ def test_read_cap_is_replaced_atomically_again(kit):
     cap.take()
     before = f.stat().st_ino
     cap.take()
-    assert json.loads(f.read_text(encoding="utf-8")) and (sys.platform == "win32" or f.stat().st_ino != before)
-    assert not list(f.parent.glob("reads.json.*tmp*"))
+    assert statexml.read_list(f) and (sys.platform == "win32" or f.stat().st_ino != before)
+    assert not list(f.parent.glob("reads.xml.*tmp*"))
 
 
 def test_backup_keeps_the_acls():

@@ -17,6 +17,7 @@ from fakes.claude_fake import FakeClaude
 from test_intake_history import ITEM, JPEG, JPEG2, READ, RULES  # noqa: F401  (the same example label as the history tests)
 
 from filament_kit import cli, config, intake, intake_history, inventory, modules, output, pairing
+from filament_kit.profiles import statexml
 from filament_kit.intake import read_labels
 from filament_kit.spoolman import Spoolman
 
@@ -968,7 +969,7 @@ def test_unpair_is_devices_and_devices_forget_under_its_old_name(capsys, asked):
 
 def _reads(tmp_path) -> list:
     path = tmp_path / "state" / "reads.json"
-    return json.loads(path.read_text()) if path.exists() else []
+    return statexml.read_list(path) or []
 
 
 def _audit_lines(caplog) -> list[str]:
@@ -995,7 +996,7 @@ def test_a_revision_at_the_daily_limit_is_refused_with_the_hubs_words(sm, capsys
     cfg = config.load()
     cfg["reads_per_day"] = 1
     config.save(cfg)
-    (tmp_path / "state" / "reads.json").write_text(json.dumps([time.time() - 10]))
+    statexml.write_list(tmp_path / "state" / "reads.json", [{"t": time.time() - 10}], 0o644)
     fake = label_reader(monkeypatch, fixed(name="PLA+ Black"))
     rc, out, err = run(capsys, "recent", "revise", hid, "--note", "x")
     assert rc == 1 and out == "" and fake.calls == [] and len(_reads(tmp_path)) == 1
