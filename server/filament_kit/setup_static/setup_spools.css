@@ -19,6 +19,8 @@
 .coll--spools .coll__item .coll__cell[data-col="select"] { width: auto; flex: none; }
 /* the page's `:where(.page) input:is([type="checkbox"])` resets the width of every checkbox to auto (13 px, taller than wide): the square of the component is kept here */
 .coll--spools .check__input { width: calc(var(--s4) + var(--s1) / 2); flex: none; }
+/* the label is the hit area of the checkbox (page audit: 44 x 44): the checkbox of a row (and of the header where its label is hidden) has no visible text, so its label gets the width the component's height gives it */
+.coll--spools .coll__cell[data-col="select"] .check { justify-content: center; min-width: calc(var(--s7) - var(--s1)); }
 :root[data-look="panes"] .coll--spools .coll__item .coll__cell[data-col="select"] { order: -3; }
 :root[data-look="workbench"] .coll--spools .coll__head:not(:has(.coll__sort)), :root[data-look="palette"] .coll--spools .coll__head:not(:has(.coll__sort)) { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
 :root[data-look="panes"] .coll--spools .coll__head:not(:has(.coll__sort)) { display: block; }
