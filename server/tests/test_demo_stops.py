@@ -268,3 +268,17 @@ def test_a_demo_print_goes_through_the_real_tracker_and_the_switch_and_leaves_no
     assert [e["job"] for e in demo_printers.usage_entries(pid, 3650)]    # the demo's own log has the print
     demo.leave()
     assert not (env / "state" / "printers").exists()
+
+
+def test_the_slot_snapshot_lands_in_the_demos_folder_and_not_in_the_real_state(env):
+    """R609 N2: what the slot test must put back is kept in the demo's folder, so leaving the demo leaves no pending restore."""
+    from filament_kit.bridge import snapshot
+    pid = "00M00A000000001"
+    on()
+    snapshot.save(pid, "slottest", [{"label": "A1", "ams_id": 0, "tray_id": 0, "setting": {"tray_type": "PLA"}}])
+    assert snapshot.pending(pid) and snapshot.pending_serials() == [pid] and snapshot.load(pid)["kind"] == "slottest"
+    assert not (env / "state" / "printers").exists()
+    assert list((env / "state" / "demo" / "printers" / pid).rglob("*.xml"))
+    demo.leave()
+    assert not (env / "state" / "printers").exists() and not (env / "state" / "demo").exists()
+    assert not snapshot.pending(pid) and snapshot.pending_serials() == []

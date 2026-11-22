@@ -18,7 +18,7 @@ import logging
 import time
 from typing import Callable
 
-from .. import config
+from .. import config, demo
 from ..profiles import statexml
 from . import layout, registry, status
 from .connection import PrinterOffline, UnknownPrinter
@@ -33,7 +33,7 @@ ONLINE = ('connected', 'needs_developer_mode')
 def path(serial: str):
     if not isinstance(serial, str) or not registry.SERIAL.fullmatch(serial):
         raise ValueError(f"bad serial {serial!r}")
-    return config.paths().state / "printers" / serial / FILE
+    return demo.where(config.paths().state / "printers" / serial, f"printers/{serial}") / FILE      # the demo keeps its own
 
 
 def save(serial: str, kind: str, slots: list[dict], test_colours=()) -> None:
@@ -74,7 +74,7 @@ def pending(serial: str) -> bool:
 
 
 def pending_serials() -> list[str]:
-    root = config.paths().state / "printers"
+    root = demo.where(config.paths().state / "printers", "printers")
     if not root.is_dir():
         return []
     return sorted(d.name for d in root.iterdir() if registry.SERIAL.fullmatch(d.name) and statexml.exists(d / FILE))

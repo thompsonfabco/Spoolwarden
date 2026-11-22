@@ -392,6 +392,7 @@ def routes(page) -> list[tuple]:
         return page.mapper
 
     async def map_start(request, body):
+        not_in_demo()                       # the slot test writes to a printer: the pretend ones are not mapped
         serial = page._serial(request)
 
         def run() -> str:

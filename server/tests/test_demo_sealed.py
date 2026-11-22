@@ -334,3 +334,14 @@ def test_a_printer_edit_in_the_demo_answers_the_stop_not_an_internal_error(hub, 
         r = c.post(f"/setup/api/printers/{pid}/{what}", json=body)
         assert (r.status_code, r.json()) == (409, {"error": demo.NOT_IN_DEMO, "code": demo.NOT_IN_DEMO_CODE}), (pid, what)
     assert snapshot(tmp_path) == before
+
+
+def test_map_slots_stops_in_the_demo(hub, tmp_path):
+    """R609 N2: Map slots has a stop (the slot test writes to a printer); nothing is written outside the demo's folder."""
+    c, out, (bambu, _) = hub
+    before = snapshot(tmp_path)
+    assert bambu.command("00M00A000000001", "stop")["ok"]              # the print is over, so the printer is idle
+    r = c.post("/setup/api/printers/00M00A000000001/map", json={"code": CODE})
+    assert (r.status_code, r.json()) == (409, {"error": demo.NOT_IN_DEMO, "code": demo.NOT_IN_DEMO_CODE})
+    time.sleep(0.3)                                                    # a job thread would be left behind by now
+    assert snapshot(tmp_path) == before and [k for k in out.seen if not INSIDE.match(k)] == [] and out.wrote == []
