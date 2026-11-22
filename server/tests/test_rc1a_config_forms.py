@@ -82,11 +82,11 @@ def test_a_passing_read_error_does_not_set_the_good_xml_aside(etc, monkeypatch):
             raise PermissionError(13, "Permission denied")
         return real(self)
 
-    monkeypatch.setattr(type(xf), "read_bytes", flaky)
-    assert config.load()["port"] == 5                       # config.json is used
-    assert any("config.xml" in p for p in statexml.problems())
-    config.save({"port": 8})
-    monkeypatch.undo()
+    with monkeypatch.context() as m:
+        m.setattr(type(xf), "read_bytes", flaky)
+        assert config.load()["port"] == 5                   # config.json is used
+        assert any("config.xml" in p for p in statexml.problems())
+        config.save({"port": 8})
     assert not (etc / "config.xml.unreadable").exists()
     assert config.load()["port"] == 8
 
