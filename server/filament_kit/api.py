@@ -1099,12 +1099,17 @@ def _intake_web_app(cfg: dict, sm: Spoolman, claude, hosts=None) -> list:
     from . import web_access
     from .web import mcp_tools, slots
     from .web.intake_app import IntakeApp
-    kit = slots.KitApi(token_file=config.paths().state / INTAKE_TOKEN, device=INTAKE_DEVICE, role=web_access.WEB_ROLE)
+    from .web.reader import Reader
+    kit =slots.KitApi(token_file=config.paths().state / INTAKE_TOKEN, device=INTAKE_DEVICE, role=web_access.WEB_ROLE)
     tools = mcp_tools.Tools(sm, kit_api=kit, kit_writes=True)
     lan_cidrs = (cfg.get("web") or {}).get("lan") or []
-    return IntakeApp(tools, public_url=None, lan_cidrs=lan_cidrs, claude=claude, kit_api=kit, push=False,
-                     host_ok=lambda request: setup_page.host_ok(request, hosts),
-                     host_refusal=setup_page.bad_host_text).routes()
+    # the Tag Reader's API (web/reader.py) on this listener too: a reader talks to the Hub on the home network, whether
+    # or not Remote access (the web unit) is installed. Same handlers, same reader token and home-network checks, and
+    # the same kit calls through the loopback pairing above.
+    return [*IntakeApp(tools, public_url=None, lan_cidrs=lan_cidrs, claude=claude, kit_api=kit, push=False,
+                       host_ok=lambda request: setup_page.host_ok(request, hosts),
+                       host_refusal=setup_page.bad_host_text).routes(),
+            *Reader(tools, sm, lan_cidrs=lan_cidrs).routes()]
 
 
 def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hub=None,

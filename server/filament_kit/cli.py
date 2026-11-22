@@ -5435,6 +5435,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
             return 1
         a.ssid, a.port = str(answers.get("ssid") or ""), answers.get("port") or a.port
         a.buzzer, a.name = answers.get("buzzer") or "high", answers.get("name") or a.name
+        a.printer = answers.get("printer") or ""
         typed = str(answers.get("pass") or "")
         ask_secret = lambda _prompt: typed  # noqa: E731
     if rf.bundled_image() is None:
@@ -5481,7 +5482,8 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     try:
         base = a.base.rstrip("/") if a.base else rs.reader_base(config.load())
         if not base.startswith("https://"):
-            raise rs.SetupError("--base must be the kit's public https address plus /reader")
+            raise rs.SetupError("--base must be an https address plus /reader")
+        home = None if a.base else rs.home_settings(getattr(a, "printer", None) or "")
         key_pem, real_key = rs.pubkey(Path(a.ota_pubkey).read_text(encoding="utf-8") if a.ota_pubkey else None)
         token = Path(a.token_file).read_text(encoding="utf-8").strip() if a.token_file else None
     except (rs.SetupError, OSError) as e:
@@ -5496,13 +5498,14 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     if password is None:
         return 1
     buzzer = a.buzzer or _ask_choice(
-        ask, "Its buzzer: [h]igh-triggered (behind a MOSFET, as in the parts list) or [l]ow-triggered (the older "
-             "3-pin module)? [h] ", {"h": "high", "high": "high", "l": "low", "low": "low"}, "high")
+        ask, "Its buzzer: a [b]are buzzer (high-triggered, as in the parts list) or a buzzer with a [d]river board "
+             "(low-triggered)? [b] ", {"b": "high", "bare": "high", "h": "high", "high": "high",
+                                                         "d": "low", "driver": "low", "l": "low", "low": "low"}, "high")
     if buzzer is None:
         _err_line("no answer for the buzzer; nothing was changed")
         return 1
     try:
-        rs.secrets_h(ssid, password, base, token or "x" * 43, key_pem)      # the same checks as a build's
+        rs.secrets_h(ssid, password, base, token or "x" * 43, key_pem, home=home)      # the same checks as a build's
     except rs.SetupError as e:
         _err_line(f"{e}; nothing was changed")
         return 1
@@ -5524,7 +5527,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
         except reader_tokens.TokenFileError as e:
             _err_line(f"{e}; nothing was changed")
             return 1
-    settings = {"ssid": ssid, "pass": password, "base": base, "token": token, "buzzer_low": buzzer == "low"}
+    settings = {"ssid": ssid, "pass": password, "base": base, "token": token, "buzzer_low": buzzer == "low", **(home or {})}
     if real_key:
         settings["ota_key"] = key_pem
     service = "filament-kit-station.service"      # its panel watcher also opens ESP32 boards: off while we work
@@ -5635,7 +5638,8 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
     try:
         base = a.base.rstrip("/") if a.base else rs.reader_base(config.load())
         if not base.startswith("https://"):
-            raise rs.SetupError("--base must be the kit's public https address plus /reader")
+            raise rs.SetupError("--base must be an https address plus /reader")
+        home = None if a.base else rs.home_settings(getattr(a, "printer", None) or "")
         key_pem, real_key = rs.pubkey(Path(a.ota_pubkey).read_text(encoding="utf-8") if a.ota_pubkey else None)
         token = Path(a.token_file).read_text(encoding="utf-8").strip() if a.token_file else None
     except (rs.SetupError, OSError) as e:
@@ -5651,7 +5655,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
     if password is None:
         return 1
     try:
-        rs.secrets_h(ssid, password, base, token or "x" * 43, key_pem, low)  # every check before a token is made
+        rs.secrets_h(ssid, password, base, token or "x" * 43, key_pem, low, home)  # every check before a token is made
         if a.out and not rs.out_ok(Path(a.out), who.uid if who else os.getuid() if hasattr(os, "getuid") else 0):
             raise rs.SetupError(f"{a.out} exists and is not a file of yours; choose a new name")
     except rs.SetupError as e:
@@ -5664,7 +5668,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         except reader_tokens.TokenFileError as e:
             _err_line(f"{e}; nothing was changed")
             return 1
-    text = rs.secrets_h(ssid, password, base, token, key_pem, low)
+    text = rs.secrets_h(ssid, password, base, token, key_pem, low, home)
     if a.out:
         out = Path(a.out)
         try:
@@ -5704,8 +5708,8 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         output.result(f"Flashed. The reader joins {ssid} and calls {base}.")
     if a.out or flashing:
         print(f"Buzzer: {'low' if low else 'high'}-triggered"
-              + (" (the older 3-pin module)." if low else " (a buzzer behind a MOSFET). A reader with the older 3-pin "
-                 "buzzer module needs --buzzer low."))
+              + (" (a buzzer with a driver board)." if low else " (a bare buzzer). A reader with a buzzer on a driver "
+                 "board needs --buzzer low."))
     if tid:
         output.out(f"Reader token {tid} ({a.name or 'reader'}). Remove it later with: "
                    + f"sudo spoolwarden reader revoke {tid}")
@@ -6848,16 +6852,18 @@ def _add_tag_reader(sub, name: str, *, alias: bool) -> None:
     rds.add_argument("--out", help="write its secrets.h here (0600) to build elsewhere")
     rds.add_argument("--ota-pubkey", help="the PEM public key OTA images are signed with (ota_publish.py --init-key)")
     rds.add_argument("--token-file", help="a token made on the server (new-token) instead of a new one")
-    rds.add_argument("--base", help="READER_BASE when this machine is not the server: <web.public_url>/reader")
+    rds.add_argument("--base", help="READER_BASE when this machine is not the server: the Hub's address plus /reader "
+                                    "(the Hub's own certificate is not given then)")
     rds.add_argument("--secrets", help="flash a secrets.h written earlier with --out (needs --source)")
     rds.add_argument("--reflash", action="store_true",
                      help="write the kit's firmware even when the board already runs that build")
     rds.add_argument("--pending", action="store_true",
                      help="take the answers the setup page left (its job runs this; nothing is asked)")
     rds.add_argument("--buzzer", choices=("high", "low"), default=None,
-                     help="the buzzer's trigger: high (a buzzer behind a MOSFET, the default; asked when left out) "
-                          "or low (the older 3-pin "
-                          "module)")
+                     help="the buzzer's trigger: high (a bare buzzer, the default; asked when left out) "
+                          "or low (a buzzer with a driver board)")
+    rds.add_argument("--printer", help="the printer id the reader starts on (the knob can change it); left out, it is "
+                                       "chosen on the reader")
 
 
 def _dispatch_recent(args) -> int:

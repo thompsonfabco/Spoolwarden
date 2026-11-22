@@ -2,13 +2,14 @@
 board plugged into the computer the owner sits at) or by the server (plugged into the server's USB). The images come
 from the installed kit version (reader_flash.DEVICES), never the internet, and hold no settings.
 
-    GET  firmware                       the devices this kit has images for, the boards on the server's USB, and
-                                        whether the Printer Station's settings can be made (web.public_url)
+    GET  firmware                       the devices this kit has images for, the boards on the server's USB, and the
+                                        printers a Tag Reader can start on
     GET  firmware/{device}.bin          one image, for the browser to write
-    POST flash/provision {code[, name]} the browser way, Printer Station: a new reader token and the kit's reader
-                                        address, which the page writes into the board over USB (FK-SET) and never
-                                        shows; a run that fails revokes it (readers/{id}/revoke)
-    POST flash/server {code, ssid, pass, buzzer[, port][, name]}   the server way: the root helper's op reader_usb
+    POST flash/provision {code[, name][, printer]} the browser way, Printer Station: a new reader token and the Hub's
+                                        home address (base, root_ca, hub_ip, printer: reader_setup.home_settings),
+                                        which the page writes into the board over USB (FK-SET) and never shows; a
+                                        run that fails revokes it (readers/{id}/revoke)
+    POST flash/server {code, ssid, pass, buzzer[, port][, name][, printer]}   the server way: the root helper's op reader_usb
                                         starts the job reader_setup (`reader setup --pending`); the page follows it
                                         as every job
 
@@ -24,13 +25,6 @@ from starlette.responses import Response
 from .. import config, modules, reader_flash, reader_setup, reader_tokens
 
 
-def _base() -> tuple[str | None, str | None]:
-    try:
-        return reader_setup.reader_base(config.load()), None
-    except reader_setup.SetupError as e:
-        return None, str(e)
-
-
 def listing() -> dict:
     devices = []
     for dev, title in reader_flash.DEVICES.items():
@@ -38,13 +32,21 @@ def listing() -> dict:
         devices.append({"id": dev, "title": title, "bundled": got is not None,
                         "version": got[1] if got else None, "size": got[0].stat().st_size if got else None,
                         "settings": dev == "printer-station"})
-    base, why = _base()
     cfg = config.load()
     return {"devices": devices,
             # the port and the board's own name; never the by-id path, which holds the chip's serial
             "server_boards": [{"port": r.port, "product": r.product} for r in reader_setup.find_readers()],
             "station_here": "station" in modules.enabled(cfg),
-            "settings_ok": base is not None, "settings_why": why}
+            "printers": [{"id": p["id"], "name": p["name"]} for p in reader_setup.hub_printers(cfg)]}
+
+
+def _printer_choice(page, body: dict) -> str:
+    """The printer the Tag Reader starts on: one of the Hub's printers, or "" (choose on the reader's knob)."""
+    from ..setup_page import Refused
+    try:
+        return reader_setup.check_printer(page._opt_text(body, "printer"))
+    except reader_setup.SetupError as e:
+        raise Refused(400, str(e), field="printer") from None
 
 
 def routes(page) -> list[tuple]:
@@ -71,9 +73,11 @@ def routes(page) -> list[tuple]:
         name = page._opt_text(body, "name") or "printer-station"
         if reader_flash.bundled_image() is None:
             raise Refused(409, "this Hub has no Tag Reader firmware bundled; update Spoolwarden")
-        base, why = _base()
-        if base is None:
-            raise Refused(409, why)
+        printer = _printer_choice(page, body)
+        try:
+            home = {"base": reader_setup.reader_base(config.load()), **reader_setup.home_settings(printer)}
+        except reader_setup.SetupError as e:
+            raise Refused(409, str(e)) from None
 
         def run():
             try:
@@ -83,11 +87,12 @@ def routes(page) -> list[tuple]:
         tid, token = await anyio.to_thread.run_sync(run)
         page.audit(request, f"reader token {tid} made for a Tag Reader flashed from the browser")
         # the one reply with a token: the page writes it to the board over USB and keeps it nowhere
-        return {"ok": True, "id": tid, "token": token, "base": base}
+        return {"ok": True, "id": tid, "token": token, **home}
 
     async def server(request, body):
+        _printer_choice(page, body)             # the helper checks it again, with the same words
         req = {"op": "reader_usb", "code": body["code"]}
-        for k in ("ssid", "pass", "buzzer", "port", "name"):
+        for k in ("ssid", "pass", "buzzer", "port", "name", "printer"):
             if k in body:
                 req[k] = body[k]
         r = await page._helper(req)

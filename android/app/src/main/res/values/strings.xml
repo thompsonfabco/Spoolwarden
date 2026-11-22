@@ -887,8 +887,8 @@
     <!-- 1=port 2=product_name -->
     <string name="flash_board_option">%1$s · %2$s</string>
     <string name="flash_buzzer">Buzzer</string>
-    <string name="flash_buzzer_high">High-triggered (the build in the parts list)</string>
-    <string name="flash_buzzer_older">Older 3-pin module</string>
+    <string name="flash_buzzer_high">Bare buzzer</string>
+    <string name="flash_buzzer_older">Buzzer with driver board</string>
     <string name="flash_connect_hint">then pick the board in the browser\'s list.</string>
     <string name="flash_connect_write">Connect and write</string>
     <string name="flash_device_display">Weigh Station display</string>
@@ -903,10 +903,10 @@
     <string name="flash_error_back">The board did not come back on USB after its restart. Unplug it, plug it in again, and run this again.</string>
     <string name="flash_error_hub_refused">The Tag Reader reached the Hub, but the Hub refused it. Run this again.</string>
     <!-- 1=address -->
-    <string name="flash_error_hub_unreachable">The Tag Reader joined the Wi-Fi but could not reach the Hub at %1$s. Check the public address in Settings > Network and addresses.</string>
+    <string name="flash_error_hub_unreachable">The Tag Reader joined the Wi-Fi but could not reach the Hub at %1$s. Check that the Tag Reader\'s Wi-Fi is the Hub\'s home network.</string>
     <!-- 1=reason -->
     <string name="flash_error_refused">The board refused the settings: %1$s. Run this again.</string>
-    <string name="flash_error_report">The board did not report back. Run this again.</string>
+    <string name="flash_error_late">The reader did not answer in time. Run this again.</string>
     <!-- 1=wifi -->
     <string name="flash_error_wifi">The Tag Reader could not join \'%1$s\'. Check the Wi-Fi name and password (2.4 GHz networks only).</string>
     <!-- 1=reason -->
@@ -916,7 +916,6 @@
     <string name="flash_intro">Writes Spoolwarden\'s firmware over USB. Nothing is downloaded: the firmware comes with the Hub.</string>
     <string name="flash_no_board">No board was chosen. Press Connect and write again and pick the board.</string>
     <string name="flash_no_boards">No board is plugged into the Hub. Plug it in with a data cable; this list updates by itself.</string>
-    <string name="flash_no_public">A Tag Reader needs the Hub\'s public address. Set it in Settings > Network and addresses.</string>
     <string name="flash_no_serial">This browser cannot write to USB devices. Use Chrome or Edge on a computer, or plug the board into the Hub and choose The Hub.</string>
     <string name="flash_phone_note">Phones cannot write to USB devices. Plug the board into the Hub and choose The Hub, or open this page on a computer.</string>
     <string name="flash_plugged_computer">This computer</string>
@@ -943,6 +942,9 @@
     <string name="flash_error">Could not read the firmware on this Hub. %1$s</string>
     <string name="flash_hub_started">Writing on the Hub has started. The job strip follows it; keep the board plugged in.</string>
     <string name="flash_name">Name</string>
+    <string name="flash_printer">Printer</string>
+    <string name="flash_printer_hint">The printer the Tag Reader starts on. The knob can still change it.</string>
+    <string name="flash_printer_reader">Choose on the reader</string>
     <string name="flash_name_hint">The name the Hub gives this Tag Reader\'s token.</string>
     <string name="flash_stopped">Stopped before the next step. Nothing more was written.</string>
     <string name="flash_stopped_half">Stopped while writing. The board is half written: run this again before using it.</string>
@@ -1630,7 +1632,6 @@
     <string name="settings_network_hosts_hint">Separate them with spaces. The Hub\'s own names and addresses always work, and so does a local name from your network (one word, .local, .lan, .home.arpa or your network\'s own domain) that points at this Hub. Add any other name here.</string>
     <string name="settings_network_hosts_placeholder">hub.example</string>
     <string name="settings_network_public">Public address</string>
-    <string name="settings_network_public_hidden">Set (hidden). Type a new address to replace it.</string>
     <string name="settings_network_public_hint">The https address of the web app and Claude\'s connector.</string>
     <string name="settings_network_public_hint_off">Used when Web access is on.</string>
     <string name="settings_network_public_placeholder">https://hub.example/filament</string>

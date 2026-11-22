@@ -63,7 +63,8 @@ from starlette.routing import Route
 
 from .. import config, inventory, tags
 from ..spoolman import SpoolmanError
-from . import auth, pages, slots
+from .. import lan
+from . import pages, slots
 from ..reader_tokens import (MAX_FILE, MAX_TOKENS, SHA256, TOKEN_ID, SeenBuffer, TokenFileError,  # noqa: F401
                              TokenStore, _clean_name, _hash, flush, parse_build, parse_tokens, render_tokens, token_file)
 from .errors import Problem
@@ -372,7 +373,7 @@ class Reader:
     def __init__(self, tools, sm, *, lan_cidrs=(), tokens: TokenStore | None = None, queue: LoadQueue | None = None,
                  seen: SeenBuffer | None = None):
         self.tools, self.sm = tools, sm
-        self.nets = auth.parse_lan(lan_cidrs)
+        self.nets = lan.parse_lan(lan_cidrs)
         self.tokens = tokens if tokens is not None else TokenStore()
         self.seen = seen if seen is not None else SeenBuffer()
         self._handing = threading.Lock()
@@ -390,7 +391,7 @@ class Reader:
     # --- plumbing ---
 
     def _lan(self, request: Request) -> bool:
-        return auth.is_lan(request.client.host if request.client else "", self.nets)
+        return lan.is_lan(request.client.host if request.client else "", self.nets)
 
     def _gated(self, fn):
         @functools.wraps(fn)

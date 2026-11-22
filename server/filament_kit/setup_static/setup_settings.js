@@ -889,9 +889,9 @@ function openPortDialog(curPort, remoteOn, opener, portBox) {
 }
 
 function groupNetwork({ g }) {
-  const v = g.values, web = !!g.web_on, setPublic = S.web.public_set, curPort = Number(g.port) || 8710, portBox = sbox();
+  const v = g.values, web = !!g.web_on, curPort = Number(g.port) || 8710, portBox = sbox();
   const fields = [
-    plainField({ name: "web.public_url", mono: true, label: SW.t("settings_network_public"), placeholder: setPublic ? SW.t("settings_network_public_hidden") : SW.t("settings_network_public_placeholder"),
+    plainField({ name: "web.public_url", mono: true, label: SW.t("settings_network_public"), value: S.web.public_url || "", placeholder: SW.t("settings_network_public_placeholder"),
       hint: SW.t(web ? "settings_network_public_hint" : "settings_network_public_hint_off"), effect: "applies" }),
     plainField({ name: "station.url", mono: true, label: SW.t("settings_network_station"), value: S.station.url || "", placeholder: SW.t("settings_network_station_placeholder"),
       hint: SW.t("settings_network_station_hint"), effect: "applies" }),
