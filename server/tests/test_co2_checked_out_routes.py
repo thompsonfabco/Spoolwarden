@@ -188,6 +188,55 @@ def test_return_and_home_have_the_callers_of_the_spools_move_and_weight(sm, prin
     assert ("PATCH", "/api/spools/{id}") not in api.WEB_ROUTES and ("POST", "/api/spools/{id}/return") not in api.HOME_WEB_ROUTES
 
 
+def test_return_is_no_more_reachable_than_the_most_permissive_spool_change_the_web_app_has(sm, printers, store):  # noqa: F811
+    """CO2 caller ruling: return gives the web app NO MORE REACH than it already has for changing a spool. Every spool change the
+    web app has, with the list that admits its kit route (or none: it runs in the app's own process) and whether its twin refuses
+    the public address; return's reach must equal the widest of them, so moving return (or one of them) between lists fails here.
+    Reach: 2 = the public address too (WEB_ROUTES, or a twin with no home-only check), 1 = home only (HOME_WEB_ROUTES, or a twin
+    that refuses the public address), 0 = phone / PC only."""
+    web_routes, home_routes = set(api.WEB_ROUTES), set(api.HOME_WEB_ROUTES)
+
+    def listed(method, path):
+        return 2 if (method, path) in web_routes else 1 if (method, path) in home_routes else 0
+
+    # action: (twin, kit route it calls, reach)
+    changes = {
+        "load into a slot": ("POST /intake/api/printers/{id}/slots/{label}/load", ("POST", "/api/printers/{id}/slots/{label}/load")),
+        "unload a slot": ("POST /intake/api/printers/{id}/slots/{label}/unload", ("POST", "/api/printers/{id}/slots/{label}/unload")),
+        "undo an action": ("POST /intake/api/events/{event}/undo", ("POST", "/api/events/{id}/undo")),
+        "undo a usage entry": ("POST /intake/api/printers/{id}/usage/{entry}/undo", ("POST", "/api/usage/{entry_id}/undo")),
+    }
+    reach = {name: listed(*kit) for name, (_twin, kit) in changes.items()}
+    # add, edit (weight, move, empty, home) and the tag link run in the app's own process on Spoolman: no kit route, no token, and
+    # no home-only check on the app's public address (only the voice twins have one). Proved by running them on a public-address app.
+    public = Starlette(routes=IntakeApp(mcp_tools.Tools(sm, kit_api=None, kit_writes=False), public_url="https://hub.example",
+                                        lan_cidrs=["192.168.1.0/24"], push=False).routes())
+    pc = TestClient(public, base_url="https://hub.example", client=("192.168.1.50", 1234))
+    org = {"origin": "https://hub.example"}
+    s = _out(sm, name="Reach")
+    edit = pc.post(f"/intake/api/spools/{s['id']}", json={"remaining": 400}, headers=org)       # a dry run: the weight edit twin
+    assert edit.status_code == 200 and edit.json().get("error") != "home_only"
+    add = pc.post("/intake/api/add", json={"items": []}, headers=org)                           # reaches its own checks, not a refusal
+    assert add.status_code != 403
+    reach["edit a spool (weight, move, empty, home)"] = 2
+    reach["add a spool"] = 2
+    voice = pc.patch("/intake/api/voice", json={}, headers=org)                                 # the home-only wording the app already has
+    assert voice.status_code == 403 and voice.json()["error"] == "home_only"
+    widest = max(reach.values())
+    assert widest == 2 and all(reach[k] == 2 for k in changes)                                  # the list the table below quotes
+    assert listed("POST", "/api/spools/{id}/return") == widest
+    assert ("POST", "/api/spools/{id}/return") in api.WEB_ROUTES and ("POST", "/api/spools/{id}/return") not in api.HOME_WEB_ROUTES
+    # the kit's own spool PATCH (move, weight, home) is phone / PC only: the web app does not call it
+    assert listed("PATCH", "/api/spools/{id}") == 0
+    # the web tokens (home and public) reach return, the viewer and the station never, a phone / PC always
+    app = create_app(sm=sm)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        for who, h, ok in (("viewer", _auth("Viewer", role=pairing.VIEWER_ROLE), False), ("station", _auth("station", scope="station"), False),
+                           ("phone", _auth("Phone"), True), ("home_web", _auth(INTAKE_DEVICE, role=web_access.WEB_ROLE), True),
+                           ("public_web", _auth("web (MCP)", role=web_access.WEB_ROLE), True)):
+            r = client.post(f"/api/spools/{_out(sm, name=who)['id']}/return", json={}, headers=h)
+            assert (r.status_code not in (401, 403)) is ok, who
+
 # ---------- a Klipper printer is told ----------
 
 class FakeBambu:
