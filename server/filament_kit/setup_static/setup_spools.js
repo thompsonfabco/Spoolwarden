@@ -78,6 +78,9 @@ const spSTUB = {
   spools_csv_filaments: "Filaments (Spoolman's file)",
   spools_csv_failed: "Could not download the file: {reason}",
   spools_more_actions: "More actions for spools",
+  spools_print_label: "Print a label",
+  spools_print_labels: "Print labels",
+  spools_print_label_name: "Print a label: {name}",
 };
 const tx = (key, vars) => {
   if (window.SW_TEXT && window.SW_TEXT[key] != null) return SW.t(key, vars);
@@ -149,6 +152,9 @@ async function spDownloadCsv(set, fallback) {
 }
 const spCsvItem = (set, key) => ({ label: tx(key), icon: "download", action: `download-${set}`,
   run: () => needCode(async () => { try { await spDownloadCsv(set, set + ".csv"); } catch (e) { if (e.locked) throw e; SW.toast(tx("spools_csv_failed", { reason: hubText(e.message) }), "bad"); } }) });
+
+// ----- Print a label / Print labels (R85 5.3): the Hub's print page opens in a new tab with the size choice and a preview; open, so no code -----
+const spPrintAt = (ids) => window.open(`/setup/api/labels?${new URLSearchParams({ ids: ids.join(","), size: "62x29" })}`, "_blank", "noopener");
 
 // ----- what the section knows -----
 const st = { q: "", filter: "", rows: [], total: 0, more: false, url: null, ready: false };
@@ -247,6 +253,7 @@ function spHeader() {
     SW.menu(more, [{ heading: tx("spools_download_csv") }, ...csv], { label: tx("spools_more_actions") });
     meta.append(more);
   }
+  if (st.rows.length) meta.append(spX("button", { class: "btn btn--ghost spools-print", type: "button", on: { click: () => spPrintAt(st.rows.map((v) => v.id)) } }, tx("spools_print_labels")));
   return meta;
 }
 const CHIPS = [["sealed", "common_sealed"], ["opened", "spool_state_opened"], ["loaded", "spools_chip_loaded"], ["low", "spools_chip_low"]];
@@ -419,6 +426,10 @@ function detail(v0, view, id) {
     done: () => tx("spools_done_empty"),
     toast: (r) => tx("spools_toast_empty", { name: spName(r.spool), id: r.spool.id }) }));
 
+  // Print a label: the Hub's print page for this spool (open: no code)
+  const printGo = SW.btn(tx("spools_print_label"), { cls: "spools-print-one", name: tx("spools_print_label_name", { name: spName(v0) }) });
+  printGo.addEventListener("click", () => spPrintAt([view.v.id]));
+
   // the last ten events of this spool (R84 2.2): read when the detail first opens, and again after each change
   const eventsBox = spE("div", "spools-events");
   let asked = false;
@@ -439,6 +450,7 @@ function detail(v0, view, id) {
     spE("div", "detail__body",
       spE("div", "detail__section", spE("h3", "detail__heading", tx("spools_fact_state")), facts),
       hubHasHistory("activity") ? spE("div", "detail__section", spE("h3", "detail__heading", tx("spools_events_title")), eventsBox) : null,
+      spE("div", "detail__section", spE("div", "spools-labelrow", printGo)),
       spE("div", "detail__section",
         spE("h3", "detail__heading", tx("spools_group_change")),
         actions(weight, weightGo, weightBox), actions(move, moveGo, moveBox), spE("div", "spools-act", spE("div", "spools-act__row", linkGo), linkBox),
