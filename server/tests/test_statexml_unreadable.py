@@ -36,14 +36,14 @@ def test_a_transient_read_error_leaves_the_good_file_and_notes_it(tmp_path, monk
     p = tmp_path / "lines.json"
     statexml.write(p, {"n": 1})
     good = (tmp_path / "lines.xml").read_bytes()
-    real = Path.read_bytes
+    real = statexml._read_regular
 
-    def flaky(self):
-        if self.name == "lines.xml":
+    def flaky(path):
+        if Path(path).name == "lines.xml":
             raise OSError(code, "transient")
-        return real(self)
+        return real(path)
 
-    monkeypatch.setattr(Path, "read_bytes", flaky)
+    monkeypatch.setattr(statexml, "_read_regular", flaky)
     statexml.read(p)                                            # no value; it must not raise
     assert any("lines.xml" in x and "cannot read" in x for x in statexml.problems())
     statexml.write(p, {"n": 2})                                 # a save over a file that could not be read: no set-aside
@@ -58,14 +58,14 @@ def test_a_transient_read_error_returns_no_value_and_keeps_the_file(tmp_path, mo
     statexml.write(tmp_path / "lines.json", {"n": 1})
     (tmp_path / "lines.json").unlink()
     (tmp_path / "lines.json.sha256").unlink()
-    real = Path.read_bytes
+    real = statexml._read_regular
 
-    def flaky(self):
-        if self.name == "lines.xml":
+    def flaky(path):
+        if Path(path).name == "lines.xml":
             raise OSError(errno.EIO, "io")
-        return real(self)
+        return real(path)
 
-    monkeypatch.setattr(Path, "read_bytes", flaky)
+    monkeypatch.setattr(statexml, "_read_regular", flaky)
     assert statexml.read(tmp_path / "lines.json") is None
     monkeypatch.undo()
     assert p.is_file() and not list(tmp_path.glob("*.unreadable*"))
