@@ -37,6 +37,14 @@ def fk_env(tmp_path, monkeypatch):
     config.save({"placement": {"box_count": 2}})
 
 
+@pytest.fixture(autouse=True)
+def no_sink_left_behind():
+    """`Tools(kit_writes=True)` and the app install the process-wide event sink: leave it as found."""
+    from filament_kit import event_sink
+    yield
+    event_sink.set_sink(None)
+
+
 @pytest.fixture
 def sm(spoolman_url):
     s = Spoolman(spoolman_url)
