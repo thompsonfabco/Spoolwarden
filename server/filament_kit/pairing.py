@@ -252,7 +252,8 @@ def _read(name: str) -> list:
     names = (f, statexml.xml_path(f), f.with_name(f.name + ".sha256"))
     _refuse_links(names)
     out = statexml.read_list(f, mode=0o600, state_owned=True)
-    _refuse_links(names)        # a link swapped in while the helper read: its answer is not used
+    _refuse_links(names)        # the helper reads through a no-follow descriptor, so a link swapped in while it read is
+                                # not followed; a link seen now is an error here, not a quiet fall back to the JSON form
     return [] if out is None else out
 
 

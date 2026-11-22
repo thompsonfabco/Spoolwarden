@@ -156,6 +156,21 @@ def test_a_link_swapped_in_while_the_helper_reads_is_not_used(tmp_path, monkeypa
         pairing._read("devices.json")
 
 
+@POSIX
+def test_the_helper_itself_does_not_follow_a_link_to_the_state_file(tmp_path, monkeypatch):
+    """Pairing's own checks are off: only the helper's read (one O_NOFOLLOW descriptor) stands between a swapped-in link
+    and the data. The linked file's answer is not used and it is not changed."""
+    pairing._write("devices.json", DEVICES)
+    outside = tmp_path / "outside.xml"
+    outside.write_bytes(statexml.dumps_list("devices", DEVICES[:1]))
+    before = outside.read_bytes()
+    state("devices.xml").unlink()
+    state("devices.xml").symlink_to(outside)
+    monkeypatch.setattr(pairing, "_refuse_links", lambda paths: None)
+    assert pairing._read("devices.json") == DEVICES            # the JSON form answers: the link was not read
+    assert outside.read_bytes() == before
+
+
 def test_pairing_itself_still_works_over_the_xml_files():
     p = pairing.issue("phone")
     assert pairing.check(p.token)
