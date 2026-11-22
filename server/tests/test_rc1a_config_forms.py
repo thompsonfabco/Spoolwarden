@@ -71,6 +71,47 @@ def test_a_damaged_xml_is_kept_aside_by_the_next_save(etc):
     assert config.load()["port"] == 6 and not statexml.problems()
 
 
+def test_a_passing_read_error_does_not_set_the_good_xml_aside(etc, monkeypatch):
+    config.save({"port": 7})
+    (etc / "config.json").write_text(json.dumps({"port": 5}), encoding="utf-8")
+    xf = etc / "config.xml"
+    real = type(xf).read_bytes
+
+    def flaky(self):
+        if self.name == "config.xml":
+            raise PermissionError(13, "Permission denied")
+        return real(self)
+
+    monkeypatch.setattr(type(xf), "read_bytes", flaky)
+    assert config.load()["port"] == 5                       # config.json is used
+    assert any("config.xml" in p for p in statexml.problems())
+    config.save({"port": 8})
+    monkeypatch.undo()
+    assert not (etc / "config.xml.unreadable").exists()
+    assert config.load()["port"] == 8
+
+
+def test_a_really_broken_xml_set_aside_twice_keeps_both_numbered(etc):
+    (etc / "config.json").write_text(json.dumps({"port": 5}), encoding="utf-8")
+    for n, body in enumerate([b"<config one", b"<config two"]):
+        (etc / "config.xml").write_bytes(body)
+        config.load()
+        config.save({"port": 6 + n})
+    assert (etc / "config.xml.unreadable").read_bytes() == b"<config two"
+    assert (etc / "config.xml.unreadable.1").read_bytes() == b"<config one"
+
+
+def test_at_most_five_set_aside_copies_are_kept(etc):
+    (etc / "config.json").write_text(json.dumps({"port": 5}), encoding="utf-8")
+    for n in range(7):
+        (etc / "config.xml").write_bytes(b"<config %d" % n)
+        config.load()
+        config.save({"port": 6})
+    names = sorted(p.name for p in etc.glob("config.xml.unreadable*"))
+    assert names == ["config.xml.unreadable"] + [f"config.xml.unreadable.{i}" for i in range(1, 5)]
+    assert (etc / "config.xml.unreadable").read_bytes() == b"<config 6"
+
+
 def test_an_error_when_no_form_reads(etc):
     (etc / "config.json").write_text("{not json", encoding="utf-8")
     (etc / "config.xml").write_bytes(b"<config")
