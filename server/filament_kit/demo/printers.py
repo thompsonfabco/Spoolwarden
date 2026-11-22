@@ -495,12 +495,13 @@ class Family:
         return loading.clear_view({"slot": {"label": label, "location": loc}, "spool": spool, "moved_back": moved,
                                    "printer_cleared": False, "dry_run": bool(dry)}, False)
 
-    def return_spool(self, sm, pid: str, spool_id, *, grams: float | None = None, rules=None, dry: bool = False) -> dict:
+    def return_spool(self, sm, pid: str, spool_id, *, grams: float | None = None, rules=None, dry: bool = False,
+                     gross: float | None = None) -> dict:
         """A spool taken out of the pretend printer by hand goes home (`inventory.return_spool`); there is no printer to tell."""
         from .. import inventory
         if self._get(pid) is None:
             raise loading.NotFound(f"no printer {pid}")
-        return inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry)
+        return inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry, gross=gross)
 
     def usage(self, pid: str, days: float) -> list[dict]:
         return usage_entries(pid, days)
