@@ -2802,9 +2802,29 @@ def cmd_recent_undo(rid: str) -> int:
     return 0
 
 
-def cmd_cert() -> int:
-    """`certificate` (06 9.12): make the Hub's certificate when there is none, print its fingerprint."""
+def cmd_cert(renew: bool = False, yes: bool = False) -> int:
+    """`certificate [--renew]` (06 9.12): make the Hub's certificate when there is none (or renew on `--renew`), print its fingerprint."""
     cert = config.paths().etc / "cert.pem"
+    if renew:
+        if not _no_systemd() and not _is_root():
+            return output.need_sudo(_sudo_command("sudo spoolwarden certificate --renew"))
+        stop = _confirm(
+            "Make a new certificate for this Hub? Every paired phone, PC and Weigh Station will see a changed "
+            "certificate and must trust it again or be paired again. Tag Readers set up for this Hub must be set up again.",
+            "making a new certificate", yes=yes,
+        )
+        if stop is not None:
+            return stop
+        cert.parent.mkdir(parents=True, exist_ok=True)
+        full, short = socket.gethostname(), pairing.short_hostname()
+        fp = pairing.make_cert(short, pairing.local_ips(), cert.parent, extra_dns=[full] if full != short else [])
+        _restart_service()
+        output.emit({"ok": True, "made": True, "renewed": True, "fingerprint": fp})
+        output.out("Made a new certificate.")
+        output.out("Tag Readers set up for this Hub must be set up again.")
+        output.out("Fingerprint:")
+        output.out_lines(_fingerprint_lines(fp))
+        return 0
     made = not cert.exists()
     if made:
         cert.parent.mkdir(parents=True, exist_ok=True)
@@ -6929,8 +6949,11 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_locations(sub)
     alerts_cli.add_parsers(sub)
     address_cli.add_parser(sub)
-    sub.add_parser("certificate", help="make the Hub's certificate if missing; print its fingerprint")
-    sub.add_parser("cert", help="the old spelling of certificate")
+    for cname, chelp in (("certificate", "make the Hub's certificate if missing; print its fingerprint"),
+                         ("cert", "the old spelling of certificate")):
+        cp = sub.add_parser(cname, help=chelp)
+        _add_yes(cp)
+        cp.add_argument("--renew", action="store_true", help="make a new certificate for this Hub and restart it (root)")
     _add_recent(sub, "recent", "Recently added: the last spool additions, their photos and revisions", alias=False)
     _add_recent(sub, "intake", "the old spelling of recent", alias=True)
     sub.add_parser("ensure-fields", help="the old spelling of spoolman fields")
@@ -7283,7 +7306,7 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "recent":
         return _dispatch_recent(args)
     if args.cmd == "certificate":
-        return cmd_cert()
+        return cmd_cert(renew=args.renew, yes=args.yes) if getattr(args, "renew", False) else cmd_cert()
     if args.cmd == "spoolman":
         return cmd_ensure_fields() if args.spoolman_cmd == "fields" else cmd_spoolman_address(args.url)
     if args.cmd == "logs":

@@ -718,58 +718,21 @@ class SetupPage:
 
     @staticmethod
     def _access_code(body: dict) -> str:
-        code = body.get("access_code")
-        code = code.strip() if isinstance(code, str) else ""
-        if not registry.ACCESS_CODE.fullmatch(code):
-            raise Refused(400, registry.BAD_ACCESS_CODE, field="access_code")
-        return code
+        return check_access_code(body)
 
     @staticmethod
     def _opt_text(body: dict, key: str, limit: int = 64) -> str:
-        v = body.get(key)
-        if v is None:
-            return ""
-        if not isinstance(v, str) or len(v) > limit or not v.isprintable():
-            raise Refused(400, f"{key} must be text", field=key)
-        return v.strip()
+        return opt_text(body, key, limit)
 
     async def printer_add(self, request: Request, body: dict):
         """Add a printer by its address, kept as typed: its serial from its TLS certificate (CN), else the typed one
         (upper-cased). The guided drawer requires the TLS read to succeed."""
         manager = self._manager()
-        ip = hostaddr.clean(body.get("address", body.get("ip")))
-        problem = hostaddr.form_error(ip)
-        if problem:
-            raise Refused(400, f"{problem} (on the printer: Settings > Network)", field="address")
-        access = self._access_code(body)
-        name, model = self._opt_text(body, "name"), self._opt_text(body, "model", 32)
-        typed = self._opt_text(body, "serial").upper()
 
         def run() -> dict:
-            _, problem, note = hostaddr.inspect(ip)
-            if problem:
-                raise Refused(400, problem, field="address")
-            try:
-                seen, why = setup_serial(ip), ""
-            except OSError as e:
-                seen, why = None, f"the printer at {ip} did not answer ({type(e).__name__})"
-                if body.get("require_certificate") is True:
-                    raise Refused(400, why, field="address") from None
-            if seen and typed and seen != typed:
-                raise Refused(400, f"the printer at {ip} names itself {seen}, not {typed}: check the address",
-                              field="address")
-            serial = seen or typed
-            if not serial:
-                raise Refused(400, (why or f"the printer at {ip} did not name its serial") +
-                              "; type the serial number (on the printer: Settings > Device)", field="serial")
-            problem = registry.check_fields(serial, access)
-            if problem:
-                raise Refused(400, problem, field="serial")      # the Access Code was checked first: only the serial is left
-            old = registry.load().get(serial)
-            # as the CLI's add: a fresh entry (adding the printer again also clears its TLS pin)
-            registry.add_bambu(serial, name or (old.name if old else ""), model or (old.model if old else ""), ip, access)
+            r = bambu_add_by_address(body, allow_replace=True)
             manager.sync()
-            return {"serial": serial, "replaced": old is not None and old.configured, "note": note}
+            return r
         r = await anyio.to_thread.run_sync(run)
         self.audit(request, f"printer {r['serial']} {'replaced' if r['replaced'] else 'added'}")
         return {"ok": True, "serial": r["serial"], **({"note": r["note"]} if r["note"] else {})}
@@ -946,6 +909,63 @@ class SetupPage:
         await self._helper({"op": "apply", "code": body["code"]})
         self.audit(request, "modules apply started")
         return {"ok": True}
+
+
+class AlreadySetUpError(Exception):
+    """Raised when `bambu_add_by_address(..., allow_replace=False)` hits an already configured printer."""
+
+
+def check_access_code(body: dict) -> str:
+    code = body.get("access_code")
+    code = code.strip() if isinstance(code, str) else ""
+    if not registry.ACCESS_CODE.fullmatch(code):
+        raise Refused(400, registry.BAD_ACCESS_CODE, field="access_code")
+    return code
+
+
+def opt_text(body: dict, key: str, limit: int = 64) -> str:
+    v = body.get(key)
+    if v is None:
+        return ""
+    if not isinstance(v, str) or len(v) > limit or not v.isprintable():
+        raise Refused(400, f"{key} must be text", field=key)
+    return v.strip()
+
+
+def bambu_add_by_address(body: dict, *, allow_replace: bool = True) -> dict:
+    """Validate and save a Bambu Lab printer by its typed address (`address`/`ip`), reading its serial from its TLS
+    certificate when possible. Raises `Refused` with the page's texts or `AlreadySetUpError` when `allow_replace` is
+    False and the printer is already configured."""
+    ip = hostaddr.clean(body.get("address", body.get("ip")))
+    problem = hostaddr.form_error(ip)
+    if problem:
+        raise Refused(400, f"{problem} (on the printer: Settings > Network)", field="address")
+    access = check_access_code(body)
+    name, model = opt_text(body, "name"), opt_text(body, "model", 32)
+    typed = opt_text(body, "serial").upper()
+    _, problem, note = hostaddr.inspect(ip)
+    if problem:
+        raise Refused(400, problem, field="address")
+    try:
+        seen, why = setup_serial(ip), ""
+    except OSError as e:
+        seen, why = None, f"the printer at {ip} did not answer ({type(e).__name__})"
+        if body.get("require_certificate") is True:
+            raise Refused(400, why, field="address") from None
+    if seen and typed and seen != typed:
+        raise Refused(400, f"the printer at {ip} names itself {seen}, not {typed}: check the address", field="address")
+    serial = seen or typed
+    if not serial:
+        raise Refused(400, (why or f"the printer at {ip} did not name its serial") +
+                      "; type the serial number (on the printer: Settings > Device)", field="serial")
+    problem = registry.check_fields(serial, access)
+    if problem:
+        raise Refused(400, problem, field="serial")
+    old = registry.load().get(serial)
+    if not allow_replace and old is not None and old.configured:
+        raise AlreadySetUpError(serial)
+    registry.add_bambu(serial, name or (old.name if old else ""), model or (old.model if old else ""), ip, access)
+    return {"serial": serial, "replaced": old is not None and old.configured, "note": note}
 
 
 def setup_serial(ip: str, timeout: float = 5) -> str | None:   # `ip`: an address or a name

@@ -264,6 +264,7 @@ class IntakeApp:
             ("/intake/api/alerts", self.api(self.alerts_twin), ["GET"]),
             ("/intake/api/spools/low", self.api(self.spools_low_twin), ["GET"]),
             ("/intake/api/storage-use", self.api(self.storage_use_twin), ["GET"]),
+            ("/intake/api/share-corrections", self.api(self.share_corrections_twin), ["GET"]),
             # history and data (R84 9.4): the activity list, Undo, the health history, analytics and the three downloads of a phone
             ("/intake/api/activity", self.api(self.activity_twin), ["GET"]),
             ("/intake/api/events/{event}/undo", self.api(self.undo_twin), ["POST"]),
@@ -757,6 +758,9 @@ class IntakeApp:
 
     async def storage_use_twin(self, request: Request):
         return await self._hub_get("/api/storage-use")
+
+    async def share_corrections_twin(self, request: Request):
+        return await self._hub_get("/api/intake/share-corrections")
 
     # ----- history and data (R84 9.4): each passes one Hub route on, with the parameters that route has and no others -----
     ACTIVITY_PARAMS = ("subject", "actor", "kinds", "since", "limit")
