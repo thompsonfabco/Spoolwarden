@@ -94,7 +94,8 @@ DEFAULTS: dict = {
                 "panel_swap": False,  # the panel's yellow and red are wired to each other's pins
                 "page_from": "home",  # who the unit admits for the page: home, subnets or allowed (apply.page_ranges)
                 "speaker_volume": 50,   # the panel's speaker, percent
-                "voice_speaker": 0, "voice_speed": 100},   # Piper speaker (0 to 903) and speed in percent (R88 2.1)
+                "voice_speaker": 0, "voice_speed": 100,   # Piper speaker (0 to 903) and speed in percent (R88 2.1)
+                "panel_link": "usb", "panel_port": 5004},   # how the panel reaches the station, and its Wi-Fi listener (R88 4.4)
     # merge-ops: web unit, remote access, orders file, tag readers, slot service, slicer/presets/intake extras
     "web": {"port": 8101, "public_url": None, "push": False,   # push: Web Push alerts (needs internet egress)
             "lan": ["192.168.0.0/16", "10.0.0.0/8"]},   # not 172.16/12: Docker's bridges live there (A-M6)
@@ -145,6 +146,22 @@ def voice_values(cfg: dict) -> dict:
             "speaker": _whole_in(st.get("voice_speaker"), 0, VOICE_SPEAKER_MAX, d["voice_speaker"]),
             "speed": speed if speed % VOICE_SPEED_STEP == 0 else d["voice_speed"],
             "volume": _whole_in(st.get("speaker_volume"), 0, 100, d["speaker_volume"])}
+
+
+PANEL_LINKS = ("usb", "wifi")
+
+
+def panel_link(cfg: dict) -> str:
+    """`station.panel_link` (R88 4.4): `usb` or `wifi`; `usb` when it is missing or anything else."""
+    st = cfg.get("station")
+    v = st.get("panel_link") if isinstance(st, dict) else None
+    return v if v in PANEL_LINKS else DEFAULTS["station"]["panel_link"]
+
+
+def panel_port(cfg: dict) -> int:
+    """`station.panel_port`: the port the Wi-Fi listener takes, 1 to 65535; 5004 when it is missing or out of range."""
+    st = cfg.get("station")
+    return _whole_in(st.get("panel_port") if isinstance(st, dict) else None, 1, 65535, DEFAULTS["station"]["panel_port"])
 
 
 LOOKS = ("console", "workbench", "palette", "panes")    # the four themes, Console first (design 01 section 6)
