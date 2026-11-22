@@ -25,11 +25,26 @@ kit_installing() {
 }
 if [ -d "$KIT_OPT" ] && [ ! -f "$KIT_OPT/.fk-installed" ] && ! kit_installing; then
     repair='curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh'
-    # state.xml (the XML form writes "previous" as an attribute), else the state.json of an earlier release
-    earlier=$(sed -n 's/.*previous="\([0-9][0-9.]*\)".*/\1/p' "$KIT_OPT/releases/state.xml" 2>/dev/null | head -n 1) || earlier=""
-    if [ -z "$earlier" ]; then
+    # the state as the program reads it (R85 1.6): the kit's own Python, through statexml.read as updates.py does, so a
+    # state.json that an older release changed wins; the state.json of an earlier release when that cannot
+    earlier=""; xml_read=0
+    if [ -f "$KIT_OPT/releases/state.xml" ] && [ -x "$KIT_OPT/venv/bin/python" ]; then
+        if earlier=$("$KIT_OPT/venv/bin/python" -I -c '
+import sys
+from pathlib import Path
+from filament_kit.profiles import statexml
+p = (statexml.read(Path(sys.argv[1]), mode=0o644, state_owned=False) or {}).get("previous")
+print(p if isinstance(p, str) else "")
+' "$KIT_OPT/releases/state.json" 2>/dev/null); then
+            xml_read=1
+        else
+            earlier=""
+        fi
+    fi
+    if [ "$xml_read" = 0 ]; then
         earlier=$(sed -n 's/.*"previous": *"\([0-9][0-9.]*\)".*/\1/p' "$KIT_OPT/releases/state.json" 2>/dev/null) || earlier=""
     fi
+    case "$earlier" in *[!0-9.]*) earlier="" ;; esac
     if [ -n "$earlier" ]; then
         repair="$repair --version $earlier"
     fi
