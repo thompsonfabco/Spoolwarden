@@ -47,7 +47,7 @@ import json
 import re
 import secrets
 import threading
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
@@ -564,8 +564,14 @@ def load() -> LineSet:
     path = _path()
     xp = statexml.xml_path(path)
     data = None
+    newer = None
     if xp.exists():
-        statexml.read(path, keep_version=True)      # a lines.json that an older Hub changed after our last write wins once
+        with ExitStack() as stack:                  # the read can rewrite lines.xml: under the lock, as a save is
+            try:
+                stack.enter_context(locked())
+            except OSError:                         # a process that may not take the lock cannot rewrite either
+                pass
+            newer = statexml.read(path, keep_version=True)  # a lines.json an older Hub changed after our last write wins once
     try:
         raw = xp.read_bytes()
     except FileNotFoundError:
@@ -578,6 +584,8 @@ def load() -> LineSet:
             data = statexml.loads(raw, "lines", keep_version=True)
         except statexml.StateXmlError as e:
             _corrupt(xp, f"not lines XML: {e}")
+        if newer is not None:                       # the newer JSON, when the store could not be rewritten too
+            data = newer
     else:
         try:
             raw = path.read_bytes()

@@ -2,6 +2,7 @@
 Hub reads is there, current, and in the shape its writer made (builds.py:180 / lines.py:602: json.dumps(indent=2,
 ensure_ascii=False) + newline, mode 0644, state owner). Each test reads the file with v0.6.2's own reading code (copied
 here, with its line), and one test per file."""
+import errno
 import json
 import stat
 import sys
@@ -114,6 +115,33 @@ def test_lines_changed_by_an_older_hub_win_once(made):
                                        encoding="utf-8")
     assert len(lines_mod.load()) == 0
     assert statexml.read(folder / "lines.json", keep_version=True)["lines"] == []
+
+
+def test_lines_load_uses_the_newer_json_when_lines_xml_cannot_be_rewritten(made, monkeypatch):
+    folder, _ = made
+    assert len(lines_mod.load()) >= 1
+    (folder / "lines.json").write_text(json.dumps({"version": lines_mod.FILE_VERSION, "lines": []}, indent=2) + "\n",
+                                       encoding="utf-8")
+
+    def refuse(path, data, mode, state_owned):              # a user with no write permission on state/profiles
+        raise PermissionError(errno.EACCES, "denied")
+    monkeypatch.setattr(statexml, "_put", refuse)
+    assert len(lines_mod.load()) == 0                       # not the stale lines.xml
+
+
+def test_lines_load_reads_a_newer_json_under_the_lock(made, monkeypatch):
+    folder, _ = made
+    (folder / "lines.json").write_text(json.dumps({"version": lines_mod.FILE_VERSION, "lines": []}, indent=2) + "\n",
+                                       encoding="utf-8")
+    seen = []
+    real = statexml.read
+
+    def spy(*a, **kw):
+        seen.append(getattr(lines_mod._held, "depth", 0))
+        return real(*a, **kw)
+    monkeypatch.setattr(statexml, "read", spy)
+    lines_mod.load()
+    assert seen and all(depth > 0 for depth in seen)        # the read can rewrite lines.xml: locked() is held
 
 
 def test_the_live_meta_json_is_current_for_v062(made):
