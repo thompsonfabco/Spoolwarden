@@ -100,15 +100,21 @@ fi
 # A station re-run without --server and without a terminal (the updater, get.sh piped to bash) keeps the server
 # address the station already has: the first non-local station.allow entry of its config. At a terminal the
 # custom menu or the "Server address" prompt below decide. FK_ETC: tests only, as in the program.
-SAVED_CFG="${FK_ETC:-$ETC}/config.json"
+SAVED_CFG="${FK_ETC:-$ETC}/config.xml"
+[ -f "$SAVED_CFG" ] || SAVED_CFG="${FK_ETC:-$ETC}/config.json"
 if [ -z "$SERVER_ADDR" ] && ! [ -t 0 ] && { [ "$MODE" = station ] || [ "$MODE" = custom ]; } \
         && [ -f "$SAVED_CFG" ] && command -v python3 >/dev/null 2>&1; then
     SAVED_ADDR=$(python3 -I - "$SAVED_CFG" <<'PYEOF' 2>/dev/null || true
 import json, sys
+import xml.etree.ElementTree as ET
 try:
-    with open(sys.argv[1], encoding="utf-8") as fh:
-        allow = (json.load(fh).get("station") or {}).get("allow") or []
-except (OSError, ValueError, AttributeError):
+    if sys.argv[1].endswith(".xml"):
+        # config.xml (a root-owned file): <station><allow as="list"><item>name</item>...
+        allow = [i.text or "" for i in ET.parse(sys.argv[1]).getroot().findall("./station/allow/item")]
+    else:
+        with open(sys.argv[1], encoding="utf-8") as fh:
+            allow = (json.load(fh).get("station") or {}).get("allow") or []
+except (OSError, ValueError, AttributeError, ET.ParseError):
     allow = []
 print(next((str(a).strip() for a in allow if str(a).strip() not in ("127.0.0.1", "localhost", "::1")), ""))
 PYEOF
@@ -171,7 +177,7 @@ PYEOF
 fi
 
 FIRST_INSTALL=1
-[ -f "$ETC/config.json" ] && FIRST_INSTALL=0
+{ [ -f "$ETC/config.xml" ] || [ -f "$ETC/config.json" ]; } && FIRST_INSTALL=0
 
 # ---------- 1. packages (each module's packages come with `modules apply`) ----------
 say "Installing system packages"
@@ -192,7 +198,7 @@ fi
 install -d -m 750 -o filament-kit -g filament-kit "$STATE"
 # presets (live upload, builds), the updated library, and local library additions
 install -d -m 750 -o filament-kit -g filament-kit "$STATE/profiles" "$STATE/library" "$STATE/library-local"
-# setgid: files the CLI later writes here as root (config.json, key) keep the
+# setgid: files the CLI later writes here as root (config.xml, config.json, key) keep the
 # filament-kit group, so the service can still read them.
 install -d -m 2750 -o root -g filament-kit "$ETC"
 # root's backups (a restore's pinned upload too): the setup page's helper may write here, so it must exist before it runs
@@ -443,10 +449,9 @@ if [ -n "$MODE" ]; then
     # Only the modules and the station link change; on a first install there is no
     # server_name yet, so `modules apply` asks the first-run questions.
     FK_MODE="$MODE" FK_MODULES="$CUSTOM" FK_AI="$AI_INTAKE" FK_SETS="$SETS" FK_SERVER="$SERVER_ADDR" FK_HUB_PORT="$HUB_PORT" FK_STATION_PORT="$STATION_PORT" FK_NO_SYSTEMD=1 "$VENV/bin/python" -I -c '
-import json, os, sys
+import os, sys
 from filament_kit import config, modules
-f = config.paths().etc / "config.json"
-cfg = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+cfg = config.load_raw()     # config.xml, else config.json; no defaults merged in
 mode = os.environ["FK_MODE"]
 if mode == "custom":
     try:
@@ -489,8 +494,10 @@ except modules.ModuleError as e:
 config.save(cfg)
 print("Install mode: " + mode)
 '
-    chown root:filament-kit "$ETC/config.json"
-    chmod 640 "$ETC/config.json"
+    for cf in config.xml config.json; do
+        chown root:filament-kit "$ETC/$cf"
+        chmod 640 "$ETC/$cf"
+    done
 fi
 # the first-run file (R82 section 4): the Getting started panel shows on a new Hub, with the steps asked here marked
 if [ "$FIRST_INSTALL" -eq 1 ] && [ "$HUB_HERE" -eq 1 ]; then
