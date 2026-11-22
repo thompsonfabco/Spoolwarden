@@ -10,6 +10,8 @@ import pytest
 from filament_kit.station import panel_flash as pf
 from filament_kit.station import state as st
 
+SENTENCE = ("The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
+            "Run: sudo spoolwarden weigh-station panel-wifi")
 FW = Path(__file__).resolve().parents[2] / "station" / "panel" / "firmware"
 
 
@@ -77,16 +79,14 @@ def test_the_whole_image_is_used_when_the_program_image_is_missing(fw):
 
 
 def test_the_wifi_notice_only_after_a_from_scratch_flash_on_wifi(fw, monkeypatch):
-    assert pf.flash("/dev/ttyACM1", "13", "14", link="wifi").notice == pf.WIFI_LOST_NOTICE
+    assert pf.flash("/dev/ttyACM1", "13", "14", link="wifi").notice == SENTENCE
     assert pf.flash("/dev/ttyACM1", "13", "14", link="usb").notice is None
     assert pf.flash("/dev/ttyACM1", "13", "14", link=None).notice is None
     assert pf.flash("/dev/ttyACM1", "14", "15", link="wifi").notice is None     # program image: Wi-Fi survives
     monkeypatch.setitem(st.settings, "panel_link", "wifi")
-    assert pf.flash("/dev/ttyACM1", None, "14").notice == pf.WIFI_LOST_NOTICE   # link read from the settings
+    assert pf.flash("/dev/ttyACM1", None, "14").notice == SENTENCE   # link read from the settings
     assert pf.WIFI_LOST_NOTICE == ("The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
                                    "Run: sudo {command} weigh-station panel-wifi")
-    assert pf.flash("/dev/ttyACM1", None, "14").notice == ("The panel was flashed from scratch, so its Wi-Fi set-up "
-                                                          "is gone. Run: sudo spoolwarden weigh-station panel-wifi")
 
 
 def test_the_notice_test_leaves_a_real_panel_link_setting_alone(fw, monkeypatch):
