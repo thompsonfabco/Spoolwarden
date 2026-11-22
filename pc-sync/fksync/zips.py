@@ -188,6 +188,9 @@ def unpack_build(data: bytes, dest: Path) -> dict:
                 raise ValueError(f"build zip: {name} is not valid ({e})") from None
             if not isinstance(build, dict):
                 raise ValueError(f"build zip: {name} is not an object")
+            if name == "BUILD.xml":     # the installed copy keeps BUILD.json too: an older Sync reads it (stamp, in-app values)
+                (tmp / "BUILD.json").write_text(json.dumps(build, indent=2, ensure_ascii=False), encoding="utf-8",
+                                                newline="\n")
             if dest.exists():
                 dest.rmdir()  # checked empty above
             tmp.replace(dest)

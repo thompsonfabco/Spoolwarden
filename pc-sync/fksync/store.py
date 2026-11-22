@@ -152,10 +152,14 @@ def load_config(dirs: AppDirs) -> dict:
     """config.xml; an older Sync's config.json is read when there is no XML form, and moved to it (RC1c)."""
     xp = statexml.xml_path(dirs.config)
     if xp.exists():
+        newer = statexml.read(dirs.config)      # a config.json that an older Sync changed after our last write wins once
         try:
-            return statexml.loads(xp.read_bytes(), statexml.tag_of(dirs.config))
+            cfg = statexml.loads(xp.read_bytes(), statexml.tag_of(dirs.config))
+        except FileNotFoundError:
+            return {}               # an older Sync deleted config.json (unpair): read() set the XML aside, no pairing
         except (OSError, statexml.StateXmlError) as e:
             raise ValueError(f"sync config {xp} is not valid XML: {e}") from None
+        return cfg if newer is None else newer      # the newer JSON also when the store could not be rewritten
     try:
         text = dirs.config.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -195,7 +199,7 @@ def set_pair_aside(dirs: AppDirs) -> None:
     body = {"token": base64.b64encode(tok).decode("ascii") if tok is not None else None,
             "config": base64.b64encode(cfg).decode("ascii") if cfg is not None else None,
             "config_xml": base64.b64encode(cfg_xml).decode("ascii") if cfg_xml is not None else None}
-    statexml.write(dirs.pair_aside, body)
+    statexml.write(dirs.pair_aside, body, old_format={})    # v0.6.2 wrote it as compact json.dumps, no newline
 
 
 def _read_aside(dirs: AppDirs) -> dict | None:
@@ -211,7 +215,7 @@ def pair_waiting(dirs: AppDirs) -> bool:
 def mark_pair_waiting(dirs: AppDirs) -> None:
     body = _read_aside(dirs)
     if body is not None:
-        statexml.write(dirs.pair_aside, {**body, "waiting": True})
+        statexml.write(dirs.pair_aside, {**body, "waiting": True}, old_format={})
 
 
 def restore_pair_aside(dirs: AppDirs) -> bool:

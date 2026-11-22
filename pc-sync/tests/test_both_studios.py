@@ -678,6 +678,16 @@ def test_apply_updates_for_one_folder(two, closed, capsys):
     assert f"wrote the build's copy of 1 presets in {BETA_KEY}" in _log(dirs)     # the earlier "apply-updates" hint is not it
 
 
+def test_a_kept_json_an_older_sync_rewrites_after_apply_updates_wins_once(two, closed):
+    stable, beta, dirs = two
+    _both_have_build1(two)
+    assert _cli(two, "apply-updates", "--folder", BETA_KEY, "--name", A) == 0
+    kp = _sec(dirs).installed / installer.KEPT
+    assert kp.read_bytes() == json.dumps(statexml.read(kp)).encode("utf-8")        # v0.6.2's compact shape
+    kp.write_text(json.dumps({"base": ["Zed"]}), encoding="utf-8")                 # v0.6.2 sync.py:1113 rewrites it
+    assert installer._read_kept(_sec(dirs).installed) == {"Zed"}
+
+
 def test_apply_updates_refuses_what_is_not_listed(two, closed, capsys):
     stable, beta, dirs = two
     _both_have_build1(two)
