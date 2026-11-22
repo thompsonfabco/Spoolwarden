@@ -25,7 +25,7 @@ from pathlib import Path
 
 from . import __version__
 from . import storage, storage_api
-from . import address_cli, address_texts, firstrun, getting_started, history_cli, hostaddr, hubport, alerts, alerts_api, alerts_cli, apply, config, event_sink, inventory, klipper_cli, library, locations_cli, menu_ui, modules, output, pairing, qr, secret_input, steps, voice_cli
+from . import address_cli, address_texts, firstrun, getting_started, history_cli, hostaddr, hubport, alerts, alerts_api, alerts_cli, apply, config, demo, event_sink, inventory, klipper_cli, library, locations_cli, menu_ui, modules, output, pairing, qr, secret_input, steps, voice_cli
 from . import status as status_rows
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
@@ -61,6 +61,7 @@ def _restart_service() -> None:
 
 
 def _default_client(key: str):
+    demo.stop()
     import anthropic
     return anthropic.Anthropic(api_key=key, timeout=10, max_retries=0)
 
@@ -672,6 +673,8 @@ def _ask_int(prompt: str, minimum: int) -> int | None:
 def check_key(client_factory=None) -> tuple[bool, str]:
     """(ok, text) for the stored Anthropic key: one models.list() call (`status` and the setup page). The text
     never holds the key."""
+    if demo.is_on():
+        return False, demo.NOT_IN_DEMO
     keyfile = config.paths().etc / KEY_FILE
     try:
         key = keyfile.read_text(encoding="utf-8").strip()
@@ -6734,6 +6737,9 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
             where = f"{e.filename}: " if e.filename else ""
             output.error(f"{where}permission denied.", "run it with sudo:", cmd=_sudo_command("sudo spoolwarden"))
             return output.NEEDS_SUDO
+        except demo.NotInDemo as e:
+            output.error(e.message)
+            return 1
         except KeyboardInterrupt:
             output.out("Stopped.")
             return output.INTERRUPTED
