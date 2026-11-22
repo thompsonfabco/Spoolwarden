@@ -31,7 +31,7 @@ COMMAND = re.compile(r"(?:filament-kit|spoolwarden)(?:-[a-z]+)?(?: (?:modules|li
 # Stored values and texts of other steps that are not the Hub's message texts of S7.1 (file: the whole text, exactly).
 KEPT = {
     "setup_console/intake_tab.py": {"setup page"},                                  # the stored name of a device
-    # the host refusal is rewritten as the refusal page by S3.16 (the design, Hub page:358), not by S7.1; the log line is not shown
+    # the host refusal is rewritten as the refusal page by S3.16 (the design, Hub page), not by S7.1; the log line is not shown
     "web/intake_app.py": {"open this page by the server's own name or address",
                           "orders: the kit server did not give the order history: %s"},
     "web/printers_app.py": {"retry: 30000\ndata: "},                        # the stream protocol, not a text
