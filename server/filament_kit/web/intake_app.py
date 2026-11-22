@@ -911,8 +911,9 @@ class IntakeApp:
         """The twin of POST api/spools/{id}/return: the Hub's answer, a refusal as the kit gives it ({error: code, message}; 409
         not_checked_out). The Hub tells a Klipper printer too, so this goes through the Hub, not Spoolman; the spool answered
         carries its `view`, as the app's sheet reads it."""
+        spool = request.path_params["id"]
         try:
-            out = await anyio.to_thread.run_sync(self.kit.post, f"/api/spools/{request.path_params['id']}/return", {})
+            out = await anyio.to_thread.run_sync(self.kit.post, f"/api/spools/{spool}/return", {})
         except SlotError as e:
             return self._kit_refusal(e)
         if isinstance(out, dict) and isinstance(out.get("spool"), dict) and isinstance(out.get("view"), dict):

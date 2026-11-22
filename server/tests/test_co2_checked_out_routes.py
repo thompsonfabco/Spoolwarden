@@ -11,7 +11,7 @@ import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from filament_kit import api, config, inventory, pairing, station_flow, web_access
+from filament_kit import api, config, inventory, pairing, station_flow, storage, web_access
 from filament_kit.api import create_app
 from filament_kit.bridge import family
 from filament_kit.spoolman import Spoolman
@@ -21,6 +21,11 @@ from filament_kit.web.slots import INTAKE_DEVICE, SlotError
 from test_inventory import SINCE, SLOT, _opened, _out, printers, store  # noqa: F401
 
 SENTENCE = "This spool is not checked out."
+
+
+def NEW() -> str:
+    """A storage location the Hub lists, that is not "Rack 1": what a home is changed to."""
+    return storage.current().choosable()[-1]
 
 
 @pytest.fixture(autouse=True)
@@ -143,7 +148,7 @@ def test_return_caller_rules(sm, printers, store):  # noqa: F811
         third = _out(sm, name="Rules 3")
         assert client.post(f"/api/spools/{third['id']}/return", json={}, headers=phone).status_code == 200
         # a viewer and the station may still not change a home, and a viewer reads the list and the spool
-        assert client.patch(f"/api/spools/{_out(sm, name='Rules 4')['id']}", json={"home": "Rack 2"}, headers=viewer).status_code == 403
+        assert client.patch(f"/api/spools/{_out(sm, name='Rules 4')['id']}", json={"home": NEW()}, headers=viewer).status_code == 403
         assert client.get("/api/spools?filter=checked_out", headers=viewer).status_code == 200
     assert ("POST", "/api/spools/{id}/return") in api.WEB_ROUTES and ("POST", "/api/spools/{id}/return") not in api.VIEWER_ROUTES
 
@@ -187,13 +192,13 @@ def test_a_spool_in_a_klipper_slot_goes_back_through_the_klipper_family(sm, prin
 
 def test_the_home_edit_previews_then_saves_and_has_no_event(c, sm):
     s = _out(sm, home="Rack 1")
-    dry = c.patch(f"/api/spools/{s['id']}", json={"home": "Rack 2", "dry_run": True})
+    dry = c.patch(f"/api/spools/{s['id']}", json={"home": NEW(), "dry_run": True})
     assert dry.status_code == 200 and dry.json()["dry"] is True
-    assert (dry.json()["before"]["home"], dry.json()["view"]["home"]) == ("Rack 1", "Rack 2")
+    assert (dry.json()["before"]["home"], dry.json()["view"]["home"]) == ("Rack 1", NEW())
     assert inventory.prev_entry(sm.get(f"spool/{s['id']}"))[0] == "Rack 1"        # a preview writes nothing
-    real = c.patch(f"/api/spools/{s['id']}", json={"home": "Rack 2", "dry_run": False})
+    real = c.patch(f"/api/spools/{s['id']}", json={"home": NEW(), "dry_run": False})
     assert real.status_code == 200 and real.json()["dry"] is False
-    assert (real.json()["before"]["home"], real.json()["view"]["home"]) == ("Rack 1", "Rack 2")
+    assert (real.json()["before"]["home"], real.json()["view"]["home"]) == ("Rack 1", NEW())
     assert real.json()["view"]["checked_out"] is True and real.json()["view"]["checked_out_since"] == SINCE
     assert sm.get(f"spool/{s['id']}")["location"] == SLOT                          # still in the slot
     assert "event_id" not in real.json()                                           # a home change has no undo
@@ -201,7 +206,7 @@ def test_the_home_edit_previews_then_saves_and_has_no_event(c, sm):
 
 def test_the_home_edit_refuses_a_spool_not_checked_out_and_an_unknown_place(c, sm):
     plain = _at_home(sm, name="At home")
-    r = c.patch(f"/api/spools/{plain['id']}", json={"home": "Rack 2", "dry_run": False})
+    r = c.patch(f"/api/spools/{plain['id']}", json={"home": NEW(), "dry_run": False})
     assert r.status_code == 409 and r.json() == {"error": "not_checked_out", "message": SENTENCE}
     out = _out(sm)
     bad = c.patch(f"/api/spools/{out['id']}", json={"home": "Nowhere at all", "dry_run": False})
@@ -236,7 +241,7 @@ def test_the_tag_of_a_checked_out_spool_says_so_and_names_its_home(stc, sm):
     uid = _own_tag(sm, s)
     r = stc.get(f"/api/station/tag/{uid}").json()
     assert r["known"] is True and r["spool"]["checked_out"] is True and r["spool"]["home"] == "Rack 2"
-    assert r["spool"]["slot"] == "AMS A2"
+    assert r["spool"]["slot"] == "A2"
     assert r["display"] == [r["spool"]["name"][:16], "Home: Rack 2"]
     nohome = _out(sm, home="", name="No home")
     d = stc.get(f"/api/station/tag/{_own_tag(sm, nohome)}").json()
@@ -393,12 +398,12 @@ def test_the_editing_twin_changes_a_home_and_refuses_as_the_hub_does(sm, printer
     s = _out(sm, home="Rack 1")
     plain = _at_home(sm, name="At home")
     with _web(sm, RecordingKit()) as w:
-        prev = w.post(f"/intake/api/spools/{s['id']}", json={"home": "Rack 2"}, headers=ORIGIN).json()    # dry_run is the default
-        assert prev["dry"] is True and (prev["before"]["home"], prev["view"]["home"]) == ("Rack 1", "Rack 2")
+        prev = w.post(f"/intake/api/spools/{s['id']}", json={"home": NEW()}, headers=ORIGIN).json()    # dry_run is the default
+        assert prev["dry"] is True and (prev["before"]["home"], prev["view"]["home"]) == ("Rack 1", NEW())
         assert inventory.prev_entry(sm.get(f"spool/{s['id']}"))[0] == "Rack 1"
-        saved = w.post(f"/intake/api/spools/{s['id']}", json={"home": "Rack 2", "dry_run": False}, headers=ORIGIN).json()
-        assert saved["view"]["home"] == "Rack 2" and saved["view"]["checked_out"] is True
-        no = w.post(f"/intake/api/spools/{plain['id']}", json={"home": "Rack 2", "dry_run": False}, headers=ORIGIN)
+        saved = w.post(f"/intake/api/spools/{s['id']}", json={"home": NEW(), "dry_run": False}, headers=ORIGIN).json()
+        assert saved["view"]["home"] == NEW() and saved["view"]["checked_out"] is True
+        no = w.post(f"/intake/api/spools/{plain['id']}", json={"home": NEW(), "dry_run": False}, headers=ORIGIN)
         assert no.status_code == 409 and no.json() == {"error": SENTENCE, "code": "not_checked_out"}
         bad = w.post(f"/intake/api/spools/{s['id']}", json={"home": "Nowhere at all", "dry_run": False}, headers=ORIGIN)
         assert bad.status_code == 400 and bad.json()["field"] == "home"
@@ -424,10 +429,10 @@ def test_the_command_lines_requests_find_every_field_they_read(c, sm):
     assert again.status_code == 409 and again.json()["error"] == "not_checked_out" and again.json()["message"] == SENTENCE
     # spool home: PATCH {home, dry_run: true} then {home, dry_run: false}: before.home and view.home
     t = _out(sm, home="Rack 1", name="Second")
-    prev = c.patch(f"/api/spools/{t['id']}", json={"home": "Rack 2", "dry_run": True}).json()
-    done = c.patch(f"/api/spools/{t['id']}", json={"home": "Rack 2", "dry_run": False}).json()
+    prev = c.patch(f"/api/spools/{t['id']}", json={"home": NEW(), "dry_run": True}).json()
+    done = c.patch(f"/api/spools/{t['id']}", json={"home": NEW(), "dry_run": False}).json()
     for ans in (prev, done):
-        assert ans["before"]["home"] == "Rack 1" and ans["view"]["home"] == "Rack 2"
+        assert ans["before"]["home"] == "Rack 1" and ans["view"]["home"] == NEW()
     # 400 for an unknown location carries the Hub's message
     bad = c.patch(f"/api/spools/{t['id']}", json={"home": "Nowhere", "dry_run": True})
     assert bad.status_code == 400 and isinstance(bad.json()["message"], str) and bad.json()["message"]

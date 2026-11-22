@@ -1548,7 +1548,10 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         """`POST api/spools/{id}/return` (R88 1.7): a checked-out spool goes back to its home (the place the rules chose when
         none was recorded) with no question and no body. `location` is where it went (None when the rules place it nowhere);
         `event_id` is its Undo. 409 not_checked_out otherwise."""
-        out = await run_in_threadpool(returner, request.path_params["id"])
+        sid = request.path_params["id"]
+        if not sid.isdecimal():
+            return _err(404, "not_found", f"no spool {sid}")
+        out = await run_in_threadpool(returner, int(sid))
         return JSONResponse({**out, "location": out["view"]["location"] or None})
 
     @_authed
@@ -1834,7 +1837,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/filaments", filament_list),
             Route("/api/vendors", vendor_list),
             Route("/api/spools/{id:int}/link", spool_link, methods=["POST"]),
-            Route("/api/spools/{id:int}/return", spool_return, methods=["POST"]),
+            Route("/api/spools/{id}/return", spool_return, methods=["POST"]),   # `{id}` as WEB_ROUTES spells it
             Route("/api/spools/{id:int}", spool_get),
             Route("/api/spools/{id:int}", spool_update, methods=["PATCH"]),
             Route("/api/locations", locations),
