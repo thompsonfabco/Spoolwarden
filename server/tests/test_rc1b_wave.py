@@ -140,7 +140,7 @@ def test_station_requests_are_xml_with_their_secrets_root_only():
     rows = [{"id": "0123456789ab", "request_id": "e" * 64, "name": "bench", "token": "t" * 43, "state": "approved",
              "expires": time.time() + 600}]
     pairing._write(sr.FILE, rows)
-    assert state("station-requests.xml").is_file() and not state("station-requests.json").exists()
+    assert state("station-requests.xml").is_file() and state("station-requests.json").is_file()      # the JSON stays beside it
     assert pairing._read(sr.FILE) == rows
     if sys.platform != "win32":
         assert stat.S_IMODE(os.stat(state("station-requests.xml")).st_mode) == 0o600

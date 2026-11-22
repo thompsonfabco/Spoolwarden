@@ -273,7 +273,7 @@ def test_root_state_write_gives_file_to_state_dir_owner(tmp_path, monkeypatch):
     fchowns = []
     monkeypatch.setattr(_os, "fchown", lambda fd, u, g: fchowns.append((u, g)), raising=False)
     pairing._write("devices.json", [])
-    assert fchowns == [(st.st_uid, st.st_gid)] * 2     # both forms of devices; on the open temp file, never by name
+    assert fchowns == [(st.st_uid, st.st_gid)] * 3     # XML, JSON and its hash; on the open temp file, never by name
     if _os.name != "nt":
         calls.clear()
         pairing.devices()
