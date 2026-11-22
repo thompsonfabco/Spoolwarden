@@ -49,7 +49,7 @@ LEAKS: dict[str, str] = {
         "", "/current.json", "/versions", "/versions/2-20261101T000000Z")},
     "write state/printers": "bridge/mapping.py (RC1e): the per-printer folder",
     "write state/printers/<id>": "same",
-    "write state/printers/<id>/...": "same: the map",
+    "write state/profiles": "profiles/builds.py (RC1c): `_dir()` (a read of the system presets takes the lock in it)",
 }
 
 # what the calls with a real body leave outside the demo's folder (the walk's empty bodies stop before they get there)
