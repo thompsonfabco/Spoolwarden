@@ -45,11 +45,14 @@ long high beeps mean the I2C bus is stuck (a PN532 left mid-transfer): unplug th
 
 ## Server API
 
-The reader talks to the filament-kit web process. `READER_BASE` (in `src/secrets.h`) is the API's base URL,
-for example `https://filament.example.net/filament/reader`. Every request carries the reader token in the
+The reader talks to the filament-kit Hub on the home network. `READER_BASE` (in `src/secrets.h`) is the API's base URL,
+for example `https://hub.local:8443/reader`. Every request carries the reader token in the
 `X-Auth-Token` header (`filament-kit reader token` makes one). HTTPS, server certificate checked against the
-pinned root (ISRG Root X1 unless `READER_ROOT_CA` is set). This contract is fixed; the server side is
-`server/filament_kit/web/reader.py`.
+pinned root (ISRG Root X1 unless `READER_ROOT_CA` is set). When the host of the base is a `.local` name
+(`https://<hub>.local:<port>/reader`, what the setup page writes), the reader looks it up by mDNS for up to 2 s and,
+if that finds nothing, connects to the settings' `hub_ip` (the Hub's home address at setup time); the certificate is
+checked against the root CA and the `.local` name, never the address. A base with another host connects by name.
+This contract is fixed; the server side is `server/filament_kit/web/reader.py`.
 
 `GET <READER_BASE>/printers` → `200`, a JSON list:
 
@@ -106,8 +109,8 @@ Plug the Printer Station into the kit server's USB port with a data cable and ru
 Or open the kit's setup page, tab **Flash a device**: it does the same with the board plugged into the server,
 or writes it from the computer you sit at (Chrome or Edge, over Web Serial).
 
-It finds the board, asks the Wi-Fi name and password and the buzzer's trigger (high for a buzzer behind a MOSFET, as
-in the parts list; low for the older 3-pin module), makes the reader's token, writes the kit's own firmware
+It finds the board, asks the Wi-Fi name and password and the buzzer's trigger (bare buzzer, high-triggered; buzzer with
+driver board, low-triggered), makes the reader's token, writes the kit's own firmware
 (`firmware/printer-station.bin`, which holds no settings) unless the board already runs that build, sends the
 settings over USB, and waits for the reader to report that it joined the Wi-Fi and reached the kit. It ends with
 "Done." or a plain reason. Then unplug it and power it where it lives: it keeps its settings. `--ssid` and
@@ -128,21 +131,21 @@ start whenever they differ from the ones it copied last, so a rebuilt `secrets.h
 takes over; settings the kit writes over USB later win until a build with other compiled ones):
 
 1. `cp src/secrets.example.h src/secrets.h` and fill in Wi-Fi, `READER_BASE`, `READER_TOKEN` and `OTA_PUBKEY`
-   (see below), and `READER_BUZZER_ACTIVE_LOW`: 0 for a buzzer behind a MOSFET (high-triggered), 1 for the older
-   3-pin module (low-triggered; also what a `secrets.h` without the line means). `secrets.h` is ignored by git;
+   (see below), and `READER_BUZZER_ACTIVE_LOW`: 0 for a bare buzzer behind a MOSFET (high-triggered), 1 for a buzzer
+   with driver board (low-triggered; also what a `secrets.h` without the line means). `secrets.h` is ignored by git;
    never commit it.
 2. `pio run -e esp32-c3-supermini` builds; `pio run -e esp32-c3-supermini -t upload` flashes over USB (the first
    time only; updates go over Wi-Fi).
 
 **Or let the kit build and flash it:** on the kit server, with the reader plugged in by USB and PlatformIO installed,
 `sudo filament-kit reader setup --name printer-station --source <checkout>/reader --ota-pubkey <key.pem>` makes the token,
-works out `READER_BASE` from `web.public_url`, asks you to confirm the USB board to flash (`[y/N]`; pass `--port` to skip the question, and a script that pipes the Wi-Fi name in must do that or answer it first), asks the Wi-Fi name and password, and builds and flashes a private copy
+works out `READER_BASE` (the Hub's own `https://<hub>.local:<port>/reader`), asks you to confirm the USB board to flash (`[y/N]`; pass `--port` to skip the question, and a script that pipes the Wi-Fi name in must do that or answer it first), asks the Wi-Fi name and password, and builds and flashes a private copy
 of this folder (the checkout never holds `secrets.h`). Install PlatformIO as yourself, not with sudo
 (`python3 -m pip install --user platformio`): under sudo the build and flash run as you, with your PlatformIO, and
 you need to be in the `dialout` group for the serial port. With `--out secrets.h` instead of `--source`, it only writes
 the file (mode 600) for a build on another PC. On a PC that is not the server, pass `--token-file` (a token from
-`reader token`) and `--base <web.public_url>/reader`. `--buzzer low` is for a reader with the older 3-pin buzzer
-module; the default is a high-triggered buzzer. Nothing secret is printed.
+`reader token`) and `--base https://<hub>.local:<port>/reader`. `--buzzer low` is for a reader with a buzzer with driver board
+(low-triggered); the default is a bare buzzer (high-triggered). Nothing secret is printed.
 
 Tests: `pio test -e native` runs the host unit tests of `lib/reader_core` (list parsing, scan statuses,
 knob and menu, saved choice, scrolling). Needs a host C++ compiler (on Windows, run it in WSL).
