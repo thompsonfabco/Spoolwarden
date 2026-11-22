@@ -103,9 +103,22 @@ may rename it). The images are `firmware/intake-panel.bin` (whole, at 0x0) and `
 - See: the buttons, `TAG` and `AIR` lines arrive over Wi-Fi as they do on USB; the station's checked-out-spool return works.
 - Pass: same behaviour as on USB; the station's Devices row says "Panel: on Wi-Fi".
 
+## B11. A save is all or none, and CFG CLEAR tells the truth (host-tested only; the NVS layer under it is not)
+- Do: set up a network and a station (B7). Then (a) send a new `CFG WIFI` and pull the USB cable during the write, several times;
+  after each, power the panel from the wall and see which network it joins. (b) `CFG CLEAR`, then power-cycle.
+- See: after (a) the panel joins the old network with the old password, or the new one with the new password, never a mix; a
+  save answered `ERR store` leaves the old set. After (b) it answers `OK` and behaves as unconfigured.
+- Pass: no mixed set in any of the cuts. The layout is two slots of keys and a marker flipped last (lib/panel_core/src/panel_store.h);
+  native tests fail every write position against a fake store, so only the real NVS calls (`putBytes`, `remove`, `isKey`) are unproven.
+
+## B12. The build refuses a program over 95 % of the app slot
+- Do: `sh build.sh` prints `ok: panel program: ... bytes in the app slot (NN.N%, limit 95.0%)`. To see it fail without a big
+  program: `FK_PANEL_MAX_PERCENT=80 sh build.sh`.
+- Pass: the second exits non-zero with `FAIL: ...` and writes no image (the check runs before the images are merged).
+
 ## Known and not measured
 - Image size: the program image is 1,148,240 bytes of the 1,310,720-byte application slot (87.6 %), above the proposal's 80 %
-  target (est). There is no over-the-air update, the slot is fixed by the partition table, and USB flashing does not need headroom, so
+  target (est); the ruling accepts the program at 85.5 % of the slot, and build.sh fails above 95 % (B12). There is no over-the-air update, the slot is fixed by the partition table, and USB flashing does not need headroom, so
   this is a margin, not a failure, but the next feature will reach the slot's end. Nothing was measured of free heap at run time.
 - The loop's own work never waits on the network (the link runs in its own task), but a lookup or handshake that never ends is only
   abandoned at its bound (2 s and 3 s), not killed, until it returns; at most one lookup task runs at a time.

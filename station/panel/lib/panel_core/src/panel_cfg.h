@@ -44,6 +44,7 @@ struct CfgResult {
   bool isCfg = false;       // the line is a CFG line at all (else it is an ordinary command)
   bool ok = false;          // understood in full: `out` changed and is to be stored before the panel says OK
   const char *err = "";     // the reason word when !ok: long hex ssid password address port fingerprint token cfg
+                            // (the caller adds "store" when the flash write fails)
 };
 
 // Parses a line. On ok the settings take the new values; otherwise `out` is untouched. CFG CLEAR leaves `out` cleared.
