@@ -728,7 +728,7 @@ void test_local_name_and_ipv4() {
   TEST_ASSERT_TRUE(isLocalName("hub.local."));
   TEST_ASSERT_FALSE(isLocalName("local"));
   TEST_ASSERT_FALSE(isLocalName(".local"));
-  TEST_ASSERT_FALSE(isLocalName("hub.localdomain"));
+  TEST_ASSERT_FALSE(isLocalName("hub.localhost"));
   TEST_ASSERT_FALSE(isLocalName("filament.example.net"));
   TEST_ASSERT_TRUE(isIpv4("192.168.1.20"));
   TEST_ASSERT_FALSE(isIpv4(""));
