@@ -70,7 +70,7 @@ CLI_SPOOL_HOME_NOT_RECORDED = "not recorded"
 CLI_SPOOL_SINCE = "since {value}"
 CLI_SPOOL_RETURN_DONE = "Returned to {place}."
 CLI_SPOOL_RETURN_DONE_PLAIN = "Returned."
-CLI_SPOOL_RETURN_UNDO = "To undo it: {command}"
+CLI_SPOOL_RETURN_UNDO = "To undo it: {undo}"
 CLI_SPOOL_HOME_PREVIEW = "Spool {n}, {name}: home {before}, would be {after}."
 CLI_SPOOL_HOME_ASK = "Change the home of spool {n} to {after}?"
 CLI_SPOOL_HOME_DONE = "Home is now {place}."
@@ -375,7 +375,7 @@ def cmd_spool_return(api, number) -> int:
     place = (r.get("spool") or {}).get("location") or (r.get("view") or {}).get("location")
     output.out(CLI_SPOOL_RETURN_DONE.format(place=place) if place else CLI_SPOOL_RETURN_DONE_PLAIN)
     event = r.get("event_id")
-    output.out(CLI_SPOOL_RETURN_UNDO.format(command=f"sudo {COMMAND} undo" + (f" {event}" if event is not None else "")))
+    output.out(CLI_SPOOL_RETURN_UNDO.format(undo=f"sudo {COMMAND} undo" + (f" {event}" if event is not None else "")))
     return 0
 
 

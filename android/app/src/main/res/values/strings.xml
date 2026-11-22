@@ -5594,7 +5594,8 @@
     <!-- 1=place -->
     <string name="cli_spool_return_done">Returned to %1$s.</string>
     <string name="cli_spool_return_done_plain">Returned.</string>
-    <string name="cli_spool_return_undo">To undo it: spoolwarden</string>
+    <!-- 1=undo -->
+    <string name="cli_spool_return_undo">To undo it: %1$s</string>
     <!-- 1=n 2=name 3=before 4=after -->
     <string name="cli_spool_home_preview">Spool %1$s, %2$s: home %3$s, would be %4$s.</string>
     <!-- 1=n 2=after -->

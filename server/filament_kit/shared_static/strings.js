@@ -3983,7 +3983,7 @@ window.SW_TEXT = Object.freeze({
   "cli_spool_since": "since {value}",
   "cli_spool_return_done": "Returned to {place}.",
   "cli_spool_return_done_plain": "Returned.",
-  "cli_spool_return_undo": "To undo it: spoolwarden",
+  "cli_spool_return_undo": "To undo it: {undo}",
   "cli_spool_home_preview": "Spool {n}, {name}: home {before}, would be {after}.",
   "cli_spool_home_ask": "Change the home of spool {n} to {after}?",
   "cli_spool_home_done": "Home is now {place}.",

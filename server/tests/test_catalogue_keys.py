@@ -109,3 +109,22 @@ def test_the_page_defaults_are_the_catalogue_texts():
     from filament_kit.station import page
     wrong = {k: (v, CATALOGUE.get(k)) for k, v in page._PAGE_DEFAULTS.items() if CATALOGUE.get(k) != v}
     assert not wrong, wrong
+
+
+def test_no_text_uses_a_reserved_placeholder_for_anything_but_its_name():
+    """build_tokens fills {product} and {command} (tokens/build_tokens.py RESERVED) with the app and the command NAME in every
+    generated copy. A text that puts a whole command, or anything else, in one of them reads wrong there ("To undo it:
+    spoolwarden"). {command} must stand as the program name: followed by its arguments, or by the `;` of "is now called
+    {command}; ..."; a whole command that the code builds has its own placeholder."""
+    import re
+    import sys
+    sys.path.insert(0, str(ROOT / "tokens"))
+    import build_tokens
+    assert set(build_tokens.RESERVED) == {"product", "command"}, "a new reserved placeholder: say here how it may be used"
+    bad = []
+    for key, value in CATALOGUE.items():
+        for text in (value.values() if isinstance(value, dict) else [value]):
+            for m in re.finditer(r"\{command\}(.?.?)", text):
+                if not re.match(r" [a-z<-]|;", m.group(1)):
+                    bad.append((key, text))
+    assert not bad, f"{{command}} stands for the command name only; a text that ends on it or uses it as a whole command: {bad}"
