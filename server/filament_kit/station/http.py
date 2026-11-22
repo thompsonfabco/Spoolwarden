@@ -45,6 +45,9 @@ def tls_context(cert, key) -> ssl.SSLContext:
     return ctx
 
 
+DRAIN_SECONDS = 2    # the most a refusal spends, in all, on the rest of the caller's body before it closes (the handler's `timeout` is 30)
+
+
 def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, store=None,
                  wrong_tickets=None, *, page_ranges: str | None = None,
                  page_from: str = "home") -> type[BaseHTTPRequestHandler]:
@@ -156,13 +159,19 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
         def _drain(self):
             """Read what a refusal left of the request body (at most 64 KiB) before the connection closes: a socket closed with
             request bytes unread makes Windows send a reset (10054) or an abort (10053) that can destroy the 403 / 404 the caller
-            has not read yet."""
+            has not read yet. The whole drain has DRAIN_SECONDS: a caller that declares a body and sends none, or trickles it, is
+            let go when they are up (the answer is already sent), not after the handler's `timeout` per read."""
             if getattr(self, "_taken", False):
                 return
             try:
-                n = int(self.headers.get("Content-Length") or 0)
-                if n > 0:
-                    self.rfile.read(min(n, 16 * page.MAX_BODY))
+                left = min(int(self.headers.get("Content-Length") or 0), 16 * page.MAX_BODY)
+                end = time.monotonic() + DRAIN_SECONDS
+                while left > 0 and end > time.monotonic():
+                    self.connection.settimeout(end - time.monotonic())
+                    chunk = self.rfile.read1(min(left, 8192))
+                    if not chunk:
+                        break
+                    left -= len(chunk)
             except (ValueError, OSError):
                 pass
 
