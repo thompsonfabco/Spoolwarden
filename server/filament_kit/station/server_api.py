@@ -343,6 +343,15 @@ def hello_values(fp: str | None, port: int, plain: str | None = None) -> dict:
     return {"port": port, "version": __version__, "plain": " ".join(str(plain or "no certificate").split())[:120]}
 
 
+def take_voice(body) -> None:
+    """The `voice` of the Hub's hello answer (speech, speaker, speed, volume) goes live in the station (speech.py)."""
+    from . import speech
+    try:
+        speech.apply_hello(body)
+    except Exception:  # noqa: BLE001 - the hello is taken either way
+        log.exception("hello: voice")
+
+
 def announce(api_of, fp: str | None, port: int, tries: int = 20, wait: float = 30, sleep=time.sleep,
              plain: str | None = None) -> bool:
     """Tell the Hub the three values once the station has started (and so after its port or certificate changed). An
@@ -354,6 +363,7 @@ def announce(api_of, fp: str | None, port: int, tries: int = 20, wait: float = 3
             return False
         status, body = api.hello(hello_values(fp, port, plain))
         if status == 200:
+            take_voice(body)
             return True
         log.info("telling the Hub about this station: %s %s", status, body.get("error") or "")
         if status == 401:       # the token is no good: pairing again is the way out, not asking
@@ -386,6 +396,7 @@ def checkin(api_of, fp: str | None, port: int, every: float = CHECKIN_SECONDS, s
             log.exception("check-in")
             continue
         if status == 200:
+            take_voice(body)
             taken += 1
         else:
             log.info("check-in with the Hub: %s %s", status, body.get("error") or "")

@@ -29,6 +29,13 @@ from pathlib import Path
 
 from .pairing import AmbiguousStation
 
+
+def _say(key: str, /, **values) -> str:
+    """A sentence of a failed call to the Weigh Station, from the catalogue (D13: the Hub page shows it)."""
+    from .station.page import say
+    return say(key, **values)
+
+
 # Texts for the Checks rows and the page (AF5 moves them to the catalogue).
 TEXT_STATION_CERT_CHANGED = "The Weigh Station's certificate is not the one the Hub trusts."
 TEXT_STATION_CERT_FIX = ("Restart the Weigh Station so it tells the Hub its new certificate "
@@ -458,7 +465,7 @@ def pinned_endpoint(url: str | None) -> tuple[str, int, str]:
     except (AmbiguousStation, ValueError) as e:
         raise StationCallError(503, str(e)) from None
     if not host:
-        raise StationCallError(503, "the Hub does not know the Weigh Station's address")
+        raise StationCallError(503, _say("station_call_address_unknown"))
     if info is None:
         raise StationPinMissing(503, TEXT_STATION_NO_PIN)
     return host, info["port"], info["fp"]
@@ -480,7 +487,7 @@ def station_endpoint(url: str | None) -> tuple[str, int, str | None]:
             if parsed.scheme == "http" and parsed.hostname:
                 return parsed.hostname, parsed.port or 80, None
         except ValueError:
-            raise StationCallError(503, "the Hub does not know the Weigh Station's address") from None
+            raise StationCallError(503, _say("station_call_address_unknown")) from None
         raise
 
 
@@ -491,13 +498,17 @@ def _call(endpoint, method, path, body, cap=MAX_JSON, timeout=STATION_TIMEOUT):
     headers = {"Accept": "*/*"}
     if body is not None:
         headers["Content-Type"] = "application/json"
-    purpose = {("POST", "/ticket"): "ticket", ("POST", "/settings"): "settings"}.get((method, path))
+    purpose = {("POST", "/ticket"): "ticket", ("POST", "/settings"): "settings", ("POST", "/voice"): "voice",
+               ("POST", "/voice/test"): "voice"}.get((method, path))
+    if purpose == "ticket" and fp is None:
+        # D14: the page ticket is the way into the station's own page: the Hub never asks for one over plain HTTP, whatever the proof
+        raise StationPinMissing(503, TEXT_STATION_NO_PIN)
     if purpose:
-        # the proof, not HTTPS, guards a change and a ticket (R83 2026-11-18 01:10); a station that told the Hub no
-        # certificate is called over plain HTTP (R82 00:28 point 1; `station_endpoint` never goes plain for a pinned one)
+        # the proof, not HTTPS, guards a change (R83 2026-11-18 01:10); a station that told the Hub no certificate is called over
+        # plain HTTP for it (R82 00:28 point 1; `station_endpoint` never goes plain for a pinned one)
         key = proof_key(pinned=fp is not None)
         if key is None:
-            raise StationCallError(503, "the Hub cannot prove itself to the Weigh Station: pair it again")
+            raise StationCallError(503, _say("station_call_cannot_prove"))
         headers[page.PROOF_HEADER] = page.make_proof(key, purpose, body or b"")
     try:
         options = {"plain": True} if fp is None else {}
@@ -505,15 +516,15 @@ def _call(endpoint, method, path, body, cap=MAX_JSON, timeout=STATION_TIMEOUT):
     except PinMismatch:
         raise StationCallError(502, f"{TEXT_STATION_CERT_CHANGED} {TEXT_STATION_CERT_FIX}") from None
     except TimeoutError:
-        raise StationCallError(502, "the Weigh Station answers too slowly") from None
+        raise StationCallError(502, _say("station_call_too_slow")) from None
     except UnicodeError:
-        raise StationCallError(502, "the Weigh Station address is not valid") from None
+        raise StationCallError(502, _say("station_call_address_invalid")) from None
     except ValueError:
-        raise StationCallError(502, "the Weigh Station's answer is too large") from None
+        raise StationCallError(502, _say("station_call_answer_too_large")) from None
     except (OSError, http.client.HTTPException) as e:
-        raise StationCallError(502, f"the Weigh Station does not answer ({type(e).__name__})") from None
+        raise StationCallError(502, _say("station_call_no_answer", kind=type(e).__name__)) from None
     if 300 <= status < 400:
-        raise StationCallError(502, "the Weigh Station answered with a redirect")
+        raise StationCallError(502, _say("station_call_redirect"))
     return status, kind, data
 
 
@@ -525,13 +536,13 @@ def call_json(url: str | None, method: str, path: str, body: dict | None = None)
 
 def _json_reply(status: int, kind: str, data: bytes) -> dict:
     if kind.split(";")[0].strip().lower() != "application/json":
-        raise StationCallError(502, "the Weigh Station did not answer with JSON")
+        raise StationCallError(502, _say("station_call_not_json"))
     try:
         out = json.loads(data or b"{}")
     except ValueError:
         out = None
     if not isinstance(out, dict):
-        raise StationCallError(502, "the Weigh Station's answer is not valid")
+        raise StationCallError(502, _say("station_call_answer_invalid"))
     if not 200 <= status < 300:
         why = out.get("message") or out.get("error")
         raise StationCallError(status if status in (400, 403, 404, 429) else 502,
@@ -545,7 +556,7 @@ def ticket(url: str | None, *, endpoint: tuple[str, int, str | None] | None = No
     got = _json_reply(*_call(endpoint if endpoint is not None else station_endpoint(url), "POST", "/ticket", b"{}"))
     t, expires = got.get("ticket"), got.get("expires_in")
     if not (isinstance(t, str) and TICKET.fullmatch(t)) or expires != 60 or isinstance(expires, bool):
-        raise StationCallError(502, "the Weigh Station's ticket is not valid")
+        raise StationCallError(502, _say("station_call_ticket_invalid"))
     return {"ticket": t, "expires_in": 60}
 
 
@@ -591,7 +602,7 @@ def read_photo(url: str | None) -> bytes:
     """The station's photo: only `image/jpeg`, at most 4 MiB, and it must begin as a JPEG does."""
     status, kind, data = call(url, "GET", "/photo", cap=MAX_PHOTO)
     if status != 200 or kind.split(";")[0].strip().lower() != "image/jpeg" or not data.startswith(b"\xff\xd8"):
-        raise StationCallError(502, "the Weigh Station's photo is not a JPEG picture")
+        raise StationCallError(502, _say("station_call_photo_invalid"))
     return data
 
 

@@ -8,6 +8,7 @@ User=filament-kit
 Group=filament-kit
 WorkingDirectory=/var/lib/filament-kit
 ExecStart=/opt/filament-kit/venv/bin/filament-kit profiles build
+Environment=FILAMENT_KIT_ACTOR=hub
 Nice=10
 ProtectSystem=strict
 ReadWritePaths=/var/lib/filament-kit

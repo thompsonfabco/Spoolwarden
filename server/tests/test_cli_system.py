@@ -403,10 +403,10 @@ def test_setup_code_revoke_trusted_says_how_many_and_what_each_needs(capsys, mon
 def test_certificate_makes_one_once_and_prints_the_fingerprint_in_groups(capsys):
     rc, out, _ = run(capsys, ["certificate"])
     lines = out.splitlines()
-    assert rc == 0 and lines[:2] == ["Made a new certificate.", "Fingerprint:"] and len(lines) == 4
-    assert all(len(g) == 4 for line in lines[2:] for g in line.split()) and len(lines[2].split()) == 8
+    assert rc == 0 and lines[:3] == ["Made a new certificate.", "Tag Readers set up for this Hub must be set up again.", "Fingerprint:"] and len(lines) == 5     # R86 22:35.1
+    assert all(len(g) == 4 for line in lines[3:] for g in line.split()) and len(lines[3].split()) == 8
     rc, again, _ = run(capsys, ["certificate"])
-    assert again.splitlines()[0] == "Certificate present." and again.splitlines()[1:] == lines[1:]
+    assert again.splitlines()[0] == "Certificate present." and again.splitlines()[1:] == lines[2:]       # no Tag Reader line: nothing was made
     assert run(capsys, ["cert"]) == (0, again, "")                      # the old spelling
 
 

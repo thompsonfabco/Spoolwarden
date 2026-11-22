@@ -284,8 +284,8 @@ def test_legacy_http_station_reads_without_sending_a_proof(monkeypatch):
     monkeypatch.setattr(station_client, "bounded_call", receive)
     url = "http://station.example:5003"
     assert station_client.read_state(url) == {"photo": False}
-    with pytest.raises(StationCallError, match="pair it again"):      # no station pairing: no proof to give (R559 01 #4:
-        station_client.ticket(url)                                  # a missing pin alone no longer refuses it)
+    with pytest.raises(StationCallError, match="not told the Hub its certificate"):    # D14: no page ticket over plain HTTP
+        station_client.ticket(url)
     assert calls == [("station.example", 5003, None, "GET", "/state", True)]
 
 

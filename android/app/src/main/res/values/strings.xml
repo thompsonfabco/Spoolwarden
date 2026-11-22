@@ -5139,6 +5139,18 @@
     <string name="kit_newest_minimum">newest must be 1 or more</string>
     <string name="kit_no_such_event">no such event</string>
     <string name="devices_station_allow_list_only">This Weigh Station answers only the addresses on its allow-list.</string>
+    <string name="station_call_address_unknown">the Hub does not know the Weigh Station\'s address</string>
+    <string name="station_call_cannot_prove">the Hub cannot prove itself to the Weigh Station: pair it again</string>
+    <string name="station_call_too_slow">the Weigh Station answers too slowly</string>
+    <string name="station_call_address_invalid">the Weigh Station address is not valid</string>
+    <string name="station_call_answer_too_large">the Weigh Station\'s answer is too large</string>
+    <!-- 1=kind -->
+    <string name="station_call_no_answer">the Weigh Station does not answer (%1$s)</string>
+    <string name="station_call_redirect">the Weigh Station answered with a redirect</string>
+    <string name="station_call_not_json">the Weigh Station did not answer with JSON</string>
+    <string name="station_call_answer_invalid">the Weigh Station\'s answer is not valid</string>
+    <string name="station_call_ticket_invalid">the Weigh Station\'s ticket is not valid</string>
+    <string name="station_call_photo_invalid">the Weigh Station\'s photo is not a JPEG picture</string>
     <!-- 1=slot -->
     <string name="event_title_slot_cleared">Slot %1$s cleared</string>
     <!-- 1=name 2=slot -->
@@ -5478,6 +5490,7 @@
     <string name="cli_undo_ask">Undo it?</string>
     <string name="cli_undo_done">Put back.</string>
     <string name="cli_undo_none">Nothing has been changed from the command line in the last 7 days.</string>
+    <string name="cli_undo_newest_cannot">The newest change from the command line cannot be undone: it was already undone, or it is not one that can be undone. To pick another one, run spoolwarden activity, then spoolwarden undo &lt;number>.</string>
     <!-- 1=id -->
     <string name="cli_undo_not_found">there is no event %1$s.</string>
     <!-- 1=value -->
@@ -5494,4 +5507,14 @@
     <string name="cli_who_unknown">unknown actor %1$s.</string>
     <!-- 1=names -->
     <string name="cli_who_unknown_fix">available: %1$s</string>
+    <string name="voice_apps_readonly">Change the voice on the Hub page.</string>
+    <string name="voice_busy">The Weigh Station is in use. Try again when it is idle.</string>
+    <string name="voice_change_at_home">Change this at home.</string>
+    <string name="voice_no_answer">The Weigh Station did not answer.</string>
+    <string name="voice_no_station">This Hub has no Weigh Station.</string>
+    <string name="voice_not_saved">The voice settings could not be saved.</string>
+    <string name="voice_off">Speaking is switched off.</string>
+    <string name="voice_played">Played on the Weigh Station.</string>
+    <string name="voice_remote">Chosen on the Weigh Station\'s own computer: spoolwarden config.</string>
+    <string name="voice_speaker_hint">This voice has 904 speakers. Try a few with Test.</string>
 </resources>

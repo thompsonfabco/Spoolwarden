@@ -150,9 +150,15 @@ class FakePiper:
         cls.loads.append(path)
         return cls()
 
-    def synthesize_wav(self, text, w):
+    def synthesize_wav(self, text, w, syn_config=None):
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050)
         w.writeframes(b"\x00\x01" * 100)
+
+
+class Synth:
+    """piper.SynthesisConfig: only the settings the station passes."""
+    def __init__(self, speaker_id=None, length_scale=None):
+        self.speaker_id, self.length_scale = speaker_id, length_scale
 
 
 @pytest.fixture
@@ -161,7 +167,7 @@ def piper_env(tmp_path, monkeypatch):
     model.write_bytes(ONNX)
     monkeypatch.setitem(st.settings, "tts", "auto")
     monkeypatch.setitem(st.settings, "piper_voice", str(model))
-    monkeypatch.setitem(sys.modules, "piper", types.SimpleNamespace(PiperVoice=FakePiper))
+    monkeypatch.setitem(sys.modules, "piper", types.SimpleNamespace(PiperVoice=FakePiper, SynthesisConfig=Synth))
     speech.piper.clear()
     FakePiper.loads = []
     espeak = []
@@ -203,7 +209,7 @@ def test_a_broken_piper_falls_back_once_loaded(piper_env, monkeypatch):
 
 def test_a_phrase_piper_fails_on_goes_to_espeak(piper_env, monkeypatch):
     _, espeak = piper_env
-    monkeypatch.setattr(FakePiper, "synthesize_wav", lambda self, t, w: (_ for _ in ()).throw(ValueError("bad")))
+    monkeypatch.setattr(FakePiper, "synthesize_wav", lambda self, t, w, syn_config=None: (_ for _ in ()).throw(ValueError("bad")))
     assert speech.synth("a") == b"RIFFespeak" and len(espeak) == 1
 
 
@@ -403,3 +409,10 @@ def test_no_voice_download_when_speech_is_off(tmp_path, monkeypatch):
     cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one", say=None)
     cfg["station"].update(speech=False)
     assert not [a for a in apply.plan(cfg, resolve=lambda h: [h]) if a.kind == "station_voice"]
+
+
+def test_the_synthesis_config_fake_takes_only_what_piper_takes():
+    """D11: the real `piper.SynthesisConfig` is a dataclass: a misspelt keyword raises, so the fake must too."""
+    assert Synth(speaker_id=3, length_scale=0.5).length_scale == 0.5
+    with pytest.raises(TypeError):
+        Synth(length_scal=0.5)

@@ -87,8 +87,14 @@
     }
     input.dataset.id = s.id;
     input.dataset.kind = s.kind;
+    if (s.readonly) { input.disabled = true; }       // the Hub's value is in force: the line says where to change it
     label.appendChild(name);
     label.appendChild(input);
+    if (s.readonly && s.note) {
+      var note = document.createElement("small");
+      say(note, s.note);
+      label.appendChild(note);
+    }
     return label;
   }
 
@@ -101,6 +107,7 @@
   function values() {
     var out = {};
     $("settings").querySelectorAll("[data-id]").forEach(function (el) {
+      if (el.disabled) { return; }
       out[el.dataset.id] = el.dataset.kind === "switch" ? el.checked : el.dataset.kind === "number" ? Number(el.value) : el.value;
     });
     return out;
