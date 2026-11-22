@@ -467,9 +467,23 @@ def test_a_record_json_is_read_moved_once_and_keeps_its_version_count(sm):
     assert intake_history.list_records(True)["count"] == 1
 
 
+def test_a_damaged_record_xml_with_its_json_beside_it_serves_the_json_and_keeps_the_xml_aside(sm):
+    r, hid = add(sm)
+    d = intake_history._dir(hid)
+    assert (d / "record.json").is_file()                          # both forms, the usual state for one release
+    (d / "record.xml").write_text("<record", encoding="utf-8")
+    assert intake_history._load(hid)["id"] == hid
+    assert any("record.xml" in p for p in statexml.problems())
+    assert (d / "record.xml").read_text(encoding="utf-8") == "<record"       # a read never writes over it
+    rec = intake_history._load(hid)
+    intake_history._save(rec)                                     # the next save keeps the damaged file aside
+    assert (d / "record.xml.unreadable").read_text(encoding="utf-8") == "<record"
+    assert intake_history._load(hid)["id"] == hid and (d / "record.xml").is_file()
+
+
 def test_a_damaged_record_xml_is_no_such_record_not_a_crash(sm):
     r, hid = add(sm)
-    (intake_history._dir(hid) / "record.json").unlink()          # the JSON form kept for one release would be read
+    (intake_history._dir(hid) / "record.json").unlink()          # with no JSON form beside it there is nothing to read
     (intake_history._dir(hid) / "record.xml").write_text("<record", encoding="utf-8")
     with pytest.raises(intake_history.HistoryError):
         intake_history._load(hid)
