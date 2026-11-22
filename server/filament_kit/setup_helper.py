@@ -90,7 +90,7 @@ try:
 except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
-from . import config, events, modules, setup_code, trusted
+from . import config, demo, events, modules, setup_code, trusted
 
 log = logging.getLogger(__name__)
 
@@ -1189,6 +1189,8 @@ def handle(req) -> dict:
             raise Refused(400, "unknown request")
         if req["op"] not in NO_CODE_OPS:
             _access(req)
+        if req["op"] != "check" and demo.is_on():       # demo: nothing is changed through the root helper (R85 4.3)
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         if req["op"] in LOCKED_OPS:
             with _job_lock():
                 return {"ok": True, "status": 200, **OPS[req["op"]](req)}

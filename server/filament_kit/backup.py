@@ -39,7 +39,7 @@ from typing import Callable, Iterable
 
 from defusedxml import ElementTree as SafeET
 
-from . import API_VERSION, __version__, backup_crypt, config, event_sink, events, modules, output, release
+from . import API_VERSION, __version__, backup_crypt, config, demo, event_sink, events, modules, output, release
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +67,13 @@ MAX_PASSWORD_LEN = 1024
 
 class BackupError(Exception):
     """A backup that cannot be made, read or restored; the message says why, never a value from it."""
+
+
+class InDemo(BackupError):
+    """The demo makes and restores no backup (R85 4.3): the message is the demo's "Not in the demo."."""
+
+    def __init__(self):
+        super().__init__(demo.NOT_IN_DEMO)
 
 
 class Unfit(BackupError):
@@ -365,7 +372,10 @@ def zip_name(prefix: str = PREFIX, now: float | None = None, *, encrypted: bool 
 def create(dest: Path | None = None, *, prefix: str = PREFIX, now: float | None = None,
            step: Callable[[str], None] | None = None, actor: str = "hub") -> Path:
     """Write a backup zip (or `.zip.enc` when a backup password is set) into `dest` (default the backups folder);
-    its path. Root, on an install. `step(sentence)` is told when each of the three steps of the backup job starts."""
+    its path. Root, on an install. `step(sentence)` is told when each of the three steps of the backup job starts.
+    `InDemo` while the demo is on: nothing is written."""
+    if demo.is_on():
+        raise InDemo()
     step = step or (lambda _text: None)
     dest = Path(dest) if dest is not None else backups_dir()
     dest.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -876,7 +886,10 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
             password: str | None = None, password_file: Path | None = None,
             actor: str = "hub") -> int:
     """Bring this machine to the state in the backup. 0 when the data is back and the apply worked. `step(sentence)` is
-    told when each of the restore_steps() steps starts (steps.py)."""
+    told when each of the restore_steps() steps starts (steps.py). 1 while the demo is on: nothing is restored."""
+    if demo.is_on():
+        out(f"Error: {demo.NOT_IN_DEMO}")
+        return 1
     run = run or default_run
     step = step or (lambda _text: None)
     zip_path = Path(zip_path)
@@ -1104,7 +1117,9 @@ def _open_upload() -> int:
 def pin_upload() -> tuple[Manifest, str]:
     """Root (the setup helper, when the page checks an upload): copy the page's upload at once into the root-only
     backups folder, hash it and check it (the server removes its own copy). What the owner then sees summarised is
-    this copy, and only this copy is restored (take_upload), so the service user cannot swap the file afterwards."""
+    this copy, and only this copy is restored (take_upload), so the service user cannot swap the file afterwards. `InDemo` while the demo is on."""
+    if demo.is_on():
+        raise InDemo()
     try:
         fd = _open_upload()
     except FileNotFoundError:
