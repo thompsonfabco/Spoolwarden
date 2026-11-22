@@ -208,7 +208,8 @@ def test_get_voice_with_a_station():
     voice_state.save({"speaker": 5}, _cfg())
     got = voice_tab.get_voice(_cfg())
     assert got == {"station": True, "speech": True, "speaker": 5, "speed": 100, "volume": 50,
-                   "voice": "Piper, many speakers", "speaker_range": [0, 903]}
+                   "voice": "Piper, many speakers", "voice_file": "Piper, many speakers", "remote": False,
+                   "speaker_range": [0, 903]}
     assert voice_tab.get_voice(_cfg(voice="en_US-ljspeech-medium"))["speaker_range"] is None
     assert voice_tab.get_voice(_cfg(tts="espeak"))["speaker_range"] is None
 
