@@ -373,6 +373,13 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, on
                              "see why:", cmd=f"sudo journalctl -u {service} -n 50")
 
 
+def _speaker_count(speaker_range) -> int | None:
+    """How many speakers a voice has from the Hub's [first, last] range (it need not start at 0); None if there is none."""
+    if not speaker_range or len(speaker_range) < 2:
+        return None
+    return speaker_range[1] - speaker_range[0] + 1
+
+
 def _flash_and_verify(panel, port: str, version: str) -> int:
     """Flash port, then ask the board for its HELLO: success only when it reports the bundled version."""
     with output.wait(f"Writing the firmware to {port}…", programs=True):
@@ -1291,9 +1298,9 @@ class _ConfigMenu:
                 if _ITEMS[iid].voice and self.voice_view() is None:
                     continue                    # the Hub's service does not answer, or there is no Weigh Station
                 if iid == "voice_speaker" and (self.value(_ITEMS["voice"]) == "espeak"
-                                               or not self.voice_view().get("speaker_range")):
+                                               or _speaker_count(self.voice_view().get("speaker_range")) is None):
                     continue
-                add(iid, extra=f"  {voice_cli.speaker_hint(self.voice_view()['speaker_range'][1] + 1)}" if iid == "voice_speaker" else "")
+                add(iid, extra=f"  {voice_cli.speaker_hint(_speaker_count(self.voice_view()['speaker_range']))}" if iid == "voice_speaker" else "")
         if gid == "backups":
             after = ["Back up now: sudo spoolwarden backup create", "Restore: sudo spoolwarden restore <zip>"]
         elif gid == "catalog":

@@ -198,6 +198,13 @@ def test_a_panel_setup_error_with_other_braces_is_printed_and_the_command_is_the
     assert "bad {undo}: othername again" in capsys.readouterr().err
 
 
+def test_the_speaker_count_is_the_range_length_whatever_its_first_value():
+    assert cli._speaker_count([10, 19]) == 10
+    assert cli._speaker_count([0, 903]) == 904
+    assert cli._speaker_count([0, 99]) == 100
+    assert cli._speaker_count(None) is None and cli._speaker_count([]) is None and cli._speaker_count([5]) is None
+
+
 # ---- (c) status ----
 
 def test_the_status_rows_of_the_station_carry_the_panel_rows(monkeypatch):
