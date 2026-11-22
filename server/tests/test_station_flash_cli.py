@@ -5,8 +5,13 @@ from __future__ import annotations
 import pytest
 
 from filament_kit import cli
-from filament_kit.station import panel
+from filament_kit.station import panel, panel_flash
 from filament_kit.station import state as st
+
+
+def _result(flash):
+    """flash_panel_result (what the CLI calls) over a bool fake of flash_panel: a whole-image write with no notice."""
+    return lambda dev, version, have=None: panel_flash.Flash(bool(flash(dev, version)), True, None)
 
 
 class Probe:
@@ -38,7 +43,7 @@ def bench(monkeypatch):
         flashed.append((dev, version))
         probe.hello.add(dev)
         return True
-    monkeypatch.setattr(panel, "flash_panel", flash)
+    monkeypatch.setattr(panel, "flash_panel_result", _result(flash))
     calls = []
 
     def run(cmd, **kw):
@@ -130,7 +135,7 @@ def test_a_port_that_says_hello_is_not_offered(bench):
 def test_service_restarted_when_flash_raises(bench, monkeypatch):
     def boom(dev, version):
         raise RuntimeError("esptool died")
-    monkeypatch.setattr(panel, "flash_panel", boom)
+    monkeypatch.setattr(panel, "flash_panel_result", _result(boom))
     with pytest.raises(RuntimeError):
         cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run)
     assert services(bench) == ["stop", "start"]
@@ -151,7 +156,7 @@ def test_blank_c3_ports_ignores_ttyusb_and_other_vendors(monkeypatch):
 
 
 def test_failed_esptool_exits_1(bench, monkeypatch, capsys):
-    monkeypatch.setattr(panel, "flash_panel", lambda dev, version: False)
+    monkeypatch.setattr(panel, "flash_panel_result", _result(lambda dev, version: False))
     assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 1
     assert "ttyACM0" in capsys.readouterr().err
     assert services(bench) == ["stop", "start"]
@@ -170,7 +175,7 @@ def test_flash_with_wrong_version_afterwards_exits_1(bench, monkeypatch, capsys)
     def flash(dev, version):
         bench.probe.hello.add(dev)
         return True
-    monkeypatch.setattr(panel, "flash_panel", flash)
+    monkeypatch.setattr(panel, "flash_panel_result", _result(flash))
     assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 1
     assert "does not answer with firmware" in capsys.readouterr().err
 
@@ -311,3 +316,10 @@ def test_the_done_line_and_the_service_line_close_a_good_flash(bench, capsys):
     assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 0
     out = capsys.readouterr().out
     assert out.splitlines()[-2:] == ["  + done          The display answered.", "Started the Weigh Station service again."]
+
+
+def test_the_wifi_lost_notice_is_printed_after_the_done_line(bench, monkeypatch, capsys):
+    monkeypatch.setattr(panel, "flash_panel_result", lambda dev, version, have=None: (bench.probe.hello.add(dev), panel_flash.Flash(True, True, "Its Wi-Fi set-up is gone: sudo {command} weigh-station panel-wifi"))[1])
+    assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 0
+    out = capsys.readouterr().out
+    assert out.index("The display answered.") < out.index("Its Wi-Fi set-up is gone: sudo spoolwarden weigh-station panel-wifi")

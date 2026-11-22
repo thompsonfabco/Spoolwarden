@@ -33,7 +33,7 @@ def _need_root(tail: str) -> int | None:
 
 
 def add_parsers(sub) -> None:
-    """The three commands, in the parser of cli.py."""
+    """The two commands, in the parser of cli.py (`spools low` is a word of the `spools` command of spools_cli.py)."""
     al = sub.add_parser("alerts", help="what Spoolwarden warns you about: the switches and limits; set, test (root)")
     als = al.add_subparsers(dest="alerts_cmd")
     als.add_parser("list", help="the alert switches and thresholds (also what alerts alone shows)")
@@ -48,9 +48,6 @@ def add_parsers(sub) -> None:
                     "'2026-11-17 04:00'; without it the newest 50")
     ev.add_argument("--kind", metavar="PREFIX", help="only kinds that start with this, e.g. print or spool.low")
     ev.add_argument("--follow", action="store_true", help="keep printing new events as they come; Ctrl-C ends")
-    sp = sub.add_parser("spools", help="spools running low")
-    sps = sp.add_subparsers(dest="spools_cmd", required=True)
-    sps.add_parser("low", help="the opened spools at or under the running-low limit, least filament first")
 
 
 # ---------------------------------------------------------------- alerts

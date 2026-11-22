@@ -25,7 +25,7 @@ from pathlib import Path
 
 from . import __version__
 from . import storage, storage_api
-from . import address_cli, address_texts, firstrun, getting_started, history_cli, hostaddr, hubport, alerts, alerts_api, alerts_cli, apply, config, demo, event_sink, inventory, klipper_cli, library, locations_cli, menu_ui, modules, output, pairing, qr, secret_input, steps, voice_cli
+from . import address_cli, address_texts, firstrun, getting_started, history_cli, hostaddr, hubport, alerts, alerts_api, alerts_cli, apply, config, demo, event_sink, inventory, klipper_cli, library, locations_cli, menu_ui, modules, output, pairing, qr, secret_input, spools_cli, steps, voice_cli
 from . import status as status_rows
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
@@ -376,8 +376,8 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, on
 def _flash_and_verify(panel, port: str, version: str) -> int:
     """Flash port, then ask the board for its HELLO: success only when it reports the bundled version."""
     with output.wait(f"Writing the firmware to {port}…", programs=True):
-        written = panel.flash_panel(port, version)
-    if not written:
+        result = panel.flash_panel_result(port, version)
+    if not result.ok:
         _err_line(f"writing the firmware to {port} failed (esptool); the board may still be blank. Unplug and "
                   "replug it, then run this again.")
         return 1
@@ -390,8 +390,10 @@ def _flash_and_verify(panel, port: str, version: str) -> int:
         _err_line(f"{port} was written but does not answer with firmware {version}"
                   + (f" (it says {seen})" if seen else "") + ". Unplug and replug it, then run this again.")
         return 1
-    output.emit({"ok": True, "port": port, "version": version})
+    output.emit({"ok": True, "port": port, "version": version, **({"notice": result.notice} if result.notice else {})})
     output.out_lines(output.status_row("done", "The display answered."))
+    if result.notice:
+        output.out(result.notice.format(command="spoolwarden") if "{command}" in result.notice else result.notice)
     return 0
 
 
@@ -535,6 +537,95 @@ def cmd_station_voice_test() -> int:
     if not _no_systemd() and not _is_root():
         return output.need_sudo(_sudo_command("sudo spoolwarden weigh-station voice-test"))
     return voice_cli.cmd_voice_test(_server_api)
+
+
+def _open_panel_port(panel, station_state):
+    """The first USB serial port that answers as the intake panel (with the station stopped, so it holds nothing), or None."""
+    for dev in station_state.panel_ttys():
+        ser = panel.open_panel(dev)
+        if ser:
+            return ser
+    return None
+
+
+def cmd_station_panel_wifi(off: bool = False, ask=input, secret=None, run=subprocess.run, address: str | None = None) -> int:
+    """`weigh-station panel-wifi [--off]` (R88 4.4): set the panel up to reach the station over Wi-Fi, or (--off) go back to
+    the USB cable. The station holds the panel's USB port, so it is stopped first and started again at the end; the panel
+    is told over USB through panel_setup's plain functions, whose sentences are printed as they are (they never hold the
+    password). The change is then applied (the drop-in, the station's restart)."""
+    from .station import panel, panel_setup, state as station_state
+    command = "sudo spoolwarden weigh-station panel-wifi" + (" --off" if off else "")
+    if not _is_root():
+        return output.need_sudo(_sudo_command(command))
+    if not off and ask is input and not output.terminal():     # the name and the password are asked: nothing is stopped
+        output.error("setting up the panel asks for the Wi-Fi name and password, and there is no terminal to ask.",
+                     "run it at a terminal:", cmd=_sudo_command(command))
+        return output.USAGE
+    secret = secret or secret_input.ask
+    service = "filament-kit-station.service"
+    was_active = run(["systemctl", "is-active", service], check=False).returncode == 0
+    ser = None
+    try:
+        with output.wait("Stopping the Weigh Station service…", programs=True):
+            stopped = run(["systemctl", "stop", service], check=False)
+        if stopped.returncode not in (0, 5):
+            _err_line(f"could not stop {service} (systemctl exit {stopped.returncode}); its panel port may look "
+                      "busy. Nothing was changed.")
+            return 1
+        with output.wait("Looking for the panel…", programs=True):
+            ser = _open_panel_port(panel, station_state)
+
+        def send(line):
+            if line is not None:
+                ser.write(line.encode() + b"\n")
+            ser.timeout = 5
+            return ser.readline().decode(errors="replace")
+
+        try:
+            if off:
+                done = panel_setup.disable(send if ser else None)
+                output.emit({"ok": True, **done})
+                output.out_lines(output.status_row("done", "The panel is back on the USB cable."))
+                if ser and not done["panel_forgotten"]:
+                    output.out("The panel did not confirm that it forgot its Wi-Fi settings; its token is gone, so it can "
+                               "no longer connect.")
+            else:
+                if not ser:
+                    output.error("no panel answered on USB.", "plug the panel in with a data cable, then run this again.")
+                    return 1
+                cfg = config.load()
+                if not (station_state.tls_dir() / "key.pem").is_file():
+                    output.error("the Weigh Station has no certificate yet.",
+                                 "start it once, then run this again:", cmd="sudo systemctl start " + service)
+                    return 1
+                _, _, fingerprint = station_state.ensure_cert()
+                host = address or next(iter(pairing.local_ips()), "")
+                try:
+                    ssid = ask("Wi-Fi name: ").strip()
+                    password = secret("Wi-Fi password (empty for an open network): ")
+                except (EOFError, KeyboardInterrupt):
+                    return _input_ended()
+                done = panel_setup.enable(send, version=getattr(ser, "panel_version", None), ssid=ssid, password=password,
+                                          address=host, port=config.panel_port(cfg), fingerprint=fingerprint)
+                output.emit({"ok": True, **done})
+                output.out_lines(output.status_row("done", "The panel is set up for Wi-Fi."))
+        except panel_setup.PanelSetupError as e:
+            output.error(str(e).format(command="spoolwarden") if "{command}" in str(e) else str(e))
+            return 1
+        if ser:
+            ser.close()
+            ser = None
+        return _run_apply(pairing=False)
+    finally:
+        if ser:
+            ser.close()
+        if was_active:
+            started = run(["systemctl", "start", service], check=False)
+            if started.returncode == 0:
+                output.result("Started the Weigh Station service again.")
+            else:
+                output.error(f"could not start {service} again (systemctl exit {started.returncode}).",
+                             "see why:", cmd=f"sudo journalctl -u {service} -n 50")
 
 
 def cmd_station_pairing_state(old_spelling: bool = False) -> int:
@@ -1818,10 +1909,6 @@ def _pointer(where: str, sentence: str, url: str) -> int:
 
 def cmd_add() -> int:
     return _pointer("web app", "Add spools in the web app, app or Weigh Station:", _intake_url())
-
-
-def cmd_spool() -> int:
-    return _pointer("web app", "Spools are opened and tagged in the web app or app:", _intake_url())
 
 
 # ---------- the Printers screen (06 8.4) ----------
@@ -6510,6 +6597,14 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`recent edit <record> field=value... [--item N] [--spools 41,42]`', 'Edit by hand', '{recent_edit}, {common_save_changes}'),
  ('`recent undo <record>`', 'Undo the newest revision that is not undone', 'Undo revision N'),
  ('`spools low`', 'The opened spools at or under the running-low threshold', '{nav_overview}, {running_low_title}'),
+ ('`spools [<words>] [--sealed \\| --opened \\| --loaded \\| --low \\| --checked-out]`',
+  'The spools, searched by words; `--checked-out` lists the spools taken out of a printer and not yet returned', '{nav_spools}'),
+ ('`spool show <n>`', "One spool's facts", '{nav_spools}'),
+ ('`spool weigh <n> <grams> [-y]`', "Set a spool's weight from a weighing with the spool on the scale (asks)", '{nav_spools}'),
+ ('`spool move <n> <location\\|auto> [-y]`', 'Put a spool in a place (asks)', '{nav_spools}'),
+ ('`spool empty <n> [-y]`', 'Mark a spool empty (asks)', '{nav_spools}'),
+ ('`spool return <n>`', 'Send a checked-out spool back to its home (undoable, so it asks nothing)', '{nav_spools}'),
+ ('`spool home <n> <location> [-y]`', 'Change the home of a checked-out spool (asks)', '{nav_spools}'),
  ('`events [--since ID\\|TIME] [--kind PREFIX] [--follow]`',
   "The Hub's events, newest last; `--follow` keeps printing new ones",
   '{nav_settings} > {settings_group_alerts} > {settings_alerts_recent} (alerts only)'),
@@ -6523,6 +6618,8 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
   '{devices_pair_station_here}'),
  ('`weigh-station flash-display`', 'Write the Weigh Station display firmware over USB', '{nav_flash_device}'),
  ('`weigh-station voice-test`', 'Play the voice test sentence on the Weigh Station', '{nav_settings} > {settings_group_voice}'),
+ ('`weigh-station panel-wifi [--off] [--address ADDRESS]`',
+  'Set the display panel up to reach the Weigh Station over Wi-Fi, or with `--off` back to the USB cable (root)', '(none)'),
  ('`weigh-station pairing-state`', 'Paired, not paired or not checked yet', '(none)'),
  ('`tag-reader list`', 'Tag Reader tokens', '{nav_devices}, {devices_readers_title}'),
  ('`tag-reader new-token [--name NAME]`', 'Make a token', '{devices_readers_make}'),
@@ -6592,7 +6689,6 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`uninstall [--purge]`', 'Remove Spoolwarden (asks)', '{nav_updates}, footer line'),
  ('`logs [<service>] [--lines 50\\|100\\|200]`', "The end of a service's log", '{nav_logs}'),
  ('`add`', 'Prints where spools are added', '(none)'),
- ('`spool`', 'Prints where spools are opened, tagged and moved', '(none)'),
  ('`help [<command> \\| aliases \\| --markdown]`',
   'Help; `--markdown` prints the command table for the user guide',
   '(none)')]
@@ -6850,6 +6946,10 @@ def _add_weigh_station(sub, name: str, *, alias: bool) -> None:
     stp_sub.add_parser("pairing-state", help="whether this Weigh Station is paired, as one line (paired, unpaired, "
                                              "unchecked in --json)")
     stp_sub.add_parser("voice-test", help="play a short test message on the Weigh Station")
+    pw = stp_sub.add_parser("panel-wifi", help="set the display panel up to reach the Weigh Station over Wi-Fi, or with "
+                                              "--off back to the USB cable (root)")
+    pw.add_argument("--off", action="store_true", help="back to the USB cable: the panel forgets its Wi-Fi settings")
+    pw.add_argument("--address", help="the Weigh Station's address as the panel reaches it (default: this computer's first)")
 
 
 def _add_presets(sub, name: str, *, alias: bool) -> None:
@@ -7042,7 +7142,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lg.add_argument("service", nargs="?", help="a service the switched-on features run (default: the Hub's)")
     lg.add_argument("--lines", type=int, choices=(50, 100, 200), default=100, help="how many lines (default 100)")
     sub.add_parser("add", help="where spools are added")
-    sub.add_parser("spool", help="where spools are opened, tagged and moved")
+    spools_cli.add_parser(sub)         # spools, spool show|weigh|move|empty|return|home (its own module)
     hp = sub.add_parser("help", help="help for a command; help aliases lists the old spellings; help --markdown the command table")
     hp.add_argument("topic", nargs="?", help="a command, or aliases")
     hp.add_argument("--markdown", action="store_true", help="the command table for the user guide")
@@ -7281,7 +7381,7 @@ def _sub_of(a) -> str | None:
     """The word after the command: `backup create` is `create`."""
     for name in ("station_cmd", "recent_cmd", "devices_cmd", "printer_cmd", "library_cmd", "presets_cmd", "features_cmd",
                  "web_cmd", "li_cmd", "lr_cmd", "tag_reader_cmd", "backup_cmd", "remote_cmd", "klipper_cmd",
-                 "config_cmd", "spoolman_cmd", "loc_cmd", "alerts_cmd", "spools_cmd"):
+                 "config_cmd", "spoolman_cmd", "loc_cmd", "alerts_cmd", "spool_cmd"):
         if hasattr(a, name):
             return getattr(a, name)
     return None
@@ -7367,6 +7467,8 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return cmd_station_flash_panel(yes=args.yes, only_port=args.port)
     if args.cmd == "weigh-station" and args.station_cmd == "voice-test":
         return cmd_station_voice_test()
+    if args.cmd == "weigh-station" and args.station_cmd == "panel-wifi":
+        return cmd_station_panel_wifi(off=args.off, address=args.address)
     if args.cmd == "weigh-station":
         return (cmd_station_pairing_state(old_spelling=getattr(args, "old_spelling", False))
                 if args.station_cmd == "pairing-state" else cmd_station_pair())
@@ -7384,8 +7486,10 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return alerts_cli.run_alerts(args)
     if args.cmd == "events":
         return alerts_cli.run_events(args)
-    if args.cmd == "spools":
+    if args.cmd == "spools" and args.words == ["low"] and args.filter is None:      # the old `spools low` keeps its table
         return alerts_cli.run_spools(args, sm_factory or _default_spoolman)
+    if args.cmd in ("spools", "spool"):
+        return spools_cli.run(args, _server_api())
     if args.cmd == "recent":
         return _dispatch_recent(args)
     if args.cmd == "certificate":
@@ -7396,8 +7500,6 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return cmd_logs(args.service, args.lines)
     if args.cmd == "add":
         return cmd_add()
-    if args.cmd == "spool":
-        return cmd_spool()
     if args.cmd == "label-reader":
         if args.lr_cmd == "status":
             return cmd_local_intake_status()

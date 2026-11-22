@@ -152,6 +152,8 @@ def _station_rows(url: str) -> Iterator[Row]:
         yield Row(INFO, "Weigh Station reader not seen", key="weigh-station.reader")
     if not state.get("scale") and not state.get("last_weight"):
         yield Row(INFO, "Weigh Station scale not seen", key="weigh-station.scale")
+    from .station import panel_setup      # R88 4.5: how the panel is connected (Devices), a panel that is not there (Weigh Station)
+    yield from panel_setup.panel_rows(config.load(), state, has_station=True)      # these rows carry their own groups
 
 
 def satellite_rows(cfg: dict | None = None) -> Iterator[Row]:
