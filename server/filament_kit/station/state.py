@@ -22,6 +22,28 @@ def volume_from_env() -> int:
         return 50
 
 
+def int_from_env(name: str, default: int, low: int, high: int) -> int:
+    """The environment variable `name` clamped to low-high; `default` when unset or not a number."""
+    try:
+        return max(low, min(high, int(os.environ.get(name, str(default)))))
+    except ValueError:
+        return default
+
+
+# the live voice values (R88 2.5): the ranges the station takes, and where each one sits in `settings`
+VOICE_RANGES = {"speaker": (0, 903), "speed": (50, 200), "volume": (0, 100)}
+VOICE_KEYS = {"speech": "speech", "speaker": "voice_speaker", "speed": "voice_speed", "volume": "speaker_volume"}
+# the sentences of the voice routes' refusals (plain constants; the string catalogue takes them later, RC9 / RG1)
+VOICE_TEXTS = {
+    "bad_speech": "speech must be true or false.",
+    "bad_speaker": "speaker must be a whole number from 0 to 903.",
+    "bad_speed": "speed must be a whole number from 50 to 200.",
+    "bad_volume": "volume must be a whole number from 0 to 100.",
+    "busy": "The Weigh Station is in use. Try again when it is idle.",
+    "off": "Speaking is switched off.",
+}
+
+
 def settings_from_env() -> dict:
     return {
         "port": int(os.environ.get("STATION_PORT", "5003")),
@@ -40,7 +62,13 @@ def settings_from_env() -> dict:
         "panel_flash": os.environ.get("STATION_PANEL_FLASH", "1") != "0",
         # the panel is wired the other way round (yellow on D2/D6, red on D1/D5): swap the buttons and lamps
         "panel_swap": os.environ.get("STATION_PANEL_SWAP", "0") == "1",
+        # the panel's carrier (R88 4.3): usb (default) or wifi, which turns the TLS listener on `panel_port` on (WL4 writes both)
+        "panel_link": "wifi" if os.environ.get("STATION_PANEL_LINK", "usb") == "wifi" else "usb",
+        "panel_port": int_from_env("STATION_PANEL_PORT", 5004, 1, 65535),
         "speaker_volume": volume_from_env(),  # the C3 panel's speaker, percent
+        # the voice: Piper's speaker number (the many-speaker voice only) and the speaking speed in percent
+        "voice_speaker": int_from_env("STATION_VOICE_SPEAKER", 0, *VOICE_RANGES["speaker"]),
+        "voice_speed": int_from_env("STATION_VOICE_SPEED", 100, *VOICE_RANGES["speed"]),
         # the intake flow: no progress this long and it goes back to idle; a recognition (local AI, then Claude)
         # may take this long. The server's address and token come from the pairing files (server_api).
         "flow_timeout": int(os.environ.get("STATION_FLOW_TIMEOUT", "600")),
@@ -52,6 +80,39 @@ settings = settings_from_env()
 # the lamp the owner chose for a step of the intake flow on the station's page (settings.py): {step: "yellow" | "red" |
 # "both" | "off"}; a step with no entry keeps the lamps flow.STEP_LAMPS gives it
 lamp_map: dict[str, str] = {}
+
+# The voice values the Hub handed over (`POST /voice`, the hello answer): kept in memory over the drop-in's values in
+# `settings`, so a change needs no restart and the station page's own store (settings.py) cannot undo it
+live: dict = {}
+
+
+def voice_value(name: str):
+    """The voice value `name` (speech, speaker, speed or volume): the live one, else the drop-in's."""
+    return live[name] if name in live else settings[VOICE_KEYS[name]]
+
+
+def voice_values() -> dict:
+    return {name: voice_value(name) for name in VOICE_KEYS}
+
+
+def clean_voice(body: dict) -> tuple[dict, dict]:
+    """`(values, problems)` of a voice request: the values that are valid (a whole number inside its range; speech a
+    true/false) and `{name: sentence}` for each that is not. Names the station does not know are left out."""
+    values, problems = {}, {}
+    for name in VOICE_KEYS:
+        if name not in body:
+            continue
+        v = body[name]
+        if name == "speech":
+            ok = isinstance(v, bool)
+        else:
+            ok = isinstance(v, int) and not isinstance(v, bool) and VOICE_RANGES[name][0] <= v <= VOICE_RANGES[name][1]
+        if ok:
+            values[name] = v
+        else:
+            problems[name] = VOICE_TEXTS["bad_" + name]
+    return values, problems
+
 
 MIN_GRAMS = 20  # an empty pan reads 0; anything under this isn't a spool
 
@@ -70,6 +131,7 @@ panel_lock = threading.Lock()
 panel = {"ser": None}
 panel_dirty = threading.Event()
 panel_resend = threading.Event()  # the panel said HELLO on its own (it reset): refresh sends every row and lamp again
+panel_scale = {"on": False}  # state["scale"] holds a reading the panel sent (`W` lines), not the computer's own scale
 
 
 def usb_ttys() -> list[str]:
@@ -129,8 +191,15 @@ def ensure_cert(folder: Path | None = None) -> tuple[Path, Path, str]:
     return cert, key, fp
 
 
+def panel_kind() -> str | None:
+    """How the panel is connected now: "usb", "wifi" (R88 4.3) or None when there is none."""
+    ser = panel["ser"]
+    return None if not ser else "wifi" if getattr(ser, "wifi", False) else "usb"
+
+
 def view() -> dict:
-    """A snapshot for the HTTP handler: the state plus the panel's port and firmware version and the flow."""
+    """A snapshot for the HTTP handler: the state plus how the panel is connected ("usb", "wifi" or None), its
+    firmware version and the flow."""
     with lock:
-        return dict(state, panel=ports["panel"], panel_version=ports["panel_version"], panel_nfc=ports["panel_nfc"],
+        return dict(state, panel=panel_kind(), panel_version=ports["panel_version"], panel_nfc=ports["panel_nfc"],
                     flow={k: flow[k] for k in ("step", "message", "spool", "filament")})

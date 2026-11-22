@@ -11,7 +11,8 @@ Protocol (firmware 11), 115200 baud, one line each: PC -> panel `?`, `L <yellow>
 second), `D <row> [text]` (OLED row 0 the title, 1-4 the body; sent when it changes), `B <hz> <ms> [count]`, `V <percent>` (speech volume, 0-100);
 `A <n>` + n raw bytes (speech, see `speech`);
 panel -> PC `HELLO intake-panel <version> [<chip>]` (firmware 10: `esp32c3`; no chip token: an ESP8266), `P H` / `P D` (the yellow / red button, a short press, on release),
-`L H` / `L D` (the yellow / red button held 0.8 s), `AIR <C> <RH|-> <hPa>` (see `air`);
+`L H` / `L D` (the yellow / red button held 0.8 s), `AIR <C> <RH|-> <hPa>` (see `air`),
+`W <grams> <0|1 settled>` (a scale on the panel: used as the scale when the computer has none);
 firmware 11 adds `TAG <uid hex>` (a tag read by the PN532 on the panel's I2C bus, handled like the USB reader's, and
 the same tag from either reader within 2 s is one tap: `nfc.on_identifier`) and `NFC ok` / `NFC none` (whether that
 PN532 answers, after each HELLO and when it changes).
@@ -20,17 +21,21 @@ PN532 answers, after each HELLO and when it changes).
 lamp on red's pins) sets station.panel_swap (STATION_PANEL_SWAP=1): the buttons' roles and the `L` lamp modes are swapped
 here, so the wiring never needs a reflash. Firmware 9 reports both buttons alike for that; a long press on red
 cancels like a short one.
+
+The same lines also run over Wi-Fi (R88 4.3; `panel_net`): the panel dials the station's TLS port and says `HELLO
+intake-panel <version> <chip> <token>`. A panel on USB wins over one on Wi-Fi.
 """
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 import subprocess
 import sys
 import time
 
-from . import air, flow, nfc, wire
+from . import air, flow, nfc, panel_net, scale, wire
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -46,6 +51,8 @@ def on_line(line: bytes):
             flow.on_red()
     elif line.startswith(b"AIR "):
         air.on_air(line)
+    elif line.startswith(b"W "):  # a scale on the panel
+        on_scale(line)
     elif line.startswith(b"TAG "):  # the panel's own PN532 (firmware 11): same path as the USB reader
         hexid = line[4:].strip()
         if not re.fullmatch(rb"(?:[0-9a-fA-F]{2}){4}|(?:[0-9a-fA-F]{2}){7}|(?:[0-9a-fA-F]{2}){10}", hexid):
@@ -60,6 +67,39 @@ def on_line(line: bytes):
             send_volume()  # it forgot the volume
         st.panel_resend.set()
         st.panel_dirty.set()
+
+
+def on_scale(line: bytes):
+    """`W <grams> <0|1 settled>` from the panel: the scale reading, in the shape the computer's own scale gives, when
+    the computer has none (the flow's own use of it is flow.py's). A malformed line is ignored."""
+    parts = line.split()
+    try:
+        grams = float(parts[1])
+        settled = {b"0": False, b"1": True}[parts[2]]
+        if len(parts) != 3 or not math.isfinite(grams) or abs(grams) > 100000:
+            raise ValueError
+    except (IndexError, KeyError, ValueError):
+        log.warning("button panel: ignoring W line %r", line[:40])
+        return
+    if scale.find_scale():  # the computer's own scale wins
+        st.panel_scale["on"] = False
+        return
+    now = time.time()
+    with st.lock:
+        st.state.update(scale={"grams": round(grams, 1), "status": "stable" if settled else "moving", "unit": 2,
+                               "stable": settled}, scale_at=now)
+        if settled and grams >= st.MIN_GRAMS:
+            st.state.update(last=round(grams, 1), last_at=now)
+        st.panel_scale["on"] = True
+    st.panel_dirty.set()
+
+
+def forget_panel_scale():
+    """The panel went away: a scale reading it sent is no longer a reading."""
+    with st.lock:
+        if st.panel_scale["on"]:
+            st.state.update(scale=None, scale_at=None)
+            st.panel_scale["on"] = False
 
 
 class Shown:
@@ -232,8 +272,8 @@ def warn_swap_needs_fw9(version):
 
 def send_volume():
     """Tell the C3 panel the speaker volume (percent). A setting change rewrites the drop-in and restarts the
-    service, so one send when the panel is found covers changes."""
-    return wire.panel_send("V %d" % st.settings["speaker_volume"])
+    service, so one send when the panel is found covers changes; the Hub's live volume (`POST /voice`) is sent as it comes."""
+    return wire.panel_send("V %d" % st.voice_value("volume"))
 
 
 EMPTY_PASSES, SLOW_SECONDS = 3, 60  # after this many passes without a panel, look every SLOW_SECONDS
@@ -255,6 +295,7 @@ def wait_for_panel(misses):
 def panel_loop():
     """Find the button panel among the USB serial ports, then relay its presses and keep its lamps current."""
     misses = 0
+    panel_net.start()  # the Wi-Fi listener, when station.panel_link is wifi
     while True:
         ser = find_panel()
         if not ser:
@@ -281,6 +322,7 @@ def panel_loop():
         with st.panel_lock:
             st.panel["ser"] = None
         ser.close()
+        forget_panel_scale()
         st.ports["panel"] = st.ports["panel_version"] = st.ports["panel_chip"] = st.ports["panel_nfc"] = None
         log.info("button panel gone")
         time.sleep(2)
