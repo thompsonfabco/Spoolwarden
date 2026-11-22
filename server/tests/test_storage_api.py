@@ -203,11 +203,12 @@ def test_the_hub_page_and_the_web_twin_answer_the_list_without_spoolman(fk_env, 
 def test_a_save_that_needs_spoolman_still_refuses_when_it_does_not_answer(fk_env, monkeypatch, hub):
     storage.save(listing())
     monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: DownSm())
+    before = storage.current().describe({})
     body = current_body(hub)
     for call in ("settings/storage", "settings/storage/preview"):
         r = post(hub, call, body) if call == "settings/storage" else hub.post(f"/setup/api/{call}", json=body, headers=H)
         assert r.status_code == 502 and r.json()["error"] == storage_api.say("storage_error_spoolman_unreachable"), (call, r.text)
-    assert storage.current().describe({}) == listing().describe({})              # nothing was written
+    assert storage.current().describe({}) == before              # nothing was written
 
 
 def test_api_locations_keeps_todays_answer_a_list_of_names(fk_env, tmp_path):
