@@ -29,6 +29,9 @@ CANNOT_TELL = "Cannot tell whether this Hub is empty: Spoolman cannot be reached
 NO_CAMERA = "No camera in the demo."
 NOT_IN_DEMO_CODE = "in_demo"            # the code of a stop (409); "not_in_demo" is the leave route's: the demo is off
 SAMPLE = Path(__file__).with_name("sample.xml")
+# Whether the demo may be mounted (RC9). Set True only when the seal test's leak lists (`server/tests/test_demo_sealed.py`)
+# are all empty: `test_the_demo_is_not_mountable_while_a_leak_list_is_not_empty` fails otherwise.
+MOUNTABLE = False
 
 
 class DemoError(Exception):
