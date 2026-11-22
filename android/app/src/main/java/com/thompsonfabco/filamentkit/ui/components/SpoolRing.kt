@@ -30,11 +30,11 @@ internal fun ringSide(size: RingSize): Dp {
  * One spool as a ring, the way it looks from the side (02-components 7.4): a track in `surface3`, an arc in the filament
  * colour from 12 o'clock clockwise for the [level] (0 to 1) left, a 1 dp `borderStrong` ring inside and outside the band
  * (pale colours stay visible) and a hub in `surface2`. The band is an eighth of the size. A null [level] is the full
- * track with no arc; an [empty] place is a dashed outline ring; a colour that is no colour draws the arc in `muted`. The
+ * track with no arc; an [empty] place is a dashed outline ring; a [waiting] slot has the dashed ring outside the band; a colour that is no colour draws the arc in `muted`. The
  * ring is decoration: the words that go with it say the same.
  */
 @Composable
-internal fun SpoolRing(hex: String?, level: Float?, size: RingSize, modifier: Modifier = Modifier, empty: Boolean = false) {
+internal fun SpoolRing(hex: String?, level: Float?, size: RingSize, modifier: Modifier = Modifier, empty: Boolean = false, waiting: Boolean = false) {
     val colors = SpoolwardenTheme.colors
     val side = ringSide(size)
     val hairline = SpoolwardenTheme.sizes.hairline
@@ -60,7 +60,8 @@ internal fun SpoolRing(hex: String?, level: Float?, size: RingSize, modifier: Mo
                 style = Stroke(band, cap = StrokeCap.Butt),
             )
         }
-        drawCircle(colors.borderStrong, outer - line / 2, center, style = Stroke(line))
+        val outside = if (waiting) Stroke(line, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash.toPx(), dash.toPx()))) else Stroke(line)
+        drawCircle(colors.borderStrong, outer - line / 2, center, style = outside)
         drawCircle(colors.borderStrong, outer - band + line / 2, center, style = Stroke(line))
         val hub = (outer - band) / 2
         drawCircle(colors.surface2, hub, center)

@@ -82,7 +82,6 @@ import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
-import com.thompsonfabco.filamentkit.ui.components.SwIconSize
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.components.SwMenu
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
@@ -443,8 +442,7 @@ internal fun PrinterTile(p: Printer, slots: List<SlotLook>, modifier: Modifier =
             ) {
                 // a slot with a colour is a full ring in it (the Hub gives no level here); a free one is the dashed ring
                 shown.forEach { slot ->
-                    SpoolRing(slot.hex, 1f, RingSize.Small, Modifier.testTag(SLOT_RING_TAG), empty = slot.drawnEmpty)
-                    if (slot.waiting) WaitingMark()
+                    SpoolRing(slot.hex, 1f, RingSize.Small, Modifier.testTag(SLOT_RING_TAG), empty = slot.drawnEmpty, waiting = slot.waiting)
                 }
                 if (more > 0) Text(stringResource(R.string.printers_slots_more, more), style = MaterialTheme.typography.bodySmall)
             }
@@ -479,8 +477,7 @@ private fun Swatches(slots: List<SlotLook>) {
     ) {
         shown.forEach { slot ->
             val words = slotWords(slot, stringResource(R.string.a11y_swatch_empty))
-            ColorSwatch(slot.hex, Modifier.semantics { contentDescription = words }, empty = slot.drawnEmpty)
-            if (slot.waiting) WaitingMark()
+            ColorSwatch(slot.hex, Modifier.semantics { contentDescription = words }, empty = slot.drawnEmpty, waiting = slot.waiting)
         }
         if (more > 0) {
             Text(stringResource(R.string.printers_slots_more, more), style = MaterialTheme.typography.bodySmall)
@@ -499,16 +496,6 @@ private fun slotWords(slot: SlotLook, emptyWords: String): String {
         slot.empty -> emptyWords
         else -> colour.orEmpty()
     }
-}
-
-/**
- * The mark beside the swatch of a slot that waits for its spool to load (R83 section 3.5). The dashed ring of the
- * design is not drawn by the shared swatch, which this change does not open, so the waiting slot keeps its colour and
- * gets a small clock.
- */
-@Composable
-internal fun WaitingMark(modifier: Modifier = Modifier) {
-    SwIcon(R.drawable.sw_ic_clock, null, modifier, size = SwIconSize.Small, tint = SpoolwardenTheme.colors.muted)
 }
 
 /**

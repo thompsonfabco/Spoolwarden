@@ -54,7 +54,7 @@ internal fun problemOf(e: ApiError): Problem = when (e.code) {
 
 /**
  * One slot of a printer as the list's swatch row draws it. A [waiting] slot has a spool assigned that has not loaded yet
- * (R83 section 3.5): it shows the spool's colour when it is known, with a clock mark beside it.
+ * (R83 section 3.5): it shows the spool's colour when it is known, with the dashed ring.
  */
 data class SlotLook(val hex: String, val empty: Boolean, val waiting: Boolean = false) {
     /** True when the swatch is the dashed ring of a free slot: empty, and not a waiting one whose colour is known. */

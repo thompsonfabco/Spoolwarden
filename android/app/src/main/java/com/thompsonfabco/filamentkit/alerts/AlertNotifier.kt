@@ -103,7 +103,7 @@ class AlertNotifier(private val context: Context) {
 
         /** The place an alert's tap carries, null for any other intent. A test alert and a place-less one open the list. */
         fun targetOf(intent: Intent?): AlertTarget? {
-            if (intent?.getBooleanExtra(EXTRA_ALERT, false) != true) return null
+            if (intent?.getBooleanExtra(EXTRA_ALERT, false) != true) return deepLinkTarget(intent?.dataString)
             return alertTarget(intent.getStringExtra(EXTRA_PLACE), intent.getStringExtra(EXTRA_PLACE_ID))
         }
     }
