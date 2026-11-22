@@ -1087,6 +1087,10 @@ the `station` Feature, on the Hub computer (Hub with Weigh Station) or on a seco
 - Optional: the **button panel** (Hold and Discard buttons, lamps, an OLED, a buzzer and a speaker, on an ESP32-C3 Super Mini). How
   to build it: the [Weigh Station display guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/intake-panel). What the Weigh Station does with it:
   [station/PANEL.md](../station/PANEL.md).
+- Optional, with the panel: **the panel over Wi-Fi** instead of the USB cable. It is off until you turn it on: plug the
+  panel into the Weigh Station's computer by USB once and run `sudo spoolwarden weigh-station panel-wifi` (it asks for
+  the Wi-Fi name and password); the panel then only needs power. `sudo spoolwarden weigh-station panel-wifi --off`
+  goes back to the cable.
 - Optional: a speaker (USB or the computer's headphone socket) for the scan beep when there is no panel.
 - Optional, with the panel: a **BME280** sensor for room temperature and humidity, a small speaker on the panel
   (it says things like "1042 grams. Hold yellow to save.") and a **USB webcam** that takes a picture of the spool when you press
