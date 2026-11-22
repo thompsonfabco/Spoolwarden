@@ -563,7 +563,8 @@ class IntakeApp:
         size = request.query_params.get("size", "62x29")
         if size not in self.LABEL_SIZES:
             return self._bad("size must be 62x29, 50x30 or sheet24")
-        return await self._raw_pass(f"/api/spools/{request.path_params['id']}/label.svg?size={size}", "image/svg+xml", 1 << 20,
+        spool = request.path_params["id"]
+        return await self._raw_pass(f"/api/spools/{spool}/label.svg?size={size}", "image/svg+xml", 1 << 20,
                                     {"Cache-Control": "private, no-store",
                                      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox"})
 
@@ -571,7 +572,10 @@ class IntakeApp:
         """Leave the demo (R85 4.6): the Hub's answer, {demo: false}; 409 not_in_demo when it was already off."""
         await self._body(request)
         self._kit_cache.pop("info", None)
-        return await anyio.to_thread.run_sync(self.kit.post, "/api/demo/leave", {})
+        try:
+            return await anyio.to_thread.run_sync(self.kit.post, "/api/demo/leave", {})
+        except SlotError as e:
+            return self._kit_refusal(e)
 
     async def asset(self, request: Request):
         name = request.url.path.rsplit("/", 1)[-1]

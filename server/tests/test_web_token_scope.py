@@ -147,6 +147,10 @@ CALLED_BEFORE_THE_HUB_MOUNTS_THEM = {
     ("GET", "/api/library/local"),                          # R83 10.1
     ("POST", "/api/library/local/form"),                    # R83 10.1
     ("DELETE", "/api/library/local/{id}"),                  # R83 10.1
+    ("GET", "/api/languages"),                              # R85 6.1 (RC2 builds it, RC9 mounts it)
+    ("GET", "/api/strings/{code}"),                         # R85 6.1: the texts of a language, `<code>.js`
+    ("GET", "/api/spools/{id}/label.svg"),                  # R85 6.1 (RC8)
+    ("POST", "/api/demo/leave"),                            # R85 6.1 (RC6)
 }
 _CALLED_BEFORE_THE_HUB_MOUNTS_THEM_RX = [
     re.compile(re.sub(r"\{\w+\}", "[^/]+", t).replace("[^/]+.csv", "[^/]+")) for _, t in CALLED_BEFORE_THE_HUB_MOUNTS_THEM]

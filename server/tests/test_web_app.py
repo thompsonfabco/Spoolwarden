@@ -1012,8 +1012,8 @@ def test_spools_remember_sealed_only_under_its_key_and_wrap_storage():
 def test_spools_other_actions_follow_what_the_hub_offers():
     src = _spools_src()
     assert 'document.body.dataset.spoolEdit === "1"' in src
-    assert "EDIT ? weightBtn : null, EDIT ? moveBtn : null, PRINTERS ? loadBtn : null" in src     # editing, and Load with the Printers Feature
-    assert "const other = EDIT || PRINTERS ?" in src and "EDIT ? h(\"div\", { class: \"spools__danger\" }, emptyBtn)" in src
+    assert "EDIT ? weightBtn : null, EDIT ? moveBtn : null, printBtn, PRINTERS ? loadBtn : null" in src     # editing, Print a label (always), Load with the Printers Feature
+    assert "const other = part(" in src and "EDIT ? h(\"div\", { class: \"spools__danger\" }, emptyBtn)" in src
     assert "history.pushState({ sheet: true }, \"\", `#spools/${id}`)" in src and "document.title" not in src   # the title comes from the shell
 
 
