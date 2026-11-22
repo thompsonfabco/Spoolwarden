@@ -62,6 +62,9 @@ def settings_from_env() -> dict:
         "panel_flash": os.environ.get("STATION_PANEL_FLASH", "1") != "0",
         # the panel is wired the other way round (yellow on D2/D6, red on D1/D5): swap the buttons and lamps
         "panel_swap": os.environ.get("STATION_PANEL_SWAP", "0") == "1",
+        # the panel's carrier (R88 4.3): usb (default) or wifi, which turns the TLS listener on `panel_port` on (WL4 writes both)
+        "panel_link": "wifi" if os.environ.get("STATION_PANEL_LINK", "usb") == "wifi" else "usb",
+        "panel_port": int_from_env("STATION_PANEL_PORT", 5004, 1, 65535),
         "speaker_volume": volume_from_env(),  # the C3 panel's speaker, percent
         # the voice: Piper's speaker number (the many-speaker voice only) and the speaking speed in percent
         "voice_speaker": int_from_env("STATION_VOICE_SPEAKER", 0, *VOICE_RANGES["speaker"]),
@@ -128,6 +131,7 @@ panel_lock = threading.Lock()
 panel = {"ser": None}
 panel_dirty = threading.Event()
 panel_resend = threading.Event()  # the panel said HELLO on its own (it reset): refresh sends every row and lamp again
+panel_scale = {"on": False}  # state["scale"] holds a reading the panel sent (`W` lines), not the computer's own scale
 
 
 def usb_ttys() -> list[str]:
@@ -187,8 +191,15 @@ def ensure_cert(folder: Path | None = None) -> tuple[Path, Path, str]:
     return cert, key, fp
 
 
+def panel_kind() -> str | None:
+    """How the panel is connected now: "usb", "wifi" (R88 4.3) or None when there is none."""
+    ser = panel["ser"]
+    return None if not ser else "wifi" if getattr(ser, "wifi", False) else "usb"
+
+
 def view() -> dict:
-    """A snapshot for the HTTP handler: the state plus the panel's port and firmware version and the flow."""
+    """A snapshot for the HTTP handler: the state plus how the panel is connected ("usb", "wifi" or None), its
+    firmware version and the flow."""
     with lock:
-        return dict(state, panel=ports["panel"], panel_version=ports["panel_version"], panel_nfc=ports["panel_nfc"],
+        return dict(state, panel=panel_kind(), panel_version=ports["panel_version"], panel_nfc=ports["panel_nfc"],
                     flow={k: flow[k] for k in ("step", "message", "spool", "filament")})
