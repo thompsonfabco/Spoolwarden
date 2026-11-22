@@ -24,7 +24,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import (API_VERSION, __version__, address_texts, alerts_api, analytics, config, csv_io, event_sink, events,
+from . import (API_VERSION, __version__, address_texts, alerts_api, analytics, config, csv_io, demo, event_sink, events,
                health, hostaddr, hub_view, intake, intake_history, inventory, modules, pairing, profiles_api,
                reader_corrections, setup_page, station_flow, station_requests, storage, storage_api, tags, undo)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
@@ -66,6 +66,8 @@ def _http_error(e: HTTPException) -> JSONResponse:
 def _to_response(e: Exception) -> JSONResponse:
     if isinstance(e, HTTPException):  # e.g. a malformed or oversized multipart body from request.form()
         return _http_error(e)
+    if isinstance(e, demo.DemoError):      # a stop of the demo (409), or a demo refusal (400)
+        return _err(409 if isinstance(e, demo.NotInDemo) else 400, e.code, e.message)
     if isinstance(e, ProfileError):
         if e.status >= 500:
             log.error("profiles error %s", e.code, exc_info=e)
@@ -537,6 +539,7 @@ def _printer_routes(printers) -> list[Route]:
     @_authed
     async def printer_add(request: Request):
         body = await _json(request)
+        demo.stop()
         fam = body.get("family", "bambu")
         if fam == "klipper":
             return await klipper_add(body)
@@ -664,6 +667,7 @@ def _printer_routes(printers) -> list[Route]:
         from .setup_console.printers_tab import API_KEY, BAD_API_KEY, checked_address, port_of
 
         body = await _json(request)
+        demo.stop()
         fam = body.get("family")
         if fam == "bambu":
             raise BadRequest("A Bambu Lab printer is tested when it is added.", "family")
@@ -960,6 +964,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
 
     @_authed
     async def map_start(request: Request):
+        demo.stop()
         serial = request.path_params["id"]
         await run_in_threadpool(bambu_only, serial)
         job = await run_in_threadpool(audited, "slot mapping", request.state.device,

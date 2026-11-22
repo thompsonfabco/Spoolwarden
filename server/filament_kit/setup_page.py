@@ -64,7 +64,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import __version__, config, getting_started, hostaddr, hubport, lan, modules, pairing, qr, reader_tokens, setup_code, shared_files, trusted
+from . import __version__, config, demo, getting_started, hostaddr, hubport, lan, modules, pairing, qr, reader_tokens, setup_code, shared_files, trusted
 from .bridge import registry
 from .station_client import station_reach
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offline, Unauthorized
@@ -692,6 +692,8 @@ class SetupPage:
 
     async def key_check(self, request: Request, body: dict):
         from . import cli
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         self._gap()
         ok, text = await anyio.to_thread.run_sync(cli.check_key, self.client_factory)
         return {"ok": ok, "text": text}
@@ -759,6 +761,8 @@ class SetupPage:
         /printer/info. And the connection's state."""
         from .bridge import tlspin
         serial = self._serial(request)
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         await anyio.to_thread.run_sync(self._entry, serial)   # 404 / 409 before the gap is spent
         self._gap()
 
