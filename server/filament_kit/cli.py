@@ -101,7 +101,14 @@ def cmd_status(client_factory, station_pairing: str | None = None) -> int:
     with output.wait("Checking…", programs=True):
         rows = list(status_rows.rows(client_factory=client_factory, station_pairing=station_pairing))
     hub = "server" in modules.enabled(config.load())
-    started = getting_started.view() if hub else None
+    backup_done: bool | None = None
+    if hub and not _is_root() and not _no_systemd():
+        from . import setup_page
+        try:
+            backup_done = bool(setup_page.HelperClient()({"op": "backup_last"}).get("last"))
+        except (OSError, setup_page.Refused):
+            backup_done = None
+    started = getting_started.view(backup_done=backup_done) if hub else None
     if not (output.json_mode() or output.quiet()):
         output.out(status_rows.header_line())
         output.out()
@@ -417,16 +424,13 @@ _BACKUP_KIND = {"made": "made here", "pre-restore": "before a restore", "daily":
 
 
 def cmd_backup(action: str, out: str | None, days: int | None = None, *,
-               remove: bool = False, show: bool = False) -> int:
+               remove: bool = False, show: bool = False, yes: bool = False) -> int:
     """`backup create`, `list`, `keep <days>` and `password` (06 9.10); the same helper functions the Hub page's routes use."""
     from . import backup, setup_helper
     if not _is_root():
         return output.need_sudo(_sudo_command(f"sudo spoolwarden backup {action}" + (f" {days}" if days else "")))
     if action == "password":
-        pw = None
-        if not remove and not show:
-            pw = secret_input.ask("Backup password: ")
-        return history_cli.run_backup_password(remove=remove, show=show, password=pw)
+        return history_cli.run_backup_password(remove=remove, show=show, yes=yes)    # it asks twice itself when setting
     if action == "keep":
         try:
             r = setup_helper._backup_keep({"days": days})
@@ -2802,9 +2806,29 @@ def cmd_recent_undo(rid: str) -> int:
     return 0
 
 
-def cmd_cert() -> int:
-    """`certificate` (06 9.12): make the Hub's certificate when there is none, print its fingerprint."""
+def cmd_cert(renew: bool = False, yes: bool = False) -> int:
+    """`certificate [--renew]` (06 9.12): make the Hub's certificate when there is none (or renew on `--renew`), print its fingerprint."""
     cert = config.paths().etc / "cert.pem"
+    if renew:
+        if not _no_systemd() and not _is_root():
+            return output.need_sudo(_sudo_command("sudo spoolwarden certificate --renew"))
+        stop = _confirm(
+            "Make a new certificate for this Hub? Every paired phone, PC and Weigh Station will see a changed "
+            "certificate and must trust it again or be paired again. Tag Readers set up for this Hub must be set up again.",
+            "making a new certificate", yes=yes,
+        )
+        if stop is not None:
+            return stop
+        cert.parent.mkdir(parents=True, exist_ok=True)
+        full, short = socket.gethostname(), pairing.short_hostname()
+        fp = pairing.make_cert(short, pairing.local_ips(), cert.parent, extra_dns=[full] if full != short else [])
+        _restart_service()
+        output.emit({"ok": True, "made": True, "renewed": True, "fingerprint": fp})
+        output.out("Made a new certificate.")
+        output.out("Tag Readers set up for this Hub must be set up again.")
+        output.out("Fingerprint:")
+        output.out_lines(_fingerprint_lines(fp))
+        return 0
     made = not cert.exists()
     if made:
         cert.parent.mkdir(parents=True, exist_ok=True)
@@ -2814,6 +2838,8 @@ def cmd_cert() -> int:
         fp = pairing.fingerprint(cert.read_bytes())
     output.emit({"ok": True, "made": made, "fingerprint": fp})
     output.out("Made a new certificate." if made else "Certificate present.")
+    if made:
+        output.out("Tag Readers set up for this Hub must be set up again.")
     output.out("Fingerprint:")
     output.out_lines(_fingerprint_lines(fp))
     return 0
@@ -6935,8 +6961,11 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_locations(sub)
     alerts_cli.add_parsers(sub)
     address_cli.add_parser(sub)
-    sub.add_parser("certificate", help="make the Hub's certificate if missing; print its fingerprint")
-    sub.add_parser("cert", help="the old spelling of certificate")
+    for cname, chelp in (("certificate", "make the Hub's certificate if missing; print its fingerprint"),
+                         ("cert", "the old spelling of certificate")):
+        cp = sub.add_parser(cname, help=chelp)
+        _add_yes(cp)
+        cp.add_argument("--renew", action="store_true", help="make a new certificate for this Hub and restart it (root)")
     _add_recent(sub, "recent", "Recently added: the last spool additions, their photos and revisions", alias=False)
     _add_recent(sub, "intake", "the old spelling of recent", alias=True)
     sub.add_parser("ensure-fields", help="the old spelling of spoolman fields")
@@ -7083,7 +7112,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     bkp = bksub.add_parser("password", help="set, show, or remove the backup encryption password (root)")
     bkpg = bkp.add_mutually_exclusive_group()
     bkpg.add_argument("--remove", action="store_true", help="remove the backup password")
-    bkpg.add_argument("--show", action="store_true", help="say whether a backup password is set")
+    bkpg.add_argument("--show", action="store_true", help="print the backup password")
+    _add_yes(bkp)
     rs = sub.add_parser("restore", help="bring this machine to the state in a backup zip (root)")
     rs_what = rs.add_mutually_exclusive_group(required=True)
     rs_what.add_argument("zip", nargs="?", help="the backup zip")
@@ -7148,17 +7178,19 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     if _is_root() or _no_systemd():          # as root the command line writes the Hub's events itself (R80 E1)
         event_sink.set_sink(event_sink.StoreSink())
     try:
-        with event_sink.acting(_cli_actor()), output.muted() if _reports_results(args) else contextlib.nullcontext():
+        with event_sink.acting(_cli_actor(args)), output.muted() if _reports_results(args) else contextlib.nullcontext():
             return _dispatch(args, client_factory=client_factory, manager_factory=manager_factory,
                              sm_factory=sm_factory)         # what the command line changes is done by `cli` (R84 1.2)
     finally:
         event_sink.set_sink(before)
 
 
-def _cli_actor() -> str:
-    """Honor FILAMENT_KIT_ACTOR when a Hub-page job runs a CLI command as a subprocess (D8, 04.4)."""
+def _cli_actor(args=None) -> str:
+    """Honor FILAMENT_KIT_ACTOR when a Hub-page job or scheduled timer runs a CLI command (D8, R84 1.2)."""
+    if args is not None and getattr(args, "scheduled", False):
+        return "hub"
     actor = os.environ.get("FILAMENT_KIT_ACTOR", "")
-    return actor if actor in ("page", "cli") else "cli"
+    return actor if actor in ("page", "cli", "hub") else "cli"
 
 
 def _old_spelling(args) -> None:
@@ -7211,7 +7243,8 @@ def _json_refusal(a) -> int | None:
             (c == "local-intake" and sub == "token" and not a.remove, "local-intake token"),
             (c == "printer" and sub in ("unpin", "forget-certificate") and not a.access_code, f"printer {sub}"),
             (c == "printer" and sub == "map" and a.manual, "printer map --manual"),
-            (c == "klipper" and sub == "api-key" and not a.api_key and not a.clear, "klipper api-key"))
+            (c == "klipper" and sub == "api-key" and not a.api_key and not a.clear, "klipper api-key"),
+            (c == "backup" and sub == "password" and not a.remove and not a.show, "backup password"))
     for yes, name in asks:
         if yes:
             output.error(f"{name} asks for typed answers, and --json does not ask.", "run it without --json.")
@@ -7289,7 +7322,7 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "recent":
         return _dispatch_recent(args)
     if args.cmd == "certificate":
-        return cmd_cert()
+        return cmd_cert(renew=args.renew, yes=args.yes) if getattr(args, "renew", False) else cmd_cert()
     if args.cmd == "spoolman":
         return cmd_ensure_fields() if args.spoolman_cmd == "fields" else cmd_spoolman_address(args.url)
     if args.cmd == "logs":
@@ -7363,7 +7396,8 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "backup":
         return cmd_backup(args.backup_cmd, args.out if args.backup_cmd == "create" else None,
                           days=args.days if args.backup_cmd == "keep" else None,
-                          remove=getattr(args, "remove", False), show=getattr(args, "show", False))
+                          remove=getattr(args, "remove", False), show=getattr(args, "show", False),
+                          yes=getattr(args, "yes", False))
     if args.cmd == "restore":
         return cmd_restore(args.zip, uploaded=args.uploaded, yes=args.yes,
                            password_file=getattr(args, "password_file", None))

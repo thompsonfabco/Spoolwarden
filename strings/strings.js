@@ -2732,6 +2732,7 @@ window.SW_TEXT = Object.freeze({
   "cli_q_leave_config": { "one": "Leave without saving {count} change ({list})?", "other": "Leave without saving {count} changes ({list})?" },
   "cli_q_leave_features": { "one": "Leave without applying {count} change ({list})?", "other": "Leave without applying {count} changes ({list})?" },
   "cli_q_presets_accept_updates": { "one": "Accept this update? The Slicer Sync writes it at its next run, after its backup.", "other": "Accept these {count} updates? The Slicer Sync writes them at its next run, after its backup." },
+  "cli_q_certificate_renew": "Make a new certificate for this Hub? Every paired phone, PC and Weigh Station will see a changed certificate and must trust it again or be paired again. Tag Readers set up for this Hub must be set up again.",
   "cli_q_printer_api_key_clear": "Clear the Moonraker API key of {name}? Spoolwarden then connects without a key. If Moonraker asks for one, the printer's test says so until a key is set.",
   "cli_q_printer_dismiss": "Dismiss {name}? It leaves this list. A new scan may find it again.",
   "cli_q_printer_forget_bambu": "Forget {name}? Spoolwarden stops connecting to it and deletes its Access Code. To use it again, add it again.",

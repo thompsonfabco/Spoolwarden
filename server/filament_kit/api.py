@@ -11,6 +11,8 @@ import json
 import logging
 import math
 import re
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -170,6 +172,7 @@ WEB_ROUTES = (
     ("GET", "/api/printers"),
     ("POST", "/api/printers"),
     ("POST", "/api/printers/scan"),     # R83 10.1: the web app's Add printer search
+    ("POST", "/api/printers/test"),     # R87 AP1: test a Klipper printer before adding (under printer_changes)
     ("GET", "/api/printers/{id}"),
     ("PATCH", "/api/printers/{id}"),
     ("DELETE", "/api/printers/{id}"),
@@ -195,6 +198,7 @@ WEB_ROUTES = (
     ("POST", "/api/intake/cap/take"),
     ("POST", "/api/intake/cap/refund"),
     ("GET", "/api/intake/orders"),
+    ("GET", "/api/intake/share-corrections"),
     ("POST", "/api/profiles/web/line_add"),
     ("POST", "/api/profiles/web/line_new"),
     ("POST", "/api/profiles/web/generate"),
@@ -304,7 +308,7 @@ PUBLIC_PRINTER_CHANGES_OFF = ("Printer changes from the public address are off. 
 
 
 def _printer_write(method: str, path: str) -> bool:
-    return ((method == "POST" and path == "/api/printers")
+    return ((method == "POST" and path in ("/api/printers", "/api/printers/test"))
             or (method in ("PATCH", "DELETE") and path != "/api/printers" and bool(_PRINTER_WRITE.fullmatch(path))))
 
 
@@ -492,7 +496,14 @@ def _printer_routes(printers) -> list[Route]:
         return JSONResponse({"printers": await run_in_threadpool(build)})
 
     async def klipper_add(body: dict):
+        from .setup_console.printers_tab import API_KEY, BAD_API_KEY
         host, name, port = body.get("host"), _opt(body, "name", str), _opt(body, "port", int, 7125)
+        raw_key = body.get("api_key")
+        if raw_key is not None and not isinstance(raw_key, str):
+            raise BadRequest(BAD_API_KEY, "api_key")
+        key = raw_key.strip() if isinstance(raw_key, str) else ""
+        if key and not API_KEY.fullmatch(key):
+            raise BadRequest(BAD_API_KEY, "api_key")
         if not isinstance(host, str) or not HOST.fullmatch(host.strip()):
             raise BadRequest("host is required: the Moonraker host name or address (letters, digits, . - :)", "host")
         if isinstance(port, bool) or not 1 <= port <= 65535:
@@ -503,6 +514,9 @@ def _printer_routes(printers) -> list[Route]:
                 p = discovery.add((name or "").strip() or host.strip(), host.strip(), port)
             except registry.DuplicatePrinter as e:
                 raise BadRequest(str(e), "host") from None
+            if key:
+                registry.set_api_key(p.serial, key)
+                p = registry.load().get(p.serial, p)
             printers.sync()
             printers.wait_settled(p.serial, FIRST_STATE_WAIT)
             return _printer_view(p, printers)
@@ -516,6 +530,25 @@ def _printer_routes(printers) -> list[Route]:
             return await klipper_add(body)
         if fam != "bambu":
             raise BadRequest("family must be bambu or klipper", "family")
+        if "address" in body or "ip" in body:
+            if family_off("bambu"):
+                return _module_off("printers")
+            from . import setup_page
+
+            def run_by_address() -> dict:
+                try:
+                    res = setup_page.bambu_add_by_address({**body, "require_certificate": True}, allow_replace=False)
+                except setup_page.Refused as e:
+                    raise BadRequest(e.message, e.extra.get("field")) from None
+                serial = res["serial"]
+                printers.sync()
+                printers.wait_settled(serial, FIRST_STATE_WAIT)
+                return _printer_view(registry.load()[serial], printers)
+            try:
+                view = await run_in_threadpool(run_by_address)
+            except setup_page.AlreadySetUpError:
+                return _err(409, "exists", "this printer is already set up")
+            return JSONResponse({"printer": view})
         serial, code = body.get("serial"), body.get("access_code")
         if not isinstance(serial, str) or not serial.strip():
             raise BadRequest("serial is required", "serial")
@@ -607,6 +640,53 @@ def _printer_routes(printers) -> list[Route]:
         except ValueError as e:
             raise BadRequest(str(e)) from None
         return JSONResponse({"found": found})
+
+    test_lock = threading.Lock()
+    last_test = [-setup_page.CHECK_GAP]
+
+    @_authed
+    async def printer_test(request: Request):
+        """`POST /api/printers/test {family: "klipper", host, port?, api_key?}`: test a Klipper printer's Moonraker
+        address before adding it; saves nothing."""
+        from .bridge.klipper import moonraker
+        from .setup_console.printers_tab import API_KEY, BAD_API_KEY, checked_address, port_of
+
+        body = await _json(request)
+        fam = body.get("family")
+        if fam == "bambu":
+            raise BadRequest("A Bambu Lab printer is tested when it is added.", "family")
+        if fam != "klipper":
+            raise BadRequest("family must be klipper", "family")
+        if family_off("klipper"):
+            return _module_off("klipper")
+        raw_key = body.get("api_key")
+        if raw_key is not None and not isinstance(raw_key, str):
+            raise BadRequest(BAD_API_KEY, "api_key")
+        key = raw_key.strip() if isinstance(raw_key, str) else ""
+        if key and not API_KEY.fullmatch(key):
+            raise BadRequest(BAD_API_KEY, "api_key")
+        try:
+            port = port_of(body)
+            host, _, _ = await run_in_threadpool(checked_address, body, "host")
+        except setup_page.Refused as e:
+            raise BadRequest(e.message, e.extra.get("field")) from None
+
+        with test_lock:
+            now = time.monotonic()
+            if now - last_test[0] < setup_page.CHECK_GAP:
+                return _err(429, "rate_limited", f"wait {setup_page.CHECK_GAP:.0f} s between checks")
+            last_test[0] = now
+
+        def run() -> bool:
+            try:
+                info = moonraker.Moonraker(host, port, key).info()
+            except moonraker.Unauthorized:
+                raise BadRequest("Moonraker wants a valid API key", "api_key") from None
+            except moonraker.MoonrakerError:
+                return False
+            return isinstance(info, dict) and isinstance(info.get("state"), str)
+
+        return JSONResponse({"reachable": await run_in_threadpool(run)})
 
     def family_off(fam: str) -> bool:
         """True when `fam`'s module is off here (Printers holds None for it; a bare Manager is Bambu only)."""
@@ -764,6 +844,7 @@ def _printer_routes(printers) -> list[Route]:
         Route("/api/printers", printer_list),
         Route("/api/printers", printer_add, methods=["POST"]),
         Route("/api/printers/scan", printer_scan, methods=["POST"]),
+        Route("/api/printers/test", printer_test, methods=["POST"]),
         Route("/api/printers/{id}", printer_get),
         Route("/api/printers/{id}", printer_patch, methods=["PATCH"]),
         Route("/api/printers/{id}", printer_delete, methods=["DELETE"]),
@@ -1495,10 +1576,11 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         if since is not None and since < 0:
             raise BadRequest("since must be 0 or more", "since")
         newest = _number(q, "newest")
-        if newest is not None and newest < 1:
-            raise BadRequest("newest must be 1 or more", "newest")
-        if newest is not None and since is not None:
-            raise BadRequest("give since or newest, not both")
+        if newest is not None and (newest < 1 or newest > 1000):
+            raise BadRequest("newest must be between 1 and 1000", "newest")
+        wait_val = _number(q, "wait", float) or 0
+        if newest is not None and (since is not None or since_at or wait_val > 0):
+            raise BadRequest("give newest without since, since_at or wait")
         if since_at:
             try:
                 since_at = alerts_api.parse_time(since_at)

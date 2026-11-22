@@ -3820,6 +3820,7 @@
         <item quantity="one">Accept this update? The Slicer Sync writes it at its next run, after its backup.</item>
         <item quantity="other">Accept these %1$d updates? The Slicer Sync writes them at its next run, after its backup.</item>
     </plurals>
+    <string name="cli_q_certificate_renew">Make a new certificate for this Hub? Every paired phone, PC and Weigh Station will see a changed certificate and must trust it again or be paired again. Tag Readers set up for this Hub must be set up again.</string>
     <!-- 1=name -->
     <string name="cli_q_printer_api_key_clear">Clear the Moonraker API key of %1$s? Spoolwarden then connects without a key. If Moonraker asks for one, the printer\'s test says so until a key is set.</string>
     <!-- 1=name -->
