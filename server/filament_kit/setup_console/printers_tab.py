@@ -368,6 +368,7 @@ def routes(page) -> list[tuple]:
         return {"ok": True}
 
     async def detect(request, body):
+        not_in_demo()
         serial = page._serial(request)
         await anyio.to_thread.run_sync(klipper_entry, serial)
         page._gap()

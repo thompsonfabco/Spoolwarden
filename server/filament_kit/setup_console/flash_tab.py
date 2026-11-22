@@ -58,6 +58,7 @@ def routes(page) -> list[tuple]:
         return await anyio.to_thread.run_sync(listing)
 
     async def image(request, body):
+        not_in_demo()                   # no firmware to write to a device in the demo
         name = request.path_params["device"]
         dev = name.removesuffix(".bin")
         got = reader_flash.device_image(dev) if name.endswith(".bin") else None

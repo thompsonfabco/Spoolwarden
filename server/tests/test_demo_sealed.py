@@ -20,6 +20,7 @@ import os
 import re
 import socket
 import subprocess
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -45,6 +46,14 @@ STREAMS = ("/intake/api/printers/{id}/events",)           # a server-sent stream
 # what still leaves the demo or lands outside its folder in this tree, with the step that adds the stop. Filled from
 # the first runs on the test boxes.
 LEAKS: dict[str, str] = {}
+
+# what the Klipper per-printer page routes reach with a real body (the walk's empty bodies stop before they get there):
+# `POST /setup/api/printers/{serial}/test` calls Moonraker's /printer/info (a Bambu printer: a TLS handshake) in
+# `setup_page.py printer_test` (RC9, Antigravity's file): it needs a 409 "Not in the demo." (`code=demo.NOT_IN_DEMO_CODE`)
+# before `_moonraker_test`. Empty when that lands.
+KLIPPER_ROUTE_LEAKS: dict[str, list[str]] = {
+    "POST /setup/api/printers/{serial}/test": ["connect voron.example"],
+}
 
 # what the calls with a real body leave outside the demo's folder (the walk's empty bodies stop before they get there)
 LEAKS_WITH_BODY: dict[str, str] = {}
@@ -284,3 +293,30 @@ def test_every_route_in_the_demo(hub, tmp_path):
     assert walked > 100                                           # the walk really covered the app
     report = "\n".join(f"    {k!r}: {len(v)} routes, e.g. {sorted(v)[0]}" for k, v in sorted(leaks.items()))
     assert set(leaks) == set(LEAKS), "\n" + report
+
+
+def test_firmware_download_and_the_klipper_printer_routes_with_bodies_stay_inside(hub, tmp_path):
+    """R587 M2 and M4: the firmware image is no download in the demo, and every per-printer page route for each Klipper
+    printer, with a body that gets past the checks, reaches nothing and writes nothing outside the demo's folder."""
+    c, out, _ = hub
+    before, n, w = snapshot(tmp_path), len(out.seen), len(out.wrote)
+    r = c.get("/setup/api/firmware/printer-station.bin")
+    assert r.status_code == 409 and r.json()["code"] == "in_demo"
+    body = {"code": CODE, "name": "Renamed", "host": "192.0.2.99", "port": 7125, "api_key": "k", "mode": "on",
+            "serial": "x", "name_": "x"}
+    walked, reached = 0, {"firmware": [x for x in out.seen[n:] if not INSIDE.match(x)]}
+    for method, path in routes_of(c.app):
+        if not path.startswith("/setup/api/printers/{serial}") or method == "GET":
+            continue
+        for pid in ("garage-voron", "mainsailos"):
+            k = len(out.seen)
+            c.request(method, sample_path(path).replace("00M00A000000001", pid), json=body)
+            walked += 1
+            time.sleep(0.3)                      # a route that leaves a thread behind is caught at its own request
+            reached.setdefault(f"{method} {path}", []).extend(x for x in out.seen[k:] if not INSIDE.match(x))
+    assert walked >= 20
+    assert {r: v for r, v in reached.items() if v} == KLIPPER_ROUTE_LEAKS      # held exactly, like LEAKS
+    assert sorted(k for k in out.seen[n:] if not INSIDE.match(k)) == sorted(x for v in KLIPPER_ROUTE_LEAKS.values() for x in v)
+    after = snapshot(tmp_path)
+    written = {"write " + norm(k) for k in set(before) | set(after) if before.get(k) != after.get(k)}
+    assert written | {"write " + norm(k) for k in out.wrote[w:]} == set()
