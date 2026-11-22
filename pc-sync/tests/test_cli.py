@@ -8,6 +8,7 @@ import pytest
 
 import orca_fixture
 import studio_fixture
+from fksync import statexml
 from fksync import __main__ as cli
 from fksync import client, store, studio
 from tls_helper import TlsServer, make_cert
@@ -193,9 +194,9 @@ def test_status_and_unpair(srv, paths, capsys):
     dirs = _dirs(paths)
     (dirs.installed).mkdir(parents=True)
     (dirs.installed / "BUILD.json").write_text(json.dumps({"stamp": "20261101-090000"}))
-    st = json.loads(dirs.state.read_text())
+    st = statexml.read(dirs.state)
     st["stale"] = ["Old Preset A"]
-    dirs.state.write_text(json.dumps(st))
+    statexml.write(dirs.state, st)
     capsys.readouterr()
     assert _main(paths, "status") == 0
     out = capsys.readouterr().out

@@ -290,7 +290,10 @@ class Client:
         return self._request("POST", "/api/sync/rebuild", json.dumps(body).encode(), "application/json")
 
     def build(self, stamp: str) -> bytes:
-        return self._request("GET", f"/api/sync/build?{urllib.parse.urlencode({'stamp': stamp})}", raw=True)
+        # format=xml: the manifest as BUILD.xml (RC1c); a Hub that does not know it answers with BUILD.json, which
+        # unpack_build reads too
+        return self._request("GET", f"/api/sync/build?{urllib.parse.urlencode({'stamp': stamp, 'format': 'xml'})}",
+                             raw=True)
 
     def installed(self, stamp: str, trees: list[str] | None = None, written: dict | None = None) -> dict:
         """Report an install; `trees` = what went in (Ruling AB): ["base"] or ["base", "orca"]; `written` = the

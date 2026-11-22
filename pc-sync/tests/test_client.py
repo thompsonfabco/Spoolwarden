@@ -78,7 +78,7 @@ def test_matching_fp_works_and_sends_token(certs):
         assert c.build("20261102-010203") == b"PK-zipbytes"
         assert c.upload("live", b"zip", user_id="123") == {"live_hash": "h"}
         reqs = srv.requests
-        assert [r["path"] for r in reqs] == ["/api/info", "/api/sync/state", "/api/sync/build?stamp=20261102-010203",
+        assert [r["path"] for r in reqs] == ["/api/info", "/api/sync/state", "/api/sync/build?stamp=20261102-010203&format=xml",
                                              "/api/sync/live?user_id=123"]
         assert reqs[1]["auth"] == "Bearer secret-token"
         assert reqs[3]["method"] == "PUT" and reqs[3]["type"] == "application/zip" and reqs[3]["body"] == b"zip"

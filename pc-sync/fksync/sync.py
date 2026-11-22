@@ -105,7 +105,6 @@ showing the wait. A heartbeat that fails is logged and never changes the outcome
 Every outcome and the stale-preset list are logged in one line each. Errors other than an install
 refusal, a rejected upload or `409 other_pc` propagate (the caller logs them; the next run retries).
 """
-import json
 import os
 import shutil
 import tempfile
@@ -113,7 +112,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from . import inapp, installer, store, studio, zips
+from . import inapp, installer, statexml, store, studio, zips
 from .client import ApiError, CertChanged, Offline
 from .studio import OrcaFolders, StudioFolders
 from .treehash import tree_hash
@@ -131,7 +130,14 @@ OUTCOMES = ("studio_running", "uploaded", "no_build", "up_to_date", "rebuild_req
 
 
 def marker_path(dirs: store.AppDirs) -> Path:
-    return dirs.base / "installing.json"
+    return dirs.base / "installing.json"            # by its JSON name; the file is installing.xml (RC1c)
+
+
+def _move_marker(src: store.AppDirs, dst: store.AppDirs) -> None:
+    for a, b in ((marker_path(src), marker_path(dst)), (statexml.xml_path(marker_path(src)),
+                                                        statexml.xml_path(marker_path(dst)))):
+        if a.exists():
+            os.replace(a, b)
 
 
 # What the server may hear about a failed run: a class, which it words itself. The detail stays on this PC (it can hold a
@@ -154,15 +160,12 @@ def report_failure(dirs: store.AppDirs, c, outcome: str) -> None:
 
 
 def load_state(dirs: store.AppDirs) -> dict:
-    try:
-        st = json.loads(dirs.state.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return st if isinstance(st, dict) else {}
+    """state.xml (an older Sync's state.json is read once and moved to XML: RC1c); {} when there is none."""
+    return statexml.read(dirs.state) or {}
 
 
 def _save_state(dirs: store.AppDirs, st: dict) -> None:
-    store._write_atomic(dirs.state, (json.dumps(st, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+    statexml.write(dirs.state, st)
 
 
 def _read_bytes(path: Path) -> bytes | None:
@@ -483,7 +486,7 @@ class _Run:
         m = {"stamp": stamp, "backup": backup.name, "at": self.now, "orca": with_orca}
         if accept:
             m["accept"] = accept
-        store._write_atomic(marker_path(self.d), json.dumps(m).encode())
+        statexml.write(marker_path(self.d), m)
 
     def accepted(self, server: dict, stamp: str) -> dict:
         """The updates the owner accepted for build `stamp` ({"base"|"orca": [names]}, only the non-empty ones;
@@ -663,15 +666,13 @@ class _Run:
         self.st.pop("partial", None)
 
     def _clear_marker(self) -> None:
-        marker_path(self.d).unlink(missing_ok=True)
+        statexml.unlink(marker_path(self.d))
 
     def _marker(self) -> dict | None:
-        try:
-            m = json.loads(marker_path(self.d).read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            return None
-        except (OSError, ValueError):
-            self._clear_marker()
+        m = statexml.read(marker_path(self.d))
+        if m is None:
+            if statexml.exists(marker_path(self.d)):        # there, but not a marker: cleared, as before
+                self._clear_marker()
             return None
         return m if isinstance(m, dict) and isinstance(m.get("stamp"), str) else None
 
@@ -809,7 +810,7 @@ class _Run:
             m = {"stamp": stamp, "backup": backup.name, "at": self.now}
             if accept:
                 m["accept"] = accept
-            store._write_atomic(marker_path(sd), json.dumps(m).encode())
+            statexml.write(marker_path(sd), m)
 
         try:
             res = self.install_fn(build_dir, f, sd, running=self.running,
@@ -819,7 +820,7 @@ class _Run:
         except Exception as e:  # noqa: BLE001 - a secondary never stops the primary; retried next run
             err = e.reason if isinstance(e, installer.Refused) else f"{type(e).__name__}: {e}"
             if isinstance(e, installer.Refused):
-                marker_path(sd).unlink(missing_ok=True)     # refused: nothing was written
+                statexml.unlink(marker_path(sd))            # refused: nothing was written
             if isinstance(e, installer.Refused) and e.code == "studio_running":
                 self.log(f"install of build {stamp} into {where} waits: {err}; trying again next run")
                 return                                      # no back-off: the slicer is closed soon
@@ -829,7 +830,7 @@ class _Run:
             self.log(f"install of build {stamp} into {where} failed: {err}; trying again in "
                      f"{UPLOAD_BACKOFF // 3600} h, or at the next build")
             return
-        marker_path(sd).unlink(missing_ok=True)
+        statexml.unlink(marker_path(sd))
         differing = list(getattr(res, "differing", []) or [])
         rec.update(installed={"stamp": stamp, "at": self.now}, differing=differing, stale=list(res.stale),
                    skipped=list(getattr(res, "skipped", []) or []))
@@ -909,10 +910,10 @@ class _Run:
             dest = store.AppDirs(folders / old_key)
             shutil.rmtree(dest.base, ignore_errors=True)
             dest.ensure()
-            for src, dst in ((self.d.installed, dest.installed), (self.d.backups, dest.backups),
-                             (marker_path(self.d), marker_path(dest))):
+            for src, dst in ((self.d.installed, dest.installed), (self.d.backups, dest.backups)):
                 if src.exists():
                     os.replace(src, dst)
+            _move_marker(self.d, dest)
             rec = {"variant": old.variant if old else None, "user_id": old.user_id if old else None,
                    "root": str(old.root) if old else None, "differing": list(self.st.get("differing") or [])}
             inst = self.st.get("installed")
@@ -922,9 +923,9 @@ class _Run:
         else:                                   # whose it was is not known: kept apart, never dropped
             dest = store.AppDirs(folders / time.strftime("unknown-%Y%m%d-%H%M%S", time.localtime(self.now)))
             dest.ensure()
-            for src, dst in ((self.d.installed, dest.installed), (marker_path(self.d), marker_path(dest))):
-                if src.exists():
-                    os.replace(src, dst)
+            if self.d.installed.exists():
+                os.replace(self.d.installed, dest.installed)
+            _move_marker(self.d, dest)
             inst = self.st.get("installed")
             _save_state(dest, {"installed": inst} if isinstance(inst, dict) else {})
         new = store.AppDirs(folders / studio.folder_key(self.f))
@@ -1014,10 +1015,7 @@ def _age(seconds: float) -> str:
 
 
 def _read_marker(dirs: store.AppDirs) -> dict | None:
-    try:
-        m = json.loads(marker_path(dirs).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
+    m = statexml.read(marker_path(dirs))
     return m if isinstance(m, dict) and isinstance(m.get("stamp"), str) else None
 
 
@@ -1110,8 +1108,7 @@ def apply_folder_updates(dirs: store.AppDirs, key: str, names: list[str] | None,
         for suffix in (".json", ".info"):
             (held / f"{name}{suffix}").unlink(missing_ok=True)
     if kept is not None:
-        (sd.installed / installer.KEPT).write_text(json.dumps({"base": sorted(kept - set(written))}),
-                                                   encoding="utf-8")
+        statexml.write_plain(sd.installed / installer.KEPT, {"base": sorted(kept - set(written))}, also_json=True)
     rec["differing"] = [n for n in listed if n not in written]
     _save_state(sd, rec)
     msg = (f"wrote the build's copy of {len(written)} presets in {key} (backup {backup.name}): "

@@ -7,6 +7,7 @@ import json
 import pytest
 from starlette.testclient import TestClient
 
+from filament_kit.profiles import statexml
 from filament_kit import cli, config, library, pairing
 from filament_kit.api import create_app
 from filament_kit.bridge import registry
@@ -108,7 +109,7 @@ def test_changed_values_are_listed_as_updates_then_accepted_and_cleared(env, cap
     assert N04 not in {u["name"] for u in builds.updates_view()["updates"]}
     # the next report of the same build adds to what was written
     builds.record_installed(b2, "a", ["base"], {"base": [N06]})
-    inst = builds._read_obj(TB.profiles_dir() / "installed.json")
+    inst = builds._state_obj(TB.profiles_dir() / "installed.json")
     assert {N04, N06} <= set(inst["written"])
 
 
@@ -187,7 +188,7 @@ def test_older_pc_report_without_written_keeps_the_build_as_snapshot(env):
     _first_install(env)
     b2 = _rebuild(env, 1.31, TG.NOW + 1)
     builds.record_installed(b2, "a")                                # an older PC sync wrote every preset
-    assert "written" not in builds._read_obj(TB.profiles_dir() / "installed.json")
+    assert "written" not in builds._state_obj(TB.profiles_dir() / "installed.json")
     folder = TB.profiles_dir() / "builds" / b2
     assert updates.view(folder, "base", builds._written(builds._installed(), "written"), folder / "x") == folder
     assert builds.updates_view()["count"] == len(_slicer(b2))       # nothing reported written: still listed
