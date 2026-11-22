@@ -397,7 +397,9 @@ def test_setup_refuses_an_out_path_it_must_not_replace(tmp_path, monkeypatch, ca
         victim.write_text("127.0.0.1 localhost\n")
         assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 1
         assert victim.read_text() == "127.0.0.1 localhost\n" and reader_tokens.TokenStore().list() == []
-        assert "not a file of yours" in " ".join(capsys.readouterr().err.split())      # on one line or two
+        err = capsys.readouterr().err
+        assert "not a file of yours" in " ".join(err.split())      # on one line or two
+        assert str(victim) in err                                  # the path is never cut by the wrapping (06 6.3: breaks only at spaces)
 
 
 # ---------- the buzzer's trigger (reader/src/main.cpp: no line in secrets.h = the older low-triggered module) ----------
