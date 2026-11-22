@@ -190,6 +190,17 @@ def test_a_wifi_panel_that_is_not_there_needs_a_look():
     assert fail[0].group == "Weigh Station" and fail[0].key == "weigh-station.panel" and "panel-wifi --off" in fail[0].fix
 
 
+def test_a_flash_notice_from_the_station_is_a_checks_row_while_it_is_set():
+    lost = ("The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
+            "On the Weigh Station's computer, run: sudo spoolwarden weigh-station panel-wifi")
+    rows = list(ps.panel_rows(_cfg("usb"), {"panel": None, "flash_notice": "from the station"}))
+    flash = [r for r in rows if r.key == "weigh-station.panel-flash"]
+    assert len(flash) == 1 and flash[0].state == status.FAIL and flash[0].group == "Weigh Station" and flash[0].text == lost
+    for state in ({"panel": None}, {"panel": None, "flash_notice": None}, {"panel": "wifi", "flash_notice": ""}, None):
+        assert not [r for r in ps.panel_rows(_cfg("usb"), state) if r.key == "weigh-station.panel-flash"]
+    assert not list(ps.panel_rows({}, {"flash_notice": "x"}))        # no Weigh Station on this Hub: nothing
+
+
 def test_no_checks_row_for_usb_a_present_panel_or_a_station_that_did_not_answer():
     assert not [r for r in ps.panel_rows(_cfg("usb"), {"panel": None}) if r.state == status.FAIL]
     assert not [r for r in ps.panel_rows(_cfg("wifi"), {"panel": "wifi"}) if r.state == status.FAIL]

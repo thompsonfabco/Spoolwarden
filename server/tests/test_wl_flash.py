@@ -11,7 +11,7 @@ from filament_kit.station import panel_flash as pf
 from filament_kit.station import state as st
 
 SENTENCE = ("The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
-            "Run: sudo spoolwarden weigh-station panel-wifi")
+            "On the Weigh Station's computer, run: sudo spoolwarden weigh-station panel-wifi")
 FW = Path(__file__).resolve().parents[2] / "station" / "panel" / "firmware"
 
 
@@ -86,7 +86,7 @@ def test_the_wifi_notice_only_after_a_from_scratch_flash_on_wifi(fw, monkeypatch
     monkeypatch.setitem(st.settings, "panel_link", "wifi")
     assert pf.flash("/dev/ttyACM1", None, "14").notice == SENTENCE   # link read from the settings
     assert pf.WIFI_LOST_NOTICE == ("The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
-                                   "Run: sudo {command} weigh-station panel-wifi")
+                                   "On the Weigh Station's computer, run: sudo {command} weigh-station panel-wifi")
 
 
 def test_the_notice_test_leaves_a_real_panel_link_setting_alone(fw, monkeypatch):

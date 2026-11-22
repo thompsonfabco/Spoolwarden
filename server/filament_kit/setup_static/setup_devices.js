@@ -285,10 +285,12 @@ function devKindLine(d) {
   if (!d.kind || d.kind === "builtin") return d.kind === "builtin" && d.version ? devT("devices_version", { version: d.version }) : null;
   return devT("devices_kind_version", { kind: devT("devices_kind_" + d.kind), version: d.version ? devT("devices_version", { version: d.version }) : devT("devices_version_unknown") });
 }
+// a station's line "Panel: on USB" / "Panel: on Wi-Fi": the sentence the Hub sends as `panel`, none when it is not known
+function devPanelLine(d) { return d.panel ? h("span", { class: "coll__sub muted", textContent: d.panel }) : null; }
 // what `G devices` knows (kind, version, out of date, page) laid over the paired devices of the state; a Tag Reader is a row of its own
 function devMerge(info) {
   const by = new Map((info || []).map((r) => [r.id, r]));
-  const own = S.devices.map((d) => { const r = by.get(d.id) || {}; return { ...d, kind: r.kind, version: r.version, newest: r.newest, out_of_date: !!r.out_of_date, advice: r.advice, page: !!r.page }; });
+  const own = S.devices.map((d) => { const r = by.get(d.id) || {}; return { ...d, kind: r.kind, version: r.version, newest: r.newest, out_of_date: !!r.out_of_date, advice: r.advice, page: !!r.page, panel: r.panel, panel_notice: r.panel_notice }; });
   return [...own, ...(info || []).filter((r) => r.kind === "reader")];
 }
 function devRowFor(d) {
@@ -304,7 +306,9 @@ function devRowFor(d) {
     devCell("title", 1, null, h("span", { class: "devices__name", textContent: d.name }),
       d.built_in ? [" ", SW.status("note", { text: SW.t("devices_built_in"), small: true }), h("span", { class: "coll__sub muted", textContent: SW.t("devices_built_in_line") })] : null,
       kindLine ? h("span", { class: "coll__sub muted", textContent: kindLine }) : null,
-      ood ? h("span", { class: "coll__sub" }, SW.status("needs_look", { text: ood, small: true })) : null),
+      devPanelLine(d),
+      ood ? h("span", { class: "coll__sub" }, SW.status("needs_look", { text: ood, small: true })) : null,
+      d.panel_notice ? h("span", { class: "coll__sub" }, SW.status("needs_look", { text: d.panel_notice, small: true })) : null),   // the panel was flashed from scratch (the station's flash_notice)
     devCell("paired", 2, SW.t("devices_col_paired"), d.paired || SW.t("common_unknown")),
     // a station calls the Hub every few minutes, so its time says it is running; the answer beside it says whether it is up now
     devCell("last_seen", 1, SW.t("devices_col_last_seen"), d.last_seen || SW.t("common_never"),
@@ -355,6 +359,7 @@ function devReaderLine() {
 // one setting of the station's page as a field of the field component
 function devSettingField(s) {
   const o = { row: true, label: s.label, name: s.id, attrs: { "aria-required": "false" } };
+  if (s.readonly) Object.assign(o, { disabled: true, hint: s.note || null });        // set on the Hub: shown, with its note, never an edit control
   if (s.kind === "switch") return SW.field({ ...o, type: "select", value: s.value ? "on" : "off", options: [{ value: "on", label: SW.t("status_on") }, { value: "off", label: SW.t("status_off") }] });
   if (s.kind === "choice") {
     const options = (s.choices || []).map((c) => (typeof c === "object" ? { value: String(c.value), label: c.label || c.text || String(c.value) } : { value: String(c), label: String(c) }));

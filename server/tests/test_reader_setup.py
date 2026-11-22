@@ -129,12 +129,14 @@ def test_home_settings_without_the_certificate_say_so(tmp_path, monkeypatch):
         rs.home_settings()
 
 
-def test_secrets_h_carries_the_hubs_certificate_only_when_given(hub):
+def test_secrets_h_carries_the_hubs_certificate_and_address_only_when_given(hub):
     text = rs.secrets_h("Home", "pw", BASE, TOKEN, KEY, home=rs.home_settings())
     assert f'READER_ROOT_CA R"CERT({hub})CERT"' in text
-    assert "READER_HUB_IP" not in text and "READER_PRINTER" not in text      # FK-SET fields only: the firmware reads no macro
+    assert '#define READER_HUB_IP "192.0.2.7"\n' in text
+    assert "READER_PRINTER" not in text
     plain = rs.secrets_h("Home", "pw", BASE, TOKEN, KEY)
     assert "READER_ROOT_CA" not in plain
+    assert "READER_HUB_IP" not in plain
 
 
 def _usb(sysfs, name, vid, tty, product="USB JTAG/serial debug unit"):
@@ -251,6 +253,15 @@ def test_a_bad_wifi_name_is_refused_before_a_token_is_made(tmp_path, monkeypatch
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     assert cli.cmd_reader_setup(_args(out=str(tmp_path / "s.h"), ssid="x" * 40), ask_secret=_secret("p", "p")) == 1
     assert reader_tokens.TokenStore().list() == []
+
+
+def test_an_unknown_printer_is_exit_2_with_the_text_and_nothing_is_made(hub, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.setattr(rs, "reader_base", lambda cfg: BASE)
+    out = tmp_path / "secrets.h"
+    assert cli.cmd_reader_setup(_args(out=str(out), base=None, printer="nope"), ask_secret=_secret("p", "p")) == 2
+    assert rs.UNKNOWN_PRINTER in capsys.readouterr().err
+    assert not out.exists() and reader_tokens.TokenStore().list() == []
 
 
 def test_nothing_else_said_is_the_usb_setup(monkeypatch):
@@ -391,11 +402,15 @@ def test_out_never_replaces_a_path_that_is_not_the_callers_file(tmp_path):
 def test_setup_refuses_an_out_path_it_must_not_replace(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     monkeypatch.setattr(rs, "owner", lambda: rs.Owner("someone", os.getuid() + 1, os.getgid(), tmp_path))
-    victim = tmp_path / "hosts"
-    victim.write_text("127.0.0.1 localhost\n")
-    assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 1
-    assert victim.read_text() == "127.0.0.1 localhost\n" and reader_tokens.TokenStore().list() == []
-    assert "not a file of yours" in capsys.readouterr().err
+    for pad in range(40):       # the error is wrapped at 80 columns: a path of any length may split the words, so the folder's name grows
+        victim = tmp_path / ("d" * pad) / "hosts"
+        victim.parent.mkdir(exist_ok=True)
+        victim.write_text("127.0.0.1 localhost\n")
+        assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 1
+        assert victim.read_text() == "127.0.0.1 localhost\n" and reader_tokens.TokenStore().list() == []
+        err = capsys.readouterr().err
+        assert "not a file of yours" in " ".join(err.split())      # on one line or two
+        assert str(victim) in err                                  # the path is never cut by the wrapping (06 6.3: breaks only at spaces)
 
 
 # ---------- the buzzer's trigger (reader/src/main.cpp: no line in secrets.h = the older low-triggered module) ----------

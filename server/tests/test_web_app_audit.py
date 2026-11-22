@@ -525,7 +525,7 @@ READY = {
     checks: [{ group: 'storage', state: 'look', text: 'Storage is almost full', fix: 'Free some space.' }, { group: 'backup', state: 'ok', text: 'Backups are fine' }],
     getting_started: { done: 4, total: 8, hidden: false, finished: false }, features: [{ id: 'web', name: 'Web app', on: true }, { id: 'printers', name: 'Printers', on: false }],
     catalog: { version: '2026.11', checked_at: 1700000000 }, backup: { last_at: 1700000000, nightly: true }, reader: { engine: 'cloud', key_set: true },
-    devices: [{ name: 'Pat phone', kind: 'phone', version: '0.6.2', last_seen: 1700000000, out_of_date: false, this: true }, { name: 'Shop PC', kind: 'slicer-sync', out_of_date: true, this: false }],
+    devices: [{ name: 'Sam phone', kind: 'phone', version: '0.6.2', last_seen: 1700000000, out_of_date: false, this: true }, { name: 'Shop PC', kind: 'slicer-sync', out_of_date: true, this: false }],
     records_kept: 12, spoolman_url: 'http://hub.local:7912', hub_page: 'https://hub.local/setup' };
   let asked = 0; stub('hub', () => { asked++; return reply(hub); });
   hubCache = null; moreBtn.click();
@@ -538,7 +538,7 @@ READY = {
   await until('the Hub screen', () => $('dialog[open] .hubglance') && $('dialog[open] .hubglance').textContent.includes('Records kept: 12'));
   const t = text('dialog[open] .hubglance');
   for (const want of ['Status', 'Storage is almost full', 'Free some space.', 'Getting started on the Hub: 4 of 8 done', 'Installed: 0.6.2', 'Newest: 0.6.3', 'Update available', 'Web app · On', 'Printers · Off',
-    'Filament Catalog', 'Backups', 'nightly backup on', 'Label Reader', 'cloud · key set', 'Pat phone', 'this device', 'Shop PC', 'out of date', 'Recently added'])
+    'Filament Catalog', 'Backups', 'nightly backup on', 'Label Reader', 'cloud · key set', 'Sam phone', 'this device', 'Shop PC', 'out of date', 'Recently added'])
     need('the Hub screen shows: ' + want, t.includes(want));
   need('each group says where to change it', $$('dialog[open] .hubglance__change').length === 9 && t.includes('Change this on the Hub page.'));
   need('no address or key of the Hub is listed but the links', !t.includes('192.168') && !/sk-/.test(t));
@@ -947,7 +947,7 @@ READY = {
   toggle.click(); typeIn(field('Weight with spool', card).querySelector('input'), '700'); toggle.click();         // opened, a weight, sealed again
   need('sealed again hides the weight', toggle.checked && field('Weight with spool', card).hidden);
   $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
-  need('a sealed card sends no weight', sent.length === 1 && !('gross' in sent[0].items[0]) && !text('.add__results').includes('700'));
+  need('a sealed card sends no weight', sent.length === 1 && !('gross' in sent[0].items[0]) && !text('.add__results').split(stamp).join('').includes('700'));   // the brand and name carry the stamp, whose digits may hold 700
 """,
     "numbers_and_colours": r"""
   await waitPage(); spyAdd(); const stamp = String(Date.now());
@@ -1417,7 +1417,7 @@ SP_READY = {
 """,
     "running_low": r"""
   await waitPage();
-  need('no chip while the Hub has no list', !$$('.spools__low').some((b) => !b.classList.contains('hidden')));
+  need('no chip while the Hub has no list', !$$('.spools__low:not([data-action="checked-out"])').some((b) => !b.classList.contains('hidden')));
   stub(/^spools\/low$/, () => reply({ threshold_g: 150, spools: [
     { id: 11, filament: 'Elegoo PLA Red', material: 'PLA', color: 'C0392B', remaining_g: 80, location: 'Rack 1', in_stock: 2, last_one: false },
     { id: 12, filament: 'Bambu Lab PETG Orange', material: 'PETG', color: 'F2762E', remaining_g: 140, location: 'Dry bin 1', in_stock: 0, last_one: true }] }));
@@ -1430,6 +1430,7 @@ SP_READY = {
   need('the first row: filament, spool, place, grams, others', /Elegoo PLA Red/.test(rows[0]) && /Spool 11/.test(rows[0]) && /Rack 1 · 80 g left · 2 more in stock/.test(rows[0]));
   need('the last one is marked and has no stock line', /Last one/.test(rows[1]) && !/more in stock/.test(rows[1]) && /140 g left/.test(rows[1]) && !!$('.spools__last'));
   need('the chip is on, the search is out of the way', chip.getAttribute('aria-pressed') === 'true' && search().closest('.hidden'));
+  stub(/^find\?/, (u, i) => sleep(700).then(() => fetchReal(u, i)));      // the search the chip asks for when off answers after the filter is on again (seen under load)
   chip.click();
   await until('the search is back', () => !search().closest('.hidden') && chip.getAttribute('aria-pressed') === 'false');
   const low2 = [{ id: 11, filament: 'Elegoo PLA Red', material: 'PLA', color: 'C0392B', remaining_g: 80, location: 'Rack 1', in_stock: 2, last_one: false }, { id: 12, filament: 'Bambu Lab PETG Orange', material: 'PETG', color: 'F2762E', remaining_g: 140, location: 'Dry bin 1', in_stock: 0, last_one: true }];
@@ -1522,12 +1523,13 @@ SP_READY = {
     "sheet_history": r"""
   await waitPage();
   stub(/^activity/, () => reply({ events: [
-    { id: 31, at: '2026-11-17T20:00:00Z', kind: 'spool.moved', text: 'Moved Polymaker PLA to Shelf B.', actor: { type: 'device', name: 'Pat phone' }, undo: { possible: true }, undone: false },
-    { id: 30, at: '2026-11-16T09:30:00Z', kind: 'spool.weighed', text: 'Weighed: 640 g left.', actor: { type: 'cli', name: 'command line' }, undo: { possible: false, why_not: 'changed_since' }, undone: true }] }));
+    // the Hub answers the newest events oldest first (D1); the sheet shows them newest first
+    { id: 30, at: '2026-11-16T09:30:00Z', kind: 'spool.weighed', text: 'Weighed: 640 g left.', actor: { type: 'cli', name: 'command line' }, undo: { possible: false, why_not: 'changed_since' }, undone: true },
+    { id: 31, at: '2026-11-17T20:00:00Z', kind: 'spool.moved', text: 'Moved Polymaker PLA to Shelf B.', actor: { type: 'device', name: 'Sam phone' }, undo: { possible: true }, undone: false }] }));
   $('.spools__row').click();
   const d = await sheetReady();
   await until('the last events', () => $$('dialog[open] .history__row').length === 2);
-  need('the text and who did it', text('dialog[open] .history__row').includes('Moved Polymaker PLA to Shelf B.') && text('dialog[open] .history__row').includes('by Pat phone'));
+  need('the text and who did it', text('dialog[open] .history__row').includes('Moved Polymaker PLA to Shelf B.') && text('dialog[open] .history__row').includes('by Sam phone'));
   need('a put back one says so', $$('dialog[open] .history__row')[1].textContent.includes('(put back)'));
 """,
     "sheet_history_none": r"""
@@ -1622,6 +1624,7 @@ SP_READY = {
   await until('the remaining', () => reason(button('Save weight')) === null);
   button('Save weight').click();
   await until('saved', () => out('Weight updated: 812 g left.'));
+  await until('the toast', () => text('.toasts').includes('Weight updated: 812 g left.'));        // after the result line: the page first asks the Hub whether Undo can be offered, and under load that answer is late
   need('the summary follows and the form is closed', text('.spools__sum-text').includes('812 g left') && $('.spools__form').hidden && text('.toasts').includes('Weight updated: 812 g left.'));
 """,
     "sheet_weight_refused": r"""

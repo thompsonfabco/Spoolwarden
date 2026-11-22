@@ -31,7 +31,7 @@ LAYOUT_BREAKS: tuple[int, ...] = ()         # firmware versions that CHANGED the
 
 WIFI_LOST_KEY = "station_panel_wifi_lost"   # the catalogue key; the English below is its fallback ({command} is filled in)
 WIFI_LOST_NOTICE = ("The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
-                    "Run: sudo {command} weigh-station panel-wifi")
+                    "On the Weigh Station's computer, run: sudo {command} weigh-station panel-wifi")
 
 
 class Flash(NamedTuple):

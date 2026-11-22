@@ -33,10 +33,17 @@ def listing() -> dict:
                         "version": got[1] if got else None, "size": got[0].stat().st_size if got else None,
                         "settings": dev == "printer-station"})
     cfg = config.load()
+    try:
+        reader_setup.cert_local_name()
+    except reader_setup.SetupError as e:
+        tag_reader_warning = str(e)
+    else:
+        tag_reader_warning = None
     return {"devices": devices,
             # the port and the board's own name; never the by-id path, which holds the chip's serial
             "server_boards": [{"port": r.port, "product": r.product} for r in reader_setup.find_readers()],
             "station_here": "station" in modules.enabled(cfg),
+            "tag_reader_warning": tag_reader_warning,
             "printers": [{"id": p["id"], "name": p["name"]} for p in reader_setup.hub_printers(cfg)]}
 
 

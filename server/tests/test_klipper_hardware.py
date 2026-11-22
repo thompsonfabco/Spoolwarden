@@ -1,4 +1,6 @@
 """bridge.klipper.hardware: klipper_hardware.xml loader, validator, override and gcode templates."""
+import os
+
 import pytest
 
 from filament_kit.bridge.klipper import hardware as kh
@@ -73,8 +75,12 @@ def test_fill_rejects_negative_or_bool_spool():
 
 
 def _override(etc, body: str, version="1.1"):
-    (etc / "klipper_hardware.xml").write_text(f'<klipper-hardware version="{version}">{body}</klipper-hardware>',
-                                              encoding="utf-8")
+    path = etc / "klipper_hardware.xml"
+    before = path.stat().st_mtime_ns if path.exists() else 0
+    path.write_text(f'<klipper-hardware version="{version}">{body}</klipper-hardware>', encoding="utf-8")
+    # the loader's cache key is (mtime, size): two same-size writes inside one filesystem clock tick (about 15 ms on
+    # Windows) look like one file, so every write here gets a strictly later mtime
+    os.utime(path, ns=(max(path.stat().st_mtime_ns, before + 1_000_000),) * 2)
 
 
 def test_template_with_newline_is_error(etc):

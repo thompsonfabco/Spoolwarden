@@ -2726,10 +2726,11 @@ function openTab() {
       try {
         const res = await api(`find?q=${encodeURIComponent(q)}&sealed=${sealedOnly ? 1 : 0}`);
         if (mine !== findStamp) return null;
-        foundAt = Date.now();
         rows = res.filaments.flatMap((f) => f.spools.map((s) => ({ f, s })));
         cut = !!res.truncated; page = 1; asked = true;
         if (firstLoad) { firstLoad.done(); firstLoad = null; }
+        if (low) { drawLow(); return null; }      // Running low went on while this was asked: its list stays (turning it off searches again)
+        foundAt = Date.now();
         drawResults(false);
       } catch (e) { if (firstLoad && mine === findStamp) { firstLoad.done(); firstLoad = null; } throw e; }
       return null;

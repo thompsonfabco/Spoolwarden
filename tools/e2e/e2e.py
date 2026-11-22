@@ -446,6 +446,7 @@ class E2E:
         # Another web server on this machine, holding 443 the whole run: a first install then takes 8710, which is where
         # every scenario but i looks for the Hub (KIT). Scenario i lets go of it to see the installer take 443.
         self._port443: socket.socket | None = None
+        self._discovery_socks: list[socket.socket] = []
 
     def hold443(self) -> None:
         if self._port443 is None:
@@ -459,6 +460,24 @@ class E2E:
         if self._port443 is not None:
             self._port443.close()
             self._port443 = None
+
+    def hold_discovery(self) -> None:
+        """Bind Bambu SSDP ports without SO_REUSEADDR so real LAN printers do not enter printers.xml during e2e."""
+        if self._discovery_socks:
+            return
+        for port in (2021, 1990):
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.bind(("0.0.0.0", port))
+            except OSError:
+                s.close()
+                continue
+            self._discovery_socks.append(s)
+
+    def release_discovery(self) -> None:
+        for s in self._discovery_socks:
+            s.close()
+        self._discovery_socks.clear()
 
     # ---- a) fake release server and get.sh
     def a_install(self, sc="a") -> None:
@@ -1474,6 +1493,7 @@ def main() -> int:
     rel = Releases(run)
     e2e = E2E(run, rel, args.previous, storage_tags)
     e2e.hold443()
+    e2e.hold_discovery()
     want = [s for s in args.only.split(",") if s]
     if args.previous and "f" not in want:
         want.append("f")
@@ -1506,6 +1526,7 @@ def main() -> int:
     finally:
         if e2e.printer is not None:
             e2e.printer.close()
+        e2e.release_discovery()
         e2e.release443()
         rel.stop()
         (run.work / "results.json").write_text(json.dumps({"scenarios": status, "checks": run.results}, indent=2),

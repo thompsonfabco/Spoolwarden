@@ -365,24 +365,38 @@ def station_reach(devs: list[dict], url: str | None) -> dict[str, bool]:
     return {ids[0]: hit[1]}
 
 
-_panel_seen: dict[str, tuple[float, str | None]] = {}
+_panel_seen: dict[str, tuple[float, str | None, str | None]] = {}
+
+
+def _panel_state(url: str | None) -> tuple[str | None, str | None]:
+    """(panel, flash notice) from the station's `GET /state`, one read reused for REACH_KEEP seconds. Both are None when the
+    station does not answer. The notice is the Hub's own catalogue sentence while the station carries a `flash_notice`."""
+    if not url:
+        return None, None
+    now = time.monotonic()
+    hit = _panel_seen.get(url)
+    if hit is None or now - hit[0] > REACH_KEEP:
+        try:
+            got = StationClient(url, timeout=2, backoff=0).state()
+        except (StationUnreachable, StationCertChanged):
+            got = {}
+        value, note = got.get("panel"), got.get("flash_notice")
+        hit = (now, value if value in ("usb", "wifi") else None,
+               TEXT_STATION_WIFI_LOST if isinstance(note, str) and note.strip() else None)
+        _panel_seen[url] = hit
+    return hit[1], hit[2]
 
 
 def station_panel(url: str | None) -> str | None:
     """How the Weigh Station's panel is connected, from its `GET /state` `panel`: "usb" or "wifi"; None when it has no panel
     connected or does not answer (the Devices row then says nothing). Reused for REACH_KEEP seconds."""
-    if not url:
-        return None
-    now = time.monotonic()
-    hit = _panel_seen.get(url)
-    if hit is None or now - hit[0] > REACH_KEEP:
-        try:
-            value = StationClient(url, timeout=2, backoff=0).state().get("panel")
-        except (StationUnreachable, StationCertChanged):
-            value = None
-        hit = (now, value if value in ("usb", "wifi") else None)
-        _panel_seen[url] = hit
-    return hit[1]
+    return _panel_state(url)[0]
+
+
+def station_flash_notice(url: str | None) -> str | None:
+    """The sentence to show while the station's `GET /state` carries a `flash_notice` (the panel was flashed from scratch and
+    lost its Wi-Fi set-up); None when it has none or does not answer."""
+    return _panel_state(url)[1]
 
 
 def station_https(url: str | None) -> str | None:
@@ -438,14 +452,19 @@ MAX_TEXT = 200
 SETTING_ID = re.compile(r"[a-z0-9_.-]{1,40}")
 SETTING_KINDS = ("switch", "choice", "number", "text")
 TICKET = re.compile(r"[A-Za-z0-9_-]{16,128}")
-def _catalogue_text(key: str) -> str:
+def _catalogue_text(key: str, fallback: str | None = None) -> str:
     text = (Path(__file__).resolve().parent / "shared_static" / "strings.js").read_text(encoding="utf-8")
     cat = json.loads(re.sub(r",\s*}$", "}", text[text.index("{"):text.rindex("}") + 1]))
     vals = {"product": cat.get("app_name", ""), "command": cat.get("command_name", "")}
-    return re.sub(r"\{(\w+)\}", lambda m: vals.get(m.group(1), m.group(0)), cat[key])
+    return re.sub(r"\{(\w+)\}", lambda m: vals.get(m.group(1), m.group(0)), cat[key] if fallback is None else cat.get(key, fallback))
 
 
 TEXT_STATION_NO_PIN = _catalogue_text("station_not_pinned")
+# the station refuses a page change of Speak or Volume once the Hub has sent values (409 `set_on_hub`); same key as the station's
+TEXT_STATION_SET_ON_HUB = _catalogue_text("station_voice_set_on_hub", "Speaking and volume are set on the Hub.")
+# after a from-scratch flash of a wireless panel the station says its Wi-Fi set-up is gone (`flash_notice`); the owner reads this
+TEXT_STATION_WIFI_LOST = _catalogue_text("station_panel_wifi_lost", "The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
+                                         "On the Weigh Station's computer, run: sudo {command} weigh-station panel-wifi")
 
 
 class StationCallError(Exception):
@@ -454,6 +473,10 @@ class StationCallError(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
         self.status, self.message = status, message
+
+
+class StationSetOnHub(StationCallError):
+    """The station refused a change of Speak or Volume: the Hub sets them (409 `set_on_hub`)."""
 
 
 class StationPinMissing(StationCallError):
@@ -563,6 +586,8 @@ def _json_reply(status: int, kind: str, data: bytes) -> dict:
         out = None
     if not isinstance(out, dict):
         raise StationCallError(502, _say("station_call_answer_invalid"))
+    if status == 409 and out.get("error") == "set_on_hub":
+        raise StationSetOnHub(409, TEXT_STATION_SET_ON_HUB)
     if not 200 <= status < 300:
         why = out.get("message") or out.get("error")
         raise StationCallError(status if status in (400, 403, 404, 429) else 502,
@@ -678,4 +703,8 @@ def _clean_setting(s: dict) -> dict | None:
             choices.append(v if not isinstance(c, dict) else {"value": v, "label": lab})
         out["choices"] = choices
     out["value"] = value
+    if s.get("readonly") is True:                   # the station's own page shows it, but it is not changed there (VO1)
+        out["readonly"] = True
+    if isinstance(s.get("note"), str) and s["note"].strip():
+        out["note"] = s["note"].strip()[:MAX_TEXT]
     return out

@@ -1166,7 +1166,7 @@ def test_ci_runs_the_web_tests_and_the_other_suites():
     """The web module's tests skip themselves without the extra, so the recipe must install it: "green" must mean the same at each
     stage, so CI runs the same script as everyone else."""
     flow, recipe = _read(".github/workflows/server.yml"), _read("tools/testenv.sh")
-    assert "bash tools/testenv.sh --root --lint" in flow and "timeout-minutes:" in flow and "refs/tags/v0.3.0" in flow
+    assert "bash tools/testenv.sh --only pc-sync,other,get --root --lint" in flow and "timeout-minutes:" in flow and "refs/tags/v0.3.0" in flow
     assert "pytest " not in flow.split("testenv.sh")[1]
     for suite in ('server[test,web]', 'pc-sync[test]', "-n \"$WORKERS\"", "-rfEs", "printer-pack/tests", "integrations/orca-spool-sync/tests",
                   "reader/tools", "test_root_links.py", "tools/test_get_e2e.py", "tools/e2e/*.sh", "printer-pack/*.sh", "tools/e2e/klipper.sh"):

@@ -274,3 +274,20 @@ def test_hub_view_shows_build_and_last_seen_from_the_hubs_store(env):
     d = hub_view.build(paired=[])["devices"]
     assert d == [{"name": "bench", "kind": "reader", "version": "1794551072", "last_seen": at(0),
                   "out_of_date": False, "this": False}]
+
+
+def test_the_hand_over_thread_is_waited_for_by_the_suite(env, monkeypatch):
+    """A reader's call is handed to the Hub on a `reader-seen` thread, off the request; the suite's autouse fixture waits
+    for it, so it never outlives its test (it did, and wrote to the default state folder during another test)."""
+    from types import SimpleNamespace
+    from conftest import wait_for_reader_seen_threads
+    from filament_kit.web import reader as web_reader
+    release, flushed = threading.Event(), []
+    monkeypatch.setattr(web_reader, "flush", lambda seen, kit: (release.wait(5), flushed.append(1)))
+    r = web_reader.Reader(SimpleNamespace(kit_bridge=lambda: None), None)
+    tid, _ = TokenStore().issue("bench")
+    r._seen(tid, "1794551072")
+    assert [t for t in threading.enumerate() if t.name == "reader-seen"]            # running, held by the flush
+    release.set()
+    wait_for_reader_seen_threads()
+    assert flushed == [1] and not [t for t in threading.enumerate() if t.name == "reader-seen"]

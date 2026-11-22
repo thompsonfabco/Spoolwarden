@@ -13,54 +13,36 @@
 #include <Preferences.h>
 #include <memory>
 #include "panel_link.h"
+#include "panel_store.h"
 
 namespace panelnet {
 
 // ---------- stored settings (NVS namespace "panel"; the program-only update leaves it alone) ----------
-// Keys: ssid, pass (bytes; absent = open network), addr, port, fp, token. All six are written at every CFG line; hasWifi is
-// ssid present, hasLink is token present.
-static bool loadSettings(panel::Settings &s) {
+// The layout, and why a failed save cannot leave a mix, is in lib/panel_core/src/panel_store.h; this is NVS under it.
+struct NvsStore : panel::KvStore {
   Preferences p;
+  bool open = false;
+  explicit NvsStore(bool readOnly) { open = p.begin("panel", readOnly); }  // read-only fails on a panel that never stored anything
+  ~NvsStore() { if (open) p.end(); }
+  bool put(const char *key, const uint8_t *data, size_t len) override { return open && p.putBytes(key, data, len) == len; }
+  size_t get(const char *key, uint8_t *buf, size_t cap) override { return open && p.isKey(key) ? p.getBytes(key, buf, cap) : 0; }
+  bool has(const char *key) override { return open && p.isKey(key); }
+  bool remove(const char *key) override { return open && p.remove(key); }
+};
+
+static bool loadSettings(panel::Settings &s) {
+  NvsStore kv(true);
   s.clear();
-  if (!p.begin("panel", true)) return false;  // read-only: a panel that never stored anything has no namespace
-  s.ssidLen = (uint8_t)p.getBytes("ssid", s.ssid, sizeof s.ssid);
-  s.hasWifi = s.ssidLen > 0;
-  s.passLen = (uint8_t)p.getBytes("pass", s.pass, sizeof s.pass);
-  String addr = p.getString("addr", ""), fp = p.getString("fp", ""), token = p.getString("token", "");
-  s.port = p.getUShort("port", 0);
-  p.end();
-  s.hasLink = addr.length() > 0 && addr.length() <= panel::MAX_ADDR && fp.length() == panel::FP_HEX &&
-              token.length() == panel::TOKEN_HEX && s.port != 0;
-  if (s.hasLink) {
-    strcpy(s.addr, addr.c_str()); strcpy(s.fp, fp.c_str()); strcpy(s.token, token.c_str());
-  } else {
-    s.port = 0;
-  }
+  if (!kv.open) return false;
+  panel::loadSettings(kv, s);
   return true;
 }
 
-// True only when every value was written (the panel answers OK after this, not before).
+// True only when every value was stored (the panel answers OK after this, not before); a false leaves the old set or
+// nothing. A clear is a store of an empty set.
 static bool storeSettings(const panel::Settings &s) {
-  Preferences p;
-  if (!p.begin("panel", false)) return false;
-  bool ok = true;
-  if (s.hasWifi) {
-    ok &= p.putBytes("ssid", s.ssid, s.ssidLen) == s.ssidLen;
-    if (s.passLen) ok &= p.putBytes("pass", s.pass, s.passLen) == s.passLen;
-    else p.remove("pass");
-  } else {
-    p.remove("ssid"); p.remove("pass");
-  }
-  if (s.hasLink) {
-    ok &= p.putString("addr", s.addr) == strlen(s.addr);
-    ok &= p.putUShort("port", s.port) == sizeof(uint16_t);
-    ok &= p.putString("fp", s.fp) == strlen(s.fp);
-    ok &= p.putString("token", s.token) == strlen(s.token);
-  } else {
-    p.remove("addr"); p.remove("port"); p.remove("fp"); p.remove("token");
-  }
-  p.end();
-  return ok;
+  NvsStore kv(false);
+  return kv.open && panel::storeSettings(kv, s);
 }
 
 // ---------- the world, as panel::LinkIo ----------

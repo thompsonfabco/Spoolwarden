@@ -28,7 +28,7 @@
 //                 "CFG WIFI <ssid hex> <password hex|->", "CFG LINK <address> <port> <fingerprint> <token>" and "CFG CLEAR":
 //                         the Wi-Fi set-up (since firmware 14), over USB only. Each is answered "OK" once the whole line
 //                         was understood and stored in NVS, else "ERR <reason>" (long hex ssid password address port
-//                         fingerprint token cfg). A line over 256 characters is answered "ERR long" and dropped, never
+//                         fingerprint token cfg store). A line over 256 characters is answered "ERR long" and dropped, never
 //                         cut short. Limits: name 1-32 bytes, password 8-63 bytes (or "-": an open network), address at
 //                         most 64 characters, port 1-65535, fingerprint 64 hex digits (the station certificate's SHA-256),
 //                         token 32 hex digits. The station's side is server/filament_kit/station/panel_setup.py.
@@ -433,7 +433,12 @@ static void handle(const char *s, Out from, Carrier &in) {
     if (c.isCfg) {
       const char *err = c.err;
       bool ok = c.ok;
-      if (ok && !panelnet::storeSettings(next)) { ok = false; err = "store"; }
+      if (ok && !panelnet::storeSettings(next)) {
+        ok = false; err = "store";
+        panelnet::loadSettings(next);  // what the flash holds now (the old set, or nothing after a half-done clear)
+        settings = next;
+        panelLink.configure(settings);
+      }
       if (ok) {
         settings = next;
         panelLink.configure(settings);

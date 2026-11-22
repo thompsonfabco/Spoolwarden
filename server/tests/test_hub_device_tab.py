@@ -662,6 +662,7 @@ def test_the_photo_and_the_ticket_calls_have_the_same_deadline(env_hub, monkeypa
     c, st = env_hub
     monkeypatch.setattr(device_tab.station_client, "station_reach", lambda devs, url: {})      # that probe is station_client's own
     monkeypatch.setattr(device_tab.station_client, "station_panel", lambda url: None)          # so is the panel-link probe
+    monkeypatch.setattr(device_tab.station_client, "station_flash_notice", lambda url: None)   # and the flash-notice probe
     srv, url, fp, port = _trickle("body", tmp_path / "trickle-tls")
     try:
         _pair_station(st, fp=fp, port=port)

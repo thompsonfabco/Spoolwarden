@@ -132,7 +132,10 @@ takes over; settings the kit writes over USB later win until a build with other 
 
 1. `cp src/secrets.example.h src/secrets.h` and fill in Wi-Fi, `READER_BASE`, `READER_TOKEN` and `OTA_PUBKEY`
    (see below), and `READER_BUZZER_ACTIVE_LOW`: 0 for a bare buzzer behind a MOSFET (high-triggered), 1 for a buzzer
-   with driver board (low-triggered; also what a `secrets.h` without the line means). `secrets.h` is ignored by git;
+   with driver board (low-triggered; also what a `secrets.h` without the line means). Optionally `READER_HUB_IP`
+   (the Hub's home IPv4 address, used when the `.local` name in `READER_BASE` does not resolve); like the other
+   settings it is copied into the reader's flash, so it survives an update built without `secrets.h`; a `hub_ip` the
+   kit writes over USB later wins. `secrets.h` is ignored by git;
    never commit it.
 2. `pio run -e esp32-c3-supermini` builds; `pio run -e esp32-c3-supermini -t upload` flashes over USB (the first
    time only; updates go over Wi-Fi).

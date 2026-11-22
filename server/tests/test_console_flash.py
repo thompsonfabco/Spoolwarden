@@ -83,6 +83,18 @@ def test_the_listing_offers_the_printers_by_name_and_none_with_the_feature_off(a
     assert client(app).get("/setup/api/firmware").json()["printers"] == []
 
 
+def test_the_listing_warns_about_the_certificate_before_flashing(app, home):
+    c = client(app)
+    assert c.get("/setup/api/firmware").json()["tag_reader_warning"] is None
+    (config.paths().etc / "cert.pem").unlink()
+    listing = c.get("/setup/api/firmware")
+    assert listing.status_code == 200
+    refused = post(c, "flash/provision", {})
+    assert refused.status_code == 409
+    assert listing.json()["tag_reader_warning"] == refused.json()["error"]
+    assert "no .local name" in listing.json()["tag_reader_warning"]
+
+
 def test_an_image_is_served_whole_from_the_kit_and_only_to_the_home_network(app):
     for dev in ("printer-station", "intake-panel"):
         r = client(app).get(f"/setup/api/firmware/{dev}.bin")
@@ -212,7 +224,7 @@ def test_all_three_ways_refuse_a_printer_the_hub_does_not_have_with_one_text(app
     # the command line: the pending answers, and the option
     rf.write_pending({**ANSWERS, "port": "/dev/ttyACM1", "printer": "01P00A000000009"})
     capsys.readouterr()
-    assert cli._reader_setup_usb(_args(base=None), _no_ask, _no_ask, run=_run) == 1
+    assert cli._reader_setup_usb(_args(base=None), _no_ask, _no_ask, run=_run) == 2
     assert text in capsys.readouterr().err
     with pytest.raises(rs.SetupError) as e:
         rs.home_settings("x" * 70)                                  # too long for the firmware: the same refusal, not FK-ERR
@@ -526,3 +538,29 @@ def test_every_text_the_flash_section_says_is_in_the_catalogue():
     keys = {k for k in keys if not k.endswith("_")}      # the two built from a name (flash_step_<step>, job_title_<job>)
     assert keys and all(k in texts for k in keys), sorted(k for k in keys if k not in texts)
     assert texts["flash_error_wifi"] == "The Tag Reader could not join '{wifi}'. Check the Wi-Fi name and password (2.4 GHz networks only)."
+
+
+def _no_answers_of_any_form():
+    etc = rf.pending_path().parent
+    assert sorted(x.name for x in etc.glob("reader-setup*")) == []
+    assert "wifi-secret-1" not in "".join(x.read_text(errors="replace") for x in etc.iterdir() if x.is_file())
+
+
+@pytest.mark.parametrize("exc", [subprocess.TimeoutExpired("systemctl", 30), OSError("no systemctl")])
+def test_a_job_start_that_raises_anything_leaves_no_answers(app, monkeypatch, exc):
+    def boom(name, why=""):
+        raise exc
+    monkeypatch.setattr(setup_helper, "_start_job", boom)
+    with pytest.raises(type(exc)):
+        setup_helper._reader_usb(dict(ANSWERS))
+    _no_answers_of_any_form()
+
+
+def test_a_write_that_fails_after_the_xml_leaves_no_answers(app, monkeypatch):
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(rf.json, "dump", boom)              # the old-form file is written after the XML
+    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="": None)
+    with pytest.raises(OSError):
+        setup_helper._reader_usb(dict(ANSWERS))
+    _no_answers_of_any_form()

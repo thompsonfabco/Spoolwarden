@@ -34,6 +34,9 @@
 #include "secrets.h"         // optional: a build with settings compiled in (copied into flash; see loadSettings)
 #define HAVE_SECRETS 1
 #endif
+#ifndef READER_HUB_IP
+#define READER_HUB_IP ""
+#endif
 #include "fw_build.h"        // FW_BUILD, generated per build by fw_build.py
 #include "reader_api.h"
 #include "menu.h"
@@ -232,6 +235,7 @@ void loadSettings() {
   compiled.rootCa = READER_ROOT_CA;
 #endif
   compiled.buzzerLow = COMPILED_BUZZER_LOW;
+  compiled.hubIp = READER_HUB_IP;   // copied into flash like the rest, so an update built without secrets.h keeps it
   std::string stamp = settingsStamp(compiled);
   if (adoptCompiled(cfg, savedStamp, stamp)) {
     cfg = compiled;

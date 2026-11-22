@@ -188,12 +188,12 @@ class _Spoolman:
 # ---------- finding 8: --who <device name> ----------
 
 def test_activity_who_finds_a_device_by_the_name_in_its_events(capsys):
-    events.write("spool.moved", {"type": "spool", "id": "1"}, {"type": "device", "id": "d1", "name": "Pat's phone"},
+    events.write("spool.moved", {"type": "spool", "id": "1"}, {"type": "device", "id": "d1", "name": "Sam's phone"},
                  {"spool": "1", "before_location": "A", "after_location": "B"})
     _spool_moved(2, {"type": "page", "name": "Hub page"})
-    assert history_cli.cmd_activity(HubApi(token()), who="pat's phone") == 0
+    assert history_cli.cmd_activity(HubApi(token()), who="sam's phone") == 0
     out = capsys.readouterr().out
-    assert "Pat's phone" in out and "Hub page" not in out
+    assert "Sam's phone" in out and "Hub page" not in out
     assert history_cli.cmd_activity(HubApi(token()), who="nobody") == 2
     assert "unknown actor nobody." in capsys.readouterr().err
 

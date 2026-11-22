@@ -324,7 +324,13 @@ def test_the_page_offers_it_in_the_unlock_dialog_and_keeps_the_rules():
     # the code is held in memory by the shared script and sent in the body, never stored by the page
     assert "const theCode = () => SW.lock.code" in setup and "code: theCode()" in setup
     every = "".join(p.read_text(encoding="utf-8") for p in STATIC.glob("setup*.js"))
-    assert "sessionStorage" not in every and "localStorage" not in every
+    # the only thing a setup script keeps in the browser is the language choice (setup_settings.js, SET_LANG_KEY): never a code
+    # counted per CALL, not per line: every localStorage use is a call whose first argument is SET_LANG_KEY
+    import re
+    code = "\n".join(ln for ln in every.splitlines() if not ln.lstrip().startswith("//"))
+    uses = len(re.findall(r"localStorage", code))
+    calls = re.findall(r"localStorage\.\w+\(\s*([^,)\s]*)", code)
+    assert "sessionStorage" not in every and uses == len(calls) and set(calls) <= {"SET_LANG_KEY"}, (uses, calls)
 
 
 def test_the_script_is_served_and_the_second_question_stays(app):
