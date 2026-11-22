@@ -358,24 +358,38 @@ def station_reach(devs: list[dict], url: str | None) -> dict[str, bool]:
     return {ids[0]: hit[1]}
 
 
-_panel_seen: dict[str, tuple[float, str | None]] = {}
+_panel_seen: dict[str, tuple[float, str | None, str | None]] = {}
+
+
+def _panel_state(url: str | None) -> tuple[str | None, str | None]:
+    """(panel, flash notice) from the station's `GET /state`, one read reused for REACH_KEEP seconds. Both are None when the
+    station does not answer. The notice is the Hub's own catalogue sentence while the station carries a `flash_notice`."""
+    if not url:
+        return None, None
+    now = time.monotonic()
+    hit = _panel_seen.get(url)
+    if hit is None or now - hit[0] > REACH_KEEP:
+        try:
+            got = StationClient(url, timeout=2, backoff=0).state()
+        except (StationUnreachable, StationCertChanged):
+            got = {}
+        value, note = got.get("panel"), got.get("flash_notice")
+        hit = (now, value if value in ("usb", "wifi") else None,
+               TEXT_STATION_WIFI_LOST if isinstance(note, str) and note.strip() else None)
+        _panel_seen[url] = hit
+    return hit[1], hit[2]
 
 
 def station_panel(url: str | None) -> str | None:
     """How the Weigh Station's panel is connected, from its `GET /state` `panel`: "usb" or "wifi"; None when it has no panel
     connected or does not answer (the Devices row then says nothing). Reused for REACH_KEEP seconds."""
-    if not url:
-        return None
-    now = time.monotonic()
-    hit = _panel_seen.get(url)
-    if hit is None or now - hit[0] > REACH_KEEP:
-        try:
-            value = StationClient(url, timeout=2, backoff=0).state().get("panel")
-        except (StationUnreachable, StationCertChanged):
-            value = None
-        hit = (now, value if value in ("usb", "wifi") else None)
-        _panel_seen[url] = hit
-    return hit[1]
+    return _panel_state(url)[0]
+
+
+def station_flash_notice(url: str | None) -> str | None:
+    """The sentence to show while the station's `GET /state` carries a `flash_notice` (the panel was flashed from scratch and
+    lost its Wi-Fi set-up); None when it has none or does not answer."""
+    return _panel_state(url)[1]
 
 
 def station_https(url: str | None) -> str | None:
@@ -441,6 +455,9 @@ def _catalogue_text(key: str, fallback: str | None = None) -> str:
 TEXT_STATION_NO_PIN = _catalogue_text("station_not_pinned")
 # the station refuses a page change of Speak or Volume once the Hub has sent values (409 `set_on_hub`); same key as the station's
 TEXT_STATION_SET_ON_HUB = _catalogue_text("station_voice_set_on_hub", "Speaking and volume are set on the Hub.")
+# after a from-scratch flash of a wireless panel the station says its Wi-Fi set-up is gone (`flash_notice`); the owner reads this
+TEXT_STATION_WIFI_LOST = _catalogue_text("station_panel_wifi_lost", "The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
+                                         "Run: sudo {command} weigh-station panel-wifi")
 
 
 class StationCallError(Exception):

@@ -60,6 +60,8 @@ TEXT_NOT_ACCEPTED = _t("panel_setup_not_accepted", "The panel did not accept the
 TEXT_TIMEOUT = _t("panel_setup_timeout", "The panel did not answer in time.")
 TEXT_NOT_SAVED = _t("panel_setup_not_saved", "The panel took the Wi-Fi settings, but the station could not save them. "
                     "Run the set-up again.")
+TEXT_WIFI_LOST = _t("station_panel_wifi_lost", "The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
+                    "Run: sudo {command} weigh-station panel-wifi")
 TEXT_NOT_CONNECTED = _t("check_panel_not_connected", "The Weigh Station's panel is not connected.")
 TEXT_NOT_CONNECTED_FIX = _t("check_panel_not_connected_fix", "check the panel has power and is in Wi-Fi range; to go back to "
                             "the USB cable: sudo spoolwarden weigh-station panel-wifi --off")
@@ -273,3 +275,6 @@ def panel_rows(cfg: dict, station_state: dict | None, *, has_station: bool | Non
         yield Row(INFO, TEXT_DEVICES_WIFI if panel == "wifi" else TEXT_DEVICES_USB, group="Devices", key="devices.panel-link")
     if link == "wifi" and station_state is not None and not station_state.get("panel"):
         yield Row(FAIL, TEXT_NOT_CONNECTED, TEXT_NOT_CONNECTED_FIX, group="Weigh Station", key="weigh-station.panel")
+    note = (station_state or {}).get("flash_notice")      # set while the panel's Wi-Fi set-up is gone after a from-scratch flash
+    if has_station and isinstance(note, str) and note.strip():
+        yield Row(FAIL, TEXT_WIFI_LOST, group="Weigh Station", key="weigh-station.panel-flash")

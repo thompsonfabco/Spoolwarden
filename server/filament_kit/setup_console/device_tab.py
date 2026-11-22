@@ -135,6 +135,9 @@ def rows() -> list[dict]:
             panel = station_client.station_panel(_station_url(cfg))      # the station's own /state; nothing when it is silent
             if panel:
                 row["panel"] = panel_setup.TEXT_DEVICES_WIFI if panel == "wifi" else panel_setup.TEXT_DEVICES_USB
+            notice = station_client.station_flash_notice(_station_url(cfg))   # the panel lost its Wi-Fi set-up in a flash
+            if notice:
+                row["panel_notice"] = notice
         out.append(row)
     for t in _readers():
         made = str(t.get("created") or "").replace("T", " ")[:16]

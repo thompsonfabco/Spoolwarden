@@ -78,3 +78,49 @@ def test_a_readonly_row_is_drawn_disabled_with_its_note_and_the_others_are_not()
 def test_the_form_reads_only_the_error_sentence_not_a_message_field():
     src = (SP.STATIC / "setup_devices.js").read_text(encoding="utf-8")
     assert "e.data.message" not in src
+
+
+# ---- the flash notice: shown on the Weigh Station's Devices row while the station's /state carries it ----
+LOST = ("The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
+        "Run: sudo spoolwarden weigh-station panel-wifi")
+
+
+def _fake_state(monkeypatch, answer):
+    monkeypatch.setattr(station_client, "_panel_seen", {})
+
+    class Fake:
+        def __init__(self, *a, **k):
+            pass
+
+        def state(self):
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+    monkeypatch.setattr(station_client, "StationClient", Fake)
+
+
+def test_the_flash_notice_is_the_catalogue_sentence_while_the_station_carries_one(monkeypatch):
+    _fake_state(monkeypatch, {"panel": None, "flash_notice": "x from the station"})
+    assert station_client.station_flash_notice("http://h") == LOST
+    for answer in ({"panel": "usb", "flash_notice": None}, {"panel": "usb"}, {"flash_notice": "  "}, {"flash_notice": 7},
+                   station_client.StationUnreachable("x")):
+        _fake_state(monkeypatch, answer)
+        assert station_client.station_flash_notice("http://h") is None
+    assert station_client.station_flash_notice(None) is None
+
+
+def test_the_devices_row_of_a_station_shows_the_notice_only_when_the_state_carries_it(env, monkeypatch):
+    from filament_kit import config
+    monkeypatch.setattr(device_tab, "_pairings", lambda: [{"id": "s1", "name": "Bench", "type": "station"}])
+    monkeypatch.setattr(device_tab, "_readers", lambda: [])
+    monkeypatch.setattr(station_client, "station_reach", lambda devs, url: {})
+    monkeypatch.setattr(config, "load", lambda: {"station": {"url": "http://127.0.0.1:5003", "panel_link": "wifi"}})
+    _fake_state(monkeypatch, {"panel": None, "flash_notice": "sentence"})
+    assert device_tab.rows()[0]["panel_notice"] == LOST
+    _fake_state(monkeypatch, {"panel": None, "flash_notice": None})
+    assert "panel_notice" not in device_tab.rows()[0]
+
+
+def test_the_devices_page_draws_the_notice_line_on_the_row():
+    src = (SP.STATIC / "setup_devices.js").read_text(encoding="utf-8")
+    assert "panel_notice: r.panel_notice" in src and "d.panel_notice" in src
