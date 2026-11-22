@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import hashlib
 import json
 import math
 import os
@@ -278,6 +279,7 @@ def atomic_write(path: Path, data: bytes, mode: int = 0o600) -> None:
 
 _DEFAULT_MODE = 0o600
 _NO_WRITE = {errno.EACCES, errno.EPERM, errno.EROFS}
+OLD_FORMAT = {"indent": 2, "sort_keys": True}     # how the older Sync wrote its config and state (store.py, sync.py)
 
 
 def _put(path: Path, data: bytes, mode: int, state_owned: bool) -> None:      # state_owned is the Hub's: unused here
@@ -316,9 +318,100 @@ def quarantine(path: Path) -> bool:
     return True
 
 
-def _read(path: Path, tag: str | None, keep_version: bool, is_list: bool, mode: int | None, state_owned: bool):
+# ---- shared block: identical in both copies (a test holds them to it); OLD_FORMAT, _put, _mkdir are each copy's own ----
+
+def _json_path(path: Path, old_name) -> Path:
+    """The old (JSON) form of state file `path`: its own name, or `old_name` (a file name next to it, or a path) when the
+    old release used another name (usage.jsonl, station_server.json)."""
+    return Path(path) if not old_name else Path(path).parent / old_name
+
+
+def _old_bytes(data, old_format) -> bytes:
+    """`data` as the older release wrote it. `old_format` is the keyword arguments of json.dumps (the default OLD_FORMAT of
+    this copy), or a function that returns the bytes (a file that was not one JSON document). A newline follows when an
+    indent was used, as the older writers did."""
+    if callable(old_format):
+        return old_format(data)
+    kw = OLD_FORMAT if old_format is None else old_format
+    text = json.dumps(data, **kw)
+    return (text + "\n" if kw.get("indent") is not None else text).encode("utf-8")
+
+
+def _sha(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _sha_path(jp: Path) -> Path:
+    return jp.with_name(jp.name + ".sha256")
+
+
+def _recorded(jp: Path) -> str | None:
+    """The hash of the JSON form as this code last wrote it, or None (nothing recorded yet)."""
+    try:
+        return _sha_path(jp).read_text(encoding="ascii").strip() or None
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _note_sha(jp: Path, raw: bytes, mode: int, state_owned: bool) -> None:
+    _put(_sha_path(jp), (_sha(raw) + "\n").encode("ascii"), mode, state_owned)
+
+
+def _keep_old(path: Path, data, mode: int, state_owned: bool, old_name, old_format) -> None:
+    """The JSON form next to the XML one, then the hash of it: written after the XML, so a stop in between leaves the XML as
+    the truth (a JSON that equals the XML's data is never taken for a newer one)."""
+    jp = _json_path(path, old_name)
+    body = _old_bytes(data, old_format)
+    _put(jp, body, mode, state_owned)
+    _note_sha(jp, body, mode, state_owned)
+
+
+def _same(a, b) -> bool:
+    if isinstance(a, dict) and isinstance(b, dict):
+        a, b = {k: v for k, v in a.items() if k != "version"}, {k: v for k, v in b.items() if k != "version"}
+    return a == b
+
+
+def _newer_json(path: Path, xml_data, t: str, is_list: bool, keep_version: bool, mode: int | None, state_owned: bool,
+                old_name):
+    """The data of a JSON form that changed after this code last wrote it (an older release after a rollback), or None.
+    It wins once: the XML form is written from it and its hash recorded. Nothing recorded, an unreadable JSON, or one
+    that holds what the XML form holds: the XML form wins. A store that cannot be rewritten still returns the data."""
+    jp = _json_path(path, old_name)
+    want = _recorded(jp)
+    if want is None:
+        return None
+    try:
+        raw = jp.read_bytes()
+    except OSError:
+        return None
+    if _sha(raw) == want:
+        return None
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return None
+    if not isinstance(data, list if is_list else dict):
+        return None
+    m = _DEFAULT_MODE if mode is None else mode
+    same = _same(data, xml_data)
+    try:
+        if not same:
+            _write_xml(path, data, t, m, state_owned, is_list)
+        _note_sha(jp, raw, m, state_owned)
+    except (OSError, StateXmlError, TypeError, ValueError) as e:
+        if not (isinstance(e, OSError) and e.errno in _NO_WRITE):
+            note_problem(path, f"could not be converted: {e}")
+    if same:
+        return None
+    return {"version": FORMAT, **data} if keep_version and not is_list and "version" not in data else data
+
+
+def _read(path: Path, tag: str | None, keep_version: bool, is_list: bool, mode: int | None, state_owned: bool,
+          keep_old_form: bool = True, old_name=None):
     path = Path(path)
     xp = xml_path(path)
+    jp = _json_path(path, old_name)
     t = tag or tag_of(path)
     try:
         raw = xp.read_bytes()
@@ -331,42 +424,58 @@ def _read(path: Path, tag: str | None, keep_version: bool, is_list: bool, mode: 
         try:
             out = loads_list(raw, t) if is_list else loads(raw, t, keep_version=keep_version)
             clear_problem(xp)
+            if keep_old_form:
+                newer = _newer_json(path, out, t, is_list, keep_version, mode, state_owned, old_name)
+                if newer is not None:
+                    return newer
             return out
         except StateXmlError as e:
             note_problem(xp, str(e))
-    old = _plain_list(path) if is_list else _plain(path)
+    old = _plain_list(jp) if is_list else _plain(jp)
     if old is not None and raw is None:
-        _move(path, old, t, mode, state_owned)
+        _move(path, old, t, mode, state_owned, keep_old_form, old_name)
     return old
 
 
 def read(path: Path, *, keep_version: bool = False, tag: str | None = None, mode: int | None = None,
-         state_owned: bool = True) -> dict | None:
+         state_owned: bool = True, keep_old_form: bool = True, old_name=None) -> dict | None:
     """The data of state file `path` (given by its JSON name), or None when there is none or neither form holds an
     object. The XML form wins; a JSON-only file is moved to XML on the way (with `mode` and owner as given: the default
     mode of the copy, the state's owner). `tag` is the root element when it is not the file stem (a month-named file).
     A store that cannot be rewritten (a read by a user with no write permission) reads the old form, records nothing
-    and raises nothing."""
-    return _read(path, tag, keep_version, False, mode, state_owned)
+    and raises nothing. `keep_old_form` and `old_name` as `write`: a JSON form that an older release changed after this
+    code wrote it (a rollback) wins once and is written to the XML form."""
+    return _read(path, tag, keep_version, False, mode, state_owned, keep_old_form, old_name)
 
 
-def read_list(path: Path, *, tag: str | None = None, mode: int | None = None, state_owned: bool = True) -> list | None:
+def read_list(path: Path, *, tag: str | None = None, mode: int | None = None, state_owned: bool = True,
+              keep_old_form: bool = True, old_name=None) -> list | None:
     """Like `read` for a file that holds a JSON list (reads.json, devices.json): None when neither form holds a list."""
-    return _read(path, tag, False, True, mode, state_owned)
+    return _read(path, tag, False, True, mode, state_owned, keep_old_form, old_name)
 
 
-def _move(path: Path, data, tag: str, mode: int | None, state_owned: bool) -> None:
+def _move(path: Path, data, tag: str, mode: int | None, state_owned: bool, keep_old_form: bool = True,
+          old_name=None, old_format=None) -> None:
     xp = xml_path(path)
     moving = xp.with_name(xp.name + ".moving")
+    m = _DEFAULT_MODE if mode is None else mode
     try:
         if xp.exists():
             return
-        _put(moving, dumps_list(tag, data) if isinstance(data, list) else dumps(tag, data),
-             _DEFAULT_MODE if mode is None else mode, state_owned)
+        _put(moving, dumps_list(tag, data) if isinstance(data, list) else dumps(tag, data), m, state_owned)
         try:
             os.link(moving, xp)
         except FileExistsError:
-            pass
+            return
+        if keep_old_form:                       # the JSON form stays as it is when there is one; else it is written
+            jp = _json_path(path, old_name)
+            try:
+                have = jp.read_bytes()
+            except FileNotFoundError:
+                _keep_old(path, data, m, state_owned, old_name, old_format)
+            else:
+                if _same(_plain_list(jp) if isinstance(data, list) else _plain(jp), data):
+                    _note_sha(jp, have, m, state_owned)
     except (OSError, StateXmlError, TypeError, ValueError) as e:
         if not (isinstance(e, OSError) and e.errno in _NO_WRITE):      # no write permission is not a failure
             note_problem(path, f"could not be converted: {e}")
@@ -377,50 +486,72 @@ def _move(path: Path, data, tag: str, mode: int | None, state_owned: bool) -> No
             pass
 
 
-def migrate(path: Path, obj: dict, mode: int | None = None, *, tag: str | None = None, state_owned: bool = True) -> None:
+def migrate(path: Path, obj: dict, mode: int | None = None, *, tag: str | None = None, state_owned: bool = True,
+            keep_old_form: bool = True, old_name=None, old_format=None) -> None:
     """Write `obj` (what the JSON file `path` holds) as its XML form, only when there is none yet: a reader that moves
     a file must never write over what a writer saved a moment before. A failing move changes nothing (the JSON form
-    is read until the next save writes the XML form); no write permission is not recorded as a problem."""
-    _move(Path(path), obj, tag or tag_of(path), mode, state_owned)
+    is read until the next save writes the XML form); no write permission is not recorded as a problem. The JSON form is
+    written too when there is none (as `write`)."""
+    _move(Path(path), obj, tag or tag_of(path), mode, state_owned, keep_old_form, old_name, old_format)
 
 
 def migrate_list(path: Path, items: list, mode: int | None = None, *, tag: str | None = None,
-                 state_owned: bool = True) -> None:
+                 state_owned: bool = True, keep_old_form: bool = True, old_name=None, old_format=None) -> None:
     """Like `migrate` for a file that holds a JSON list."""
-    _move(Path(path), list(items), tag or tag_of(path), mode, state_owned)
+    _move(Path(path), list(items), tag or tag_of(path), mode, state_owned, keep_old_form, old_name, old_format)
 
 
-def _save(path: Path, data, tag: str | None, mode: int | None, state_owned: bool, is_list: bool) -> None:
-    path = Path(path)
+def _write_xml(path: Path, data, t: str, mode: int, state_owned: bool, is_list: bool) -> None:
     xp = xml_path(path)
-    t = tag or tag_of(path)
     if xp.exists():                                 # never overwrite what could not be read
         try:
             loads_list(xp.read_bytes(), t) if is_list else loads(xp.read_bytes(), t, keep_version=True)
         except (OSError, StateXmlError):
             quarantine(path)
     _mkdir(xp.parent)
-    _put(xp, dumps_list(t, data) if is_list else dumps(t, data), _DEFAULT_MODE if mode is None else mode, state_owned)
+    _put(xp, dumps_list(t, data) if is_list else dumps(t, data), mode, state_owned)
     clear_problem(xp)
     clear_problem(path)
 
 
-def write(path: Path, obj: dict, mode: int | None = None, *, tag: str | None = None, state_owned: bool = True) -> None:
-    """Save `obj` as state file `path`'s XML form (the JSON form is left as it was at the move). An XML file that cannot
-    be read is kept as `<name>.xml.unreadable`. `mode` and `state_owned` as `read`."""
-    _save(path, obj, tag, mode, state_owned, False)
+def _save(path: Path, data, tag: str | None, mode: int | None, state_owned: bool, is_list: bool,
+          keep_old_form: bool, old_name, old_format) -> None:
+    path = Path(path)
+    m = _DEFAULT_MODE if mode is None else mode
+    _write_xml(path, data, tag or tag_of(path), m, state_owned, is_list)
+    if keep_old_form:
+        jp = _json_path(path, old_name)
+        try:
+            _keep_old(path, data, m, state_owned, old_name, old_format)
+        except (OSError, TypeError, ValueError) as e:      # the XML form is saved; the old form is a rollback aid
+            note_problem(jp, f"old form could not be written: {e}")
+        else:
+            clear_problem(jp)
+
+
+def write(path: Path, obj: dict, mode: int | None = None, *, tag: str | None = None, state_owned: bool = True,
+          keep_old_form: bool = True, old_name=None, old_format=None) -> None:
+    """Save `obj` as state file `path`'s XML form, then its JSON form as the older release wrote it (same `mode` and
+    owner; written after the XML, so a stop leaves the XML as the truth) and the hash of that JSON, so a later read can
+    tell an older release changed it. An XML file that cannot be read is kept as `<name>.xml.unreadable`. `mode` and
+    `state_owned` as `read`. `keep_old_form=False` is for a cache an older release rebuilds by itself. `old_name` is the
+    older release's file name when it differs (usage.jsonl); `old_format` the json.dumps keyword arguments, or a function
+    that returns the bytes, when the older writer did not use this copy's OLD_FORMAT."""
+    _save(path, obj, tag, mode, state_owned, False, keep_old_form, old_name, old_format)
 
 
 def write_list(path: Path, items: list, mode: int | None = None, *, tag: str | None = None,
-               state_owned: bool = True) -> None:
+               state_owned: bool = True, keep_old_form: bool = True, old_name=None, old_format=None) -> None:
     """Like `write` for a file that holds a JSON list."""
-    _save(path, list(items), tag, mode, state_owned, True)
+    _save(path, list(items), tag, mode, state_owned, True, keep_old_form, old_name, old_format)
+
+
+# ---- end of the shared block ----
 
 
 def write_both(path: Path, obj: dict, mode: int = 0o600) -> None:
-    """XML first, then the JSON form of the file (an older Sync reads that one after a rollback)."""
+    """XML first, then the JSON form of the file (an older Sync reads that one after a rollback): what `write` does."""
     write(path, obj, mode)
-    atomic_write(Path(path), (json.dumps(obj, indent=2, sort_keys=True) + "\n").encode("utf-8"), mode)
 
 
 def write_plain(path: Path, obj: dict, *, also_json: bool = False) -> None:
@@ -438,6 +569,6 @@ def exists(path: Path) -> bool:
 
 
 def unlink(path: Path) -> None:
-    for p in (xml_path(path), Path(path)):
+    for p in (xml_path(path), Path(path), _sha_path(Path(path))):
         with contextlib.suppress(FileNotFoundError):
             p.unlink()
