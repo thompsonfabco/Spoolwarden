@@ -83,6 +83,7 @@ import com.thompsonfabco.filamentkit.ui.history.showUndoable
 import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.history.shareCsv
 import com.thompsonfabco.filamentkit.ui.spool.CheckedOutRules
+import com.thompsonfabco.filamentkit.ui.spool.CheckedOutSupport
 import com.thompsonfabco.filamentkit.ui.spool.CheckedOutTexts
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
 import com.thompsonfabco.filamentkit.ui.spool.HubFailureNotice
@@ -132,9 +133,11 @@ data class SearchUi(
     /** Why the download did not happen: the words for an older Hub or a full phone, or a failure the usual notices say. */
     val csvProblem: String? = null,
     val csvFailure: HubFailure? = null,
-    /** The "Checked out" filter (R88 section 1.6); the chip's count comes from the screen's `checkedOutCount`, like Running low. */
+    /** The "Checked out" filter (R88 section 1.6); the chip's count is the `total` of the answer. */
     val checkedOnly: Boolean = false,
     val checked: List<SpoolSummary> = emptyList(),
+    /** The chip's number (the list answer's `total`); null: the Hub does not apply the filter, so there is no chip. */
+    val checkedCount: Int? = null,
     val checkedLoaded: Boolean = false,
     /** The spool whose Return is on its way; the Hub's refusal of one (its own `message`) stays under the list. */
     val returningId: Int? = null,
@@ -281,12 +284,13 @@ class SearchViewModel(
         checkedJob = viewModelScope.launch {
             try {
                 val answer = load()
+                CheckedOutSupport.supported = CheckedOutRules.supported(answer.filters)
                 if (!CheckedOutRules.supported(answer.filters)) {
-                    _state.update { it.copy(busy = false, checkedOnly = false, checked = emptyList()) }
+                    _state.update { it.copy(busy = false, checkedOnly = false, checked = emptyList(), checkedCount = null) }
                 } else {
                     val spools = CheckedOutRules.rows(answer.spools)
                     _state.update {
-                        it.copy(busy = false, checked = spools, checkedLoaded = true, loadedAt = System.currentTimeMillis(),
+                        it.copy(busy = false, checked = spools, checkedCount = CheckedOutRules.count(answer), checkedLoaded = true, loadedAt = System.currentTimeMillis(),
                             failure = if (it.checkedOnly) null else it.failure)
                     }
                 }
@@ -295,7 +299,7 @@ class SearchViewModel(
             } catch (e: Exception) {
                 val gone = e is ApiError && (e.status == HTTP_NOT_FOUND || e.status == HTTP_BAD_REQUEST)
                 _state.update {
-                    it.copy(busy = false, checkedOnly = it.checkedOnly && !gone,
+                    it.copy(busy = false, checkedOnly = it.checkedOnly && !gone, checkedCount = if (gone) null else it.checkedCount,
                         failure = if (it.checkedOnly && !gone) hubFailure(e) else it.failure)
                 }
             }
@@ -320,7 +324,7 @@ class SearchViewModel(
                 _state.update { s ->
                     val left = s.checked.filter { it.id != spool.id }
                     s.copy(
-                        returningId = null, checked = left,
+                        returningId = null, checked = left, checkedCount = s.checkedCount?.let { n -> maxOf(n - 1, 0) },
                         returnToast = ReturnToast(CheckedOutTexts.returned(where), event),
                     )
                 }
@@ -405,8 +409,6 @@ fun SearchScreen(
     online: Boolean = true,
     /** How many spools are running low, for the chip "Running low (n)"; null: no chip (the Hub has no such list). */
     lowCount: Int? = null,
-    /** How many spools are checked out, for the chip "Checked out (n)"; null: no chip (the Hub does not apply the filter). */
-    checkedOutCount: Int? = null,
     onNfcSettings: (() -> Unit)? = null,
     /** Opens the scanner in label mode (Scan a label, 7.1); null: no button. */
     onScanLabel: (() -> Unit)? = null,
@@ -417,6 +419,7 @@ fun SearchScreen(
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
     LaunchedEffect(vm) { vm.loadSpoolmanLink() }
+    LaunchedEffect(vm) { vm.loadCheckedOut() }
     // a Return: the toast says where the spool went, with Undo for 10 seconds when the Hub offers one (R88 1.6)
     val toast = LocalToast.current
     val undoLabel = stringResource(R.string.common_undo)
@@ -526,8 +529,7 @@ fun SearchScreen(
                             ToggleChip(stringResource(R.string.running_low_chip, lowCount ?: ui.low.size), ui.lowOnly) { vm.setLowOnly(!ui.lowOnly) }
                         }
                         // spools with a remembered place (R88 1.6); no chip for a Hub without the filter
-                        if (checkedOutCount != null || ui.checkedOnly) {
-                            val n = if (ui.checkedOnly && ui.checkedLoaded) ui.checked.size else checkedOutCount ?: ui.checked.size
+                        ui.checkedCount?.let { n ->
                             ToggleChip(CheckedOutTexts.chip(n), ui.checkedOnly) { vm.setCheckedOnly(!ui.checkedOnly) }
                         }
                     }

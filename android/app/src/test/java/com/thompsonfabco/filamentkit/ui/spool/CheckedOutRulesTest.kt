@@ -46,10 +46,12 @@ class CheckedOutRulesTest {
         assertFalse("an empty list is no support", CheckedOutRules.supported(emptyList()))
     }
 
-    @Test fun theCountNeedsTheFilterEvenWithRowsThatCarryTheFields() {
+    @Test fun theCountIsTheTotalOfTheAnswerAndFallsBackToTheRowsWithoutOne() {
+        assertEquals(7, CheckedOutRules.count(SpoolsAnswer(listOf(row(1, true)), null, listOf("checked_out"), total = 7)))
         assertEquals(1, CheckedOutRules.count(answer(listOf("checked_out"), row(1, true), row(2, false))))
         assertEquals("zero spools is still support", 0, CheckedOutRules.count(answer(listOf("checked_out"))))
         assertNull(CheckedOutRules.count(answer(null, row(1, true))))
+        assertNull(CheckedOutRules.count(SpoolsAnswer(emptyList(), null, null, total = 3)))
         assertNull(CheckedOutRules.count(answer(emptyList())))
     }
 

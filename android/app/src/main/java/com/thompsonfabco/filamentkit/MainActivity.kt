@@ -707,7 +707,6 @@ internal fun FilamentKitApp(
                 online = online,
                 printersOn = info?.printersOn != false,
                 label = if (labelRoutes) LabelSource({ size -> currentApi().labelSvg(route.id, size) }) else null,
-                checkedOutSupported = alertsUi.checkedOutCount != null,
             )
         }
 
@@ -1321,7 +1320,6 @@ internal fun FilamentKitApp(
                             online = online,
                             onScanLabel = if (labelRoutes) ({ nav.navigate(SpoolsScanRoute) { launchSingleTop = true } }) else null,
                             lowCount = alertsUi.lowCount,
-                            checkedOutCount = alertsUi.checkedOutCount,
                             spoolDetail = { spool, embedded, _ ->
                                 val spoolVm: SpoolViewModel = viewModel(
                                     key = "spool-${spool.id}",
@@ -1339,7 +1337,6 @@ internal fun FilamentKitApp(
                                     onPairAgain = app.router::pairAgain,
                                     online = online,
                                     printersOn = info?.printersOn != false,
-                                    checkedOutSupported = alertsUi.checkedOutCount != null,
                                     embedded = embedded,
                                     label = if (labelRoutes) LabelSource({ size -> currentApi().labelSvg(spool.id, size) }) else null,
                                 )
