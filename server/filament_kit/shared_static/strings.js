@@ -3929,6 +3929,7 @@ window.SW_TEXT = Object.freeze({
   "panel_setup_firmware_old": "This panel's firmware is too old for Wi-Fi. Flash it first: sudo spoolwarden weigh-station flash-display",
   "panel_setup_no_answer_usb": "The panel did not answer over USB. Check the cable and try again.",
   "panel_setup_not_accepted": "The panel did not accept the Wi-Fi settings.",
+  "panel_setup_panel_store": "The panel could not save the Wi-Fi settings. Run this again; if it fails again, flash the panel: sudo spoolwarden weigh-station flash-display",
   "panel_setup_timeout": "The panel did not answer in time.",
   "panel_setup_not_saved": "The panel took the Wi-Fi settings, but the station could not save them. Run the set-up again.",
   "station_panel_wifi_lost": "The panel was flashed from scratch, so its Wi-Fi set-up is gone. On the Weigh Station's computer, run: sudo spoolwarden weigh-station panel-wifi",
