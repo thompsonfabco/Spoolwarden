@@ -1,6 +1,7 @@
 """RC1e: the Bambu Lab filament-used log is one XML file per month per printer (`usage/<yyyy-mm>.xml`): the round trip,
 the old usage.jsonl read once and left alone, a damaged month file, undo and its events, modes, and the reach of the
 reads (analytics reads every month)."""
+import errno
 import hashlib
 import json
 import os
@@ -385,3 +386,38 @@ def test_a_marker_of_the_earlier_form_is_read_as_nothing_taken_in():
     (d / "usage.jsonl").write_text(json.dumps(_entry(E1, "2026-11-10T10:00:00Z")) + "\n", encoding="utf-8")
     assert [e["id"] for e in usage.entries(SERIAL, days=10_000)] == [E1]
     assert usage.entries(SERIAL, days=10_000) and (d / "usage" / usage.MIGRATED).read_text().startswith("usage.jsonl taken in: ")
+
+
+class _NoSpaceOs:
+    """usage.os with an fsync that fails (the disk is full)."""
+    def __getattr__(self, name):
+        return getattr(os, name)
+
+    def fsync(self, fd):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+
+def test_a_failed_append_to_the_old_log_is_logged_once_and_noted(monkeypatch, caplog):
+    with monkeypatch.context() as m, caplog.at_level("WARNING"):
+        m.setattr(usage, "os", _NoSpaceOs())
+        for i in range(3):
+            usage.append(SERIAL, {"job": f"j{i}"})
+    assert len([r for r in caplog.records if "usage.jsonl" in r.getMessage()]) == 1
+    [p] = [p for p in statexml.problems() if "usage.jsonl" in p]
+    assert "No space left" in p and "rollback" in p
+    usage.append(SERIAL, {"job": "ok"})                    # the entries were kept in the XML meanwhile
+    assert len(usage.entries(SERIAL, days=30)) == 4
+
+
+def test_on_a_fresh_old_log_the_line_is_written_before_the_marker(monkeypatch):
+    real = usage._write_atomic
+
+    def broken(path, *a, **kw):
+        if path.name == usage.MIGRATED:
+            raise OSError("disk full")
+        return real(path, *a, **kw)
+    monkeypatch.setattr(usage, "_write_atomic", broken)
+    r = usage.append(SERIAL, {"job": "a"})
+    assert [x["id"] for x in _v062_read(SERIAL)[0]] == [r["id"]]        # the rollback copy has the entry
+    monkeypatch.setattr(usage, "_write_atomic", real)
+    assert [e["id"] for e in usage.entries(SERIAL, days=30)] == [r["id"]]      # and a lost marker costs no double

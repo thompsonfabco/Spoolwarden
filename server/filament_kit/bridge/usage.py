@@ -430,6 +430,11 @@ def _write_line(serial: str, rec: dict) -> None:
         _old_form(serial, rec)
 
 
+def _copy_key(serial: str) -> Path:
+    """What a failed rollback copy is noted under (the move of usage.jsonl has its own note, under usage.jsonl)."""
+    return _dir(serial) / (FILE + " (rollback copy)")
+
+
 def _old_form(serial: str, rec: dict) -> None:
     """Append `rec` to usage.jsonl as the release before wrote it (one JSON line, fsynced, mode 600), then mark it taken
     in (the marker is written after the line, so a lost marker only makes the next read see the line again)."""
@@ -451,8 +456,9 @@ def _old_form(serial: str, rec: dict) -> None:
             raw = f.read_bytes()
             if len(raw) == before + len(line):
                 _write_marker(serial, raw)
+                _forget(_copy_key(serial))
     except (OSError, TypeError, ValueError) as e:       # the XML is the record: the old copy is for a rollback only
-        log.warning("usage: printer %s: cannot append to %s (%s)", serial, FILE, e)
+        _report(_copy_key(serial), f"cannot be kept current for a rollback: {e}")
 
 
 def _mark(serial: str, eid: str, at: Any, undone: bool) -> None:
