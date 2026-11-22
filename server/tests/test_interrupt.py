@@ -15,6 +15,7 @@ from filament_kit.bridge import ams, calib3mf, connection, mapping, registry, sl
 from filament_kit.bridge.calib3mf import CalibResult
 from filament_kit.bridge.connection import Manager
 from filament_kit.bridge.registry import Printer
+from filament_kit.profiles import statexml
 from fakes.fake_paho import FakeClient, FakePrinter
 from test_slottest import ADDR, LABELS, REPORT, assert_back_to_original, no_test_colour_left
 
@@ -154,9 +155,9 @@ def test_slot_test_refuses_while_a_snapshot_is_pending(rig):
 def test_corrupt_snapshot_says_what_test_colours_look_like_and_where_the_file_is(rig):
     """R3: an unreadable snapshot names the shape of the test colours and the file to delete."""
     m, printer, _ = rig
-    f = snapshot.path(SERIAL)
+    f = statexml.xml_path(snapshot.path(SERIAL))
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text("{not json", encoding="utf-8")
+    f.write_text("<not xml", encoding="utf-8")
     probs = snapshot.restore(m, SERIAL)
     assert len(probs) == 1, probs
     p = probs[0]
@@ -261,8 +262,8 @@ def test_old_slottest_snapshot_still_restores_its_test_colours(rig):
     m, printer, _ = rig
     leave_test_colours(printer)
     f = snapshot.path(SERIAL)
-    d = json.loads(f.read_text(encoding="utf-8"))
-    f.write_text(json.dumps(dict(d, at=time.time() - 3600)), encoding="utf-8")
+    d = statexml.read(f)
+    statexml.write(f, dict(d, at=time.time() - 3600), mode=0o600)
     set_colour(m, printer, 0, 3, "ABCDEFFF")              # A4 changed since
     assert snapshot.restore(m, SERIAL) == []
     assert sorted({(w["ams_id"], w["tray_id"]) for w in printer.writes}) == [(0, 0), (0, 1)]

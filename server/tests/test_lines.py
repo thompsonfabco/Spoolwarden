@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from filament_kit.profiles import statexml
 from filament_kit import config, library
 from filament_kit.profiles import bbl, lines
 
@@ -276,7 +277,7 @@ def test_lines_roundtrip_atomic(lib, store):
     lines.save(ls)
     assert lines.load() == ls
     folder = config.paths().state / "profiles"
-    assert (folder / "lines.json").is_file()
+    assert (folder / "lines.xml").is_file()
     assert not list(folder.glob("*.tmp"))
 
 
@@ -340,7 +341,7 @@ def test_invalid_rows_kept_reported_and_their_fids_reserved(lib, store, monkeypa
     new = lines.ensure(ls, "SUNLU", "PLA+", "PLA", bambu_parent=None, library=lib, store=store, used_fids=set())
     assert new.filament_id == "P00000bb"       # neither the invalid row's id nor a valid line's
     lines.save(ls)
-    saved = json.loads(p.read_text(encoding="utf-8"))["lines"]
+    saved = statexml.read(p, keep_version=True)["lines"]
     assert saved[2:] == rows[1:]               # invalid rows written back unchanged, after the valid lines
     assert [r["line_id"] for r in saved[:2]] == ["sunlu--pla-plus", "xzn--petg"]
 
@@ -587,7 +588,7 @@ def test_filament_in_two_lines_is_reported_and_dropped_from_the_later_one(lib, s
     assert ls["acme--pla"].filaments == [3] and ls["xzn--petg"].filaments == [1, 2]
     assert any("filament 2 is listed in lines acme--pla and xzn--petg" in s for s in lines.problems(ls))
     lines.save(ls)
-    saved = {r["line_id"]: r["filaments"] for r in json.loads(p.read_text(encoding="utf-8"))["lines"]}
+    saved = {r["line_id"]: r["filaments"] for r in statexml.read(p, keep_version=True)["lines"]}
     assert saved == {"acme--pla": [3], "xzn--petg": [1, 2]}
     assert not any("listed in lines" in s for s in lines.problems(lines.load()))
 

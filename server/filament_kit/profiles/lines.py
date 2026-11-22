@@ -60,7 +60,7 @@ from .. import config
 from .. import library as library_mod
 from ..library import Library
 from ..pairing import _write_atomic, make_state_dir, open_lock
-from . import errors
+from . import errors, statexml
 from .bbl import Store, _first
 from .orca import SYSTEM, OrcaStore
 
@@ -562,21 +562,38 @@ def load() -> LineSet:
     """The saved lines; an empty set when lines.json is missing. Raises LineStoreError when it cannot be read
     (left in place) or is not a lines file (moved aside first)."""
     path = _path()
+    xp = statexml.xml_path(path)
+    data = None
     try:
-        raw = path.read_bytes()
+        raw = xp.read_bytes()
     except FileNotFoundError:
-        return LineSet()
+        raw = None
     except OSError as e:
-        # a read failure (permissions, I/O, a directory) says nothing about the content: leave the file in place
-        raise LineStoreError(f"lines.json could not be read ({e.__class__.__name__}); left in place",
+        raise LineStoreError(f"lines.xml could not be read ({e.__class__.__name__}); left in place",
                              moved=None) from None
-    try:
-        data = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as e:
-        _corrupt(path, f"not JSON: {e.__class__.__name__}")
+    if raw is not None:
+        try:
+            data = statexml.loads(raw, "lines", keep_version=True)
+        except statexml.StateXmlError as e:
+            _corrupt(xp, f"not lines XML: {e}")
+    else:
+        try:
+            raw = path.read_bytes()
+        except FileNotFoundError:
+            return LineSet()
+        except OSError as e:
+            # a read failure (permissions, I/O, a directory) says nothing about the content: leave the file in place
+            raise LineStoreError(f"lines.json could not be read ({e.__class__.__name__}); left in place",
+                                 moved=None) from None
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as e:
+            _corrupt(path, f"not JSON: {e.__class__.__name__}")
     rows = data.get("lines") if isinstance(data, dict) else None
     if not isinstance(rows, list):
-        _corrupt(path, "no lines list")
+        _corrupt(xp if xp.exists() else path, "no lines list")
+    if xp.name != path.name and not xp.exists():
+        statexml.migrate(path, data)            # RC1c: the first read of an older Hub's file writes the XML form
     out = LineSet()
     for r in rows:
         line = _row(r)
@@ -602,11 +619,9 @@ def load() -> LineSet:
 def save(lines: dict[str, Line]) -> None:
     """Write the set (valid lines sorted by line_id, then the invalid rows unchanged). Call under `locked()`."""
     path = _path()
-    make_state_dir(path.parent)
     rows = [asdict(lines[k]) for k in sorted(lines)] + list(getattr(lines, "invalid", []))
     data = {"version": FILE_VERSION, "lines": rows}
-    _write_atomic(path, (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8"), 0o644,
-                  state_owned=True)
+    statexml.write(path, data)                  # RC1c: lines.xml; the JSON form stays as it was at the move
 
 
 @contextmanager

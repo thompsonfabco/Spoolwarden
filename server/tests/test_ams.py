@@ -84,8 +84,8 @@ def test_map_roundtrip(state):
     m.slots["A1"] = {"ams_id": 0, "tray_id": 0, "global_id": 0}
     m.calibrated, m.observe = True, False
     ams.save_map("SER1", m)
-    f = state / "printers" / "SER1" / "slotmap.json"
-    assert f.exists() and not list(f.parent.glob("*.tmp"))
+    f = state / "printers" / "SER1" / "slotmap.xml"
+    assert f.exists() and not (f.parent / "slotmap.json").exists() and not list(f.parent.glob("*.tmp"))
     m2 = ams.load_map("SER1")
     assert m2.slots == m.slots and m2.calibrated and not m2.observe and m2.updated
     assert ams.load_map("OTHER").slots == {}
