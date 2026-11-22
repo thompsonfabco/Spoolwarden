@@ -460,11 +460,11 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `local-intake plan` | What installing the latest reader release needs, per tier (saved when run as root) | (none) |
 | `local-intake remove [-y]` | Uninstall the local reader from this machine and switch the local reader off (root; its settings are kept) | (none) |
 | `local-intake test <photo>...` | Read photos with the local reader only and print the result (nothing saved) | (none) |
-| `label-reader corrections [list]` | The corrections waiting to be shared | (none) |
-| `label-reader corrections remove <id>...` | Take corrections out of the list; nothing is sent | (none) |
-| `label-reader corrections retry <record>...` | Queue the corrections of records again that `list` shows as not waiting | (none) |
-| `label-reader corrections package <file>` | Save the exact zip that `send` would send, to look at it first | (none) |
-| `label-reader corrections send` | Ask the Label Reader to send the corrections waiting (it does the upload) | (none) |
+| `label-reader corrections [list]` | The corrections waiting to be shared (root) | (none) |
+| `label-reader corrections remove <id>...` | Take corrections out of the list; nothing is sent (root) | (none) |
+| `label-reader corrections retry <record>...` | Queue the corrections of records again that `list` shows as not waiting (root) | (none) |
+| `label-reader corrections package <file>` | Save the exact zip that `send` would send, to look at it first (root) | (none) |
+| `label-reader corrections send` | Ask the Label Reader to send the corrections waiting (it does the upload) (root) | (none) |
 
 ### Notes on some commands
 
