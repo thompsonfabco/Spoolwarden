@@ -76,6 +76,8 @@ def test_status_lines_when_things_fail(cfg, capsys, monkeypatch):
         f"--   reads used today: 0 of {cfg['reads_per_day']}",
         "FAIL Weigh Station not answering at http://192.0.2.30:5003",
         "     fix: check the Weigh Station machine: sudo systemctl status filament-kit-station  (url http://192.0.2.30:5003)",
+        "FAIL The Weigh Station at 192.0.2.30:5003 is not using HTTPS.",
+        "     fix: Update it: on that machine run sudo spoolwarden update.",
         "--   paired devices: 0",
         "--   Filament Catalog version 7 (bundled), 1 local addition",
     ]

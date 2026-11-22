@@ -360,8 +360,8 @@ def test_a_mode_change_keeps_the_local_reader():
 
 # ---------- status, the setup page's reader test, the CLI ----------
 
-def test_status_rows(fake_reader, dead_url):
-    from filament_kit import status
+def test_status_rows(fake_reader, dead_url, monkeypatch):
+    from filament_kit import local_intake_install, status
     url, data = fake_reader
     setup(url)
     rows = list(status.local_reader_rows(config.load()))
@@ -371,6 +371,7 @@ def test_status_rows(fake_reader, dead_url):
     texts = [r.text for r in status.local_reader_rows(config.load())]
     assert any("degraded: gpu: no CUDA device" in t for t in texts) and any("last read" in t for t in texts)
     setup(dead_url)
+    monkeypatch.setattr(local_intake_install, "installed", lambda: {"version": "1.0.0", "tier": "cpu"})     # installed, not up
     bad = list(status.local_reader_rows(config.load()))[0]
     assert bad.state == status.FAIL and "does not answer" in bad.text and "9) Label reader" in bad.fix
     assert any("local label reader" in r.text for r in status.rows(config.load(), live_key=False))

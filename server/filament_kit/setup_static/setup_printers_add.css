@@ -1,5 +1,11 @@
 /* Printers add (S2.5) */
 .printers-add { display: grid; gap: var(--s3); }
+.printers-add__title { margin: 0; }
+.printers-add__step { display: grid; gap: var(--s3); }
+.printers-add__found { list-style: none; margin: 0; padding: 0; }
+.printers-add__found li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--s2); padding: var(--s2) 0; overflow-wrap: anywhere; }
+.printers-add__more summary { min-height: calc(var(--ctl) + var(--s1)); align-content: center; cursor: pointer; }
+.printers-add__more[open] summary { margin-bottom: var(--s2); }
 .printers-tools { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s3); margin: var(--s3) 0; align-items: start; }
 .printers-tools > .card { margin: 0; display: grid; gap: var(--s3); min-width: 0; }
 .printers-tools > .card > * { margin: 0; min-width: 0; }

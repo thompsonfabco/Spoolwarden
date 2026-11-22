@@ -2,11 +2,15 @@
 managers already hold, opens no printer connection, and leaves the per-printer replies as they were."""
 from __future__ import annotations
 
+import csv
+import io
+
 import pytest
 
-from filament_kit import api
+from filament_kit import api, trusted
 from filament_kit.bridge import registry, status
-from test_setup_page import (HOME, SERIAL, STATIC, client, env, helper, make)  # noqa: F401
+from test_setup_page import (AWAY, CODE, HOME, SERIAL, STATIC, client, env, helper, make)  # noqa: F401
+from test_setup_trusted import _trust
 
 NAME = "voron.example.com"
 REPORT = {"gcode_state": "RUNNING", "subtask_name": "bracket", "mc_percent": 42, "mc_remaining_time": 30,
@@ -84,7 +88,6 @@ def test_the_read_opens_no_printer_connection_and_shows_no_address(env, helper, 
 
 
 def test_the_read_is_for_the_lan_only(env, helper, fleet):
-    from test_setup_page import AWAY
     mgr, _ = fleet
     app = make(env, helper, mgr, add=frozenset({"klipper"}))
     assert client(app, AWAY).get("/setup/api/printers/states").status_code == 403
@@ -104,4 +107,51 @@ def test_the_per_printer_replies_are_unchanged(env, helper, fleet):
                                "port", "api_key", "lane_data"}
     p = registry.load()[SERIAL]
     assert set(api._printer_view(p, mgr)) == {"id", "name", "model", "serial", "ip", "configured", "state", "camera",
-                                              "model_name", "summary", "family", "pinned"}
+                                              "model_name", "summary", "family", "pinned", "auto", "auto_possible"}
+
+
+def test_printers_csv_requires_the_code_or_a_trusted_computer(env, helper, fleet):
+    mgr, _ = fleet
+    app = make(env, helper, mgr, add=frozenset({"klipper"}))
+    c = client(app)
+    path = "/setup/api/export/printers.csv"
+    for refused in (c.get(path), c.get(path, headers={"X-Setup-Code": "00000000"}),
+                    client(app, AWAY).get(path, headers={"X-Setup-Code": CODE})):
+        assert refused.status_code == 403 and "content-disposition" not in refused.headers
+    assert mgr.reads == 0
+
+    assert _trust(c).status_code == 200
+    r = c.get(path)
+    assert r.status_code == 200 and trusted.COOKIE in r.headers["set-cookie"]
+    assert "name,kind,model,slot,spool" in r.text
+
+
+def test_printers_csv_contains_only_printer_and_slot_fields(env, helper, fleet):
+    mgr, kl = fleet
+    registry.rename(kl.serial, '=Étage, "Atelier"')
+    unnamed = registry.add_klipper("", "192.0.2.44", 7125)
+    registry.set_api_key(unnamed.serial, "moonraker-key")
+    registry.set_address(unnamed.serial, "new-host", 7125)
+    other = registry.add_klipper("", "former-printer.local", 7125)
+    registry.set_address(other.serial, "other-host", 7125)
+    single_label = registry.add_klipper("", "workshop-voron", 7125)
+    registry.set_address(single_label.serial, "new-voron", 7125)
+    registry.add_klipper("Workshop Voron", "192.0.2.45", 7125)
+    mgr.held[kl.serial]["ams"][0]["slots"][0]["spool"] = {"id": 42, "name": "Secret spool description"}
+    app = make(env, helper, mgr, add=frozenset({"klipper"}))
+    r = client(app).get("/setup/api/export/printers.csv", headers={"X-Setup-Code": CODE})
+    assert r.status_code == 200, r.text
+    assert r.headers["Content-Type"] == "text/csv; charset=utf-8"
+    assert r.headers["Content-Disposition"] == 'attachment; filename="printers.csv"'
+    assert r.headers["Cache-Control"] == "no-store"
+    rows = list(csv.reader(io.StringIO(r.text)))
+    assert rows[0] == ["name", "kind", "model", "slot", "spool"]
+    assert ["'=Étage, \"Atelier\"", "klipper", "", "T0", "42"] in rows
+    assert ["P1S", "bambu", "P1S", "", ""] in rows
+    assert ["Workshop Voron", "klipper", "", "", ""] in rows
+    assert rows.count(["", "klipper", "", "", ""]) == 3
+    assert all(len(row) == 5 for row in rows)
+    for hidden in (NAME, SERIAL, "192.0.2.40", "192.0.2.44", "former-printer.local", "workshop-voron",
+                   "new-voron", "12345678", "moonraker-key", "Secret spool description"):
+        assert hidden not in r.text
+    assert mgr.touched == []

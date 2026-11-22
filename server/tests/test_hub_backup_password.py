@@ -32,12 +32,14 @@ window.fetch = async (u, init) => {
   hub.calls.push({ path, password: body.password, name: body.name, sha256: body.sha256, confirm: body.confirm });
   if (path === "backups/list") return reply(200, { backups: hub.rows, keep_days: 14, folder: "/var/backups/filament-kit", password_set: hub.set });
   if (path === "backups/password") {
-    if (body.password.length < hub.minimum) return reply(400, { error: "too_short", text: "The server wants at least " + hub.minimum + " characters." });
+    if (body.password.length < hub.minimum) return reply(400, { error: "The server wants at least " + hub.minimum + " characters.", code: "too_short", text: "NOT THIS", message: "NOT THIS" });
     hub.set = true; hub.last = body.password;
     return reply(200, { set: true });
   }
   if (path === "backups/password/remove") { hub.set = false; return reply(200, { set: false }); }
-  if (path === "restore/password") return body.password === "right password" ? reply(200, { ok: true }) : reply(400, { error: "wrong_password", text: "Wrong password, or the file is damaged. Nothing was changed." });
+  if (path === "restore/password") return body.password === "right password"
+    ? reply(200, { ok: true, host: "other-hub", created: "2026-11-16", kit: "1.0", files: 4, spoolman: false, modules: ["backup"], replaces_data: true, other_host: true, sha256: "ab".repeat(32) })
+    : reply(400, { error: "Wrong password, or the file is damaged. Nothing was changed.", code: "wrong_password", text: "NOT THIS", message: "NOT THIS" });
   if (path === "restore/forget") return reply(200, { ok: true });
   return reply(200, { job: "restore" });
 };
@@ -183,7 +185,7 @@ const choose = async () => {
   input.files = dt.files; input.dispatchEvent(new Event("change", { bubbles: true }));
   await sleep(150);
   [...document.querySelectorAll(".steps button")].find((b) => text(b) === "Upload and check").click();
-  await until(() => [...document.querySelectorAll(".steps button")].find((b) => text(b) === "Restore…"), "the checked upload");
+  await until(() => $('.steps [data-action="unlock-backup"], .steps [data-action="restore"]'), "the checked upload");
 };
 const askRestore = async () => {
   [...document.querySelectorAll(".steps button")].find((b) => text(b) === "Restore…").click();
@@ -197,19 +199,23 @@ def test_the_restore_dialog_asks_the_password_only_for_a_file_the_stored_one_doe
 out.accept = $('.settings__group[data-id="backups"] input[type=file]').accept;
 await choose();
 out.summary = text($(".settings__summary"));
-let dlg = await askRestore();
+$('.steps [data-action="unlock-backup"]').click();
+let dlg = await until(() => $("dialog[open]"), "the password question");
 const field = () => $('input[name="restore_password"]', dlg);
 out.field = { there: !!field(), type: field().type, label: text($("label[for=" + field().id + "]", dlg)) };
-const word = [...dlg.querySelectorAll("input")].find((i) => i !== field());
 const confirm = async () => { $('[data-action="confirm"]', dlg).click(); await sleep(400); };
-word.value = "restore"; word.dispatchEvent(new Event("input", { bubbles: true }));
 await confirm();                                               // nothing typed
 out.empty = text($(".field__error", field().closest(".field")));
 field().value = "wrong one"; await confirm();
 out.wrong = { result: text($(".dialog__result .result__text", dlg)), open: dlg.open, job: calls().includes("job"), focus: document.activeElement === field() };
 field().value = "right password"; await confirm();
 await until(() => !dlg.open, "the dialog to close");
-await sleep(300);
+await until(() => text($(".settings__summary")).includes("other-hub"), "the verified restore summary");
+out.review = { job: calls().includes("job"), summary: text($(".settings__summary")) };
+dlg = await askRestore();
+const word = dlg.querySelector("input");
+word.value = "restore"; word.dispatchEvent(new Event("input", { bubbles: true }));
+await confirm();
 out.right = { job: window.__hub.calls.filter((c) => c.path === "job").map((c) => [c.confirm, c.sha256]), order: calls().filter((c) => c === "restore/password" || c === "job") };
 """)
     assert page["accept"] == ".zip,.enc,application/zip"
@@ -217,6 +223,7 @@ out.right = { job: window.__hub.calls.filter((c) => c.path === "job").map((c) =>
     assert page["field"] == {"there": True, "type": "password", "label": "Password of this backup"}
     assert page["empty"] == "Enter the password of this backup."
     assert page["wrong"] == {"result": WRONG, "open": True, "job": False, "focus": True}
+    assert page["review"]["job"] is False and "other-hub" in page["review"]["summary"]
     assert page["right"]["job"] == [["restore", "ab" * 32]] and page["right"]["order"] == ["restore/password", "restore/password", "job"]
 
 

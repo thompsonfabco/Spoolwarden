@@ -23,6 +23,8 @@ def env(tmp_path, monkeypatch):
         monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
     kh._reset_cache()
     config.save({**config.load(), "modules": {"printers": True, "klipper": True}})       # Klipper is opt-in
+    # the test before a Klipper printer is saved (R82 s5 p3) is test_af5_printer_add.py's; these are about the address
+    monkeypatch.setattr(cli, "_klipper_test", lambda host, port, key: True)
     yield
     kh._reset_cache()
 
@@ -367,6 +369,7 @@ def test_detect_odd_server_config_is_not_known(moonraker, answer):
 
 def test_detect_unreadable_config_is_not_known(moonraker):
     (config.paths().etc / "config.json").write_text("{not json", encoding="utf-8")
+    (config.paths().etc / "config.xml").write_text("<config", encoding="utf-8")       # both forms unreadable
     p = registry.add_klipper("Box", moonraker.host, moonraker.port)
     d = klipper_cli.detect(p)
     assert d["ok"] is True and d["problem"] is None and d["spoolman"] is None

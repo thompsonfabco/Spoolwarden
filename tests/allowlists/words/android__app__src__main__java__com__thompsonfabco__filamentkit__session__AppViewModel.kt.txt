@@ -1,1 +1,0 @@
-android/app/src/main/java/com/thompsonfabco/filamentkit/session/AppViewModel.kt | filament-kit | 1 | product name, waits for the rename

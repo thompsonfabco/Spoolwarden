@@ -188,7 +188,7 @@ def test_finished_two_colour_print_deducts_from_the_right_spools(rig, sd, spoolm
     es = usage.entries(SERIAL, 7)
     assert sorted((e["slot"], e["spool_id"], e["grams"]) for e in es) == [("A2", A2, 21.92), ("HT-A", HTA, 9.6)]
     for e in es:
-        assert set(e) == {"id", "at", "job", "grams", "spool_id", "slot", "observe", "undone"}
+        assert {"id", "at", "job", "grams", "spool_id", "slot", "observe", "undone"}.issubset(e)
         assert e["job"] == "bracket_v3" and e["observe"] is False and e["undone"] is False
 
 
@@ -199,6 +199,16 @@ def test_cancelled_at_40_percent_deducts_40_percent(rig, sd, spoolman_fake_store
     r.print_job(final="FAILED", percent=40)
     assert used(spoolman_fake_store, A2) == round(21.92 * 0.4, 2)
     assert used(spoolman_fake_store, HTA) == round(9.6 * 0.4, 2)
+
+
+def test_a_stop_without_a_reported_print_error_is_unknown(rig, sd):
+    calibrate()
+    put(sd, "/bracket_v3.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig()
+    r.push(JOB)
+    r.push({"gcode_state": "FAILED", "mc_percent": 40, "fail_reason": "0"})
+    r.settled()
+    assert {row["outcome"] for row in usage.entries(SERIAL, 7)} == {"unknown"}
 
 
 def test_finish_in_first_report_after_connect_is_not_settled(rig, sd, spoolman_fake_store):

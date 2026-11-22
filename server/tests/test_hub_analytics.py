@@ -2,8 +2,7 @@
 analytics (HD3's module is not in this tree): the six insight sentences in their order (and none when the Hub has none), one
 SVG bar per month for twelve months with an empty one among them, the choice of printer, Show as table, the table per
 material for the chosen month, the honest notes, "No usage yet", the wait and the failure with Try again, in all four looks at
-1280 and 390 px (nothing wider than the page; Panes does not squeeze a label to a sliver). The section's own files are put in
-the page by the driver (its --init script and a style sheet made in the page), as the registry that mounts them is HD7e's.
+1280 and 390 px (nothing wider than the page; Panes does not squeeze a label to a sliver). Uses the normal Hub registry.
 The same skip rules as the page audit: no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
 
@@ -16,7 +15,6 @@ from pathlib import Path
 import httpx
 import pytest
 
-from filament_kit import setup_console
 from filament_kit.setup_console import analytics_tab
 from test_hub_page_audit import _missing, _node, _serve, hub_app  # noqa: F401
 from test_hub_presets_ui import AsHttps
@@ -24,7 +22,6 @@ from test_hub_settings import PRELUDE
 
 ROOT = Path(__file__).resolve().parents[2]
 DRIVER = ROOT / "tests" / "page_drive.mjs"
-STATIC = ROOT / "server" / "filament_kit" / "setup_static"
 LOOKS = ["console", "workbench", "palette", "panes"]
 REAL_READ = analytics_tab.read
 
@@ -81,6 +78,8 @@ def stub(monkeypatch):
     st = {"answers": {None: ALL, "p2": ONE}, "delay": 0.0, "fail": 0, "calls": []}
 
     def read(months, printer):
+        if months == 1:                 # the shell's summary, independent of section reads
+            return {"months": st["answers"][None]["months"][:1]}
         st["calls"].append((months, printer))
         time.sleep(st["delay"])
         if st["fail"] > 0:                       # the next `fail` reads fail
@@ -93,11 +92,8 @@ def stub(monkeypatch):
 
 
 @pytest.fixture
-def hub(stub, monkeypatch):
-    """The Hub page with this section's route mounted (the mount is HD7e's, so the test adds it before the app is made:
-    list this fixture before hub_app)."""
-    mounted = setup_console.routes
-    monkeypatch.setattr(setup_console, "routes", lambda page: mounted(page) + analytics_tab.routes(page))
+def hub(stub):
+    """Install the analytics source before the Hub is made."""
 
 
 @pytest.fixture
@@ -113,11 +109,9 @@ def _drive(url, tmp_path, script, width=1280, look="console"):
     node = _node()
     if not node:
         _missing("the page driver needs Node 22 or later")
-    (tmp_path / "init.js").write_text((STATIC / "setup_analytics.js").read_text(encoding="utf-8"), encoding="utf-8")
-    css = json.dumps((STATIC / "setup_analytics.css").read_text(encoding="utf-8"))
     (tmp_path / "drive.js").write_text(
-        PRELUDE.replace('location.hash = "#settings";\n', "") + HELPERS.replace("__CSS__", css).replace("__LOOK__", look) + script, encoding="utf-8")
-    run = subprocess.run([node, str(DRIVER), "--url", url, "--script", str(tmp_path / "drive.js"), "--init", str(tmp_path / "init.js"), "--width", str(width)],
+        PRELUDE.replace('location.hash = "#settings";\n', "") + HELPERS.replace("__LOOK__", look) + script, encoding="utf-8")
+    run = subprocess.run([node, str(DRIVER), "--url", url, "--script", str(tmp_path / "drive.js"), "--width", str(width)],
                          capture_output=True, encoding="utf-8", timeout=300)
     if run.returncode == 2 and "no Chrome, Edge or Chromium" in run.stderr:
         _missing("the page driver needs a Chrome, Edge or Chromium (set AUT5_BROWSER)")
@@ -128,15 +122,11 @@ def _drive(url, tmp_path, script, width=1280, look="console"):
 
 
 HELPERS = r"""
-const sheet = new CSSStyleSheet();
-sheet.replaceSync(__CSS__);
-document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
 document.documentElement.setAttribute("data-look", "__LOOK__");
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const busy = () => $('.an [aria-busy="true"]');
 const ready = async () => {
   await until(() => typeof S !== "undefined" && S && $("main"), "the Hub's state");
-  TABS.analytics = ["nav_updates", "updates", () => [analyticsTab]];      // the registry (HD7e) adds this entry
   location.hash = "#analytics";
   await until(() => $(".an"), "the section");
 };

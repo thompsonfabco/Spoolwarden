@@ -725,14 +725,19 @@ class IntakeApp:
     EVENT_PARAMS = ("since", "since_at", "kinds", "limit", "alert", "client")
     EVENT_WAIT_MAX = 20.0       # the channel to the Hub gives up after 30 s: a longer wait cannot be passed on
 
+    @staticmethod
+    def _kit_refusal(e) -> JSONResponse:
+        """The Hub's refusal, or its silence, as the kit answers one: {error: code, message: sentence} (R83 addition 2026-11-18 01:06)."""
+        st = e.http
+        answered = isinstance(st, int) and 400 <= st < 600 and st != 401
+        return JSONResponse({"error": e.code or ("refused" if answered else "unreachable"), "message": str(e)}, st if answered else 502)
+
     async def _hub_get(self, path: str):
         """GET `path` from the Hub with this app's pairing; the Hub's refusal or its silence as the JSON error it is."""
         try:
             return await anyio.to_thread.run_sync(self.kit.get, path)
         except SlotError as e:
-            st = e.http
-            return JSONResponse({"error": str(e), **({"code": e.code} if e.code else {})},
-                                st if isinstance(st, int) and 400 <= st < 600 and st != 401 else 502)
+            return self._kit_refusal(e)
 
     async def events_twin(self, request: Request):
         """The twin of GET api/events: the Hub's answer, for the parameters the Hub's route has."""
@@ -778,9 +783,7 @@ class IntakeApp:
         try:
             return await anyio.to_thread.run_sync(self.kit.post, f"/api/events/{quote(event, safe='')}/undo", {})
         except SlotError as e:
-            st = e.http
-            return JSONResponse({"error": str(e), **({"code": e.code} if e.code else {})},
-                                st if isinstance(st, int) and 400 <= st < 600 and st != 401 else 502)
+            return self._kit_refusal(e)
 
     async def health_twin(self, request: Request):
         days = request.query_params.get("days", "7")
@@ -807,7 +810,7 @@ class IntakeApp:
         name = request.path_params["name"]
         key = name[:-4] if name.endswith(".csv") else ""
         if key not in self.EXPORT_SETS:
-            return JSONResponse({"error": "no such file"}, 404)
+            return JSONResponse({"error": "not_found", "message": "no such file"}, 404)
         q = {}
         if key == "usage":
             days, printer = request.query_params.get("days"), request.query_params.get("printer")
@@ -829,11 +832,9 @@ class IntakeApp:
         try:
             data = await anyio.to_thread.run_sync(fetch)
         except SlotError as e:
-            st = e.http
-            return JSONResponse({"error": str(e), **({"code": e.code} if e.code else {})},
-                                st if isinstance(st, int) and 400 <= st < 600 and st != 401 else 502)
+            return self._kit_refusal(e)
         if len(data) > EXPORT_MAX:
-            return JSONResponse({"error": "that file is too large to pass on"}, 413)
+            return JSONResponse({"error": "too_large", "message": "that file is too large to pass on"}, 413)
         return Response(data, media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": f'attachment; filename="{self.EXPORT_SETS[key]}"', "Cache-Control": "no-store"})
 

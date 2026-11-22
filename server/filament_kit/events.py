@@ -189,6 +189,8 @@ def _element(ev: dict) -> ET.Element:
                 a[f"{tag}-{f}"] = party[f]
     if ev["condition"]:
         a["condition"], a["state"] = ev["condition"]["key"], ev["condition"]["state"]
+    if ev.get("undo_of") is not None:
+        a["undo-of"] = str(ev["undo_of"])
     el = ET.Element("event", a)
     for name, value in ev["data"].items():
         ET.SubElement(el, "v", {"name": name}).text = value
@@ -202,13 +204,17 @@ def _dump(el: ET.Element) -> bytes:
 def _event(el: ET.Element) -> dict | None:
     try:
         cond = el.get("condition")
-        return {"id": int(el.get("id")), "at": el.get("at", ""), "kind": el.get("kind", ""),
-                "severity": el.get("severity", "info"),
-                "subject": {"type": el.get("subject", ""), "id": el.get("subject-id", ""),
-                            "name": el.get("subject-name", "")},
-                "actor": {"type": el.get("actor", ""), "id": el.get("actor-id", ""), "name": el.get("actor-name", "")},
-                "data": {v.get("name", ""): v.text or "" for v in el.findall("v")},
-                "condition": {"key": cond, "state": el.get("state", "")} if cond else None}
+        ev = {"id": int(el.get("id")), "at": el.get("at", ""), "kind": el.get("kind", ""),
+              "severity": el.get("severity", "info"),
+              "subject": {"type": el.get("subject", ""), "id": el.get("subject-id", ""),
+                          "name": el.get("subject-name", "")},
+              "actor": {"type": el.get("actor", ""), "id": el.get("actor-id", ""), "name": el.get("actor-name", "")},
+              "data": {v.get("name", ""): v.text or "" for v in el.findall("v")},
+              "condition": {"key": cond, "state": el.get("state", "")} if cond else None}
+        undo_of = el.get("undo-of")
+        if undo_of is not None and undo_of != "":
+            ev["undo_of"] = int(undo_of)
+        return ev
     except (TypeError, ValueError):
         return None
 
@@ -470,14 +476,14 @@ class EventStore:
 
     # ---- write
     def write(self, kind: str, subject, actor, data: dict | None = None, *, severity: str | None = None,
-              key: str | None = None, now: datetime | None = None) -> dict:
+              key: str | None = None, now: datetime | None = None, undo_of: int | None = None) -> dict:
         """Write one event and return it (the dict `read` returns). `subject` and `actor` are {type, id, name} (id
         and name optional; a bare string is the type). `severity` is the kind's own unless the kind allows two
         (storage.low: warn or bad). `key` is the condition key's suffix when it is not the subject id (a check row's
         key). A kind that raises a condition raises it (a later raise of the same key replaces the stored one: the
         newest raise wins); a kind that clears one clears it, whether or not it was raised (`condition.cleared`
         clears the key in its value `key`)."""
-        ev = self._prepare(kind, subject, actor, data, severity, key, now)
+        ev = self._prepare(kind, subject, actor, data, severity, key, now, undo_of)
         return self._commit(ev)
 
     def write_many(self, items: list[dict]) -> list[int]:
@@ -489,7 +495,7 @@ class EventStore:
         for i, it in enumerate(items):
             try:
                 evs.append(self._prepare(it["kind"], it.get("subject"), it.get("actor"), it.get("data"),
-                                         it.get("severity"), it.get("key"), it.get("now")))
+                                         it.get("severity"), it.get("key"), it.get("now"), it.get("undo_of")))
             except EventError as e:
                 raise EventError(f"event {i + 1} of {len(items)}: {e}") from None
         held: dict[tuple, int] = {}
@@ -502,7 +508,7 @@ class EventStore:
             ids.append(known if known is not None else self._commit(ev)["id"])
         return ids
 
-    def _prepare(self, kind, subject, actor, data, severity, key, now) -> dict:
+    def _prepare(self, kind, subject, actor, data, severity, key, now, undo_of=None) -> dict:
         """The event `write` would store, checked, with id 0."""
         k = event_kinds.get(kind)
         if k is None:
@@ -536,6 +542,8 @@ class EventStore:
               "actor": actor, "data": values,
               "condition": {"key": ckey, "state": "raised" if k.condition == event_kinds.RAISES else "cleared"}
               if ckey else None}
+        if undo_of is not None:
+            ev["undo_of"] = int(undo_of)
         return ev
 
     def _commit(self, ev: dict) -> dict:
@@ -637,16 +645,56 @@ class EventStore:
             ids = [e["id"] for p in self._months() for e in _read_file(p)]
         return min(ids, default=0)
 
+    def all_events(self, since_at: datetime | str | None = None) -> list[dict]:
+        """All kept events, oldest first (optionally at or after `since_at`)."""
+        return self._events_after(0, (), _iso(since_at))
+
+    def get(self, event_id: int) -> dict | None:
+        """One event by id (enriched with `undo` and `undone`), or None when not found."""
+        try:
+            eid = int(event_id)
+        except (TypeError, ValueError):
+            return None
+        all_evs = self._events_after(0, ())
+        ev = next((e for e in all_evs if e["id"] == eid), None)
+        if ev is None:
+            return None
+        from . import undo
+        return undo.enrich([copy.deepcopy(ev)], all_evs=all_evs)[0]
+
+    @staticmethod
+    def _matches(ev: dict, activity: bool, subject: str | None, actor: str | None) -> bool:
+        if activity and ev["kind"] not in event_kinds.ACTIVITY_KINDS:
+            return False
+        if subject:
+            stype, sep, sid = subject.partition(":")
+            if ev["subject"]["type"] != stype:
+                return False
+            if sep and sid != "" and ev["subject"]["id"] != sid:
+                return False
+        if actor:
+            atype, sep, aid = actor.partition(":")
+            if ev["actor"]["type"] != atype:
+                return False
+            if sep and aid != "" and ev["actor"]["id"] != aid:
+                return False
+        return True
+
     def read(self, since: int = 0, limit: int = LIMIT_DEFAULT, kinds=None, wait: float = 0, *,
-             since_at: datetime | str | None = None) -> dict:
+             since_at: datetime | str | None = None, activity: bool = False,
+             subject: str | None = None, actor: str | None = None,
+             include_undo: bool = False, newest: int | None = None) -> dict:
         """Events newer than `since` (an id) and, when `since_at` (a time, UTC: a datetime or an ISO text) is given,
         at or after it; oldest first, at most `limit` (1 to 1000), whose kind starts with one of `kinds` (a list or a
-        comma-separated string of prefixes; none = all). `wait` (0 to 55 s) blocks until such an event exists; the
-        answer is empty after the time. Returns {"events": [...], "next": id, "oldest": lowest id kept}: continue
-        with since=next. `next` is the store's highest id, also when nothing is new (never an echo of `since`: a
-        `since` above it, from another Hub, shows as next < since); only a page cut by `limit` ends at its last event."""
+        comma-separated string of prefixes; none = all). `activity` limits to Activity kinds; `subject` (`<type>:<id>`)
+        and `actor` (`<type>` or `<type>:<id>`) filter by subject/actor. `wait` (0 to 55 s) blocks until such an event
+        exists; the answer is empty after the time. Returns {"events": [...], "next": id, "oldest": lowest id kept}:
+        continue with since=next. `newest=N` (1 to 1000) returns the newest N matching events instead (still in ascending
+        id order; `limit` is then not used): a "last ten" asks for those. `next` is the store's highest id, also when nothing is new (never an echo of `since`:
+        a `since` above it, from another Hub, shows as next < since); only a page cut by `limit` ends at its last event."""
         since = max(int(since or 0), 0)
         limit = min(max(int(limit or LIMIT_DEFAULT), 1), LIMIT_MAX)
+        newest = None if newest in (None, "") else min(max(int(newest), 1), LIMIT_MAX)
         at_text = _iso(since_at)
         if isinstance(kinds, str):
             kinds = kinds.split(",")
@@ -655,15 +703,22 @@ class EventStore:
         _, cond = _shared_for(self.root)
         seen = None                                      # the newest id looked at, so a wait reads only on news
         while True:
-            newest = self.last_id()
-            if seen is None or newest > seen:
-                seen = newest
+            top = self.last_id()
+            if seen is None or top > seen:
+                seen = top
                 found = self._events_after(since, prefixes, at_text)
-                evs = copy.deepcopy(found[:limit])
+                if activity or subject or actor:
+                    found = [e for e in found if self._matches(e, activity, subject, actor)]
+                cut = newest is None and len(found) > limit
+                evs = copy.deepcopy(found[-newest:] if newest is not None else found[:limit])
                 if evs:
+                    if activity or include_undo:
+                        from . import undo
+                        all_evs = self._events_after(0, ())
+                        evs = undo.enrich(evs, all_evs=all_evs)
                     # cut by `limit`: continue after the last one given; else everything up to the store's highest id
                     # is covered (what is in between does not match), so `next` is that
-                    return {"events": evs, "next": evs[-1]["id"] if len(found) > limit else max(evs[-1]["id"], newest),
+                    return {"events": evs, "next": evs[-1]["id"] if cut else max(evs[-1]["id"], top),
                             "oldest": self.oldest()}
             left = deadline - time.monotonic()
             if left <= 0:
@@ -739,8 +794,15 @@ def write_many(items: list[dict]) -> list[int]:
     return store().write_many(items)
 
 
-def read(since: int = 0, limit: int = LIMIT_DEFAULT, kinds=None, wait: float = 0, *, since_at=None) -> dict:
-    return store().read(since, limit, kinds, wait, since_at=since_at)
+def read(since: int = 0, limit: int = LIMIT_DEFAULT, kinds=None, wait: float = 0, *, since_at=None,
+         activity: bool = False, subject: str | None = None, actor: str | None = None,
+         include_undo: bool = False, newest: int | None = None) -> dict:
+    return store().read(since, limit, kinds, wait, since_at=since_at, activity=activity, subject=subject,
+                        actor=actor, include_undo=include_undo, newest=newest)
+
+
+def get(event_id: int) -> dict | None:
+    return store().get(event_id)
 
 
 def oldest() -> int:

@@ -22,10 +22,11 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import (API_VERSION, __version__, alerts_api, config, event_sink, events, hostaddr, intake, intake_history, inventory, modules, pairing, profiles_api, reader_corrections, setup_page,
-               station_flow, station_requests, storage, storage_api, tags)
+from . import (API_VERSION, __version__, address_texts, alerts_api, analytics, config, csv_io, event_sink, events,
+               health, hostaddr, hub_view, intake, intake_history, inventory, modules, pairing, profiles_api,
+               reader_corrections, setup_page, station_flow, station_requests, storage, storage_api, tags, undo)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
-from .bridge import camera, family, hardware, loading, mapping, pending, registry, usage
+from .bridge import auto_slot, camera, family, hardware, loading, mapping, pending, registry, usage
 from .bridge.klipper import discovery
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
 from .bridge.slottest import NoStatus, PrinterBusy
@@ -103,6 +104,8 @@ CERT_CHANGED = camera.CERT_CHANGED   # one text for the API and the camera
 
 def _bridge_error(e: Exception) -> JSONResponse | None:
     """Slot mapping, loading and usage errors (route-contract.md); None for anything else."""
+    if isinstance(e, auto_slot.AutoError):
+        return _err(e.status, e.code, e.message)
     if isinstance(e, usage.UsageError):
         return _err(e.status, e.code, str(e))
     if isinstance(e, mapping.AlreadyRunning):   # also LoadRunning: a load is writing to the printer
@@ -181,6 +184,9 @@ WEB_ROUTES = (
     ("POST", "/api/printers/{id}/manual-map/stop"),
     ("POST", "/api/printers/{id}/manual-map/offer"),
     ("POST", "/api/printers/{id}/command"),
+    ("POST", "/api/printers/{id}/slots/auto/load"),
+    ("POST", "/api/printers/{id}/auto/choose"),
+    ("POST", "/api/printers/{id}/auto/cancel"),
     ("POST", "/api/printers/{id}/slots/{label}/load"),
     ("POST", "/api/printers/{id}/slots/{label}/unload"),
     ("GET", "/api/printers/{id}/camera.mjpeg"),
@@ -196,14 +202,57 @@ WEB_ROUTES = (
     ("POST", "/api/profiles/web/restore_deleted"),
     ("GET", "/api/events"),
     ("POST", "/api/events/web"),
+    ("POST", "/api/events/{id}/undo"),
     ("GET", "/api/alerts"),
     ("POST", "/api/alerts/test"),
     ("GET", "/api/spools/low"),
     ("GET", "/api/storage-use"),
+    ("GET", "/api/health"),
+    ("GET", "/api/analytics"),
+    ("GET", "/api/export/{set}.csv"),
+    ("GET", "/api/hub"),
 )
 _WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
 WEB_ONLY_PREFIX = "/api/profiles/web/"  # the web unit's preset writes: no phone or PC calls them
 WEB_ONLY_PATHS = ("/api/events/web",)   # the web unit's hand-over of its spool events (R80 E1)
+
+VIEWER_ROUTES = (
+    ("GET", "/api/info"),
+    ("GET", "/api/hub"),
+    ("GET", "/api/events"),
+    ("GET", "/api/alerts"),
+    ("GET", "/api/printers"),
+    ("GET", "/api/printers/{id}"),
+    ("GET", "/api/printers/{id}/usage"),
+    ("GET", "/api/printers/{id}/camera.mjpeg"),
+    ("GET", "/api/printers/{id}/camera/{name:path}"),
+    ("GET", "/api/spools"),
+    ("GET", "/api/spools/{id}"),
+    ("GET", "/api/spools/low"),
+    ("GET", "/api/storage"),
+    ("GET", "/api/storage-use"),
+    ("GET", "/api/health"),
+    ("GET", "/api/analytics"),
+)
+_VIEWER_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in VIEWER_ROUTES}
+
+
+MAX_IMPORT_BYTES = 5 * 1024 * 1024      # a CSV import's body, as on the Hub page (setup_console/history_tab.py)
+
+
+def _current_checks() -> list[dict]:
+    """The Overview's rows as the health history knows them: `{key, group, text, state}`, redacted as `GET api/hub` does,
+    so a check that never failed shows with its group. An empty list when the rows cannot be read: the history stands alone."""
+    from . import redact, status
+    try:
+        cfg = config.load()
+        known = redact.known_values(cfg)
+        return [{"key": r.key, "group": r.group, "text": redact.text(r.text, known),
+                 "state": "ok" if r.state == status.OK else "look"}
+                for r in status.collect(cfg) if r.key and r.state in (status.OK, status.FAIL)]
+    except Exception:  # noqa: BLE001 - the history is still worth showing
+        log.exception("health: the current checks cannot be read")
+        return []
 
 
 def _device_name(device: str | None) -> str:
@@ -224,8 +273,24 @@ def _is_intake_device(device: str) -> bool:
         return False
 
 
+def _actor_name(actor: dict, device: str) -> str:
+    """The name of the device an event is written for, looked up when the first event is written (`event_sink.acting`).
+    The command line's own pairing (CLI_DEVICE, the one `spoolwarden` asks this server with) writes as `cli` (R84 1.2):
+    the actor becomes {type: cli} here, before the event takes it."""
+    name = _device_name(device)
+    if name == CLI_DEVICE:
+        actor.pop("id", None)
+        actor["type"] = "cli"
+        return ""
+    return name
+
+
 def _web_may(method: str, path: str) -> bool:
     return any(m == method and rx.fullmatch(path) for m, rx in _WEB_MATCH)
+
+
+def _viewer_may(method: str, path: str) -> bool:
+    return any(m == method and rx.fullmatch(path) for m, rx in _VIEWER_MATCH)
 
 
 # The printer writes a web token may make (add, edit, forget). The kit's own phone web app (the built-in pairing
@@ -266,6 +331,8 @@ def _authed(fn):
         path = request.scope["path"]
         if scope == "web" and not _web_may(request.method, path):
             return _err(403, "forbidden", "the web unit's token is for the web unit's routes only")
+        if scope == "viewer" and not _viewer_may(request.method, path):
+            return _err(403, "forbidden", "a viewer token may only read Hub status, printers, spools and health")
         if (scope == "web" and _printer_write(request.method, path)
                 and not await run_in_threadpool(_web_printer_changes_ok, device)):
             return _err(403, "public_printer_changes_off", PUBLIC_PRINTER_CHANGES_OFF)
@@ -276,7 +343,7 @@ def _authed(fn):
         # the name is looked up when an event is written, not for every request (pairing.devices() reads a file)
         actor = {"type": "device", "id": device}
         if request.method not in ("GET", "HEAD", "OPTIONS"):
-            actor["name"] = functools.partial(_device_name, device)
+            actor["name"] = functools.partial(_actor_name, actor, device)
         with event_sink.acting(actor):
             return await fn(request)
     return _handle(wrapper)
@@ -321,7 +388,10 @@ def _apk_version() -> str | None:
 FIRST_STATE_WAIT = 8.0  # seconds POST /api/printers waits for the first connection result
 
 
-def _printer_view(p: registry.Printer, printers) -> dict:
+_UNSET = object()
+
+
+def _printer_view(p: registry.Printer, printers, *, st=_UNSET) -> dict:
     """The public shape of a printer. Built field by field so the Access Code can never leak."""
     state = "not_configured"
     if p.configured:
@@ -333,11 +403,20 @@ def _printer_view(p: registry.Printer, printers) -> dict:
     except Exception:  # noqa: BLE001 - one odd report must not fail the whole printer list
         log.exception("printer %s: cannot summarize its report", p.serial)
         summary = None
+    if st is _UNSET:
+        try:
+            st = printers.status(p.serial) if hasattr(printers, "status") else None
+        except Exception:  # noqa: BLE001 - one odd report must not fail the whole printer list
+            log.exception("printer %s: cannot read its status", p.serial)
+            st = None
+    auto_possible = bool(st["auto_possible"]) if isinstance(st, dict) and "auto_possible" in st else auto_slot.is_auto_possible(st)
+    auto = st["auto"] if isinstance(st, dict) and "auto" in st else auto_slot.default_store().active_view(p.serial)
     fam = getattr(p, "family", "bambu")
     view = {"id": p.serial, "name": registry.display_name(p), "model": p.model, "serial": p.serial, "ip": p.ip,
             "configured": p.configured, "state": state, "camera": {"kind": camera_kind(p.model)},
             "model_name": model_name(p.model),
-            "summary": summary, "family": fam, "pinned": bool(p.cert_fp)}   # a certificate is pinned, never which
+            "summary": summary, "family": fam, "pinned": bool(p.cert_fp),   # a certificate is pinned, never which
+            "auto_possible": auto_possible, "auto": auto}
     if fam == "klipper":
         kf = getattr(printers, "klipper", None)
         view["host"] = p.host
@@ -472,8 +551,9 @@ def _printer_routes(printers) -> list[Route]:
 
         def build() -> dict:
             p = known(serial)
-            return {"printer": _printer_view(p, printers), "status": printers.status(serial),
-                    "hardware": _hardware_view()}
+            st = printers.status(serial) if hasattr(printers, "status") else None
+            pv = _printer_view(p, printers, st=st)
+            return {"printer": pv, "status": st, "hardware": _hardware_view(), "auto": pv["auto"]}
         return JSONResponse(await run_in_threadpool(build))
 
     @_authed
@@ -667,6 +747,8 @@ def _printer_routes(printers) -> list[Route]:
         def run() -> bool:
             editable(serial)
             gone = registry.remove(serial)
+            if gone:
+                auto_slot.default_store().drop_printer(serial)
             printers.sync()
             return gone
         try:
@@ -824,7 +906,72 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         return JSONResponse(await run_in_threadpool(build))
 
     @_authed
+    async def auto_load(request: Request):
+        serial = request.path_params["id"]
+        body = await _json(request)
+        spool_id = body.get("spool_id")
+        if not isinstance(spool_id, int) or isinstance(spool_id, bool):
+            raise BadRequest("spool_id must be a whole number", "spool_id")
+        dry = _opt(body, "dry_run", bool, True)
+
+        def run() -> dict:
+            known(serial)
+            kf = klipper_of(serial)
+            if kf is None:
+                if isinstance(printers, family.Printers) and printers.bambu is None:
+                    raise family.ModuleOff("printers")
+                not_cert_changed(serial)
+                not_mapping(serial)
+            return auto_slot.default_store().start(printers, sm, serial, spool_id, dry=dry)
+        return JSONResponse(await run_in_threadpool(audited, "auto load", request.state.device, run,
+                                                    serial=serial, spool=spool_id, dry_run=dry))
+
+    @_authed
+    async def auto_choose(request: Request):
+        serial = request.path_params["id"]
+        body = await _json(request)
+        slot = body.get("slot")
+        if not isinstance(slot, str) or not slot.strip():
+            raise BadRequest("slot is required", "slot")
+        if auto_slot.is_reserved_label(slot):
+            return _err(400, "invalid_slot", "'auto' is a reserved slot label")
+
+        def run() -> dict:
+            known(serial)
+            kf = klipper_of(serial)
+            if kf is None:
+                if isinstance(printers, family.Printers) and printers.bambu is None:
+                    raise family.ModuleOff("printers")
+                not_cert_changed(serial)
+                not_mapping(serial)
+            try:
+                return auto_slot.default_store().choose(printers, sm, serial, slot.strip())
+            except loading.SlotWriteFailed as e:
+                if printers.state(serial) == "needs_developer_mode" or DEVELOPER_MODE_REASON.search(str(e)):
+                    raise _Refused("needs_developer_mode",
+                                   f"{e}; turn on Developer Mode (LAN-only mode) on the printer and retry") from e
+                raise _Refused("write_refused", str(e)) from e
+        try:
+            r = await run_in_threadpool(audited, "auto choose", request.state.device, run,
+                                        serial=serial, slot=slot.strip())
+        except _Refused as e:
+            return _err(409, e.code, e.message)
+        return JSONResponse(r)
+
+    @_authed
+    async def auto_cancel(request: Request):
+        serial = request.path_params["id"]
+
+        def run() -> dict:
+            known(serial)
+            return auto_slot.default_store().cancel(serial)
+        return JSONResponse(await run_in_threadpool(audited, "auto cancel", request.state.device, run,
+                                                    serial=serial))
+
+    @_authed
     async def slot_load(request: Request):
+        if auto_slot.is_reserved_label(request.path_params["label"]):
+            return _err(400, "invalid_slot", "'auto' is a reserved slot label")
         serial, label = request.path_params["id"], label_of(request)
         body = await _json(request)
         spool_id = body.get("spool_id")
@@ -836,7 +983,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
             known(serial)
             kf = klipper_of(serial)
             if kf is not None:
-                r = kf.load(sm, serial, label, spool_id, dry, sealed_location=sealed())
+                r = auto_slot.load_named_klipper(kf, sm, serial, label, spool_id, dry, sealed_location=sealed())
                 return {**r, "confirmed": r.get("confirmed") if dry else bool(r.get("confirmed"))}
             not_cert_changed(serial)
             not_mapping(serial)
@@ -857,6 +1004,8 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
 
     @_authed
     async def slot_unload(request: Request):
+        if auto_slot.is_reserved_label(request.path_params["label"]):
+            return _err(400, "invalid_slot", "'auto' is a reserved slot label")
         serial, label = request.path_params["id"], label_of(request)
         dry = _opt(await _json(request), "dry_run", bool, True)
 
@@ -876,7 +1025,11 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
     @_authed
     async def usage_list(request: Request):
         serial = request.path_params["id"]
-        raw = request.query_params.get("days", str(usage.UNDO_DAYS))
+        by = request.query_params.get("by") or None
+        if by is not None and by != "month":
+            raise BadRequest("by must be 'month'", "by")
+        default_days = MAX_DAYS if by == "month" else usage.UNDO_DAYS
+        raw = request.query_params.get("days", str(default_days))
         try:
             days = float(raw)
         except ValueError:
@@ -884,12 +1037,14 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         if not math.isfinite(days) or not 0 <= days <= MAX_DAYS:
             raise BadRequest(f"days must be between 0 and {MAX_DAYS:g}")
 
-        def build() -> list[dict]:
+        def build() -> dict:
             known(serial)
             kf = klipper_of(serial)
             got = kf.usage(serial, days) if kf is not None else usage.entries(serial, days)
-            return inventory.with_spools(got, sm)
-        return JSONResponse({"entries": await run_in_threadpool(build)})
+            if by == "month":
+                return {"months": usage.by_month(got)}
+            return {"entries": inventory.with_spools(got, sm)}
+        return JSONResponse(await run_in_threadpool(build))
 
     @_authed
     async def usage_undo(request: Request):
@@ -908,6 +1063,9 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
                 manual_call(name or "view", fn, write=method == "POST"), methods=[method])
           for name, method, fn in manual_routes],
         Route("/api/printers/{id}/report", map_report, methods=["POST"]),
+        Route("/api/printers/{id}/slots/auto/load", auto_load, methods=["POST"]),
+        Route("/api/printers/{id}/auto/choose", auto_choose, methods=["POST"]),
+        Route("/api/printers/{id}/auto/cancel", auto_cancel, methods=["POST"]),
         Route("/api/printers/{id}/slots/{label}/load", slot_load, methods=["POST"]),
         Route("/api/printers/{id}/slots/{label}/unload", slot_unload, methods=["POST"]),
         Route("/api/printers/{id}/usage", usage_list),
@@ -928,7 +1086,7 @@ class _Refused(Exception):
 # ---- end slot mapping, loading and usage routes ----------------------------------------------------------
 
 
-from .web.slots import INTAKE_DEVICE  # noqa: E402  (the kit's own phone web app's pairing; no mcp import)
+from .web.slots import CLI_DEVICE, INTAKE_DEVICE  # noqa: E402  (the kit's own pairings; no mcp import)
 INTAKE_TOKEN = "intake_kit_token"       # in the state folder: the kit server's own phone web app's pairing
 
 
@@ -1197,7 +1355,20 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def station_hello(request: Request):
-        """`spoolwarden station pair` calls this once: the first authenticated call claims the station's token."""
+        """`spoolwarden station pair` calls this once: the first authenticated call claims the station's token. The
+        station also tells the Hub about itself in the query (R82 section 2.3): `fp` (the SHA-256 of its certificate),
+        `port` and `version`, or `port`, `version` and `plain` (why it has no certificate). The Hub keeps them with the
+        station's pairing; a call with none of them (an older station) stores nothing and is still answered."""
+        q = request.query_params
+        told = {k: q.get(k) for k in ("fp", "port", "version", "plain")}
+        if told["plain"]:       # a reason is one clean line of bounded length before it is stored or shown
+            told["plain"] = address_texts.clean_line(told["plain"]) or None
+        if any(told.values()):
+            kept = await run_in_threadpool(pairing.record_station_hello, request.state.device, told["fp"],
+                                           told["port"], told["version"], told["plain"])
+            if not kept:
+                return _err(400, "bad_hello", "the certificate fingerprint, port or version is not valid, or this "
+                                              "token is not a Weigh Station's")
         return JSONResponse({"ok": True})
 
     @_handle
@@ -1244,7 +1415,10 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                   force=_opt(body, "force", bool, False), dry=_opt(body, "dry_run", bool, True))
         spool = await run_in_threadpool(
             lambda: inventory.open_spool(sm, request.path_params["id"], tag, rules(), **kw))
-        return JSONResponse({"spool": spool})
+        out = {"spool": spool}
+        if not kw["dry"] and isinstance(spool, dict) and spool.get("event_id") is not None:
+            out["event_id"] = spool["event_id"]
+        return JSONResponse(out)
 
     @_authed
     async def spool_update(request: Request):
@@ -1315,6 +1489,11 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             raise BadRequest("give since or since_at, not both")
         if since is not None and since < 0:
             raise BadRequest("since must be 0 or more", "since")
+        newest = _number(q, "newest")
+        if newest is not None and newest < 1:
+            raise BadRequest("newest must be 1 or more", "newest")
+        if newest is not None and since is not None:
+            raise BadRequest("give since or newest, not both")
         if since_at:
             try:
                 since_at = alerts_api.parse_time(since_at)
@@ -1322,10 +1501,14 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                 raise BadRequest(str(e), "since_at") from None
         client = (q.get("client") or "").strip()[:80]
         callers = [f"device:{request.state.device}"] + ([f"client:{client}"] if client else [])
+        activity = q.get("activity", "").lower() in ("1", "true", "yes")
+        subject = (q.get("subject") or "").strip() or None
+        actor = (q.get("actor") or "").strip() or None
         out = await run_in_threadpool(functools.partial(
             alerts_api.events_answer, since=since, since_at=since_at, wait=_number(q, "wait", float) or 0,
             kinds=q.get("kinds") or None, limit=_number(q, "limit") or events.LIMIT_DEFAULT,
-            alert=q.get("alert", "").lower() in ("1", "true", "yes"), callers=callers))
+            alert=q.get("alert", "").lower() in ("1", "true", "yes"), callers=callers,
+            activity=activity, subject=subject, actor=actor, **({"newest": newest} if newest is not None else {})))
         return JSONResponse(out)
 
     @_authed
@@ -1379,6 +1562,99 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return JSONResponse(await run_in_threadpool(alerts_api.storage_view))
 
     @_authed
+    async def event_undo(request: Request):
+        try:
+            event_id = int(request.path_params["id"])
+        except (TypeError, ValueError):
+            return _err(404, "not_found", "no such event")
+        try:
+            res = await run_in_threadpool(undo.undo_event, event_id, sm)
+        except undo.EventNotFound as e:
+            return _err(404, "not_found", str(e) or "no such event")
+        except undo.UndoError as e:
+            return _err(409, e.code, e.message)
+        return JSONResponse(res)
+
+    @_authed
+    async def hub_get(request: Request):
+        raw = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip()
+        host = raw.rsplit(":", 1)[0] if ":" in raw and not raw.endswith("]") else raw
+        return JSONResponse(await run_in_threadpool(
+            hub_view.build, host=host or None, this_device=request.state.device))
+
+    @_authed
+    async def health_get(request: Request):
+        days = _number(request.query_params, "days")
+        if days is None:
+            days = 7
+        if days not in (7, 30):
+            raise BadRequest("days must be 7 or 30", "days")
+        return JSONResponse(await run_in_threadpool(
+            functools.partial(health.health_view, days=days, current_checks=_current_checks())))
+
+    @_authed
+    async def analytics_get(request: Request):
+        months = _number(request.query_params, "months")
+        if months is None:
+            months = 12
+        if not 1 <= months <= 13:
+            raise BadRequest("months must be 1 to 13", "months")
+        printer = (request.query_params.get("printer") or "").strip() or None
+        return JSONResponse(await run_in_threadpool(
+            functools.partial(analytics.view, months=months, printer=printer, sm=sm)))
+
+    @_authed
+    async def export_csv(request: Request):
+        set_name = request.path_params["set"]
+        q = request.query_params
+        days = _number(q, "days", float)
+        if days is not None and (not math.isfinite(days) or days <= 0):
+            raise BadRequest("days must be positive", "days")
+        printer = (q.get("printer") or "").strip() or None
+        kw: dict = {"printer": printer, "sm": sm, "printers_mgr": printers}
+        if days is not None:
+            kw["days"] = days
+        try:
+            data = await run_in_threadpool(functools.partial(csv_io.export_csv, set_name, **kw))
+        except csv_io.CsvError as e:
+            return _err(e.status, e.code, str(e))
+        return Response(
+            data,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{set_name}.csv"'},
+        )
+
+    async def _import_csv(request: Request, kind: str):
+        raw_bytes = bytearray()
+        async for chunk in request.stream():          # the Hub page's twin takes 5 MiB at most
+            if len(raw_bytes) + len(chunk) > MAX_IMPORT_BYTES:
+                return _err(413, "too_large", "the CSV file is larger than the Hub takes (5 MB at most)")
+            raw_bytes.extend(chunk)
+        try:
+            raw_text = raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise BadRequest("the CSV file must be UTF-8 text") from None
+        dry_run = request.query_params.get("dry_run", "1").lower() not in ("0", "false", "no")
+        try:
+            if kind == "spools":
+                res = await run_in_threadpool(
+                    functools.partial(csv_io.import_spools, sm, raw_text, dry_run=dry_run, rules=rules()))
+            else:
+                res = await run_in_threadpool(
+                    functools.partial(csv_io.import_locations, raw_text, dry_run=dry_run))
+        except csv_io.CsvError as e:
+            return _err(e.status, e.code, str(e))
+        return JSONResponse(res)
+
+    @_authed
+    async def import_spools_route(request: Request):
+        return await _import_csv(request, "spools")
+
+    @_authed
+    async def import_locations_route(request: Request):
+        return await _import_csv(request, "locations")
+
+    @_authed
     async def station_state(request: Request):
         client = await run_in_threadpool(station_client)
         if client is None:
@@ -1402,6 +1678,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     return Starlette(
         routes=[
             Route("/api/info", info),
+            Route("/api/hub", hub_get),
             Route("/api/pair", pair, methods=["POST"]),
             Route("/api/pair", unpair, methods=["DELETE"]),
             *_gated([
@@ -1434,6 +1711,12 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/storage-use", storage_use),
             Route("/api/events", events_get),
             Route("/api/events/web", events_web, methods=["POST"]),
+            Route("/api/events/{id}/undo", event_undo, methods=["POST"]),
+            Route("/api/health", health_get),
+            Route("/api/analytics", analytics_get),
+            Route("/api/export/{set}.csv", export_csv),
+            Route("/api/import/spools", import_spools_route, methods=["POST"]),
+            Route("/api/import/locations", import_locations_route, methods=["POST"]),
             Route("/api/alerts", alerts_get),
             Route("/api/alerts/test", alerts_test, methods=["POST"]),
             Route("/app.apk", apk),
@@ -1453,6 +1736,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             *setup_page.routes(printers if on & {"printers", "klipper"} else None,
                                families={f for m, f in (("printers", "bambu"), ("klipper", "klipper")) if m in on},
                                mapper=mapper if "printers" in on else None,
+                               spoolman=sm, camera_hub=camera_hub,
                                **(setup or {})),
         ],
         exception_handlers={HTTPException: http_error},

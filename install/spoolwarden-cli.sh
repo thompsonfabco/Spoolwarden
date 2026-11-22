@@ -25,7 +25,11 @@ kit_installing() {
 }
 if [ -d "$KIT_OPT" ] && [ ! -f "$KIT_OPT/.fk-installed" ] && ! kit_installing; then
     repair='curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh'
-    earlier=$(sed -n 's/.*"previous": *"\([0-9][0-9.]*\)".*/\1/p' "$KIT_OPT/releases/state.json" 2>/dev/null) || earlier=""
+    # state.xml (the XML form writes "previous" as an attribute), else the state.json of an earlier release
+    earlier=$(sed -n 's/.*previous="\([0-9][0-9.]*\)".*/\1/p' "$KIT_OPT/releases/state.xml" 2>/dev/null | head -n 1) || earlier=""
+    if [ -z "$earlier" ]; then
+        earlier=$(sed -n 's/.*"previous": *"\([0-9][0-9.]*\)".*/\1/p' "$KIT_OPT/releases/state.json" 2>/dev/null) || earlier=""
+    fi
     if [ -n "$earlier" ]; then
         repair="$repair --version $earlier"
     fi
@@ -55,6 +59,15 @@ case "${1:-}" in
         run_as_root "$@"
         ;;
 esac
+# Let the CLI validate a supplied port as the original caller. Reading the port stays unprivileged.
+if [ "${1:-}" = port ]; then
+    for arg in "${@:2}"; do
+        case "$arg" in
+            -y | --yes | -h | --help | --) ;;
+            *) run_as_root "$@" ;;
+        esac
+    done
+fi
 # `spoolman address` saves the Hub's settings and applies them; `spoolman fields` runs as the user below.
 if [ "${1:-}" = spoolman ] && [ "${2:-}" = address ] && [ -n "${3:-}" ]; then
     run_as_root "$@"

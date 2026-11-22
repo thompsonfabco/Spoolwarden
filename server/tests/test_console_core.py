@@ -1007,15 +1007,18 @@ def test_every_tab_the_shell_lists_has_its_view():
     block = src[src.index("const TABS = {"):src.index("const tabNow")]
     # S1.3: the ten sections of foundations 8 in their two groups (Everyday the first five, System the rest), named from
     # the catalogue; the old addresses #modules and #intake lead to their new names
-    assert re.findall(r"^  (\w+): \[", block, re.M) == ["overview", "printers", "recent", "devices", "presets",
-                                                               "features", "settings", "flash", "updates", "logs"]
-    assert '["everyday", "nav_everyday", 0, 5], ["system", "nav_system", 5, 10]' in block
+    assert re.findall(r"^  (\w+): \[", block, re.M) == [
+        "overview", "printers", "spools", "analytics", "recent", "devices",
+        "presets", "features", "settings", "flash", "updates", "logs",
+    ]
+    assert '["everyday", "nav_everyday", 0, 7], ["system", "nav_system", 7, 12]' in block
     assert 'modules: "features", intake: "recent"' in block
     assert re.findall(r'^  \w+: \["(nav_\w+)"', block, re.M) == [
-        "nav_overview", "nav_printers", "nav_recently_added", "nav_devices", "nav_slicer_presets", "nav_features",
-        "nav_settings", "nav_flash_device", "nav_updates", "nav_logs"]
+        "nav_overview", "nav_printers", "nav_spools", "nav_analytics", "nav_recently_added", "nav_devices",
+        "nav_slicer_presets", "nav_features", "nav_settings", "nav_flash_device", "nav_updates", "nav_logs",
+    ]
     for fn in re.findall(r"(\w+(?:Card|Tab))\(\)", block):
-        assert f"function {fn}(" in every, fn
+        assert f"function {fn}(" in every or f"window.{fn} =" in every, fn
 
 
 def test_the_klipper_hint_no_longer_promises_an_app_screen():
@@ -1029,11 +1032,11 @@ def test_the_0_4_0_job_unit_and_its_entry_are_gone():
 
 
 def test_helper_ops_are_the_closed_list():
-    assert set(setup_helper.OPS) == {"check", "key_set", "key_remove", "passphrase_set", "library_token_set",
-                                     "library_token_remove", "local_intake_token_set", "local_intake_token_remove", "module", "setting", "general", "general_group", "spoolman_url", "apply", "mode", "job", "journal", "backup_keep", "backup_list", "backup_last", "backup_open", "restore_pin", "restore_forget", "station_pairing",
+    assert set(setup_helper.OPS) == {"check", "key_set", "key_remove", "passphrase_set",
+                                     "local_intake_token_set", "local_intake_token_remove", "module", "setting", "general", "general_group", "spoolman_url", "apply", "mode", "job", "journal", "backup_keep", "backup_list", "backup_last", "backup_open", "backup_password_set", "backup_password_remove", "restore_pin", "restore_password", "restore_forget", "station_pairing",
                                      "trust_status", "trust_add", "trust_list", "trust_rename", "trust_revoke",
-                                     "trust_revoke_all", "trust_enabled", "reader_usb"}
+                                     "trust_revoke_all", "trust_enabled", "reader_usb", "port_change", "report_open"}
     assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair", "library_update",
                                       "library_rollback", "remote_issue",
-                                      "backup", "restore", "local_intake_plan", "local_intake_install", "local_intake_remove", "local_intake_share", "corrections_send", "reader_setup"}
+                                      "backup", "restore", "report", "local_intake_plan", "local_intake_install", "local_intake_remove", "local_intake_share", "corrections_send", "reader_setup", "port_change"}
     assert set(setup_helper.BUSY) == set(setup_helper.JOBS)

@@ -26,6 +26,7 @@ log = logging.getLogger("filament_kit.event_sink")
 HUB = {"type": "hub"}
 _actor: contextvars.ContextVar = contextvars.ContextVar("event_actor", default=None)
 _batch: contextvars.ContextVar = contextvars.ContextVar("event_batch", default=None)
+_spool_extra: contextvars.ContextVar = contextvars.ContextVar("event_spool_extra", default=None)
 
 
 class NullSink:
@@ -90,6 +91,18 @@ def sink():
 
 
 _held: contextvars.ContextVar = contextvars.ContextVar("event_held", default=None)
+_captured: contextvars.ContextVar = contextvars.ContextVar("event_captured", default=None)
+
+
+@contextlib.contextmanager
+def capture():
+    """Collect events actually written (with their assigned id) during this block, including flushed `held()` events."""
+    buf: list[dict] = []
+    tok = _captured.set(buf)
+    try:
+        yield buf
+    finally:
+        _captured.reset(tok)
 
 
 @contextlib.contextmanager
@@ -112,10 +125,15 @@ def held():
 
 def _write(kind, subject, actor, data, kw):
     try:
-        return _sink.write(kind, subject, actor, data, **kw)
+        ev = _sink.write(kind, subject, actor, data, **kw)
     except Exception:  # noqa: BLE001
         log.exception("event %s not written", kind)
         return None
+    if ev is not None:
+        buf = _captured.get()
+        if buf is not None:
+            buf.append(ev)
+    return ev
 
 
 _weight_hook = None
@@ -202,14 +220,29 @@ def spool_subject(spool: dict | None, spool_id=None) -> dict:
     return {"type": "spool", "id": "" if sid is None else str(sid), "name": name}
 
 
-def emit_spool(kind: str, spool: dict | None, spool_id=None, **values) -> None:
+@contextlib.contextmanager
+def spool_data(kind: str, **values):
+    """Add `values` to the `data` of spool events of `kind` emitted inside this block (e.g. `auto="yes"`)."""
+    extra = {k: v for k, v in values.items() if v is not None}
+    cur = dict(_spool_extra.get() or {})
+    cur[kind] = {**cur.get(kind, {}), **extra}
+    tok = _spool_extra.set(cur)
+    try:
+        yield
+    finally:
+        _spool_extra.reset(tok)
+
+
+def emit_spool(kind: str, spool: dict | None, spool_id=None, *, undo_of: int | None = None, **values) -> dict | None:
     """A spool event (`spool.moved` ...): the values are `spool`, `before_*` and `after_*` (None ones are left out),
     and the request's `batch`."""
     s = spool_subject(spool, spool_id)
-    data = {"spool": s["id"], **{k: v for k, v in values.items() if v is not None}}
+    extra = (_spool_extra.get() or {}).get(kind) or {}
+    data = {"spool": s["id"], **extra, **{k: v for k, v in values.items() if v is not None}}
     if current_batch():
         data["batch"] = current_batch()
-    emit(kind, s, data)
+    kw = {"undo_of": undo_of} if undo_of is not None else {}
+    return emit(kind, s, data, **kw)
 
 
 class RunBook:

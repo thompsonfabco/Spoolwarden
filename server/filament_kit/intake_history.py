@@ -33,8 +33,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config
-from . import read_confidence
+from . import config, event_sink, read_confidence
 from .pairing import _write_atomic, make_state_dir
 
 log = logging.getLogger(__name__)
@@ -593,6 +592,7 @@ def apply(sm, rid: str, *, proposal: str | None = None, item=None, values: dict 
                  else "")
     _rebuild(changed)
     _share(rid)                         # a hand edit or an accepted suggestion
+    event_sink.emit("record.changed", {"type": "hub"}, {"record": str(rid), "what": "revised"})
     return get(rid)
 
 
@@ -658,4 +658,5 @@ def undo(sm, rid: str, revision) -> dict:
         log.info("intake history: record %s revision %d undone", rid, rev["n"])
     _rebuild([])
     _share(rid)                         # the waiting correction follows the record's values again
+    event_sink.emit("record.changed", {"type": "hub"}, {"record": str(rid), "what": "undone"})
     return get(rid)

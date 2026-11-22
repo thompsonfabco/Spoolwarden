@@ -93,7 +93,7 @@ def test_backup_last_time_and_nightly(monkeypatch):
 
     def read(since, limit, kinds):
         asked.append((since, kinds))
-        return pages[len(asked) - 1]
+        return pages[len(asked) - 1] if len(asked) <= len(pages) else {"events": [], "next": since}
     monkeypatch.setattr(events, "read", read)
     assert get()["backup"]["last_at"] == "2027-01-16T03:00:00+00:00"
     assert asked == [(0, ["backup.finished"]), (2, ["backup.finished"]), (3, ["backup.finished"])]

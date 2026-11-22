@@ -19,10 +19,10 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from filament_kit import (api, apply, cli, config, library, modules, pairing, reader_tokens, setup_code, setup_helper,
+from filament_kit import (api, apply, cli, config, modules, pairing, reader_tokens, setup_code, setup_helper,
                           setup_page)
 from filament_kit.bridge import registry
-from filament_kit.setup_page import CSS_SECTIONS
+from filament_kit.setup_page import CSS_SECTIONS, SHELL_SCRIPTS
 from filament_kit.spoolman import Spoolman
 from test_shared_files import SETUP_CSP, check_files, check_sprite_first
 
@@ -120,7 +120,6 @@ def post(c, path, body=None, code=CODE, headers=H):
 # every write the page has, with a body that would succeed with the right code
 WRITES = [
     ("key", {"key": KEY}), ("key/remove", {}), ("passphrase", {"passphrase": PASS}),
-    ("library_token", {"token": "ghp_EXAMPLE"}), ("library_token/remove", {}),
     ("readers", {"name": "bench"}), ("readers/r1/revoke", {}), ("pair", {"kind": "phone"}),
     ("devices/abc/revoke", {}), ("modules", {"name": "ai_intake", "on": True}),
     ("settings", {"key": "station.url", "value": "http://station.example.com:5003"}), ("apply", {}),
@@ -154,6 +153,40 @@ def test_the_base_address_serves_the_hub_page_like_setup(app):
     assert client(app).post("/", json={}).status_code == 405
     assert client(app, AWAY).get("/").status_code == client(app, AWAY).get("/setup").status_code == 403
     assert client(app, base="https://wrong.example:8710").get("/").status_code == 403    # the Host check applies as on /setup
+
+
+def test_the_registry_mounts_the_section_routes_and_assets_once(app):
+    c = client(app)
+    page = c.get("/setup").text
+    scripts = re.findall(r"<script src='/setup/(setup_[^']+|setup\.js)'>", page)
+    assert scripts == list(SHELL_SCRIPTS)
+    assert scripts.index("setup_start.js") < scripts.index("setup_overview.js")
+    assert scripts.index("setup_printer_live.js") < scripts.index("setup_printers.js")
+    assert all(c.get("/setup/" + script).status_code == 200 for script in scripts)
+    routes = [(r.path, m) for r in app.routes if r.path.startswith("/setup/api/") for m in r.methods]
+    assert len(routes) == len(set(routes))
+    expected = {"/start": "GET", "/spools": "GET", "/device/{id}": "GET", "/analytics": "GET",
+                "/printers/{serial}/live": "GET", "/printers/{serial}/camera/ticket": "POST", "/export/printers.csv": "GET"}
+    assert {("/setup/api" + path, method) for path, method in expected.items()} <= set(routes)
+    assert c.get("/setup/api/start").status_code == c.get("/setup/api/devices").status_code == 200
+    assert post(c, "start", {"hide": True}, code=None).status_code == 403
+    assert c.get("/setup/api/state").json()["history"] == {
+        "exports": ["activity", "lines", "locations", "printers", "recent", "spoolman-filaments",
+                    "spoolman-spools", "usage"], "event_undo": True, "activity": True, "report": True,
+    }
+
+
+def test_remote_preview_warns_when_the_hub_uses_port_443(app, monkeypatch):
+    from filament_kit import hubport
+    monkeypatch.setattr(hubport, "REMOTE_EXCLUDES_HUB_443", True)
+    cfg = config.load()
+    cfg["port"] = 443
+    config.save(cfg)
+    before = config.load()
+    r = client(app).get("/setup/api/modules/preview?name=remote")
+    assert r.status_code == 200
+    assert r.json()["code"] == "remote_443" and r.json()["refused"] == hubport.TEXT_REMOTE_REFUSAL
+    assert config.load() == before
 
 
 def test_shared_files_are_served_and_the_sprite_comes_first(app):
@@ -299,16 +332,11 @@ def test_web_passphrase_is_stored_as_the_cli_stores_it(app, caplog):
     assert "setup: web passphrase set from 192.0.2.20" in caplog.text and PASS not in caplog.text
 
 
-def test_library_token_lands_where_the_library_reads_it(app, caplog):
-    caplog.set_level(logging.INFO, logger="filament_kit")
+def test_the_hub_no_longer_offers_library_token_routes(app):
     c = client(app)
-    r = post(c, "library_token", {"token": "ghp_EXAMPLE"})
-    assert r.status_code == 200 and "ghp_EXAMPLE" not in r.text
-    assert library._token() == "ghp_EXAMPLE"
-    assert c.get("/setup/api/state").json()["library_token"]["set"] is True
-    post(c, "library_token/remove", {})
-    assert library._token() is None
-    assert "ghp_EXAMPLE" not in caplog.text and "setup: library token removed from 192.0.2.20" in caplog.text
+    assert post(c, "library_token", {"token": "example"}).status_code == 404
+    assert post(c, "library_token/remove").status_code == 404
+    assert "library_token" not in c.get("/setup/api/state").json()
 
 
 def test_reader_token_is_shown_once_and_only_its_hash_is_kept(app, caplog):

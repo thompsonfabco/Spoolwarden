@@ -1,0 +1,15 @@
+body { font-family: system-ui, sans-serif; margin: 0; background: #f6f6f4; color: #1b1b1b; }
+main { max-width: 40rem; margin: 0 auto; padding: 1rem; }
+h1 { font-size: 1.4rem; }
+h2 { font-size: 1.1rem; margin-top: 1.5rem; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; }
+dt { font-weight: 600; }
+dd { margin: 0; overflow-wrap: anywhere; }
+img { max-width: 100%; height: auto; border-radius: 4px; }
+form { display: grid; gap: 0.6rem; }
+label { display: grid; grid-template-columns: 1fr max-content; gap: 0.5rem; align-items: center; }
+input[type=number], select { font: inherit; padding: 0.25rem; min-width: 8rem; }
+input[type=checkbox] { width: 1.3rem; height: 1.3rem; }
+button { font: inherit; padding: 0.5rem 1rem; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #1a5fb4; outline-offset: 2px; }
+#note { font-weight: 600; }

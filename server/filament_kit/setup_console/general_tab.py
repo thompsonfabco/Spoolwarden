@@ -8,11 +8,12 @@
                                          `jobs`); turning it on without the reader installed here is a field error; turning
                                          it off with {delete_waiting: true} first deletes the corrections waiting (`deleted`)
     POST settings/spoolman {code, url}  an external Spoolman: only after this server has reached it and it answered as one
+    POST settings/port {code, port}      change the Hub's web port: checked here before starting the `port_change` job
     POST remote/firewall {code}          the rules the owner sets up by hand: printed only, and it names their networks
-    GET  settings/local-intake           the local label reader's health (local_reader.health): a read, no code
-    POST settings/local-intake/test {code, url, tier}   the same health for an address not saved yet (S2.18): the
+    GET  settings/local-intake           the local label reader's health (local_reader.test): a read, no code
+    POST settings/local-intake/test {code, url, tier}   the same check for an address not saved yet (S2.18): the
                                          Hub contacts a host the user names, so it takes the code; nothing is stored,
-                                         no token is sent, no redirect is followed
+                                         no token is sent, no redirect is followed; trusts a changed cert when told
     GET  settings/local-intake/plan      what the last plan job (local_intake_plan) saved: no network here, the server's
                                          unit does not reach GitHub (install / removal: jobs local_intake_install, _remove)
 The certificate itself is the job `remote_issue`.
@@ -21,7 +22,7 @@ from __future__ import annotations
 
 import anyio
 
-from .. import config, local_intake_install, local_reader, modules, redact, remote, setup_helper, share_corrections
+from .. import config, getting_started, hubport, local_intake_install, local_reader, modules, redact, remote, setup_helper, share_corrections
 from ..spoolman import Spoolman, SpoolmanError
 
 
@@ -44,6 +45,8 @@ def _view() -> dict:
     return {"values": values, "station_on": "station" in on, "remote_on": "remote" in on, "web_on": "web" in on,
             "ai_intake_on": "ai_intake" in on, "local_intake_on": "local_intake" in on,
             "local_intake_installed": local_intake_install.installed(),
+            "reader_install_pending": getting_started.reader_install_pending(cfg),
+            "port": int(cfg.get("port") or hubport.FALLBACK_PORT),
             "spoolman_external": "server" in on and "spoolman" not in on,
             "intake_history": _history_use(),
             "spoolman_url": redact.text(str(cfg.get("spoolman_url") or ""), redact.known_values())}
@@ -144,12 +147,31 @@ def routes(page) -> list[tuple]:
                 raise Refused(503, f"cannot read the remote files ({e.strerror or e})") from None
         return {"text": await anyio.to_thread.run_sync(text)}
 
+    async def port_change(request, body):
+        raw_port = body.get("port")
+        if isinstance(raw_port, bool) or not isinstance(raw_port, (int, str)):
+            raise Refused(400, "give the port number", field="port")
+        text = str(raw_port).strip()
+
+        def validate() -> int:
+            cfg = config.load()
+            cur = int(cfg.get("port") or hubport.FALLBACK_PORT)
+            num, why = hubport.check_port(text, current=cur, allow_443=("remote" not in modules.enabled(cfg)))
+            if num is None:
+                raise Refused(400, why, field="port")
+            return num
+
+        port_num = await anyio.to_thread.run_sync(validate)
+        await page._helper({"op": "port_change", "code": body["code"], "port": port_num})
+        page.audit(request, f"Hub port change to {port_num} started")
+        return {"ok": True, "port": port_num, "job": "port_change"}
+
     async def reader_health(request, body):
         def check() -> dict:
             cfg = config.load()
             if "local_intake" not in modules.enabled(cfg):
                 raise Refused(409, "the \"Label Reader: On this Hub\" Feature is off: turn it on in Features")
-            h = local_reader.health(cfg)
+            h = local_reader.test(cfg)
             return {**h, "share_corrections": share_corrections.state(cfg, h)}
         return await anyio.to_thread.run_sync(check)
 
@@ -164,6 +186,7 @@ def routes(page) -> list[tuple]:
             raise Refused(400, err, field="url")
         if tier not in local_reader.TIERS:
             raise Refused(400, "the tier is auto, cpu or gpu", field="tier")
+        trust = body.get("trust") is True
 
         def check() -> dict:
             cfg = config.load()
@@ -171,7 +194,7 @@ def routes(page) -> list[tuple]:
                 raise Refused(409, "the \"Label Reader: On this Hub\" Feature is off: turn it on in Features")
             raw = cfg.get("local_intake") if isinstance(cfg.get("local_intake"), dict) else {}
             tried = {**cfg, "local_intake": {**raw, "url": url, "tier": tier}}
-            h = local_reader.health(tried)
+            h = local_reader.test(tried, trust=trust)
             return {**h, "share_corrections": share_corrections.state(tried, h)}
         return await anyio.to_thread.run_sync(check)
 
@@ -183,5 +206,6 @@ def routes(page) -> list[tuple]:
             ("/settings/local-intake/test", page.guard(reader_test, write=True), "POST"),
             ("/settings/local-intake/plan", page.guard(reader_plan), "GET"),
             ("/settings/general", page.guard(write, write="helper"), "POST"),
+            ("/settings/port", page.guard(port_change, write="helper"), "POST"),
             ("/settings/spoolman", page.guard(spoolman, write=True), "POST"),
             ("/remote/firewall", page.guard(firewall, write=True), "POST")]

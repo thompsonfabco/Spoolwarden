@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 
 from filament_kit import config, setup_helper, storage
 
 from test_hub_page_audit import _run, hub_app, hub_change  # noqa: F401
 from test_hub_presets_ui import _drive, T, hub  # noqa: F401
+from test_setup_page import STATIC
 
 GROUPS = ["appearance", "general", "storage", "alerts", "label-reader", "backups", "network", "passphrase", "catalog", "voice"]
 NAMES = ["Appearance", "General", "Storage locations", "Alerts", "Label Reader", "Backups and restore", "Network and addresses",
@@ -22,7 +24,7 @@ async function until(look, what) { for (let i = 0; i < 300; i++) { const v = loo
 const $ = (s, root = document) => root.querySelector(s);
 const text = (el) => (el ? el.textContent.trim().replace(/\\s+/g, " ") : null);
 const shown = (el) => !!el && el.getClientRects().length > 0;
-const loaded = () => until(() => !$(".chip--lock .skeleton__line") && !$('main [aria-busy="true"]:not(button)') && $(".settings__group form, .settings__group section"), "the groups to load");
+const loaded = () => until(() => !$(".chip--lock .skeleton__line") && document.querySelectorAll(".settings__group").length === 10 && !$('main [aria-busy="true"]:not(button)') && $("#set-catalog"), "the groups to load");
 const type = (form, name, value) => { const c = form.elements[name]; c.value = value; c.dispatchEvent(new Event("input", { bubbles: true })); };
 // Unlocking makes the Backups group read its list with the code; a save sent at the same moment would write the lock's
 // file at the same time as that read does, which a Windows file system refuses, so the test waits for the list first
@@ -303,3 +305,158 @@ return out;
     assert "Records kept" in page["first"].split("Not saved")[0] and "Address" not in page["first"], page["first"]
     assert page["keptAfterRefusal"] == "sk-ant-example-1"
     assert page["keptAfterAccepted"] == "" and page["dirty"] == "dirty", page
+
+
+def test_catalog_has_no_token_and_adds_and_removes_custom_entry_via_form(hub, monkeypatch, tmp_path):
+    from filament_kit.profiles import builds
+    rebuilds: list[str] = []
+    monkeypatch.setattr(builds, "request_rebuild", lambda why: rebuilds.append(why))
+    _switch_on("library")
+    page = _drive(hub, tmp_path, PRELUDE + """
+await loaded();
+await unlock();
+const cat = $("#set-catalog");
+const out = {
+  tag: cat.tagName,
+  hasTokenField: !!$('[name="library_token"]', cat),
+  hasRemoveToken: !!$('[data-action="remove-library-token"]', cat),
+  hasSaveFoot: !!$(".group__foot", cat),
+  moreClosed: !$("details.settings__cat-more", cat).open,
+  otherHidden: $('[name="other_material"]', cat).closest(".field").hidden,
+  hasOtherOption: [...$('[name="material"]', cat).options].some((o) => o.value === "__other__"),
+};
+const form = $(".settings__cat-form", cat);
+type(form, "brand", "PolyTerra");
+type(form, "name", "Charcoal Black");
+const mat = $('[name="material"]', form);
+mat.value = "__other__";
+mat.dispatchEvent(new Event("change", { bubbles: true }));
+out.otherShown = !$('[name="other_material"]', form).closest(".field").hidden;
+type(form, "other_material", "BioPLA");
+form.requestSubmit();
+out.moreOpenedOnErr = await until(() => $("details.settings__cat-more", form).open && !!$(".field__error", form), "details open on temp error");
+type(form, "nozzle_min", "200");
+type(form, "bed_min", "55");
+form.requestSubmit();
+out.added = await until(() => {
+  const el = $('.settings__cat-form [role="status"][data-state="ok"]', cat);
+  return el ? text(el) : null;
+}, "catalog added message");
+$('[data-action="see-entries"]', cat).click();
+const dlg = await until(() => $("dialog[open]"), "custom entries dialog");
+await until(() => $(".settings__cat-table tbody tr", dlg), "entry row");
+out.row = [...$(".settings__cat-table tbody tr", dlg).querySelectorAll("td")].slice(0, 4).map(text);
+$('[data-action="remove-local-entry"]', dlg).click();
+const confirmDlg = await until(() => {
+  const ds = [...document.querySelectorAll("dialog[open]")];
+  return ds.length > 1 ? ds[ds.length - 1] : null;
+}, "remove confirmation dialog");
+$('[data-action="confirm"]', confirmDlg).click();
+out.empty = await until(() => {
+  const p = $(".settings__cat-dialog-body p.muted", dlg);
+  return p && /no entries of your own yet/i.test(text(p)) ? text(p) : null;
+}, "empty entries text");
+$('[data-action="close"]', dlg).click();
+return out;
+""")
+    assert page["tag"] == "SECTION"
+    assert not page["hasTokenField"] and not page["hasRemoveToken"] and not page["hasSaveFoot"]
+    assert page["moreClosed"] and page["otherHidden"] and page["hasOtherOption"] and page["otherShown"] and page["moreOpenedOnErr"]
+    assert page["added"].startswith("Added. Slicer presets are rebuilt in a minute.")
+    assert page["row"][:3] == ["PolyTerra", "Charcoal Black", "BioPLA"]
+    assert "no entries of your own yet" in page["empty"].lower()
+    assert len(rebuilds) >= 2
+
+
+def test_network_shows_hub_port_and_change_port_dialog_submits_to_helper(hub, monkeypatch, tmp_path):
+    calls: list[dict] = []
+    monkeypatch.setitem(setup_helper.OPS, "port_change", lambda req: calls.append(dict(req)) or {"name": "port_change"})
+    page = _drive(hub, tmp_path, PRELUDE + """
+await loaded();
+await unlock();
+const fetches = [], real = window.fetch;
+let disconnected = false;
+const oldJob = { name: "port_change", running: false, exit: 0, next: 10, text: "An earlier port change", lost: false };
+window.fetch = (u, init) => {
+  fetches.push(new URL(u, location.href).origin);
+  if (String(u).endsWith("/setup/api/job")) {
+    if (disconnected) return Promise.reject(new TypeError("old port disconnected"));
+    return Promise.resolve(Response.json(oldJob));
+  }
+  return real(u, init);
+};
+const net = $("#set-network");
+const out = {
+  port: text($(".settings__port-val", net)),
+  hasBtn: !!$('[data-action="change-port"]', net),
+};
+$('[data-action="change-port"]', net).click();
+const dlg = await until(() => $("dialog[open]"), "change port dialog");
+const input = $('[name="port"]', dlg);
+out.initialTitle = text($(".dialog__title", dlg));
+out.mono = input.classList.contains("mono") || !!input.closest(".mono");
+input.value = "8443";
+input.dispatchEvent(new Event("input", { bubbles: true }));
+out.updatedTitle = text($(".dialog__title", dlg));
+$('[data-action="confirm"]', dlg).click();
+await until(() => !$("dialog[open]"), "dialog to close");
+out.status = await until(() => text($('.settings__port-row ~ .result .result__text', net)), "port moving result");
+out.next = new URL($('.settings__port-row ~ .result .result__text a', net).href).port;
+disconnected = true;
+out.lost = await until(() => text($('.settings__port-row ~ .result[data-state="warn"] .result__text', net)), "lost contact");
+out.sameOrigin = fetches.every((origin) => origin === location.origin);
+return out;
+""")
+    assert page["port"] == "8710" and page["hasBtn"] and page["mono"]
+    assert "8710" in page["initialTitle"] and "8443" in page["updatedTitle"]
+    assert "8443" in page["status"]
+    assert page["next"] == "8443" and page["sameOrigin"]
+    assert T("job_lost_touch") in page["lost"] and T("common_open_hub_page") in page["lost"]
+    assert calls and calls[0]["port"] == 8443
+
+
+def test_port_move_navigates_on_disconnect_only_after_the_job_has_started():
+    from test_hub_page_audit import _missing, _node
+
+    node = _node()
+    if not node:
+        _missing("the port navigation check needs Node 22 or later")
+    source = (STATIC / "setup_settings.js").read_text(encoding="utf-8")
+    wait = source[source.index("function waitNewPort("):source.index("function openPortDialog(")]
+    script = wait + """
+const prior = { name: "port_change", running: false, exit: 0, next: 20, text: "earlier move" };
+const started = { ...prior, running: true, exit: null, next: 10, text: "starting" };
+const loss = Object.assign(new Error("old listener disconnected"), { unreachable: true });
+const failed = { ...prior, exit: 1, next: 40, text: "restart failed" };
+async function scenario(replies) {
+  const timers = [], navigate = [], results = [], requests = [];
+  Object.assign(globalThis, {
+    location: { href: "https://kit.local:8710/setup#settings/network", origin: "https://kit.local:8710", replace: (url) => navigate.push(url) },
+    h: (tag, attrs) => ({ tag, ...attrs }),
+    SW: { t: (key) => key },
+    say: (box, value, state) => results.push({ value, state }),
+    followApply() {},
+    setTimeout: (fn) => timers.push(fn),
+    api: async (path) => { requests.push(path); const r = replies.shift(); if (r instanceof Error) throw r; return r; },
+  });
+  waitNewPort(8443, {}, prior);
+  await new Promise(setImmediate);
+  while (timers.length && replies.length) await timers.shift()();
+  return { navigate, results, requests };
+}
+(async () => console.log(JSON.stringify({
+  lostAfterStart: await scenario([started, loss]),
+  ambiguous: await scenario([prior, loss]),
+  failed: await scenario([started, failed]),
+})))();
+"""
+    run = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+    assert run.returncode == 0, run.stderr
+    out = json.loads(run.stdout)
+    target = "https://kit.local:8443/setup#settings/network"
+    assert out["lostAfterStart"]["navigate"] == [target]
+    assert [r["state"] for r in out["lostAfterStart"]["results"]] == ["run"]
+    assert out["ambiguous"]["navigate"] == [] and out["ambiguous"]["results"][-1]["state"] == "warn"
+    assert out["ambiguous"]["results"][-1]["value"][-1]["href"] == target
+    assert out["failed"]["navigate"] == [] and out["failed"]["results"][-1] == {"value": "job_failed", "state": False}
+    assert all(row["requests"] == ["job", "job"] for row in out.values())

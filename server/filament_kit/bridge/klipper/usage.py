@@ -12,6 +12,8 @@ different or unknown (a name that doesn't resolve here may well resolve on the p
 """
 from __future__ import annotations
 
+import calendar
+import datetime as dt
 import ipaddress
 import logging
 import socket
@@ -27,8 +29,30 @@ from .moonraker import MoonrakerError, NotFound, _host_part
 
 log = logging.getLogger(__name__)
 FILE = "usage.xml"
-KEEP = 2000
+RETENTION_MONTHS = 13
+_OUTCOMES = ("finished", "failed", "cancelled", "unknown")
 _lock = threading.Lock()
+
+
+def _outcome(status: str) -> str:
+    s = (status or "").strip().lower()
+    if s == "completed":
+        return "finished"
+    if s == "cancelled":
+        return "cancelled"
+    if s in {"error", "shutdown", "klippy_shutdown"}:
+        return "failed"
+    return "unknown"
+
+
+def _cutoff_13_months(now: float | None = None) -> float:
+    cur = dt.datetime.fromtimestamp(time.time() if now is None else now, dt.timezone.utc)
+    y, m = cur.year, cur.month - RETENTION_MONTHS
+    while m <= 0:
+        m += 12
+        y -= 1
+    last_day = calendar.monthrange(y, m)[1]
+    return cur.replace(year=y, month=m, day=min(cur.day, last_day)).timestamp()
 
 
 def _file(pid: str):
@@ -55,11 +79,19 @@ def _read(pid: str) -> list[dict]:
     out = []
     for el in root.findall("entry"):
         sid = el.get("spool-id")
+        st = el.get("status", "")
+        raw_out = el.get("outcome")
         out.append({"id": el.get("id", ""), "job": el.get("job", ""), "file": el.get("file", ""),
                     "started": _num(el.get("started")), "ended": _num(el.get("ended")),
-                    "status": el.get("status", ""), "spool_id": int(sid) if (sid or "").isdigit() else None,
+                    "status": st, "spool_id": int(sid) if (sid or "").isdigit() else None,
                     "filament_mm": _num(el.get("filament-mm")), "grams": _num(el.get("grams")),
-                    "source": el.get("source", "moonraker")})
+                    "source": el.get("source", "moonraker"),
+                    "material": el.get("material") or None,
+                    "vendor": el.get("vendor") or None,
+                    "name": el.get("name") or None,
+                    "color_hex": el.get("color-hex") or None,
+                    "printer_name": el.get("printer-name") or None,
+                    "outcome": raw_out if raw_out in _OUTCOMES else _outcome(st)})
     return out
 
 
@@ -71,6 +103,10 @@ def _write(pid: str, entries: list[dict]) -> None:
                         ("grams", "grams"), ("spool_id", "spool-id")):
             if e.get(k) is not None:
                 attrs[name] = repr(e[k]) if isinstance(e[k], float) else str(e[k])
+        for k, name in (("material", "material"), ("vendor", "vendor"), ("name", "name"),
+                        ("color_hex", "color-hex"), ("printer_name", "printer-name"), ("outcome", "outcome")):
+            if e.get(k):
+                attrs[name] = xmlfile.clean(str(e[k]))
         ET.SubElement(root, "entry", attrs)
     ET.indent(root)
     f = _file(pid)
@@ -80,48 +116,69 @@ def _write(pid: str, entries: list[dict]) -> None:
     tmp.replace(f)
 
 
-def record(pid: str, job: dict, spool_id) -> dict:
+def job_spool_id(job: dict, fallback: int | None) -> int | None:
+    """Prefer Moonraker's recorded spool to the printer's current spool."""
+    aux = next((a.get("value") for a in (job.get("auxiliary_data") or [])
+                if isinstance(a, dict) and a.get("name") == "spool_ids"), None)
+    return aux[0] if isinstance(aux, list) and aux and type(aux[0]) is int else fallback
+
+
+def record(pid: str, job: dict, spool_id, *, spool: dict | None = None) -> dict:
     """Append Moonraker's history `job` (once per job id) and return the entry."""
     meta = job.get("metadata") or {}
     jid = str(job.get("job_id") or "")
-    aux = next((a.get("value") for a in (job.get("auxiliary_data") or [])
-                if isinstance(a, dict) and a.get("name") == "spool_ids"), None)
-    if isinstance(aux, list) and aux and isinstance(aux[0], int):
-        spool_id = aux[0]
+    spool_id = job_spool_id(job, spool_id)
     status = str(job.get("status") or "")
     used_mm, total_mm = _num(job.get("filament_used")), _num(meta.get("filament_total"))
     grams = _num(meta.get("filament_weight_total"))      # the whole file's weight: right for a job that finished
     if status != "completed" and grams is not None:
         grams = round(grams * min(used_mm / total_mm, 1.0), 2) if used_mm is not None and total_mm else None
+    p = registry.load().get(pid)
+    pname = registry.display_name(p) if p else pid
+    fil = (spool.get("filament") or {}) if isinstance(spool, dict) else {}
+    raw_color = meta.get("filament_color") or fil.get("color_hex") or ""
+    color_hex = str(raw_color).strip().lstrip("#")[:6].upper() or None
     e = {"id": f"{KLIPPER_ENTRY}{jid or int(time.time())}", "job": jid, "file": str(job.get("filename") or ""),
          "started": _num(job.get("start_time")), "ended": _num(job.get("end_time")) or time.time(),
          "status": status, "spool_id": spool_id if isinstance(spool_id, int) else None,
          "filament_mm": used_mm, "grams": grams,
-         "source": "moonraker"}
+         "source": "moonraker",
+         "material": meta.get("filament_type") or fil.get("material") or None,
+         "vendor": meta.get("filament_vendor") or (fil.get("vendor") or {}).get("name") or None,
+         "name": fil.get("name") or meta.get("filament_name") or None,
+         "color_hex": color_hex,
+         "printer_name": pname,
+         "outcome": _outcome(status)}
+    cutoff = _cutoff_13_months()
     with _lock:
         entries = _read(pid)
         old = next((x for x in entries if x["id"] == e["id"]), None)
         if old is not None:
             return old
-        entries = (entries + [e])[-KEEP:]
+        entries = [x for x in (entries + [e]) if (x.get("ended") or 0) >= cutoff]
         _write(pid, entries)
     log.info("klipper usage %s: job %s %s, %.0f mm (Moonraker deducted it in Spoolman)", pid, jid, e["status"],
              e["filament_mm"] or 0)
     if e["grams"]:                                                  # a new entry with a weight: usage.recorded
-        p = registry.load().get(pid)
-        event_sink.emit("usage.recorded", {"type": "printer", "id": pid, "name": registry.display_name(p) if p else pid},
+        event_sink.emit("usage.recorded", {"type": "printer", "id": pid, "name": pname},
                         {"printer": pid, "job": e["file"], "spool": e["spool_id"],
-                         "material": meta.get("filament_type") or None, "grams": e["grams"],
+                         "material": e["material"], "grams": e["grams"],
                          "printer_job": jid or None, "run": event_sink.runs.last(pid, e["file"]) or None})
     return e
 
 
-def entries(pid: str, days: float) -> list[dict]:
-    """Entries of the last `days` days, newest first, shaped like the Bambu usage log's."""
+def entries(pid: str, days: float, *, by: str | None = None) -> list[dict] | dict:
+    """Entries of the last `days` days, newest first (or `{months: [...]}` when `by='month'`), shaped like the Bambu usage log's."""
     since = time.time() - days * 86400
     with _lock:
         got = _read(pid)
-    return [{**e, "undone": False, "can_undo": False} for e in reversed(got) if (e["ended"] or 0) >= since]
+    out = [{**e, "undone": False, "can_undo": False} for e in reversed(got) if (e["ended"] or 0) >= since]
+    if by == "month":
+        from .. import usage as busage
+        return {"months": busage.by_month(out)}
+    if by is not None:
+        raise ValueError(f"unsupported grouping {by!r}")
+    return out
 
 
 # --- which Spoolman does Moonraker report to ----------------------------------------------------------------------

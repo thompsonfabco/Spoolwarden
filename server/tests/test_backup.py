@@ -723,19 +723,19 @@ def test_a_restore_carries_the_event_ids_so_none_is_given_twice(kit):
     sub, hub = {"type": "hub"}, {"type": "hub"}
     for _ in range(3):
         events.write("print.started", {"type": "printer", "id": "p"}, hub, {"job": "a"})
-    z = backup.create()
+    z = backup.create(actor=None)
     for _ in range(4):                                           # ids 4 to 7 are newer than the backup
         events.write("print.started", {"type": "printer", "id": "p"}, hub, {"job": "b"})
     assert events.last_id() == 7
-    assert backup.restore(z, yes=True, run=Runner()) == 0
+    assert backup.restore(z, yes=True, run=Runner(), actor=None) == 0
     assert [e["id"] for e in events.read()["events"]] == [1, 2, 3]           # the newer events went with the state
     assert events.write("print.started", {"type": "printer", "id": "p"}, hub, {"job": "c"})["id"] == 8
 
 
 def test_a_restore_onto_a_hub_with_no_events_changes_nothing_about_ids(kit):
     from filament_kit import events
-    z = backup.create()
-    assert backup.restore(z, yes=True, run=Runner()) == 0
+    z = backup.create(actor=None)
+    assert backup.restore(z, yes=True, run=Runner(), actor=None) == 0
     assert events.write("print.started", {"type": "printer", "id": "p"}, {"type": "hub"}, {"job": "a"})["id"] == 1
 
 

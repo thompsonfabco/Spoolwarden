@@ -13,7 +13,9 @@ from filament_kit import cli, hostaddr, klipper_cli, modules, release, setup_pag
 from filament_kit.bridge import mapping, registry
 from filament_kit.bridge.connection import PrinterOffline
 from filament_kit.bridge.klipper import discovery
+from filament_kit.bridge.klipper.moonraker import Offline, Unauthorized
 from filament_kit.bridge.slottest import PrinterBusy
+from filament_kit.setup_console import printers_tab
 from test_setup_page import (CODE, H, HOSTNAME, SERIAL, STATIC, FakeManager, client, env, helper, make, manager, post)  # noqa: F401
 
 KEY = "abcdef0123456789abcdef0123456789"
@@ -162,6 +164,20 @@ def test_a_bambu_printer_added_by_name_keeps_it(both, manager, monkeypatch):
     assert registry.load()[SERIAL].ip == "h2d.local"
 
 
+def test_the_guided_bambu_add_requires_a_tls_reply_even_with_a_serial(both, manager, monkeypatch):
+    def no_reply(address):
+        raise TimeoutError
+
+    monkeypatch.setattr(setup_page, "setup_serial", no_reply)
+    c = client(both)
+    body = {"address": "192.0.2.40", "access_code": "12345678", "serial": SERIAL}
+    r = post(c, "printers", {**body, "require_certificate": True})
+    assert r.status_code == 400 and r.json()["field"] == "address" and "did not answer" in r.json()["error"]
+    assert not registry.load() and manager.synced == 0
+    assert post(c, "printers", body).status_code == 200
+    assert registry.load()[SERIAL].ip == body["address"] and manager.synced == 1
+
+
 def test_a_name_that_doesnt_resolve_is_refused_and_nothing_is_kept(both, monkeypatch):
     monkeypatch.setattr(setup_page, "setup_serial", lambda ip: pytest.fail("reached out"))
     r = post(client(both), "printers", {"address": "nosuch.local", "access_code": "12345678", "serial": SERIAL})
@@ -219,6 +235,40 @@ def test_the_terminal_menu_takes_a_name_too(env, names, monkeypatch, capsys):
 
 
 # ---------- Klipper: no Access Code, an optional key ----------
+@pytest.mark.parametrize("failure", [None, Offline, Unauthorized])
+def test_klipper_probe_asks_for_printer_info_without_saving(both, monkeypatch, failure):
+    calls = []
+
+    class Client:
+        def __init__(self, host, port, key):
+            calls.append((host, port, key))
+
+        def info(self):
+            if failure:
+                raise failure("the key must never be shown")
+            return {"state": "ready"}
+
+    monkeypatch.setattr(printers_tab, "Moonraker", Client)
+    c = client(both)
+    path = "printers/klipper/probe"
+    body = {"host": NAME, "port": "7126", "api_key": KEY}
+    before = registry.load()
+    assert post(c, path, body, code=None).status_code == 403
+    for field, value in [("host", "user@printer.example.com"), ("port", "0"), ("api_key", "bad key")]:
+        r = post(c, path, {**body, field: value})
+        assert r.status_code == 400 and r.json()["field"] == field
+    assert calls == []
+
+    r = post(c, path, body)
+    if failure is Unauthorized:
+        assert r.status_code == 400 and r.json()["field"] == "api_key"
+    else:
+        assert r.status_code == 200 and r.json() == {"reachable": failure is None}
+    assert calls == [(NAME, 7126, KEY)]
+    assert KEY not in r.text and "the key must never be shown" not in r.text
+    assert registry.load() == before
+
+
 def test_a_klipper_printer_is_added_with_a_name_and_no_access_code(both, manager, caplog):
     caplog.set_level(logging.INFO, logger="filament_kit")
     c = client(both)
@@ -572,28 +622,10 @@ def test_map_by_loading_filament_on_klipper_without_its_family_is_refused(both, 
     assert r.status_code == 409
 
 
-def test_the_printers_tab_links_the_live_view_in_the_phone_web_app():
-    """Interface parity (gap 5 of the 2026-11-10 matrix): the live printer view (slots, load, camera, controls, usage)
-    is the phone web app's Printers tab; the setup page links it, only when the printers module gives the web app
-    that tab, at /intake beside /setup on the same server."""
+def test_the_printers_tab_uses_the_hubs_live_view_and_the_page_menu():
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
-    assert 'replace(/\/(setup)?\/?$/, "") + "/intake#printers"' in text
-    head = text.split("function header(found)")[1].split("\n}\n")[0]
-    assert 'P.bambu ? X("a"' in head and "href: url" in head and 'rel: "noopener"' in head and "printers_live_view" in head
-
-
-@pytest.mark.skipif(not __import__("shutil").which("node"), reason="needs node")
-def test_the_live_view_link_resolves_beside_the_setup_page():
-    import json
-    import re
-    import shutil
-    import subprocess
-    text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
-    expr = re.search(r"const liveUrl = \(\) => (location\.pathname\..*);$", text, re.M).group(1)
-    probe = ["/setup", "/setup/", "/kit/setup", "/", "/kit/"]      # the Hub page is served at / as well as /setup
-    js = f"console.log(JSON.stringify({json.dumps(probe)}.map((p) => {{ const location = {{ pathname: p }}; return {expr}; }})));"
-    out = subprocess.run([shutil.which("node"), "-e", js], capture_output=True, encoding="utf-8", timeout=30, check=True).stdout
-    assert json.loads(out) == ["/intake#printers", "/intake#printers", "/kit/intake#printers", "/intake#printers", "/kit/intake#printers"]
+    assert "window.printerLive(p)" in text
+    assert "printers_live_view" not in text and "hubWebMenuItem()" in text
 
 
 # ---------- printer reports on the setup page (the user, 2026-11-10: "available on the computer setup page as well") ----------

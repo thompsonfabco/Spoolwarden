@@ -97,6 +97,8 @@ def test_every_path_the_web_unit_writes_is_listed():
             continue
         if path == UNDO_CALL:       # the scan stops at the quote in f"/api/events/{quote(event, safe='')}/undo"
             path = "/api/events/1/undo"
+        if path == "/api/export/1": # intake_app forwards f"/api/export/{name}" where name ends with .csv
+            path = "/api/export/1.csv"
         if any(rx.fullmatch(path) for rx in _CALLED_BEFORE_THE_HUB_MOUNTS_THEM_RX):
             continue                # refused until the Hub mounts the route: the tests below hold that
         assert (api._web_may("GET", path) or api._web_may("POST", path) or api._web_may("DELETE", path)), path
@@ -112,11 +114,11 @@ def test_every_listed_route_is_one_the_web_unit_writes():
     """The other way: nothing stays listed once the web unit stops calling it."""
     from filament_kit.web import slots
     calls = _calls_in_web() | {slots.printer_path("1"), slots.load_path("1", "1"), "/api/printers/1/slots/1/unload",
-                               "/api/printers/1/camera/1"}
+                               "/api/printers/1/camera/1", "/api/events/1/undo"}
     for method, template in api.WEB_ROUTES:
         if (method, template) in LISTED_BEFORE_THE_WEB_UNIT_CALLS_THEM:
             continue
-        rx = re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", template)))
+        rx = re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", template)).replace("[^/]+.csv", "[^/]+"))
         assert any(rx.fullmatch(c) for c in calls), (method, template)
 
 
@@ -141,15 +143,10 @@ def test_a_route_listed_ahead_of_the_web_unit_is_not_yet_called_by_it():
 # refusal. The mount step lists the route in WEB_ROUTES and deletes its line here; the tests below make that so.
 UNDO_CALL = "/api/events/{quote(event, safe="
 CALLED_BEFORE_THE_HUB_MOUNTS_THEM = {
-    ("GET", "/api/hub"),                                    # R83 10.1 (what a web token may call gains exactly ...)
     ("POST", "/api/printers/{id}/slots/{label}/clear"),     # R83 10.1
     ("GET", "/api/library/local"),                          # R83 10.1
     ("POST", "/api/library/local/form"),                    # R83 10.1
     ("DELETE", "/api/library/local/{id}"),                  # R83 10.1
-    ("POST", "/api/events/{id}/undo"),                      # R84 9.1: a web token may call it
-    ("GET", "/api/export/{set}.csv"),                       # R84 9.2: the GET /api/export/... routes, not the imports
-    ("GET", "/api/health"),                                 # R84 9.2
-    ("GET", "/api/analytics"),                              # R84 9.2
 }
 _CALLED_BEFORE_THE_HUB_MOUNTS_THEM_RX = [
     re.compile(re.sub(r"\{\w+\}", "[^/]+", t).replace("[^/]+.csv", "[^/]+")) for _, t in CALLED_BEFORE_THE_HUB_MOUNTS_THEM]

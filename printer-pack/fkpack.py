@@ -32,6 +32,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -48,11 +49,23 @@ PY39_PINS = ["requests<2.33", "gunicorn==23.0.0"]   # nfc2klipper's pins need Py
 SPOOLMAN_URL = re.compile(r"https?://[^\s\"'`$;&|<>()\\]+")      # one line of moonraker.conf: no spaces, no shell
 SERVICE = re.compile(r"[A-Za-z0-9_.-]{1,64}")            # a manifest service entry: a plain unit name, nothing else
 SERVICE_FILES = {"lasttag": ("lasttag/lasttag.py", "lasttag/allow")}   # files a kept service still needs
+LASTTAG_PORT = 5002                  # an existing lasttag keeps it; a new install may take 443 (R82 section 2 point 5)
+LASTTAG_HTTPS_PORT = 443
+LASTTAG_CAPS = "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\nAmbientCapabilities=CAP_NET_BIND_SERVICE\n"
 EMPTY = {"files": [], "include": False, "services": [], "asvc": [], "moonraker": [], "nfc": None}
 
 
 class PackError(Exception):
     pass
+
+
+def _port_free(port):
+    """True when nothing on this machine answers on `port` (a connect is refused)."""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=2):
+            return False
+    except OSError:
+        return True
 
 
 def stamp():
@@ -61,8 +74,9 @@ def stamp():
 
 class Pack:
     def __init__(self, data, moonraker="http://localhost:7125", home=None, ask=None, out=None, run=None,
-                 klipper_dir=None, units_dir="/etc/systemd/system", prompt=None):
+                 klipper_dir=None, units_dir="/etc/systemd/system", prompt=None, port_free=None):
         self.units_dir = units_dir
+        self.port_free = port_free or _port_free
         self.data = os.path.abspath(os.path.expanduser(data))
         self.cfg = os.path.join(self.data, "config")
         self.dest = os.path.join(self.cfg, "filament-kit")
@@ -434,10 +448,17 @@ class Pack:
         unit = unit.replace("@PYTHON@", os.path.join(self.nfc_dir(), "venv", "bin", "python"))
         unit = unit.replace("@LASTTAG@", os.path.join(self.dest, "lasttag", "lasttag.py"))
         if "lasttag" in m["services"] and os.path.exists(self.unit_path("lasttag")):
+            if self.lasttag_unit_update(unit):
+                return
             if changed and self.ask("lasttag's allow list changed; restart it to use the new one?"):
                 self.run(["sudo", "systemctl", "restart", "lasttag"])
             return
-        if self.ask("Install the lasttag service (port 5002, read only)?"):
+        port = LASTTAG_PORT
+        if self.port_free(LASTTAG_HTTPS_PORT) and self.ask(
+                "Serve the lasttag service on port 443, so its address needs no port? (no: port 5002)"):
+            port = LASTTAG_HTTPS_PORT
+            unit = self.lasttag_port(unit, port)
+        if self.ask("Install the lasttag service (port {}, read only)?".format(port)):
             tmp = self._stage("lasttag.service", unit)
             try:
                 self.run(["sudo", "install", "-m", "644", tmp, self.unit_path("lasttag")])
@@ -447,6 +468,45 @@ class Pack:
             self.run(["sudo", "systemctl", "enable", "--now", "lasttag"])
             self._add(m["services"], "lasttag")
             self.asvc_add(m, "lasttag")
+
+    @staticmethod
+    def lasttag_port(unit, port):
+        """The unit text for a lasttag that serves `port` (LASTTAG_PORT is what the service reads). Below 1024 it
+        gets exactly CAP_NET_BIND_SERVICE, as the kit's own units do."""
+        unit = unit.replace("(port {})".format(LASTTAG_PORT), "(port {})".format(port))
+        if port == LASTTAG_PORT:
+            return unit
+        extra = "Environment=LASTTAG_PORT={}\n".format(port) + (LASTTAG_CAPS if port < 1024 else "")
+        unit = unit.replace("\r\n", "\n")
+        if "[Service]\n" not in unit:
+            raise ValueError("the lasttag service template has no [Service] section")
+        return unit.replace("[Service]\n", "[Service]\n" + extra, 1)
+
+    def lasttag_unit_update(self, unit):
+        """An existing lasttag install made before the service served HTTPS: its unit has no StateDirectory, so the
+        service could not keep a certificate and answers plain HTTP. Rewrite the unit (keeping the port it had) and
+        restart it, once asked. True when it did; False when the unit is already the new kind (or the owner said no)."""
+        try:
+            with open(self.unit_path("lasttag"), encoding="utf-8") as f:
+                old = f.read()
+        except OSError:
+            return False
+        if re.search(r"(?m)^StateDirectory=", old):
+            return False
+        ports = [port for line in re.findall(r"(?m)^Environment=(.*)$", old)
+                 for port in re.findall(r'(?:^|\s)"?LASTTAG_PORT=(\d+)"?(?=\s|$)', line)]
+        unit = self.lasttag_port(unit, int(ports[-1]) if ports else LASTTAG_PORT)
+        self.out("  lasttag: its service file is from before it served HTTPS (it answers plain HTTP)")
+        if not self.ask("Update the lasttag service so it serves HTTPS (it restarts)?"):
+            return False
+        tmp = self._stage("lasttag.service", unit)
+        try:
+            self.run(["sudo", "install", "-m", "644", tmp, self.unit_path("lasttag")])
+        finally:
+            self._unstage(tmp)
+        self.run(["sudo", "systemctl", "daemon-reload"])
+        self.run(["sudo", "systemctl", "restart", "lasttag"])
+        return True
 
     def part_moonraker(self, m, spoolman):
         path = os.path.join(self.cfg, "moonraker.conf")

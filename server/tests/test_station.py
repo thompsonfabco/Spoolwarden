@@ -16,6 +16,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
+from filament_kit import __version__
 from filament_kit.station import http as station_http
 from filament_kit.station import nfc as station_nfc
 from filament_kit.station import panel as station_panel
@@ -121,7 +122,7 @@ def test_state_and_last_tag_shapes():
         code, st = _get(base + "/state")
         assert code == 200
         assert set(st) == {"tag", "scale", "last_weight", "panel", "panel_version", "panel_nfc", "air", "photo",
-                       "flow"}
+                       "flow", "version", "settings_changed"}   # the last two: R83 section 10.4
         iso = station_http.iso(now - 10)
         tag = {"status": "ok", "nfc_id": "a:b:c:d:e:f:1", "read_at": iso, "read_at_unix": now - 10, "held": False}
         _ages_near(st, {"tag": 10, "scale": 1, "last_weight": 2})
@@ -130,14 +131,14 @@ def test_state_and_last_tag_shapes():
             "scale": {"grams": 1000.0, "status": "stable", "unit": 2, "stable": True},
             "last_weight": {"grams": 1000.0, "held": False},
             "panel": "/dev/ttyUSB1", "panel_version": "2", "panel_nfc": True, "air": None, "photo": None,
-            "flow": IDLE}
+            "flow": IDLE, "version": __version__, "settings_changed": False}
         code, lt = _get(base + "/last-tag")
         assert code == 200
         assert abs(lt.pop("age_seconds") - 10) <= 2
         assert lt == tag
         code, body = _get(base + "/other")
         assert code == 404
-        assert body == {"status": "error", "message": "not found"}
+        assert body == {"error": "not_found", "message": "There is nothing here."}
     finally:
         _stop(srv)
 
@@ -157,7 +158,7 @@ def test_state_held_and_empty():
         assert st == {"tag": {"status": "ok", "nfc_id": None, "read_at": None, "read_at_unix": None,
                               "age_seconds": None, "held": False},
                       "scale": None, "last_weight": None, "panel": None, "panel_version": None, "panel_nfc": None, "air": None,
-                      "photo": None, "flow": IDLE}
+                      "photo": None, "flow": IDLE, "version": __version__, "settings_changed": False}
     finally:
         _stop(srv)
 
@@ -195,7 +196,7 @@ def test_photo_is_served_as_a_jpeg_and_is_a_404_without_one():
 def test_refuses_client_not_in_allow():
     srv, base = _serve(lambda: _raw(time.time()), {"10.9.9.9"})
     try:
-        assert _get(base + "/state") == (403, {"status": "error", "message": "forbidden"})
+        assert _get(base + "/state") == (403, {"error": "forbidden", "message": "This address may not ask for that."})
         assert _get(base + "/last-tag")[0] == 403
     finally:
         _stop(srv)

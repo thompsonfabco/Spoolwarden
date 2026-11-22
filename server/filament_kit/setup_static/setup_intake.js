@@ -122,6 +122,33 @@ function intakeTab() {
   return [body];
 }
 
+// ----- Download as CSV (R84 6): the file the Hub gives for GET export/recent.csv, unlocked as a file leaves the Hub -----
+// Texts the catalogue does not have yet (only HD2 opens it): the catalogue's own wins once the key is there.
+const REC_STUB = { recent_download_csv: "Download as CSV", recent_csv_failed: "Could not download the file: {reason}" };
+const recT = (key, vars) => {
+  const v = SW.t(key, vars);
+  return v !== key || !(key in REC_STUB) ? v : REC_STUB[key].replace(/\{([a-z]+)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m));
+};
+async function recDownloadCsv(set, fallback) {
+  const r = await fetch(`/setup/api/export/${set}.csv`, { credentials: "same-origin", headers: { "X-Setup-Code": theCode() } });
+  if (!r.ok) { let d = {}; try { d = await r.json(); } catch { /* not JSON */ } throw hubError(r.status, d); }
+  const m = /filename="([^"]+)"/.exec(r.headers.get("Content-Disposition") || "");
+  const url = URL.createObjectURL(await r.blob());
+  const a = h("a", { href: url, download: m ? m[1] : fallback });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+function recListMore() {
+  if (!hubCanExport("recent")) return null;
+  const more = SW.iconBtn("more", SW.t("common_more_actions_for", { name: SW.t("nav_recently_added") }), { cls: "recent-listmore" });
+  SW.menu(more, () => [{ label: recT("recent_download_csv"), icon: "download", action: "download-csv",
+    run: () => needCode(async () => { try { await recDownloadCsv("recent", "recent.csv"); } catch (e) { if (e.locked) throw e; SW.toast(recT("recent_csv_failed", { reason: hubText(e.message) }), "bad"); } }) }],
+  { label: SW.t("common_actions_for", { name: SW.t("nav_recently_added") }) });
+  return more;
+}
+
 // ----- the list (03 6.2) -----
 function listPage(body, d, page) {
   recentAt = null;
@@ -131,7 +158,7 @@ function listPage(body, d, page) {
   const settings = h("a", { class: "btn btn--ghost", href: "#settings/label-reader" }, SW.t("recent_meta_change"));
   const meta = h("p", { class: "page-head__meta" },
     h("span", {}, d.keep ? SW.t("recent_meta_kept", { count: d.keep, size: recSize(d.photo_bytes) }) : SW.t("recent_keep_none")), settings,
-    h("span", {}, SW.t("common_label_reader"), " ", SW.status(d.ai ? "on" : "off", { small: true })));
+    h("span", {}, SW.t("common_label_reader"), " ", SW.status(d.ai ? "on" : "off", { small: true })), recListMore());
   const filter = conf && all.length ? SW.segmented({ legend: SW.t("recent_col_filament"), legendSr: true, name: "recent-filter", value: recentFilter,
     options: [{ value: "all", label: SW.t("recent_filter_all", { count: all.length }) }, { value: "check", label: SW.t("recent_filter_check", { count: check }) }] }) : null;
   const list = h("div");

@@ -82,13 +82,16 @@ def test_record_same_job_once():
     assert len(kusage.entries("p", 36500)) == 1
 
 
-def test_cap_2000(monkeypatch):
-    assert kusage.KEEP == 2000     # the shortened cap below is only a stand-in for this one
-    monkeypatch.setattr(kusage, "KEEP", 5)
-    for i in range(8):
-        kusage.record("p", history_job(job_id=f"{i:06d}"), 1)
+def test_cap_2000():
+    assert kusage.RETENTION_MONTHS == 13
+    old_ts = time.time() - 450 * 86400
+    kusage._write("p", [{
+        "id": "k-old", "job": "old", "file": "old.gcode", "started": old_ts - 60, "ended": old_ts,
+        "status": "completed", "spool_id": 1, "filament_mm": 100.0, "grams": 10.0, "source": "moonraker",
+    }])
+    kusage.record("p", history_job(job_id="new"), 1)
     ids = [e["job"] for e in kusage.entries("p", 36500)]
-    assert len(ids) == 5 and "000007" in ids and "000000" not in ids
+    assert "new" in ids and "old" not in ids
 
 
 def test_entries_missing_or_broken_file(tmp_path):
@@ -144,6 +147,21 @@ def test_job_end_records_entry(printer):
     e = fam.usage(pid, 36500)[0]
     assert (e["job"], e["status"], e["source"]) == ("000200", "completed", "moonraker")
     assert sm.calls == []                                    # never writes usage to Spoolman (no PUT, PATCH or POST)
+
+
+def test_job_end_uses_the_history_spools_public_metadata(printer):
+    fam, pid, fake, recorder = printer
+    vendor = recorder.sm.post("vendor", {"name": "Test Filament"})
+    filament = recorder.sm.post("filament", {"name": "Blue PETG", "vendor_id": vendor["id"],
+                                            "material": "PETG", "color_hex": "AABBCC"})
+    spool = recorder.sm.post("spool", {"filament_id": filament["id"]})
+    fake.history = [history_job(job_id="000299", status="interrupted",
+                                auxiliary_data=[{"name": "spool_ids", "value": [spool["id"]]}])]
+    fam._record_job(pid)
+    entry, = fam.usage(pid, 36500)
+    assert (entry["spool_id"], entry["vendor"], entry["name"], entry["color_hex"], entry["outcome"]) == (
+        spool["id"], "Test Filament", "Blue PETG", "AABBCC", "unknown"
+    )
 
 
 def test_shutdown_mid_job_records_history_only(printer):

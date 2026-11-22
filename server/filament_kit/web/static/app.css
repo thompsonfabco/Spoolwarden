@@ -259,6 +259,11 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 
 .pload, .pload__search, .pload__picked, .pmanual, .pmanual__ask, .pmanual__offer { display: grid; gap: var(--s3); }
 .pload__or { margin: 0; text-align: center; }
+.pauto { display: grid; gap: var(--s2); }
+.pauto:empty { display: none; }
+.pauto__choices, .pauto__buttons, .printer__buttons { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.pload__where { display: grid; gap: var(--s2); }
+.slot-targets .segmented__option { min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: center; }
 .pmanual__heading { margin: 0; color: var(--muted); font-size: var(--fs-s); }
 .pmanual__foot { display: flex; flex: 1; gap: var(--s2); }
 .pmanual__foot > * { flex: 1 1 0; }

@@ -1,6 +1,8 @@
 """The Printers tab, beyond what setup_page.py had: both families' controls. Addresses are kept as typed (hostaddr).
 
     POST printers/klipper {code, host[, port, name, api_key]}     add one (no Access Code; its API key is optional)
+    POST printers/klipper/probe {code, host[, port, api_key]}    read /printer/info before adding, without saving
+    GET export/printers.csv  (X-Setup-Code or trusted cookie)    export printer and slot data already held by the Hub
     POST printers/scan {code[, subnet]}             look for Moonraker on this server's /24 or a private one: it records what
                                                     it finds, unconfigured, so it needs the code; one at a time, 30 s apart
     POST printers/pack {}                           the printer pack's commands, checked against the signed release
@@ -19,6 +21,8 @@
 """
 from __future__ import annotations
 
+import csv
+import io
 import ipaddress
 import re
 import threading
@@ -30,6 +34,7 @@ from .. import config, hostaddr, release, updates
 from ..bridge import ams, camera, mapping, registry
 from ..bridge.connection import PrinterOffline, UnknownPrinter
 from ..bridge.klipper import discovery
+from ..bridge.klipper.moonraker import Moonraker, MoonrakerError, Unauthorized
 from ..bridge.slottest import NoStatus, PrinterBusy
 
 # Map by loading filament (bridge/manual.py): (route, method, call)
@@ -47,6 +52,31 @@ SCAN_GAP = 30.0
 API_KEY = re.compile(r"[!-~]{1,64}")
 BAD_API_KEY = "a Moonraker API key has no spaces and at most 64 characters"
 OFFLINE = "the printer is offline; check that it is on and on the network"
+
+
+def port_of(body: dict) -> int:
+    from ..setup_page import Refused
+
+    port = body.get("port", discovery.DEFAULT_PORT)
+    try:
+        if isinstance(port, bool):
+            raise ValueError
+        port = int(port)
+    except (TypeError, ValueError):
+        raise Refused(400, "the port must be a number from 1 to 65535", field="port") from None
+    if not 1 <= port <= 65535:
+        raise Refused(400, "the port must be a number from 1 to 65535", field="port")
+    return port
+
+
+def checked_address(body: dict, key: str = "address") -> hostaddr.Inspected:
+    """The address as it will be kept, with the note to show beside it (the unit doesn't reach it) or None."""
+    from ..setup_page import Refused
+
+    a = hostaddr.inspect(body.get(key))
+    if a.problem:
+        raise Refused(400, a.problem, field=key)
+    return a
 
 
 def scan_net(subnet):
@@ -68,14 +98,14 @@ def scan_net(subnet):
     return net
 
 
-def printer_states(page) -> list[dict]:
+def printer_states(page, rows=None) -> list[dict]:
     """One entry per listed printer: `serial`, `family`, `state` (as `G state` gives it), `job` (None while the Hub has
     no status: the printer's `gcode_state`, `name`, `percent`, `remaining_min`, `eta`, `layer`, `total_layers`) and
     `slots` (the units of the printer's status, None while there is none) and, for a Bambu printer, `mapped` (the
     server holds a slot map for it: the file only, no connection). Read from the managers' held reports and cached
     spool lists; no address or key, only the serial the list already shows."""
     out = []
-    for row in page._printer_rows():
+    for row in page._printer_rows() if rows is None else rows:
         serial = row["serial"]
         st = None
         if row["configured"] and page.printers is not None:
@@ -96,6 +126,33 @@ def printer_states(page) -> list[dict]:
     return out
 
 
+def printers_csv(page) -> str:
+    def cell(value):
+        return "'" + value if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r", "\n")) else value
+
+    rows = page._printer_rows()
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(("name", "kind", "model", "slot", "spool"))
+    for row, state in zip(rows, printer_states(page, rows), strict=True):
+        name, kind = row["name"], row["family"]
+        # Klipper defaults its name to the host, which may be a single DNS label and may have changed since.
+        label = re.sub(r" \d+$", "", name)
+        label = hostaddr.clean(re.sub(r"^(\[[^]]+\]|[^:]+):\d+$", r"\1", label))
+        address_name = ("." in label or "-" in label or hostaddr.is_literal(label)) and hostaddr.form_error(label) is None
+        if (address_name or label.casefold() in {row["ip"].casefold(), row.get("host", "").casefold()}
+                or (kind == "bambu" and name == row["serial"])):
+            name = ""
+        printer = (cell(name), kind, cell(row["model"]))
+        slots = [slot for unit in state["slots"] or [] for slot in unit["slots"]]
+        if not slots:
+            writer.writerow((*printer, "", ""))
+        for slot in slots:
+            spool = (slot.get("spool") or {}).get("id")
+            writer.writerow((*printer, cell(slot["label"]), spool if type(spool) is int else None))
+    return output.getvalue()
+
+
 def routes(page) -> list[tuple]:
     from .. import klipper_cli
     from ..setup_page import Refused
@@ -111,25 +168,6 @@ def routes(page) -> list[tuple]:
         if key and not API_KEY.fullmatch(key):
             raise Refused(400, BAD_API_KEY, field="key" if "key" in body and "api_key" not in body else "api_key")
         return key
-
-    def port_of(body: dict) -> int:
-        port = body.get("port", discovery.DEFAULT_PORT)
-        try:
-            if isinstance(port, bool):
-                raise ValueError
-            port = int(port)
-        except (TypeError, ValueError):
-            raise Refused(400, "the port must be a number from 1 to 65535", field="port") from None
-        if not 1 <= port <= 65535:
-            raise Refused(400, "the port must be a number from 1 to 65535", field="port")
-        return port
-
-    def address(body: dict, key: str = "address") -> hostaddr.Inspected:
-        """The address as it will be kept, with the note to show beside it (the unit doesn't reach it) or None."""
-        a = hostaddr.inspect(body.get(key))
-        if a.problem:
-            raise Refused(400, a.problem, field=key)
-        return a
 
     def klipper_entry(serial: str) -> registry.Printer:
         p = page._entry(serial)
@@ -156,7 +194,7 @@ def routes(page) -> list[tuple]:
         name, key, port = page._opt_text(body, "name"), api_key(body), port_of(body)
 
         def run() -> tuple[str, str | None]:
-            host, _, note = address(body, "host")
+            host, _, note = checked_address(body, "host")
             same = registry.klipper_at(registry.load(), host, port) or found_by_name(host, port)
             if same is not None and same.configured:
                 raise Refused(409, f"{registry.display_name(same)} is already at {host}:{port}", field="host")
@@ -174,6 +212,23 @@ def routes(page) -> list[tuple]:
         pid, note = await anyio.to_thread.run_sync(run)
         page.audit(request, f"klipper printer {pid} added")
         return {"ok": True, "serial": pid, **({"note": note} if note else {})}
+
+    async def klipper_probe(request, body):
+        page._manager("klipper")
+        key, port = api_key(body), port_of(body)
+        host, _, _ = await anyio.to_thread.run_sync(checked_address, body, "host")
+        page._gap()
+
+        def run() -> bool:
+            try:
+                info = Moonraker(host, port, key).info()
+            except Unauthorized:
+                raise Refused(400, "Moonraker wants a valid API key", field="api_key") from None
+            except MoonrakerError:
+                return False
+            return isinstance(info, dict) and isinstance(info.get("state"), str)
+
+        return {"reachable": await anyio.to_thread.run_sync(run)}
 
     async def scan(request, body):
         page._manager("klipper")
@@ -237,7 +292,7 @@ def routes(page) -> list[tuple]:
             if access is not None and p.family == "klipper":
                 raise Refused(400, "a Klipper printer has no Access Code", field="access_code")
             port = port_of({"port": body.get("port", p.port)}) if p.family == "klipper" else None
-            host, _, note = address(body)
+            host, _, note = checked_address(body)
             if p.family == "klipper":
                 other = registry.klipper_at(registry.load(), host, port)
                 if other is not None and other.serial != serial:
@@ -425,8 +480,21 @@ def routes(page) -> list[tuple]:
         """Every printer's state, job and slots in one read (03 2.7): what the Hub already holds, no new connection."""
         return {"printers": await anyio.to_thread.run_sync(lambda: printer_states(page))}
 
+    async def export_csv(request, body):
+        from starlette.responses import Response
+
+        body = {"code": request.headers.get("x-setup-code", "")}
+        token = page._trusted_token(request, body)
+        await page._code_ok(request, body)
+        data = await anyio.to_thread.run_sync(printers_csv, page)
+        page.audit(request, "printers CSV downloaded")
+        if token:
+            request.state.set_trust = token
+        return Response(data, media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="printers.csv"'})
+
     one = "/printers/{serial}"
     return [("/printers/states", g(states), "GET"), ("/printers/klipper", w(klipper_add), "POST"), ("/printers/scan", w(scan), "POST"),
+            ("/printers/klipper/probe", w(klipper_probe), "POST"), ("/export/printers.csv", g(export_csv), "GET"),
             ("/printers/pack", g(pack), "POST"),
             (one + "/rename", w(rename), "POST"), (one + "/address", w(change_address), "POST"),
             (one + "/unpin", w(unpin), "POST"), (one + "/connect", w(connect), "POST"),

@@ -138,7 +138,7 @@ def test_every_control_of_the_section_reaches_its_hub_route(hub, monkeypatch, tm
     # the section's own words, from the catalogue
     assert page["title"] == T("nav_slicer_presets")
     assert page["cards"] == [T("presets_build_title"), T("presets_updates_title"), T("presets_lines_title")]
-    assert page["head"][1] == T("presets_build_now") and T("presets_meta_sync") in page["head"][0]
+    assert T("presets_build_now") in page["head"][1] and T("presets_meta_sync") in page["head"][0]
     assert page["slicerSync"] == f"{T('status_ok')} {T('presets_sync_ok')}"
     assert page["columns"][1:] == [T("common_field_line"), T("common_field_material"), T("presets_col_presets"),
                                    T("common_field_bambu_parent"), *([T("presets_col_orca_parent")] if len(page["columns"]) == 7 else []), T("common_actions")]

@@ -14,7 +14,7 @@ import time
 from dataclasses import asdict, dataclass, replace
 from typing import Iterable, Iterator
 
-from . import config, modules, output, pairing, remote
+from . import address_texts, config, modules, output, pairing, remote
 
 OK, FAIL, INFO, DETAIL = "ok", "fail", "info", "detail"
 _MARKS = {"OK": OK, "--": INFO}
@@ -151,6 +151,68 @@ def _station_rows(url: str) -> Iterator[Row]:
         yield Row(INFO, "Weigh Station reader not seen", key="weigh-station.reader")
     if not state.get("scale") and not state.get("last_weight"):
         yield Row(INFO, "Weigh Station scale not seen", key="weigh-station.scale")
+
+
+def satellite_rows(cfg: dict | None = None) -> Iterator[Row]:
+    """The rows about the satellites' HTTPS (R82 section 2 points 4 and 5; 06 9.1), filed under Devices: a Weigh Station
+    that is not on HTTPS or whose certificate is not the pinned one, and a tag source that answers only on plain HTTP or
+    whose certificate changed. None of the calls raises."""
+    yield from _in("Devices", _satellite_rows(cfg if cfg is not None else config.load()))
+
+
+def _loopback(url: str) -> bool:
+    from ipaddress import ip_address
+    from urllib.parse import urlsplit
+    host = urlsplit(url).hostname or ""
+    if host == "localhost":
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _address_of(url: str) -> str:
+    from urllib.parse import urlsplit
+    u = urlsplit(url)
+    return f"{u.hostname}:{u.port}" if u.port else str(u.hostname)
+
+
+def _satellite_rows(cfg: dict) -> Iterator[Row]:
+    from . import station_client, tagsources
+    addr_say = address_texts.say
+    url = (cfg.get("station") or {}).get("url")
+    seen = station_client.station_https(url) if url else None
+    # R82 ruled 2026-11-18 00:28: a station on this machine is called as it answers (pinned HTTPS once it has given its
+    # fingerprint, plain HTTP before) and the not-on-HTTPS row is never shown for it; the changed-certificate row is
+    if seen == "plain" and not _loopback(url):
+        address = _address_of(url)
+        reason = _plain_reason()
+        if reason:
+            text = addr_say("check_station_not_https_why", address=address, reason=reason)
+            fix = addr_say("check_station_not_https_why_fix")
+        else:
+            text = addr_say("check_station_not_https_at", address=address)
+            fix = addr_say("check_station_not_https_fix")
+        yield Row(FAIL, address_texts.clean_line(text), fix, key="devices.station-https")
+    elif seen == "changed":
+        yield Row(FAIL, station_client.TEXT_STATION_CERT_CHANGED, station_client.TEXT_STATION_CERT_FIX,
+                  key="devices.station-certificate")
+    for n, issue in enumerate(tagsources.issues(cfg), 1):
+        if issue["kind"] == "plain":      # the texts are tagsources' constants: the design's words, the catalogue's keys
+            yield Row(FAIL, issue["text"], issue["fix"] or "", key=f"devices.tag-source-https-{n}")
+        else:
+            yield Row(FAIL, issue["text"], issue["fix"] or "", key=f"devices.tag-source-certificate-{n}")
+
+
+def _plain_reason() -> str | None:
+    """Why the Weigh Station that said hello last has no certificate, as one clean line (the hello route cleans it; a
+    store written by hand or by an older Hub is cleaned again here)."""
+    try:
+        why = pairing.station_plain_reason()
+    except (OSError, ValueError):
+        return None
+    return address_texts.clean_line(why) or None
 
 
 def hardware_rows() -> Iterator[Row]:
@@ -316,6 +378,14 @@ def _key_lines(client_factory, live_key: bool) -> Iterator[Row]:
                   + "  (option 4) or check internet access", key="label-reader.anthropic-key")
 
 
+def _outdated_devices() -> int:
+    try:
+        from .setup_console import device_tab
+        return sum(1 for r in device_tab.rows() if r.get("out_of_date"))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
          station_pairing: str | None = None) -> Iterator[Row]:
     """`spoolwarden status`, row by row, each filed under its group (the Overview's headings).
@@ -373,12 +443,17 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
     station_url = (cfg.get("station") or {}).get("url")
     if station_url:
         yield from station_rows(station_url)
+    yield from satellite_rows(cfg)
     if "station" in on:
         yield from _station_pairing_rows(station_pairing)
 
     if "server" in on:
         yield Row(INFO, f"display name: {cfg['server_name']}", group="Hub", key="hub.display-name")
         yield Row(INFO, f"paired devices: {len(pairing.devices())}", group="Devices", key="devices.paired")
+        outdated = _outdated_devices()
+        if outdated:
+            yield Row(FAIL, address_texts.say("check_devices_out_of_date", count=outdated),
+                      address_texts.say("check_devices_out_of_date_fix"), group="Devices", key="devices.out-of-date")
         yield Row(INFO, f"reads used today: {cli._reads_today()} of {cfg['reads_per_day']}", group="Label Reader",
                   key="label-reader.reads-today")
     if "printers" in on:
@@ -447,10 +522,18 @@ def local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
 
 def _local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
     """The local label reader (local_intake): does it answer, which tiers it can use, the reader order."""
-    from . import intake, local_reader
+    from . import getting_started, intake, local_reader
     cfg = cfg if cfg is not None else config.load()
+    https = local_reader.https_row(cfg)
+    if https:                       # a reader on another machine at an http address (R82 s2 p6, ruled 21:12)
+        yield Row(FAIL if https["state"] == "needs_a_look" else INFO, https["text"],
+                  https["fix"] or "", key="label-reader.https")
     h = local_reader.health(cfg)
-    if h["ok"]:
+    if not h["ok"] and getting_started.reader_install_pending(cfg):     # R82 s6 p5: switched on, nothing installed here
+        _addr_say = address_texts.say
+        yield Row(FAIL, _addr_say("reader_not_installed"), getting_started.COMMANDS["reader"].format(
+            command=address_texts.COMMAND), key="label-reader.not-installed")
+    elif h["ok"]:
         tiers = ", ".join(f"{k} {'usable' if t['usable'] else 'not usable'}" for k, t in h["tiers"].items())
         yield Row(OK, f"local label reader answering at {h['url']} (version {h['version'] or '?'}, API "
                       f"{h['api_version']}; {tiers or 'no tiers listed'})", key="label-reader.local")

@@ -168,7 +168,7 @@ def test_keep_days_goes_through_the_helper(app):
 def test_the_settings_tab_has_the_card_and_the_page_its_script(app):
     assert "[settingsTab]" in (STATIC / "setup.js").read_text(encoding="utf-8")
     src = (STATIC / "setup_backup.js").read_text(encoding="utf-8")
-    assert "innerHTML" not in src and "confirm: values[values.length - 1].trim()" in src and "function backupsGroup(" in src
+    assert "innerHTML" not in src and "confirm: values[0].trim()" in src and "function backupsGroup(" in src
     assert '"settings_backups_warning"' in src
     assert "/setup/setup_backup.js" in client(app).get("/setup").text
 

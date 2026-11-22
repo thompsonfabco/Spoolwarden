@@ -435,6 +435,7 @@ def pushapp(env, kit, monkeypatch):
             raise answer["code"]
         return answer["code"]
     monkeypatch.setattr(push, "webpush_sender", lambda subject: fake_sender)
+    monkeypatch.setattr(push.Feed, "start", lambda self: None)
     app = make_app(env, kit, push=True)
     app.push_answer = answer
     return app
@@ -1099,6 +1100,26 @@ def test_kit_api_client_keeps_the_kits_field(monkeypatch):
     assert (e.value.field, e.value.http, e.value.code) == ("port", 400, "bad_request")
 
 
+@pytest.mark.parametrize("path, code", [("/api/printers/P/slots/auto/load", "auto_not_possible"), ("/api/events/1/undo", "changed_since")])
+@pytest.mark.parametrize("legacy", [False, True])
+def test_kit_api_client_reads_auto_and_undo_refusals_in_both_shapes(monkeypatch, path, code, legacy):
+    import urllib.error
+    from filament_kit.web import slots
+
+    message = "That choice is no longer available."
+    refusal = {"error": message, "code": code} if legacy else {"error": code, "message": message}
+
+    def fail(req, timeout, context=None):
+        raise urllib.error.HTTPError(req.full_url, 409, "Conflict", {}, io.BytesIO(json.dumps(refusal).encode()))
+
+    monkeypatch.setattr(slots, "_http_json", fail)
+    api = slots.KitApi(base_url="http://kit.invalid")
+    monkeypatch.setattr(api, "_token", lambda: "t")
+    with pytest.raises(SlotError) as raised:
+        api.post(path, {})
+    assert (raised.value.http, raised.value.code, str(raised.value)) == (409, code, message)
+
+
 def test_add_edit_and_forget_need_the_pages_origin_and_the_home_network(managing):
     app, kit = managing
     with TestClient(app, base_url=ORIGIN, client=HOME) as c:
@@ -1278,3 +1299,198 @@ def test_every_catalogue_key_is_written_once():
     pairs = json.loads((repo / "strings" / "en.json").read_text(encoding="utf-8"), object_pairs_hook=lambda kv: kv)
     twice = sorted(k for k, n in collections.Counter(k for k, _ in pairs).items() if n > 1)
     assert not twice, twice
+
+
+
+# ---------- Auto (R83 addition A6, AS3): the three routes, the printer's auto object and auto_possible ----------
+AUTO_WAIT = {"spool_id": 9, "spool": {"id": 9, "name": "PLA Red", "material": "PLA", "color_hex": "C0392B"}, "state": "waiting", "text": "Waiting for 9.",
+             "expires_at": "2026-11-18T01:30:00-05:00"}
+
+
+class AutoKit(FakeKit):
+    """FakeKit with the Auto routes of contract A6: a printer that can do it, its `auto` object, and the three POSTs."""
+
+    def __init__(self):
+        super().__init__()
+        self.auto = None
+
+    def get(self, path):
+        d = super().get(path)
+        if path == "/api/printers":
+            d["printers"][0]["auto_possible"] = True
+        if path == f"/api/printers/{SERIAL}":
+            d["printer"]["auto_possible"] = True
+            d["auto"] = self.auto
+        return d
+
+    def post(self, path, body):
+        if path.endswith("/slots/auto/load") or path.endswith("/auto/choose") or path.endswith("/auto/cancel"):
+            self._check()
+            self.calls.append(("POST", path, body))
+            if path.endswith("/slots/auto/load"):
+                if body["dry_run"]:
+                    return {"auto": True, "watching": ["A1", "A2"], "replaces": {"spool_id": 4, "name": "PETG Blue"}, "dry_run": True}
+                return {"auto": True, "pending": True, "confirmed": None, "expires_in": 900, "message": "Waiting for 9."}
+            if path.endswith("/auto/choose"):
+                return {"slot": {"label": body["slot"]}, "confirmed": True, "dry_run": False}
+            return {"cancelled": True}
+        return super().post(path, body)
+
+
+@pytest.fixture
+def autokit():
+    return AutoKit()
+
+
+def test_the_auto_routes_pass_to_the_kit_with_only_their_keys(env, autokit):
+    c = signed(make_app(env, autokit))
+    r = c.post(P + f"/{SERIAL}/slots/auto/load", json={"spool_id": 9, "x": 1}, headers=H)
+    assert r.status_code == 200 and r.json()["watching"] == ["A1", "A2"] and r.json()["replaces"]["name"] == "PETG Blue"
+    r = c.post(P + f"/{SERIAL}/slots/auto/load", json={"spool_id": 9, "dry_run": False}, headers=H)
+    assert r.json()["pending"] is True and r.json()["expires_in"] == 900
+    assert c.post(P + f"/{SERIAL}/auto/choose", json={"slot": "A2", "y": 2}, headers=H).json()["slot"]["label"] == "A2"
+    assert c.post(P + f"/{SERIAL}/auto/cancel", json={}, headers=H).json() == {"cancelled": True}
+    posts = [x for x in autokit.calls if x[0] == "POST"]
+    assert posts == [("POST", f"/api/printers/{SERIAL}/slots/auto/load", {"spool_id": 9, "dry_run": True}),
+                     ("POST", f"/api/printers/{SERIAL}/slots/auto/load", {"spool_id": 9, "dry_run": False}),
+                     ("POST", f"/api/printers/{SERIAL}/auto/choose", {"slot": "A2"}), ("POST", f"/api/printers/{SERIAL}/auto/cancel", {})]
+
+
+def test_auto_refusal_uses_the_kit_twin_shape(env, autokit, monkeypatch):
+    def refuse(path, body):
+        raise SlotError("This slot no longer waits.", http=409, code="nothing_to_choose")
+
+    monkeypatch.setattr(autokit, "post", refuse)
+    c = signed(make_app(env, autokit))
+    response = c.post(P + f"/{SERIAL}/auto/choose", json={"slot": "A2"}, headers=H)
+    assert response.status_code == 409
+    assert response.json() == {"error": "nothing_to_choose", "message": "This slot no longer waits."}
+
+
+def test_the_auto_routes_check_their_input_before_the_kit_and_need_the_pages_origin(env, autokit):
+    c = signed(make_app(env, autokit))
+    assert c.post(P + f"/{SERIAL}/slots/auto/load", json={}, headers=H).status_code == 400
+    assert c.post(P + f"/{SERIAL}/slots/auto/load", json={"spool_id": 9, "dry_run": "no"}, headers=H).status_code == 400
+    assert c.post(P + f"/{SERIAL}/auto/choose", json={"slot": "A%231"}, headers=H).status_code == 400
+    assert c.post(P + f"/{SERIAL}/auto/choose", json={}, headers=H).status_code == 400
+    assert not [x for x in autokit.calls if x[0] == "POST"]
+    c2 = signed(make_app(env, autokit))
+    for path, body in ((f"/{SERIAL}/slots/auto/load", {"spool_id": 9}), (f"/{SERIAL}/auto/choose", {"slot": "A1"}), (f"/{SERIAL}/auto/cancel", {})):
+        assert c2.post(P + path, json=body).status_code == 403          # a change needs the page's own origin
+
+
+def test_auto_is_not_taken_for_a_slot_named_auto(env, autokit):
+    """"auto" is a reserved label: its load goes to the Auto route, never to the named-slot route."""
+    c = signed(make_app(env, autokit))
+    c.post(P + f"/{SERIAL}/slots/auto/load", json={"spool_id": 9, "dry_run": False}, headers=H)
+    assert [x[1] for x in autokit.calls if x[0] == "POST"] == [f"/api/printers/{SERIAL}/slots/auto/load"]
+
+
+def test_the_printers_state_carries_its_auto_object_and_the_list_auto_possible(env, autokit):
+    autokit.auto = AUTO_WAIT
+    c = signed(make_app(env, autokit))
+    st = c.get(P + f"/{SERIAL}/state").json()
+    assert st["auto"]["spool_id"] == 9 and st["auto"]["state"] == "waiting" and st["printer"]["auto_possible"] is True
+    assert c.get(P).json()["printers"][0]["auto_possible"] is True
+    autokit.auto = None
+    assert c.get(P + f"/{SERIAL}/state").json()["auto"] is None
+
+
+def test_the_printer_page_has_load_a_spool_the_notice_and_automatic_first():
+    """AS3: the client sends Auto to its own route, shows Stop waiting without a question and the choice
+    for two slots; the spool sheet's slot step is one list with Automatic first and selected."""
+    js = (STATIC / "printers.js").read_text(encoding="utf-8")
+    for words in ("g.loadAny", "/slots/auto/load`", "/auto/choose`", "/auto/cancel`", 'state === "choose"', 'tg("auto_stop")', 'tg("auto_choose"',
+                  'name: "pload-target"', 'value: "auto", label: tg("auto_option")', "SW.segmented("):
+        assert words in js, words
+    assert "sheetAsk" not in js[js.index("async function autoStop"):js.index("async function autoChoose")]          # Stop waiting does not ask
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    for words in ("p.auto_possible", 'let chosen = "auto"', 'value: "auto", label: tt("auto_option")', 'name: "spools-target"', 'sl.label === "auto"', "SW.segmented("):
+        assert words in app, words
+
+
+@pytest.mark.parametrize("refusal", [
+    {"error": "auto_not_possible", "message": "Auto is unavailable."},
+    {"error": "Auto is unavailable.", "code": "auto_not_possible"},
+])
+@pytest.mark.parametrize("during_dry_run", [True, False])
+def test_slot_choices_show_the_spool_and_auto_refusal_reviews_the_first_slot(tmp_path, refusal, during_dry_run):
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("needs Node")
+    app = (STATIC / "app.js").read_text(encoding="utf-8")
+    printers = (STATIC / "printers.js").read_text(encoding="utf-8")
+    snippets = [
+        app[app.index("const autoNotPossible = "):app.index("async function undoEvent")],
+        app[app.index("    function pickSlot(p)"):app.index("    function plan(p, sl)")],
+        printers[printers.index("  const slotPath = "):printers.index("  // Spoolman only (the printer's slot setting stays)")],
+    ]
+    harness = r"""
+const t = (key) => key, tt = t, tg = t, enc = encodeURIComponent;
+const resultLine = () => ({}), needsHub = (button) => button, disabled = (button, why) => { button.why = why; };
+const clear = (line) => { delete line.kind; };
+const h = (tag, props, ...children) => ({
+  tag, ...props, children, replaceChildren(...kids) { this.children = kids; }, addEventListener() {},
+});
+const picker = { id: "P", auto_possible: true };
+const state = { printer: picker, status: { ams: [{ slots: [
+  { label: "A1", spool: { id: 7, name: "PLA Red" } }, { label: "A2" },
+] }] } };
+const page = { id: "P", lastSnap: state };
+const nameOf = () => "Workshop", loadBox = {}, stepFoot = () => null, pickPrinter = () => null;
+const fill = (_, __, fn) => fn();
+const api = async () => state;
+const act = async (_, __, fn) => fn();
+const lineNodes = (lines) => lines;
+const segments = [], calls = [];
+let sheet;
+const openHere = () => {};
+const SW = {
+  t, btn: (_, opts) => opts, field: () => ({}), sheet: (opts) => (sheet = { ...opts, isConnected: true }),
+  segmented: (opts) => { segments.push(opts); return h("fieldset"); },
+  result: (line, kind, text) => Object.assign(line, { kind, text }),
+  HubError: class extends Error { constructor(status, data) { super(); this.status = status; this.data = data; } },
+};
+const pj = async (path, body) => {
+  if (path === "tagged") return { spool: { id: 9, name: "New Spool" } };
+  calls.push([path, body]);
+  if (path === "P/slots/auto/load") {
+    if (duringDryRun || !body.dry_run) throw new SW.HubError(409, refusal);
+    return { watching: ["A1"] };
+  }
+  return {};
+};
+"""
+    run = r"""
+(async () => {
+  await pickSlot(picker);
+  openLoad(null, {});
+  await sheet.body.children[0].run();
+  await new Promise(setImmediate);
+  if (!duringDryRun) {
+    await sheet.foot[1].run();
+    await new Promise(setImmediate);
+  }
+  console.log(JSON.stringify({ segments, calls, lines: sheet.body.children.filter((el) => el.kind), load: sheet.foot[1] }));
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+"""
+    script = tmp_path / "auto_picker.js"
+    setup = f"const refusal = {json.dumps(refusal)}, duringDryRun = {json.dumps(during_dry_run)};"
+    script.write_text("\n".join([setup, harness, *snippets, run]), encoding="utf-8")
+    completed = subprocess.run([node, str(script)], capture_output=True, encoding="utf-8", timeout=60)
+    assert completed.returncode == 0, completed.stderr
+    out = json.loads(completed.stdout)
+    assert [(s["name"], s["value"]) for s in out["segments"]] == [
+        ("spools-target", "auto"), ("pload-target", "auto"), ("pload-target", "A1"),
+    ]
+    for segment in out["segments"]:
+        assert segment["options"][1] == {"value": "A1", "label": "A1 · PLA Red"}
+    calls = [["P/slots/auto/load", {"spool_id": 9, "dry_run": True}]]
+    if not during_dry_run:
+        calls.append(["P/slots/auto/load", {"spool_id": 9, "dry_run": False}])
+    assert out["calls"] == [*calls, ["P/slots/A1/load", {"spool_id": 9, "dry_run": True}]]
+    assert out["lines"][0] == {"kind": "bad", "text": "auto_not_possible"}
+    assert out["lines"][1]["kind"] == "ok" and out["load"]["why"] is None

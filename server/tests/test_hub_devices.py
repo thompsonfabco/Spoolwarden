@@ -140,14 +140,14 @@ out.revokeAll = text($('[data-action="revoke-all"]'));
 return out;
 """)
     assert page["head"][0] == _T("nav_devices")
-    assert page["head"][1] == f"{_T('devices_meta_paired', count=len(page['paired']))} · {_T('devices_meta_readers', count=2)}"
+    assert page["head"][1] == f"{_T('devices_meta_paired', count=len([r for r in page['paired'] if not r[0].startswith('Tag Reader')]))} · {_T('devices_meta_readers', count=2)}"
     assert page["head"][2] == [_T("devices_link_sync"), _T("common_more_actions"), _T("devices_pair_phone")]
     assert [re.sub(r"(On|Off)\Z", "", c).strip() for c in page["cards"]] == [
         _T("devices_paired_title"), _T("devices_requests_title"), _T("devices_webapp_title"), _T("devices_readers_title"), _T("devices_trusted_title")]
     assert page["pairedHead"][:3] == [_T("devices_col_device"), _T("devices_col_paired"), _T("devices_col_last_seen")]
     by_name = {n: (button, line) for n, button, line in page["unpair"]}
     assert by_name["Kitchen phone"] == (True, None) and by_name["Garage tablet"] == (True, None)
-    built_in = [v for v in by_name.values() if v[1]]
+    built_in = [v for n, v in by_name.items() if not n.startswith("Tag Reader") and v[1]]
     assert built_in and all(button is False and line == _T("devices_built_in_line") for button, line in built_in)   # a built-in pairing has no Unpair
     assert _T("devices_requests_locked") in page["lockedRequests"] and _T("common_unlock_to_show") in page["lockedRequests"]
     assert _T("common_list_locked") in page["lockedTrust"]

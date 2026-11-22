@@ -70,7 +70,7 @@ def test_undo_passes_on_and_keeps_the_hubs_refusal_code(env):
     assert r.status_code == 200 and r.json()["undone"] is True and ("POST", "/api/events/412/undo", {}) in kit.calls
     kit.undo_refusal = SlotError("This changed again since, so it cannot be undone.", code="changed_since", http=409)
     r = c.post("/intake/api/events/412/undo", headers=H)
-    assert r.status_code == 409 and r.json() == {"error": "This changed again since, so it cannot be undone.", "code": "changed_since"}
+    assert r.status_code == 409 and r.json() == {"error": "changed_since", "message": "This changed again since, so it cannot be undone."}
     assert c.post("/intake/api/events/a%20b/undo", headers=H).status_code == 400            # not an event id
     kit.undo_refusal = SlotError("kit unreachable", code="unreachable")
     assert c.post("/intake/api/events/412/undo", headers=H).status_code == 502

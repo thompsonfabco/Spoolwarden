@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>{{title}}</title>
+<link rel="stylesheet" href="static/station.css">
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p id="note" role="status"></p>
+  <section id="status-section" hidden>
+    <h2 id="status-heading"></h2>
+    <dl id="status"></dl>
+    <img id="photo" alt="" hidden>
+  </section>
+  <section id="settings-section" hidden>
+    <h2 id="settings-heading"></h2>
+    <p id="page-from" hidden></p>
+    <p id="own-values" hidden></p>
+    <form id="settings"></form>
+    <p><button type="button" id="save"></button> <button type="button" id="reset"></button></p>
+    <p id="result" role="status"></p>
+  </section>
+</main>
+<script type="application/json" id="texts">{{texts}}</script>
+<script src="static/station.js"></script>
+</body>
+</html>

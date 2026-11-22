@@ -812,3 +812,68 @@ def test_scan_on_a_slot_with_unknown_presence_queues_but_an_external_is_set_at_o
     with client(app) as c:
         r = scan(c, token, slot="Ext-L")                # no sensor: sent at once, as before
     assert r.json()["status"] == "set" and queue.jobs() == {}
+
+
+def test_auto_slot_is_first_when_auto_possible_and_respects_cap(app, token, kit):
+    real_get = kit.get
+
+    def get(path):
+        d = real_get(path)
+        if path == "/api/printers/SER1":
+            d["printer"]["auto_possible"] = True
+            d["status"]["auto_possible"] = True
+        return d
+    kit.get = get
+    with client(app) as c:
+        sl = c.get("/reader/printers/SER1/slots", headers={"X-Auth-Token": token}).json()
+    auto = {"label": "auto", "say": ["Auto"], "kind": "auto", "present": None, "type": "", "spool": None}
+    assert sl[0] == auto
+    assert [s["label"] for s in sl] == ["auto", "A1", "A2", "HT-A", "Ext-L", "Ext-R"]
+    kit.slots["SER1"] = [slot(f"{reader.slots.letters(i // 4)}{i % 4 + 1}") for i in range(200)]
+    with client(app) as c:
+        capped = c.get("/reader/printers/SER1/slots", headers={"X-Auth-Token": token}).json()
+    assert capped[0] == auto and "note" in capped[-1]
+    assert len([s for s in capped if "label" in s]) <= reader.MAX_SLOTS
+
+
+def test_scan_auto_forwards_without_queueing_and_maps_errors(app, token, kit, queue):
+    real_post = kit.post
+
+    def post(path, body):
+        if path == "/api/printers/SER1/slots/auto/load":
+            with kit.lock:
+                kit.loads.append((path, body))
+            if kit.load_error is not None:
+                raise kit.load_error
+            if body["dry_run"]:
+                return {"auto": True, "watching": ["A1", "A2"], "dry_run": True,
+                        "replaces": {"spool_id": 4, "name": "Very long spool name " * 4}}
+            return {"auto": True, "pending": True, "confirmed": None, "expires_in": 900, "message": "Waiting."}
+        return real_post(path, body)
+    kit.post = post
+
+    with client(app) as c:
+        r = scan(c, token, slot="Auto")
+        body = r.json()
+        assert r.status_code == 200
+        assert body == {"status": "queued", "slot": "auto", "message": "Auto: load any slot (waits 15 min)",
+                        "filament": "SUNLU PLA+ Grey"}
+        assert queue.jobs() == {}
+        assert kit.loads == [("/api/printers/SER1/slots/auto/load", {"spool_id": 7, "dry_run": False})]
+
+        dry = scan(c, token, slot=" auto ", dry_run=True)
+        dbody = dry.json()
+        assert dry.status_code == 200 and dbody["dry_run"] is True and dbody["slot"] == "auto"
+        assert len(dbody["replaces"]["name"].encode("utf-8")) <= 40
+        assert queue.jobs() == {}
+
+        kit.load_error = slots.SlotError("This printer has no slots the Hub can watch. Choose a slot.",
+                                         code="auto_not_possible", http=409)
+        err = scan(c, token, slot="auto")
+        assert err.status_code == 409 and err.json()["status"] == "error"
+        assert err.json()["message"].startswith("This printer has no slots the Hub can wa")
+        assert len(err.json()["message"].encode("utf-8")) <= 40
+
+        kit.load_error = slots.SlotError("no preset", code="no_preset", http=409)
+        assert scan(c, token, slot="auto").json()["status"] == "no_preset"
+    assert queue.jobs() == {}

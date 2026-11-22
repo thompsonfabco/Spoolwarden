@@ -25,7 +25,7 @@ from copy import deepcopy
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 
-from .. import config, hostaddr
+from .. import config, event_sink, hostaddr
 from . import xmlfile
 from ..pairing import _write_atomic, open_lock
 
@@ -339,23 +339,31 @@ def upsert(p: Printer) -> None:
         _write(printers)
 
 
-def remove(serial: str) -> bool:
+def remove(serial: str, *, actor=None) -> bool:
     with _locked():
         printers = _read()
         if serial not in printers:
             return False
+        old = printers[serial]
         del printers[serial]
         _write(printers)
+        if old.configured and (actor is not None or event_sink._actor.get() is not None):
+            event_sink.emit("printer.removed", {"type": "printer", "id": serial, "name": display_name(old)},
+                            {"family": old.family}, actor=actor)
         return True
 
 
-def rename(serial: str, name: str) -> bool:
+def rename(serial: str, name: str, *, actor=None) -> bool:
     with _locked():
         printers = _read()
         if serial not in printers:
             return False
-        printers[serial].name = _free_name(name, printers, serial)
+        p = printers[serial]
+        p.name = _free_name(name, printers, serial)
         _write(printers)
+        if p.configured and (actor is not None or event_sink._actor.get() is not None):
+            event_sink.emit("printer.changed", {"type": "printer", "id": serial, "name": display_name(p)},
+                            {"family": p.family, "names": "name"}, actor=actor)
         return True
 
 
@@ -397,7 +405,7 @@ class AlreadyConfigured(RegistryError):
     pass
 
 
-def set_code(serial: str, code: str, name: str | None = None, replace: bool = False) -> Printer:
+def set_code(serial: str, code: str, name: str | None = None, replace: bool = False, *, actor=None) -> Printer:
     """Atomically configure `serial` with an Access Code (creating the entry if needed). A printer that is
     already configured raises AlreadyConfigured unless `replace`; the name only changes when one is given. Clears
     the TLS pin: the next connection pins the leaf the printer presents then."""
@@ -417,10 +425,14 @@ def set_code(serial: str, code: str, name: str | None = None, replace: bool = Fa
             p.name = _free_name(p.name, printers, serial)
         printers[serial] = p
         _write(printers)
+        if actor is not None or event_sink._actor.get() is not None:
+            event_sink.emit("printer.added" if first else "printer.changed",
+                            {"type": "printer", "id": serial, "name": display_name(p)},
+                            {"family": p.family, **({} if first else {"names": "access_code"})}, actor=actor)
         return p
 
 
-def add_bambu(serial: str, name: str, model: str, ip: str, code: str) -> Printer:
+def add_bambu(serial: str, name: str, model: str, ip: str, code: str, *, actor=None) -> Printer:
     """Add (or add again) a configured Bambu printer as a fresh entry (clears the TLS pin). The name is made unique
     ("name 2" ...) against the other printers; the printer's own current name never counts as taken."""
     with _locked():
@@ -432,6 +444,10 @@ def add_bambu(serial: str, name: str, model: str, ip: str, code: str) -> Printer
         p = Printer(serial, name, model, ip, code, True)
         printers[serial] = p
         _write(printers)
+        if actor is not None or event_sink._actor.get() is not None:
+            event_sink.emit("printer.added" if (old is None or not old.configured) else "printer.changed",
+                            {"type": "printer", "id": serial, "name": display_name(p)},
+                            {"family": "bambu"}, actor=actor)
         return p
 
 
@@ -501,7 +517,7 @@ def _free_name(name: str, printers: dict[str, Printer], me: str = "") -> str:
     return out
 
 
-def add_klipper(name: str, host: str, port: int = 7125) -> Printer:
+def add_klipper(name: str, host: str, port: int = 7125, *, actor=None) -> Printer:
     """Add a configured Klipper printer (host = Moonraker's host name or address). The entry discovery made for the same
     host and port becomes this one. DuplicatePrinter when that host and port is already added."""
     host, name = host.strip(), (name or host).strip()
@@ -517,10 +533,13 @@ def add_klipper(name: str, host: str, port: int = 7125) -> Printer:
                         host=host, port=int(port), configured=True)
         printers[p.serial] = p
         _write(printers)
+        if actor is not None or event_sink._actor.get() is not None:
+            event_sink.emit("printer.added", {"type": "printer", "id": p.serial, "name": display_name(p)},
+                            {"family": "klipper"}, actor=actor)
         return p
 
 
-def set_api_key(pid: str, key: str) -> bool:
+def set_api_key(pid: str, key: str, *, actor=None) -> bool:
     """Store (or clear, with "") a Klipper printer's Moonraker API key. False when there is no such printer."""
     with _locked():
         printers = _read()
@@ -529,23 +548,30 @@ def set_api_key(pid: str, key: str) -> bool:
             return False
         p.api_key = key.strip()
         _write(printers)
+        if p.configured and (actor is not None or event_sink._actor.get() is not None):
+            event_sink.emit("printer.changed", {"type": "printer", "id": pid, "name": display_name(p)},
+                            {"family": p.family, "names": "api_key"}, actor=actor)
         return True
 
 
-def configure_klipper(pid: str, name: str = "") -> bool:
+def configure_klipper(pid: str, name: str = "", *, actor=None) -> bool:
     """A Klipper printer a scan found goes into use. False when there is no such printer."""
     with _locked():
         printers = _read()
         p = printers.get(pid)
         if p is None:
             return False
+        first = not p.configured
         p.configured = True
         p.name = name.strip() or p.name
         _write(printers)
+        if first and (actor is not None or event_sink._actor.get() is not None):
+            event_sink.emit("printer.added", {"type": "printer", "id": pid, "name": display_name(p)},
+                            {"family": p.family}, actor=actor)
         return True
 
 
-def set_address(serial: str, host: str, port: int | None = None) -> bool:
+def set_address(serial: str, host: str, port: int | None = None, *, actor=None) -> bool:
     """Where the printer is, as typed: Bambu's `ip`, Klipper's `host` and `port`. Its pinned certificate stays: the pin is
     of the printer, not of its address. False when there is no such printer."""
     with _locked():
@@ -559,6 +585,9 @@ def set_address(serial: str, host: str, port: int | None = None) -> bool:
         else:
             p.ip = host
         _write(printers)
+        if p.configured and (actor is not None or event_sink._actor.get() is not None):
+            event_sink.emit("printer.changed", {"type": "printer", "id": serial, "name": display_name(p)},
+                            {"family": p.family, "names": "address"}, actor=actor)
         return True
 
 
@@ -567,7 +596,7 @@ def klipper_names() -> set[str]:
     return {display_name(p) for p in load().values() if p.family == "klipper"}
 
 
-def set_lane_data(pid: str, mode: str) -> bool:
+def set_lane_data(pid: str, mode: str, *, actor=None) -> bool:
     """Set a Klipper printer's lane_data publishing (auto | on | off). False when there is no such printer."""
     if mode not in LANE_DATA:
         raise ValueError(f"lane_data must be one of {', '.join(LANE_DATA)}")
@@ -578,6 +607,9 @@ def set_lane_data(pid: str, mode: str) -> bool:
             return False
         p.lane_data = mode
         _write(printers)
+        if p.configured and (actor is not None or event_sink._actor.get() is not None):
+            event_sink.emit("printer.changed", {"type": "printer", "id": pid, "name": display_name(p)},
+                            {"family": p.family, "names": "lane_data"}, actor=actor)
         return True
 
 

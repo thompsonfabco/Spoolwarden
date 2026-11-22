@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from filament_kit import config, events
+from filament_kit import config, event_kinds, events
 from filament_kit.events import EventError, EventStore
 
 PRINTER = {"type": "printer", "id": "p-3", "name": "Workshop X1"}
@@ -135,7 +135,7 @@ def test_cursor_limit_and_kinds_filters(store):
     assert store.read(since=9) == {"events": [], "next": 4, "oldest": 1}    # the store's highest id, not an echo of since
 
 
-def test_unknown_kind_and_bad_values_are_refused(store):
+def test_unknown_kind_and_bad_values_are_refused(store, monkeypatch):
     with pytest.raises(EventError):
         store.write("print.exploded", PRINTER, HUB)
     with pytest.raises(EventError):
@@ -146,8 +146,9 @@ def test_unknown_kind_and_bad_values_are_refused(store):
         store.write("print.started", PRINTER, {"type": "nobody"})
     with pytest.raises(EventError):
         store.write("print.started", PRINTER, HUB, severity="bad")
+    monkeypatch.setitem(event_kinds.KINDS, "reserved.test", event_kinds.Kind("reserved.test", ("info",), emitted=False))
     with pytest.raises(EventError):
-        store.write("hub.started", HUB, HUB)                 # reserved for phase 4
+        store.write("reserved.test", HUB, HUB)
     with pytest.raises(EventError):
         store.write("print.paused", HUB, HUB)                # a keyed condition needs a subject id
     assert store.read()["events"] == [] and store.last_id() == 0

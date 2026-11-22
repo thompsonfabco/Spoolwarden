@@ -951,6 +951,9 @@ function tt(key, vars) {
     running_low_in_stock: { one: "{count} more in stock", other: "{count} more in stock" },
     running_low_last_one: "Last one",
     running_low_empty: "Nothing is running low.",
+    auto_where: "Where should it go?", auto_option: "Automatic", auto_option_hint: "The slot where the spool appears.", auto_continue: "Continue",
+    auto_plan: "{spool} goes into the slot where it appears ({slots}). The Hub waits up to 15 minutes.", auto_replaces: "Replaces {spool}, which was waiting.",
+    auto_started: "Waiting for {spool} to appear in a slot of {printer}.", auto_not_possible: "This printer has no slots the Hub can watch. Choose a slot.",
     topbar_hub_page: "Hub page",
     hub_screen_title: "Hub", hub_only_at_home: "Only at home.", hub_change_on_page: "Change this on the Hub page.", hub_unavailable: "This Hub does not show its overview here yet.",
     hub_group_status: "Status", hub_status_none: "Nothing to report.", hub_group_getting_started: "Getting started",
@@ -1075,7 +1078,12 @@ function hubSheet(opener, reuse) {
 }
 // ----- History (R84 sections 2, 3, 4): Undo after an action, a spool's last ten events, the check history, downloads -----
 // The Hub's answers: `activity` = {events: [{id, at, title, text, actor: {name}, undo: {possible, until?, why_not?}, undone}]}; Undo = POST events/<id>/undo.
-const undoWhy = (x) => { const c = x && x.data && x.data.code; return ["changed_since", "too_old", "already_undone", "not_undoable"].includes(c) ? tt("history_undo_" + c) : tt("history_undo_failed"); };
+// Hub refusals put the code in error; older twins put the sentence there and the code beside it.
+const undoWhy = (x) => {
+  const c = [x?.data?.error, x?.data?.code].find((code) => ["changed_since", "too_old", "already_undone", "not_undoable"].includes(code));
+  return tt(c ? "history_undo_" + c : "history_undo_failed");
+};
+const autoNotPossible = (e) => e instanceof SW.HubError && e.status === 409 && [e.data?.error, e.data?.code].includes("auto_not_possible");
 async function undoEvent(id) {
   try { await api(`events/${encodeURIComponent(id)}/undo`, { body: {} }); SW.toast(tt("history_undo_put_back"), "ok"); return true; }
   catch (x) { SW.toast(undoWhy(x), "bad"); return false; }
@@ -2528,7 +2536,17 @@ function openTab() {
         const r = await api(`printers/${enc(p.id)}/state`);
         const slots = ((r.status || {}).ams || []).flatMap((u) => u.slots || []);
         const head = h("h4", { class: "spools__step", textContent: SW.t("spool_load_which_slot", { printer: p.name || p.id }) });
-        if (!slots.length) return [head, h("p", { class: "muted", textContent: SW.t("spool_load_no_slots") }), stepFoot(pickPrinter)];
+        if (!slots.length && !p.auto_possible) return [head, h("p", { class: "muted", textContent: SW.t("spool_load_no_slots") }), stepFoot(pickPrinter)];
+        if (p.auto_possible) {                       // one list: Automatic first and selected, then the slots; Continue goes on (R83 addition A5)
+          let chosen = "auto";
+          const entries = [{ value: "auto", label: tt("auto_option") }, ...slots.map((sl) => ({
+            value: sl.label, label: [sl.label, sl.spool ? sl.spool.name || SW.t("spool_title", { id: sl.spool.id }) : sl.type || SW.t("spool_sheet_slot_empty")].join(" · "),
+          }))];
+          const go = SW.btn(tt("auto_continue"), { cls: "btn--primary", action: "slot-continue", run: () => plan(p, chosen === "auto" ? { label: "auto" } : slots.find((sl) => sl.label === chosen)) });
+          const seg = SW.segmented({ legend: tt("auto_where"), legendSr: true, name: "spools-target", cls: "slot-targets", wide: true, value: chosen, options: entries });
+          seg.addEventListener("change", (ev) => { chosen = ev.target.value; });
+          return [head, seg, h("p", { class: "muted", textContent: tt("auto_option_hint") }), h("div", { class: "spools__buttons" }, go), stepFoot(pickPrinter)];
+        }
         return [head, h("ul", { class: "spools__rows" }, slots.map((sl) => pickRow([SW.swatch(hexOf(sl.color_hex)),
           h("span", { class: "spools__row-text" }, h("b", { class: "mono", textContent: sl.label }),
             h("span", { class: "muted", textContent: sl.spool ? [sl.spool.name, sl.spool.remaining_weight != null ? SW.t("common_grams", { grams: grams(sl.spool.remaining_weight) }) : null].filter(Boolean).join(" · ")
@@ -2537,13 +2555,30 @@ function openTab() {
     }
     function plan(p, sl) {
       const line = resultLine(), go = needsHub(SW.btn(SW.t("common_load"), { cls: "btn--primary", run: (e) => send(false, e.currentTarget) }));
-      loadBox.replaceChildren(h("h4", { class: "spools__step", textContent: SW.t("spool_load_title", { slot: sl.label }) }), line, go, stepFoot(() => pickSlot(p)));
+      const auto = sl.label === "auto";
+      loadBox.replaceChildren(h("h4", { class: "spools__step", textContent: auto ? tt("auto_option") : SW.t("spool_load_title", { slot: sl.label }) }), line, go, stepFoot(() => pickSlot(p)));
       disabled(go, SW.t("spool_load_working_out"));
       async function send(dry, button) {
         await act(line, SW.t(dry ? "spool_load_working_out" : "common_load_wait"), async () => {
           let r;
           try { r = await api(`printers/${enc(p.id)}/slots/${enc(sl.label)}/load`, { body: { spool_id: id, dry_run: dry } }); }
-          catch (e) { if (dry) disabled(go, SW.t("spool_load_see_above")); throw e; }
+          catch (e) {
+            if (auto && autoNotPossible(e)) e.message = tt("auto_not_possible");
+            if (dry) disabled(go, SW.t("spool_load_see_above"));
+            throw e;
+          }
+          if (auto) {                                // nothing is loaded yet: the Hub watches the slots (contract A6)
+            const name = view ? nameOf(view) : SW.t("spool_title", { id });
+            if (dry) {
+              disabled(go, null);
+              return { kind: "ok", text: h("span", {}, ...lines([tt("auto_plan", { spool: name, slots: (r.watching || []).join(", ") || "?" }),
+                r.replaces ? tt("auto_replaces", { spool: r.replaces.name || SW.t("spool_title", { id: r.replaces.spool_id ?? "?" }) }) : ""].filter(Boolean))) };
+            }
+            const said = r.message || tt("auto_started", { spool: name, printer: p.name || p.id });
+            closeLoad(); changed = true; refresh();
+            SW.toast(said); SW.result(actAns, "ok", said);
+            return null;
+          }
           const back = (r.moved_back || []).filter((m) => m.id !== id)
             .map((m) => SW.t("spool_load_plan_goes_back", { id: m.id ?? "?", slot: sl.label, location: m.location || SW.t("spool_load_previous_place") }));
           if (dry) {

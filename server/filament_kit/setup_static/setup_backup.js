@@ -27,14 +27,16 @@ const BK_TEXT = {
   settings_restore_password_hint: "This backup is encrypted, and the Hub's backup password does not open it.",
   settings_restore_password_need: "Enter the password of this backup.",
   settings_restore_wrong_password: "Wrong password, or the file is damaged. Nothing was changed.",
-  settings_restore_summary_encrypted: "This backup is encrypted. Its contents are checked when the password is entered."
+  settings_restore_summary_encrypted: "This backup is encrypted. Its contents are checked when the password is entered.",
+  reader_setup_again: "Tag Readers set up for this Hub must be set up again."
 };
 const bkT = (key, vars) => { const v = SW.t(key, vars); return v !== key ? v : BK_TEXT[key]; };
 
 // A reply that is a file: saved by the browser under the name the server gives.
-async function download(path, body, fallback) {
-  const r = await fetch("/setup/api/" + path, { method: "POST", credentials: "same-origin",
-    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+async function download(path, body, fallback, code = "") {
+  const init = body === undefined ? { method: "GET", headers: { "X-Setup-Code": code } }
+    : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const r = await fetch("/setup/api/" + path, { ...init, credentials: "same-origin" });
   if (!r.ok) { let d = {}; try { d = await r.json(); } catch { /* not JSON */ } throw hubError(r.status, d); }
   const m = /filename="([^"]+)"/.exec(r.headers.get("Content-Disposition") || "");
   const url = URL.createObjectURL(await r.blob());
@@ -115,8 +117,13 @@ function passwordPane(r, said, result) {
       working(res, SW.t("common_saving"));
       try { await api("backups/password", { password: one._control.value, code: theCode() }); } catch (x) {
         if (x.locked) { SW.result(res, null); throw x; }
-        if (x.data && x.data.error === "too_short") { SW.result(res, null); SW.fieldError(one, x.data.text || bkT("settings_backups_password_short")); one._control.focus(); return; }
-        say(res, hubText(x.data && x.data.text || x.message), false);
+        const code = x.data && x.data.code;
+        const err = x.data && x.data.error;
+        if (code === "too_short" || err === "too_short") {
+          const text = err && err !== "too_short" && err !== "bad origin" ? hubText(err) : bkT("settings_backups_password_short");
+          SW.result(res, null); SW.fieldError(one, text); one._control.focus(); return;
+        }
+        say(res, hubText((err && err !== "bad origin" ? err : "") || x.message), false);
         return;
       }
       one._control.value = two._control.value = "";
@@ -147,30 +154,42 @@ function keepForm(r) {
   return form;
 }
 
-// The restore dialog (typed word); a backup the Hub's stored password does not open also asks for its password, checked first
-// (restore/password) so a wrong one leaves everything as it was
+function unlockRestore(opener) {
+  const pw = SW.field({ type: "secret", name: "restore_password", label: bkT("settings_restore_password"), hint: bkT("settings_restore_password_hint"),
+    attrs: { autocomplete: "off" }, check: (x) => (x ? null : bkT("settings_restore_password_need")) });
+  return SW.ask({ kind: "entry", opener, fields: [pw], title: bkT("settings_restore_password"), confirm: SW.t("common_check"),
+    run: async ([password], { result }) => {
+      let summary = null;
+      await needCode(async () => {
+        try {
+          summary = await api("restore/password", { password, code: theCode() });
+        } catch (x) {
+          if (x.locked) throw x;
+          SW.result(result, "bad", hubText(x.data?.error || x.message));
+          if (x.data?.code === "wrong_password") pw._control.focus();
+        }
+      });
+      return summary || false;
+    } });
+}
+
 function restoreAsk(s, opener) {
-  const pw = s.needs_password ? SW.field({ type: "secret", name: "restore_password", label: bkT("settings_restore_password"), hint: bkT("settings_restore_password_hint"),
-    attrs: { autocomplete: "off" }, check: (x) => (x ? null : bkT("settings_restore_password_need")) }) : null;
-  const out = SW.ask({ kind: "typed", word: "restore", opener, fields: pw ? [pw] : [],
+  return SW.ask({ kind: "typed", word: "restore", opener,
     title: SW.t("settings_restore_title"), text: SW.t("settings_restore_short", { host: s.host || SW.t("settings_restore_summary_other_hub"), created: s.created }),
     body: h("p", { class: "dialog__text", textContent: SW.t("settings_restore_body") }), confirm: SW.t("settings_restore_confirm"),
     run: async (values, { result }) => {
       let r = null;
       await needCode(async () => {
         try {
-          if (pw) await api("restore/password", { password: values[0], code: theCode() });
-          r = await api("job", { name: "restore", confirm: values[values.length - 1].trim(), sha256: s.sha256, code: theCode() });
+          r = await api("job", { name: "restore", confirm: values[0].trim(), sha256: s.sha256, code: theCode() });
         } catch (x) {
           if (x.locked) throw x;
-          const wrong = x.data && x.data.error === "wrong_password";
-          SW.result(result, "bad", wrong ? (x.data.text || bkT("settings_restore_wrong_password")) : hubText(x.message));
-          if (wrong && pw) pw._control.focus();
+          const err = x.data && x.data.error;
+          SW.result(result, "bad", hubText((err && err !== "bad origin" ? err : "") || x.message));
         }
       });
       return r || false;
     } });
-  return out;
 }
 
 // Restore: three steps the person goes through (02 8.2)
@@ -233,7 +252,14 @@ function restoreSteps() {
       line("settings_restore_summary_code"),
       h("p", { class: "mono", textContent: SW.t("settings_restore_summary_sha", { hash: s.sha256 }) })].filter(Boolean));
     actions.replaceChildren(
-      SW.btn(SW.t("settings_restore_button"), { cls: "btn--danger", action: "restore", run: async (e) => { if (await restoreAsk(s, e.currentTarget)) { reset(); followApply(true); } } }),
+      s.needs_password
+        ? SW.btn(SW.t("common_check"), { cls: "btn--primary", action: "unlock-backup", run: async (e) => {
+          const unlocked = await unlockRestore(e.currentTarget);
+          if (unlocked) checked(unlocked);
+        } })
+        : SW.btn(SW.t("settings_restore_button"), { cls: "btn--danger", action: "restore", run: async (e) => {
+          if (await restoreAsk(s, e.currentTarget)) { reset(); followApply(true); }
+        } }),
       SW.btn(SW.t("settings_restore_discard"), { cls: "btn--ghost", action: "discard-upload", run: () => settingAct(rbox, "restore/forget", {}, () => reset()) }));
     paint();
     actions.querySelector("button").focus();

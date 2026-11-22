@@ -56,6 +56,8 @@ class LinkResult:
     dry: bool = False
     cleared: list[int] = field(default_factory=list)
     patch: dict = field(default_factory=dict)
+    event_id: int | None = None
+    event: dict | None = None
 
 
 class AddFailed(Exception):
@@ -412,39 +414,48 @@ def link_tag(sm: Spoolman, spool_id: int, uid: str, force: bool, dry: bool, keep
     `keep_sealed` (the intake station's sealed spool with its tag already on the bag). A spool that was sealed and is
     opened by it is reported as spool.opened (`_events` False: the caller, open_spool, reports its own)."""
     uid = tags.normalize_uid(uid)
-    with event_sink.held(), _LOCK:
-        target = sm.get(f"spool/{spool_id}")
-        if tags.stored(target) == uid:
-            return LinkResult(spool_id, uid, noop=True, dry=dry)
-        others = [s for s in _all_spools(sm) if tags.stored(s) == uid and s["id"] != spool_id]
-        if others and not force:
-            raise TagConflict(others[0], f"tag {uid} is already linked to {describe(others[0])}")
-        if tags.stored(target) and not force:
-            raise TagConflict(None, f"{describe(target)} already has tag {tags.stored(target)}; "
-                                    f"tapped {uid} (force replaces it)", reason="spool_has_other_tag")
-        patch: dict = {}
-        if not keep_sealed:
-            if not target.get("first_used"):
-                patch["first_used"] = _now()
-            comment = (target.get("comment") or "").replace(SEALED_COMMENT, "").strip(" |;.")
-            if comment != (target.get("comment") or ""):
-                patch["comment"] = comment
-        result = LinkResult(spool_id, uid, dry=dry, cleared=[s["id"] for s in others], patch=patch)
-        if dry:
-            return result
-        for s in others:
-            sm.patch(f"spool/{s['id']}", {"extra": {**(s.get("extra") or {}), "nfc_id": json.dumps("")}})
-        sm.patch(f"spool/{spool_id}",
-                 {**patch, "extra": {**(target.get("extra") or {}), "nfc_id": json.dumps(uid)}})
-        if tags.stored(sm.get(f"spool/{spool_id}")) != uid:
-            raise RuntimeError("tag did not land")
-        if _events and patch:                        # sealed before, opened now
-            with event_sink.batch_scope():
-                event_sink.emit_spool("spool.opened", target, spool_id, before_location=target.get("location"),
-                                      after_location=target.get("location"),
-                                      before_grams=target.get("remaining_weight"),
-                                      after_grams=target.get("remaining_weight"))
-        return result
+    with event_sink.capture() as cap:
+        with event_sink.held(), _LOCK:
+            target = sm.get(f"spool/{spool_id}")
+            if tags.stored(target) == uid:
+                return LinkResult(spool_id, uid, noop=True, dry=dry)
+            others = [s for s in _all_spools(sm) if tags.stored(s) == uid and s["id"] != spool_id]
+            if others and not force:
+                raise TagConflict(others[0], f"tag {uid} is already linked to {describe(others[0])}")
+            if tags.stored(target) and not force:
+                raise TagConflict(None, f"{describe(target)} already has tag {tags.stored(target)}; "
+                                        f"tapped {uid} (force replaces it)", reason="spool_has_other_tag")
+            patch: dict = {}
+            if not keep_sealed:
+                if not target.get("first_used"):
+                    patch["first_used"] = _now()
+                comment = (target.get("comment") or "").replace(SEALED_COMMENT, "").strip(" |;.")
+                if comment != (target.get("comment") or ""):
+                    patch["comment"] = comment
+            result = LinkResult(spool_id, uid, dry=dry, cleared=[s["id"] for s in others], patch=patch)
+            if dry:
+                return result
+            for s in others:
+                sm.patch(f"spool/{s['id']}", {"extra": {**(s.get("extra") or {}), "nfc_id": json.dumps("")}})
+            sm.patch(f"spool/{spool_id}",
+                     {**patch, "extra": {**(target.get("extra") or {}), "nfc_id": json.dumps(uid)}})
+            if tags.stored(sm.get(f"spool/{spool_id}")) != uid:
+                raise RuntimeError("tag did not land")
+            if _events and patch:                        # sealed before, opened now
+                with event_sink.batch_scope():
+                    event_sink.emit_spool("spool.opened", target, spool_id, before_location=target.get("location"),
+                                          after_location=target.get("location"),
+                                          before_grams=target.get("remaining_weight"),
+                                          after_grams=target.get("remaining_weight"),
+                                          before_tag=tags.stored(target) or "",
+                                          after_tag=uid,
+                                          before_first_used=target.get("first_used") or "",
+                                          before_comment=target.get("comment") or "",
+                                          took_tag_from=",".join(str(i) for i in result.cleared))
+    if cap:
+        result.event_id = cap[-1]["id"]
+        result.event = cap[-1]
+    return result
 
 
 def add_and_link(sm: Spoolman, items: list[dict], rules: dict, dry: bool, uid: str | None,
@@ -538,53 +549,60 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
         raise ValueError("gross must be a number of grams")
     if humidity is not None and (not _is_num(humidity) or not 0 <= humidity <= 100):
         raise ValueError("humidity must be a percentage (0-100)")
-    with event_sink.held(), _LOCK:
-        spool = sm.get(f"spool/{spool_id}")
-        if spool.get("archived"):
-            raise ValueError(f"spool {spool_id} is marked empty (archived): it cannot be opened")
-        patch: dict = {}
-        if gross is not None:
-            tare = spool.get("spool_weight") or (spool.get("filament") or {}).get("spool_weight") or 0
-            if gross < tare:
-                raise ValueError(f"gross {gross} g is below the spool tare {tare} g - check the weight")
-            patch["remaining_weight"] = round(gross - tare, 1)
-        elif remaining is not None:
-            patch["remaining_weight"] = remaining
-        _cap_remaining(spool, patch)
-        link = link_tag(sm, spool_id, uid, force=force, dry=dry, _events=False)   # raises TagConflict first
-        if location is None and spool.get("location") in (None, "", placement.sealed_name(rules)):
-            used = Counter(s["location"] for s in sm.get("spool") if s.get("location") and s["id"] != spool_id)
-            material = (spool.get("filament") or {}).get("material") or ""
-            location = placement.place([{"material": material, "sealed": False, "count": 1}], used, rules)[0][
-                "location"]
-        if location is not None:                      # a containers location's name = its lowest free container
-            used = Counter(s["location"] for s in sm.get("spool") if s.get("location") and s["id"] != spool_id)
-            location = placement.resolve(placement.as_storage(rules), location, used)
-        if location is not None and location != spool.get("location"):
-            patch["location"] = location
-        moist = {} if humidity is None else {"box_humidity": json.dumps(humidity),
-                                             "humidity_checked": json.dumps(_now())}
-        if dry:
-            return {**spool, **link.patch, **patch,
-                    "extra": {**(spool.get("extra") or {}), "nfc_id": json.dumps(uid), **moist}}
-        fresh = sm.get(f"spool/{spool_id}")
-        if not fresh.get("first_used"):
-            patch["first_used"] = _now()
-        comment = (fresh.get("comment") or "").replace(SEALED_COMMENT, "").strip(" |;.")
-        if comment != (fresh.get("comment") or ""):
-            patch["comment"] = comment
-        if moist:  # on top of the fresh extra, which now holds the linked tag
-            patch["extra"] = {**(fresh.get("extra") or {}), **moist}
-        if patch:
-            sm.patch(f"spool/{spool_id}", patch)
-        final = sm.get(f"spool/{spool_id}")
-        with event_sink.batch_scope():
-            event_sink.emit_spool("spool.opened", final, spool_id, before_location=spool.get("location"),
-                                  after_location=final.get("location"), before_grams=spool.get("remaining_weight"),
-                                  after_grams=final.get("remaining_weight"))
-        if "remaining_weight" in patch:
-            event_sink.weight_changed(sm)
-        return final
+    with event_sink.capture() as cap:
+        with event_sink.held(), _LOCK:
+            spool = sm.get(f"spool/{spool_id}")
+            if spool.get("archived"):
+                raise ValueError(f"spool {spool_id} is marked empty (archived): it cannot be opened")
+            patch: dict = {}
+            if gross is not None:
+                tare = spool.get("spool_weight") or (spool.get("filament") or {}).get("spool_weight") or 0
+                if gross < tare:
+                    raise ValueError(f"gross {gross} g is below the spool tare {tare} g - check the weight")
+                patch["remaining_weight"] = round(gross - tare, 1)
+            elif remaining is not None:
+                patch["remaining_weight"] = remaining
+            _cap_remaining(spool, patch)
+            link = link_tag(sm, spool_id, uid, force=force, dry=dry, _events=False)   # raises TagConflict first
+            if location is None and spool.get("location") in (None, "", placement.sealed_name(rules)):
+                used = Counter(s["location"] for s in sm.get("spool") if s.get("location") and s["id"] != spool_id)
+                material = (spool.get("filament") or {}).get("material") or ""
+                location = placement.place([{"material": material, "sealed": False, "count": 1}], used, rules)[0][
+                    "location"]
+            if location is not None:                      # a containers location's name = its lowest free container
+                used = Counter(s["location"] for s in sm.get("spool") if s.get("location") and s["id"] != spool_id)
+                location = placement.resolve(placement.as_storage(rules), location, used)
+            if location is not None and location != spool.get("location"):
+                patch["location"] = location
+            moist = {} if humidity is None else {"box_humidity": json.dumps(humidity),
+                                                 "humidity_checked": json.dumps(_now())}
+            if dry:
+                return {**spool, **link.patch, **patch,
+                        "extra": {**(spool.get("extra") or {}), "nfc_id": json.dumps(uid), **moist}}
+            fresh = sm.get(f"spool/{spool_id}")
+            if not fresh.get("first_used"):
+                patch["first_used"] = _now()
+            comment = (fresh.get("comment") or "").replace(SEALED_COMMENT, "").strip(" |;.")
+            if comment != (fresh.get("comment") or ""):
+                patch["comment"] = comment
+            if moist:  # on top of the fresh extra, which now holds the linked tag
+                patch["extra"] = {**(fresh.get("extra") or {}), **moist}
+            if patch:
+                sm.patch(f"spool/{spool_id}", patch)
+            final = sm.get(f"spool/{spool_id}")
+            with event_sink.batch_scope():
+                event_sink.emit_spool("spool.opened", final, spool_id, before_location=spool.get("location"),
+                                      after_location=final.get("location"), before_grams=spool.get("remaining_weight"),
+                                      after_grams=final.get("remaining_weight"),
+                                      before_tag=tags.stored(spool) or "", after_tag=uid,
+                                      before_first_used=spool.get("first_used") or "",
+                                      before_comment=spool.get("comment") or "",
+                                      took_tag_from=",".join(str(i) for i in link.cleared))
+            if "remaining_weight" in patch:
+                event_sink.weight_changed(sm)
+    if cap:
+        return {**final, "event_id": cap[-1]["id"], "event": cap[-1]}
+    return final
 
 
 def pick_sealed(sm: Spoolman, filament_id: int) -> int | None:
@@ -736,7 +754,8 @@ def _report_update(sm: Spoolman, before: dict, after: dict, patch: dict, empty: 
     grams = {"before_grams": before.get("remaining_weight"), "after_grams": patch.get("remaining_weight")}
     with event_sink.batch_scope():
         if empty:
-            event_sink.emit_spool("spool.emptied", before, sid, **grams)
+            event_sink.emit_spool("spool.emptied", before, sid,
+                                  before_archived=str(bool(before.get("archived", False))).lower(), **grams)
         elif "remaining_weight" in patch:
             event_sink.emit_spool("spool.weighed", before, sid, **grams)
         if "location" in patch and patch["location"] != before.get("location"):
@@ -772,8 +791,13 @@ def edit_spool(sm: Spoolman, spool_id: int, *, auto_location: bool = False, **kw
         loc, why = auto_place(sm, before, kw.get("rules"))
         kw["location"] = loc
         placed = {"placed_by": why, "placed_text": PLACED_BY.get(why, why).format(material=(before.get("filament") or {}).get("material") or "")}
-    spool = update_spool(sm, spool_id, **kw)
-    return {"spool": spool, "view": spool_view(spool), "before": spool_view(before), "dry": kw["dry"], **(placed or {})}
+    with event_sink.capture() as cap:
+        spool = update_spool(sm, spool_id, **kw)
+    out = {"spool": spool, "view": spool_view(spool), "before": spool_view(before), "dry": kw["dry"], **(placed or {})}
+    if not kw["dry"] and cap:
+        out["event_id"] = cap[-1]["id"]
+        out["event"] = cap[-1]
+    return out
 
 
 def with_spools(entries: list[dict], sm: Spoolman) -> list[dict]:

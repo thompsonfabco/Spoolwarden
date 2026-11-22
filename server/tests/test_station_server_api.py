@@ -216,6 +216,7 @@ def test_station_mode_dropin_allows_the_paired_servers_addresses():
     from filament_kit import apply, modules
     cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "station")
     cfg["station"]["allow"] = ["192.0.2.10"]
+    cfg["station"]["page_from"] = "allowed"
     assert _allow_line(apply.station_dropin(cfg, ["192.0.2.10"])) == "IPAddressAllow=localhost 192.0.2.10"
     _paired(["192.0.2.10", "198.51.100.7"])
     text = apply.station_dropin(cfg, ["192.0.2.10"])
@@ -226,6 +227,7 @@ def test_station_mode_dropin_allows_the_paired_servers_addresses():
 def test_all_in_one_dropin_allows_the_paired_lan_address():
     from filament_kit import apply, modules
     cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one")
+    cfg["station"]["page_from"] = "allowed"
     _paired(["127.0.0.1", "192.0.2.5"])  # the server's LAN address from its link, loopback first
     assert _allow_line(apply.station_dropin(cfg, ["127.0.0.1"])) == "IPAddressAllow=localhost 127.0.0.1 192.0.2.5"
 
@@ -233,6 +235,7 @@ def test_all_in_one_dropin_allows_the_paired_lan_address():
 def test_a_broken_pairing_file_does_not_stop_the_dropin():
     from filament_kit import apply, modules
     cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one")
+    cfg["station"]["page_from"] = "allowed"
     server_api.pairing_dir().mkdir(parents=True, exist_ok=True)
     server_api.server_file().write_text("{not json", encoding="utf-8")
     assert _allow_line(apply.station_dropin(cfg, ["127.0.0.1"])) == "IPAddressAllow=localhost 127.0.0.1"

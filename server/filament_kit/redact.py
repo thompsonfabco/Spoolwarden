@@ -23,7 +23,8 @@ _SERIAL = re.compile(r"\b(?=[0-9A-Z]*[0-9])(?=[0-9A-Z]*[A-Z])[0-9A-Z]{12,20}\b")
 _ACCOUNT = re.compile(r"\b(?:user[_-]?id|uid)\b[=:\s\"']+[^\s&\"']+|\b\d{9,}\b", re.I)
 _USER_FOLDER = re.compile(r"([\\/]user[\\/]+)[^\\/\s]+", re.I)
 _BEARER = re.compile(r"\b(?:authorization[=:\s\"']+(?:bearer\s+)?|bearer[=:\s\"']+"
-                     r"|(?:token|password|passwd|secret|access_code|api_?key)\s*[=:]\s*)[^\s&\"']+", re.I)
+                     r"|(?:token|password|passwd|secret|access_code|api_?key|backup_?password|passphrase"
+                     r"|pairing_?code|setup_?code|x-setup-code)\s*[=:]\s*)[^\s&\"']+", re.I)
 _KEYS = re.compile(r"\b(?:sk-ant-[\w-]+|gh[pousr]_\w+|github_pat_\w+)")
 _EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b")
 

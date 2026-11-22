@@ -20,6 +20,27 @@ async function saveStorage(list) {
   }
 }
 
+// ----- Download as CSV (R84 6): the file the Hub gives for GET export/locations.csv, unlocked as a file leaves the Hub -----
+// Texts the catalogue does not have yet (only HD2 opens it): the catalogue's own wins once the key is there.
+const ST_STUB = { storage_download_csv: "Download as CSV", storage_csv_failed: "Could not download the file: {reason}" };
+const stT = (key, vars) => {
+  const v = SW.t(key, vars);
+  return v !== key || !(key in ST_STUB) ? v : ST_STUB[key].replace(/\{([a-z]+)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m));
+};
+async function stDownloadCsv(set, fallback) {
+  const r = await fetch(`/setup/api/export/${set}.csv`, { credentials: "same-origin", headers: { "X-Setup-Code": theCode() } });
+  if (!r.ok) { let d = {}; try { d = await r.json(); } catch { /* not JSON */ } throw hubError(r.status, d); }
+  const m = /filename="([^"]+)"/.exec(r.headers.get("Content-Disposition") || "");
+  const url = URL.createObjectURL(await r.blob());
+  const a = h("a", { href: url, download: m ? m[1] : fallback });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+const stCsvItem = () => ({ label: stT("storage_download_csv"), icon: "download", action: "download-csv",
+  run: () => needCode(async () => { try { await stDownloadCsv("locations", "locations.csv"); } catch (e) { if (e.locked) throw e; SW.toast(stT("storage_csv_failed", { reason: hubText(e.message) }), "bad"); } }) });
+
 // ----- the rows' words -----
 function stFull(r) {
   const used = r.used || 0;
@@ -58,8 +79,10 @@ function storageGroup({ st }) {
   const notices = h("div", { class: "storage__notices" });
   let panelData = st, previewing = 0, timer = 0;
   const add = SW.btn(SW.t("storage_add_location"), { cls: "btn--primary", icon: "plus", run: (e) => openEditor(null, e.currentTarget) });
+  const barMore = SW.iconBtn("more", SW.t("common_more_actions_for", { name: SW.t("settings_storage_locations") }), { cls: "storage__barmore" });
+  SW.menu(barMore, () => [stCsvItem()], { label: SW.t("common_actions_for", { name: SW.t("settings_storage_locations") }) });
   const body = [
-    h("div", { class: "storage__bar" }, h("h3", { class: "settings__heading", textContent: SW.t("settings_storage_locations") }), add),
+    h("div", { class: "storage__bar" }, h("h3", { class: "settings__heading", textContent: SW.t("settings_storage_locations") }), h("div", { class: "actions" }, add, hubCanExport("locations") ? barMore : null)),
     table, notices,
     h("section", { class: "storage__panel", "aria-labelledby": "storage-panel-title" },
       h("h3", { class: "settings__heading", id: "storage-panel-title", textContent: SW.t("storage_panel_title") }), panel),

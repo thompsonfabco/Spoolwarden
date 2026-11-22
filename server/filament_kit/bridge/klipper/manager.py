@@ -595,7 +595,12 @@ class KlipperFamily(LoadsMixin):
         }
         with c.lock:
             out["spoolman_warning"] = kusage.with_connection(c.spoolman_warning, c.spoolman_connected)
-        return out
+        from .. import auto_slot
+        try:
+            adapter_name = self.model(pid)[2].name
+        except Exception:  # noqa: BLE001
+            adapter_name = None
+        return auto_slot.annotate(pid, out, adapter=adapter_name)
 
     # --- usage ---------------------------------------------------------------------------------------------------
     def usage(self, pid: str, days: float) -> list[dict]:
@@ -622,7 +627,10 @@ class KlipperFamily(LoadsMixin):
         if not job:
             log.warning("klipper %s: a job ended but Moonraker's history has no job (is [history] on?)", pid)
             return
-        kusage.record(pid, job, c.spool_id)
+        with c.lock:
+            spool_id = kusage.job_spool_id(job, c.spool_id)
+        spool = next((row for row in self._spool_list() if row.get("id") == spool_id), None) if spool_id else None
+        kusage.record(pid, job, spool_id, spool=spool)
 
     # --- camera --------------------------------------------------------------------------------------------------
     def camera_url(self, pid: str) -> str | None:

@@ -35,6 +35,14 @@ def kit(tmp_path, monkeypatch):
     config.save({**config.load(), "modules": {"printers": True, "klipper": True}})       # Klipper is opt-in
 
 
+@pytest.fixture(autouse=True)
+def klipper_answers(monkeypatch):
+    """The test before a Klipper printer is saved (R82 s5 p3) finds the printer: the tests of the other commands add one
+    at an address nothing answers on. The guided order's own tests are in test_af5_printer_add.py."""
+    monkeypatch.setattr(cli, "_klipper_test", lambda host, port, key: True)
+    monkeypatch.setattr(discovery, "scan", lambda net, **kw: [])
+
+
 def seed():
     """Two Bambu Lab printers, a Klipper printer added, and a Klipper printer found by a scan and not added."""
     registry.add_bambu(X1, "Workshop X1", "X1C", "192.0.2.40", "12345678")
@@ -452,7 +460,7 @@ def test_add_asks_for_what_the_flags_leave_out_in_the_order_of_06_8_7(capsys, mo
     assert rc == 0, err
     assert asked == ["IP address or name (e.g. 192.0.2.40 or printer.local): ",
                      "Access Code (on the printer: Settings > Network/LAN): ", "Name (optional): ",
-                     "Serial (optional: read from the printer): "]
+                     "Serial (optional: read from the printer): ", "Map its slots now? [Y/n] "]
     assert registry.load()[X1].name == "Workshop X1"
 
 
@@ -515,7 +523,8 @@ def test_add_a_klipper_printer_asks_in_the_order_of_06_8_7(capsys, monkeypatch, 
     monkeypatch.setattr(cli.secret_input, "ask", lambda prompt: asked.append(prompt) or "")
     rc, out, err = run(capsys, "printer", "add", "--klipper")
     assert rc == 0, err
-    assert asked == ["Address: ", "Port [7125]: ", "Name (optional): ", "Moonraker API key (optional): "]
+    assert asked == ["Address: ", "Port [7125]: ", "Name (optional): ", "Moonraker API key (optional): ",
+                     "Map its slots now? [Y/n] "]
 
 
 def test_add_a_klipper_printer_twice_is_exit_1(capsys):
@@ -573,6 +582,7 @@ def test_a_module_that_is_off_says_how_to_turn_it_on(capsys):
 def test_an_unreadable_config_stops_every_printer_command(capsys, argv):
     seed()
     (config.paths().etc / "config.json").write_text("{not json", encoding="utf-8")
+    (config.paths().etc / "config.xml").write_text("<config", encoding="utf-8")       # both forms unreadable
     rc, out, err = run(capsys, "printer", *argv)
     assert (rc, out) == (1, "") and err.startswith("Error: ") and "Traceback" not in err
     assert "config.json cannot be read" in err and "\nFix: " in err

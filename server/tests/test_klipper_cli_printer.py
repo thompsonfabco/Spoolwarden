@@ -279,8 +279,7 @@ def test_printer_parsers_and_run(capsys):
     a = ap.parse_args(["load", "Workshop", "A1", "12", "-y"])
     assert (a.printer, a.slot, a.spool, a.yes) == ("Workshop", "A1", "12", True)
     assert ap.parse_args(["usage", "Workshop", "--days", "3"]).days == 3.0
-    with pytest.raises(SystemExit):
-        ap.parse_args(["load", "Workshop", "A1"])                 # a spool number is needed
+    assert klipper_cli.run_printer(ap.parse_args(["load", "Workshop", "A1"]), FakeApi({}), P) == 2   # a spool number is needed
     api = FakeApi({f"POST {SLOT}/clear": clear_answer})
     assert klipper_cli.run_printer(ap.parse_args(["clear", "Workshop", "A1", "-y"]), api, P) == 0
     api = FakeApi({"GET /api/printers/S1/usage?days=3": {"entries": []}})
@@ -297,10 +296,10 @@ def test_catalogue_texts_are_named_like_keys_and_use_known_fields():
     assert len(texts) > 60 and all(re.fullmatch(r"cli_[a-z0-9_]+", k) for k in texts)
     for key, text in texts.items():
         assert text.strip(), key
-        assert set(re.findall(r"\{(\w+)\}", text)) <= {"n", "name", "slot", "printer", "place", "why", "value", "days", "url",
-                                                          "brand", "material", "field", "text", "id", "names", "setting",
-                                                          "ids", "choices", "low", "high", "label", "device", "after",
-                                                          "before"}, key
+        assert set(re.findall(r"\{(\w+)\}", text)) <= {"n", "name", "slot", "slots", "printer", "place", "why", "value",
+                                                          "days", "url", "brand", "material", "field", "text", "id",
+                                                          "names", "setting", "ids", "choices", "low", "high", "label",
+                                                          "device", "after", "before", "command"}, key
 
 
 def test_texts_already_in_the_catalogue_have_not_drifted():

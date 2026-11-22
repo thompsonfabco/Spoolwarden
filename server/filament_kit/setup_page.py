@@ -39,7 +39,7 @@ Routes (JSON under /setup/api; every POST body is a JSON object, `code` = the se
         with `klipper` (either alone is enough). This route and the Access Code are Bambu's (a Klipper printer: 400,
         and setup_console/printers_tab.py adds one); Test is a TLS handshake for Bambu, Moonraker's /printer/info for
         Klipper (its API key never shown). An address is an IP or a name, kept as typed (hostaddr).
-    POST passphrase {code, passphrase}  library_token {code, token}  library_token/remove {code}
+    POST passphrase {code, passphrase}
     POST local_intake_token {code, token}  local_intake_token/remove {code}   (the local label reader's bearer token)
     POST readers {code[, name]} (the token, shown once)  readers/{id}/revoke {code}
     POST pair {code, kind: phone|pc|station}  devices/{id}/revoke {code}
@@ -64,7 +64,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import __version__, config, hostaddr, lan, modules, pairing, qr, reader_tokens, setup_code, shared_files, trusted
+from . import __version__, config, getting_started, hostaddr, hubport, lan, modules, pairing, qr, reader_tokens, setup_code, shared_files, trusted
 from .bridge import registry
 from .station_client import station_reach
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offline, Unauthorized
@@ -74,7 +74,14 @@ log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "setup_static"
 # one stylesheet per section, linked after setup.css (the shell) in this order, which is the cascade order: a section adds
 # its own file here and never appends to another's
-CSS_SECTIONS = tuple(f"setup_{n}.css" for n in ("updates", "features", "printers", "overview", "printers_add", "settings", "flash", "intake", "alerts", "analytics", "spools", "printer_live"))
+CSS_SECTIONS = tuple(f"setup_{n}.css" for n in ("updates", "features", "printers", "overview", "printers_add", "settings", "flash", "intake", "alerts", "analytics", "spools", "printer_live", "start"))
+SHELL_SCRIPTS = (
+    "setup.js", "setup_history.js", "setup_alertbar.js", "setup_overview_alerts.js", "setup_alerts.js",
+    "setup_tabs.js", "setup_start.js", "setup_overview.js", "setup_features.js", "setup_updates.js",
+    "setup_settings.js", "setup_devices.js", "setup_printer_live.js", "setup_printers.js", "setup_trust.js",
+    "setup_presets.js", "setup_backup.js", "setup_storage.js", "setup_logs.js", "setup_intake.js",
+    "setup_spools.js", "setup_analytics.js", "setup_flash.js",
+)
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
                                "connect-src 'self'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'",
@@ -283,11 +290,14 @@ def _host_of(host_header: str) -> str:
 
 
 class SetupPage:
-    def __init__(self, printers=None, *, families=None, helper=None, client_factory=None, hosts=None, mapper=None):
+    def __init__(self, printers=None, *, families=None, helper=None, client_factory=None, hosts=None, mapper=None,
+                 spoolman=None, camera_hub=None):
         # the connection manager: the Bambu Manager or family.Printers (None: no printer module is on); `families`
         # = the printer families whose module is on ("bambu" = the printers module, "klipper" = the klipper module)
         self.printers = printers
         self.mapper = mapper                        # Bambu slot mapping: the server's own (None: the printers module is off)
+        self.spoolman, self.camera_hub = spoolman, camera_hub
+        self.history = {"exports": [], "event_undo": False, "activity": False, "report": False}
         self.families = frozenset(families if families is not None else ({"bambu"} if printers is not None else ()))
         if printers is None:
             self.families = frozenset()
@@ -297,10 +307,7 @@ class SetupPage:
         self.last_check = 0.0
         self.shared = shared_files.load()           # tokens, strings, icon sprite, components: served at /setup/shared/<file>
         self.static = {n: (STATIC / n).read_bytes()
-                       for n in ("setup.js", "setup_tabs.js", "setup_overview.js", "setup_features.js", "setup_updates.js",
-                                 "setup_settings.js", "setup_devices.js", "setup_printers.js", "setup_trust.js", "setup_presets.js",
-                                 "setup_backup.js", "setup_storage.js", "setup_alertbar.js", "setup_overview_alerts.js", "setup_alerts.js",
-                                 "setup_logs.js", "setup_intake.js", "setup_flash.js",
+                       for n in (*SHELL_SCRIPTS,
                                  # esptool-js 0.7.0 as published (THIRD-PARTY.md): only the Flash a device tab
                                  # loads it, when the owner writes a board from the browser
                                  "esptool.bundle.js",
@@ -321,34 +328,27 @@ class SetupPage:
             ("/printers/{serial}/test", g(self.printer_test), "POST"),
             ("/printers/{serial}/forget", w(self.printer_forget), "POST"),
             ("/passphrase", hw(self.passphrase), "POST"),
-            ("/library_token", hw(self.library_token), "POST"),
-            ("/library_token/remove", hw(self.library_token_remove), "POST"),
             ("/local_intake_token", hw(self.local_intake_token), "POST"),
             ("/local_intake_token/remove", hw(self.local_intake_token_remove), "POST"),
             ("/readers", w(self.reader_add), "POST"), ("/readers/{id}/revoke", w(self.reader_revoke), "POST"),
             ("/pair", w(self.pair), "POST"), ("/devices/{id}/revoke", w(self.device_revoke), "POST"),
             ("/modules", hw(self.module), "POST"), ("/settings", hw(self.setting), "POST"),
             ("/apply", hw(self.apply_start), "POST")] + setup_console.routes(self)
+        from .setup_console.history_tab import EXPORT_SETS
+        exports = {p.removeprefix("/export/").removesuffix(".csv") for p, _, method in table
+                   if method == "GET" and p.startswith("/export/") and p.endswith(".csv")}
+        if "{set}" in exports:
+            exports.remove("{set}")
+            exports.update(EXPORT_SETS)
+        self.history = {
+            "exports": sorted(exports),
+            "event_undo": any(p.startswith("/events/{") and p.endswith("/undo") and m == "POST" for p, _, m in table),
+            "activity": any(p == "/activity" and m == "GET" for p, _, m in table),
+            "report": {"/report", "/report/download"} <= {p for p, _, m in table if m == "POST"},
+        }
         return ([Route("/", self.page, methods=["GET"]),          # the Hub's base address answers with the same page
                  Route("/setup", self.page, methods=["GET"]),
-                 Route("/setup/setup.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_tabs.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_overview.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_features.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_updates.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_settings.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_devices.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_printers.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_trust.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_presets.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_backup.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_storage.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_alertbar.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_overview_alerts.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_alerts.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_logs.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_intake.js", self.asset, methods=["GET"]),
-                 Route("/setup/setup_flash.js", self.asset, methods=["GET"]),
+                 *[Route(f"/setup/{n}", self.asset, methods=["GET"]) for n in SHELL_SCRIPTS],
                  Route("/setup/esptool.bundle.js", self.asset, methods=["GET"]),
                  Route("/setup/setup.css", self.asset, methods=["GET"]),
                  *[Route(f"/setup/{n}", self.asset, methods=["GET"]) for n in CSS_SECTIONS],
@@ -496,7 +496,7 @@ class SetupPage:
         req.setdefault("client", _CLIENT.get())       # the address the helper's lockout counts against
         r = await anyio.to_thread.run_sync(self.helper, req)
         if not r.get("ok"):
-            extra = {k: r[k] for k in ("needs", "trust_gone", "tries_left", "retry_at", "field", "errors") if k in r}
+            extra = {k: r[k] for k in ("needs", "trust_gone", "tries_left", "retry_at", "field", "errors", "code") if k in r}
             raise Refused(int(r.get("status") or 500), str(r.get("error") or "the setup helper refused"), **extra)
         return r
 
@@ -525,9 +525,8 @@ class SetupPage:
             "<link rel=stylesheet href='/setup/shared/components.css'><link rel=stylesheet href='/setup/shared/components-jobs.css'><link rel=stylesheet href='/setup/shared/alerts.css'>"
             "<link rel=stylesheet href='/setup/setup.css'>"
             + "".join(f"<link rel=stylesheet href='/setup/{n}'>" for n in CSS_SECTIONS) +
-            f"<body>{shared_files.sprite_inline(self.shared)}<div id=app></div><script src='/setup/setup.js'></script><script src='/setup/setup_alertbar.js'></script><script src='/setup/setup_overview_alerts.js'></script><script src='/setup/setup_alerts.js'></script>"
-            "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_overview.js'></script><script src='/setup/setup_features.js'></script><script src='/setup/setup_updates.js'></script><script src='/setup/setup_settings.js'></script><script src='/setup/setup_devices.js'></script><script src='/setup/setup_printers.js'></script>"
-            "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_storage.js'></script><script src='/setup/setup_logs.js'></script><script src='/setup/setup_intake.js'></script><script src='/setup/setup_flash.js'></script></body></html>",
+            f"<body>{shared_files.sprite_inline(self.shared)}<div id=app></div>"
+            + "".join(f"<script src='/setup/{n}'></script>" for n in SHELL_SCRIPTS) + "</body></html>",
             headers=HEADERS)
 
     async def asset(self, request: Request):
@@ -591,7 +590,8 @@ class SetupPage:
                          "optional_ai": m.optional_ai, "on": n in on} for n, m in modules.MODULES.items()],
             "anthropic": {"set": _present(cli.KEY_FILE), "ai_intake": "ai_intake" in on},
             "passphrase": {"set": _present(cli.WEB_PASSPHRASE), "web": "web" in on},
-            "library_token": {"set": _present("github_token"), "library": "library" in on},
+            "reader_install_pending": getting_started.reader_install_pending(cfg),
+            "history": self.history,
             "local_intake_token": {"set": _present("local_intake_token"), "on": "local_intake" in on},
             "printers": {"on": bool(self.families), "bambu": "bambu" in self.families,
                          "klipper": "klipper" in self.families, "list": self._printer_rows()},
@@ -640,6 +640,10 @@ class SetupPage:
                     "refused": "this page is the server module's: switch it off at the server: "
                                "sudo filament-kit modules disable server"}
         chosen, notes = modules.toggle(on, name)
+        conflict = hubport.remote_conflict(cfg) if name == "remote" and name in chosen else None
+        if conflict:
+            return {"name": name, "on": False, "notes": [], "after": sorted(on), "needs": [],
+                    "refused": conflict, "code": "remote_443"}
         needs = [{"key": k, "prompt": modules._SETTING_PROMPTS[k].rstrip(": ")}
                  for k in modules.missing_settings(chosen, cfg) if k != "station.allow"]
         return {"name": name, "on": name in chosen, "notes": notes,
@@ -731,7 +735,7 @@ class SetupPage:
 
     async def printer_add(self, request: Request, body: dict):
         """Add a printer by its address, kept as typed: its serial from its TLS certificate (CN), else the typed one
-        (upper-cased)."""
+        (upper-cased). The guided drawer requires the TLS read to succeed."""
         manager = self._manager()
         ip = hostaddr.clean(body.get("address", body.get("ip")))
         problem = hostaddr.form_error(ip)
@@ -749,6 +753,8 @@ class SetupPage:
                 seen, why = setup_serial(ip), ""
             except OSError as e:
                 seen, why = None, f"the printer at {ip} did not answer ({type(e).__name__})"
+                if body.get("require_certificate") is True:
+                    raise Refused(400, why, field="address") from None
             if seen and typed and seen != typed:
                 raise Refused(400, f"the printer at {ip} names itself {seen}, not {typed}: check the address",
                               field="address")
@@ -833,6 +839,9 @@ class SetupPage:
         def run() -> bool:
             self._entry(serial)
             gone = registry.remove(serial)
+            if gone:
+                from .bridge import auto_slot
+                auto_slot.default_store().drop_printer(serial)
             self.printers.sync()
             return gone
         if not await anyio.to_thread.run_sync(run):
@@ -846,18 +855,6 @@ class SetupPage:
         await self._helper({"op": "passphrase_set", "code": body["code"], "passphrase": body.get("passphrase")})
         self.audit(request, "web passphrase replaced" if had else "web passphrase set")
         return {"ok": True, "set": True}
-
-    async def library_token(self, request: Request, body: dict):
-        had = _present("github_token")
-        await self._helper({"op": "library_token_set", "code": body["code"], "token": body.get("token")})
-        self.audit(request, "library token replaced" if had else "library token set")
-        return {"ok": True, "set": True}
-
-    async def library_token_remove(self, request: Request, body: dict):
-        r = await self._helper({"op": "library_token_remove", "code": body["code"]})
-        if r.get("removed"):
-            self.audit(request, "library token removed")
-        return {"ok": True, "set": False}
 
     async def local_intake_token(self, request: Request, body: dict):
         had = _present("local_intake_token")

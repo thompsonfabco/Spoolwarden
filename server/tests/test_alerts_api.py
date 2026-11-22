@@ -55,12 +55,22 @@ def hub(env, sm):
     return TestClient(create_app(sm=sm))
 
 
+def _redeem_quietly(device: str, **issue_kw) -> dict:
+    prev = event_sink.sink()
+    event_sink.set_sink(None)
+    try:
+        token = pairing.redeem_code(pairing.issue(device, **issue_kw).code)
+    finally:
+        event_sink.set_sink(prev)
+    return {"Authorization": "Bearer " + token}
+
+
 def phone() -> dict:
-    return {"Authorization": "Bearer " + pairing.redeem_code(pairing.issue("Pixel").code)}
+    return _redeem_quietly("Pixel")
 
 
 def web() -> dict:
-    return {"Authorization": "Bearer " + pairing.redeem_code(pairing.issue("web (MCP)", role=pairing.WEB_ROLE).code)}
+    return _redeem_quietly("web (MCP)", role=pairing.WEB_ROLE)
 
 
 def write(store, kind, data=None, subject=None, **kw):
@@ -79,19 +89,23 @@ def test_the_server_texts_are_the_catalogue_texts():
 
 
 DYNAMIC = ("alerts_type_", "event_title_spool_", "event_text_spool_", "event_reason_", "event_title_check_",
-           "storage_use_disk_", "storage_use_item_", "status_alerts_")           # built from a kind or a key: `say(f"alerts_type_{k}")`
+           "storage_use_disk_", "storage_use_item_", "status_alerts_",           # built from a kind or a key: `say(f"alerts_type_{k}")`
+           "event_title_device_", "event_text_device_", "event_title_printer_added", "event_title_printer_changed",
+           "event_title_printer_removed", "event_text_printer_added", "event_text_printer_changed",
+           "event_text_printer_removed", "undo_why_")
 
 
 def test_every_server_text_is_built_somewhere_and_every_say_names_a_text():
     here = Path(alerts_api.__file__).parent
     code = "".join((here / n).read_text(encoding="utf-8")
-                   for n in ("alerts_api.py", "alerts_cli.py", "status.py", "cli.py", "api.py", "watch.py"))
+                   for n in ("alerts_api.py", "alerts_cli.py", "status.py", "cli.py", "api.py", "watch.py",
+                             "undo.py", "analytics.py", "csv_io.py", "health.py"))
     block = Path(alerts_api.__file__).read_text(encoding="utf-8").split("MESSAGES = {", 1)[1].split(chr(10) + "}" + chr(10), 1)[0]
     outside = code.replace(block, "")
     unused = [k for k in alerts_api.MESSAGES if f'"{k}"' not in outside and not k.startswith(DYNAMIC)
               and not k.endswith("_no_percent")]
     assert not unused, f"texts nobody builds: {unused}"
-    for m in re.finditer(r'\bsay\("([a-z_]+)"[,)]', code):
+    for m in re.finditer(r'(?<![\w.])say\("([a-z_]+)"[,)]', code):   # not address_texts.say(...)
         assert m.group(1) in alerts_api.MESSAGES, m.group(1)
 
 

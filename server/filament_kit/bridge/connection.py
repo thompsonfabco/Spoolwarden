@@ -640,9 +640,10 @@ class Manager:
         conn = self._conn(serial)
         if conn is None:
             return None
-        from . import pending       # here: pending imports loading, which imports this module
-        return pending.annotate(serial, status.summarize(conn.report(), self._spool_list(), printer_name=conn.name,
-                                                         updated=conn.updated, model=conn.model))
+        from . import auto_slot, pending       # here: pending/auto_slot import loading, which imports this module
+        st = pending.annotate(serial, status.summarize(conn.report(), self._spool_list(), printer_name=conn.name,
+                                                       updated=conn.updated, model=conn.model))
+        return auto_slot.annotate(serial, st)
 
     def summary(self, serial: str) -> dict:
         conn = self._conn(serial)

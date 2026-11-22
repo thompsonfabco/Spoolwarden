@@ -7,7 +7,7 @@
 const SW = window.SW, { t, h } = SW;
 const doc = document, $ = (s, r = doc) => r.querySelector(s), E = (tag, cls, ...kids) => h(tag, { class: cls }, ...kids);
 const NAMED = new Set(["backup", "restore", "apply", "update", "rollback", "check", "library_update", "library_rollback", "remote_issue",
-  "station_pair", "reader_setup"]);
+  "station_pair", "reader_setup", "port_change"]);
 const RESTARTS = new Set(["apply", "update", "rollback", "restore"]);    // jobs that restart the Hub (8.4, "Error")
 const WORD = { running: "status_running", done: "status_done", failed: "status_failed" };
 const titleOf = (name) => t(NAMED.has(name) ? "job_title_" + name : "job_title_other");

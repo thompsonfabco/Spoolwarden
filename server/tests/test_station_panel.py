@@ -335,7 +335,7 @@ def test_state_air_and_photo():
         assert s["air"] == {"temp_c": 21.43, "rh": 45.2, "hpa": 1013.25, "age_seconds": 2}
         assert s["photo"] == {"url": "/photo", "taken_at": station_http.iso(now - 1), "age_seconds": 1}
         assert set(s) == {"tag", "scale", "last_weight", "panel", "panel_version", "panel_nfc", "air", "photo",
-                      "flow"}
+                      "flow", "version", "settings_changed"}        # the last two: R83 section 10.4
         assert s["panel_version"] == "7"
         assert s["flow"] == {"step": "ready", "message": "", "spool": None, "filament": {"id": 45}}
         assert s["last_weight"] == {"grams": 1098.0, "age_seconds": 3, "held": True}
@@ -374,7 +374,7 @@ def test_photo_served_as_jpeg_and_404_without_one():
         assert (code, hdr["Content-Type"], hdr["Cache-Control"], body) == (200, "image/jpeg", "no-store", JPEG)
         assert int(hdr["Content-Length"]) == len(JPEG)
         code, _, body = _fetch(base + "/photo")
-        assert code == 404 and json.loads(body) == {"status": "error", "message": "not found"}
+        assert code == 404 and json.loads(body) == {"error": "not_found", "message": "There is nothing here."}
     finally:
         srv.shutdown()
 
@@ -394,8 +394,12 @@ def test_station_stays_read_only():
     now = time.time()
     srv, base = _serve(lambda: _raw(now, photo=JPEG, photo_at=now), {"127.0.0.1"})
     try:
-        for method in ("POST", "PUT", "DELETE"):
+        for method in ("PUT", "DELETE"):
             assert _fetch(base + "/photo", method)[0] == 501  # no do_<method> on the handler
+        # the only POST routes are the ticket, session and settings ones (R83 section 10.4; test_ev3_station_page.py): a
+        # read route takes none, and a station made with no settings store has no settings route
+        for path in ("/photo", "/state", "/last-tag", "/settings"):
+            assert _fetch(base + path, "POST")[0] == 404
     finally:
         srv.shutdown()
 

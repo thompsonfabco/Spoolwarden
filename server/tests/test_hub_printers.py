@@ -10,12 +10,12 @@ import os
 
 import pytest
 
-from filament_kit import api, pairing
+from filament_kit import api, pairing, setup_page
 from filament_kit.bridge import mapping as bridge_mapping, registry, status as bridge_status, tlspin
 
 from test_hub_page_audit import _missing, _node, _run, _serve, hub_app  # noqa: F401
 from test_hub_presets_ui import AsHttps, T, _drive
-from test_setup_page import CODE, FakeManager
+from test_setup_page import CODE, STATIC, FakeManager
 from test_setup_printer_states import _klipper_status
 
 X1 = "00M00A000000001"
@@ -116,6 +116,8 @@ def printers_hub(monkeypatch, request, mapper):
     monkeypatch.setattr(FakeManager, "state", lambda self, serial: "offline" if serial == MINI else "connected", raising=False)
     monkeypatch.setattr(FakeManager, "status", status, raising=False)
     monkeypatch.setattr(tlspin, "leaf_fp", lambda host, port: (_ for _ in ()).throw(OSError("no route")))      # a test needs no network
+    serials = {"192.0.2.77": "01P00A000000009", "192.0.2.79": "01P00A000000010"}
+    monkeypatch.setattr(setup_page, "setup_serial", serials.get)
     running = _serve(AsHttps(app), port)
     try:
         yield running.url + "/setup", voron.serial
@@ -380,9 +382,10 @@ PRINTERS_PRELUDE = """
 ADD_DRAWER = """(async () => {""" + PRINTERS_PRELUDE + """
   await unlock();
   await until("no Add a printer drawer", () => document.querySelector(".detail--drawer .printers-add"));
-  const drawer = document.querySelector(".detail--drawer"), add = drawer.querySelector(".detail__foot .btn--primary");
-  if (add.textContent.trim() !== "Add printer") throw new Error("Printers: the drawer's main action is " + add.textContent);
-  add.click();
+  const drawer = document.querySelector(".detail--drawer");
+  const button = (label) => [...drawer.querySelectorAll(".detail__foot .btn:not([hidden])")].find((b) => b.textContent.trim() === label);
+  button("Next").click();
+  button("Next").click();
   await until("no error at an empty address", () => drawer.querySelector('.field[data-state="error"] .field__error:not([hidden])'));
   const set = (name, v) => { const c = drawer.querySelector('[name="' + name + '"]'); c.value = v; c.dispatchEvent(new Event("input", { bubbles: true })); };
   set("address", "192.0.2.77"); set("access_code", "12345678");
@@ -390,7 +393,8 @@ ADD_DRAWER = """(async () => {""" + PRINTERS_PRELUDE + """
   window.fetch = (u, o) => (String(u).endsWith("/api/printers") && o && o.method === "POST"
     ? Promise.resolve(new Response(JSON.stringify({ error: "the printer at 192.0.2.77 names itself 01P00A000000009, not 00M00A000000001: check the address", field: "address" }),
       { status: 400, headers: { "Content-Type": "application/json" } })) : real(u, o));
-  add.click();
+  button("Next").click();
+  button("Add printer").click();
   await until("no refusal at the address field", () => /calls itself/.test(drawer.querySelector('[name="address"]').closest(".field").innerText));
   if (document.activeElement !== drawer.querySelector('[name="address"]')) throw new Error("Printers: the refused field is not focused");
   window.fetch = real;
@@ -465,11 +469,19 @@ def test_the_klipper_add_on_commands_pass_the_audit_while_locked(monkeypatch, kl
 ADD_PRE = PRE + UNLOCK + """
 location.hash = "#printers";
 await until(() => rowOf("Workshop X1"), "the rows");
-const posts = [], real = window.fetch;
+const posts = [], probes = [], probeReplies = [], order = [], real = window.fetch;
 let hold = null;                                    // a promise the Hub's answer to an add waits for
 window.fetch = (u, o) => {
   const add = o && o.method === "POST" && /\\/setup\\/api\\/printers(\\/klipper)?$/.test(String(u));
-  if (add) posts.push([String(u).replace(/^.*\\/setup\\/api\\//, ""), JSON.parse(o.body)]);
+  if (add) {
+    order.push("save");
+    posts.push([String(u).replace(/^.*\\/setup\\/api\\//, ""), JSON.parse(o.body)]);
+  }
+  if (o && o.method === "POST" && String(u).endsWith("/setup/api/printers/klipper/probe")) {
+    order.push("probe");
+    probes.push(JSON.parse(o.body));
+    return Promise.resolve(Response.json({ reachable: probeReplies.shift() ?? true }));
+  }
   return add && hold ? hold.then(() => real(u, o)) : real(u, o);
 };
 const open = () => $("dialog[open] .detail--drawer");
@@ -479,10 +491,43 @@ const openAdd = async () => { addButton().click(); return until(open, "the Add d
 const kind = (region, k) => { $('input[type=radio][value="' + k + '"]', region).click(); };
 const typed = () => [...document.querySelectorAll("input[type=password]")].filter((i) => i.value).length;
 const dup = () => { const ids = [...document.querySelectorAll("[id]")].map((e) => e.id), seen = new Set(); return ids.filter((i) => seen.size === seen.add(i).size); };
-const footBtn = (region, label) => [...region.querySelectorAll(".detail__foot .btn")].find((b) => text(b) === label);
+const footBtn = (region, label) => [...region.querySelectorAll(".detail__foot .btn:not([hidden])")].find((b) => text(b) === label);
+const next = (region) => footBtn(region, "Next").click();
+const later = async (region) => (await until(() => footBtn(region, "Later"), "the mapping step")).click();
 const said = (name) => text([...rowOf(name).querySelectorAll(".coll__row--note .result")].pop());
 const leftOver = () => ({ drawers: document.querySelectorAll(".detail--drawer, dialog.dialog--drawer").length, typed: typed(), dup: dup() });
 """
+
+
+def test_checklist_opens_guided_add_and_the_existing_mapping_confirmation(printers_hub, tmp_path):
+    url, _ = printers_hub
+    page = _drive(url, tmp_path, PRE + """
+const real = window.fetch;
+let mapWrites = 0;
+window.fetch = (u, init) => {
+  if (String(u).endsWith("/setup/api/start")) return Promise.resolve(Response.json({ show: true, done: 0, total: 2,
+    steps: [{ id: "printer", state: "next", target: "#printers/add" }, { id: "slots", state: "open", target: "#printers//map" }] }));
+  if (init?.method === "POST" && String(u).endsWith("/map")) mapWrites++;
+  return real(u, init);
+};
+location.hash = "#overview";
+await refresh();
+const add = await until(() => $('[data-action="start-go-printer"]'), "the checklist's Add a printer");
+const addLabel = text(add);
+add.click();
+const drawer = await until(() => $("dialog[open] .printers-add"), "the add drawer");
+const addHash = location.hash;
+$(".detail__close", drawer.closest(".detail")).click();
+await until(() => !$("dialog[open]"), "the add drawer to close");
+location.hash = "#overview";
+const map = await until(() => $('[data-action="start-go-slots"]'), "the checklist's Map slots");
+map.click();
+const confirm = await until(() => $("dialog[open] .dialog__title"), "mapping confirmation");
+return { addLabel, addHash, mapTitle: text(confirm), mapHash: location.hash, mapWrites };
+""")
+    assert (page["addLabel"], page["addHash"]) == (T("printers_add"), "#printers/add"), page
+    assert page["mapTitle"] == T("printers_map_title", name="Workshop X1"), page
+    assert page["mapHash"] == "#printers" and page["mapWrites"] == 0, page
 
 
 def test_adding_a_bambu_and_a_klipper_printer_sends_one_add_each_and_opens_the_new_row(printers_hub, tmp_path):
@@ -493,38 +538,150 @@ def test_adding_a_bambu_and_a_klipper_printer_sends_one_add_each_and_opens_the_n
 const out = {};
 let region = await openAdd();
 out.hashOpen = location.hash;
+next(region);
+$("details", region).open = true;
 out.bambuFields = ["address", "access_code", "serial"].map((n) => !!$('[name="' + n + '"]', region).offsetParent);
 setv(region, "address", " 192.0.2.77 "); setv(region, "access_code", "12345678"); setv(region, "name", "Fresh P1"); setv(region, "serial", "01P00A000000009");
+next(region);
 const add = footBtn(region, "Add printer");
 add.click(); add.click();
 await sleep(50); add.click();
+const map = await until(() => footBtn(region, "Map slots"), "the mapping step");
+map.click();
+const ask = await until(() => $("dialog[open]:not(.dialog--drawer)"), "the mapping confirmation");
+out.map = text(ask);
+$('[data-action="cancel"]', ask).click();
 await until(() => !open() && rowOf("Fresh P1"), "the drawer to close and the new row");
 await sleep(300);
 const row = rowOf("Fresh P1");
 out.bambu = { posts: posts.slice(), expanded: row.querySelector(".coll__expand").getAttribute("aria-expanded"), said: said("Fresh P1"), hash: location.hash, left: leftOver() };
 posts.length = 0;
+order.length = 0;
 region = await openAdd();
 out.second = dup();
 kind(region, "klipper");
+next(region);
 out.klipperFields = ["host", "port", "api_key"].map((n) => !!$('[name="' + n + '"]', region).offsetParent);
 out.bambuHidden = ["address", "access_code"].map((n) => !$('[name="' + n + '"]', region).offsetParent);
 setv(region, "host", "192.0.2.88"); setv(region, "name", "Fresh Klipper"); setv(region, "api_key", "k-secret");
+next(region);
 const go = footBtn(region, "Add printer");
 go.click(); go.click();
+await later(region);
 await until(() => !open() && rowOf("Fresh Klipper"), "the drawer to close and the Klipper row");
 await sleep(300);
-out.klipper = { posts: posts.slice(), expanded: rowOf("Fresh Klipper").querySelector(".coll__expand").getAttribute("aria-expanded"), said: said("Fresh Klipper"), left: leftOver() };
+out.klipper = { posts: posts.slice(), probes, order, focused: document.activeElement.getAttribute("aria-label"),
+  expanded: rowOf("Fresh Klipper").querySelector(".coll__expand").getAttribute("aria-expanded"), said: said("Fresh Klipper"), left: leftOver() };
 return out;
 """)
     assert page["hashOpen"] == "#printers/add" and page["bambuFields"] == [True, True, True], page
-    assert page["bambu"]["posts"] == [["printers", {"address": "192.0.2.77", "access_code": "12345678", "name": "Fresh P1", "serial": "01P00A000000009", "code": CODE}]], page
+    assert page["bambu"]["posts"] == [["printers", {"address": "192.0.2.77", "access_code": "12345678", "name": "Fresh P1", "serial": "01P00A000000009", "require_certificate": True, "code": CODE}]], page
     assert page["bambu"]["expanded"] == "true" and page["bambu"]["said"].startswith(T("printers_added_connecting")), page
     assert page["bambu"]["hash"] == "#printers/01P00A000000009", page
+    assert T("printers_map_title", name="Fresh P1") in page["map"], page
     assert page["bambu"]["left"] == {"drawers": 0, "typed": 0, "dup": []}, page
     assert page["second"] == [] and page["klipperFields"] == [True, True, True] and page["bambuHidden"] == [True, True], page
     assert page["klipper"]["posts"] == [["printers/klipper", {"host": "192.0.2.88", "port": "7125", "name": "Fresh Klipper", "api_key": "k-secret", "code": CODE}]], page
+    assert page["klipper"]["order"] == ["probe", "save"], page
+    assert page["klipper"]["probes"] == [{"host": "192.0.2.88", "port": "7125", "api_key": "k-secret", "code": CODE}], page
+    assert page["klipper"]["focused"] == T("printers_test_name", name="Fresh Klipper"), page
     assert page["klipper"]["expanded"] == "true" and page["klipper"]["said"].startswith(T("printers_added_connecting")), page
     assert page["klipper"]["left"] == {"drawers": 0, "typed": 0, "dup": []}, page
+
+
+def test_add_uses_a_found_klipper_and_needs_explicit_override_after_a_failed_probe(printers_hub, tmp_path):
+    url, _ = printers_hub
+    page = _drive(url, tmp_path, ADD_PRE + """
+const region = await openAdd();
+kind(region, "klipper");
+next(region);
+setv(region, "host", "192.0.2.56"); setv(region, "api_key", "key-for-another-printer");
+footBtn(region, "Back").click();
+$(".printers-add__found .btn", region).click();
+await until(() => footBtn(region, "Back"), "details after using the found printer");
+const host = $('[name="host"]', region), port = $('[name="port"]', region), key = $('[name="api_key"]', region);
+const found = [host.value, port.value, key.value];
+setv(region, "name", "Found Klipper"); setv(region, "api_key", "k-secret");
+footBtn(region, "Back").click();
+await until(() => !footBtn(region, "Back"), "the printer choice");
+next(region);
+const kept = [host.value, port.value, $('[name="name"]', region).value, key.value];
+next(region);
+probeReplies.push(false, false);
+footBtn(region, "Add printer").click();
+const retry = await until(() => footBtn(region, "Try again"), "the first failed test");
+const failure = await until(() => text($(".detail__foot .result", region)), "the failure text");
+const noSave = posts.length;
+retry.click();
+await until(() => probes.length === 2 && retry.getAttribute("aria-busy") !== "true", "the retry result");
+const noRetrySave = posts.length;
+footBtn(region, "Add anyway").click();
+await later(region);
+await until(() => !open() && !$(".detail--drawer") && rowOf("Found Klipper"), "the saved printer");
+return { found, kept, failure, noSave, noRetrySave, order, posts, left: leftOver() };
+""")
+    assert page["found"] == ["192.0.2.57", "7125", ""], page
+    assert page["kept"] == ["192.0.2.57", "7125", "Found Klipper", "k-secret"], page
+    assert page["failure"].startswith(T("printer_guided_test_failed", address="192.0.2.57:7125")), page
+    assert page["noSave"] == page["noRetrySave"] == 0, page
+    assert page["order"] == ["probe", "probe", "save"], page
+    assert page["posts"] == [["printers/klipper", {"host": "192.0.2.57", "port": "7125", "name": "Found Klipper", "api_key": "k-secret", "code": CODE}]], page
+    assert page["left"] == {"drawers": 0, "typed": 0, "dup": []}, page
+
+
+@pytest.mark.parametrize("look", ["palette", "panes"])
+def test_later_focuses_test_connection_inside_the_new_printers_detail(printers_hub, tmp_path, look):
+    url, _ = printers_hub
+    page = _drive(url, tmp_path, ADD_PRE + """
+SW.setLook("__LOOK__");
+const region = await openAdd();
+kind(region, "klipper");
+next(region);
+setv(region, "host", "192.0.2.88"); setv(region, "name", "Fresh Klipper");
+next(region);
+footBtn(region, "Add printer").click();
+await later(region);
+const focused = await until(() => document.activeElement.matches('.detail [data-action="test-connection"]')
+  && document.activeElement, "the detail's Test connection button");
+const detail = focused.closest(".detail");
+return { name: focused.getAttribute("aria-label"), inSheet: !!detail.closest("dialog[open]"),
+  said: "__LOOK__" === "palette" ? await until(() => { const el = [...detail.querySelectorAll(".result")].find((e) => !e.closest(".plive") && text(e)); return el ? text(el) : null; }, "the added message in the sheet") : said("Fresh Klipper") };
+""".replace("__LOOK__", look))
+    assert page["name"] == T("printers_test_name", name="Fresh Klipper"), page
+    assert page["inSheet"] == (look == "palette"), page
+    assert page["said"].startswith(T("printers_added_connecting")), page
+
+
+def test_page_menu_downloads_printers_csv_after_unlock(printers_hub, tmp_path):
+    url, _ = printers_hub
+    page = _drive(url, tmp_path, PRE + """
+location.hash = "#printers";
+await until(() => rowOf("Workshop X1"), "the rows");
+const real = window.fetch, requests = [];
+window.fetch = async (u, o) => {
+  const r = await real(u, o);
+  if (String(u).endsWith("/export/printers.csv")) {
+    requests.push({ method: o.method, code: o.headers["X-Setup-Code"], status: r.status, csv: await r.clone().text() });
+  }
+  return r;
+};
+const files = [], click = HTMLAnchorElement.prototype.click;
+HTMLAnchorElement.prototype.click = function () { if (this.download) files.push(this.download); else click.call(this); };
+const menu = $('[aria-label="More actions for this page"]');
+menu.click();
+[...document.querySelectorAll('[role="menuitem"]')].find((b) => text(b) === "Download as CSV").click();
+const ask = await until(() => $('dialog[open] input[type="password"]'), "the unlock prompt");
+const before = requests.length;
+ask.value = "__CODE__";
+$('[data-action="confirm"]', ask.closest("dialog")).click();
+await until(() => files.length, "the CSV download");
+return { before, requests, files };
+""")
+    assert page["before"] == 0 and page["files"] == ["printers.csv"], page
+    assert len(page["requests"]) == 1, page
+    r = page["requests"][0]
+    assert (r["method"], r["code"], r["status"]) == ("GET", CODE, 200), page
+    assert r["csv"].startswith("name,kind,model,slot,spool\r\n") and "Workshop X1,bambu,X1C,A1," in r["csv"], page
 
 
 def test_cancel_with_typed_values_asks_first_and_the_busy_drawer_says_wait(printers_hub, tmp_path):
@@ -534,6 +691,7 @@ def test_cancel_with_typed_values_asks_first_and_the_busy_drawer_says_wait(print
     page = _drive(url, tmp_path, ADD_PRE + """
 const out = {};
 let region = await openAdd();
+next(region);
 setv(region, "address", "192.0.2.78"); setv(region, "access_code", "87654321");
 footBtn(region, "Cancel").click();
 const ask = await until(() => $("dialog[open]:not(.dialog--drawer)"), "the leave-first ask");
@@ -547,14 +705,17 @@ await until(() => !open() && !$(".detail--drawer"), "the drawer to close");
 out.leave = { posts: posts.length, hash: location.hash, left: leftOver() };
 region = await openAdd();
 out.second = dup();
+next(region);
 setv(region, "address", "192.0.2.79"); setv(region, "access_code", "12345678"); setv(region, "serial", "01P00A000000010");
 let release; hold = new Promise((r) => { release = r; });
+next(region);
 footBtn(region, "Add printer").click();
 await until(() => footBtn(region, "Cancel") && $('.detail__foot [aria-busy="true"]', region), "the add to be sent");
 footBtn(region, "Cancel").click();
 await until(() => text($(".detail__foot .result", region)), "the warning");
 out.busy = { warning: text($(".detail__foot .result", region)), open: !!open(), asked: !!$("dialog[open]:not(.dialog--drawer)"), posts: posts.length };
 release();
+await later(region);
 for (let i = 0; i < 300 && (open() || $(".detail--drawer")); i++) await sleep(100);   // until the closed drawer is gone too, as the leave step waits
 out.end = { left: leftOver(), hash: location.hash, still: open() ? text(open()) : null };
 return out;
@@ -616,3 +777,141 @@ return { width: document.documentElement.clientWidth, caption: box($(".code__cap
     assert page["captionInBlock"] is False and page["copyInBlock"] is False, page
     assert page["caption"][0] >= 0 and page["copy"][0] >= 0 and page["caption"][1] <= page["width"] and page["copy"][1] <= page["width"], page
     assert page["scroll"] <= page["width"], page
+
+
+# ---------------------------------------------------------------- EV4b phase 2: live view mounted in detailRegion, old link removed
+
+def test_ev4b_removes_external_live_view_links_while_preserving_add_and_csv(printers_hub, tmp_path):
+    """EV4b phase 2 removes liveUrl and both printers_live_view links while keeping Guided Add and Printers CSV."""
+    js = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
+    assert "liveUrl" not in js and "printers_live_view" not in js and "/intake" not in js
+    assert "printersMenu" in js and "openAddDrawer" in js
+    url, _ = printers_hub
+    page = _drive(url, tmp_path, PRE + """
+location.hash = "#printers";
+await until(() => rowOf("Workshop X1"), "the rows");
+const head = $(".printers-head");
+const links = [...document.querySelectorAll(".printers-head a")].map((a) => text(a));
+const addBtn = [...head.querySelectorAll("button")].some((b) => text(b) === "Add a printer");
+const menuBtn = $('[aria-label="More actions for this page"]', head);
+menuBtn.click();
+const csv = [...document.querySelectorAll('[role="menuitem"]')].some((b) => text(b) === "Download as CSV");
+return { links, addBtn, csv };
+""")
+    assert T("printers_live_view") not in page["links"], page
+    assert page["addBtn"] is True and page["csv"] is True, page
+
+
+def test_ev4b_mounts_printer_live_above_facts_and_stops_polling_and_camera_on_collapse_and_redraw(printers_hub, tmp_path):
+    """EV4b phase 2 mounts window.printerLive(p) above facts(p, box), drops slotsBox/detailSlots, and stops polling and
+    camera sessions cleanly on detail collapse, re-open, table redraw, and leaving the section."""
+    live_js = (STATIC / "setup_printer_live.js").read_text(encoding="utf-8")
+    url, _ = printers_hub
+    script = PRE + UNLOCK + """
+const realFetch = window.fetch.bind(window);
+const calls = [];
+const livePayload = {
+  summary: { gcode_state: "RUNNING", percent: 42 },
+  state: "connected", family: "bambu", name: "Workshop X1",
+  camera: { kind: "mjpeg" }, controls: { light: true },
+  status: { gcode_state: "RUNNING", job: "benchy.3mf", percent: 42, layer: 80, total_layers: 190,
+    remaining_min: 72, temps: { nozzle: [{ current: 220, target: 220 }], bed: { current: 55, target: 55 } },
+    ams: [{ unit: 0, label: "AMS A", type_name: "AMS 2 Pro", slots: [
+      { slot: 0, label: "A1", type: "PLA", color_hex: "2B2B2E", active: true, present: true,
+        spool: { id: 7, name: "PolyTerra PLA", material: "PLA", color_hex: "2B2B2E", remaining_weight: 620 } }] }],
+    hms: [], print_error: "", light: "on", notes: [] }
+};
+window.fetch = async (u, init) => {
+  const s = String(u), m = (init && init.method) || "GET";
+  if (/\\/setup\\/api\\/printers\\/[^/]+\\/(live|usage|camera\\/ticket|camera\\/close)/.test(s)) {
+    calls.push(m + " " + s.replace(/^.*\\/setup\\/api\\//, ""));
+    if (s.includes("/live")) return Response.json(livePayload);
+    if (s.includes("/usage")) return Response.json({ entries: [] });
+    if (s.includes("/camera/ticket")) return Response.json({ ticket: "t1", expires_in: 60 });
+    if (s.includes("/camera/close")) return Response.json({ closed: true });
+  }
+  return realFetch(u, init);
+};
+Object.defineProperty(HTMLImageElement.prototype, "src", { configurable: true, get() { return this.getAttribute("data-src") || ""; }, set(v) { this.setAttribute("data-src", v); } });
+if (typeof window.printerLive !== "function") {
+""" + live_js + """
+}
+const origLive = window.printerLive;
+const created = [], stopped = [];
+window.printerLive = function (p, ctx) {
+  const el = origLive(p, ctx);
+  created.push(p.serial);
+  const origStop = el.stop;
+  el.stop = () => { stopped.push(p.serial); if (origStop) origStop(); };
+  return el;
+};
+location.hash = "#printers";
+await until(() => rowOf("Workshop X1"), "the rows");
+const x1 = rowOf("Workshop X1");
+const det = () => x1.querySelector(".detail");
+const liveCalls = () => calls.filter((c) => c === "GET printers/00M00A000000001/live").length;
+const beforeOpen = { created: created.slice(), stopped: stopped.slice(), liveCalls: liveCalls() };
+// Expand Workshop X1: .plive mounts above .kv, no .printers-slots, polling starts, camera opens
+x1.querySelector(".coll__expand").click();
+await until(() => liveCalls() >= 1 && det().querySelector(".plive__slot"), "live view poll");
+const plive = det().querySelector(".plive"), kv = det().querySelector(".kv");
+const orderOk = !!(plive && kv && (plive.compareDocumentPosition(kv) & Node.DOCUMENT_POSITION_FOLLOWING));
+const view = rowViews.get("00M00A000000001");
+const openState = {
+  orderOk,
+  hasSlotsBox: !!det().querySelector(".printers-slots"),
+  detailSlotsUndefined: view && view.detailSlots === undefined,
+  hasViewLive: !!(view && view.live === plive),
+  hasRegionLive: !!(det()._live === plive),
+};
+$('[data-action="camera"]', plive).click();
+await until(() => calls.includes("POST printers/00M00A000000001/camera/ticket"), "camera ticket");
+// Collapse Workshop X1: live.stop() runs, camera/close fires, polling stops
+const stopBeforeCollapse = stopped.length;
+x1.querySelector(".coll__expand").click();
+await until(() => stopped.length > stopBeforeCollapse, "live.stop on collapse");
+await until(() => calls.includes("POST printers/00M00A000000001/camera/close"), "camera close on collapse");
+const callsAtCollapse = liveCalls();
+await sleep(2400);
+const callsWhileCollapsed = liveCalls() - callsAtCollapse;
+// Re-expand Workshop X1: fresh printerLive mounts and polling resumes
+const createdBeforeReopen = created.length;
+x1.querySelector(".coll__expand").click();
+await until(() => created.length > createdBeforeReopen && liveCalls() > callsAtCollapse, "live resumed on reopen");
+// Table redraw (lock change) invokes live.stop() on old rows
+const stopBeforeRedraw = stopped.length;
+SW.setLock("locked");
+await until(() => stopped.length > stopBeforeRedraw, "live.stop on redraw");
+// Leave section invokes live.stop() and stops polling
+const stopBeforeLeave = stopped.length;
+location.hash = "#overview";
+await until(() => stopped.length > stopBeforeLeave, "live.stop on leaving printers");
+const callsAtLeave = liveCalls();
+await sleep(2400);
+return { beforeOpen, openState, callsWhileCollapsed, callsAfterLeave: liveCalls() - callsAtLeave,
+  createdCount: created.length, stoppedCount: stopped.length };
+"""
+    page = _drive(url, tmp_path, script)
+    assert page["beforeOpen"]["liveCalls"] == 0, page
+    assert page["openState"] == {
+        "orderOk": True, "hasSlotsBox": False, "detailSlotsUndefined": True,
+        "hasViewLive": True, "hasRegionLive": True,
+    }, page
+    assert page["callsWhileCollapsed"] == 0, page
+    assert page["callsAfterLeave"] == 0, page
+    assert page["stoppedCount"] >= 3, page
+
+
+def test_ev4b_falls_back_to_slots_box_when_printer_live_is_undefined(printers_hub, tmp_path):
+    """Before setup_printer_live.js is loaded (window.printerLive undefined), detailRegion keeps fallback slotsBox."""
+    url, _ = printers_hub
+    page = _drive(url, tmp_path, PRE + """
+window.printerLive = undefined;
+location.hash = "#printers";
+await until(() => rowOf("Workshop X1"), "the rows");
+const x1 = rowOf("Workshop X1");
+x1.querySelector(".coll__expand").click();
+const det = await until(() => x1.querySelector(".detail:not([hidden])"), "the detail");
+return { hasSlotsBox: !!det.querySelector(".printers-slots"), hasLive: !!det.querySelector(".plive") };
+""")
+    assert page == {"hasSlotsBox": True, "hasLive": False}, page

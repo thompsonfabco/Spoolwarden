@@ -21,6 +21,41 @@ const SET_GROUPS = [
 const SET_KEY = Object.fromEntries(SET_GROUPS.map((g) => [g[0], g[1]]));
 const SET_ICON = Object.fromEntries(SET_GROUPS.map((g) => [g[0], g[2]]));
 
+const SET_STUB = {
+  settings_reader_cert_fp: "Certificate fingerprint",
+  settings_reader_cert_changed: "The reader's certificate changed. Trust the new certificate to use this address.",
+  settings_reader_trust: "Trust certificate",
+  settings_network_port_hint: "443, or 1024 to 65535.",
+  settings_network_port_empty: "Enter a port number.",
+  settings_catalog_other: "Other",
+  settings_catalog_other_material: "Material name",
+  settings_catalog_choose_material: "Choose…",
+  settings_catalog_more: "More (optional)",
+  settings_catalog_nozzle_min: "Nozzle min (°C)",
+  settings_catalog_nozzle_max: "Nozzle max (°C)",
+  settings_catalog_bed_min: "Bed min (°C)",
+  settings_catalog_bed_max: "Bed max (°C)",
+  settings_catalog_mvs: "Max volumetric speed (mm³/s)",
+  settings_catalog_added: "Added. Slicer presets are rebuilt in a minute.",
+  settings_catalog_error_brand: "Enter the brand.",
+  settings_catalog_error_name: "Enter the filament name.",
+  settings_catalog_error_material: "Choose a material.",
+  settings_catalog_error_other_material: "Enter the material name.",
+  settings_catalog_see_entries: "See custom entries",
+  settings_catalog_entries_title: "Custom catalog entries",
+  settings_catalog_entries_empty: "You have no entries of your own yet.",
+  settings_catalog_col_added: "Added",
+  settings_catalog_remove_title: "Remove {brand} {name}?",
+  settings_catalog_remove_body: "This custom entry is removed from the catalog and slicer presets will be rebuilt.",
+  settings_catalog_removed: "Removed.",
+  settings_catalog_entries_error: "Could not load custom entries.",
+};
+const setT = (key, vars) => {
+  const got = SW.t(key, vars);
+  if (got !== key || !Object.hasOwn(SET_STUB, key)) return got;
+  return SET_STUB[key].replace(/\{(\w+)\}/g, (_, k) => (vars && vars[k] !== undefined ? vars[k] : `{${k}}`));
+};
+
 let setEl = null;                 // the section's region, kept while Settings stays open
 let setGeneral = null;            // the one read of settings/general
 const setSeen = { g: null, lib: null, st: null, al: null };
@@ -201,7 +236,16 @@ function settingsTab() {
   const loads = SET_GROUPS.map(([id]) => loadGroup(id));
   later(Promise.all(loads));
   const first = setGroupId();
-  Promise.all(loads).then(() => { if (first && setEl && !SW.phone()) scrollToGroup(first, false, true); });
+  Promise.all(loads).then(() => {
+    const arrivedReader = first === "label-reader" && setEl && setEl.querySelector('.settings__reader[data-arrived="1"]');
+    if (arrivedReader) {
+      delete arrivedReader.dataset.arrived;
+      arrivedReader.scrollIntoView({ behavior: "auto", block: "nearest" });
+      markCurrent(first);
+    } else if (first && setEl && !SW.phone()) {
+      scrollToGroup(first, false, true);
+    }
+  });
   if (!setScrollOn) { setScrollOn = true; window.addEventListener("scroll", onScroll, { passive: true }); }
   markCurrent(first || SET_GROUPS[0][0]);
   return setEl;
@@ -285,16 +329,22 @@ function markCurrent(id) {
   if (!setEl) return;
   for (const a of setEl.querySelectorAll(".subnav__link, .settings__row")) { if (a.dataset.id === id) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current"); }
 }
+let setScrollLock = 0;
 function onScroll() {
   if (!setEl || !setEl.isConnected) { setScrollOn = false; window.removeEventListener("scroll", onScroll); return; }
-  if (SW.phone()) return;
+  if (SW.phone() || Date.now() < setScrollLock) return;
   let cur = SET_GROUPS[0][0];
   for (const [id] of SET_GROUPS) { const w = wrapOf(id); if (w && w.getBoundingClientRect().top <= window.innerHeight / 3) cur = id; }
+  if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
+    const last = [...SET_GROUPS].reverse().find(([id]) => wrapOf(id));
+    if (last) cur = last[0];
+  }
   markCurrent(cur);
 }
 function scrollToGroup(id, focus, instant) {
   const w = wrapOf(id);
   if (!w) return;
+  setScrollLock = Date.now() + (instant ? 100 : 600);
   w.scrollIntoView({ behavior: instant || matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
   const t1 = w.querySelector(".group__title");
   if (focus && t1) t1.focus({ preventScroll: true });
@@ -320,6 +370,17 @@ window.addEventListener("hashchange", () => {
   setTimeout(() => { setHashMove = false; }, 0);
   if (setEl && setEl.isConnected && tabNow() === "settings") {
     const id = setGroupId();
+    if (id === "label-reader" && window.__swReaderArrived) {
+      window.__swReaderArrived = false;
+      const box = setEl.querySelector(".settings__reader");
+      if (box) {
+        box.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" });
+        const checkBtn = box.querySelector('[data-action="check-reader"]');
+        if (checkBtn && !box.querySelector('[data-action="install-reader"]')) checkBtn.click();
+      }
+      markCurrent(id);
+      return;
+    }
     if (id && !SW.phone() && setEl.dataset.open !== id) scrollToGroup(id, true);
   }
 });
@@ -427,14 +488,14 @@ function groupLabelReader({ g }) {
   } else if (local) body.push(h("p", { class: "muted", textContent: SW.t("settings_reader_key_cloud_off") }));
 
   if (local) {
-    const saved = v["local_intake.url"] || "", out = slot();
+    const saved = v["local_intake.url"] || "", out = slot(), fpBox = h("div", { class: "settings__fp" });
     const addr = requiredField({ name: "local_intake.url", mono: true, label: SW.t("settings_reader_address"), value: saved, placeholder: SW.t("settings_reader_address_placeholder"),
       hint: SW.t("settings_reader_address_hint") });
     const tier = SW.segmented({ legend: SW.t("settings_reader_tier"), name: "local_intake.tier", value: v["local_intake.tier"] || "auto",
       options: [["auto", SW.t("settings_reader_tier_auto")], ["cpu", SW.t("settings_reader_tier_cpu")], ["gpu", SW.t("settings_reader_tier_gpu")]]
         .map(([value, label]) => ({ value, label })) });
-    const test = SW.btn(SW.t("settings_reader_test"), { action: "test-reader", run: () => testReader(out, addr, tier, saved) });
-    body.push(heading("settings_reader_group_local"), h("div", { class: "settings__withbtn" }, addr, test), out,
+    const test = SW.btn(SW.t("settings_reader_test"), { action: "test-reader", run: () => testReader(out, fpBox, addr, tier, saved) });
+    body.push(heading("settings_reader_group_local"), h("div", { class: "settings__withbtn" }, addr, test), h("div", { class: "settings__test-row" }, out, fpBox),
       h("div", { class: "settings__choice" }, tier, h("p", { class: "field__hint", textContent: SW.t("settings_reader_tier_hint") })),
       readerInstall(g));
     readerBadge(localBadge);
@@ -466,31 +527,60 @@ function readerBadge(into) {
     () => into.replaceChildren(SW.t("settings_reader_badge_local"), " ", SW.status("needs_look", { small: true }), " " + SW.t("settings_reader_local_down")));
 }
 // Test (03 10.5): the saved address without the code; an address typed and not saved after unlocking in place, saved nowhere
-async function testReader(out, addr, tier, saved) {
+async function testReader(out, fpBox, addr, tier, saved) {
   const url = addr._control.value.trim();
+  const formatFp = (fp) => (String(fp || "").replace(/\s+/g, "").match(/.{1,4}/g) || []).join(" ");
+  const paintFp = (r) => {
+    if (!r || !r.fp) return;
+    fpBox.replaceChildren(h("span", { class: "muted", textContent: setT("settings_reader_cert_fp") }), " ", h("span", { class: "mono settings__fp-code", textContent: formatFp(r.fp) }));
+  };
+  const runRemoteTest = async (trust) => {
+    const picked = tier.querySelector("input:checked");
+    await needCode(async () => {
+      try {
+        const payload = { url, tier: picked ? picked.value : "auto", code: theCode() };
+        if (trust) payload.trust = true;
+        show(await api("settings/local-intake/test", payload));
+      } catch (e) { if (e.locked) throw e; failed(e); }
+    }, () => { SW.result(out, null); fpBox.replaceChildren(); });
+  };
   const show = (r) => {
+    fpBox.replaceChildren();
+    paintFp(r);
+    if (r.pin === "changed") {
+      say(out, r.warning || setT("settings_reader_cert_changed"), "warn");
+      fpBox.append(SW.btn(setT("settings_reader_trust"), {
+        cls: "btn--small",
+        action: "trust-reader-cert",
+        run: () => { working(out, SW.t("settings_reader_testing")); runRemoteTest(true); },
+      }));
+      return;
+    }
     const tiers = Object.entries(r.tiers || {}).filter(([, t1]) => t1.usable).map(([k]) => k.toUpperCase());
     const list = new Intl.ListFormat("en", { type: "conjunction" }).format(tiers);
     if (!r.ok) { say(out, SW.t("settings_reader_test_none", { address: url }), false); return; }
     if (r.degraded) { say(out, SW.t("settings_reader_test_degraded", { reason: String(r.error || "").replace(/[.]$/, "") }), "warn"); return; }
     say(out, SW.t("settings_reader_test_ok", { version: r.version || "?", api: r.api_version, tiers: list, corrections: SW.t(r.revise ? "settings_reader_corrections_yes" : "settings_reader_corrections_no") }), true);
   };
-  const failed = (e) => say(out, e.status === 409 ? SW.t("settings_reader_test_off") : hubText(e.message), false);
+  const failed = (e) => { fpBox.replaceChildren(); say(out, e.status === 409 ? SW.t("settings_reader_test_off") : hubText(e.message), false); };
+  fpBox.replaceChildren();
   working(out, SW.t("settings_reader_testing"));
   if (url === saved) { try { show(await api("settings/local-intake")); } catch (e) { failed(e); } return; }
-  const picked = tier.querySelector("input:checked");
-  await needCode(async () => {
-    try { show(await api("settings/local-intake/test", { url, tier: picked ? picked.value : "auto", code: theCode() })); } catch (e) { if (e.locked) throw e; failed(e); }
-  }, () => SW.result(out, null));
+  await runRemoteTest(false);
 }
 
 // the reader that runs on this machine: install, upgrade, remove, and its token (jobs and one setting; not part of the Save)
 function readerInstall(g) {
+  const arrived = !!window.__swReaderArrived;
+  if (arrived) window.__swReaderArrived = false;
   const have = g.local_intake_installed, box = sbox(), install = sbox(), tokBox = sbox(), out = h("div");
   const check = () => runJob(box, "local_intake_plan");
   api("settings/local-intake/plan").then((r) => {
     const s = r.saved;
-    if (!s) return;
+    if (!s) {
+      if (arrived && !have) check();
+      return;
+    }
     const p = s.plan, t1 = p.tiers[p.tier], label = SW.t(p.upgrade ? "settings_reader_plan_upgrade" : p.same ? "settings_reader_plan_reinstall" : "settings_reader_plan_install");
     const name = SW.t("settings_reader_plan_button", { label, version: p.version, tier: p.tier });
     fill(out, h("p", { class: "muted", textContent: SW.t("settings_reader_plan_checked", { when: new Date(s.at * 1000).toLocaleString() }) }),
@@ -501,12 +591,13 @@ function readerInstall(g) {
       install,
       !s.fresh ? h("p", { class: "muted", textContent: SW.t("settings_reader_plan_old") }) : null,
       h("p", { class: "muted", textContent: SW.t("settings_reader_plan_tier") }));
+    if (arrived && !have && !s.fresh) check();
   }).catch((e) => say(out, hubText(e.message), false));
   const tok = SW.field({ row: true, type: "secret", label: SW.t("settings_reader_token"), attrs: { "aria-required": "false" } }), set = S.local_intake_token && S.local_intake_token.set;
   const tokSet = SW.btn(SW.t(set ? "common_replace" : "settings_reader_token_set"), { action: "set-token", run: () => settingAct(tokBox, "local_intake_token", { token: tok._control.value },
     () => loadGroup("label-reader", { quiet: true, fresh: true }), [tok._control]) });
   tok._control.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); tokSet.click(); } });
-  return h("div", { class: "settings__reader" },
+  return h("div", { class: "settings__reader", ...(arrived ? { "data-arrived": "1" } : {}) },
     h("p", { class: "muted", textContent: have ? SW.t("settings_reader_local_installed", { version: have.version, tier: have.tier }) : SW.t("settings_reader_local_not_installed") }),
     h("div", { class: "actions" },
       SW.btn(SW.t(have ? "settings_reader_check_upgrade" : "settings_reader_check_install"), { action: "check-reader", run: check }),
@@ -519,8 +610,111 @@ function readerInstall(g) {
 }
 
 // ----- Network and addresses (03 10.7) -----
+function waitNewPort(newPort, box, previous) {
+  const next = new URL(location.href);
+  next.port = newPort;
+  next.hash = "#settings/network";
+  const link = h("a", { class: "btn", href: next.href, textContent: SW.t("common_open_hub_page") });
+  const moving = SW.t("port_moving", { port: newPort });
+  say(box, [moving, " ", link], "run");
+  followApply(true);
+  const expires = Date.now() + 90000;
+  let seen = false, running = false, disconnected = false;
+  const probe = async () => {
+    if (Date.now() >= expires) {
+      say(box, [SW.t("common_wait_hub_back"), " ", link], "warn");
+      return;
+    }
+    try {
+      const job = await api("job");
+      running = job.name === "port_change" && job.running;
+      if (job.name === "port_change") {
+        seen ||= previous.name !== job.name || previous.next !== job.next || previous.text !== job.text
+          || previous.exit !== job.exit || job.running;
+        if (seen && !job.running) {
+          if (!job.lost && job.exit === 0) {
+            if (next.origin !== location.origin) location.replace(next.href);
+            else say(box, SW.t("port_done", { port: newPort, address: next.href }), true);
+          } else {
+            const key = job.lost ? "job_failed_stopped" : "job_failed";
+            say(box, SW.t(key, { title: SW.t("job_title_port_change") }), false);
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      // Moving the listener cuts off the old origin before it can report the job's exit.
+      if (e.unreachable && running && next.origin !== location.origin) {
+        location.replace(next.href);
+        return;
+      }
+      if (!disconnected) say(box, [SW.t("job_lost_touch"), " ", link], "warn");
+      disconnected = true;
+    }
+    setTimeout(probe, 1000);
+  };
+  probe();
+}
+
+function openPortDialog(curPort, remoteOn, opener, portBox) {
+  const portField = SW.field({
+    row: true,
+    mono: true,
+    cls: "settings__port-field",
+    name: "port",
+    label: SW.t("port_dialog_field"),
+    value: String(curPort),
+    hint: setT("settings_network_port_hint"),
+    attrs: { inputmode: "numeric" },
+    check: (x) => {
+      const s = x.trim();
+      if (!s) return setT("settings_network_port_empty");
+      if (!/^\d+$/.test(s)) return SW.t("port_error_not_a_number", { text: s });
+      const n = Number(s);
+      if (n !== 443 && (n < 1024 || n > 65535)) return SW.t("port_error_range_change", { port: n });
+      if (n === 443 && remoteOn) return SW.t("port_remote_on_443");
+      return null;
+    },
+  });
+  portField._control.oninput = () => {
+    const dlg = portField.closest("dialog");
+    const h2 = dlg && dlg.querySelector(".dialog__title");
+    const raw = portField._control.value.trim();
+    if (h2) h2.textContent = SW.t("port_dialog_title", { port: /^\d+$/.test(raw) ? raw : curPort });
+  };
+  return SW.ask({
+    kind: "confirm",
+    title: SW.t("port_dialog_title", { port: curPort }),
+    text: SW.t("port_dialog_body"),
+    fields: [portField],
+    confirm: SW.t("port_change"),
+    opener,
+    run: async ([port], { result }) => {
+      let r = null;
+      await needCode(async () => {
+        try {
+          const previous = await api("job");
+          r = { ...await api("settings/port", { port: Number(port.trim()), code: theCode() }), previous };
+        } catch (e) {
+          if (e.locked) throw e;
+          if (e.data && e.data.field === "port") {
+            SW.fieldError(portField, hubText(e.message));
+            portField._control.focus();
+          } else {
+            SW.result(result, "bad", hubText(e.message));
+          }
+        }
+      });
+      return r || false;
+    },
+  }).then((r) => {
+    if (r?.job === "port_change") waitNewPort(r.port, portBox, r.previous);
+    return r;
+  });
+}
+
 function groupNetwork({ g }) {
-  const v = g.values, web = !!g.web_on, setPublic = S.web.public_set;
+  const v = g.values, web = !!g.web_on, setPublic = S.web.public_set, curPort = Number(g.port) || 8710, portBox = sbox();
   const fields = [
     plainField({ name: "web.public_url", mono: true, label: SW.t("settings_network_public"), placeholder: setPublic ? SW.t("settings_network_public_hidden") : SW.t("settings_network_public_placeholder"),
       hint: SW.t(web ? "settings_network_public_hint" : "settings_network_public_hint_off"), effect: "applies" }),
@@ -528,6 +722,11 @@ function groupNetwork({ g }) {
       hint: SW.t("settings_network_station_hint"), effect: "applies" }),
     plainField({ name: "setup.hosts", mono: true, label: SW.t("settings_network_hosts"), value: (v["setup.hosts"] || []).join(" "), placeholder: SW.t("settings_network_hosts_placeholder"),
       hint: SW.t("settings_network_hosts_hint") }),
+    h("div", { class: "settings__port-row" },
+      h("span", { class: "field__label", textContent: SW.t("port_row_label") }),
+      h("span", { class: "mono settings__port-val", textContent: String(curPort) }),
+      SW.btn(SW.t("port_change"), { action: "change-port", run: (e) => openPortDialog(curPort, !!g.remote_on, e.currentTarget, portBox) })),
+    portBox,
   ];
   if (web) fields.push(SW.check({ name: "web.printer_changes", label: SW.t("settings_network_changes"), desc: SW.t("settings_network_changes_hint"), checked: v["web.printer_changes"] === true }));
   fields.push(heading("settings_network_remote"), remoteBlock(g));
@@ -570,13 +769,98 @@ function groupPassphrase() {
 }
 
 // ----- Filament Catalog (03 10.9) -----
+function openCustomEntriesDialog(opener, onChanged) {
+  const id = SW.uid("cat-entries");
+  const body = h("div", { class: "settings__cat-dialog-body" });
+  const res = h("p", { class: "result result--block dialog__result", role: "status" });
+  const close = () => dlg.close();
+  const closeBtn = SW.btn(SW.t("common_close"), { cls: "btn--primary", action: "close", run: close });
+  const form = h("form", { class: "dialog__form", method: "dialog", novalidate: true },
+    h("div", { class: "dialog__head" },
+      h("h2", { class: "dialog__title", id: id + "-title", textContent: setT("settings_catalog_entries_title") }),
+      SW.iconBtn("close", SW.t("common_close"), { action: "close", run: close })),
+    h("div", { class: "dialog__body" }, res, body),
+    h("div", { class: "dialog__foot" }, closeBtn));
+  const dlg = h("dialog", { class: "dialog dialog--wide", "aria-labelledby": id + "-title" }, form);
+  dlg.addEventListener("close", () => {
+    dlg.remove();
+    if (opener && opener.isConnected) opener.focus();
+  });
+  document.body.append(dlg);
+  dlg.showModal();
+
+  const loadList = async () => {
+    body.replaceChildren(h("p", { class: "muted", textContent: SW.t("common_loading_thing", { thing: setT("settings_catalog_entries_title") }) }));
+    let data;
+    try {
+      data = await api("library/local");
+    } catch (e) {
+      body.replaceChildren();
+      SW.result(res, "bad", hubText(e.message || setT("settings_catalog_entries_error")));
+      return;
+    }
+    const entries = Array.isArray(data && data.entries) ? data.entries : [];
+    if (!entries.length) {
+      body.replaceChildren(h("p", { class: "muted", textContent: setT("settings_catalog_entries_empty") }));
+      return;
+    }
+    const tbl = h("table", { class: "tbl settings__cat-table" },
+      h("thead", {}, h("tr", {},
+        h("th", { scope: "col", textContent: SW.t("common_field_brand") }),
+        h("th", { scope: "col", textContent: SW.t("common_field_name") }),
+        h("th", { scope: "col", textContent: SW.t("common_field_material") }),
+        h("th", { scope: "col", textContent: setT("settings_catalog_col_added") }),
+        h("th", { scope: "col", textContent: SW.t("common_actions") }))),
+      h("tbody", {}, ...entries.map((row) => h("tr", {},
+        h("td", { textContent: row.brand || "" }),
+        h("td", { textContent: row.name || "" }),
+        h("td", { textContent: row.material || "" }),
+        h("td", { class: "mono", textContent: row.added || "" }),
+        h("td", {}, SW.btn(SW.t("common_remove"), {
+          cls: "btn--ghost btn--danger btn--small",
+          action: "remove-local-entry",
+          run: async (ev) => {
+            const ok = await SW.ask({
+              kind: "destructive",
+              title: setT("settings_catalog_remove_title", { brand: row.brand || "", name: row.name || "" }),
+              text: setT("settings_catalog_remove_body"),
+              confirm: SW.t("common_remove"),
+              opener: ev.currentTarget,
+              run: async (_, { result }) => {
+                let done = false;
+                try {
+                  await needCode(async () => {
+                    await api(`library/local/${encodeURIComponent(row.id)}/remove`, { code: theCode() });
+                    done = true;
+                  });
+                  return done;
+                } catch (e) {
+                  SW.result(result, "bad", hubText(e.message));
+                  return false;
+                }
+              },
+            });
+            if (ok) {
+              SW.result(res, "ok", setT("settings_catalog_removed"));
+              if (typeof onChanged === "function") onChanged();
+              await loadList();
+            }
+          },
+        }))))));
+    body.replaceChildren(tbl);
+  };
+
+  loadList();
+}
+
 function groupCatalog({ lib }) {
-  const on = S.library_token.library, c = lib.last_check, set = S.library_token.set, none = lib.source === "none";
+  const on = !!S.modules?.find((m) => m.name === "library")?.on;
+  const c = lib.last_check, none = lib.source === "none";
   const badges = [];
   if (!on) { /* switched off: no state badge */ } else if (none) badges.push(h("span", { class: "settings__badge", textContent: SW.t("settings_catalog_none") }));
   else if (c && !c.ok) badges.push(h("span", { class: "settings__badge" }, SW.status("needs_look", { small: true }), " " + SW.t("settings_catalog_failed")));
   else badges.push(SW.status("ok", { small: true }));
-  const state = h("div", { class: "settings__state-lines" }), box = sbox(), job = sbox(), entryBox = sbox();
+  const state = h("div", { class: "settings__state-lines" }), job = sbox(), entryBox = sbox();
   const paint = (l) => {
     const k = l.last_check;
     state.replaceChildren(...[h("p", { textContent: l.source === "none" ? SW.t("settings_catalog_none") : SW.t("settings_catalog_state", { version: l.version, source: l.source, count: l.local }) }),
@@ -585,38 +869,152 @@ function groupCatalog({ lib }) {
       l.skipped && h("p", {}, SW.status("note", { small: true, text: l.skipped }))].filter(Boolean));
   };
   paint(lib);
-  const token = SW.field({ row: true, type: "secret", name: "library_token", label: SW.t("settings_catalog_token"), hint: SW.t("settings_catalog_token_hint"), attrs: { "aria-required": "false" } });
-  token.querySelector(".field__label").append(" ", SW.status(set ? "set" : "not_set", { small: true }));
-  const entry = SW.field({ row: true, type: "textarea", mono: true, label: SW.t("settings_catalog_entry"), placeholder: SW.t("settings_catalog_entry_placeholder"), hint: SW.t("settings_catalog_entry_hint"),
-    attrs: { "aria-required": "false" } });
-  const add = SW.btn(SW.t("settings_catalog_entry_add"), { action: "add-entry", run: () => {
-    const text = entry._control.value;
-    try { JSON.parse(text); } catch { SW.fieldError(entry, SW.t("settings_catalog_entry_json")); entry._control.focus(); return; }
-    SW.fieldError(entry, null);
-    settingAct(entryBox, "library/add", { entry: text }, (r) => {
-      say(entryBox, SW.t("settings_catalog_entry_added", { line: `${r.vendor} ${r.product}` }), true);
-      entry._control.value = "";
-      api("library").then(paint, () => {});
-    });
-  } });
+  const reloadLib = () => api("library").then((fresh) => {
+    setSeen.lib = fresh;
+    paint(fresh);
+    paintList();
+  }, () => {});
   const body = [];
-  if (!on) body.push(offNote("settings_catalog_off"));
-  else body.push(state, h("div", { class: "actions" },
+  if (!on) {
+    body.push(offNote("settings_catalog_off"));
+    return setGroup("catalog", { desc: SW.t("settings_catalog_desc"), badges, body });
+  }
+  body.push(state, h("div", { class: "actions" },
     SW.btn(SW.t("settings_catalog_update"), { action: "update-catalog", run: () => runJob(job, "library_update") }),
     SW.btn(SW.t("settings_catalog_back"), { cls: "btn--ghost", action: "catalog-back", run: (e) => runJob(job, "library_rollback", { ...destroy("settings_catalog_back_title", "settings_catalog_back_body",
       "settings_catalog_back_confirm"), opener: e.currentTarget }) })), job);
-  body.push(token);
-  if (set) body.push(h("div", { class: "actions" }, SW.btn(SW.t("settings_catalog_token_remove"), { cls: "btn--ghost btn--danger", action: "remove-library-token", run: (e) => confirmed(
-    { ...destroy("settings_token_remove_title", "settings_token_remove_body", "settings_catalog_token_remove"), opener: e.currentTarget }, "library_token/remove", {},
-    () => loadGroup("catalog", { quiet: true, fresh: true })) })));
-  if (on) body.push(entry, h("div", { class: "actions" }, add), entryBox);
-  const el = setGroup("catalog", { desc: SW.t("settings_catalog_desc"), save: SW.t("settings_catalog_save"), badges, body });
-  const o = { send: async (key, value) => {
-    try { await api("library_token", { token: value, code: theCode() }); } catch (e) { throw setRefusal(el, Object.assign(e, { data: { ...(e.data || {}), field: key } })); }
-    return {};
-  } };
-  wireGroup(el, "catalog", o);
-  return el;
+
+  const materials = Array.isArray(lib.materials) ? lib.materials : [];
+  const brandField = requiredField({ name: "brand", label: SW.t("common_field_brand"), attrs: { autocomplete: "off" } });
+  const nameField = requiredField({ name: "name", label: SW.t("common_field_name"), attrs: { autocomplete: "off" } });
+  const matField = requiredField({
+    name: "material",
+    type: "select",
+    label: SW.t("common_field_material"),
+    value: "",
+    optional: false,
+    options: [
+      { value: "", label: setT("settings_catalog_choose_material") },
+      ...materials.map((m) => ({ value: m, label: m })),
+      { value: "__other__", label: setT("settings_catalog_other") },
+    ],
+  });
+  const otherField = plainField({ name: "other_material", label: setT("settings_catalog_other_material"), attrs: { autocomplete: "off" } });
+  otherField.hidden = true;
+  matField._control.addEventListener("change", () => {
+    const isOther = matField._control.value === "__other__";
+    otherField.hidden = !isOther;
+    SW.fieldError(matField, null);
+    if (!isOther) {
+      SW.fieldError(otherField, null);
+      otherField._control.value = "";
+    } else {
+      otherField._control.focus();
+    }
+  });
+
+  const nozzleMin = plainField({ name: "nozzle_min", type: "number", mono: true, label: setT("settings_catalog_nozzle_min"), attrs: { step: "any" } });
+  const nozzleMax = plainField({ name: "nozzle_max", type: "number", mono: true, label: setT("settings_catalog_nozzle_max"), attrs: { step: "any" } });
+  const bedMin = plainField({ name: "bed_min", type: "number", mono: true, label: setT("settings_catalog_bed_min"), attrs: { step: "any" } });
+  const bedMax = plainField({ name: "bed_max", type: "number", mono: true, label: setT("settings_catalog_bed_max"), attrs: { step: "any" } });
+  const densityField = plainField({ name: "density", type: "number", mono: true, label: SW.t("common_field_density"), attrs: { step: "any" } });
+  const mvsField = plainField({ name: "max_volumetric_speed", type: "number", mono: true, label: setT("settings_catalog_mvs"), attrs: { step: "any" } });
+  const parentField = plainField({ name: "bambu_parent", label: SW.t("common_field_bambu_parent") });
+  const notesField = plainField({ name: "notes", type: "textarea", cls: "settings__cat-notes", label: SW.t("common_field_notes") });
+  const moreDetails = h("details", { class: "coll settings__cat-more" },
+    h("summary", { textContent: setT("settings_catalog_more") }),
+    h("div", { class: "settings__cat-grid" },
+      nozzleMin, nozzleMax, bedMin, bedMax, densityField, mvsField, parentField, notesField));
+
+  const fieldMap = {
+    brand: brandField,
+    name: nameField,
+    material: matField,
+    other_material: otherField,
+    nozzle_min: nozzleMin,
+    nozzle_max: nozzleMax,
+    bed_min: bedMin,
+    bed_max: bedMax,
+    density: densityField,
+    max_volumetric_speed: mvsField,
+    bambu_parent: parentField,
+    notes: notesField,
+  };
+  const moreKeys = new Set(["nozzle_min", "nozzle_max", "bed_min", "bed_max", "density", "max_volumetric_speed", "bambu_parent", "notes"]);
+  for (const fld of Object.values(fieldMap)) {
+    fld._control.oninput = () => SW.fieldError(fld, null);
+  }
+
+  const addBtn = SW.btn(SW.t("common_add"), { cls: "btn--primary", action: "add-entry" });
+  addBtn.type = "submit";
+  const seeBtn = SW.btn(setT("settings_catalog_see_entries"), { action: "see-entries", run: (e) => openCustomEntriesDialog(e.currentTarget, reloadLib) });
+  const form = h("form", { class: "settings__cat-form", novalidate: true },
+    heading("settings_catalog_entry"),
+    brandField, nameField, matField, otherField, moreDetails,
+    h("div", { class: "actions" }, addBtn, seeBtn),
+    entryBox);
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    for (const fld of Object.values(fieldMap)) SW.fieldError(fld, null);
+    SW.result(entryBox, null);
+    const brand = brandField._control.value.trim();
+    const name = nameField._control.value.trim();
+    const matRaw = matField._control.value;
+    const otherMat = otherField._control.value.trim();
+    let firstBad = null;
+    if (!brand) { SW.fieldError(brandField, setT("settings_catalog_error_brand")); firstBad = firstBad || brandField; }
+    if (!name) { SW.fieldError(nameField, setT("settings_catalog_error_name")); firstBad = firstBad || nameField; }
+    if (!matRaw) { SW.fieldError(matField, setT("settings_catalog_error_material")); firstBad = firstBad || matField; }
+    if (matRaw === "__other__" && !otherMat) { SW.fieldError(otherField, setT("settings_catalog_error_other_material")); firstBad = firstBad || otherField; }
+    if (firstBad) {
+      firstBad._control.focus();
+      return;
+    }
+    const payload = { brand, name, material: matRaw === "__other__" ? otherMat : matRaw };
+    for (const key of moreKeys) {
+      const val = fieldMap[key]._control.value.trim();
+      if (val !== "") payload[key] = val;
+    }
+    addBtn.disabled = true;
+    working(entryBox, SW.t("common_adding"));
+    try {
+      let added = false;
+      await needCode(async () => {
+        await api("library/local", { ...payload, code: theCode() });
+        added = true;
+      });
+      if (!added) { SW.result(entryBox, null); return; }
+      for (const fld of Object.values(fieldMap)) fld._control.value = "";
+      otherField.hidden = true;
+      moreDetails.open = false;
+      say(entryBox, setT("settings_catalog_added"), true);
+      reloadLib();
+    } catch (err) {
+      const probs = err.data && Array.isArray(err.data.problems) ? err.data.problems : [];
+      if (probs.length) {
+        let focusFld = null;
+        for (const p of probs) {
+          const key = p.field === "material" && matField._control.value === "__other__" ? "other_material" : p.field;
+          const fld = fieldMap[key];
+          if (fld) {
+            if (moreKeys.has(key)) moreDetails.open = true;
+            SW.fieldError(fld, hubText(p.text));
+            if (!focusFld) focusFld = fld;
+          }
+        }
+        if (focusFld) { SW.result(entryBox, null); focusFld._control.focus(); }
+        else say(entryBox, hubText(err.message), false);
+      } else {
+        say(entryBox, hubText(err.message), false);
+      }
+    } finally {
+      addBtn.disabled = false;
+    }
+  });
+
+  body.push(form);
+  return setGroup("catalog", { desc: SW.t("settings_catalog_desc"), badges, body });
 }
 
 // ----- Weigh Station voice (03 10.10): applies on choosing, no Save -----

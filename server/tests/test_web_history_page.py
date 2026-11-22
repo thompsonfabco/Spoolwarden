@@ -51,9 +51,11 @@ const window = {};
   out.quiet = toasts.length;
   // the Hub's refusal codes become their sentences; any other failure its own
   toasts.length = 0;
-  answers = { activity: { events: [{ id: 43, undo: { possible: true } }] }, "events/N/undo": Object.assign(new Error("x"), { data: { code: "changed_since" } }) };
+  answers = { activity: { events: [{ id: 43, undo: { possible: true } }] }, "events/N/undo": Object.assign(new Error("x"), { data: { error: "changed_since", message: "This changed again since." } }) };
   await offerUndo(5, "y"); await toasts[0][2].run();
-  answers["events/N/undo"] = Object.assign(new Error("x"), { data: { code: "weird" } });
+  answers["events/N/undo"] = Object.assign(new Error("x"), { data: { error: "weird", message: "x" } });
+  await toasts[0][2].run();
+  answers["events/N/undo"] = Object.assign(new Error("x"), { data: { error: "That event is too old.", code: "too_old" } });
   await toasts[0][2].run();
   out.refusals = toasts.slice(1).map((t) => [t[0], t[1]]);
   // the subject of the question and the cut-out limit
@@ -99,7 +101,7 @@ def test_undo_is_offered_only_when_the_hub_can_put_it_back(tmp_path):
     assert out["afterUndo"]["toast"][0] == "history_undo_put_back" and out["afterUndo"]["done"] == 1      # the spool is drawn again
     assert out["named"] is True and out["namedCalls"] == [["events/77/undo", "POST"]]
     assert out["notPossible"] is False and out["noEvents"] is False and out["noRoute"] is False and out["quiet"] == 0
-    assert [t[0] for t in out["refusals"]] == ["history_undo_changed_since", "history_undo_failed"]       # a code of the Hub, or the general one
+    assert [t[0] for t in out["refusals"]] == ["history_undo_changed_since", "history_undo_failed", "history_undo_too_old"]
     assert all(t[1] == "bad" for t in out["refusals"])
 
 

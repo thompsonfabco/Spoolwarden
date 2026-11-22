@@ -20,6 +20,9 @@ The web process never talks to a printer. Everything goes to the kit server's ow
                                         dry_run: false), as the Android app does
     POST printers/{id}/slots/{label}/unload  {[dry_run]}: the slot's spool goes back to where it was (Spoolman
                                         only)
+    POST printers/{id}/slots/auto/load  {spool_id[, dry_run]}: Auto (R83 addition A6): no slot named, the Hub loads the spool
+                                        where one shows up; POST printers/{id}/auto/choose {slot} when two slots were loaded;
+                                        POST printers/{id}/auto/cancel stops waiting
     GET  printers/tagged                the last tapped tag and its spool (the load picker's "last tap")
     GET  printers/manage                every printer the kit knows, set up or only seen on the network (no secrets)
     POST printers/scan                  the kit's Scan for Klipper printers: {found: [{id, host, port, name, configured}]}
@@ -71,7 +74,7 @@ ENTRY = re.compile(r"[A-Za-z0-9_-]{1,64}")
 HLS_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}\.(ts|m3u8)")
 HLS_TYPES = {"m3u8": "application/vnd.apple.mpegurl", "ts": "video/mp2t"}
 MAX_SEGMENT = 16 * 1024 * 1024
-LIST_FIELDS = ("id", "name", "model", "family", "state", "camera", "summary")
+LIST_FIELDS = ("id", "name", "model", "family", "state", "camera", "summary", "auto_possible")      # auto_possible: Automatic can be chosen (R83 addition A6)
 # the kit path of each step, written out so test_web_token_scope sees every path this unit calls
 MANUAL_STEPS = {"start": "/api/printers/{serial}/manual-map/start", "confirm": "/api/printers/{serial}/manual-map/confirm",
                 "skip": "/api/printers/{serial}/manual-map/skip", "stop": "/api/printers/{serial}/manual-map/stop",
@@ -147,6 +150,9 @@ class PrintersApp:
             ("/{id}/report", g(self.map_report), ["POST"]),
             ("/{id}/manual-map", g(self.manual_get), ["GET"]),
             ("/{id}/manual-map/{step}", g(self.manual_step), ["POST"]),
+            ("/{id}/slots/auto/load", g(self.auto_load, kit_refusal=True), ["POST"]),
+            ("/{id}/auto/choose", g(self.auto_choose, kit_refusal=True), ["POST"]),
+            ("/{id}/auto/cancel", g(self.auto_cancel, kit_refusal=True), ["POST"]),
             ("/{id}/slots/{label}/load", g(self.slot_load), ["POST"]),
             ("/{id}/slots/{label}/unload", g(self.slot_unload), ["POST"]),
             ("/{id}/slots/{label}/clear", g(self.slot_clear), ["POST"]),
@@ -168,12 +174,14 @@ class PrintersApp:
             routes.append(Route("/intake/api/alerts/test", g(self.push_test), methods=["POST"]))
         return routes
 
-    def guard(self, fn):
+    def guard(self, fn, *, kit_refusal: bool = False):
         """LAN, Host and Origin checks (the intake app's), plus the kit's refusals as readable errors."""
         async def inner(request: Request):
             try:
                 return await fn(request)
             except SlotError as e:
+                if kit_refusal:
+                    return self.intake._kit_refusal(e)
                 st = e.http
                 body = {"error": REFUSALS.get(e.code or "", str(e))}
                 if e.code:
@@ -201,7 +209,10 @@ class PrintersApp:
 
     def snapshot(self, serial: str) -> dict:
         d = self.kit.get(f"/api/printers/{serial}")
-        return {"printer": _printer(d.get("printer") or {}), "status": d.get("status")}
+        # `auto`: the waiting Auto assignment of this printer ({spool_id, spool, state: waiting|choose, slots?, text, expires_at}) or none; the
+        # kit puts it beside the printer or inside it (A6 names only "the printer's auto object"), both are read
+        printer = d.get("printer") or {}
+        return {"printer": _printer(printer), "status": d.get("status"), "auto": d.get("auto") or printer.get("auto") or None}
 
     async def state(self, request: Request):
         return await self._kit_call(self.snapshot, self._serial(request))
@@ -275,6 +286,35 @@ class PrintersApp:
             log.info("printers tab: load spool %s into %s %s", spool, serial, label)
         return await self._kit_call(self.kit.post, f"/api/printers/{serial}/slots/{label}/load",
                                     {"spool_id": spool, "dry_run": dry})
+
+    async def auto_load(self, request: Request):
+        """Auto (R83 addition A1, contract A6): a spool for the printer with no slot named; the Hub watches the slots and loads it where
+        one shows up. A dry run unless `dry_run: false`: {auto, watching, replaces?} then {auto, pending, expires_in, message}."""
+        serial = self._serial(request)
+        b = await self._body(request)
+        spool = b.get("spool_id")
+        if not isinstance(spool, int) or isinstance(spool, bool) or spool < 1:
+            raise Problem("spool_id must be a spool id")
+        dry = self._dry(b)
+        if not dry:
+            log.info("printers tab: auto load spool %s on %s", spool, serial)
+        return await self._kit_call(self.kit.post, f"/api/printers/{serial}/slots/auto/load", {"spool_id": spool, "dry_run": dry})
+
+    async def auto_choose(self, request: Request):
+        """When two slots were loaded the Hub asks which one got the spool: this is the answer (the answer of a named load)."""
+        serial = self._serial(request)
+        label = (await self._body(request)).get("slot")
+        if not isinstance(label, str) or not LABEL.fullmatch(label):
+            raise Problem("no such slot")
+        log.info("printers tab: auto choose %s on %s", label, serial)
+        return await self._kit_call(self.kit.post, f"/api/printers/{serial}/auto/choose", {"slot": label})
+
+    async def auto_cancel(self, request: Request):
+        """Stop waiting: no question, nothing is lost."""
+        serial = self._serial(request)
+        await self._body(request)
+        log.info("printers tab: auto cancel on %s", serial)
+        return await self._kit_call(self.kit.post, f"/api/printers/{serial}/auto/cancel", {})
 
     async def slot_unload(self, request: Request):
         serial, label = self._serial(request), self._label(request)

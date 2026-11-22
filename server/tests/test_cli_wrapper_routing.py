@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(BASH is None or os.name == "nt", reason="the wra
 
 ROOT_COMMANDS = [
     ["config", "show"], ["cert", "status"], ["modules", "apply"], ["modules", "set", "full"], ["update"],
-    ["uninstall"], ["station", "pair"], ["setup-code"], ["backup", "create"], ["restore", "x.zip"],
+    ["port", "8711", "--yes"], ["port", "-y", "8711"], ["port", "invalid"], ["port", "-1"], ["port", " 8711 ", "--yes"], ["uninstall"], ["station", "pair"], ["setup-code"], ["backup", "create"], ["restore", "x.zip"],
     ["web", "passphrase"], ["reader", "token", "a"], ["reader", "revoke", "a"], ["reader", "setup"],
     ["local-intake", "install", "--yes", "--planned"], ["local-intake", "remove", "--yes"],
     ["local-intake", "token"], ["local-intake", "plan"], ["local-intake", "share-corrections", "on"],
@@ -31,7 +31,7 @@ ROOT_COMMANDS = [
 ]
 USER_COMMANDS = [
     ["local-intake", "status"], ["local-intake", "test", "a.jpg"], ["web", "status"], ["reader", "tokens"],
-    ["printer", "list"], ["recent"], ["label-reader", "status"], ["label-reader", "test", "a.jpg"], ["catalog", "status"],
+    ["port"], ["port", "--yes"], ["port", "--help"], ["printer", "list"], ["recent"], ["label-reader", "status"], ["label-reader", "test", "a.jpg"], ["catalog", "status"],
     ["catalog", "update"], ["spoolman", "fields"], ["spoolman", "address"], ["add"], ["spool"], ["help", "aliases"],
     ["locations"], ["locations", "list"], ["locations", "--json"],
 ]
