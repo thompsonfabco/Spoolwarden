@@ -1,5 +1,5 @@
 // Service worker: keeps the page shell for offline start (04 10.2) and shows the Hub's alerts (every alert type, R80 section 4)
-// when the server has web.push on. Served whether or not alerts are on. Never caches <app path>/api/ replies.
+// when the server has web.push on. Served whether or not alerts are on. Never caches <app path>/api/ replies but the texts of a language.
 "use strict";
 const VERSION = "__VERSION__";   // the server writes its version here when it serves this file
 const CACHE = "fk-shell-" + VERSION;
@@ -17,9 +17,13 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith("fk-shell-") && k !== CACHE).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
+// the texts of the language in use (GET api/strings/<code>.js, the one api reply kept): the app opens offline in the language it
+// was last used in (R85 3.5; 04 10.2)
+const STRINGS = BASE + "/api/strings/";
+const isStrings = (path) => path.startsWith(STRINGS) && /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?\.js$/.test(path.slice(STRINGS.length));
 self.addEventListener("fetch", (event) => {
   const r = event.request, u = new URL(r.url);
-  if (r.method !== "GET" || u.origin !== self.location.origin || !SHELL.includes(u.pathname)) return;
+  if (r.method !== "GET" || u.origin !== self.location.origin || !(SHELL.includes(u.pathname) || isStrings(u.pathname))) return;
   // network first, the copy when the Hub does not answer
   event.respondWith(fetch(r).then((resp) => {
     // only the page itself: an answer redirected (to the sign-in page) is not the shell

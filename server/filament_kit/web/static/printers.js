@@ -233,6 +233,7 @@ function printersTab() {
     printer_guided_looking: "Looking…", printer_guided_none: "None found. Type its address in the next step.", printer_guided_use: "Use this",
     printer_guided_back: "Back", printer_guided_access_hint: "On the printer: Settings > Network/LAN > Access Code",
     printer_guided_found_at: "Found on the network at {address}.",
+    printer_guided_type_bambu: "Type a Bambu Lab printer's address", printer_guided_type_klipper: "Type a Klipper printer's address",
     printer_guided_testing: "Testing…", printer_guided_test_failed: "The Hub could not reach a Klipper printer at {address}.",
     printer_guided_add_anyway: "Add anyway", printer_guided_try_again: "Try again",
     printer_guided_map_title: "Map its slots now?", printer_guided_map_body: "Mapping tells the Hub which slot is which. Nothing heats or moves.",
@@ -290,9 +291,9 @@ function printersTab() {
           ...k.filter((p) => !p.configured).map((p) => row(p.name || p.host, `${p.host}:${p.port}`, () => useKlipper(p)))];
         body.replaceChildren(h("h3", { class: "pguided__heading" }, tg("printer_guided_found")),
           rows.length ? h("ul", { class: "pfound" }, rows) : h("p", { class: "muted" }, st.scan === "running" ? tg("printer_guided_looking") : tg("printer_guided_none")),
-          h("h3", { class: "pguided__heading" }, tg("printer_guided_which")),
-          h("div", { class: "pguided__choice" }, SW.btn(t("common_bambu_lab"), { action: "family-bambu", run: () => pickFamily("bambu") }),
-            SW.btn(t("common_klipper"), { action: "family-klipper", run: () => pickFamily("klipper") })));
+          // no family choice (R87 00:55; 04 6.9): a printer that was not found is typed, under the list, always shown, in this order
+          h("div", { class: "pguided__choice" }, SW.btn(tg("printer_guided_type_bambu"), { action: "type-bambu", run: () => typeBambu() }),
+            SW.btn(tg("printer_guided_type_klipper"), { action: "type-klipper", run: () => pickFamily("klipper") })));
         foot.replaceChildren(cancel);
       } else if (step === "details") {
         const bambu = st.family === "bambu";
@@ -307,6 +308,11 @@ function printersTab() {
       }
     }
     function pickFamily(fam) { st.family = fam; go("details"); }
+    function typeBambu() {                                  // step 2's Bambu Lab form with an empty address: nothing of a found row goes along
+      if (st.foundAt && f.bAddr._control.value.trim() === st.foundAt) f.bAddr._control.value = "";
+      st.serial = ""; st.foundAt = "";
+      pickFamily("bambu");
+    }
     function useBambu(p) {
       st.family = "bambu";
       f.bAddr._control.value = p.ip || ""; st.serial = p.id || ""; st.foundAt = p.ip || "";
@@ -322,12 +328,12 @@ function printersTab() {
       if (bad.length) bad[0]._control.focus();
       return bad.length > 0;
     }
-    // the test route answers 200 {ok: false} for a printer that does not answer; any other failure (a Hub without the route yet, a
-    // request that did not get through) is not the printer's answer, so the add goes on and says its own result
+    // the test route answers 200 {reachable: false} for a printer that does not answer (R87 1); any other failure (a Hub without the
+    // route yet, a request that did not get through) is not the printer's answer, so the add goes on and says its own result
     async function klipperTest(v) {
       try {
         const r = await pj("test", { family: "klipper", host: v(f.kAddr), port: parsePort(v(f.kPort)), ...(v(f.kKey) ? { api_key: v(f.kKey) } : {}) });
-        return !r || r.ok !== false;
+        return !(r && r.reachable === false);
       } catch (e) {
         return true;
       }

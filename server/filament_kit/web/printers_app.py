@@ -28,7 +28,7 @@ The web process never talks to a printer. Everything goes to the kit server's ow
     POST printers/scan                  the kit's Scan for Klipper printers: {found: [{id, host, port, name, configured}]}
                                         (R83 10.3; the same change guard as add)
     POST printers/test                  {family: klipper, host[, port, api_key]}: does a Klipper printer answer there?
-                                        {ok: bool, text?} - nothing is saved (R82 5.3; the kit route is EV1's)
+                                        {reachable: bool} - nothing is saved (R87 1; the kit route is AP1's)
     POST printers/{id}/slots/{label}/clear  {[dry_run]}: the Hub forgets the slot's spool (R83 10.1, EV1)
     POST printers/add                   {serial, access_code[, name]} a Bambu printer the kit has seen, or
                                         {address, access_code[, name, serial]} one typed (R87 2: the Hub checks the address

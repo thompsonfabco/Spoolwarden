@@ -123,7 +123,7 @@ class GuidedKit(ChangingKit):
         if path == "/api/printers/scan":
             return {"found": [{"id": "shelf-voron", "host": "192.0.2.90", "port": 7125, "name": "Shelf Voron", "configured": False}]}
         if path == "/api/printers/test":
-            return {"ok": False, "text": "no answer"}
+            return {"reachable": False}                 # the kit route's answer (R87 1)
         if path.endswith("/clear"):
             return {"slot": path.split("/")[-2], "spool": {"id": 7, "vendor": "Polymaker", "name": "PolyTerra PLA Charcoal Black"}, "moved_back": "Rack 1",
                     "waiting_ended": True, "printer_cleared": False, "dry_run": body["dry_run"],

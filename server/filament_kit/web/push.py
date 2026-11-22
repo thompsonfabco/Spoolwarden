@@ -267,18 +267,32 @@ def _topic_refused(code: int) -> bool:
 
 
 def send_all(store: Store, title: str, body: str, tag: str, *, sender, url: str = "",
-             budget: float | None = None, replace: bool = False) -> dict:
+             budget: float | None = None, replace: bool = False, texts=None) -> dict:
     """Send one alert to every subscription; the ones the push service says are gone (404 / 410) are dropped.
     {"sent": how many the push services took, "failed": [what went wrong, one line each], "removed": how many were
     dropped}. `budget` is the most seconds to spend, counted from when the subscriptions have been read: the
     subscriptions left after it are not tried, but the first one always is. `replace`: the notification of an ended
     alert: same tag, silent, no new alert sound (`renotify` false), a short TTL. Every push carries a Topic made from
     its tag; a service that answers 4xx to it gets the push once more without it and, when that is taken, is not sent
-    the Topic again."""
+    the Topic again. `texts(lang)`: the (title, body) in a phone's language (R85 3.8), asked once per language among the
+    subscriptions that sent one; when it fails or gives nothing, those phones get `title` and `body`."""
     subs = store.subs()
     deadline = None if budget is None else time.monotonic() + budget
-    payload = json.dumps({"title": title, "body": body, "tag": tag, "url": url,
-                          **({"silent": True, "renotify": False} if replace else {})})
+    payloads: dict = {}
+
+    def payload_for(lang):
+        if lang not in payloads:
+            t, b = title, body
+            if lang and texts:
+                try:
+                    got = texts(lang)
+                    if got:
+                        t, b = got
+                except Exception as e:  # noqa: BLE001 - the Hub's own words are sent instead
+                    log.warning("alert texts in %s: %s", lang, type(e).__name__)
+            payloads[lang] = json.dumps({"title": t, "body": b, "tag": tag, "url": url,
+                                         **({"silent": True, "renotify": False} if replace else {})})
+        return payloads[lang]
     topic, ttl = topic_of(tag), (REPLACE_TTL if replace else None)
     dead = []
     sent, failed = 0, []
@@ -287,6 +301,7 @@ def send_all(store: Store, title: str, body: str, tag: str, *, sender, url: str 
             failed.append(f"{urlparse(ep).hostname} not tried: out of time")
             continue
         host = (urlparse(ep).hostname or "").lower()
+        payload = payload_for(sub.get("lang") if texts else None)
         try:
             use = None if host in NO_TOPIC else topic
             code = sender(sub["info"], payload, topic=use, ttl=ttl)
@@ -360,7 +375,7 @@ class Feed(threading.Thread):
                 title, body = event_text(event)     # the ending's own notification takes the alert's place, quietly
                 send_all(self.store, title, body, TAG_CONDITION + key, sender=self.sender,
                          url=event_url(self.url.rstrip("/"), event),
-                         replace=True)
+                         replace=True, texts=lambda lang: self.texts_in(event, lang))
             return
         if event.get("alert") is not True:
             return
@@ -370,7 +385,20 @@ class Feed(threading.Thread):
             self.raised[key] = event.get("severity")
         title, body = event_text(event)
         send_all(self.store, title, body, TAG_CONDITION + key if key else f"{TAG_EVENT}{event.get('id')}", sender=self.sender,
-                 url=event_url(self.url.rstrip("/"), event))
+                 url=event_url(self.url.rstrip("/"), event), texts=lambda lang: self.texts_in(event, lang))
+
+    def texts_in(self, event: dict, lang: str) -> tuple[str, str] | None:
+        """(title, body) of `event` in a phone's language: the same event asked of the Hub again with `lang` (R85 3.8: the Hub
+        writes its texts in the language asked, `?lang=<code>`). A Hub that does not translate yet answers its own words, and
+        None (no such event in the answer) leaves the texts already built."""
+        eid = event.get("id")
+        if not isinstance(eid, int):
+            return None
+        r = self.kit.get("/api/events?" + urlencode({"since": eid - 1, "limit": 1, "lang": lang}))
+        for ev in r.get("events") or []:
+            if isinstance(ev, dict) and ev.get("id") == eid and ev.get("title"):
+                return event_text(ev)
+        return None
 
     def tick(self) -> None:
         if self.last is None:

@@ -33,7 +33,8 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from .. import __version__, config, intake, inventory, lan, modules, shared_files, storage, storage_api, tagsources
+from .. import (__version__, config, hubport, intake, inventory, lan, modules, pairing, shared_files, storage, storage_api,
+                tagsources)
 from ..intake import CapReached, ReadError
 from ..spoolman import SpoolmanError
 from ..station_client import StationClient
@@ -246,6 +247,7 @@ class IntakeApp:
             ("/intake/app.css", self.asset, ["GET"]), ("/intake/printers.js", self.asset, ["GET"]),
             ("/intake/labels.js", self.asset, ["GET"]),
             ("/intake/labels", self.labels_page, ["GET"]),            # the print page (R85 5.3; 04 5.4)
+            ("/intake/labels/page.css", self.labels_paper, ["GET"]),  # its paper, per size (R85 00:50 point 5)
             ("/intake/sw.js", self.api(self.service_worker), ["GET"]),   # S3.14: scope is the app; Printers tab or not
             ("/intake/signin.js", self.asset, ["GET"]),   # the sign-in page's Show button (auth.py, web unit)
             ("/intake/shared/{name}", self.shared_asset, ["GET"]),
@@ -418,8 +420,8 @@ class IntakeApp:
             f"<link rel=stylesheet href='{b}/app.css'>"
             # S3.3: the catalogue and the shared script load before the page's own scripts (the shell turns the title into
             # "<Page title> · <Hub name>")
-            + body + ((f"<script src='{html.escape(strings_src or b + '/shared/strings.js', quote=True)}'></script>"
-                       f"<script src='{b}/shared/components.js'></script>"
+            + body + ((pages.strings_scripts(self.base, strings_src)       # English first, then the language in use (R85 3.5)
+                       + f"<script src='{b}/shared/components.js'></script>"
                        + ("" if not self.printers else f"<script src='{b}/printers.js'></script>")
                        + f"<script src='{b}/app.js'></script>") if app else ""),
             status_code=status, headers=self.headers())
@@ -464,8 +466,29 @@ class IntakeApp:
 
     # ---------- the page's language and the demo (R85 3.7, 4.5) ----------
     LANG_CODE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?")
-    LABEL_SIZES = ("62x29", "50x30", "sheet24")
+    LABEL_SIZES = ("62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25")     # R85 00:50 point 6
     LABEL_IDS = re.compile(r"\d{1,9}(?:,\d{1,9}){0,99}")
+    # RC4's sentences the string catalogue does not hold yet (the keys file names them for RC9); the catalogue's own text wins (D13)
+    STUB_TEXTS = {"labels_bad_size": "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25.",
+                  "labels_bad_ids": "Give the spool numbers as ids=<n,n,...>, whole numbers of 1 or more.",
+                  "web_answer_too_large": "The Hub's answer is too large to pass on.",
+                  "language_not_found": "There is no such language."}
+
+    def _say(self, key: str, **values: str) -> str:
+        """A text of the catalogue the pages load (pages.text), or its stub until the catalogue has the key."""
+        cat = pages.catalogue(self.shared)
+        return pages.text(cat if key in cat else {**cat, key: self.STUB_TEXTS[key]}, key, **values)
+
+    def _refuse(self, code: str, key: str, status: int = 400) -> JSONResponse:
+        """A refusal in the twins' shape, {error: code, message: sentence}."""
+        return JSONResponse({"error": code, "message": self._say(key)}, status)
+
+    def home_address(self) -> str:
+        """The Hub's home address, `https://<name>.local[:port]`: what the Hub puts in a label's code (labels.home_address of
+        RC8: the host's own name and the Hub's port, no port for 443). This unit runs on the Hub's machine and reads the same
+        settings, so the print page names the address the codes really hold."""
+        port = self.tools.cfg().get("port", hubport.FALLBACK_PORT)
+        return f"https://{pairing.short_hostname()}.local{hubport.url_port(port)}"
 
     def _cached_kit(self, name: str, path: str, ttl: float):
         """The Hub's answer to `path`, kept `ttl` seconds; the last answer (or None) while the Hub does not answer."""
@@ -526,10 +549,27 @@ class IntakeApp:
             return self._refusal(request)
         ids, size = request.query_params.get("ids", ""), request.query_params.get("size", "62x29")
         if not self.LABEL_IDS.fullmatch(ids) or size not in self.LABEL_SIZES:
-            return HTMLResponse("bad request", 400, headers=HEADERS)
+            text = self._say("labels_bad_ids" if not self.LABEL_IDS.fullmatch(ids) else "labels_bad_size")
+            return HTMLResponse(html.escape(text), 400, headers=HEADERS)
         lang = await anyio.to_thread.run_sync(self._language_for, request)
-        body = pages.labels_body(self.base, ids, size, self._strings_src(lang), self.shared)
+
+        def shown() -> tuple[str, bool]:
+            try:
+                address = self.home_address()
+            except Exception:  # noqa: BLE001 - no address the Hub gives: the page names the one it was opened at
+                address = ""
+            return address, self._demo_on()
+        address, demo = await anyio.to_thread.run_sync(shown)
+        body = pages.labels_body(self.base, ids, size, self._strings_src(lang), self.shared, address=address, demo=demo)
         return self._html(body, lang=lang)
+
+    async def labels_paper(self, request: Request):
+        """The print page's paper for the chosen size (R85 00:50 point 5): `@page { size: A4; margin: 0 }` and the like."""
+        size = request.query_params.get("size", "62x29")
+        if size not in self.LABEL_SIZES:
+            return self._refuse("bad_request", "labels_bad_size")
+        return Response(pages.labels_page_css(size), media_type="text/css",
+                        headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
 
     async def languages_twin(self, request: Request):
         return await self._hub_get("/api/languages")
@@ -546,7 +586,7 @@ class IntakeApp:
         except SlotError as e:
             return self._kit_refusal(e)
         if len(data) > cap:
-            return JSONResponse({"error": "too_large", "message": "that answer is too large to pass on"}, 413)
+            return self._refuse("too_large", "web_answer_too_large", 413)
         return Response(data, media_type=media, headers={"X-Content-Type-Options": "nosniff", **headers})
 
     async def strings_twin(self, request: Request):
@@ -554,7 +594,7 @@ class IntakeApp:
         name = request.path_params["name"]
         code = name[:-3] if name.endswith(".js") else ""
         if not self.LANG_CODE.fullmatch(code):
-            return JSONResponse({"error": "not_found", "message": "no such language"}, 404)
+            return self._refuse("not_found", "language_not_found", 404)
         return await self._raw_pass(f"/api/strings/{code}.js", "text/javascript; charset=utf-8", 2 << 20,
                                     {"Cache-Control": "private, max-age=60"})
 
@@ -562,7 +602,7 @@ class IntakeApp:
         """A spool's label, drawn by the Hub (an image: it runs nothing, and the policy below keeps it so when opened alone)."""
         size = request.query_params.get("size", "62x29")
         if size not in self.LABEL_SIZES:
-            return self._bad("size must be 62x29, 50x30 or sheet24")
+            return self._refuse("bad_request", "labels_bad_size")
         spool = request.path_params["id"]
         return await self._raw_pass(f"/api/spools/{spool}/label.svg?size={size}", "image/svg+xml", 1 << 20,
                                     {"Cache-Control": "private, no-store",
@@ -576,6 +616,10 @@ class IntakeApp:
             return await anyio.to_thread.run_sync(self.kit.post, "/api/demo/leave", {})
         except SlotError as e:
             return self._kit_refusal(e)
+        finally:
+            # dropped again once the Hub answered: a page load that read the Hub while it was leaving must not keep the banner
+            # for the reload that follows (R574 LOW)
+            self._kit_cache.pop("hub", None)
 
     async def asset(self, request: Request):
         name = request.url.path.rsplit("/", 1)[-1]

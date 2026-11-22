@@ -1140,10 +1140,12 @@ def test_the_service_worker_cache_is_named_after_the_version_and_older_ones_go()
 
 
 def test_the_service_worker_never_answers_or_stores_an_api_request():
+    """Only a listed shell file is handled, and of the Hub's api only the texts of a language (R85 3.5, RC4: the app opens offline
+    in the language last used); test_rc4_web runs the worker on both."""
     code = _sw_code()
     guard = re.search(r'if \((.*?)\) return;', code.split('addEventListener("fetch"')[1], re.S).group(1)
-    assert 'r.method !== "GET"' in guard and "!SHELL.includes(u.pathname)" in guard      # only a listed shell file is handled
-    assert "/api" not in code and "api/" not in code
+    assert 'r.method !== "GET"' in guard and "SHELL.includes(u.pathname) || isStrings(u.pathname)" in guard
+    assert re.findall(r'"[^"\n]*api[^"\n]*"', code) == ['"/api/strings/"'] and code.count("api/") == 1
     puts = re.findall(r"\.put\(([^)]*)\)", code)
     assert puts == ["u, resp", "u.pathname, copy"]            # the install and the fetch handler store, nothing else does
     assert "resp.ok && !resp.redirected" in code               # a redirect to the sign-in page is not the shell

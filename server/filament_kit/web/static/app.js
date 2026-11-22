@@ -282,6 +282,15 @@ function recFilaments(what, rev) {
 // the changes of a revision, one per field
 const recChanges = (rev) => [...new Map((rev.changes || []).map((c) => [c.field, c])).values()];
 
+// Share corrections (04 7.5): whether it is on and how many wait, from GET share-corrections (the twin of GET api/intake/share-corrections;
+// a Hub without it: sharing is not offered here). Recently added's link and the Add spools read summary read it the same way.
+let SHARE = null;
+async function readShare() {
+  try { SHARE = await api("share-corrections"); } catch (e) { SHARE = null; }
+  return SHARE;
+}
+const sharing = () => !!(SHARE && SHARE.actual);
+
 function historyTab() {
   const intro = h("p", { class: "muted" });
   const missing = h("div");                                   // "no longer kept" for an address that names a record the Hub dropped
@@ -311,15 +320,31 @@ function historyTab() {
   }
   // ----- share corrections (7.5): the link under the intro, the lines at Save and Accept, and the page of what waits -----
   async function loadShare() {
-    let d = null;
-    try { d = await api("share-corrections"); } catch (e) { d = null; }   // a Hub without the twin: sharing is not offered here
-    shareOn = !!(d && d.actual);
+    const d = await readShare();
+    shareOn = sharing();
     const n = Number(d && d.count) || 0;
     if (!d || !(shareOn || n > 0)) { corrLink.hidden = true; corrLink.replaceChildren(); return; }
     corrLink.replaceChildren(h("a", { href: "#recent/corrections", textContent: tt(shareOn ? "corr_link_on" : "corr_link_waiting", { count: n }) }));
     corrLink.hidden = false;
   }
   const shareNote = () => (shareOn ? h("p", { class: "muted corr__note" }, SW.icon("info", "icon--s"), " ", tt("corr_save_on")) : null);
+  // the Hub's reason, when it gave one: an empty reason leaves no dangling ": ." (R574 LOW)
+  const reasonOf = (r) => (typeof r === "string" ? r.trim() : "");
+  const notTaken = (r) => (reasonOf(r) ? tt("corr_not_taken", { reason: reasonOf(r) }) : tt("corr_not_taken_plain"));
+  const notWaiting = (r) => (reasonOf(r) ? tt("corr_not_waiting", { reason: reasonOf(r) }) : tt("corr_not_waiting_plain"));
+  // the entry's own thumbnail as a same-origin picture: the page allows images from itself and blob: only (img-src 'self' blob:),
+  // so a base64 thumbnail becomes a blob and one from elsewhere (https:) is not shown (R574 13)
+  function thumbSrc(t) {
+    if (typeof t !== "string" || !t) return null;
+    if (t.startsWith(`${BASE}/api/`)) return t;
+    const m = /^(?:data:(image\/[a-z0-9.+-]+);base64,)?([A-Za-z0-9+/=\s]+)$/i.exec(t);
+    if (!m) return null;
+    try {
+      const bin = atob(m[2].replace(/\s+/g, "")), bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return URL.createObjectURL(new Blob([bytes], { type: m[1] || "image/jpeg" }));
+    } catch (e) { return null; }
+  }
   // after Save changes or Accept: what became of the correction, from the record (the Hub queues it in the background)
   function shareAfter(id, slotSay, base) {
     if (!shareOn) return;
@@ -327,7 +352,7 @@ function historyTab() {
       try {
         const d = await api(hp(id)), st = d && d.share;
         if (!st) return;
-        const more = st.state === "waiting" ? tt("corr_saved_waiting") : st.state === "not_queued" ? tt("corr_not_taken", { reason: st.reason || "" })
+        const more = st.state === "waiting" ? tt("corr_saved_waiting") : st.state === "not_queued" ? notTaken(st.reason)
           : (d.photos === 0 ? tt("corr_no_photo") : "");
         if (more) slotSay(st.state === "not_queued" ? "warn" : "ok", `${base} ${more}`);
       } catch (e) { /* the save stands; the line is only news */ }
@@ -341,17 +366,18 @@ function historyTab() {
   function corrCard(e, kept) {
     const c = e.corrected || {}, name = [c.vendor || c.brand, c.name].filter(Boolean).join(" ") || String(e.id);
     const rec = e.record && kept.has(e.record) ? e.record : null;
-    const thumb = typeof e.thumbnail === "string" && e.thumbnail ? (/^(data:|https?:|\/)/.test(e.thumbnail) ? e.thumbnail : `data:image/jpeg;base64,${e.thumbnail}`) : null;
-    const img = rec && e.photos ? photo(rec, 1) : thumb;
+    const img = rec && e.photos ? photo(rec, 1) : thumbSrc(e.thumbnail);
     const when = e.at || e.time || e.created;
     const line = h("p", { class: "result", role: "status" });
-    const rm = needsHub(SW.btn(tt("corr_remove"), { action: "remove-correction", label: tt("corr_remove_named", { name }), run: (ev) =>
-      act(line, SW.t("common_working"), async () => {
+    const rm = needsHub(SW.btn(tt("corr_remove"), { action: "remove-correction", label: tt("corr_remove_named", { name }), run: (ev) => {
+      const button = ev.currentTarget;                         // kept now: after the await the event has no currentTarget
+      return act(line, SW.t("common_working"), async () => {
         await api(`label-reader/corrections/${encodeURIComponent(e.id)}/remove`, { body: {} });
         card.querySelectorAll(".corr__fields, .corr__note-line, .corr__photos").forEach((x) => x.remove());
-        ev.currentTarget.remove();
+        button.remove();
         return tt("corr_removed");
-      }, { button: ev.currentTarget }) }));
+      }, { button });
+    } }));
     if (rm.setAttribute) rm.setAttribute("aria-label", tt("corr_remove_named", { name }));
     const card = h("li", { class: "corr__card" },
       img ? h("span", { class: "thumb" }, h("img", { class: "thumb__img", alt: "", src: img, loading: "lazy" }),
@@ -368,6 +394,19 @@ function historyTab() {
         h("div", {}, rm), line));
     return card;
   }
+  // a record whose correction the reader did not take (the list's `not_queued`: {record, at, name, reason}): not waiting, not counted,
+  // shown with the triangle line instead of its fields (7.5)
+  function notQueuedCard(q, kept) {
+    const r = q.record ? records.find((x) => x.id === q.record) : null, rec = r && kept.has(r.id) ? r.id : null;
+    const name = q.name || String(q.record || "");
+    return h("li", { class: "corr__card corr__card--not-queued" },
+      rec && r.photos ? h("span", { class: "thumb" }, h("img", { class: "thumb__img", alt: "", src: photo(rec, 1), loading: "lazy" }))
+        : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s")),
+      h("div", { class: "corr__body" },
+        rec ? h("a", { href: "#recent/" + rec, textContent: name }) : h("span", { textContent: name }),
+        q.at ? h("p", { class: "muted" }, h("time", { class: "mono", textContent: recWhen(q.at) })) : null,
+        note("warn", notWaiting(q.reason))));
+  }
   async function loadCorr() {
     const back = h("p", {}, SW.btn(tt("corr_back"), { action: "back", run: () => { location.hash = "#recent"; } }));
     const body = h("div");
@@ -376,17 +415,20 @@ function historyTab() {
       let d;
       try { d = await api("label-reader/corrections"); }
       catch (err) {
-        if (err instanceof SW.HubError && [err.data?.code, err.data?.reason].includes("unreachable")) return h("div", {}, note("warn", tt("corr_reader_down")));
+        if (err instanceof SW.HubError && [err.data?.code, err.data?.reason].includes("unreachable")) {
+          return h("div", {}, note("warn", tt("corr_reader_down")), h("p", {}, SW.btn(SW.t("common_try_again"), { action: "try-again", run: () => loadCorr() })));
+        }
         throw err;
       }
       const entries = Array.isArray(d.entries) ? d.entries : [], n = Number(d.count) || entries.length;
+      const notQueued = Array.isArray(d.not_queued) ? d.not_queued.filter((q) => q && typeof q === "object") : [];
       const kept = new Set(records.map((r) => r.id));
       const hubLink = HUB_PAGE ? h("p", {}, h("a", { class: "btn", href: HUB_PAGE }, SW.t("common_open_hub_page"))) : null;
       const foot = [h("p", { class: "muted", textContent: tt("corr_foot") }), hubLink];
-      if (!entries.length) return h("div", {}, SW.empty({ icon: "info", title: tt("corr_empty_title"), text: tt("corr_empty_text") }), ...foot);
+      if (!entries.length && !notQueued.length) return h("div", {}, SW.empty({ icon: "info", title: tt("corr_empty_title"), text: tt("corr_empty_text") }), ...foot);
       return h("div", {}, h("p", { class: "muted", textContent: tt("corr_head", { count: n, size: SW.t("recent_size_mb", { value: ((Number(d.bytes) || 0) / 1048576).toFixed(1) }) }) }),
         h("p", { class: "muted", textContent: tt(d.opt_in === false ? "corr_off_left" : "corr_intro") }),
-        h("ul", { class: "corr__list" }, ...entries.map((e) => corrCard(e, kept))), ...foot);
+        h("ul", { class: "corr__list" }, ...entries.map((e) => corrCard(e, kept)), ...notQueued.map((q) => notQueuedCard(q, kept))), ...foot);
     });
     corr.querySelector(".corr__title").focus({ preventScroll: true });
   }
@@ -472,8 +514,7 @@ function historyTab() {
       h("p", { class: "page-head__meta" }, h("time", { class: "mono", datetime: r.at, textContent: recWhen(r.at) }),
         h("span", { textContent: recSource(r) }), h("span", { class: "mono", textContent: recSpools(r.spools.map((s) => s.spool_id)) })));
     reg._body = h("div");
-    reg.append(r.spools.length ? h("p", { class: "recent__print" }, SW.btn(tt("labels_button_many"), { cls: "btn--ghost", action: "print-labels", run: () =>
-      window.open(`${BASE}/labels?ids=${r.spools.map((s) => s.spool_id).join(",")}&size=62x29`, "_blank", "noopener") })) : null, reg._body);
+    reg.append(reg._body);                                     // one label at a time here: Print labels for several is the Hub page's (R85 22:45.6)
     return reg;
   }
   // the edit forms of the list with unsaved values; reloading the list drops them, so it asks first (the shell's guard, 6.1)
@@ -1050,7 +1091,7 @@ function tt(key, vars) {
     language_help: "Automatic uses this phone's language if the Hub has it, otherwise the Hub's language.",
     demo_banner: "Demo data. Nothing here is real.", demo_leave: "Leave demo", demo_leave_title: "Leave the demo?",
     demo_leave_text: "Everything in it is deleted.",
-    labels_button_one: "Print a label", labels_button_many: "Print labels",
+    labels_button_one: "Print a label",
     corr_link_on: "Share corrections is on · {count} waiting", corr_link_waiting: "Corrections waiting · {count}",
     corr_title: "Corrections waiting", corr_back: "Recently added", corr_head: "{count} waiting · {size}",
     corr_intro: "Nothing is sent until Send now is pressed on the Hub page. Remove any you do not want to share.",
@@ -1067,6 +1108,9 @@ function tt(key, vars) {
     corr_save_on: "Share corrections is on: this correction will wait on the Hub to be shared.",
     corr_saved_waiting: "This correction is waiting to be shared.", corr_no_photo: "Not shared: no photo was kept for this record.",
     corr_not_taken: "Saved. The correction is not waiting to be shared: {reason}.",
+    corr_not_taken_plain: "Saved. The correction is not waiting to be shared.",
+    corr_add_on: "Share corrections is on: fields you change here will wait on the Hub to be shared once the spools are added.",
+    corr_not_waiting_plain: "Not waiting: the reader did not take this correction.",
     history_recent_title: "Recent changes", history_none: "Nothing has changed on this spool yet.", history_undone: "(put back)", history_by: "by {who}",
     history_undo_put_back: "Put back.", history_undo_changed_since: "This changed again since, so it cannot be undone.",
     history_undo_too_old: "This is too old to be undone.", history_undo_already_undone: "This was already put back.",
@@ -1283,12 +1327,24 @@ function setLangChoice(v) {
   try { if (v === "auto") localStorage.removeItem(LANG_KEY); else localStorage.setItem(LANG_KEY, v); } catch { /* the cookie still carries it */ }
   document.cookie = `${LANG_COOKIE}=${encodeURIComponent(v)}; path=${BASE}; max-age=31536000; samesite=strict; secure`;
 }
-async function resendPush(code) {                           // a phone switched to another language sends its subscription again
+// A phone switched to another language sends its subscription again, with the language the page is NOW in: the reload after a change
+// gives it (Automatic is only known once the Hub chose the texts), so the check runs at every load (R85 3.8; R574 9).
+const PUSH_LANG_KEY = "spoolwarden.push_language";           // the language the subscription was last sent with
+async function resendPush(code) {
   try {
     const reg = await navigator.serviceWorker.getRegistration(BASE);
     const sub = reg && await reg.pushManager.getSubscription();
-    if (sub) await api("printers/push/subscribe", { method: "POST", body: { subscription: sub.toJSON(), lang: code } });
-  } catch { /* the subscription keeps its old language until the next time */ }
+    if (!sub) return false;
+    await api("printers/push/subscribe", { method: "POST", body: { subscription: sub.toJSON(), lang: code } });
+    return true;
+  } catch { return false; /* the subscription keeps its old language until the next time */ }
+}
+async function followPushLanguage() {
+  const now = document.documentElement.lang || "en";
+  let was;
+  try { was = localStorage.getItem(PUSH_LANG_KEY); } catch { return; }
+  if (was === now || !(navigator.serviceWorker && window.PushManager)) return;
+  if (await resendPush(now)) { try { localStorage.setItem(PUSH_LANG_KEY, now); } catch { /* sent again at the next load */ } }
 }
 function languageGroup(group) {
   const live = h("p", { class: "result", role: "status" });
@@ -1310,18 +1366,19 @@ function languageGroup(group) {
   sel._control.addEventListener("change", async () => {
     const v = sel._control.value;
     setLangChoice(v);
-    await resendPush(v === "auto" ? (document.documentElement.lang || "en") : v);
-    location.reload();                                      // the page loads the texts of the language and draws itself again
-  });
+    location.reload();                                      // the page loads the texts of the language and draws itself again;
+  });                                                       // the reloaded page sends the subscription in its new language
   return group(tt("settings_language_title"), sel, h("p", { class: "muted" }, tt("language_help")), saved, live);
 }
 if (langChoice() !== "auto") setLangChoice(langChoice());   // the cookie follows the key (another tab, or a cleared cookie)
+followPushLanguage();
 async function leaveDemo(opener) {
   const done = await SW.ask({ kind: "destructive", title: tt("demo_leave_title"), text: tt("demo_leave_text"), confirm: tt("demo_leave"), opener, run: async () => {
     try { await api("demo/leave", { body: {} }); return true; }
     catch (err) {
       if (err instanceof SW.HubError && err.status === 409 && [err.data?.error, err.data?.code].includes("not_in_demo")) return true;   // already off: the banner goes
-      throw Object.assign(err, { text: () => says(err) });
+      const text = says(err);                               // built before text() is replaced: says() reads err.text
+      throw Object.assign(err, { text: () => text });
     }
   } });
   if (done) location.reload();
@@ -1390,7 +1447,7 @@ function catalogGroup() {
           const done = await SW.ask({ open: openHere, kind: "destructive", title: tt("catalog_remove"), text: tt("catalog_remove_confirm", { brand: en.brand, name: en.name }),
             confirm: tt("catalog_remove"), opener, run: async () => {
               try { await api(`library/local/${encodeURIComponent(en.id)}/remove`, { body: {} }); return true; }
-              catch (err) { throw Object.assign(err, { text: () => says(err) }); }
+              catch (err) { const text = says(err); throw Object.assign(err, { text: () => text }); }   // built first: says() reads err.text
             } });
           if (done) { SW.toast(tt("catalog_removed")); loadList(true); }
         } })))));
@@ -1918,6 +1975,7 @@ function addTab() {
       for (const it of got) { it._open = needsLook(it); items.push(it); addCard(it); }
       addedBox.replaceChildren();
       drawFound(); drawList(); changed();
+      readShare().then(() => { if (found) drawFound(); });   // whether the corrections made here will wait to be shared
       return null;
     }, { button: readBtn, kept: true, busy: SW.t("common_reading"), again: read });
     working = null; paintBar(); readable();
@@ -1941,6 +1999,8 @@ function addTab() {
     const u = f.usage, used = u && u.input_tokens != null ? SW.t("add_found_usage", { tokens_in: u.input_tokens, tokens_cached: u.cached || 0, tokens_out: u.output_tokens || 0 })
       : u && u.ms != null ? SW.t("add_found_usage_time", { seconds: (u.ms / 1000).toFixed(1) }) : "";
     if (used) kids.push(h("details", { class: "add__details" }, h("summary", { textContent: SW.t("common_details") }), h("p", { class: "mono", textContent: used })));
+    // read from photos while Share corrections is on: what is changed here waits to be shared (04 7.5)
+    if (f.count && sharing()) kids.push(h("p", { class: "muted add__share" }, SW.icon("info", "icon--s"), " ", tt("corr_add_on")));
     foundBox.replaceChildren(group(SW.t("add_found_title"), ...kids));
   }
 
@@ -2694,7 +2754,7 @@ function openTab() {
       const done = await SW.ask({ open: openHere, kind: "destructive", title: SW.t("spool_empty_title", { id }), text: SW.t("spool_sheet_empty_body", { name }),
         confirm: SW.t("spool_mark_empty"), opener, run: async () => {
           try { const r = await api(`spools/${id}`, { body: { empty: true, dry_run: false } }); emptied = r.event_id; changed = true; applyView(r.view); return true; }
-          catch (e) { throw Object.assign(e, { text: () => says(e) }); }
+          catch (e) { const text = says(e); throw Object.assign(e, { text: () => text }); }   // built first: says() reads e.text
         } });
       if (done) {
         const et = SW.t("spool_result_empty");
