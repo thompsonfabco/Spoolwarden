@@ -62,7 +62,8 @@ from starlette.routing import Route
 
 from .. import config, inventory, tags
 from ..spoolman import SpoolmanError
-from . import auth, slots
+from .. import lan
+from . import slots
 from ..reader_tokens import (MAX_FILE, MAX_TOKENS, SHA256, TOKEN_ID, TokenFileError,  # noqa: F401
                              TokenStore, _clean_name, _hash, parse_tokens, render_tokens, token_file)
 from .errors import Problem
@@ -348,7 +349,7 @@ def cap_slots(rows: list[dict], printer: str = "") -> list[dict]:
 class Reader:
     def __init__(self, tools, sm, *, lan_cidrs=(), tokens: TokenStore | None = None, queue: LoadQueue | None = None):
         self.tools, self.sm = tools, sm
-        self.nets = auth.parse_lan(lan_cidrs)
+        self.nets = lan.parse_lan(lan_cidrs)
         self.tokens = tokens if tokens is not None else TokenStore()
         self.queue = queue if queue is not None else LoadQueue(tools.kit_bridge)
         if self.queue.kit_fn is None:
@@ -358,7 +359,7 @@ class Reader:
     # --- plumbing ---
 
     def _lan(self, request: Request) -> bool:
-        return auth.is_lan(request.client.host if request.client else "", self.nets)
+        return lan.is_lan(request.client.host if request.client else "", self.nets)
 
     def _gated(self, fn):
         @functools.wraps(fn)

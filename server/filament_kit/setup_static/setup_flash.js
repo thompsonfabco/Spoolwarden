@@ -37,7 +37,9 @@ function parseHello(line) {
   if (p.length < 2 || p[0] !== "FK-READER" || !/^[0-9]+$/.test(p[1])) return null;
   const kv = {};
   for (const x of p.slice(2)) { const i = x.indexOf("="); if (i > 0) kv[x.slice(0, i)] = x.slice(i + 1); }
-  return { build: Number(p[1]), configured: kv.configured === "1", wifi: kv.wifi || "-", server: kv.server || "-" };
+  const wifi = kv.wifi || "-", server = kv.server || "-";
+  if (!["ok", "fail", "-"].includes(wifi) || !["ok", "fail", "unauth", "-"].includes(server)) return null;   // cut short: not an answer
+  return { build: Number(p[1]), configured: kv.configured === "1", wifi, server };
 }
 
 // One open serial port, read as lines. A port that goes away (the board restarting) ends as `closed`.
@@ -119,7 +121,7 @@ async function askHello(s, ms, done = () => true) {
 
 // The settings to the freshly written Tag Reader, then its own report of its first start. Mirrors reader_flash.setup on the
 // server: the same steps. `step(name)` says which of the page's steps starts (restarting, sending, report). Resolves with
-// { ok: true } or { ok: false, code, reason }: `code` is the page's text (back, answer, refused, report, wifi, hub_refused,
+// { ok: true } or { ok: false, code, reason }: `code` is the page's text (back, answer, refused, late, report, wifi, hub_refused,
 // hub_unreachable); the words are the catalogue's, said by the caller.
 async function provisionOverSerial(info, settings, step) {
   step("restarting");
@@ -157,10 +159,11 @@ async function provisionOverSerial(info, settings, step) {
     if (!s) break;
     try { h = await askHello(s, end - Date.now(), done); } finally { await s.close(); }
   }
-  if (!h) return { ok: false, code: "report" };
+  if (!h) return { ok: false, code: "late" };
   if (h.wifi !== "ok") return { ok: false, code: "wifi" };
   if (h.server === "unauth") return { ok: false, code: "hub_refused" };
-  if (h.server !== "ok") return { ok: false, code: "hub_unreachable" };
+  if (h.server === "fail") return { ok: false, code: "hub_unreachable" };
+  if (h.server !== "ok") return { ok: false, code: "report" };
   return { ok: true };
 }
 
@@ -205,7 +208,7 @@ const stopCheck = () => { if (flashRun && flashRun.stop) throw new FlashStopped(
 
 // the words of a failure of provisionOverSerial
 function provisionText(r, ssid, base) {
-  const key = { back: "flash_error_back", answer: "flash_error_answer", refused: "flash_error_refused", report: "flash_error_report",
+  const key = { back: "flash_error_back", answer: "flash_error_answer", refused: "flash_error_refused", report: "flash_error_report", late: "flash_error_late",
     wifi: "flash_error_wifi", hub_refused: "flash_error_hub_refused", hub_unreachable: "flash_error_hub_unreachable" }[r.code];
   return SW.t(key, { reason: r.reason, wifi: ssid, address: base });
 }
@@ -225,7 +228,7 @@ async function flashHere(dev, a, sent) {
   try {
     runStep("connecting");
     if (tag) {         // its token first: with none, nothing is written
-      tok = await api("flash/provision", { code: theCode(), name: a.name || undefined });
+      tok = await api("flash/provision", { code: theCode(), name: a.name || undefined, printer: a.printer });
     }
     stopCheck();
     const r = await fetch(`/setup/api/firmware/${dev.id}.bin`, { credentials: "same-origin" });
@@ -258,9 +261,10 @@ async function flashHere(dev, a, sent) {
       flashRun.done = true;
       return { ok: true, text: SW.t("flash_done_display", { version: dev.version }) };
     }
-    const settings = { ssid: a.ssid, pass: a.pass, base: tok.base, token: tok.token, buzzer_low: a.buzzer === "older" };
+    const settings = { ssid: a.ssid, pass: a.pass, base: tok.base, token: tok.token, buzzer_low: a.buzzer === "older",
+      root_ca: tok.root_ca, hub_ip: tok.hub_ip, printer: tok.printer };
     const res = await provisionOverSerial(usb, settings, (name) => { runStep(name); if (name === "sending") sent(); });
-    if (!res.ok) throw Object.assign(new Error(provisionText(res, a.ssid, tok.base)), { said: true });
+    if (!res.ok) throw Object.assign(new Error(provisionText(res, a.ssid, tok.base + (tok.hub_ip ? " (" + tok.hub_ip + ")" : ""))), { said: true });
     flashRun.done = true;
     return { ok: true, text: SW.t("flash_done_reader", { wifi: a.ssid }) + " " + SW.t("flash_token_made", { id: tok.id }) };
   } catch (e) {
@@ -371,10 +375,12 @@ function drawFlash(body, F, J) {
     check: (v) => (v === pass._control.value ? null : SW.t("flash_wifi_mismatch")) });
   const buzzer = flashChoice("flash-buzzer", SW.t("flash_buzzer"), [{ value: "high", label: SW.t("flash_buzzer_high") }, { value: "older", label: SW.t("flash_buzzer_older") }],
     flashPick.buzzer, (v) => { flashPick.buzzer = v; });      // kept like the device: radios are not typed values the page carries over a redraw
+  const printer = SW.field({ label: SW.t("flash_printer"), type: "select", name: "printer", hint: SW.t("flash_printer_hint"),
+    options: [{ value: "", label: SW.t("flash_printer_reader") }, ...(F.printers || []).map((p) => ({ value: p.id, label: p.name }))] });
   const name = SW.field({ label: SW.t("flash_name"), name: "name", optional: true, hint: SW.t("flash_name_hint") });
   const boards = () => F.server_boards || [];
   const board = SW.field({ label: SW.t("flash_board"), type: "select", name: "board", options: boards().map((b) => ({ value: b.port, label: SW.t("flash_board_option", { port: b.port, product_name: b.product }) })) });
-  const settingsEl = h("div", { class: "flash-form" }, ssid, pass, again, buzzer, name, board);
+  const settingsEl = h("div", { class: "flash-form" }, ssid, pass, again, buzzer, printer, name, board);
   // 4 write
   const goHere = SW.btn(SW.t("flash_connect_write"), { cls: "btn--primary" });
   const goHub = SW.btn(SW.t("flash_write_hub"), { cls: "btn--primary" });
@@ -387,18 +393,13 @@ function drawFlash(body, F, J) {
   const answers = () => {
     const bad = [[ssid, ssid._check()], [again, again._check()]].filter(([f, e]) => (SW.fieldError(f, e), e));
     if (bad.length) { bad[0][0]._control.focus(); return null; }
-    return { ssid: ssid._control.value.trim(), pass: pass._control.value, buzzer: flashPick.buzzer, name: name._control.value.trim() };
-  };
-  const noPublic = () => {
-    if (F.settings_ok) return false;
-    say(box, [h("p", { textContent: SW.t("flash_no_public") }), F.settings_why ? h("p", { class: "muted", textContent: hubText(F.settings_why) }) : null, h("a", { href: "#settings/network", textContent: SW.t("nav_settings") })], false);
-    return true;
+    return { ssid: ssid._control.value.trim(), pass: pass._control.value, buzzer: flashPick.buzzer, printer: printer._control.value, name: name._control.value.trim() };
   };
   goHere.addEventListener("click", () => {
     const { dev, here } = state();
     if (!here || running() || goHere.getAttribute("aria-disabled") === "true") return;
     const tag = dev.id === "printer-station", a = tag ? answers() : null;
-    if (tag && (!a || noPublic())) return;
+    if (tag && !a) return;
     needCode(async () => {
       fill(box);
       newRun(dev.id, { ssid: a && a.ssid });
@@ -416,10 +417,10 @@ function drawFlash(body, F, J) {
   goHub.addEventListener("click", async () => {
     if (running() || goHub.getAttribute("aria-disabled") === "true") return;
     const a = answers();
-    if (!a || noPublic()) return;
+    if (!a) return;
     const port = boards().length > 1 ? board._control.value : boards()[0].port;
     const before = await api("job?from=999999999").then(hubSig, () => "");      // the log as it is before this job starts
-    change(box, "flash/server", { ssid: a.ssid, pass: a.pass, buzzer: a.buzzer === "older" ? "low" : "high", port, name: a.name || undefined }, () => {
+    change(box, "flash/server", { ssid: a.ssid, pass: a.pass, buzzer: a.buzzer === "older" ? "low" : "high", port, printer: a.printer, name: a.name || undefined }, () => {
       newRun("printer-station", { hub: true, ssid: a.ssid, since: Date.now(), before });
       flashSync();
       say(box, SW.t("flash_hub_started"), "info");

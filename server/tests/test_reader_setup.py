@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from filament_kit import cli, reader_setup as rs, reader_tokens
+from filament_kit import cli, config, pairing, reader_setup as rs, reader_tokens
 
 TOKEN = "A" * 20 + "b-c_d" + "9" * 18                          # the shape token_urlsafe(32) makes: 43 characters
 KEY = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEabc+/=\nxyz=\n-----END PUBLIC KEY-----\n"
@@ -53,11 +53,88 @@ def test_the_update_key_must_be_a_pem_public_key():
             rs.pubkey(bad)
 
 
-def test_reader_base_is_the_public_https_address():
-    assert rs.reader_base({"web": {"public_url": "https://kit.example.net/filament/"}}) == BASE
-    for cfg in ({}, {"web": {"public_url": "http://kit.local/filament"}}):
-        with pytest.raises(rs.SetupError, match="https"):
-            rs.reader_base(cfg)
+@pytest.fixture
+def hub(monkeypatch):
+    """The Hub's certificate in the etc folder, its home name and its addresses."""
+    etc = config.paths().etc
+    etc.mkdir(parents=True, exist_ok=True)
+    pairing.make_cert("fkhub", ["192.0.2.7"], etc)
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "fkhub")
+    monkeypatch.setattr(pairing, "local_ips", lambda: ["192.0.2.7", "192.0.2.8"])
+    return (etc / "cert.pem").read_text(encoding="ascii")
+
+
+def test_reader_base_is_the_hubs_home_address_whatever_the_public_one(hub):
+    home = "https://fkhub.local:8443/reader"
+    assert rs.reader_base({"port": 8443}) == home
+    assert rs.reader_base({"port": 8443, "web": {"public_url": "https://kit.example.net/filament/"}}) == home
+    assert rs.reader_base({"port": 8443, "web": {"public_url": "http://kit.local/filament"}}) == home
+
+
+def test_reader_base_takes_its_name_from_the_certificate_not_the_hostname_now(hub, monkeypatch):
+    """The certificate is made once, at install. A host renamed since (or a backup restored on another host) must not
+    give readers a name the certificate lacks: on 58731d34 this said https://newname.local."""
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "newname")
+    assert rs.cert_local_name() == "fkhub.local"
+    assert rs.reader_base({"port": 8443}) == "https://fkhub.local:8443/reader"
+
+
+def test_reader_base_takes_the_current_name_when_the_certificate_has_it_too(tmp_path, monkeypatch):
+    etc = config.paths().etc
+    pairing.make_cert("one", ["192.0.2.7"], etc, extra_dns=["two.local", "Three.local", "plain.example.net"])
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "Three")
+    assert rs.cert_local_name() == "three.local"
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "other")
+    assert rs.cert_local_name() == "one.local"          # else the first of its .local names, sorted
+
+
+def test_a_certificate_without_a_local_name_or_none_refuses_with_a_text_that_says_so(tmp_path, monkeypatch):
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+    import datetime as dt
+    etc = config.paths().etc
+    etc.mkdir(parents=True, exist_ok=True)
+    with pytest.raises(rs.SetupError, match="no .local name"):         # no certificate at all
+        rs.reader_base({"port": 8443})
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "hub.example.net")])
+    now = dt.datetime.now(dt.timezone.utc)
+    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+            .serial_number(1).not_valid_before(now).not_valid_after(now + dt.timedelta(days=9))
+            .add_extension(x509.SubjectAlternativeName([x509.DNSName("hub.example.net")]), critical=False)
+            .sign(key, hashes.SHA256()))
+    (etc / "cert.pem").write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    with pytest.raises(rs.SetupError) as e:
+        rs.reader_base({"port": 8443})
+    assert "renews" in str(e.value) and "no .local name" in str(e.value)
+
+
+def test_home_settings_are_the_certificate_the_first_address_and_the_printer(hub, monkeypatch):
+    from filament_kit.bridge import registry
+    serial = registry.add_bambu("01P00A000000001", "Garage", "X1C", "192.0.2.50", "12345678").serial
+    assert rs.home_settings(serial) == {"root_ca": hub, "hub_ip": "192.0.2.7", "printer": serial}
+    assert rs.home_settings()["printer"] == ""
+    monkeypatch.setattr(pairing, "local_ips", lambda: [])
+    assert rs.home_settings()["hub_ip"] == ""
+
+
+def test_home_settings_without_the_certificate_say_so(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "paths", lambda: type("P", (), {"etc": tmp_path})())
+    with pytest.raises(rs.SetupError, match="certificate"):
+        rs.home_settings()
+    (tmp_path / "cert.pem").write_text("hello")
+    with pytest.raises(rs.SetupError, match="not a certificate"):
+        rs.home_settings()
+
+
+def test_secrets_h_carries_the_hubs_certificate_only_when_given(hub):
+    text = rs.secrets_h("Home", "pw", BASE, TOKEN, KEY, home=rs.home_settings())
+    assert f'READER_ROOT_CA R"CERT({hub})CERT"' in text
+    assert "READER_HUB_IP" not in text and "READER_PRINTER" not in text      # FK-SET fields only: the firmware reads no macro
+    plain = rs.secrets_h("Home", "pw", BASE, TOKEN, KEY)
+    assert "READER_ROOT_CA" not in plain
 
 
 def _usb(sysfs, name, vid, tty, product="USB JTAG/serial debug unit"):
@@ -630,3 +707,19 @@ def test_source_port_that_is_no_found_board_flashes_nothing(tmp_path, monkeypatc
     assert "/dev/ttyUSB0" in err and "use one of: /dev/ttyACM0, /dev/ttyACM1." in err and calls == []
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM1", yes=True),
                                 ask_secret=_secret("p", "p")) == 0 and calls[0][0] == "/dev/ttyACM1"
+
+
+def test_the_buzzer_options_read_bare_buzzer_and_buzzer_with_driver_board_everywhere():
+    root = Path(cli.__file__).resolve().parents[2]
+    texts = __import__("json").loads((root / "strings" / "en.json").read_text(encoding="utf-8"))
+    assert texts["flash_buzzer_high"] == "Bare buzzer" and texts["flash_buzzer_older"] == "Buzzer with driver board"
+    for rel in ("strings/strings.js", "server/filament_kit/shared_static/strings.js",
+                "android/app/src/main/res/values/strings.xml"):
+        text = (root / rel).read_text(encoding="utf-8")
+        assert "Bare buzzer" in text and "Buzzer with driver board" in text, rel
+        assert "Older 3-pin" not in text and "the build in the parts list" not in text, rel
+    for rel in ("server/filament_kit/cli.py", "server/filament_kit/reader_setup.py"):
+        text = (root / rel).read_text(encoding="utf-8")
+        assert "3-pin" not in text and "MOSFET" not in text, rel
+    assert "a [b]are buzzer" in (root / "server/filament_kit/cli.py").read_text(encoding="utf-8")
+

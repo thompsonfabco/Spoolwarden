@@ -14,6 +14,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import config, pairing
+
 try:
     import pwd
 except ImportError:         # Windows: only the tests run there
@@ -77,14 +79,81 @@ def _read(p: Path) -> str | None:
         return None
 
 
+def cert_local_name() -> str:
+    """A ".local" name from the Subject Alternative Names of the Hub's certificate (etc/cert.pem): the host name a Tag
+    Reader can check that certificate against. The certificate is made once, at install, so this is the name of that
+    time, not the host's name now; the current short host name wins when the certificate has it too. SetupError when
+    the certificate cannot be read or carries no .local name: a reader flashed with another name could never verify."""
+    from cryptography import x509
+    f = config.paths().etc / "cert.pem"
+    try:
+        san = x509.load_pem_x509_certificate(f.read_bytes()).extensions.get_extension_for_class(
+            x509.SubjectAlternativeName).value
+        names = sorted({n.lower().rstrip(".") for n in san.get_values_for_type(x509.DNSName)})
+    except (OSError, ValueError, x509.ExtensionNotFound):
+        names = []
+    local = [n for n in names if n.endswith(".local") and len(n) > len(".local")]
+    if not local:
+        raise SetupError("The Hub's certificate has no .local name, so a Tag Reader could not check it. The certificate "
+                         "is made once, when the Hub is installed, and this version has no command that renews it.")
+    mine = f"{pairing.short_hostname().lower()}.local"
+    return mine if mine in local else local[0]
+
+
 def reader_base(cfg: dict) -> str:
-    """The reader's READER_BASE: the kit's public HTTPS address plus /reader (the reader pins a public root
-    certificate, so only that address works)."""
-    url = str((cfg.get("web") or {}).get("public_url") or "").rstrip("/")
-    if not url.startswith("https://"):
-        raise SetupError("web.public_url is not an https address, and the reader only calls the kit over its public "
-                         "HTTPS address (set it with the web module, see docs/remote-access.md)")
-    return url + "/reader"
+    """The reader's READER_BASE: the Hub's own home address plus /reader, https://<name>.local:<port>/reader. The name is
+    one the Hub's certificate carries (cert_local_name), so the reader's check of the certificate against it holds; the
+    public address (web.public_url) plays no part. SetupError when the certificate has no such name."""
+    return f"https://{cert_local_name()}:{cfg['port']}/reader"
+
+
+def hub_ip() -> str:
+    """The Hub's home IPv4 address now ("" when it has none): given to the reader for when the name does not resolve."""
+    ips = pairing.local_ips()
+    return ips[0] if ips else ""
+
+
+def hub_root_ca() -> str:
+    """The PEM of the Hub's own certificate (etc/cert.pem): self-signed, so the reader trusts it as its own root."""
+    f = config.paths().etc / "cert.pem"
+    try:
+        pem = f.read_text(encoding="ascii")
+    except (OSError, ValueError) as e:
+        raise SetupError(f"cannot read the Hub's certificate {f} ({type(e).__name__}); a Tag Reader trusts only that "
+                         "certificate") from None
+    if "-----BEGIN CERTIFICATE-----" not in pem:
+        raise SetupError(f"{f} is not a certificate")
+    return pem
+
+
+UNKNOWN_PRINTER = "That printer is not one of this Hub's printers."
+
+
+def hub_printers(cfg: dict | None = None) -> list[dict]:
+    """The printers a Tag Reader can start on, by name: every configured printer, Bambu Lab and Klipper alike, as the
+    reader's own printer list (web/reader.py, from the kit's /api/printers) shows them. None when neither the printers
+    nor the Klipper feature is on (the kit then answers the reader's list with module_off)."""
+    from . import modules
+    from .bridge import registry
+    on = modules.enabled(cfg if cfg is not None else config.load())
+    if "printers" not in on and "klipper" not in on:
+        return []
+    return [{"id": p.serial, "name": registry.display_name(p), "family": p.family}
+            for p in registry.load().values() if p.configured]
+
+
+def check_printer(printer: str, cfg: dict | None = None) -> str:
+    """`printer` when it is "" (choose on the reader) or one of hub_printers(); SetupError(UNKNOWN_PRINTER) otherwise.
+    The one check every way of flashing a reader makes (the browser, the Hub's USB, the command line)."""
+    if printer and printer not in [p["id"] for p in hub_printers(cfg)]:
+        raise SetupError(UNKNOWN_PRINTER)
+    return printer
+
+
+def home_settings(printer: str = "") -> dict:
+    """The FK-SET fields that point a reader at the Hub's home address (the contract with the firmware): `root_ca`,
+    `hub_ip` and `printer` ("" = chosen on the reader's knob; anything else must be one of the Hub's printers)."""
+    return {"root_ca": hub_root_ca(), "hub_ip": hub_ip(), "printer": check_printer(printer)}
 
 
 def c_string(text: str) -> str:
@@ -108,9 +177,12 @@ def pubkey(text: str | None) -> tuple[str, bool]:
     return pem, True
 
 
-def secrets_h(ssid: str, password: str, base: str, token: str, key_pem: str, buzzer_active_low: bool = False) -> str:
-    """secrets.h for the build. `buzzer_active_low`: the reader's buzzer is the older low-triggered 3-pin module; the
-    default is a high-triggered buzzer behind a MOSFET (reader/src/main.cpp, Buzzer)."""
+def secrets_h(ssid: str, password: str, base: str, token: str, key_pem: str, buzzer_active_low: bool = False,
+              home: dict | None = None) -> str:
+    """secrets.h for the build. `buzzer_active_low`: the buzzer is a "Buzzer with driver board" (low-triggered); the
+    default is a bare, high-triggered buzzer (reader/src/main.cpp, Buzzer). `home`: home_settings() for a reader that calls
+    the Hub at its home address: its root_ca is compiled in (READER_ROOT_CA); hub_ip and printer are FK-SET fields only
+    (the firmware keeps no compiled-in copy). None keeps the base's own (public) certificate."""
     if not ssid or len(ssid.encode()) > 32:
         raise SetupError("the Wi-Fi name must be 1 to 32 bytes")
     if len(password.encode()) > 63:
@@ -125,7 +197,8 @@ def secrets_h(ssid: str, password: str, base: str, token: str, key_pem: str, buz
             f"static const char* READER_BASE = {c_string(base)};\n"
             f"static const char* READER_TOKEN = {c_string(token)};\n"
             f'static const char* OTA_PUBKEY = R"KEY({key_pem})KEY";\n'
-            f"#define READER_BUZZER_ACTIVE_LOW {1 if buzzer_active_low else 0}\n")
+            f"#define READER_BUZZER_ACTIVE_LOW {1 if buzzer_active_low else 0}\n"
+            + ("" if not home else f'#define READER_ROOT_CA R"CERT({home["root_ca"]})CERT"\n'))
 
 
 def write_private(path: Path, text: str) -> None:

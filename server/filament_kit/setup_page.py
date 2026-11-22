@@ -593,8 +593,9 @@ class SetupPage:
                          "klipper": "klipper" in self.families, "list": self._printer_rows()},
             "readers": {"list": readers, "error": readers_error},
             "devices": self._device_rows(cfg),
-            # the public address is owner data (`redact` hides its host): this answers without the code, so only that it is set
-            "web": {"public_set": bool((cfg.get("web") or {}).get("public_url"))},
+            # the public address as stored, for the Settings field (the Hub's report and logs still hide it: redact.py)
+            "web": {"public_set": bool((cfg.get("web") or {}).get("public_url")),
+                    "public_url": (cfg.get("web") or {}).get("public_url") or ""},
             "station": {"url": (cfg.get("station") or {}).get("url")},
             "apply": jobs.view(0, with_text=False),
             # the time of the newest backup, no code (N12): nothing else about backups leaves the root-only folder
