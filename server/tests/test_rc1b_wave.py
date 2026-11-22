@@ -49,12 +49,13 @@ def test_the_pairing_files_are_xml_and_come_back_as_they_went_in():
     assert pairing._read("spent.json") == [{"hash": "b" * 64, "at": 7.0}]
 
 
-def test_only_the_paired_devices_list_is_also_written_as_json():
+def test_every_pairing_file_is_also_written_as_json():
     pairing._write("devices.json", DEVICES)
     pairing._write("pending.json", [])
     pairing._write("spent.json", [])
     assert json.loads(state("devices.json").read_text(encoding="utf-8")) == DEVICES      # for `update --rollback`
-    assert not state("pending.json").exists() and not state("spent.json").exists()
+    assert json.loads(state("pending.json").read_text(encoding="utf-8")) == []
+    assert json.loads(state("spent.json").read_text(encoding="utf-8")) == []
 
 
 def test_a_later_save_keeps_both_forms_equal():
@@ -151,7 +152,7 @@ def test_the_cap_is_kept_as_reads_xml_and_counts_across_restarts():
     f = state("reads.json")
     intake.ReadCap(f, 3).take("d1")
     ticket = intake.ReadCap(f, 3).take()
-    assert state("reads.xml").is_file() and not f.exists()
+    assert state("reads.xml").is_file() and f.is_file()
     rows = statexml.read_list(f)
     assert [sorted(r) for r in rows] == [["device", "t", "ticket"], ["device", "t", "ticket"]]
     assert rows[1]["device"] is None and intake.reads_today(f) == 2
@@ -207,9 +208,9 @@ def test_the_record_is_xml_with_its_release_number_and_stays_as_json_for_the_uni
     assert lii.installed() == RECORD
 
 
-def test_the_plan_is_xml_only_and_comes_back(store):
+def test_the_plan_is_xml_and_json_and_comes_back(store):
     lii._write_json(lii.PLAN, PLAN)
-    assert (store / "plan.xml").is_file() and not (store / "plan.json").exists()
+    assert (store / "plan.xml").is_file() and json.loads((store / "plan.json").read_text(encoding="utf-8")) == PLAN
     d = lii.saved_plan(now=1700000010.0)
     assert d["plan"] == PLAN["plan"] and d["fresh"] is True and d["text"] == PLAN["text"]
 

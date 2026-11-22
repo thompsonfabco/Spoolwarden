@@ -382,7 +382,8 @@ def test_the_record_and_the_plan_live_in_roots_store_not_the_service_state(key, 
     s = server({"0.2.1": mrf.make_release(key)})
     lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
     lii.save_plan(lii.plan(config.load(), tier="cpu", fetcher=fetcher(s)))
-    assert {p.name for p in (tmp_path / "store").iterdir() if p.is_file()} == {"installed.json", "installed.xml", "plan.xml"}
+    assert {p.name for p in (tmp_path / "store").iterdir() if p.is_file()} == {
+        "installed.json", "installed.json.sha256", "installed.xml", "plan.json", "plan.json.sha256", "plan.xml"}
     assert not list(config.paths().state.glob("local-intake*"))
 
 

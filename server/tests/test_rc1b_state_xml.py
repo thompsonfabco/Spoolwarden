@@ -21,7 +21,7 @@ ANSWERS = {"ssid": "Home & <Net>", "pass": "12345678", "buzzer": "high", "port":
 def test_the_answers_are_xml_and_come_back_as_they_went_in():
     rf.write_pending(ANSWERS)
     path = rf.pending_path()
-    assert path.name == "reader-setup.xml" and not path.with_name("reader-setup.json").exists()
+    assert path.name == "reader-setup.xml" and json.loads(path.with_name("reader-setup.json").read_text("utf-8")) == ANSWERS
     text = path.read_text(encoding="utf-8")
     assert text.startswith("<?xml") and "<reader-setup " in text and "{" not in text
     assert rf.take_pending() == ANSWERS
@@ -43,7 +43,7 @@ def test_writing_again_replaces_the_answers_and_an_old_json_file():
     old = rf.pending_path().with_name("reader-setup.json")
     old.write_text(json.dumps({"ssid": "stale"}), encoding="utf-8")
     rf.write_pending(ANSWERS)
-    assert not old.exists()
+    assert json.loads(old.read_text("utf-8")) == ANSWERS         # the stale file was replaced by the new answers
     assert rf.take_pending()["ssid"] == ANSWERS["ssid"]
 
 
@@ -90,7 +90,8 @@ def _kept(tmp_path, monkeypatch):
 
 def test_a_kept_read_has_its_note_as_xml_and_reads_it_back(tmp_path, monkeypatch):
     d = _kept(tmp_path, monkeypatch)
-    assert (d / "meta.xml").read_text(encoding="utf-8").startswith("<?xml") and not (d / "meta.json").exists()
+    assert (d / "meta.xml").read_text(encoding="utf-8").startswith("<?xml")
+    assert json.loads((d / "meta.json").read_text(encoding="utf-8")) == {"hint": "note\nwith a break & <angle>", "tag_uid": "04:A2:B3"}
     assert intake._kept_meta(d) == {"hint": "note\nwith a break & <angle>", "tag_uid": "04:A2:B3"}
 
 
