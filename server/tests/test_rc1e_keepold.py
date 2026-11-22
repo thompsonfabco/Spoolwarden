@@ -190,3 +190,20 @@ def test_a_snapshot_the_older_release_cleared_after_a_rollback_is_not_a_pending_
     (state / "slottest-snapshot.json").unlink()            # v0.6.2 deletes the JSON when its restore is confirmed
     assert not snapshot.pending(SERIAL) and snapshot.load(SERIAL) is None
     assert not any(state.glob("slottest-snapshot*"))
+
+
+def test_a_snapshot_the_older_release_rewrote_is_read_once_and_kept(state):
+    snapshot.save(SERIAL, "slottest", [], test_colours=["FF0000"])
+    _older_release_changes(state / "slottest-snapshot.json", kind="slottest2")          # v0.6.2 `forget` / a new slot test
+    assert snapshot.load(SERIAL)["kind"] == "slottest2"
+    assert snapshot.load(SERIAL)["kind"] == "slottest2"
+    assert "slottest2" in (state / "slottest-snapshot.xml").read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="file modes are Linux's")
+def test_a_snapshot_rewritten_from_an_older_releases_json_stays_owner_only(state):
+    snapshot.save(SERIAL, "slottest", [], test_colours=["FF0000"])
+    _older_release_changes(state / "slottest-snapshot.json", kind="slottest2")
+    snapshot.load(SERIAL)
+    assert (state / "slottest-snapshot.xml").stat().st_mode & 0o777 == 0o600
+    assert (state / "slottest-snapshot.json.sha256").stat().st_mode & 0o777 == 0o600

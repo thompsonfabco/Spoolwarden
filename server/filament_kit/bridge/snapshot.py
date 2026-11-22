@@ -65,7 +65,7 @@ def load(serial: str) -> dict | None:
     f = path(serial)
     if not statexml.exists(f) or _cleared_by_older_release(serial):
         return None
-    d = statexml.read(f)
+    d = statexml.read(f, mode=0o600)          # a rewrite from the older release's JSON keeps the save's mode
     if d is None:
         # unreadable but present: still a pending restore, with nothing we can trust in it
         return {"kind": "unknown", "slots": [], "test_colours": [], "corrupt": True}
