@@ -57,6 +57,8 @@ TEXT_FIRMWARE_OLD = _t("panel_setup_firmware_old", "This panel's firmware is too
                        "Flash it first: sudo spoolwarden weigh-station flash-display")
 TEXT_NO_ANSWER_USB = _t("panel_setup_no_answer_usb", "The panel did not answer over USB. Check the cable and try again.")
 TEXT_NOT_ACCEPTED = _t("panel_setup_not_accepted", "The panel did not accept the Wi-Fi settings.")
+TEXT_PANEL_STORE = _t("panel_setup_panel_store", "The panel could not save the Wi-Fi settings. Run this again; if it fails again, "
+                      "flash the panel: sudo spoolwarden weigh-station flash-display")
 TEXT_TIMEOUT = _t("panel_setup_timeout", "The panel did not answer in time.")
 TEXT_NOT_SAVED = _t("panel_setup_not_saved", "The panel took the Wi-Fi settings, but the station could not save them. "
                     "Run the set-up again.")
@@ -69,6 +71,10 @@ TEXT_NOT_CONNECTED_FIX = _t("check_panel_not_connected_fix", "check the panel ha
 class PanelSetupError(ValueError):
     """A set-up that cannot go on: a value the panel cannot take, or a panel that did not answer. The message is one
     sentence that never holds the password."""
+
+
+class PanelRefused(PanelSetupError):
+    """The panel answered `ERR <reason>` (any reason, known or not): a refusal, so the caller sends a best-effort CFG CLEAR."""
 
 
 def new_token() -> str:
@@ -129,7 +135,10 @@ def _answer(send: Callable[[str | None], str], line: str | None) -> None:
         if reply.split(None, 1)[0] == REPLY_OK:
             return
         if reply.split(None, 1)[0] == REPLY_ERR:
-            raise PanelSetupError(TEXT_NOT_ACCEPTED)        # ERR <reason>: the reason is never shown
+            # ERR <reason>: any reason is a refusal; only `store` (the panel's own flash) has its own sentence. The reason
+            # and the line are never shown.
+            parts = reply.split()
+            raise PanelRefused(TEXT_PANEL_STORE if len(parts) > 1 and parts[1] == "store" else TEXT_NOT_ACCEPTED)
     raise PanelSetupError(TEXT_TIMEOUT)
 
 
@@ -229,7 +238,14 @@ def enable(send: Callable[[str | None], str], *, version: str | None, ssid: str,
         raise PanelSetupError(TEXT_PORT_SAME.format(port=station_port))
     fp = check_values(ssid=ssid, password=password, address=address, port=port, fingerprint=fingerprint)
     token = new_token()
-    _send_all(send, setup_lines(ssid=ssid, password=password, address=address, port=port, fingerprint=fp, token=token))
+    try:
+        _send_all(send, setup_lines(ssid=ssid, password=password, address=address, port=port, fingerprint=fp, token=token))
+    except PanelRefused:
+        try:
+            _answer(send, LINE_CLEAR)                       # best effort: the panel forgets any half it took
+        except (OSError, PanelSetupError):
+            pass
+        raise
     try:                                                    # the panel said OK: what fails now is the station's own side
         store_token(token, folder)
         _set_link("wifi", port)

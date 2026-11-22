@@ -367,7 +367,8 @@ def test_any_other_line_is_skipped_and_an_err_still_wins(env):
     panel.reply = ["W 1 1", "something new", "K", "ERR bad", "OK"]
     with pytest.raises(ps.PanelSetupError) as e:
         ps.enable(panel, **GOOD)
-    assert str(e.value) == "The panel did not accept the Wi-Fi settings." and panel.reply == ["OK"]
+    assert str(e.value) == "The panel did not accept the Wi-Fi settings." and panel.reply == []   # the OK is the CFG CLEAR's
+    assert panel.lines[-1] == ps.LINE_CLEAR
     assert ps.stored_token() is None and config.load()["station"]["panel_link"] == "usb"
 
 
@@ -427,3 +428,35 @@ def test_crlf_fixture_through_the_full_enable_path(env):
     with pytest.raises(ps.PanelSetupError, match="did not accept"):
         ps.enable(Panel("ERR long\r\n"), **GOOD)
     assert ps.disable(Panel("OK\r\n"))["panel_forgotten"] is True
+
+
+# ---- R88: every ERR <reason> is a refusal; only `store` has its own sentence ----
+
+TOKEN_RE = re.compile(r"CFG LINK \S+ \S+ \S+ (\w+)")
+REASONS = ["long", "cfg", "hex", "ssid", "password", "address", "port", "fingerprint", "token", "store", "brand-new-reason"]
+
+
+@pytest.mark.parametrize("reason", REASONS)
+def test_every_err_reason_is_a_refusal_with_the_right_sentence(env, reason):
+    etc, state = env
+    before = config.load()
+    panel = Panel()
+    panel.reply = [f"ERR {reason}", "OK"]                  # the refusal, then the best-effort CFG CLEAR's OK
+    with pytest.raises(ps.PanelSetupError) as e:
+        ps.enable(panel, **GOOD)
+    want = ("The panel could not save the Wi-Fi settings. Run this again; if it fails again, flash the panel: "
+            "sudo spoolwarden weigh-station flash-display") if reason == "store" else "The panel did not accept the Wi-Fi settings."
+    assert str(e.value) == want
+    assert ps.stored_token() is None and not (state / ps.TOKEN_FILE).exists()
+    assert config.load() == before and config.load()["station"]["panel_link"] == "usb"
+    assert panel.lines[-1] == ps.LINE_CLEAR and panel.reply == []
+
+
+def test_the_refusal_sentences_hold_no_password_or_token(env):
+    panel = Panel()
+    panel.reply = ["OK", "ERR store", "OK"]               # the Wi-Fi line taken, the link line refused (it holds the token)
+    with pytest.raises(ps.PanelSetupError) as e:
+        ps.enable(panel, **GOOD)
+    token = TOKEN_RE.match(panel.lines[1]).group(1)
+    for text in (str(e.value), ps.TEXT_NOT_ACCEPTED, ps.TEXT_PANEL_STORE):
+        assert PASSWORD not in text and token not in text and "ERR" not in text and "store" not in text.split("flash")[0].split()
