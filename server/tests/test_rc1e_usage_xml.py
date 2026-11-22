@@ -528,3 +528,29 @@ def test_a_busy_lock_does_not_rewrite_the_month_file_under_the_holder(monkeypatc
         assert "r" in out and month.read_bytes() == before        # was: rewritten without the lock (a stopped CLI's _move then undoes it)
     finally:
         _release(holder)
+
+
+@needs_flock
+def test_the_wait_for_the_file_lock_does_not_hold_the_module_lock(monkeypatch):
+    other = "0948ZZ0A0000002"
+    monkeypatch.setattr(usage, "LOCK_WAIT", 2.0, raising=False)
+    holder = _holder(_dir())
+    try:
+        slow, _ = _in_thread(usage.append, SERIAL, {"job": "waits"})
+        time.sleep(0.4)
+        t0 = time.monotonic()
+        usage.append(other, {"job": "free"})                  # another printer: was held up by the whole wait
+        assert time.monotonic() - t0 < 1.0
+        assert [e["job"] for e in usage.entries(other, days=30)] == ["free"]
+    finally:
+        _release(holder)
+        slow.join(10)
+    assert not slow.is_alive()
+
+
+def test_threads_writing_the_same_printer_lose_nothing_and_do_not_deadlock():
+    ts = [_in_thread(usage.append, SERIAL, {"job": f"j{i}"})[0] for i in range(12)]
+    for t in ts:
+        t.join(20)
+    assert not any(t.is_alive() for t in ts)
+    assert len(usage.entries(SERIAL, days=30)) == 12 and len(_v062_read(SERIAL)[0]) == 12

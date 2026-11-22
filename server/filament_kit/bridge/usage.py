@@ -223,8 +223,7 @@ def _dir(serial: str) -> Path:
 def append(serial: str, entry: dict) -> dict:
     """Add an entry (id and at are filled in) to the printer's log; returns the stored line."""
     rec = {'id': uuid.uuid4().hex, 'at': _iso(_now()), **entry}
-    with _lock:
-        _write_line(serial, rec)
+    _write_line(serial, rec)            # takes the locks itself, the wait for the file lock is made without the module lock
     return rec
 
 
@@ -257,30 +256,34 @@ class LockTimeout(OSError):
 
 @contextmanager
 def _flocked(serial: str):
-    """The module lock, and usage/.lock (flock) so the root CLI and the service do not move or write at once. The wait for
-    the file lock is bounded (LockTimeout): a stopped holder must not hold up every printer's writes."""
+    """usage/.lock (flock) so the root CLI and the service do not move or write at once, then the module lock for the body.
+    The wait for the file lock is bounded (LockTimeout) and made without the module lock, so a stopped holder does not
+    hold up the other printers' writes (a caller that already holds the module lock keeps it while it waits)."""
     with _lock:
-        if fcntl is None or serial in _held:
+        if fcntl is None or serial in _held:        # nothing to take, or this thread has it (the module lock is held)
             yield
             return
-        folder = _dir(serial) / DIR
-        make_state_dir(folder)
-        with open_lock(folder / ".lock") as fh:
-            deadline = time.monotonic() + LOCK_WAIT
-            while True:
-                try:
-                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    break
-                except BlockingIOError:
-                    if time.monotonic() >= deadline:
-                        raise LockTimeout(f"{folder / '.lock'} is held by another process") from None
-                    time.sleep(0.05)
-            _held.add(serial)
+    folder = _dir(serial) / DIR
+    make_state_dir(folder)
+    with open_lock(folder / ".lock") as fh:
+        deadline = time.monotonic() + LOCK_WAIT
+        while True:
             try:
-                yield
-            finally:
-                _held.discard(serial)
-                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise LockTimeout(f"{folder / '.lock'} is held by another process") from None
+                time.sleep(0.05)
+        try:
+            with _lock:
+                _held.add(serial)
+                try:
+                    yield
+                finally:
+                    _held.discard(serial)
+        finally:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
 
 def _load(path: Path, for_write: bool = False) -> dict:
@@ -727,14 +730,12 @@ def undo(entry_id: str, spoolman) -> dict:
     serial, rec, at, undone = found
     try:
         _same_spool(spoolman, rec, at)
-        with _lock:
-            _write_line(serial, {'undo': entry_id, 'at': _iso(_now())})
+        _write_line(serial, {'undo': entry_id, 'at': _iso(_now())})
         try:
             spoolman.use(int(rec['spool_id']), -float(rec['grams']))
         except BaseException:
             try:
-                with _lock:
-                    _write_line(serial, {'undo_failed': entry_id, 'at': _iso(_now())})
+                _write_line(serial, {'undo_failed': entry_id, 'at': _iso(_now())})
             except OSError as e:
                 log.error("usage: printer %s: undo of %s failed and could not be taken back: %s", serial, entry_id, e)
             raise
