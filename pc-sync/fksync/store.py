@@ -15,6 +15,8 @@ import tempfile
 from pathlib import Path
 from typing import Mapping
 
+from . import statexml
+
 ENTROPY = b"filament-kit-sync"
 LOG_MAX = 1024 * 1024
 _CRYPTPROTECT_UI_FORBIDDEN = 0x1
@@ -147,6 +149,13 @@ def load_token(dirs: AppDirs) -> str | None:
 # --- config ------------------------------------------------------------------------------------
 
 def load_config(dirs: AppDirs) -> dict:
+    """config.xml; an older Sync's config.json is read when there is no XML form, and moved to it (RC1c)."""
+    xp = statexml.xml_path(dirs.config)
+    if xp.exists():
+        try:
+            return statexml.loads(xp.read_bytes(), statexml.tag_of(dirs.config))
+        except (OSError, statexml.StateXmlError) as e:
+            raise ValueError(f"sync config {xp} is not valid XML: {e}") from None
     try:
         text = dirs.config.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -157,11 +166,13 @@ def load_config(dirs: AppDirs) -> dict:
         raise ValueError(f"sync config {dirs.config} is not valid JSON: {e}") from None
     if not isinstance(cfg, dict):
         raise ValueError(f"sync config {dirs.config} is not a JSON object")
+    statexml.migrate(dirs.config, cfg)
     return cfg
 
 
 def save_config(dirs: AppDirs, cfg: dict) -> None:
-    _write_atomic(dirs.config, (json.dumps(cfg, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+    """Both forms, XML first: an older Sync that is put back after a rollback still finds its pairing (RC1c)."""
+    statexml.write_both(dirs.config, cfg)
 
 
 # --- the pairing kept aside while a new one is proven ---------------------------------------------
@@ -180,20 +191,15 @@ def set_pair_aside(dirs: AppDirs) -> None:
     if pair_waiting(dirs):
         return
     tok, cfg = _read_or_none(dirs.token), _read_or_none(dirs.config)
+    cfg_xml = _read_or_none(statexml.xml_path(dirs.config))
     body = {"token": base64.b64encode(tok).decode("ascii") if tok is not None else None,
-            "config": base64.b64encode(cfg).decode("ascii") if cfg is not None else None}
-    _write_atomic(dirs.pair_aside, json.dumps(body).encode("utf-8"))
+            "config": base64.b64encode(cfg).decode("ascii") if cfg is not None else None,
+            "config_xml": base64.b64encode(cfg_xml).decode("ascii") if cfg_xml is not None else None}
+    statexml.write(dirs.pair_aside, body)
 
 
 def _read_aside(dirs: AppDirs) -> dict | None:
-    raw = _read_or_none(dirs.pair_aside)
-    if raw is None:
-        return None
-    try:
-        body = json.loads(raw)
-    except ValueError:
-        return None
-    return body if isinstance(body, dict) else None
+    return statexml.read(dirs.pair_aside)       # pair-aside.xml, or an older Sync's pair-aside.json
 
 
 def pair_waiting(dirs: AppDirs) -> bool:
@@ -205,38 +211,39 @@ def pair_waiting(dirs: AppDirs) -> bool:
 def mark_pair_waiting(dirs: AppDirs) -> None:
     body = _read_aside(dirs)
     if body is not None:
-        _write_atomic(dirs.pair_aside, json.dumps({**body, "waiting": True}).encode("utf-8"))
+        statexml.write(dirs.pair_aside, {**body, "waiting": True})
 
 
 def restore_pair_aside(dirs: AppDirs) -> bool:
     """Put the kept pairing back (no pairing, if there was none) and drop the aside. False when there is no aside."""
-    raw = _read_or_none(dirs.pair_aside)
-    if raw is None:
+    if not statexml.exists(dirs.pair_aside):
         return False
+    body = statexml.read(dirs.pair_aside)
     try:
-        body = json.loads(raw)
-        saved = {path: None if body[key] is None else base64.b64decode(body[key])
-                 for path, key in ((dirs.token, "token"), (dirs.config, "config"))}
-    except (ValueError, KeyError, TypeError):
-        dirs.pair_aside.unlink(missing_ok=True)      # unreadable: what is on disk stays
+        # config_xml: absent in an older Sync's aside, which knew only config.json (the XML form is then dropped)
+        saved = {path: None if body.get(key) is None else base64.b64decode(body[key])
+                 for path, key in ((dirs.token, "token"), (dirs.config, "config"),
+                                   (statexml.xml_path(dirs.config), "config_xml"))}
+    except (ValueError, KeyError, TypeError, AttributeError):
+        statexml.unlink(dirs.pair_aside)             # unreadable: what is on disk stays
         return False
     for path, data in saved.items():
         if data is None:
             path.unlink(missing_ok=True)
         else:
             _write_atomic(path, data)
-    dirs.pair_aside.unlink(missing_ok=True)
+    statexml.unlink(dirs.pair_aside)
     return True
 
 
 def drop_pair_aside(dirs: AppDirs) -> None:
-    dirs.pair_aside.unlink(missing_ok=True)
+    statexml.unlink(dirs.pair_aside)
 
 
 def recover_interrupted_pair(dirs: AppDirs) -> None:
     """A pairing that crashed before it was proven: the one before it comes back. One that is waiting for its proof isn't
     a crash, and stays for the next run to settle. Call while holding the lock."""
-    if dirs.pair_aside.exists() and not pair_waiting(dirs) and restore_pair_aside(dirs):
+    if statexml.exists(dirs.pair_aside) and not pair_waiting(dirs) and restore_pair_aside(dirs):
         log(dirs, "a pairing was interrupted before it was proven: the earlier pairing is back in place")
 
 

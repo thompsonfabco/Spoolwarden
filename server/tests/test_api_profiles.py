@@ -8,6 +8,7 @@ import zipfile
 import pytest
 from starlette.testclient import TestClient
 
+from filament_kit.profiles import statexml
 from filament_kit import config, library, pairing
 from filament_kit.api import create_app
 from filament_kit.bridge import registry
@@ -204,6 +205,13 @@ def test_build_download_and_installed(c, sm):
     assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
     names = zipfile.ZipFile(io.BytesIO(r.content)).namelist()
     assert "BUILD.json" in names and f"base/{TG.sunlu(TG.H2D, '0.4')}.json" in names
+    assert "BUILD.xml" not in names                 # an older Slicer Sync accepts only BUILD.json
+    r = c.get(f"/api/sync/build?stamp={stamp}&format=xml", headers=auth(tok))     # RC1c: one that reads XML asks
+    xnames = zipfile.ZipFile(io.BytesIO(r.content)).namelist()
+    assert r.status_code == 200 and "BUILD.xml" in xnames and "BUILD.json" not in xnames
+    assert f"base/{TG.sunlu(TG.H2D, '0.4')}.json" in xnames
+    r = c.get(f"/api/sync/build?stamp={stamp}&format=other", headers=auth(tok))
+    assert "BUILD.json" in zipfile.ZipFile(io.BytesIO(r.content)).namelist()
     for bad in ("nope", "20990101-000000", ""):
         r = c.get(f"/api/sync/build?stamp={bad}", headers=auth(tok))
         assert r.status_code == 404 and r.json()["error"] == "not_found", bad
@@ -216,12 +224,12 @@ def test_build_download_and_installed(c, sm):
     (config.paths().state / "profiles" / "builds" / stamp / "orca").mkdir()   # "orca" counts for an orca/ tree
     r = c.post("/api/sync/installed", json={"stamp": stamp, "trees": ["base", "orca"]}, headers=auth(tok))
     assert r.status_code == 200
-    assert builds._read_obj(config.paths().state / "profiles" / "installed.json")["orca_stamp"] == stamp
+    assert builds._state_obj(config.paths().state / "profiles" / "installed.json")["orca_stamp"] == stamp
     r = c.post("/api/sync/installed", json={"stamp": stamp}, headers=auth(tok))     # an older PC sync
     assert r.status_code == 200
     inst = r.json()["installed"]
     assert inst["stamp"] == stamp and ISO.fullmatch(inst["at"])
-    assert builds._read_obj(config.paths().state / "profiles" / "installed.json")["orca_stamp"] == stamp  # kept
+    assert builds._state_obj(config.paths().state / "profiles" / "installed.json")["orca_stamp"] == stamp  # kept
 
     st = c.get("/api/sync/state", headers=auth(tok)).json()
     assert st["installed"] == inst
@@ -556,7 +564,7 @@ def test_heartbeat_is_kept_and_shown_in_status(c, sm):
     assert put_zip(c, tok, "live", zip_of({"base/x.json": "{}"})).status_code == 200
     r = c.post("/api/sync/heartbeat", json=WAIT, headers=auth(tok))
     assert r.status_code == 200 and r.json() == {"ok": True}
-    hb = builds._read_obj(config.paths().state / "profiles" / "pc-heartbeat.json")
+    hb = builds._state_obj(config.paths().state / "profiles" / "pc-heartbeat.json")
     assert hb["device_id"] == me and hb["outcome"] == "studio_running" and hb["app"] == "Bambu Studio"
     assert hb["waiting_since"] == WAIT["waiting_since"] and isinstance(hb["at"], float)
     pc = c.get("/api/profiles/status", headers=auth(tok)).json()["pc"]
@@ -594,7 +602,7 @@ def test_heartbeat_checks_owner_body_and_values(c):
                 {"outcome": "studio_running", "waiting_since": True}):
         r = c.post("/api/sync/heartbeat", json=bad, headers=auth(a))
         assert r.status_code == 400 and r.json()["error"] == "bad_request", bad
-    assert not (config.paths().state / "profiles" / "pc-heartbeat.json").exists()
+    assert not statexml.exists(config.paths().state / "profiles" / "pc-heartbeat.json")
 
 
 def test_heartbeat_audit_line(c, caplog):
@@ -620,5 +628,5 @@ def test_fresh_live_upload_is_a_first_sync(c, sm):
     assert r.status_code == 200 and r.json()["fresh"] is True
     st = c.get("/api/sync/state", headers=auth(tok)).json()
     assert st["installed"] is None and st["owner"] == device_of(tok)
-    assert builds._read_obj(config.paths().state / "profiles" / "owner-edits.json")["stamp"] == stamp
+    assert builds._state_obj(config.paths().state / "profiles" / "owner-edits.json")["stamp"] == stamp
     assert put_zip(c, tok, "live", zip_of({"base/z.json": "{}"}), "?fresh=yes").status_code == 400
