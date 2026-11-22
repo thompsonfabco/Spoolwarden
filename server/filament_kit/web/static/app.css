@@ -498,3 +498,6 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .corr__body { min-width: 0; display: grid; gap: var(--s1); overflow-wrap: anywhere; }
 .corr__body p, .corr__fields { margin: 0; }
 .corr__fields { padding: 0; list-style: none; display: grid; gap: var(--s1); font-size: var(--fs-m); }
+
+/* Settings selects (the Language choice): a touch target of 44 px at least (page audit) */
+.settings .field--select .field__control { min-height: var(--s7); }
