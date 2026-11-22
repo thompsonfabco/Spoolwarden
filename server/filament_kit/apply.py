@@ -914,8 +914,9 @@ def _station_pairing_owner(ex: _Exec) -> None:
     ex.cmd(["chown", group, str(server_api.pairing_dir())])
     if not ex.dry:
         server_api.move_server_file()
-    if server_api.server_file().exists():
-        ex.cmd(["chown", group, str(server_api.server_file())])
+    for f in (server_api.server_file(), server_api.old_server_file(), server_api._old_sha_file()):
+        if f.exists():
+            ex.cmd(["chown", group, str(f)])
     if server_api.token_file().exists():
         ex.cmd(["chown", "filament-kit-station:filament-kit-station", str(server_api.token_file())])
 

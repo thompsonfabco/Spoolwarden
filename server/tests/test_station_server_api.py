@@ -261,6 +261,36 @@ def test_the_server_file_is_xml_and_the_old_json_form_is_read_then_moved_once():
     assert server_api.read_server()["port"] == 9
 
 
+def test_save_pairing_keeps_the_old_json_current_in_the_old_shape():
+    """v0.6.2 read station_server.json with json.loads(...) (ips, port, fp, host); the station user cannot write the folder,
+    so root's save_pairing keeps it current."""
+    link = server_api.parse_link(f"fkit://pair?h=srv.local&p=8710&t={'y' * 43}&fp={FP}&ip=192.0.2.5")
+    server_api.save_pairing(link, owner=None)
+    want = {"ips": ["192.0.2.5"], "port": 8710, "fp": FP, "host": "srv.local"}
+    raw = server_api.old_server_file().read_bytes()
+    assert raw == (json.dumps(want, indent=1) + "\n").encode("utf-8") and json.loads(raw) == want
+    if sys.platform != "win32":
+        assert (os.stat(server_api.old_server_file()).st_mode & 0o777) == 0o644
+    link2 = server_api.parse_link(f"fkit://pair?h=other.local&p=9000&t={'z' * 43}&fp={FP}&ip=192.0.2.9")
+    server_api.save_pairing(link2, owner=None)                   # a re-pair
+    assert json.loads(server_api.old_server_file().read_text(encoding="utf-8"))["port"] == 9000
+    assert server_api.read_server()["port"] == 9000
+
+
+def test_a_pairing_made_by_an_older_release_wins_once():
+    link = server_api.parse_link(f"fkit://pair?h=srv.local&p=8710&t={'y' * 43}&fp={FP}&ip=192.0.2.5")
+    server_api.save_pairing(link, owner=None)
+    older = {"ips": ["192.0.2.77"], "port": 8711, "fp": FP, "host": "old.local"}
+    server_api.old_server_file().write_text(json.dumps(older, indent=1) + "\n", encoding="utf-8")   # a rolled-back pair
+    assert server_api.read_server() == older                     # the station user's read, nothing written
+    assert statexml.loads(server_api.server_file().read_bytes(), "station-server")["port"] == 8710
+    server_api.move_server_file()                                # root's side
+    assert statexml.loads(server_api.server_file().read_bytes(), "station-server") == older
+    assert server_api.read_server() == older
+    server_api.save_pairing(link, owner=None)                    # a later pairing wins again
+    assert server_api.read_server()["port"] == 8710
+
+
 def test_a_damaged_server_xml_is_not_paired_and_is_not_replaced_by_the_old_form():
     server_api.pairing_dir().mkdir(parents=True, exist_ok=True)
     server_api.old_server_file().write_text(json.dumps({"ips": ["192.0.2.5"], "port": 1, "fp": FP}), encoding="utf-8")
