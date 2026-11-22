@@ -571,6 +571,17 @@ def _local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
     names = {"local": "the local reader", "cloud": "Claude"}
     yield Row(INFO, "label reading: " + (", then ".join(names[r] for r in order) if order else "off"),
               key="label-reader.order")
+    from . import cli, share_corrections
+    sc_st = share_corrections.state(cfg, h)
+    sc_count = sc_st.get("count") or 0
+    if sc_st.get("saved"):
+        yield Row(INFO, output.fill(cli._cli_text("cli_status_share_corrections_on"), count=sc_count),
+                  output.fill(cli._cli_text("cli_status_share_corrections_fix"), command=address_texts.COMMAND)
+                  if sc_count > 0 else "", key="label-reader.share-corrections")
+    elif sc_count > 0:
+        yield Row(INFO, output.fill(cli._cli_text("cli_status_share_corrections_off_waiting"), count=sc_count),
+                  output.fill(cli._cli_text("cli_status_share_corrections_fix"), command=address_texts.COMMAND),
+                  key="label-reader.share-corrections")
 
 
 def web_rows(cfg: dict | None = None) -> Iterator[Row]:

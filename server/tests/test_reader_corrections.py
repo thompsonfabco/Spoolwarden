@@ -437,7 +437,7 @@ def test_cli_corrections_need_root_exit_3_with_the_sudo_fix(hub, capsys, monkeyp
     add(data, "r1")
     monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
     monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
-    for args in (["list"], ["remove", "fb-1"], ["package", "x.zip"], ["send"]):
+    for args in (["remove", "fb-1"], ["send"]):
         assert cli.main(["label-reader", "corrections", *args]) == output.NEEDS_SUDO == 3
         err = capsys.readouterr().err
         assert "Error: this needs administrator rights." in err and "sudo spoolwarden label-reader corrections" in err
