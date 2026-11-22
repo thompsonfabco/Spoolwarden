@@ -255,7 +255,7 @@ await until(() => $("#set-voice .voice__test") && !pickEl(), "the locked rows");
 await sleep(100);
 const controls = () => [...document.querySelectorAll("#set-voice input, #set-voice select, #set-voice button")];
 out.locked = { rows: !!sw(), note: !!$("#set-voice .banner"),
-  voiceValue: [...document.querySelectorAll("#set-voice input[type=text]")].map((c) => c.value),
+  voiceValue: [...document.querySelectorAll("#set-voice .field")].filter((f) => text($(".field__label", f)) === "Voice").map((f) => f.querySelector("input").value),
   disabled: controls().every((c) => c.disabled), count: controls().length,
   values: { speak: sw().checked, speed: sliders()[0].value, volume: sliders()[1].value } };
 out.html = grp().textContent.includes("shown once the page is unlocked");
