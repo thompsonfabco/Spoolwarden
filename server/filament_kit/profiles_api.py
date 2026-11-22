@@ -465,6 +465,22 @@ def routes(authed, sm) -> list[Route]:
         entry, line_id = await run_in_threadpool(_audit, "library local", device, run)
         return JSONResponse({"entry": entry, "line_id": line_id}, status_code=201)
 
+    @authed
+    async def library_local_list(request: Request):
+        return JSONResponse(await run_in_threadpool(local_entries))
+
+    @authed
+    async def library_local_form(request: Request):
+        body = await _json(request)
+        return JSONResponse(await run_in_threadpool(
+            add_local_form, body, request.state.device, "library local form"), status_code=201)
+
+    @authed
+    async def library_local_remove(request: Request):
+        entry_id = request.path_params["id"]
+        return JSONResponse(await run_in_threadpool(
+            remove_local, entry_id, request.state.device, "library local remove"))
+
     return [
         Route("/api/sync/state", sync_state),
         Route("/api/sync/live", sync_live, methods=["PUT"]),
@@ -481,7 +497,10 @@ def routes(authed, sm) -> list[Route]:
         Route("/api/profiles/lines/{line_id}", line_patch, methods=["PATCH"]),
         Route("/api/profiles/parents", parents),
         Route("/api/profiles/propose", propose, methods=["POST"]),
+        Route("/api/library/local", library_local_list),
         Route("/api/library/local", library_local, methods=["POST"]),
+        Route("/api/library/local/form", library_local_form, methods=["POST"]),
+        Route("/api/library/local/{id}", library_local_remove, methods=["DELETE"]),
         *web_routes(authed, sm),
     ]
 

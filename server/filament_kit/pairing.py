@@ -401,11 +401,28 @@ def redeem_code(code: str) -> str:
     return token
 
 
-def authorize(token: str) -> tuple[str, str | None] | None:
+CLIENT_KINDS = {"android": "phone", "slicer-sync": "pc", "weigh-station": "station", "web": "web",
+                "phone": "phone", "pc": "pc", "station": "station"}
+
+
+def parse_client_header(raw: str | None) -> tuple[str, str] | None:
+    """Parse `X-Spoolwarden-Client: <kind>/<version>` into `(kind, version)` or None."""
+    if not isinstance(raw, str) or "/" not in raw:
+        return None
+    raw_kind, _, raw_ver = raw.strip().partition("/")
+    kind = CLIENT_KINDS.get(raw_kind.strip().lower())
+    ver = raw_ver.strip()
+    if kind is None or not (0 < len(ver) <= 40) or not ver.isprintable() or any(c.isspace() for c in ver):
+        return None
+    return kind, ver
+
+
+def authorize(token: str, client: str | None = None) -> tuple[str, str | None] | None:
     """(device id, scope) for a live token, else None. Claims an unclaimed QR token (its first use). scope is
     "station" for a token from `pair --station`, "web" for the web unit's (from its role, so a pairing made before this
     needs nothing done), else None (every route but the web unit's own)."""
     h = _hash(token)
+    parsed_client = parse_client_header(client)
     emit_args = None
     result = None
     with _locked():
@@ -413,6 +430,14 @@ def authorize(token: str) -> tuple[str, str | None] | None:
         for d in devs:
             if hmac.compare_digest(d["hash"], h):
                 now = time.time()
+                dirty = False
+                if parsed_client is not None:
+                    ckind, cver = parsed_client
+                    if device_type(d) == "station":
+                        ckind = "station"
+                    if (d.get("kind"), d.get("version")) != (ckind, cver):
+                        d["kind"], d["version"] = ckind, cver
+                        dirty = True
                 if d.get("claimed") is None:
                     d["claimed"] = d["paired"] = d["last_seen"] = now
                     allp = _read("pending.json")
@@ -425,6 +450,8 @@ def authorize(token: str) -> tuple[str, str | None] | None:
                                  {"kind": kind})
                 elif d["last_seen"] is None or now - d["last_seen"] > LAST_SEEN_STALE:
                     d["last_seen"] = now
+                    _write("devices.json", devs)
+                elif dirty:
                     _write("devices.json", devs)
                 # a device paired as "station" before scopes existed is scoped too
                 if d.get("scope") or device_type(d) == "station":
@@ -505,7 +532,9 @@ def device_type(d: dict) -> str | None:
 def devices() -> list[dict]:
     with _locked():
         return [
-            {**{k: d[k] for k in ("id", "name", "paired", "last_seen")}, "type": device_type(d)}
+            {**{k: d[k] for k in ("id", "name", "paired", "last_seen")}, "type": device_type(d),
+             **({"kind": d["kind"]} if d.get("kind") else {}),
+             **({"version": d["version"]} if d.get("version") else {})}
             for d in _load_devices()
             if d.get("claimed") is not None
         ]

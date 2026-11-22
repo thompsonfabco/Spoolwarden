@@ -26,7 +26,7 @@ from starlette.routing import Route
 
 from . import (API_VERSION, __version__, address_texts, alerts_api, analytics, config, csv_io, demo, event_sink, events,
                health, hostaddr, hub_view, intake, intake_history, inventory, modules, pairing, profiles_api,
-               reader_corrections, setup_page, station_flow, station_requests, storage, storage_api, tags, undo)
+               reader_corrections, reader_tokens, setup_page, station_flow, station_requests, storage, storage_api, tags, undo)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
 from .bridge import auto_slot, camera, family, hardware, loading, mapping, pending, registry, usage
 from .bridge.klipper import discovery
@@ -197,6 +197,7 @@ WEB_ROUTES = (
     ("POST", "/api/printers/{id}/auto/cancel"),
     ("POST", "/api/printers/{id}/slots/{label}/load"),
     ("POST", "/api/printers/{id}/slots/{label}/unload"),
+    ("POST", "/api/printers/{id}/slots/{label}/clear"),
     ("GET", "/api/printers/{id}/camera.mjpeg"),
     ("GET", "/api/printers/{id}/camera/{name:path}"),
     ("POST", "/api/usage/{entry_id}/undo"),
@@ -204,6 +205,10 @@ WEB_ROUTES = (
     ("POST", "/api/intake/cap/refund"),
     ("GET", "/api/intake/orders"),
     ("GET", "/api/intake/share-corrections"),
+    ("GET", "/api/library/local"),
+    ("POST", "/api/library/local/form"),
+    ("DELETE", "/api/library/local/{id}"),
+    ("POST", "/api/readers/web/seen"),
     ("POST", "/api/profiles/web/line_add"),
     ("POST", "/api/profiles/web/line_new"),
     ("POST", "/api/profiles/web/generate"),
@@ -226,7 +231,7 @@ WEB_ROUTES = (
 _WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
 HOME_WEB_ROUTES = (("PATCH", "/api/voice"), ("POST", "/api/voice/test"))
 WEB_ONLY_PREFIX = "/api/profiles/web/"  # the web unit's preset writes: no phone or PC calls them
-WEB_ONLY_PATHS = ("/api/events/web",)   # the web unit's hand-over of its spool events
+WEB_ONLY_PATHS = ("/api/events/web", "/api/readers/web/seen")   # the web unit's hand-over of its spool events and seen readers
 
 VIEWER_ROUTES = (
     ("GET", "/api/info"),
@@ -338,7 +343,7 @@ def _authed(fn):
         scheme, _, tok = header.partition(" ")
         got = None
         if scheme.lower() == "bearer" and tok.strip():
-            got = await run_in_threadpool(pairing.authorize, tok.strip())
+            got = await run_in_threadpool(pairing.authorize, tok.strip(), request.headers.get("x-spoolwarden-client"))
         if got is None:
             return _err(401, "unauthorized", "pair this phone with the server first (missing or revoked token)")
         device, scope = got
@@ -1111,13 +1116,30 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
             known(serial)
             kf = klipper_of(serial)
             if kf is not None:
-                r = kf.unload(sm, serial, label, dry, sealed_location=sealed())
+                r = {**kf.unload(sm, serial, label, dry, sealed_location=sealed()), "waiting_ended": False}
             else:
                 not_mapping(serial)
-                r = loading.unload(printers, sm, serial, label, dry, sealed_location=sealed())
+                r = pending.unload(printers, sm, serial, label, dry, sealed_location=sealed())
             first = next((m for m in r["moved_back"] if m["id"] == r["spool"].get("id")), None)
             return {**r, "location": first["location"] if first else r["spool"].get("location")}
         return JSONResponse(await run_in_threadpool(audited, "slot unload", request.state.device, run,
+                                                    serial=serial, slot=label, dry_run=dry))
+
+    @_authed
+    async def slot_clear(request: Request):
+        if auto_slot.is_reserved_label(request.path_params["label"]):
+            return _err(400, "invalid_slot", "'auto' is a reserved slot label")
+        serial, label = request.path_params["id"], label_of(request)
+        dry = _opt(await _json(request), "dry_run", bool, True)
+
+        def run() -> dict:
+            known(serial)
+            kf = klipper_of(serial)
+            if kf is not None:
+                return kf.clear(sm, serial, label, dry, sealed_location=sealed())
+            not_mapping(serial)
+            return pending.clear_slot(printers, sm, serial, label, dry, sealed_location=sealed())
+        return JSONResponse(await run_in_threadpool(audited, "slot clear", request.state.device, run,
                                                     serial=serial, slot=label, dry_run=dry))
 
     @_authed
@@ -1166,6 +1188,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         Route("/api/printers/{id}/auto/cancel", auto_cancel, methods=["POST"]),
         Route("/api/printers/{id}/slots/{label}/load", slot_load, methods=["POST"]),
         Route("/api/printers/{id}/slots/{label}/unload", slot_unload, methods=["POST"]),
+        Route("/api/printers/{id}/slots/{label}/clear", slot_clear, methods=["POST"]),
         Route("/api/printers/{id}/usage", usage_list),
         Route("/api/usage/{entry_id}/undo", usage_undo, methods=["POST"]),
     ]
@@ -1534,7 +1557,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             inventory.edit_spool, sm, request.path_params["id"], gross=_opt(body, "gross", float),
             remaining=_opt(body, "remaining", float), location=_opt(body, "location", str),
             empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, True), rules=rules(),
-            home=_opt(body, "home", str)))
+            home=_opt(body, "home", str), auto_location=_opt(body, "auto_location", bool, False)))
         return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added (S3.9); `home`: 409 not_checked_out
 
     def returner(spool_id: int, *, grams: float | None = None, dry: bool = False, gross: float | None = None) -> dict:
@@ -1569,21 +1592,29 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         spool = await run_in_threadpool(sm.get, f"spool/{request.path_params['id']}")
         return JSONResponse({"spool": spool, "view": inventory.spool_view(spool)})   # raw and phone shape, as PATCH gives
 
+    def _caller_host(request: Request) -> str | None:
+        raw = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip()
+        host = raw.rsplit(":", 1)[0] if ":" in raw and not raw.endswith("]") else raw
+        return host or None
+
     @_authed
     async def spool_search(request: Request):
         q = request.query_params.get("q", "")
         sealed = request.query_params.get("sealed", "").lower() in ("1", "true", "yes")
         flt = request.query_params.get("filter", "")
         offset, limit = inventory.page_args(request.query_params)
+        host = _caller_host(request)
 
-        def build() -> list[dict]:
+        def build() -> tuple[list[dict], str | None]:
             try:                    # `filter`: sealed, opened, loaded, low or checked_out; the rows carry their `view`
-                return inventory.listing(sm, q, sealed, flt)
+                rows = inventory.listing(sm, q, sealed, flt)
             except inventory.FilterError as e:
                 raise BadRequest(str(e), "filter") from None
-        rows = await run_in_threadpool(build)
+            return rows, hub_view.spoolman_url(config.load(), host)
+        rows, sm_url = await run_in_threadpool(build)
         rows, paging = inventory.page(rows, offset, limit)
-        return JSONResponse({"spools": rows, **paging, "filters": inventory.filter_names()})
+        return JSONResponse({"spools": rows, **paging, "filters": inventory.filter_names(),
+                             **({"spoolman_url": sm_url} if sm_url else {})})
 
     @_authed
     async def filament_list(request: Request):
@@ -1720,10 +1751,15 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def hub_get(request: Request):
-        raw = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip()
-        host = raw.rsplit(":", 1)[0] if ":" in raw and not raw.endswith("]") else raw
+        host = _caller_host(request)
         return JSONResponse(await run_in_threadpool(
-            hub_view.build, host=host or None, this_device=request.state.device))
+            lambda: hub_view.build(host=host, this_device=request.state.device,
+                                   getting_started=hub_view.getting_started_counts())))
+
+    @_authed
+    async def readers_web_seen(request: Request):
+        body = await _json(request)
+        return JSONResponse(await run_in_threadpool(reader_tokens.record_seen, body.get("readers")))
 
     @_authed
     async def health_get(request: Request):
@@ -1855,6 +1891,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/storage-use", storage_use),
             Route("/api/events", events_get),
             Route("/api/events/web", events_web, methods=["POST"]),
+            Route("/api/readers/web/seen", readers_web_seen, methods=["POST"]),
             Route("/api/events/{id}/undo", event_undo, methods=["POST"]),
             Route("/api/health", health_get),
             Route("/api/analytics", analytics_get),
