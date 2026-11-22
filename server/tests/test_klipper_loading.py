@@ -591,7 +591,7 @@ def test_a_klipper_load_records_home_and_time_and_slot_to_slot_keeps_them(printe
     assert home == "Shelf 2" and since and since.endswith("Z")
     # a spool arriving from another slot keeps the home and the time it had (the follow move's patch)
     other = spool(sm, fil, "SV08 MAX \u2013 T1")
-    sm.patch(f"spool/{other['id']}", {"extra": {"prev_location": inventory.prev_text("Shelf 9", SINCE)}})
+    sm.patch(f"spool/{other['id']}", {"extra": {**inventory.prev_extra("Shelf 9", SINCE)}})
     patch = loads._patch(sm.get(f"spool/{other['id']}"), LOC)
     assert inventory.prev_entry({"extra": patch["extra"]}) == ("Shelf 9", SINCE)
     older = spool(sm, fil, "SV08 MAX \u2013 T1", prev="Shelf 8")                  # an older entry, no time
@@ -624,7 +624,7 @@ def test_return_while_the_printer_is_off_moves_the_record_and_follow_does_not_lo
     """Prove-first 5: the printer is off (nothing answers) while its spool is returned; when it comes back it still
     shows that spool in the slot, and the Hub's record stays where the return put it."""
     s = spool(sm, fil, "Voron \u2013 T0")
-    sm.patch(f"spool/{s['id']}", {"extra": {"prev_location": inventory.prev_text("Shelf 5", SINCE)}})
+    sm.patch(f"spool/{s['id']}", {"extra": {**inventory.prev_extra("Shelf 5", SINCE)}})
     moonraker.set_spool(s["id"])                              # the printer shows the spool in its slot
     pid = registry.add_klipper("Voron", moonraker.host, moonraker.port).serial
     fam = KlipperFamily(sm, backoff=(0.1, 0.4))              # not started: the printer does not answer

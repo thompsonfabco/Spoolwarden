@@ -118,26 +118,39 @@ def _now() -> str:
 
 
 def prev_entry(s: dict) -> tuple[str, str | None]:
-    """(home, since) from `extra.prev_location`: the place a loaded spool came from and the time of the load. Written
-    as {"location", "since"}; an older entry is the place alone (a JSON text, or plain text), and has no time."""
-    v = (s.get("extra") or {}).get("prev_location")
+    """(home, since): the place a loaded spool came from and the time of the load. The home is `extra.prev_location`
+    exactly as older Hubs write and read it (plain place text); the time is in `extra.prev_since` beside it, used only
+    when it names that same home (an older Hub moving the spool rewrites prev_location alone). No `prev_since`: no time."""
+    ex = s.get("extra") or {}
+    v = ex.get("prev_location")
     if isinstance(v, str):
         try:
             v = json.loads(v)
         except ValueError:
             pass
-    if isinstance(v, dict):
+    since = None
+    if isinstance(v, dict):                                 # the unreleased object form: still read
         home, since = v.get("location"), v.get("since")
-        return (home if isinstance(home, str) else ""), (since if isinstance(since, str) and since else None)
-    return (v if isinstance(v, str) else ""), None
+    else:
+        home = v
+        w = ex.get("prev_since")
+        if isinstance(w, str):
+            try:
+                w = json.loads(w)
+            except ValueError:
+                w = None
+        if isinstance(w, dict) and w.get("location") == home:
+            since = w.get("since")
+    return (home if isinstance(home, str) else ""), (since if isinstance(since, str) and since else None)
 
 
-def prev_text(home: str, since: str | None = None) -> str:
-    """The value of `extra.prev_location` for `home` (empty: not checked out). Without a time it stays the plain
-    place, as older Hubs wrote it, so an older Hub after a restore still reads it."""
+def prev_extra(home: str, since: str | None = None) -> dict:
+    """The `extra` entries for a remembered `home` (empty: not checked out, both emptied). `prev_location` stays the
+    plain place, as older Hubs wrote it, so a rolled-back Hub still finds the home; the time goes in `prev_since`."""
     if not home:
-        return json.dumps("")
-    return json.dumps({"location": home, "since": since} if since else home)
+        return {"prev_location": json.dumps(""), "prev_since": json.dumps("")}
+    return {"prev_location": json.dumps(home),
+            "prev_since": json.dumps({"location": home, "since": since} if since else "")}
 
 
 def describe(s: dict) -> str:
@@ -810,7 +823,7 @@ def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, rem
             home = placement.resolve(st, home, used)
         except placement.NoFreeContainer as e:
             raise SpoolEditError(str(e), "home") from None
-        patch["extra"] = {**(spool.get("extra") or {}), "prev_location": prev_text(home, since)}
+        patch["extra"] = {**(spool.get("extra") or {}), **prev_extra(home, since)}
     if not patch:
         return spool
     if dry:
@@ -862,7 +875,7 @@ def send_back(sm: Spoolman, spool: dict, *, rules=None, dry: bool = False) -> st
     dest = home or auto_place(sm, spool, rules if rules is not None else storage.current())[0]
     if not dry:
         sm.patch(f"spool/{spool['id']}", {"location": dest,
-                                          "extra": {**(spool.get("extra") or {}), "prev_location": prev_text("")}})
+                                          "extra": {**(spool.get("extra") or {}), **prev_extra("")}})
     return dest
 
 
@@ -881,7 +894,7 @@ def return_spool(sm: Spoolman, spool_id: int, *, grams: float | None = None, rul
             dest = send_back(sm, before, rules=rules, dry=dry)
             if dry:
                 final = {**before, "location": dest,
-                         "extra": {**(before.get("extra") or {}), "prev_location": prev_text("")}}
+                         "extra": {**(before.get("extra") or {}), **prev_extra("")}}
             else:
                 final = sm.get(f"spool/{spool_id}")
                 slot = (view_context().slot_of(before.get("location")) or {}).get("slot")

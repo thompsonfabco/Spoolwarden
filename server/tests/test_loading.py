@@ -782,7 +782,7 @@ def test_a_load_records_the_home_and_the_time_and_the_spool_is_checked_out(rig, 
 def test_a_slot_to_slot_move_keeps_the_home_and_the_time(rig, sm, fil):
     m, printer, client = rig
     s = spool(sm, fil, "Office H2D \u2013 AMS A1", prev=None)
-    sm.patch(f"spool/{s['id']}", {"extra": {"prev_location": inventory.prev_text("Rack 1", SINCE)}})
+    sm.patch(f"spool/{s['id']}", {"extra": {**inventory.prev_extra("Rack 1", SINCE)}})
     loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
     got = sm.get(f"spool/{s['id']}")
     assert got["location"] == LOC_A2 and inventory.prev_entry(got) == ("Rack 1", SINCE)
@@ -793,7 +793,7 @@ def test_an_older_prev_location_without_since_reads_and_shows_no_time(rig, sm, f
     m, printer, client = rig
     old = spool(sm, fil, "Office H2D \u2013 AMS A1", prev="Rack 1")                  # the plain text, as older Hubs wrote it
     new = spool(sm, fil, "Office H2D \u2013 AMS A3")
-    sm.patch(f"spool/{new['id']}", {"extra": {"prev_location": inventory.prev_text("Rack 2", SINCE)}})
+    sm.patch(f"spool/{new['id']}", {"extra": {**inventory.prev_extra("Rack 2", SINCE)}})
     assert loading.prev_location(sm.get(f"spool/{old['id']}")) == "Rack 1"
     assert loading.prev_location(sm.get(f"spool/{new['id']}")) == "Rack 2"
     vo = inventory.spool_view(sm.get(f"spool/{old['id']}"))

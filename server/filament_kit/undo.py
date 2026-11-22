@@ -14,6 +14,7 @@ UNDOABLE_KINDS: frozenset[str] = frozenset({
     "spool.opened",
     "spool.loaded",
     "spool.unloaded",
+    "spool.returned",
     "slot.cleared",
 })
 
@@ -76,7 +77,7 @@ def _restorable(ev: dict) -> bool:
     kind, data = ev["kind"], ev.get("data") or {}
     if kind in ("spool.weighed", "spool.emptied"):
         return _grams(data) is not None
-    if kind in ("spool.moved", "spool.loaded", "spool.unloaded", "slot.cleared"):
+    if kind in ("spool.moved", "spool.loaded", "spool.unloaded", "spool.returned", "slot.cleared"):
         return _location(data, "before") is not None
     if kind == "spool.opened":
         return any(k in data for k in ("before_location", "before_grams", "before_tag", "before_first_used",
@@ -231,7 +232,7 @@ def _apply(ev: dict, sm, st, now, actor) -> dict:
             patch["extra"] = {**(cur.get("extra") or {}), "prev_location": json.dumps("")}
         new_data.update(before_location=data.get("after_location"), after_location=before_loc,
                         before_slot=data.get("after_slot", ""), after_slot=data.get("before_slot", ""))
-    elif kind == "spool.unloaded":
+    elif kind in ("spool.unloaded", "spool.returned"):
         after_loc = data.get("after_location", "")
         patch = {"location": before_loc,
                  "extra": {**(cur.get("extra") or {}), "prev_location": json.dumps(after_loc)}}
@@ -255,6 +256,6 @@ def _apply(ev: dict, sm, st, now, actor) -> dict:
     new_ev["undone"] = False
     new_ev["undo"] = {"possible": False, "why_not": "not_undoable"}
     out: dict = {"undone": True, "event": new_ev}
-    if kind in ("spool.loaded", "spool.unloaded"):
+    if kind in ("spool.loaded", "spool.unloaded", "spool.returned"):
         out["note"] = say("undo_load_note")
     return out

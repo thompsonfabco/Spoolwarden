@@ -52,7 +52,7 @@ def _patch(s: dict, loc: str) -> dict:
         prev, since = inventory.prev_entry(s)
     else:
         prev, since = cur, inventory._now()
-    return {"location": loc, "extra": {**(s.get("extra") or {}), "prev_location": inventory.prev_text(prev, since)}}
+    return {"location": loc, "extra": {**(s.get("extra") or {}), **inventory.prev_extra(prev, since)}}
 
 
 class LoadsMixin:

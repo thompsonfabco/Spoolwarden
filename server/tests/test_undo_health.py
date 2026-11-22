@@ -126,6 +126,19 @@ def test_undoable_kinds_and_undo_execution(store):
     assert sm.spools[1]["location"] == "X1 · A1"
 
 
+def test_undo_spool_returned_puts_the_spool_back_as_checked_out(store):
+    now = datetime.now(timezone.utc)
+    sm = _StubSM([_spool(1, weight=500.0, location="Shelf A")])
+    assert "spool.returned" in undo.UNDOABLE_KINDS
+    ev = store.write("spool.returned", {"type": "spool", "id": "1"}, "page",
+                     {"spool": "1", "before_location": "X1 · A1", "after_location": "Shelf A", "before_slot": "A1"},
+                     now=now)
+    res = undo.undo_event(ev["id"], sm, store=store, now=now + timedelta(hours=1))
+    assert res["undone"] is True and res["note"] == undo.LOAD_UNLOAD_NOTE
+    assert sm.spools[1]["location"] == "X1 · A1"
+    assert json.loads(sm.spools[1]["extra"]["prev_location"]) == "Shelf A"       # checked out again, plain home
+
+
 def test_undo_why_not_reasons(store):
     sm = _StubSM([_spool(2, weight=400.0, location="Shelf A")])
     now = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)

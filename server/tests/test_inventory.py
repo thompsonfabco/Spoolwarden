@@ -5,7 +5,7 @@ import time
 import pytest
 
 from filament_kit import inventory, tags
-from filament_kit.spoolman import Spoolman, SpoolmanError
+from filament_kit.spoolman import EXTRA_FIELDS, Spoolman, SpoolmanError
 
 RULES = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2,
          "overflow": "Overflow", "sealed_location": "Sealed stock"}
@@ -919,7 +919,7 @@ def _out(sm, home="Rack 1", since=SINCE, **kw):
     """An opened spool recorded in a printer slot, checked out from `home`."""
     s = _opened(sm, 700, **kw)
     return sm.patch(f"spool/{s['id']}", {"location": SLOT, "extra": {
-        **(s.get("extra") or {}), "prev_location": inventory.prev_text(home, since)}})
+        **(s.get("extra") or {}), **inventory.prev_extra(home, since)}})
 
 
 def test_prev_location_is_read_with_and_without_since():
@@ -931,9 +931,37 @@ def test_prev_location_is_read_with_and_without_since():
     assert x("Rack 1") == ("Rack 1", None)                                   # plain text
     assert x(json.dumps("")) == ("", None) and x(None) == ("", None) and x("7") == ("", None)
     assert inventory.prev_entry({}) == ("", None)
-    assert json.loads(inventory.prev_text("Rack 1")) == "Rack 1"             # no time: as older Hubs wrote it
-    assert json.loads(inventory.prev_text("Rack 1", SINCE)) == {"location": "Rack 1", "since": SINCE}
-    assert json.loads(inventory.prev_text("", SINCE)) == ""
+    # the new form: prev_location is the plain place exactly as 0.6.x wrote it (json.dumps(home)), the time beside it
+    x1 = inventory.prev_extra("Rack 1", SINCE)
+    assert x1["prev_location"] == json.dumps("Rack 1") == b5908_prev_text("Rack 1")
+    assert json.loads(x1["prev_since"]) == {"location": "Rack 1", "since": SINCE}
+    assert inventory.prev_entry({"extra": x1}) == ("Rack 1", SINCE)
+    assert inventory.prev_extra("Rack 1")["prev_location"] == json.dumps("Rack 1")
+    assert inventory.prev_entry({"extra": inventory.prev_extra("Rack 1")}) == ("Rack 1", None)
+    assert inventory.prev_extra("", SINCE) == {"prev_location": json.dumps(""), "prev_since": json.dumps("")}
+    # an older release moved the spool and rewrote prev_location alone: the stale time is not used
+    assert inventory.prev_entry({"extra": {**x1, "prev_location": json.dumps("Rack 2")}}) == ("Rack 2", None)
+    # an old-release spool: plain prev_location, no new field
+    assert inventory.prev_entry({"extra": {"prev_location": json.dumps("Rack 1")}}) == ("Rack 1", None)
+    assert "prev_since" in [k for _e, k, _t in EXTRA_FIELDS]
+
+
+def b5908_prev_text(home):
+    """What b5908f08's code wrote into prev_location (loading._target_patch, inventory send-back): json.dumps(home)."""
+    return json.dumps(home)
+
+
+def test_a_checked_out_spool_stays_readable_by_the_older_release_and_send_back_empties_both(sm, printers):
+    s = _out(sm, home="Rack 2")
+    ex = sm.get(f"spool/{s['id']}")["extra"]
+    assert ex["prev_location"] == json.dumps("Rack 2")                       # the old form, untouched by the new data
+    assert json.loads(ex["prev_since"]) == {"location": "Rack 2", "since": SINCE}
+    old = {"extra": {"prev_location": ex["prev_location"]}}                  # all the older release looks at
+    assert inventory.prev_entry(old) == ("Rack 2", None)
+    assert inventory.spool_view({**sm.get(f"spool/{s['id']}"), **old})["checked_out"] is True
+    inventory.send_back(sm, sm.get(f"spool/{s['id']}"))
+    back = sm.get(f"spool/{s['id']}")["extra"]
+    assert json.loads(back["prev_location"]) == "" and json.loads(back["prev_since"]) == ""
 
 
 def test_the_view_and_the_filter_know_checked_out_spools(sm, printers):
@@ -1000,8 +1028,9 @@ def test_a_checked_out_spools_home_can_be_changed(sm, printers):
     assert r["view"]["home"] == "Overflow" and r["view"]["checked_out_since"] == SINCE    # the time stays
     assert r["spool"]["location"] == SLOT                                               # the spool itself is not moved
     d = inventory.edit_spool(sm, s["id"], home="Rack 1", dry=True, rules=RULES)
-    assert d["view"]["home"] == "Rack 1" and sm.get(f"spool/{s['id']}")["extra"]["prev_location"] == json.dumps(
-        {"location": "Overflow", "since": SINCE})
+    ex = sm.get(f"spool/{s['id']}")["extra"]
+    assert d["view"]["home"] == "Rack 1" and ex["prev_location"] == json.dumps("Overflow")    # the dry run wrote nothing
+    assert json.loads(ex["prev_since"]) == {"location": "Overflow", "since": SINCE}
     with pytest.raises(inventory.SpoolEditError) as e:
         inventory.edit_spool(sm, s["id"], home="Nowhere", dry=False, rules=RULES)
     assert e.value.field == "home"

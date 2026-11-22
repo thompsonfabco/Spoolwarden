@@ -383,7 +383,7 @@ def _target_patch(s: dict, loc: str) -> dict:
         prev, since = inventory.prev_entry(s)
     else:
         prev, since = cur, inventory._now()
-    return {"location": loc, "extra": {**(s.get("extra") or {}), "prev_location": inventory.prev_text(prev, since)}}
+    return {"location": loc, "extra": {**(s.get("extra") or {}), **inventory.prev_extra(prev, since)}}
 
 
 def _preset_view(p: profiles.PresetRef) -> dict:
@@ -490,7 +490,7 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: 
         first = min(here, key=lambda s: s["id"])
         if dry:
             spool = {**first, "location": moved[0]["location"],
-                     "extra": {**(first.get("extra") or {}), "prev_location": inventory.prev_text("")}}
+                     "extra": {**(first.get("extra") or {}), **inventory.prev_extra("")}}
         else:
             spool = sm.get(f"spool/{first['id']}")
     ev = cap[-1] if (not dry and cap) else None
@@ -532,7 +532,7 @@ def clear(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: s
             spool = None
         elif dry:
             spool = {**first, "location": moved[0]["location"],
-                     "extra": {**(first.get("extra") or {}), "prev_location": inventory.prev_text("")}}
+                     "extra": {**(first.get("extra") or {}), **inventory.prev_extra("")}}
         else:
             spool = sm.get(f"spool/{first['id']}")
     ev = cap[-1] if (not dry and cap) else None
