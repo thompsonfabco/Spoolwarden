@@ -1,4 +1,4 @@
-"""Server configuration: paths, defaults, load/save of config.json."""
+"""Server configuration: paths, defaults, load/save of config.xml (and config.json, kept in both forms for one release)."""
 from __future__ import annotations
 
 import copy
@@ -150,24 +150,63 @@ def _file() -> Path:
     return paths().etc / "config.json"
 
 
+def _xml_file() -> Path:
+    return paths().etc / "config.xml"
+
+
+def _read_xml(xf: Path) -> dict | None:
+    """The settings in config.xml; None when there is none. A file that cannot be read is noted for the Checks row
+    (once) and raises, for `load` to fall back on config.json."""
+    from .profiles import statexml
+    try:
+        data = xf.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError as e:
+        reason = f"cannot read: {e.strerror or e}"
+    else:
+        try:
+            out = statexml.loads(data, "config")
+            statexml.clear_problem(xf)
+            return out
+        except statexml.StateXmlError as e:
+            reason = str(e)
+    if not any(x.startswith(f"{xf} (") for x in statexml.problems()):
+        import logging
+        logging.getLogger(__name__).warning("%s cannot be read (%s); reading config.json", xf, reason)
+    statexml.note_problem(xf, reason)
+    raise ValueError(f"{xf} cannot be read ({reason})")
+
+
+def load_raw() -> dict:
+    """What the settings files hold, with no defaults merged in ({} when there is none): config.xml when it reads, else
+    config.json; an error (ValueError) only when no form reads."""
+    try:
+        stored = _read_xml(_xml_file())
+    except ValueError:
+        stored = None                   # damaged: config.json is read, and an error only when it fails too
+    if stored is not None:
+        return stored
+    f = _file()
+    if not f.exists():
+        return {}
+    return json.loads(f.read_text(encoding="utf-8"))
+
+
 def load() -> dict:
     defaults = copy.deepcopy(DEFAULTS)
     defaults["server_name"] = socket.gethostname()
-    f = _file()
-    if not f.exists():
-        return defaults
-    return _merge(defaults, json.loads(f.read_text(encoding="utf-8")))
+    return _merge(defaults, load_raw())
 
 
-def save(cfg: dict) -> None:
-    f = _file()
+def _write(f: Path, write) -> None:
     f.parent.mkdir(parents=True, exist_ok=True)
     # a name of its own (mkstemp, mode 0600 until the chmod below): two savers at once never write into one file
     fd, tmp = tempfile.mkstemp(dir=f.parent, prefix=f.name + ".", suffix=".tmp")
     tmp = Path(tmp)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(cfg, fh, indent=2)
+        with os.fdopen(fd, "wb") as fh:
+            write(fh)
             fh.flush()
             os.fsync(fh.fileno())
         os.chmod(tmp, 0o640)
@@ -177,3 +216,14 @@ def save(cfg: dict) -> None:
         if tmp.exists():
             tmp.unlink()
         raise
+
+
+def save(cfg: dict) -> None:
+    """Both forms, config.xml first (R85 section 1.5: the JSON form stays for one release, for `update --rollback`)."""
+    from .profiles import statexml
+    xf = _xml_file()
+    if any(x.startswith(f"{xf} (") for x in statexml.problems()) and xf.exists():     # never write over what could not be read
+        os.replace(xf, xf.with_name(xf.name + ".unreadable"))
+        statexml.clear_problem(xf)
+    _write(xf, lambda fh: fh.write(statexml.dumps("config", cfg)))
+    _write(_file(), lambda fh: fh.write(json.dumps(cfg, indent=2).encode("utf-8")))
