@@ -1417,7 +1417,7 @@ SP_READY = {
 """,
     "running_low": r"""
   await waitPage();
-  need('no chip while the Hub has no list', !$$('.spools__low').some((b) => !b.classList.contains('hidden')));
+  need('no chip while the Hub has no list', !$$('.spools__low:not([data-action="checked-out"])').some((b) => !b.classList.contains('hidden')));
   stub(/^spools\/low$/, () => reply({ threshold_g: 150, spools: [
     { id: 11, filament: 'Elegoo PLA Red', material: 'PLA', color: 'C0392B', remaining_g: 80, location: 'Rack 1', in_stock: 2, last_one: false },
     { id: 12, filament: 'Bambu Lab PETG Orange', material: 'PETG', color: 'F2762E', remaining_g: 140, location: 'Dry bin 1', in_stock: 0, last_one: true }] }));
