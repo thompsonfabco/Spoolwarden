@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import studio_fixture
+from fksync import statexml
 from fksync import installer
 from fksync.store import AppDirs
 
@@ -89,7 +90,7 @@ def test_an_older_snapshot_without_a_kept_list_proves_nothing_in_a_secondary(tmp
     an accepted update is listed as differing there, not written."""
     f, dirs = beta
     _install(_build(tmp_path, {C: _p(C)}), f, dirs, secondary=True)
-    (dirs.installed / installer.KEPT).unlink()
+    statexml.unlink(dirs.installed / installer.KEPT)
     res = _install(_build(tmp_path, {C: _p(C, nozzle_temperature=["225"])}, n=2), f, dirs, n=2, secondary=True,
                    accept={"base": [C]})
     assert res.installed == [] and res.differing == [C]
@@ -101,7 +102,7 @@ def test_a_legacy_snapshot_never_proves_the_owners_kept_preset(tmp_path, beta):
     without KEPT.json an accepted update must still leave it at 230."""
     f, dirs = beta
     _install(_build(tmp_path, {A: _p(A), B: _p(B)}), f, dirs, secondary=True)       # B kept: the owner's 230
-    (dirs.installed / installer.KEPT).unlink()                                       # as an older sync left it
+    statexml.unlink(dirs.installed / installer.KEPT)                                       # as an older sync left it
     res = _install(_build(tmp_path, {B: _p(B)}, n=2), f, dirs, n=2, secondary=True, accept={"base": [B]})
     assert res.installed == [] and res.differing == [B]
     assert json.loads((f.user_filament / "base" / f"{B}.json").read_text())["nozzle_temperature"] == ["230"]

@@ -55,7 +55,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import inapp, studio
+from . import inapp, statexml, studio
 from .store import AppDirs
 from .studio import OrcaFolders, StudioFolders
 
@@ -141,10 +141,7 @@ def trusted_gcode(system_filament: Path, *more: Path) -> set[str]:
 
 def _build_meta(build_dir: Path, prefix: str = "") -> tuple[dict[str, dict], set[str]]:
     """(BUILD.json `<prefix>inapp`: {preset: {key: value}}, casefolded `<prefix>restored` names); empty when absent."""
-    try:
-        m = json.loads((build_dir / "BUILD.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, ValueError):
-        return {}, set()
+    m = statexml.read(build_dir / "BUILD.json")         # BUILD.xml, or an older Hub's BUILD.json (RC1c)
     if not isinstance(m, dict):
         return {}, set()
     rec = m.get(f"{prefix}inapp")
@@ -239,7 +236,7 @@ def _replace_installed(build_dir: Path, dirs: AppDirs, skip: tuple[str, ...] = (
         for t in targets:                                   # whose each snapshot copy is (an accepted update may
             if t.tree == "base":                            # only replace one the kit wrote, in a secondary)
                 own = sorted(n for n in t.kept if n not in t.proven)
-                (new / KEPT).write_text(json.dumps({"base": own}), encoding="utf-8")
+                statexml.write_plain(new / KEPT, {"base": own}, also_json=True)
         old = work / "old"
         if dirs.installed.exists():
             dirs.installed.rename(old)
@@ -325,9 +322,8 @@ def _read_kept(installed: Path) -> set[str] | None:
     """The snapshot's KEPT.json names (copies that are the folder's own files, not the kit's); None for a snapshot
     from before that record (in a secondary that proves nothing; in the primary a copy equal to the live file
     counts as the kit's)."""
-    try:
-        d = json.loads((installed / KEPT).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    d = statexml.read(installed / KEPT)
+    if d is None:
         return None
     names = d.get("base") if isinstance(d, dict) else None
     return {n for n in names if isinstance(n, str)} if isinstance(names, list) else None

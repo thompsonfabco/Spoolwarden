@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from filament_kit.profiles import statexml
 from filament_kit import config, library
 from filament_kit.profiles import errors, lines, orca
 
@@ -201,7 +202,7 @@ def test_v1_file_reads_with_no_orca_parent_and_saves_v2():
     assert (line.orca_parent, line.orca_parent_source) == (None, "none")
     assert line.filaments == [3]
     lines.save(ls)
-    data = json.loads(_file().read_text(encoding="utf-8"))
+    data = statexml.read(_file(), keep_version=True)
     assert data["version"] == 2 == lines.FILE_VERSION
     assert data["lines"][0] == {**V1_ROW, "orca_parent": None, "orca_parent_source": "none"}
 
@@ -212,7 +213,7 @@ def test_v2_roundtrip():
     ls = lines.load()
     assert (ls["xzn--petg"].orca_parent, ls["xzn--petg"].orca_parent_source) == ("Generic PETG", "user")
     lines.save(ls)
-    assert json.loads(_file().read_text(encoding="utf-8"))["lines"] == [row]
+    assert statexml.read(_file(), keep_version=True)["lines"] == [row]
 
 
 @pytest.mark.parametrize("bad", [{"orca_parent": 5}, {"orca_parent_source": "weird"},

@@ -99,7 +99,7 @@ from .. import config, pairing
 from .. import library as library_mod
 from ..bridge import registry
 from ..pairing import _write_atomic, make_state_dir, open_lock
-from . import generate, inapp as inapp_mod, lines as lines_mod, updates as updates_mod
+from . import generate, inapp as inapp_mod, lines as lines_mod, statexml, updates as updates_mod
 from .bbl import Store
 from .errors import ProfileError
 from .orca import OrcaStore
@@ -177,10 +177,20 @@ def _read_obj(path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def _state_obj(path: Path) -> dict:
+    """A state file (named by its JSON name): its XML form, or its JSON form moved to XML (RC1c)."""
+    return statexml.read(path) or {}
+
+
 def _write_json(path: Path, obj) -> None:
-    make_state_dir(path.parent)
-    _write_atomic(path, (json.dumps(obj, indent=2, ensure_ascii=False) + "\n").encode("utf-8"), 0o644,
-                  state_owned=True)
+    """Save a state file as XML (R85 section 1, RC1c); the JSON form of an older Hub stays as it was at the move."""
+    statexml.write(path, obj)
+
+
+def _state_stat(path: Path) -> Path:
+    """The file a state file's change is seen on: its XML form when there is one."""
+    xp = statexml.xml_path(path)
+    return xp if xp.exists() else path
 
 
 _thread_locks: dict[str, threading.RLock] = {}
@@ -214,7 +224,7 @@ def _locked(name: str):
 
 
 def _meta() -> dict:
-    return _read_obj(_live() / "meta.json")
+    return _state_obj(_live() / "meta.json")
 
 
 def meta() -> dict:
@@ -301,7 +311,7 @@ def orca_store() -> OrcaStore | None:
 
 
 def _state() -> dict:
-    return _read_obj(_dir() / "build-state.json")
+    return _state_obj(_dir() / "build-state.json")
 
 
 def _set_state(**changes) -> None:
@@ -315,7 +325,7 @@ def _set_state(**changes) -> None:
 def _installed() -> dict | None:
     """installed.json, or None; also None when it was written for another device than the sync PC (meta.json
     `owner`): another PC's snapshot would turn its presets into false deletions and edits (final review I4)."""
-    d = _read_obj(_dir() / "installed.json")
+    d = _state_obj(_dir() / "installed.json")
     if not (isinstance(d.get("stamp"), str) and STAMP_RE.fullmatch(d["stamp"])):
         return None
     return d if d.get("device_id") == _meta().get("owner") else None
@@ -335,13 +345,13 @@ def _owner_record(stamp, orca_stamp=None) -> dict | None:
     if not (isinstance(stamp, str) and STAMP_RE.fullmatch(stamp)):
         return None
     folder = _builds() / stamp
-    m = _read_json(folder / "BUILD.json")
+    m = statexml.read(folder / "BUILD.json")
     if not isinstance(m, dict):
         return None
     out = {"stamp": stamp}
     trees = [("", "base", folder, m)]
     if isinstance(orca_stamp, str) and STAMP_RE.fullmatch(orca_stamp):
-        om = _read_json(_builds() / orca_stamp / "BUILD.json")
+        om = statexml.read(_builds() / orca_stamp / "BUILD.json")
         if isinstance(om, dict):
             trees.append(("orca_", generate.ORCA, _builds() / orca_stamp, om))
     for prefix, tree, folder, m in trees:
@@ -365,7 +375,7 @@ def _owner_record(stamp, orca_stamp=None) -> dict | None:
 
 
 def _owner_edits() -> dict | None:
-    d = _read_obj(_dir() / OWNER_EDITS)
+    d = _state_obj(_dir() / OWNER_EDITS)
     return d or None
 
 
@@ -375,7 +385,7 @@ def _forget_old_pc(meta: dict) -> None:
     PC starts like a first install. The owner's in-app record and note lines of the installed build are theirs,
     not the PC's: they are kept in owner-edits.json (ruling S34) and carried by the next builds until the new PC
     installs one. Called under live.lock before meta.json is written."""
-    raw = _read_obj(_dir() / "installed.json")
+    raw = _state_obj(_dir() / "installed.json")
     rec = _owner_record(raw.get("stamp"), raw.get("orca_stamp"))
     if rec is not None:
         if "orca_inapp" not in rec:             # no Orca install yet: the owner's Orca record kept so far (e.g.
@@ -383,10 +393,7 @@ def _forget_old_pc(meta: dict) -> None:
             rec.update({k: kept[k] for k in ("orca_inapp", "orca_notes") if k in kept})
         _write_json(_dir() / OWNER_EDITS, rec)
     for name in ("installed.json", "deleted.json"):
-        try:
-            (_dir() / name).unlink()
-        except FileNotFoundError:
-            pass
+        statexml.unlink(_dir() / name)
     meta.pop("partial", None)
     meta.pop("orca_partial", None)
     for key in ("orca_live_at", "orca_live_hash", "orca_user_id"):   # the old PC's Orca: never waited for (I1)
@@ -640,7 +647,7 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
                 raise
             meta = _meta()
             now = time.time()
-            if meta.get("owner") != device_id and (meta.get("owner") or _dir().joinpath("installed.json").exists()):
+            if meta.get("owner") != device_id and (meta.get("owner") or statexml.exists(_dir() / "installed.json")):
                 _forget_old_pc(meta)
             elif fresh:                         # the same PC, another Bambu Studio folder: its first sync
                 _forget_old_pc(meta)
@@ -720,7 +727,7 @@ def _stamp_key(name: str):
 
 def _new_stamp(now: float) -> str:
     base = time.strftime("%Y%m%d-%H%M%S", time.gmtime(now))
-    cur = (_read_obj(_dir() / "current.json")).get("stamp")
+    cur = (_state_obj(_dir() / "current.json")).get("stamp")
     n = 1
     while True:
         s = base if n == 1 else f"{base}-{n}"
@@ -843,7 +850,7 @@ def _build_once(sm, now: float) -> dict:
             # folder from before that install (or with no such install) is not diffed
             ostamp = (installed or {}).get("orca_stamp")
             ostamp = ostamp if isinstance(ostamp, str) and STAMP_RE.fullmatch(ostamp) \
-                and (root / ostamp / "BUILD.json").is_file() else None
+                and statexml.exists(root / ostamp / "BUILD.json") else None
             olive_at, oat = meta.get("orca_live_at"), (installed or {}).get("orca_at")
             orca_fresh = ostamp is not None and isinstance(olive_at, (int, float)) \
                 and isinstance(oat, (int, float)) and olive_at > oat
@@ -862,9 +869,9 @@ def _build_once(sm, now: float) -> dict:
             snapshot = updates_mod.view(snapshot, "base", _written(installed, "written"), snap_view)
         # a build whose install stopped part-way (S28): only while it is kept and is not the installed one
         partial = (root / part if isinstance(part, str) and STAMP_RE.fullmatch(part)
-                   and (root / part / "BUILD.json").is_file() and part != (installed or {}).get("stamp") else None)
+                   and statexml.exists(root / part / "BUILD.json") and part != (installed or {}).get("stamp") else None)
         owner_edits = _owner_edits() if snapshot is None else None     # S34: a re-paired / new sync PC
-        before = _read_obj(_dir() / "deleted.json").get("deleted_before")
+        before = _state_obj(_dir() / "deleted.json").get("deleted_before")
         deleted_before = {n for n in before if isinstance(n, str)} if isinstance(before, list) else set()
         restore_flag = _dir() / "restore-deleted"
         restore = restore_flag.exists()
@@ -874,7 +881,7 @@ def _build_once(sm, now: float) -> dict:
             oprinters, oproblems = generate.orca_printers(models if want.get("bambu") else [], want.get("slicer", []),
                                                           bambu_nozzles=want.get("nozzles"))
             opart = meta.get("orca_partial")
-            obefore = _read_obj(_dir() / "deleted.json").get("orca_deleted_before")
+            obefore = _state_obj(_dir() / "deleted.json").get("orca_deleted_before")
             osnap = root / ostamp if ostamp is not None else None
             if osnap is not None:
                 osnap = updates_mod.view(osnap, generate.ORCA, _written(installed, "orca_written"), osnap_view)
@@ -882,7 +889,7 @@ def _build_once(sm, now: float) -> dict:
             orca = generate.OrcaTarget(
                 store=ostore, printers=oprinters, problems=oproblems, live=orca_live, snapshot=osnap,
                 partial=(root / opart if isinstance(opart, str) and STAMP_RE.fullmatch(opart)
-                         and (root / opart / "BUILD.json").is_file() and opart != ostamp else None),
+                         and statexml.exists(root / opart / "BUILD.json") and opart != ostamp else None),
                 deleted_before={n for n in obefore if isinstance(n, str)} if isinstance(obefore, list) else set(),
                 owner_edits={"inapp": oe.get("orca_inapp"), "notes": oe.get("orca_notes")} if oe else None,
                 user_id=str(meta.get("orca_user_id") or ""), live_fresh=orca_fresh)
@@ -903,8 +910,9 @@ def _build_once(sm, now: float) -> dict:
                 manifest.update(orca_live_hash=meta.get("orca_live_hash"),
                                 orca_system_hash=_system_hash(meta, "orca_system"),
                                 orca_user_id=meta.get("orca_user_id"))
-            with open(tmp / "BUILD.json", "w", encoding="utf-8", newline="\n") as fh:
-                json.dump(manifest, fh, indent=2, ensure_ascii=False)
+            with open(tmp / "BUILD.json", "w", encoding="utf-8", newline="\n") as fh:      # both forms stay for one
+                json.dump(manifest, fh, indent=2, ensure_ascii=False)                       # release (RC1c): a Sync
+            statexml.write_plain(tmp / "BUILD.json", manifest)                              # or Hub of either age
             # new / same / update against the live folders this build was made from (never sent to the PC)
             updates_mod.record(tmp, live_copy if live is not None else None,
                                orca_copy if orca_live is not None else None, orca is not None)
@@ -969,9 +977,9 @@ def run_build(sm, *, now: float | None = None) -> dict:
 
 def current() -> dict | None:
     """The last good build {stamp, created, live_hash, presets, problems}, or None."""
-    c = _read_obj(_dir() / "current.json")
+    c = _state_obj(_dir() / "current.json")
     s = c.get("stamp")
-    if not (isinstance(s, str) and STAMP_RE.fullmatch(s) and (_builds() / s / "BUILD.json").is_file()):
+    if not (isinstance(s, str) and STAMP_RE.fullmatch(s) and statexml.exists(_builds() / s / "BUILD.json")):
         return None
     return c
 
@@ -979,7 +987,7 @@ def current() -> dict | None:
 def manifest(stamp: str) -> dict | None:
     if not (isinstance(stamp, str) and STAMP_RE.fullmatch(stamp)):
         return None
-    m = _read_json(_builds() / stamp / "BUILD.json")
+    m = statexml.read(_builds() / stamp / "BUILD.json")
     return m if isinstance(m, dict) else None
 
 
@@ -991,27 +999,32 @@ def bambu_rows(manifest: dict | None) -> list[dict]:
             == generate.BAMBU_STUDIO] if isinstance(rows, list) else []
 
 
-def build_zip(stamp: str) -> bytes:
-    """`BUILD.json` + `base/<name>.json|.info` (+ the flat `orca/<name>.json|.info` tree) of a kept build;
-    ProfileError 404 for an unknown stamp."""
+def build_zip(stamp: str, fmt: str = "json") -> bytes:
+    """`BUILD.json` (`BUILD.xml` for `fmt="xml"`, which a Slicer Sync that reads both asks for: RC1c) +
+    `base/<name>.json|.info` (+ the flat `orca/<name>.json|.info` tree) of a kept build; ProfileError 404 for an
+    unknown stamp. The manifest is the one form on disk made into the other when the wanted form is not there, so a
+    Slicer Sync of either age installs from a Hub of either age."""
     if not (isinstance(stamp, str) and STAMP_RE.fullmatch(stamp)):
         raise _not_found(f"no build {stamp!r}")
     folder = _builds() / stamp
-    if not (folder / "BUILD.json").is_file():
+    if not statexml.exists(folder / "BUILD.json"):
         raise _not_found(f"no build {stamp!r}")
-    files = [("BUILD.json", folder / "BUILD.json")]
+    manifest_bytes = (statexml.xml_bytes if fmt == "xml" else statexml.json_bytes)(folder / "BUILD.json")
+    if manifest_bytes is None:
+        raise _not_found(f"no build {stamp!r}")
+    files = [("BUILD.xml" if fmt == "xml" else "BUILD.json", manifest_bytes)]
     for tree in ("base", generate.ORCA):
         base = folder / tree
         if base.is_dir():
-            files += sorted((f"{tree}/{p.name}", p) for p in base.iterdir()
+            files += sorted((f"{tree}/{p.name}", p.read_bytes()) for p in base.iterdir()
                             if p.is_file() and p.suffix.casefold() in SUFFIXES)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for name, path in files:
+        for name, data in files:
             info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.create_system = 0      # the same bytes on Windows and Linux (Python stamps its own OS otherwise)
-            zf.writestr(info, path.read_bytes())
+            zf.writestr(info, data)
     return buf.getvalue()
 
 
@@ -1050,7 +1063,7 @@ def record_installed(stamp: str, device_id: str, trees: list[str] | None = None,
     with _locked("live.lock"):
         check_owner(device_id)
         if not (isinstance(stamp, str) and STAMP_RE.fullmatch(stamp)
-                and (_builds() / stamp / "BUILD.json").is_file()):
+                and statexml.exists(_builds() / stamp / "BUILD.json")):
             raise _not_found(f"no build {stamp!r}")
         # B-M4: "orca" counts only for a build with an orca/ tree (else it would become an empty Orca snapshot)
         trees = [t for t in TREES if t in trees and (t == "base" or (_builds() / stamp / t).is_dir())]
@@ -1090,10 +1103,7 @@ def record_installed(stamp: str, device_id: str, trees: list[str] | None = None,
         if orca_part and "orca" not in trees:   # the Orca tree did not go in: the owner's Orca record still counts
             _write_json(_dir() / OWNER_EDITS, {"stamp": kept.get("stamp"), **orca_part})
         else:
-            try:                                # the installed build's own record carries them from now on (S34)
-                (_dir() / OWNER_EDITS).unlink()
-            except FileNotFoundError:
-                pass
+            statexml.unlink(_dir() / OWNER_EDITS)   # the installed build's own record carries them from now on (S34)
         return {"stamp": stamp, "at": at}
 
 
@@ -1138,9 +1148,9 @@ def _update_items() -> tuple[str | None, list[dict], int]:
     changed once it is the current one, and it names its stamp)."""
     global _items_cache
     d = _dir()
-    stamp = _read_obj(d / "current.json").get("stamp")
+    stamp = _state_obj(d / "current.json").get("stamp")
     folder = _builds() / stamp if isinstance(stamp, str) and STAMP_RE.fullmatch(stamp) else None
-    key = (str(d), stamp) + tuple(_stat_key(f) for f in (
+    key = (str(d), stamp) + tuple(_stat_key(_state_stat(f)) for f in (
         d / "current.json", _live() / "meta.json", d / "installed.json", d / "updates.json",
         *((folder / "BUILD.json", folder / updates_mod.SLICER) if folder else ())))
     cached = _items_cache
@@ -1249,7 +1259,7 @@ def record_heartbeat(device_id: str, outcome: str, waiting_since: float | None, 
 def _pc_waiting(device_id: str | None, meta: dict) -> dict | None:
     """{since, app, at} while the sync PC's last heartbeat says it waits for a slicer to close: the heartbeat is the
     sync PC's own and no upload or install report came after it."""
-    hb = _read_obj(_dir() / HEARTBEAT)
+    hb = _state_obj(_dir() / HEARTBEAT)
     if hb.get("outcome") != WAITING or hb.get("device_id") != device_id:
         return None
     at = hb.get("at")
@@ -1274,7 +1284,7 @@ PC_FAILURES = {"error_no_studio": "the PC sync can't find a Bambu Studio folder:
 
 
 def _pc_failure(device_id: str | None) -> dict | None:
-    hb = _read_obj(_dir() / HEARTBEAT)
+    hb = _state_obj(_dir() / HEARTBEAT)
     text = PC_FAILURES.get(hb.get("outcome"))
     at = hb.get("at")
     if text is None or hb.get("device_id") != device_id or not isinstance(at, (int, float)) or isinstance(at, bool):
