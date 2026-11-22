@@ -15,6 +15,8 @@ import kotlinx.serialization.json.doubleOrNull
  */
 data class VoiceSettings(
     val station: Boolean,
+    /** The Weigh Station runs on another computer than the Hub: its voice file is chosen there. Absent: false. */
+    val remote: Boolean = false,
     val speech: Boolean = true,
     /** The name the Hub shows for the voice; read-only here. */
     val voice: String = "",
@@ -29,6 +31,7 @@ object VoiceParsing {
         val o = body as? JsonObject ?: return VoiceSettings(station = false)
         return VoiceSettings(
             station = o.bool("station") ?: false,
+            remote = o.bool("remote") ?: false,
             speech = o.bool("speech") ?: true,
             voice = (o["voice"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
             speaker = o.int("speaker") ?: 0,

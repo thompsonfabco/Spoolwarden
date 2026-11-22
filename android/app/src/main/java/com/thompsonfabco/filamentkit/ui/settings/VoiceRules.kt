@@ -42,6 +42,9 @@ internal fun snapSpeed(raw: Float): Int =
 
 internal fun snapVolume(raw: Float): Int = Math.round(raw).coerceIn(VOLUME_MIN, VOLUME_MAX)
 
+/** The line under the read-only Voice row: where the voice is chosen. */
+internal fun voiceHint(s: VoiceSettings): String = if (s.remote) VoiceTexts.VOICE_HINT_REMOTE else VoiceTexts.VOICE_HINT
+
 /** The Speaker row exists only for a voice with more than one speaker. */
 internal fun speakerShown(s: VoiceSettings): Boolean = s.speakerRange != null
 

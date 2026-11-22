@@ -43,6 +43,7 @@ class ApiVoiceTest {
             "speed":120,"volume":30,"future":1}""")
         val v = api.voice()
         assertTrue(v.station)
+        assertFalse("absent is false", v.remote)
         assertFalse(v.speech)
         assertEquals("Piper, many speakers", v.voice)
         assertEquals(12, v.speaker)
@@ -53,6 +54,13 @@ class ApiVoiceTest {
         assertEquals("GET", q.method)
         assertEquals("/api/voice", q.url.encodedPath)
         assertEquals("Bearer tok-123", q.headers["Authorization"])
+    }
+
+    @Test fun remoteIsRead() = runBlocking {
+        json("""{"station":true,"remote":true}""")
+        assertTrue(api.voice().remote)
+        json("""{"station":true,"remote":"yes"}""")
+        assertFalse(api.voice().remote)
     }
 
     @Test fun aNullRangeAndMissingFieldsAreLenient() = runBlocking {
