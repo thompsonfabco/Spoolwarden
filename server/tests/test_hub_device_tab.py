@@ -661,6 +661,7 @@ def test_a_station_that_trickles_its_answer_is_cut_off_at_one_deadline(mode, tmp
 def test_the_photo_and_the_ticket_calls_have_the_same_deadline(env_hub, monkeypatch, tmp_path):
     c, st = env_hub
     monkeypatch.setattr(device_tab.station_client, "station_reach", lambda devs, url: {})      # that probe is station_client's own
+    monkeypatch.setattr(device_tab.station_client, "station_panel", lambda url: None)          # so is the panel-link probe
     srv, url, fp, port = _trickle("body", tmp_path / "trickle-tls")
     try:
         _pair_station(st, fp=fp, port=port)

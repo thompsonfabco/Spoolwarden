@@ -172,6 +172,22 @@ def _volume(v) -> int:
     return max(0, min(100, v))
 
 
+def _panel_link(st: dict) -> str:
+    """station.panel_link: `usb` or `wifi` (R88 4.4); anything else stops the apply, as a bad page_from does."""
+    v = st.get("panel_link", "usb")
+    if v not in config.PANEL_LINKS:
+        raise ModuleError(f"station.panel_link is {v!r}; fix: use one of {', '.join(config.PANEL_LINKS)}")
+    return v
+
+
+def _panel_port(st: dict) -> int:
+    """station.panel_port: the Wi-Fi listener's port, 1 to 65535."""
+    v = st.get("panel_port", 5004)
+    if isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= 65535:
+        raise ModuleError(f"station.panel_port is {v!r}; fix: use a port from 1 to 65535")
+    return v
+
+
 def own_subnets(*, run=subprocess.run) -> list[str] | None:
     """The subnets this machine's own interfaces are on (global scope, loopback left out), read with `ip -j addr`, or
     None when they cannot be read (no `ip`, no output, nothing found)."""
@@ -216,6 +232,8 @@ def station_dropin(cfg: dict, addresses: list[str], *, subnets: Callable[[], lis
     flow calls the server there. Besides them it admits what station.page_from says (`page_ranges`): the page opens
     from the home network unless the owner narrows it."""
     st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
+    if _panel_link(st) == "wifi" and _panel_port(st) == int(st["port"]):
+        raise ModuleError("station.panel_port is the station's own port; fix: use another port for the panel")
     mark, ranges = page_ranges(cfg, subnets)
     allow = _uniq(["127.0.0.1", *addresses])
     env = [f"STATION_ALLOW={' '.join(allow)}",
@@ -231,17 +249,22 @@ def station_dropin(cfg: dict, addresses: list[str], *, subnets: Callable[[], lis
            f"STATION_PANEL_FW={config.paths().opt.as_posix()}/resources/panel/intake-panel.bin",
            f"STATION_PANEL_FLASH={1 if st['panel_flash'] else 0}",
            f"STATION_PANEL_SWAP={1 if st.get('panel_swap') else 0}",
-           f"STATION_SPEAKER_VOLUME={_volume(st.get('speaker_volume', 50))}"]
+           f"STATION_SPEAKER_VOLUME={_volume(st.get('speaker_volume', 50))}",
+           f"STATION_PANEL_LINK={_panel_link(st)}",
+           f"STATION_PANEL_PORT={_panel_port(st)}"]
     if st.get("beep_device"):
         env.append(f"STATION_BEEP_DEVICE={st['beep_device']}")
     server = next((h for h in st.get("allow") or [] if h), None)
     if server:          # the station asks this server to pair it (station/pair_request.py), as typed
         env += [f"STATION_SERVER={server}", f"STATION_SERVER_PORT={int(cfg.get('port', 8710))}"]
     env_line = "Environment=" + " ".join(_env_assign(e) for e in env)
-    ip_allow = " ".join(["localhost", *_uniq([*ranges, *addresses, *paired_server_ips()])])
+    # a Wi-Fi panel dials in from a DHCP address on the home network: no single address is pinned, the token and the pinned
+    # certificate are the gate. Written here, by root at set-up, from the config; `panel-wifi --off` turns it off again.
+    wifi = [*HOME_RANGES] if _panel_link(st) == "wifi" else []
+    ip_allow = " ".join(["localhost", *_uniq([*ranges, *wifi, *addresses, *paired_server_ips()])])
     # a port below 1024 (a new station on 443): the unit's empty capability sets get exactly CAP_NET_BIND_SERVICE
     return (f"[Service]\n{env_line}\n{PAGE_MARK}{mark}\nIPAddressAllow={ip_allow}\n"
-            f"{hubport.capability_lines(st['port'])}")
+            f"{hubport.capability_lines(min(int(st['port']), _panel_port(st)) if _panel_link(st) == 'wifi' else st['port'])}")
 
 
 def _read_text(path: Path) -> str | None:

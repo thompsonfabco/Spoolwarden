@@ -48,7 +48,7 @@ def tls_context(cert, key) -> ssl.SSLContext:
 def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, store=None,
                  wrong_tickets=None, *, page_ranges: str | None = None,
                  page_from: str = "home") -> type[BaseHTTPRequestHandler]:
-    """A handler class over `state_view()`: a snapshot of the station state plus "panel" (the panel's port); "photo" is the JPEG bytes.
+    """A handler class over `state_view()`: a snapshot of the station state plus "panel" ("usb", "wifi" or null); "photo" is the JPEG bytes.
 
     Every request is guarded by the caller's address and cookie (guard.py, R83 01:10): an address on `allow` (the Hub) asks
     everything, as before, and `POST /ticket` with its proof; another home address gets the page's own files and `POST
