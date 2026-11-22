@@ -115,6 +115,7 @@ DIR = "usage"
 MIGRATED = ".migrated"           # says how many bytes of usage.jsonl were taken in
 TAKEN = re.compile(r"usage\.jsonl taken in: (\d+) ([0-9a-f]{64})\n")
 LOCK_WAIT = 5.0                 # seconds to wait for usage/.lock
+PENDING_LOCK = ".pending.lock"  # guards the pending file's open and write against the drain's rename
 PENDING = ".pending-old"        # lines for usage.jsonl not appended yet (the lock was busy), in its form, one per line
 DRAINING = ".pending-old.draining"      # the pending lines being appended (kept until all of them are in usage.jsonl)
 MONTH_FILE = re.compile(r"\d{4}-(?:0[1-9]|1[0-2])\.xml")
@@ -137,6 +138,7 @@ _lock = threading.RLock()       # re-entrant: a reader migrates the old log unde
 _held: set[str] = set()         # printers whose usage/.lock this process holds (guarded by _lock)
 _reported: set[str] = set()     # files a problem was logged for
 _undoing: set[str] = set()      # entries an Undo is working on (guarded by _lock)
+_pend_lock = threading.Lock()   # with usage/.pending.lock: held only for one appended pending line or one rename, never while waiting for another lock
 
 
 class UsageError(Exception):
@@ -470,6 +472,24 @@ def _line(rec: dict) -> bytes:
     return (json.dumps(rec, separators=(',', ':')) + "\n").encode('utf-8')
 
 
+@contextmanager
+def _pend_guard(serial: str):
+    """A short lock of its own (not usage/.lock, which can be held for long) around the pending file's open, write and
+    close, and the drain's rename of it: a line cannot land in the file a drain has just renamed, read and removed."""
+    folder = _dir(serial) / DIR
+    make_state_dir(folder)
+    with _pend_lock:
+        if fcntl is None:
+            yield
+            return
+        with open_lock(folder / PENDING_LOCK) as fh:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)         # held for a rename or one line only
+            try:
+                yield
+            finally:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
 def _pend(serial: str, rec: dict) -> None:
     """Keep `rec` for usage.jsonl until a locked write can append it: one appended, fsynced line (it survives a restart,
     and nothing is read and rewritten, so a process that holds the lock cannot lose it). The month file is not touched
@@ -477,15 +497,16 @@ def _pend(serial: str, rec: dict) -> None:
     d = _dir(serial) / DIR
     make_state_dir(d)
     f = d / PENDING
-    new = not f.exists()
-    fd = os.open(f, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, 'O_BINARY', 0), 0o600)
-    try:
-        if new:
-            give_to_state_owner(f)
-        os.write(fd, _line(rec))
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    with _pend_guard(serial):
+        new = not f.exists()
+        fd = os.open(f, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, 'O_BINARY', 0), 0o600)
+        try:
+            if new:
+                give_to_state_owner(f)
+            os.write(fd, _line(rec))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 def _pending(serial: str) -> list[dict]:
@@ -507,8 +528,11 @@ def _drain(serial: str) -> bool:
     for _ in range(2):                      # a leftover of an earlier stop first, then what came in since
         draining = d / DRAINING
         if not draining.exists():
+            if not (d / PENDING).exists():
+                break
             try:
-                os.replace(d / PENDING, draining)       # a line added from now on goes to a new file
+                with _pend_guard(serial):
+                    os.replace(d / PENDING, draining)   # a line added from now on goes to a new file
             except FileNotFoundError:
                 break
         recs = _pending_in(draining)

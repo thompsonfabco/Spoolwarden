@@ -554,3 +554,26 @@ def test_threads_writing_the_same_printer_lose_nothing_and_do_not_deadlock():
         t.join(20)
     assert not any(t.is_alive() for t in ts)
     assert len(usage.entries(SERIAL, days=30)) == 12 and len(_v062_read(SERIAL)[0]) == 12
+
+
+@needs_flock
+def test_a_line_pended_while_a_drain_renames_the_pending_file_is_not_lost(monkeypatch):
+    monkeypatch.setattr(usage, "LOCK_WAIT", 0.3, raising=False)
+    holder = _holder(_dir())
+    real = usage.give_to_state_owner
+    drainer = {}
+
+    def wrapper(path, *a, **kw):
+        if path.name == usage.PENDING and not drainer:       # between the pender's open and its write
+            _release(holder)
+            drainer["t"], drainer["out"] = _in_thread(usage.append, SERIAL, {"job": "drainer"})
+            drainer["t"].join(1.0)          # a lock of the pending file makes the drain wait here; without it the drain has run
+        return real(path, *a, **kw)
+    monkeypatch.setattr(usage, "give_to_state_owner", wrapper)
+    t, out = _in_thread(usage.append, SERIAL, {"job": "pender"})
+    t.join(10)
+    drainer["t"].join(10)
+    assert "r" in out and "r" in drainer["out"]
+    assert out["r"]["id"] in [e["id"] for e in usage.entries(SERIAL, days=30)]          # was: written into the removed file
+    assert [x["id"] for x in _v062_read(SERIAL)[0]] == [out["r"]["id"], drainer["out"]["r"]["id"]]
+    assert not (_dir() / "usage" / usage.PENDING).exists() and not (_dir() / "usage" / usage.DRAINING).exists()
