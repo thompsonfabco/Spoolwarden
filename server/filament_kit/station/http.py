@@ -1,6 +1,6 @@
 """The station's HTTP handler: GET /state, GET /last-tag and GET /photo (shapes in the package docstring; the first
 two keep their shape from filament-ops so filament-mcp keeps reading them), its own page (`GET /`, `/static/*`), its
-settings (`GET` and `POST /settings`) and the ticket and session routes of the page (`POST /ticket`, `POST /session`:
+settings (`GET` and `POST /settings`), the voice (`POST /voice`, `POST /voice/test`: the Hub's call) and the ticket and session routes of the page (`POST /ticket`, `POST /session`:
 page.py). 404 for anything else, 403 for a client not in `allow` and holding no session."""
 from __future__ import annotations
 
@@ -172,7 +172,7 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
             caller = self._caller()
             if not guard.allowed(caller, "POST", path, self._session()):
                 return self._error(403, "forbidden")
-            if path not in ("/ticket", "/session", "/settings"):
+            if path not in ("/ticket", "/session", "/settings", "/voice", "/voice/test"):
                 return self._error(404, "not_found")
             raw = self._body()
             if raw is None:
@@ -199,6 +199,18 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
                     wrong_tickets.wrong(address)
                     return self._error(403, "forbidden", "That ticket is not valid.")
                 return self._send(200, {"ok": True}, {"Set-Cookie": page.cookie_header(sid)})
+            if path in ("/voice", "/voice/test"):    # the Hub's call: an address on the allow-list (guard), no other
+                if caller != guard.LISTED:
+                    return self._error(403, "forbidden")
+                data = self._json(raw)
+                if data is None:
+                    return
+                from . import speech
+                try:
+                    speech.set_voice(data) if path == "/voice" else speech.test_voice(data)
+                except speech.VoiceRefused as e:
+                    return self._error(e.status, e.code, e.message)
+                return self._send(200, {})
             if store is None:
                 return self._error(404, "not_found")
             # a setting changes on the Hub call (allow-list and the proof of the pairing) or from the page's own session

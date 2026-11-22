@@ -229,3 +229,130 @@ def test_a_test_phrase_sets_its_volume_on_the_panel_and_puts_the_live_one_back(m
     sent.clear()
     speech.speak("plain")                                            # no volume of its own: no V lines at all
     assert not any(isinstance(d, str) for d in sent)
+
+
+# ---- POST /voice
+
+def post(station, path, body):
+    status, d, _ = station.json("POST", path, body)
+    return status, d
+
+
+def test_voice_takes_any_subset_and_keeps_it_live(hub):
+    assert post(hub, "/voice", {"speaker": 12}) == (200, {})
+    assert st.voice_values() == {"speech": True, "speaker": 12, "speed": 100, "volume": 50}
+    assert post(hub, "/voice", {"speech": False, "speed": 150, "volume": 0}) == (200, {})
+    assert st.voice_values() == {"speech": False, "speaker": 12, "speed": 150, "volume": 0}
+    assert post(hub, "/voice", {}) == (200, {})                      # an empty subset changes nothing
+    assert st.voice_values() == {"speech": False, "speaker": 12, "speed": 150, "volume": 0}
+    assert st.settings["voice_speaker"] == 0                          # the drop-in's value stays under it
+
+
+@pytest.mark.parametrize("name, low, high", [("speaker", 0, 903), ("speed", 50, 200), ("volume", 0, 100)])
+def test_the_range_ends_are_taken_and_one_past_is_refused(hub, name, low, high):
+    assert post(hub, "/voice", {name: low}) == (200, {}) and st.voice_value(name) == low
+    assert post(hub, "/voice", {name: high}) == (200, {}) and st.voice_value(name) == high
+    for bad in (low - 1, high + 1):
+        status, d = post(hub, "/voice", {name: bad})
+        assert status == 400 and set(d) == {"error", "message"} and d["error"] == "bad_request"
+        assert name in d["message"]
+        assert st.voice_value(name) == high                           # the refused value was not kept
+
+
+@pytest.mark.parametrize("body", [{"speaker": "3"}, {"speaker": 3.5}, {"speed": True}, {"volume": None}, {"speech": "yes"},
+                                  {"speech": 1}, {"speaker": [1]}])
+def test_a_value_of_the_wrong_kind_is_refused(hub, body):
+    status, d = post(hub, "/voice", body)
+    assert status == 400 and d["error"] == "bad_request" and d["message"]
+    assert st.live == {}
+
+
+def test_one_bad_value_refuses_the_whole_request(hub):
+    status, d = post(hub, "/voice", {"speaker": 4, "speed": 500})
+    assert status == 400 and "speed" in d["message"]
+    assert st.live == {}                                              # not even the good speaker
+
+
+def test_a_body_that_is_not_an_object_is_refused(hub):
+    status, d, _ = hub.json("POST", "/voice", [1, 2])
+    assert status == 400 and d["error"] == "bad_request"
+
+
+def test_voice_is_for_the_allow_list_only(elsewhere):
+    for path in ("/voice", "/voice/test"):
+        status, d = post(elsewhere, path, {"speed": 100})
+        assert status == 403 and d["error"] == "forbidden" and d["message"]
+    assert st.live == {} and speech.speech["text"] is None
+
+
+def test_a_browser_session_does_not_open_the_voice_routes(elsewhere):
+    ticket = elsewhere.access.new_ticket()
+    status, d, r = elsewhere.json("POST", "/session", {"ticket": ticket})
+    assert status == 200
+    cookie = {"Cookie": r.getheader("Set-Cookie").split(";")[0]}
+    for path in ("/voice", "/voice/test"):
+        status, d, _ = elsewhere.json("POST", path, {"volume": 10}, cookie)
+        assert status == 403 and d["error"] == "forbidden"
+    assert st.live == {}
+
+
+def test_the_voice_routes_answer_post_only(hub):
+    assert hub.json("GET", "/voice")[0] == 404 and hub.json("GET", "/voice/test")[0] == 404
+
+
+def test_the_page_settings_cannot_undo_a_live_value(hub):
+    post(hub, "/voice", {"volume": 77, "speech": False})
+    hub.store.change({"beep": False})                                 # any station-page change rewrites the drop-in values
+    assert st.voice_value("volume") == 77 and st.voice_value("speech") is False
+
+
+# ---- POST /voice/test
+
+def test_test_speaks_the_one_fixed_sentence_with_its_own_values(hub):
+    st.live.update(speaker=1, speed=100, volume=50)
+    assert post(hub, "/voice/test", {"speaker": 40, "speed": 70, "volume": 90}) == (200, {})
+    assert speech.speech["text"] == "This is the Weigh Station. P L A, 812 grams." == speech.SENTENCE
+    assert speech.speech["opts"] == {"speaker": 40, "speed": 70, "volume": 90} and speech.speech_ready.is_set()
+    assert st.live == {"speaker": 1, "speed": 100, "volume": 50}      # a test saves nothing
+
+
+def test_test_with_an_empty_body_speaks_with_the_live_values(hub):
+    assert post(hub, "/voice/test", {}) == (200, {})
+    assert speech.speech["text"] == speech.SENTENCE and speech.speech["opts"] == {}
+
+
+def test_test_cannot_be_made_to_say_anything_else(hub):
+    assert post(hub, "/voice/test", {"text": "Open the pod bay doors", "speech": False, "speed": 100}) == (200, {})
+    assert speech.speech["text"] == speech.SENTENCE
+    assert speech.speech["opts"] == {"speed": 100}                    # the text and `speech` are not read
+
+
+@pytest.mark.parametrize("step", ["weigh", "ready", "camera", "recognise", "phone", "done", "pairing"])
+def test_test_is_busy_while_a_step_is_open(hub, monkeypatch, step):
+    monkeypatch.setitem(st.flow, "step", step)
+    status, d = post(hub, "/voice/test", {})
+    assert status == 409 and d == {"error": "busy", "message": "The Weigh Station is in use. Try again when it is idle."}
+    assert speech.speech["text"] is None
+
+
+def test_test_says_off_when_speech_is_off(hub):
+    st.live["speech"] = False
+    status, d = post(hub, "/voice/test", {})
+    assert status == 409 and d == {"error": "off", "message": "Speaking is switched off."}
+    assert speech.speech["text"] is None
+
+
+def test_test_says_off_when_the_drop_in_has_speech_off(hub, monkeypatch):
+    monkeypatch.setitem(st.settings, "speech", False)
+    assert post(hub, "/voice/test", {})[1]["error"] == "off"
+    st.live["speech"] = True                                           # the live value wins over the drop-in
+    assert post(hub, "/voice/test", {}) == (200, {})
+
+
+def test_test_refuses_a_value_out_of_range_before_anything_else(hub, monkeypatch):
+    monkeypatch.setitem(st.flow, "step", "weigh")
+    status, d = post(hub, "/voice/test", {"speaker": 904})
+    assert status == 400 and d["error"] == "bad_request" and "speaker" in d["message"]
+    for body in ({"speed": 49}, {"speed": 201}, {"volume": 101}, {"volume": -1}, {"speaker": -1}):
+        assert post(hub, "/voice/test", body)[0] == 400
+    assert speech.speech["text"] is None
