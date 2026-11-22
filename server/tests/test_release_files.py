@@ -784,7 +784,19 @@ def test_wrapper_reader_revoke_as_root_and_list_as_user(tmp_path):
     assert _wrapper_run(tmp_path / "b", "reader", "tokens") == "as-user ./stubs/prog reader tokens"
 
 
-def _wrapper_half(tmp_path, *, marker=False, state=None, program=True, installing=False, state_xml=None):
+def _hub_python(path):
+    """A stand-in for the Hub's venv python that keeps -I (isolated mode ignores PYTHONPATH, so the kit's folder is put on
+    sys.path from inside the -c code, as the venv's site-packages would): the program's own import path is tested."""
+    import filament_kit
+    src = Path(filament_kit.__file__).resolve().parent.parent.as_posix()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = ('#!/bin/sh\n[ "$1" = -I ] && [ "$2" = -c ] || exit 97\ncode="$3"; shift 3\n'
+            f'exec "{Path(sys.executable).as_posix()}" -I -c "import sys; sys.path.insert(0, \'{src}\')\n$code" "$@"\n')
+    path.write_text(body, encoding="utf-8", newline="\n")
+    path.chmod(0o755)
+
+
+def _wrapper_half(tmp_path, *, marker=False, state=None, program=True, installing=False, state_xml=None, after=None):
     """Run the wrapper over a kit folder with stand-ins; (exit code, stdout, stderr)."""
     import os
     import subprocess
@@ -803,12 +815,15 @@ def _wrapper_half(tmp_path, *, marker=False, state=None, program=True, installin
         (kit / ".fk-installed").write_text("x\n")
     if state:
         (kit / "releases" / "state.json").write_text(state, encoding="utf-8")
-    if state_xml:       # read by the kit's own Python (a stand-in that is this test's interpreter)
-        (kit / "releases" / "state.xml").write_bytes(state_xml)
+    if state_xml or after:       # read by the kit's own Python (a stand-in that is this test's interpreter)
+        if state_xml:
+            (kit / "releases" / "state.xml").write_bytes(state_xml)
         (kit / "venv" / "bin").mkdir(parents=True)
         (kit / "venv" / "bin" / "python").write_text(f'#!/bin/sh\n[ "$1" = -I ] && shift\nexec "{Path(sys.executable).as_posix()}" "$@"\n',
                                                      encoding="utf-8", newline="\n")
         (kit / "venv" / "bin" / "python").chmod(0o755)
+    if after:           # changes the files once the others are in place
+        after(kit / "releases")
     text = _read("install/spoolwarden-cli.sh")
     for old, new in (("BIN=/opt/filament-kit/venv/bin/filament-kit", "BIN=./stubs/prog"),
                      ("KIT_OPT=/opt/filament-kit", "KIT_OPT=./kit")):
@@ -851,6 +866,25 @@ def test_wrapper_reads_the_repair_version_from_state_xml_with_the_kits_python(tm
     rc, out, err = _wrapper_half(tmp_path / "again", state='{"previous": "1.0.0"}',
                                  state_xml=statexml.dumps("state", {"previous": None, "held": None}))
     assert "stopped halfway" in err and "--version" not in err, err
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_repair_line_takes_a_state_json_changed_after_a_rollback(tmp_path, monkeypatch):
+    """R600 MEDIUM: a rollback writes previous=None, held=N; v0.6.2 then updates and writes only state.json
+    (previous=0.6.2, failed=N) and stops halfway. The wrapper reads the state as updates.half_install does, so its repair
+    line carries --version 0.6.2, and the two agree."""
+    import json
+    from filament_kit import config, updates
+
+    def v062_changes_the_state(releases):
+        updates.statexml.write(releases / "state.json", {"previous": None, "held": "2.0.0"}, 0o644, state_owned=False,
+                               old_format=updates._old_state)
+        (releases / "state.json").write_text(json.dumps({"previous": "0.6.2", "held": None, "failed": "2.0.0"}, indent=2),
+                                             encoding="utf-8")
+    rc, out, err = _wrapper_half(tmp_path, after=v062_changes_the_state)
+    assert f"  {config.GET_COMMAND} --version 0.6.2\n" in err, err
+    monkeypatch.setenv("FK_OPT", str(tmp_path / "kit"))
+    assert updates.half_install() == f"{config.GET_COMMAND} --version 0.6.2"
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
