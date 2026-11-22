@@ -140,6 +140,7 @@ _held: set[str] = set()         # printers whose usage/.lock this process holds 
 _reported: set[str] = set()     # files a problem was logged for
 _undoing: set[str] = set()      # entries an Undo is working on (guarded by _lock)
 _pend_lock = threading.Lock()   # with usage/.pending.lock: held only for one appended pending line or one rename, never while waiting for another lock
+_lost: set[str] = set()         # rollback copies a record was lost from (it could be neither appended nor kept pending): noted until a restart
 
 
 class UsageError(Exception):
@@ -458,6 +459,7 @@ def _write_line(serial: str, rec: dict) -> None:
                 try:
                     _pend(serial, rec)          # a line must not pass the ones before it
                 except OSError as e:            # the XML has it: only the rollback copy is lost, and that stays noted
+                    _lost.add(str(_copy_key(serial)))
                     _report(_copy_key(serial), f"cannot be kept current for a rollback: {e}")
     except LockTimeout as e:            # another process holds usage/.lock: the record waits in the pending file
         _report(_copy_key(serial), f"not kept current for a rollback yet: {e}")
@@ -543,7 +545,7 @@ def _drain(serial: str) -> bool:
             if not _old_form(serial, rec):
                 return False
         draining.unlink()
-    _forget(_copy_key(serial))
+    _clear_note(serial)
     return True
 
 
@@ -569,6 +571,23 @@ def _appended(serial: str, recs: list[dict]) -> int:
         if lines[-k:] == recs[:k]:
             return k
     return 0
+
+
+def _clear_note(serial: str) -> None:
+    """Drop the rollback-copy note when nothing is waiting for usage.jsonl and no record was lost from it."""
+    if str(_copy_key(serial)) not in _lost and not _pending(serial):
+        _forget(_copy_key(serial))
+
+
+def _sync_note(serial: str) -> None:
+    """The note follows the pending file, which outlives a restart (the note itself is only in memory)."""
+    key = _copy_key(serial)
+    waiting = _pending(serial)
+    if not waiting:
+        if str(key) not in _lost:
+            _forget(key)
+    elif not any(p.startswith(f"{key} (") for p in statexml.problems()):
+        _report(key, f"not kept current for a rollback yet: {len(waiting)} record(s) wait to be appended to usage.jsonl")
 
 
 def _pending_in(f: Path) -> list[dict]:
@@ -606,8 +625,7 @@ def _old_form(serial: str, rec: dict) -> bool:
             raw = f.read_bytes()
             if len(raw) == before + len(line):
                 _write_marker(serial, raw)
-                if not _pending(serial):
-                    _forget(_copy_key(serial))
+                _clear_note(serial)
     except (OSError, TypeError, ValueError) as e:       # the XML is the record: the old copy is for a rollback only
         _report(_copy_key(serial), f"cannot be kept current for a rollback: {e}")
         return False
@@ -654,6 +672,7 @@ def _store(serial: str, rec: dict, dedupe: bool = False) -> None:
 def _read(serial: str, since: str | None = None) -> tuple[list[dict], dict[str, str]]:
     """(entry records oldest first, {undone entry id: undo time}) of the printer's month files from `since` ("2026-11")
     on (all of them when None)."""
+    _sync_note(serial)
     old = _migrate(serial)
     out, undone = [], {}
     if old is not None:

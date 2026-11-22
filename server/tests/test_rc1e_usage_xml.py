@@ -622,3 +622,29 @@ def test_a_batch_that_stopped_part_way_is_finished_without_repeating_lines(monke
     a2 = usage.append(SERIAL, {"job": "a2"})
     assert [x["id"] for x in _v062_read(SERIAL)[0]] == [E1, E2, E3, a1["id"], a2["id"]]        # each once, in the order made
     assert not (_dir() / "usage" / usage.PENDING).exists() and not (_dir() / "usage" / usage.DRAINING).exists()
+
+
+def test_a_record_lost_from_the_old_log_and_the_pending_file_keeps_its_note(monkeypatch):
+    def full(serial, rec):
+        raise OSError(errno.ENOSPC, "No space left on device")
+    with monkeypatch.context() as m:
+        m.setattr(usage, "_old_form", lambda serial, rec: False)
+        m.setattr(usage, "_pend", full)
+        lost = usage.append(SERIAL, {"job": "lost"})
+    usage.append(SERIAL, {"job": "ok"})                     # a good write must not clear the note: the line is not in usage.jsonl
+    assert lost["id"] not in [x["id"] for x in _v062_read(SERIAL)[0]]
+    assert any("rollback" in p for p in statexml.problems())            # was: cleared
+    assert lost["id"] in [e["id"] for e in usage.entries(SERIAL, days=30)]
+
+
+def test_a_leftover_pending_file_is_noted_by_a_new_process_until_it_is_drained():
+    (_dir() / "usage").mkdir(parents=True)
+    (_dir() / "usage" / usage.PENDING).write_bytes(usage._line(_entry(E1, "2026-11-10T10:00:00Z")))
+    usage._reported.clear()                                 # a new process: no note in memory
+    statexml._unreadable.clear()
+    assert [e["id"] for e in usage.entries(SERIAL, days=10_000)] == [E1]
+    assert any("rollback" in p and "usage.jsonl" in p for p in statexml.problems())         # was: nothing
+    usage.append(SERIAL, {"job": "next"})
+    assert not any("rollback" in p for p in statexml.problems())
+    usage.entries(SERIAL, days=30)
+    assert not any("rollback" in p for p in statexml.problems())
