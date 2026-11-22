@@ -1222,6 +1222,7 @@ internal fun FilamentKitApp(
                             onPairAgain = app.router::pairAgain,
                             online = online,
                             lowCount = alertsUi.lowCount,
+                            hubKey = a,
                             spoolDetail = { spool, embedded, _ ->
                                 val spoolVm: SpoolViewModel = viewModel(
                                     key = "spool-${spool.id}",

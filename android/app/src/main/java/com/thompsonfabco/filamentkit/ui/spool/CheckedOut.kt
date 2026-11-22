@@ -3,8 +3,6 @@ package com.thompsonfabco.filamentkit.ui.spool
 import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.SpoolsAnswer
 import com.thompsonfabco.filamentkit.ui.history.RecentValues
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -30,14 +28,6 @@ object CheckedOutTexts {
     fun returnTo(home: String?) = if (home.isNullOrBlank()) RETURN else "Return to $home"
     fun homeNow(location: String) = "Home is now $location."
     fun returned(location: String?) = if (location.isNullOrBlank()) "Returned." else "Returned to $location."
-}
-
-/**
- * Whether the paired Hub applies the `checked_out` filter, as the last list answer said; the spool screen shows the Home
- * line, Return and Change home only while it is true. Memory only.
- */
-object CheckedOutSupport {
-    var supported by androidx.compose.runtime.mutableStateOf(false)
 }
 
 /** What the Hub says of a spool's remembered place (`checked_out`, `home`, `checked_out_since`). */
@@ -88,6 +78,13 @@ object CheckedOutRules {
         s.home?.let(CheckedOutTexts::home),
         s.checkedOutSince?.let { CheckedOutTexts.since(RecentValues.time(it, zone)) },
     )
+
+    /**
+     * Whether the spool screen offers the Home line, Return and Change home: the spool's own answer carried `checked_out`
+     * (R88 1.7: every list row and `GET /api/spools/{id}` do on a Hub that applies the filter). Nothing outlives the answer,
+     * so another Hub cannot inherit it. An answer without the fields (an older Hub, or a route that omits them) offers none.
+     */
+    fun offered(s: SpoolSummary): Boolean = s.checkedOutKnown
 
     /** Return is offered on a checked-out spool only. */
     fun canReturn(s: SpoolSummary): Boolean = s.checkedOut

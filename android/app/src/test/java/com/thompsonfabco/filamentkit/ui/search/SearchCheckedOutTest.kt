@@ -72,11 +72,30 @@ class SearchCheckedOutTest {
         val vm = vm()
         vm.loadCheckedOut()
         assertEquals(12, vm.state.value.checkedCount)
-        assertTrue(com.thompsonfabco.filamentkit.ui.spool.CheckedOutSupport.supported)
         filters = null
         vm.loadCheckedOut()
         assertNull(vm.state.value.checkedCount)
-        assertFalse(com.thompsonfabco.filamentkit.ui.spool.CheckedOutSupport.supported)
+    }
+
+    @Test fun anotherHubDoesNotInheritWhatWasLearnedOfTheOldOne() {
+        val vm = vm()
+        vm.setCheckedOnly(true)
+        assertEquals(2, vm.state.value.checkedCount)
+        vm.forgetCheckedOut()
+        assertNull(vm.state.value.checkedCount)
+        assertFalse(vm.state.value.checkedOnly)
+        assertTrue(vm.state.value.checked.isEmpty())
+        filters = null
+        vm.loadCheckedOut()
+        assertNull("the new Hub does not name the filter", vm.state.value.checkedCount)
+    }
+
+    @Test fun aChangedCertificateDuringReturnShowsTheCertificateNotice() {
+        val vm = vm()
+        vm.setCheckedOnly(true)
+        returnError = com.thompsonfabco.filamentkit.net.FingerprintMismatch("aa", "bb")
+        vm.returnToHome(vm.state.value.checked.first())
+        assertEquals(HubFailure.CertificateChanged, vm.state.value.returnFailure)
     }
 
     @Test fun theChipCountFallsBackToTheRowsWithoutATotalAndDropsAfterAReturn() {

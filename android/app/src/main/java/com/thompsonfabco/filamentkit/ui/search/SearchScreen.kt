@@ -82,7 +82,6 @@ import com.thompsonfabco.filamentkit.ui.history.showUndoable
 import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.history.shareCsv
 import com.thompsonfabco.filamentkit.ui.spool.CheckedOutRules
-import com.thompsonfabco.filamentkit.ui.spool.CheckedOutSupport
 import com.thompsonfabco.filamentkit.ui.spool.CheckedOutTexts
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
 import com.thompsonfabco.filamentkit.ui.spool.HubFailureNotice
@@ -283,7 +282,6 @@ class SearchViewModel(
         checkedJob = viewModelScope.launch {
             try {
                 val answer = load()
-                CheckedOutSupport.supported = CheckedOutRules.supported(answer.filters)
                 if (!CheckedOutRules.supported(answer.filters)) {
                     _state.update { it.copy(busy = false, checkedOnly = false, checked = emptyList(), checkedCount = null) }
                 } else {
@@ -303,6 +301,12 @@ class SearchViewModel(
                 }
             }
         }
+    }
+
+    /** Drops what was read of the Checked out filter (another Hub, or none yet): no chip until the Hub names the filter again. */
+    fun forgetCheckedOut() {
+        checkedJob?.cancel()
+        _state.update { it.copy(checkedOnly = false, checked = emptyList(), checkedCount = null, checkedLoaded = false, returnFailure = null) }
     }
 
     /** The "Checked out" chip: the list of checked-out spools replaces the search. */
@@ -408,6 +412,8 @@ fun SearchScreen(
     online: Boolean = true,
     /** How many spools are running low, for the chip "Running low (n)"; null: no chip (the Hub has no such list). */
     lowCount: Int? = null,
+    /** Whatever identifies the paired Hub's client; a new one makes the Checked out filter be asked again. */
+    hubKey: Any? = null,
     onNfcSettings: (() -> Unit)? = null,
     spoolDetail: (@Composable (spool: SpoolSummary, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
 ) {
@@ -416,7 +422,11 @@ fun SearchScreen(
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
     LaunchedEffect(vm) { vm.loadSpoolmanLink() }
-    LaunchedEffect(vm) { vm.loadCheckedOut() }
+    // the Hub may have changed (a re-pair): what was learned of the old one goes, then the filter is asked of this one
+    LaunchedEffect(vm, hubKey) {
+        vm.forgetCheckedOut()
+        vm.loadCheckedOut()
+    }
     // a Return: the toast says where the spool went, with Undo for 10 seconds when the Hub offers one (R88 1.6)
     val toast = LocalToast.current
     val undoLabel = stringResource(R.string.common_undo)
