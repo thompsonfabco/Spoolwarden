@@ -152,3 +152,13 @@ def test_undo_of_an_entry_in_the_previous_month():
     data = statexml.loads((_dir() / "usage" / "2026-11.xml").read_bytes(), "usage")
     assert data["undone"] == [{"entry": E1, "at": "2026-12-01T00:00:00Z"}]
     assert not (_dir() / "usage" / "2026-12.xml").exists()
+
+
+def test_a_byte_that_is_not_utf8_in_the_old_log_does_not_stop_appends():
+    d = _dir()
+    d.mkdir(parents=True)
+    (d / "usage.jsonl").write_bytes(json.dumps(_entry(E1, "2026-11-10T10:00:00Z")).encode() + b"\n\xff\xfe\n")
+    r = usage.append(SERIAL, {"job": "new"})                 # was: UnicodeDecodeError out of the move, every time
+    got = {e["id"] for e in usage.entries(SERIAL, days=30)}
+    assert got == {E1, r["id"]}
+    assert (d / "usage" / usage.MIGRATED).exists()

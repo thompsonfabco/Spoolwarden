@@ -37,14 +37,15 @@ until `mapping.LayoutWatch` re-maps the printer when it is idle (`mapping.reques
 slots all agreed resets the streak. Without a start layout (no AMS in the report) nothing is learned or checked.
 
 Log: `state/printers/<serial>/usage/<yyyy-mm>.xml`, one XML file per month per printer (tag `usage`, through
-`statexml`), written by this process only (one uvicorn worker; a module lock serialises appends and undo). Each file
+`statexml`), written under a module lock and a file lock (`usage/.lock`), so the root CLI's reads and the service do not collide. Each file
 holds `entries` (a list of entry records) and `undone` (a list of {entry, at}):
   entry:  {"id", "at", "job", "grams", "spool_id", "slot", "observe"[, "error"]} and the newer fields, in the month of
           its `at`
   undone: {"entry": <entry id>, "at"}, in the month of the entry; a failed credit takes the record back
 Each append rewrites the month's file (atomic, mode 600, owned by the state owner). The old `usage.jsonl` of the release
 before (one JSON object per line: entries, {"undo": id, "at"} and {"undo_failed": id, "at"}) is read once into the month
-files (`usage/.migrated` marks it done) and is left as it was, so a rollback finds it.
+files (`usage/.migrated` marks it done). For one release every entry and undo record is also appended to it in the
+old form, so a rollback finds the current history.
 
 Entry shape returned by `entries` / `undo` (what `GET /api/printers/{id}/usage` and `POST /api/usage/{id}/undo`
 serve):
@@ -85,15 +86,21 @@ import time
 import uuid
 import zipfile
 from concurrent.futures import Future, ThreadPoolExecutor, wait
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from defusedxml import ElementTree as SafeET
 
 from .. import config, event_sink
-from ..pairing import _write_atomic, make_state_dir
+from ..pairing import _write_atomic, give_to_state_owner, make_state_dir, open_lock
 from ..profiles import statexml
 from ..spoolman import SpoolmanError
 from . import ams, ftps, hardware, layout, mapping, registry, status, tlspin
+
+try:
+    import fcntl
+except ImportError:  # Windows dev PCs: no cross-process lock (the service only runs on Linux)
+    fcntl = None
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +124,8 @@ FIELDS = ('id', 'at', 'job', 'grams', 'spool_id', 'slot', 'observe',
           'material', 'vendor', 'name', 'color_hex', 'printer_name', 'outcome')
 
 _lock = threading.RLock()       # re-entrant: a reader migrates the old log under it
+_held: set[str] = set()         # printers whose usage/.lock this process holds (guarded by _lock)
+_reported: set[str] = set()     # files a problem was logged for (guarded by _lock)
 _undoing: set[str] = set()      # entries an Undo is working on (guarded by _lock)
 
 
@@ -253,15 +262,15 @@ def _save(path: Path, data: dict) -> None:
 def _old_log(serial: str) -> tuple[list[dict], dict[str, str]] | None:
     """(entries, {undone entry id: undo time}) of the old usage.jsonl, or None when there is none."""
     try:
-        text = (_dir(serial) / FILE).read_text(encoding='utf-8')
+        raw = (_dir(serial) / FILE).read_bytes()
     except OSError:
         return None
     out, undone = [], {}
-    for line in text.splitlines():
+    for line in raw.splitlines():
         try:
             rec = json.loads(line)
-        except ValueError:
-            continue                    # a torn last line after a crash
+        except ValueError:              # a torn last line after a crash, or a byte that is not UTF-8
+            continue
         if not isinstance(rec, dict):
             continue
         if 'undo' in rec:
@@ -720,7 +729,7 @@ class Tracker:
 
     def __init__(self, manager, spoolman):
         self._spoolman = spoolman
-        self._lock = threading.RLock()       # re-entrant: a reader migrates the old log under it
+        self._lock = threading.Lock()
         self._watch: dict[str, _Watch] = {}
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='usage')
         self._futures: list[Future] = []
