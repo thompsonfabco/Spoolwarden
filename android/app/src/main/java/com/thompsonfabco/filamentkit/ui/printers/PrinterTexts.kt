@@ -1,5 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
+import com.thompsonfabco.filamentkit.net.AutoWait
+import com.thompsonfabco.filamentkit.ui.spool.LoadTexts
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -49,6 +51,28 @@ object PrinterTexts {
 
     fun clearTitle(label: String): String = "Clear slot $label?"
 
+    /** The Auto notice's button (A4); proposed key `printer_auto_stop`. */
+    const val STOP_WAITING = "Stop waiting"
+
+    /** The Auto in the state `choose` (A4); proposed key `printer_auto_choose`. */
+    fun autoChoose(spool: String): String = "Two slots were loaded. Which one got $spool?"
+
+    /** A spool as the Auto notice names it: its name, else its number, else "the spool". */
+    fun autoSpool(auto: AutoWait): String =
+        auto.spool?.name?.ifBlank { null } ?: (auto.spoolId ?: auto.spool?.id)?.let { "Spool $it" } ?: "the spool"
+
+    /**
+     * The one notice an Auto assignment makes on the printer's screen (A4): [text] (waiting, or the question when two slots
+     * were loaded) and, in that second state, the [choices] to press (the slots' labels).
+     */
+    data class AutoNotice(val text: String, val choices: List<String>)
+
+    fun autoNotice(auto: AutoWait, printer: String): AutoNotice {
+        val spool = autoSpool(auto)
+        return if (auto.choosing) AutoNotice(autoChoose(spool), auto.slots)
+        else AutoNotice(LoadTexts.waitingAuto(spool, printer), emptyList())
+    }
+
     /**
      * The sentence for the question and the result: the Hub's own [hubText] when it gives one, else the app's own on a
      * Bambu Lab printer, else none (Klipper).
@@ -61,7 +85,7 @@ object PrinterTexts {
      */
     fun clearBody(spool: String?, place: String?, note: String? = null): String {
         val forgets = "The Hub forgets the spool recorded here."
-        val first = if (spool == null) forgets else "$forgets $spool goes back to ${place?.ifBlank { null } ?: PREVIOUS_PLACE}."
+        val first = if (spool == null) forgets else "$forgets ${spool.replaceFirstChar { it.uppercase() }} goes back to ${place?.ifBlank { null } ?: PREVIOUS_PLACE}."
         return listOfNotNull(first, note).joinToString(" ")
     }
 
@@ -75,18 +99,18 @@ object PrinterTexts {
     ): String =
         listOfNotNull(
             "Cleared slot $label.",
-            spool?.let { "$it is back on ${place?.ifBlank { null } ?: PREVIOUS_PLACE}." },
+            spool?.let { "${it.replaceFirstChar { c -> c.uppercase() }} is back on ${place?.ifBlank { null } ?: PREVIOUS_PLACE}." },
             CLEAR_WAITING_ENDED.takeIf { waitingEnded },
             CLEAR_PRINTER_CLEARED.takeIf { printerCleared },
             note,
         ).joinToString(" ")
 
-    /** A spool view (`inventory.spool_view`) as a person names it: brand and name, else "spool #id". */
+    /** A spool view (`inventory.spool_view`) as a person names it: brand and name, else "Spool id", else "the spool" (a sentence that starts with it capitalises it). */
     fun spoolName(view: JsonObject): String {
         fun text(key: String) = (view[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()?.ifBlank { null }
         val named = listOfNotNull(text("vendor"), text("name")).joinToString(" ")
         if (named.isNotBlank()) return named
         val id = (view["id"] as? JsonPrimitive)?.let { it.intOrNull?.toString() ?: it.contentOrNull }
-        return if (id.isNullOrBlank()) "The spool" else "Spool #$id"
+        return if (id.isNullOrBlank()) "the spool" else "Spool $id"
     }
 }

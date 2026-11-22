@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -235,7 +236,7 @@ class Api(
 
     /**
      * `POST api/events/{id}/undo`. 409 `changed_since`, `too_old`, `already_undone` or `not_undoable` is an [ApiError]
-     * whose `text` is in [ApiError.extra]; 404 `not_found` is an older Hub (or an event the Hub no longer has).
+     * whose `message` is the Hub's sentence; 404 `not_found` is an older Hub (or an event the Hub no longer has).
      */
     suspend fun undoEvent(id: Long): UndoAnswer =
         HistoryWire.undo(call(request("api", "events", id.toString(), "undo").post(ByteArray(0).toRequestBody(null))))
@@ -466,6 +467,29 @@ class Api(
         }
         return decode(call(request("api", "printers", id, "slots", label, "load").post(body.toBody())))
     }
+
+    /**
+     * Auto: the spool goes to whichever slot of the printer gets one (A6). [dryRun] says which slots would be watched and
+     * what it replaces; 409 `auto_not_possible` when the printer has no slots the Hub can watch.
+     */
+    suspend fun autoLoad(printerId: String, spoolId: Int, dryRun: Boolean): AutoLoadResult {
+        val body = buildJsonObject {
+            put("spool_id", spoolId)
+            put("dry_run", dryRun)
+        }
+        return AutoLoadResult.parse(call(request("api", "printers", printerId, "slots", "auto", "load").post(body.toBody())))
+    }
+
+    /** Names the slot for an Auto in the state `choose`; the answer is a named load's. 409 `nothing_to_choose`. */
+    suspend fun autoChoose(printerId: String, slot: String): LoadResult {
+        val body = buildJsonObject { put("slot", slot) }
+        return decode(call(request("api", "printers", printerId, "auto", "choose").post(body.toBody())))
+    }
+
+    /** Stop waiting: ends the printer's Auto. True when it was cancelled; 409 `not_waiting` when none was waiting. */
+    suspend fun autoCancel(printerId: String): Boolean =
+        (call(request("api", "printers", printerId, "auto", "cancel").post(ByteArray(0).toRequestBody(null))) as? JsonObject)
+            ?.get("cancelled")?.jsonPrimitive?.booleanOrNull == true
 
     suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult {
         val body = buildJsonObject { put("dry_run", dryRun) }

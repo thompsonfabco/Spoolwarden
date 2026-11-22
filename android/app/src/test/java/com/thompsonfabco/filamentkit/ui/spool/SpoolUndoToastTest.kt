@@ -21,8 +21,6 @@ import com.thompsonfabco.filamentkit.ui.history.UndoKinds
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -98,7 +96,7 @@ class SpoolUndoToastTest {
     @Test fun aRefusedUndoShowsTheHubsWords() {
         val (vm, _) = moved()
         events = listOf(event(31, UndoKinds.MOVED))
-        refusal = ApiError(409, "changed_since", "x", JsonObject(mapOf("text" to JsonPrimitive("This changed again since, so it cannot be undone."))))
+        refusal = ApiError(409, "changed_since", "This changed again since, so it cannot be undone.")
         vm.move("Shelf B")
         rule.waitUntil(5_000) { rule.onAllNodesWithText("Undo").fetchSemanticsNodes().isNotEmpty() }
         rule.onAllNodesWithText("Undo")[0].performClick()
