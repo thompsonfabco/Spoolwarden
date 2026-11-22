@@ -61,7 +61,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
 from starlette.routing import Route
 
-from .. import config, inventory, tags
+from .. import config, demo, inventory, tags
 from ..spoolman import SpoolmanError
 from .. import lan
 from . import pages, slots
@@ -423,6 +423,9 @@ class Reader:
             log.exception("reader: cannot note a reader's call")
 
     def _hand_over(self) -> None:
+        if demo.is_on():                  # a reader's call is not recorded in the demo (it is the Hub's state)
+            self._handing.release()
+            return
         try:
             flush(self.seen, self.tools.kit_bridge())
         except Exception:  # noqa: BLE001
@@ -443,6 +446,8 @@ class Reader:
         return PlainTextResponse("ok")
 
     async def fw(self, request: Request):
+        if demo.is_on():                  # no firmware goes to a device in the demo (R85 4.3: flash a device)
+            return reply(409, "error", demo.NOT_IN_DEMO)
         name = request.path_params["name"]
         path = fw_dir() / name
         if name not in FW_FILES or not path.is_file():
@@ -488,6 +493,8 @@ class Reader:
         return JSONResponse(await run_in_threadpool(build))
 
     async def scan(self, request: Request):
+        if demo.is_on():                  # a tap of a real tag loads nothing in the demo
+            return reply(409, "error", demo.NOT_IN_DEMO)
         try:
             body = json.loads(await request.body() or b"{}")
         except ValueError:

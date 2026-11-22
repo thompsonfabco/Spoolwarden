@@ -221,6 +221,18 @@ class ReleaseError(Exception):
     """A release could not be found, fetched or verified; the message says which and what to do."""
 
 
+NOT_IN_DEMO = "Not in the demo."      # the same sentence as filament_kit.demo.NOT_IN_DEMO (this file imports no package)
+
+
+def _demo_on() -> bool:
+    """The Hub's demo is on while <state>/demo/demo.xml is a file (not a link); R85 4.3: the demo downloads nothing."""
+    marker = Path(os.environ.get("FK_STATE", "/var/lib/filament-kit")) / "demo" / "demo.xml"
+    try:
+        return marker.is_file() and not marker.is_symlink()
+    except OSError:
+        return False
+
+
 # ---------------------------------------------------------------- ed25519 verification (RFC 8032, section 5.1.7)
 # Verification only: every input is public, so plain integer arithmetic is fine (no constant-time concerns).
 
@@ -462,6 +474,8 @@ class Fetcher:
         return req
 
     def _open(self, url: str, accept: str):
+        if _demo_on():
+            raise ReleaseError(NOT_IN_DEMO)
         try:
             return self._opener.open(self.request(url, accept), timeout=self.timeout)
         except urllib.error.HTTPError as e:

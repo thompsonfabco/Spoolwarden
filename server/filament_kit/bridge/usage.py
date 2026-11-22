@@ -36,12 +36,15 @@ held another filament than the slice says (another preset, or with none another 
 until `mapping.LayoutWatch` re-maps the printer when it is idle (`mapping.request_remap`). A print whose decoded
 slots all agreed resets the streak. Without a start layout (no AMS in the report) nothing is learned or checked.
 
-Log: `state/printers/<serial>/usage.jsonl`, append-only, one JSON object per line, written by this process
-only (one uvicorn worker; a module lock serialises appends and undo). Two kinds of lines:
-  entry: {"id", "at", "job", "grams", "spool_id", "slot", "observe"[, "error"]}
-  undo:  {"undo": <entry id>, "at"}
-  undo_failed: {"undo_failed": <entry id>, "at"}   (takes the entry's last undo line back: Spoolman refused the credit)
-Undo never rewrites the file: it appends an undo line, and `entries` folds them into `undone`.
+Log: `state/printers/<serial>/usage/<yyyy-mm>.xml`, one XML file per month per printer (tag `usage`, through
+`statexml`), written by this process only (one uvicorn worker; a module lock serialises appends and undo). Each file
+holds `entries` (a list of entry records) and `undone` (a list of {entry, at}):
+  entry:  {"id", "at", "job", "grams", "spool_id", "slot", "observe"[, "error"]} and the newer fields, in the month of
+          its `at`
+  undone: {"entry": <entry id>, "at"}, in the month of the entry; a failed credit takes the record back
+Each append rewrites the month's file (atomic, mode 600, owned by the state owner). The old `usage.jsonl` of the release
+before (one JSON object per line: entries, {"undo": id, "at"} and {"undo_failed": id, "at"}) is read once into the month
+files (`usage/.migrated` marks it done) and is left as it was, so a rollback finds it.
 
 Entry shape returned by `entries` / `undo` (what `GET /api/printers/{id}/usage` and `POST /api/usage/{id}/undo`
 serve):
@@ -86,14 +89,19 @@ from pathlib import Path
 from typing import Any
 from defusedxml import ElementTree as SafeET
 
-from .. import config, event_sink
-from ..pairing import give_to_state_owner, make_state_dir
+from .. import config, demo, event_sink
+from ..pairing import _write_atomic, make_state_dir
+from ..profiles import statexml
 from ..spoolman import SpoolmanError
 from . import ams, ftps, hardware, layout, mapping, registry, status, tlspin
 
 log = logging.getLogger(__name__)
 
-FILE = "usage.jsonl"
+FILE = "usage.jsonl"            # the log of the release before: read once, then left alone
+DIR = "usage"
+MIGRATED = ".migrated"
+MONTH_FILE = re.compile(r"\d{4}-(?:0[1-9]|1[0-2])\.xml")
+TAG = "usage"
 UNDO_DAYS = 7
 ACTIVE = {'RUNNING', 'PAUSE', 'PREPARE', 'SLICING'}
 TERMINAL = {'FINISH', 'FAILED'}
@@ -108,7 +116,7 @@ OUTCOMES = ('finished', 'failed', 'cancelled', 'unknown')
 FIELDS = ('id', 'at', 'job', 'grams', 'spool_id', 'slot', 'observe',
           'material', 'vendor', 'name', 'color_hex', 'printer_name', 'outcome')
 
-_lock = threading.Lock()
+_lock = threading.RLock()       # re-entrant: a reader migrates the old log under it
 _undoing: set[str] = set()      # entries an Undo is working on (guarded by _lock)
 
 
@@ -190,7 +198,7 @@ def _epoch(s: Any) -> float | None:
 def _dir(serial: str) -> Path:
     if not isinstance(serial, str) or not registry.SERIAL.fullmatch(serial):
         raise UsageNotFound(f"no printer {serial!r}")
-    return config.paths().state / "printers" / serial
+    return demo.where(config.paths().state / "printers" / serial, f"printers/{serial}")
 
 
 def append(serial: str, entry: dict) -> dict:
@@ -201,27 +209,53 @@ def append(serial: str, entry: dict) -> dict:
     return rec
 
 
-def _write_line(serial: str, rec: dict) -> None:
-    d = _dir(serial)
-    make_state_dir(d)
-    f = d / FILE
-    new = not f.exists()
-    fd = os.open(f, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, 'O_BINARY', 0), 0o600)
+def _month_files(serial: str, since: str | None = None) -> list[Path]:
+    """The printer's month files, oldest first; `since` ("2026-11") leaves out the months before it."""
+    folder = _dir(serial) / DIR
     try:
-        if new:
-            give_to_state_owner(f)
-        os.write(fd, (json.dumps(rec, separators=(',', ':')) + "\n").encode('utf-8'))
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+        names = sorted(n for n in os.listdir(folder) if MONTH_FILE.fullmatch(n))
+    except OSError:
+        return []
+    return [folder / n for n in names if since is None or n[:7] >= since]
 
 
-def _read(serial: str) -> tuple[list[dict], dict[str, str]]:
-    """(entry lines in file order, {undone entry id: undo time})."""
+def _load(path: Path, for_write: bool = False) -> dict:
+    """{'entries': [...], 'undone': [...]} of a month file. An unreadable one is logged once (statexml.problems()) and
+    read as empty; before the next write it is kept as `<name>.unreadable`, never overwritten."""
+    empty = {'entries': [], 'undone': []}
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return empty
+    except OSError as e:
+        statexml._unreadable[str(path)] = f"cannot read: {e.strerror or e}"
+        raw = None
+    if raw is not None:
+        try:
+            data = statexml.loads(raw, TAG)
+        except statexml.StateXmlError as e:
+            statexml._unreadable[str(path)] = str(e)
+        else:
+            statexml._unreadable.pop(str(path), None)
+            return {k: [x for x in data[k] if isinstance(x, dict)] if isinstance(data.get(k), list) else []
+                    for k in ('entries', 'undone')}
+    if for_write and path.exists():
+        os.replace(path, path.with_name(path.name + ".unreadable"))
+        statexml._unreadable.pop(str(path), None)
+    return empty
+
+
+def _save(path: Path, data: dict) -> None:
+    make_state_dir(path.parent)
+    _write_atomic(path, statexml.dumps(TAG, data), 0o600, state_owned=True)
+
+
+def _old_log(serial: str) -> tuple[list[dict], dict[str, str]] | None:
+    """(entries, {undone entry id: undo time}) of the old usage.jsonl, or None when there is none."""
     try:
         text = (_dir(serial) / FILE).read_text(encoding='utf-8')
-    except FileNotFoundError:
-        return [], {}
+    except OSError:
+        return None
     out, undone = [], {}
     for line in text.splitlines():
         try:
@@ -236,6 +270,95 @@ def _read(serial: str) -> tuple[list[dict], dict[str, str]]:
             undone.pop(str(rec['undo_failed']), None)
         elif isinstance(rec.get('id'), str):
             out.append(rec)
+    return out, undone
+
+
+def _month_of(at: Any) -> str | None:
+    return at[:7] if isinstance(at, str) and re.fullmatch(r"\d{4}-\d{2}", at[:7]) else None
+
+
+def _migrate(serial: str) -> tuple[list[dict], dict[str, str]] | None:
+    """Move the old usage.jsonl into the month files once (the file stays as it was). None when there was nothing to
+    do or it was moved; the old log's (entries, undone) when the move failed (read from memory until it works)."""
+    d = _dir(serial)
+    marker = d / DIR / MIGRATED
+    if marker.exists() or not (d / FILE).is_file():
+        return None
+    with _lock:
+        if marker.exists():
+            return None
+        old = _old_log(serial)
+        if old is None:
+            return None
+        entries, undone = old
+        month_of = {e['id']: _entry_month(e) for e in entries}
+        fresh: dict[str, dict] = {}
+        for e in entries:
+            fresh.setdefault(month_of[e['id']] or _iso(_now())[:7], {'entries': [], 'undone': []})['entries'].append(e)
+        for eid, at in undone.items():
+            m = month_of.get(eid) or _month_of(at)
+            if m:
+                fresh.setdefault(m, {'entries': [], 'undone': []})['undone'].append({'entry': eid, 'at': at})
+        try:
+            for m, add in sorted(fresh.items()):          # idempotent: a stop half way is finished by the next run
+                path = d / DIR / f"{m}.xml"
+                data = _load(path, True)
+                have = {e.get('id') for e in data['entries']}
+                gone = {u.get('entry') for u in data['undone']}
+                data['entries'] += [e for e in add['entries'] if e['id'] not in have]
+                data['undone'] += [u for u in add['undone'] if u['entry'] not in gone]
+                _save(path, data)
+            make_state_dir(d / DIR)
+            _write_atomic(marker, b"moved from usage.jsonl\n", 0o600, state_owned=True)
+        except (OSError, statexml.StateXmlError, TypeError, ValueError) as e:
+            log.error("usage: printer %s: cannot move %s to month files (%s); reading it until it can", serial, FILE, e)
+            return old
+    return None
+
+
+def _write_line(serial: str, rec: dict) -> None:
+    """Store an entry, or an {"undo": id, "at"} / {"undo_failed": id, "at"} record, in its month's file."""
+    d = _dir(serial)
+    make_state_dir(d / DIR)
+    _migrate(serial)
+    if 'undo' in rec or 'undo_failed' in rec:
+        eid = str(rec['undo'] if 'undo' in rec else rec['undo_failed'])
+        holder = None
+        for path in reversed(_month_files(serial)):
+            data = _load(path)
+            if any(e.get('id') == eid for e in data['entries']) or any(u.get('entry') == eid for u in data['undone']):
+                holder = path
+                break
+        if 'undo' in rec:
+            path = holder or d / DIR / f"{_month_of(rec.get('at')) or _iso(_now())[:7]}.xml"
+            data = _load(path, True)
+            if not any(u.get('entry') == eid for u in data['undone']):
+                data['undone'].append({'entry': eid, 'at': rec.get('at')})
+                _save(path, data)
+        elif holder is not None:                # takes the entry's undo back
+            data = _load(holder, True)
+            data['undone'] = [u for u in data['undone'] if u.get('entry') != eid]
+            _save(holder, data)
+        return
+    path = d / DIR / f"{_entry_month(rec) or _iso(_now())[:7]}.xml"
+    data = _load(path, True)
+    data['entries'].append(rec)
+    _save(path, data)
+
+
+def _read(serial: str, since: str | None = None) -> tuple[list[dict], dict[str, str]]:
+    """(entry records oldest first, {undone entry id: undo time}) of the printer's month files from `since` ("2026-11")
+    on (all of them when None)."""
+    old = _migrate(serial)
+    out, undone = [], {}
+    if old is not None:
+        out, undone = old[0][:], dict(old[1])
+    for path in _month_files(serial, since):
+        data = _load(path)
+        have = {e['id'] for e in out}          # a failed move may have written some months already
+        out += [e for e in data['entries'] if isinstance(e.get('id'), str) and e['id'] not in have]
+        for u in data['undone']:
+            undone.setdefault(str(u.get('entry')), u.get('at'))
     return out, undone
 
 
@@ -299,8 +422,8 @@ def by_month(items: list[dict]) -> list[dict]:
 def entries(serial: str, days: float = UNDO_DAYS, *, by: str | None = None) -> list[dict] | dict:
     """The printer's entries of the last `days` days, newest first (or `{months: [...]}` when `by='month'`).
     UsageNotFound for a malformed serial; a printer without a log has none."""
-    recs, undone = _read(serial)
     since = _now() - max(0.0, float(days)) * 86400
+    recs, undone = _read(serial, _iso(since)[:7] if since > 0 else None)
     out = [_view(r, undone) for r in recs if (_epoch(r.get('at')) or 0) >= since]
     out.reverse()
     if by == 'month':
@@ -323,7 +446,7 @@ def undo(entry_id: str, spoolman) -> dict:
     `_undoing` keeps a second Undo of the same entry out meanwhile."""
     if not isinstance(entry_id, str) or not ENTRY_ID.fullmatch(entry_id):
         raise UsageNotFound(f"no usage entry {entry_id!r}")
-    root = config.paths().state / "printers"
+    root = demo.where(config.paths().state / "printers", "printers")
     with _lock:
         found = None
         for d in sorted(root.iterdir()) if root.is_dir() else []:
@@ -597,7 +720,7 @@ class Tracker:
 
     def __init__(self, manager, spoolman):
         self._spoolman = spoolman
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()       # re-entrant: a reader migrates the old log under it
         self._watch: dict[str, _Watch] = {}
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='usage')
         self._futures: list[Future] = []
@@ -621,6 +744,8 @@ class Tracker:
         if not isinstance(gs, str):
             return
         with self._lock:
+            if demo.is_on():            # the demo records its prints itself (checked under the lock: reports keep their order)
+                return
             w = self._watch.setdefault(serial, _Watch())
             prev, w.prev = w.prev, gs
             if gs in ACTIVE:

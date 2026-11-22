@@ -10,6 +10,7 @@ from filament_kit.bridge import ams, calib3mf, connection, mapping, registry, sl
 from filament_kit.bridge.calib3mf import CalibResult
 from filament_kit.bridge.connection import Manager, PrinterOffline, UnknownPrinter
 from filament_kit.bridge.slottest import PrinterBusy, SlotTestResult
+from filament_kit.profiles import statexml
 from fakes.fake_paho import FakeClient
 
 SERIAL = "01P00A111111111"
@@ -594,9 +595,9 @@ def test_the_reason_survives_a_restart_and_older_files_read_none(stubs):
     mapping.Mapper(FakeManager()).run(SERIAL)
     assert mapping.Mapper(FakeManager()).view(SERIAL)["reason"] == "job_refused"     # from the status file
     f = mapping._dir(SERIAL) / mapping.STATUS_FILE
-    d = json.loads(f.read_text())
+    d = statexml.read(f)
     d.pop("reason")
-    f.write_text(json.dumps(d))
+    statexml.write(f, d, mode=0o600)
     assert mapping.Mapper(FakeManager()).view(SERIAL)["reason"] == "none"
 
 

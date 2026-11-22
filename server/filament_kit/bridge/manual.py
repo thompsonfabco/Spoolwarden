@@ -21,7 +21,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from .. import config
+from .. import config, demo
 from . import ams, layout, loading, mapping, status
 
 SETTLE = 3.0            # seconds a new load must hold before the session asks about it
@@ -170,7 +170,7 @@ class ManualMaps:
 
     def answer_offer(self, serial: str, share: bool) -> dict:
         """The owner's answer to the one-time question: share this map in a printer report (default off)."""
-        d = config.paths().state / "printers" / serial
+        d = demo.where(config.paths().state / "printers" / serial, f"printers/{serial}")
         d.mkdir(parents=True, exist_ok=True)
         (d / OFFERED).write_text("yes\n" if share else "no\n", encoding="utf-8")
         with self._lock:
@@ -189,7 +189,7 @@ class ManualMaps:
         s.open = False
         mapping.manual_end(s.serial)
         done = [a for a in s.answers.values() if a["status"] in ("confirmed", "by_hand")]
-        s.offer = bool(done) and not (config.paths().state / "printers" / s.serial / OFFERED).exists()
+        s.offer = bool(done) and not (demo.where(config.paths().state / "printers" / s.serial, f"printers/{s.serial}") / OFFERED).exists()
 
     def _next_step(self, s: _Session) -> None:
         s.step_since, s.seen = time.time(), None

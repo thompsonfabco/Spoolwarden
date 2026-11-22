@@ -22,7 +22,7 @@ from __future__ import annotations
 import anyio
 from starlette.responses import Response
 
-from .. import config, modules, reader_flash, reader_setup, reader_tokens
+from .. import config, demo, modules, reader_flash, reader_setup, reader_tokens
 
 
 def listing() -> dict:
@@ -60,6 +60,7 @@ def routes(page) -> list[tuple]:
         return await anyio.to_thread.run_sync(listing)
 
     async def image(request, body):
+        not_in_demo()                   # no firmware to write to a device in the demo
         name = request.path_params["device"]
         dev = name.removesuffix(".bin")
         got = reader_flash.device_image(dev) if name.endswith(".bin") else None
@@ -69,7 +70,13 @@ def routes(page) -> list[tuple]:
         return Response(data, media_type="application/octet-stream",
                         headers={"X-Firmware-Version": got[1], "X-Content-Type-Options": "nosniff"})
 
+    def not_in_demo() -> None:
+        """The demo flashes no device (R85 4.3), so it makes no Tag Reader token either."""
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
+
     async def provision(request, body):
+        not_in_demo()
         name = page._opt_text(body, "name") or "printer-station"
         if reader_flash.bundled_image() is None:
             raise Refused(409, "this Hub has no Tag Reader firmware bundled; update Spoolwarden")
@@ -90,6 +97,7 @@ def routes(page) -> list[tuple]:
         return {"ok": True, "id": tid, "token": token, **home}
 
     async def server(request, body):
+        not_in_demo()
         _printer_choice(page, body)             # the helper checks it again, with the same words
         req = {"op": "reader_usb", "code": body["code"]}
         for k in ("ssid", "pass", "buzzer", "port", "name", "printer"):

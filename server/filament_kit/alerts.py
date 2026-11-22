@@ -18,7 +18,7 @@ import threading
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from . import config, events
+from . import config, demo, events
 
 log = logging.getLogger("filament_kit.alerts")
 
@@ -134,7 +134,7 @@ _state: dict = {"values": None, "stamp": None, "problem": None}     # what is in
 
 
 def _path() -> Path:
-    return config.paths().state / FILE
+    return demo.where(config.paths().state / FILE, FILE)      # the demo keeps its own switches
 
 
 def _stamp(f: Path):

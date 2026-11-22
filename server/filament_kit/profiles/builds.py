@@ -95,7 +95,7 @@ try:
 except ImportError:  # Windows dev PC
     fcntl = None
 
-from .. import config, pairing
+from .. import config, demo, pairing
 from .. import library as library_mod
 from ..bridge import registry
 from ..pairing import _write_atomic, make_state_dir, open_lock
@@ -150,7 +150,7 @@ def _not_found(what: str) -> ProfileError:
 # ---------- paths and small state files ----------
 
 def _dir() -> Path:
-    return config.paths().state / "profiles"
+    return demo.where(config.paths().state / "profiles", "profiles")
 
 
 def _live() -> Path:

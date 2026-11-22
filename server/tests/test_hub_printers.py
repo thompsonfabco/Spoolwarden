@@ -12,6 +12,7 @@ import pytest
 
 from filament_kit import api, pairing, setup_page
 from filament_kit.bridge import mapping as bridge_mapping, registry, status as bridge_status, tlspin
+from filament_kit.profiles import statexml
 
 from test_hub_page_audit import _missing, _node, _run, _serve, hub_app  # noqa: F401
 from test_hub_presets_ui import AsHttps, T, _drive
@@ -79,9 +80,9 @@ class _Mapper:
         self.reports += 1
         time.sleep(0.4)             # long enough for a second press to land
         d = bridge_mapping._dir(serial)
-        status = json.loads((d / bridge_mapping.STATUS_FILE).read_text(encoding="utf-8"))
+        status = statexml.read(d / bridge_mapping.STATUS_FILE)
         status.pop("report_wanted", None)
-        (d / bridge_mapping.STATUS_FILE).write_text(json.dumps(status), encoding="utf-8")
+        statexml.write(d / bridge_mapping.STATUS_FILE, status, mode=0o600)
         return {"name": "printer-report-1.xml", "xml": "<report/>", "live": True}
 
 

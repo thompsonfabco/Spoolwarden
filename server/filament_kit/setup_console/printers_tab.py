@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import csv
+import functools
 import io
 import ipaddress
 import re
@@ -30,7 +31,7 @@ import time
 
 import anyio
 
-from .. import config, csv_io, hostaddr, release, updates
+from .. import config, csv_io, demo, hostaddr, release, updates
 from ..bridge import ams, camera, mapping, registry
 from ..bridge.connection import PrinterOffline, UnknownPrinter
 from ..bridge.klipper import discovery
@@ -153,8 +154,23 @@ def routes(page) -> list[tuple]:
     from .. import klipper_cli
     from ..setup_page import Refused
 
-    w = lambda fn: page.guard(fn, write=True)  # noqa: E731
-    g = page.guard
+    def stopped_in_demo(fn):
+        """A registry writer stops in the demo (`demo.NotInDemo`): the route answers the stop, not "internal error"."""
+        @functools.wraps(fn)
+        async def route(request, body):
+            try:
+                return await fn(request, body)
+            except demo.NotInDemo:
+                raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE) from None
+        return route
+
+    w = lambda fn: page.guard(stopped_in_demo(fn), write=True)  # noqa: E731
+    g = lambda fn: page.guard(stopped_in_demo(fn))  # noqa: E731
+
+    def not_in_demo() -> None:
+        """The demo reaches no printer, no network and no download: add, probe, scan and the add-on pack stop here."""
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
     scan_lock = threading.Lock()
     last_scan = [-SCAN_GAP]
 
@@ -186,6 +202,7 @@ def routes(page) -> list[tuple]:
         return p
 
     async def klipper_add(request, body):
+        not_in_demo()
         page._manager("klipper")
         name, key, port = page._opt_text(body, "name"), api_key(body), port_of(body)
 
@@ -210,6 +227,7 @@ def routes(page) -> list[tuple]:
         return {"ok": True, "serial": pid, **({"note": note} if note else {})}
 
     async def klipper_probe(request, body):
+        not_in_demo()
         page._manager("klipper")
         key, port = api_key(body), port_of(body)
         host, _, _ = await anyio.to_thread.run_sync(checked_address, body, "host")
@@ -227,6 +245,7 @@ def routes(page) -> list[tuple]:
         return {"reachable": await anyio.to_thread.run_sync(run)}
 
     async def scan(request, body):
+        not_in_demo()
         page._manager("klipper")
         subnet = body.get("subnet")
 
@@ -252,6 +271,7 @@ def routes(page) -> list[tuple]:
         return r
 
     async def pack(request, body):
+        not_in_demo()
         page._manager("klipper")
         page._gap()
 
@@ -355,6 +375,7 @@ def routes(page) -> list[tuple]:
         return {"ok": True}
 
     async def detect(request, body):
+        not_in_demo()
         serial = page._serial(request)
         await anyio.to_thread.run_sync(klipper_entry, serial)
         page._gap()
@@ -367,6 +388,7 @@ def routes(page) -> list[tuple]:
         return page.mapper
 
     async def map_start(request, body):
+        not_in_demo()                       # the slot test writes to a printer: the pretend ones are not mapped
         serial = page._serial(request)
 
         def run() -> str:

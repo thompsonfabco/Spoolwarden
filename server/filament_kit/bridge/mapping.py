@@ -34,13 +34,12 @@ Outcome (a job that ends `failed` never leaves a trusted map):
     with `calibrated: false, observe: true` even when the decoding was consistent.
 Slots the slot test did not confirm are left out of the map and listed in problems.
 
-Progress (`view`): in memory while the job runs, and in `state/printers/<serial>/mapping.json` (state, step,
+Progress (`view`): in memory while the job runs, and in `state/printers/<serial>/mapping.xml` (state, step,
 problems), so after a restart `view` shows the last finished result (slots / calibrated / observe always come
 from the saved SlotMap). A status file still saying "running" whose job no process holds is reported as
 `failed` (interrupted), never "running" forever."""
 from __future__ import annotations
 
-import json
 import logging
 import threading
 import time
@@ -49,8 +48,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .. import __version__, config
-from ..pairing import _write_atomic, make_state_dir, open_lock
+from .. import __version__, config, demo
+from ..pairing import make_state_dir, open_lock
+from ..profiles import statexml
 from . import ams, calib3mf, hardware, layout, printer_report, registry, slottest, snapshot, status
 from .connection import PrinterOffline, UnknownPrinter
 from .slottest import PrinterBusy
@@ -63,7 +63,7 @@ except ImportError:  # Windows dev PCs: one process only (the service runs on Li
 log = logging.getLogger(__name__)
 _STARTED = time.time()     # this server process's start: a job that ended before it is an earlier run's
 
-STATUS_FILE = "mapping.json"
+STATUS_FILE = "mapping.json"      # the JSON name: `statexml` keeps the data in mapping.xml and moves this file on first read
 LOCK_FILE = "mapping.lock"
 INTERRUPTED = ("the mapping was interrupted (the server or command stopped); the slots may still hold test "
                "colours: the next run restores them first, so run it again")
@@ -296,18 +296,16 @@ class _Job:
 
 
 def _dir(serial: str):
-    return config.paths().state / "printers" / serial
+    return demo.where(config.paths().state / "printers" / serial, f"printers/{serial}")
 
 
 def _save_status(serial: str, job: _Job) -> None:
     try:
-        d = _dir(serial)
-        make_state_dir(d)
         data = {"kit": __version__, "job_id": job.id, "state": job.state, "step": job.step, "problems": job.problems,
                 "notes": job.notes, "scheme_unsettled": job.scheme_unsettled,
                 "report_wanted": job.report_wanted, "reason": job.reason, "trail": job.trail, "started": job.started,
                 "finished": job.finished}
-        _write_atomic(d / STATUS_FILE, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
+        statexml.write(_dir(serial) / STATUS_FILE, data, mode=0o600)
     except OSError:
         log.exception("mapping on %s: cannot write the status file", registry.log_label(serial))
 
@@ -318,11 +316,8 @@ def job_held_elsewhere(serial: str) -> bool:
 
 
 def _load_status(serial: str) -> dict | None:
-    try:
-        d = json.loads((_dir(serial) / STATUS_FILE).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if not isinstance(d, dict) or d.get("state") not in ("running", "done", "failed"):
+    d = statexml.read(_dir(serial) / STATUS_FILE)       # mapping.xml; a mapping.json from before is moved on the way
+    if d is None or d.get("state") not in ("running", "done", "failed"):
         return None
     probs, notes = d.get("problems"), d.get("notes")
     finished = d.get("finished")
@@ -793,7 +788,7 @@ class Mapper:
             path = printer_report.save(serial, data, model)
             return {"name": path.name, "xml": data.decode("utf-8"), "path": str(path), "live": True, "saved_until": None}
         smap = ams.load_map(serial)
-        status_file = _dir(serial) / STATUS_FILE
+        status_file = statexml.xml_path(_dir(serial) / STATUS_FILE)
         stamps = [t for t in (smap.updated, saved.get("finished"),
                               status_file.stat().st_mtime if status_file.exists() else None) if isinstance(t, (int, float))]
         if not smap.slots and not saved:

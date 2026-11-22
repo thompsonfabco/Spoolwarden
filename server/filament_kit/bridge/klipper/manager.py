@@ -24,7 +24,7 @@ import time
 import urllib.parse
 from pathlib import Path
 
-from ... import config, hostaddr
+from ... import config, demo, hostaddr
 from .. import registry
 from ..connection import PrinterOffline, UnknownPrinter
 from . import adapters, detect, discovery, lanes
@@ -332,7 +332,10 @@ class KlipperFamily(LoadsMixin):
     def _forget_twins(self) -> None:
         """Discovery reports addresses, so a printer added by name gets an unconfigured twin. No lookups unless the
         entries changed since the last look and there's an unconfigured one to compare: a name that won't resolve can
-        take seconds, and this runs every round. A printer that moves shows up as a new entry, so it's looked at again."""
+        take seconds, and this runs every round. A printer that moves shows up as a new entry, so it's looked at again.
+        Not in the demo: its registry is the demo's and is never written."""
+        if demo.is_on():
+            return
         klipper = [p for p in registry.load().values() if p.family == "klipper"]
         now = ({p.serial for p in klipper if not p.configured}, {(p.host, p.port) for p in klipper if p.configured})
         if now[0] and now != self._twins_seen:
@@ -356,8 +359,8 @@ class KlipperFamily(LoadsMixin):
 
     def sync(self) -> None:
         """Match the connections to the registry: new printers connect, removed ones stop, a changed host, port or
-        API key reconnects."""
-        if not self._started:
+        API key reconnects. In the demo no connection is made."""
+        if not self._started or demo.is_on():
             return
         want = {p.serial: p for p in registry.load().values() if p.family == "klipper" and p.configured and p.host}
         start, stop, republish = [], [], []
@@ -381,6 +384,8 @@ class KlipperFamily(LoadsMixin):
             self._publish(pid)
 
     def _mdns_found(self, host: str, port: int, name: str) -> None:
+        if demo.is_on():                  # a found printer is not recorded in the demo's registry
+            return
         registry.detected_klipper(host, port, name, lookups=False)      # the browser's thread: _forget_twins does them
 
     def scan(self, subnet: str | None = None) -> list[dict]:

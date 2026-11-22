@@ -25,6 +25,7 @@ from dataclasses import replace
 from typing import Any, Callable
 
 from . import hardware, layout, registry, status, tlspin
+from .. import demo
 from ..spoolman import SpoolmanError
 
 log = logging.getLogger(__name__)
@@ -551,7 +552,10 @@ class Manager:
         return bool(p.configured and p.ip and p.access_code)
 
     def sync(self) -> None:
-        """Reconcile connections with the registry: start new ones, drop removed ones, reconnect on IP/code change."""
+        """Reconcile connections with the registry: start new ones, drop removed ones, reconnect on IP/code change.
+        In the demo no connection is made: the pretend printers answer (the demo's registry is not a real printer)."""
+        if demo.is_on():
+            return
         printers = registry.load()
         if self._only is not None:
             printers = {s: p for s, p in printers.items() if s in self._only}
