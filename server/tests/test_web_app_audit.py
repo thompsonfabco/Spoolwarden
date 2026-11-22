@@ -525,7 +525,7 @@ READY = {
     checks: [{ group: 'storage', state: 'look', text: 'Storage is almost full', fix: 'Free some space.' }, { group: 'backup', state: 'ok', text: 'Backups are fine' }],
     getting_started: { done: 4, total: 8, hidden: false, finished: false }, features: [{ id: 'web', name: 'Web app', on: true }, { id: 'printers', name: 'Printers', on: false }],
     catalog: { version: '2026.11', checked_at: 1700000000 }, backup: { last_at: 1700000000, nightly: true }, reader: { engine: 'cloud', key_set: true },
-    devices: [{ name: 'Pat phone', kind: 'phone', version: '0.6.2', last_seen: 1700000000, out_of_date: false, this: true }, { name: 'Shop PC', kind: 'slicer-sync', out_of_date: true, this: false }],
+    devices: [{ name: 'Sam phone', kind: 'phone', version: '0.6.2', last_seen: 1700000000, out_of_date: false, this: true }, { name: 'Shop PC', kind: 'slicer-sync', out_of_date: true, this: false }],
     records_kept: 12, spoolman_url: 'http://hub.local:7912', hub_page: 'https://hub.local/setup' };
   let asked = 0; stub('hub', () => { asked++; return reply(hub); });
   hubCache = null; moreBtn.click();
@@ -538,7 +538,7 @@ READY = {
   await until('the Hub screen', () => $('dialog[open] .hubglance') && $('dialog[open] .hubglance').textContent.includes('Records kept: 12'));
   const t = text('dialog[open] .hubglance');
   for (const want of ['Status', 'Storage is almost full', 'Free some space.', 'Getting started on the Hub: 4 of 8 done', 'Installed: 0.6.2', 'Newest: 0.6.3', 'Update available', 'Web app · On', 'Printers · Off',
-    'Filament Catalog', 'Backups', 'nightly backup on', 'Label Reader', 'cloud · key set', 'Pat phone', 'this device', 'Shop PC', 'out of date', 'Recently added'])
+    'Filament Catalog', 'Backups', 'nightly backup on', 'Label Reader', 'cloud · key set', 'Sam phone', 'this device', 'Shop PC', 'out of date', 'Recently added'])
     need('the Hub screen shows: ' + want, t.includes(want));
   need('each group says where to change it', $$('dialog[open] .hubglance__change').length === 9 && t.includes('Change this on the Hub page.'));
   need('no address or key of the Hub is listed but the links', !t.includes('192.168') && !/sk-/.test(t));
@@ -1522,12 +1522,13 @@ SP_READY = {
     "sheet_history": r"""
   await waitPage();
   stub(/^activity/, () => reply({ events: [
-    { id: 31, at: '2026-11-17T20:00:00Z', kind: 'spool.moved', text: 'Moved Polymaker PLA to Shelf B.', actor: { type: 'device', name: 'Pat phone' }, undo: { possible: true }, undone: false },
-    { id: 30, at: '2026-11-16T09:30:00Z', kind: 'spool.weighed', text: 'Weighed: 640 g left.', actor: { type: 'cli', name: 'command line' }, undo: { possible: false, why_not: 'changed_since' }, undone: true }] }));
+    // the Hub answers the newest events oldest first (D1); the sheet shows them newest first
+    { id: 30, at: '2026-11-16T09:30:00Z', kind: 'spool.weighed', text: 'Weighed: 640 g left.', actor: { type: 'cli', name: 'command line' }, undo: { possible: false, why_not: 'changed_since' }, undone: true },
+    { id: 31, at: '2026-11-17T20:00:00Z', kind: 'spool.moved', text: 'Moved Polymaker PLA to Shelf B.', actor: { type: 'device', name: 'Sam phone' }, undo: { possible: true }, undone: false }] }));
   $('.spools__row').click();
   const d = await sheetReady();
   await until('the last events', () => $$('dialog[open] .history__row').length === 2);
-  need('the text and who did it', text('dialog[open] .history__row').includes('Moved Polymaker PLA to Shelf B.') && text('dialog[open] .history__row').includes('by Pat phone'));
+  need('the text and who did it', text('dialog[open] .history__row').includes('Moved Polymaker PLA to Shelf B.') && text('dialog[open] .history__row').includes('by Sam phone'));
   need('a put back one says so', $$('dialog[open] .history__row')[1].textContent.includes('(put back)'));
 """,
     "sheet_history_none": r"""

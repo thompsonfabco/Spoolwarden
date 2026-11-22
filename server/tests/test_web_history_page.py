@@ -67,7 +67,7 @@ const window = {};
   out.asked = calls.filter((c) => c[0].startsWith("activity")).map((c) => c[0]).slice(-1);
   // a row: the text, who, and "put back" for an undone one
   const row = (e) => JSON.stringify(eventRow(e));
-  out.row = row({ at: "T", text: "Moved.", actor: { name: "Pat phone" } });
+  out.row = row({ at: "T", text: "Moved.", actor: { name: "Sam phone" } });
   out.undoneRow = row({ at: "T", title: "Weighed", undone: true });
   // the box: a list, an empty note, nothing at all when the Hub has no route
   const box = historyBox(7);
@@ -113,7 +113,7 @@ def test_undo_is_offered_only_when_the_hub_can_put_it_back(tmp_path):
 
 def test_a_spools_events_are_listed_with_who_and_a_put_back_mark(tmp_path):
     out = _run(tmp_path, _source())
-    assert "Moved." in out["row"] and 'history_by{\\"who\\":\\"Pat phone\\"}' in out["row"]
+    assert "Moved." in out["row"] and 'history_by{\\"who\\":\\"Sam phone\\"}' in out["row"]
     assert "history_undone" in out["undoneRow"] and "Weighed" in out["undoneRow"]
     assert out["listed"][0] is True and out["empty"] is True and out["none"] is False      # no route: no list, no error
     js = (STATIC / "app.js").read_text(encoding="utf-8")
