@@ -947,7 +947,7 @@ READY = {
   toggle.click(); typeIn(field('Weight with spool', card).querySelector('input'), '700'); toggle.click();         // opened, a weight, sealed again
   need('sealed again hides the weight', toggle.checked && field('Weight with spool', card).hidden);
   $('.add__bar-btn').click(); await until('the preview', () => $('.add__result-row'));
-  need('a sealed card sends no weight', sent.length === 1 && !('gross' in sent[0].items[0]) && !text('.add__results').includes('700'));
+  need('a sealed card sends no weight', sent.length === 1 && !('gross' in sent[0].items[0]) && !text('.add__results').split(stamp).join('').includes('700'));   // the brand and name carry the stamp, whose digits may hold 700
 """,
     "numbers_and_colours": r"""
   await waitPage(); spyAdd(); const stamp = String(Date.now());
