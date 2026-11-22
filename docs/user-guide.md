@@ -383,6 +383,7 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link Slicer Sync / Link a Weigh Station |
 | `weigh-station pair [--local]` | Run on the Weigh Station: pair it with the Hub | Pair the Weigh Station on this Hub |
 | `weigh-station flash-display` | Write the Weigh Station display firmware over USB | Flash a device |
+| `weigh-station voice-test` | Play the voice test sentence on the Weigh Station | Settings > Weigh Station voice |
 | `weigh-station panel-wifi [--off] [--address ADDRESS]` | Set the display panel up to reach the Weigh Station over Wi-Fi, or with `--off` back to the USB cable (root) | (none) |
 | `weigh-station pairing-state` | Paired, not paired or not checked yet | (none) |
 | `tag-reader list` | Tag Reader tokens | Devices, Tag Readers |
@@ -404,7 +405,7 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `features units` | The service files the features need, one per line | (none) |
 | `config [--numbered]` | The settings menu | Settings |
 | `config show` | All settings, in menu order | Settings |
-| `config set <key> <value>` | Change one setting (not the storage locations: they are a list, see `locations`) | Settings, one field |
+| `config set <key> <value>` | Change one setting | Settings, one field |
 | `config theme [<theme>]` | Show or set the theme for new devices | Settings > Appearance > Theme for new devices |
 | `locations` (same as `locations list`) | The storage locations in fill order | Settings > Storage locations |
 | `locations add <name> [--type bulk\|containers] [--limit N] [--count N] [--takes any\|none\|MATERIALS] [--overflow]` | Add a location | Add a location |
@@ -435,6 +436,7 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `remote firewall` | Print the firewall rules (changes nothing) | Show the firewall rules |
 | `remote get-certificate` | Get the public certificate now | Get the certificate |
 | `setup-code [--new] [--revoke-trusted]` | Hub page address and setup code | Setup code, Trusted computers |
+| `port [<number>]` | Show the Hub's port, or move the Hub to another | Settings > Network and addresses, Hub port |
 | `certificate` | Make the Hub's certificate if missing; print its fingerprint | (none) |
 | `spoolman fields` | Make Spoolwarden's extra fields in Spoolman | Overview, Make the fields |
 | `spoolman address [<url>]` | Show or change the Spoolman in use (checked before saving) | Settings > General, Spoolman address |
