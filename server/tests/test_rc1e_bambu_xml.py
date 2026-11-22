@@ -94,6 +94,7 @@ def test_save_map_if_compares_the_version_through_the_xml(state):
     assert ams.save_map_if(SERIAL, m, m.updated - 1) is False
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows refuses a replace over a file being read: the service runs on Linux")
 def test_concurrent_saves_and_loads_never_see_a_torn_file(state):
     ams.save_map(SERIAL, _full_map())
     errors, stop = [], threading.Event()
