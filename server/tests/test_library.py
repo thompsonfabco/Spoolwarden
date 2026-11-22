@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from filament_kit import config, library
+from filament_kit.profiles import statexml
 
 FIXTURE = Path(__file__).parent / "data" / "library"
 BUNDLED = Path(__file__).parent / "data" / "library_snapshot"   # stands in for a downloaded library (conftest)
@@ -239,7 +240,7 @@ def test_update_invalid_entry_aborts_everything(served):
     assert r.changed is False and "temperature_vitrification" in r.error
     assert library.load().source == "bundled"
     _assert_kept(_bundled_version())
-    assert not (config.paths().state / "library" / "current.json").exists()
+    assert not statexml.exists(config.paths().state / "library" / "current.json")
 
 
 def test_update_entry_404_aborts(served):
@@ -425,8 +426,8 @@ def test_local_overrides_and_survives_update(served):
     assert line == "sunlu--pla-plus-2-0"
     assert saved["schema_version"] == 1 and saved["updated"] == time.strftime("%Y-%m-%d")
     assert "local" not in saved
-    f = config.paths().state / "library-local" / "sunlu" / "pla-plus-2-0.json"
-    stored = json.loads(f.read_text(encoding="utf-8"))
+    f = config.paths().state / "library-local" / "sunlu" / "pla-plus-2-0.xml"
+    stored = statexml.loads(f.read_bytes(), "entry")
     assert "local" not in stored and stored["fields"]["nozzle_temperature_range_low"] == ["210"]
     lib = library.load()
     assert lib.local_count == 1
@@ -460,7 +461,7 @@ def test_add_local_invalid_lists_problems():
     assert "temperature_vitrification" in msg
     assert "filament_density" in msg
     assert not (config.paths().state / "library-local").exists() or \
-        not list((config.paths().state / "library-local").rglob("*.json"))
+        not list((config.paths().state / "library-local").rglob("*.*"))
     for raw in (b"not json", b"[1]", b"\xff"):
         with pytest.raises(ValueError):
             library.add_local(raw)
@@ -741,3 +742,63 @@ def test_load_keeps_the_parsed_library_until_a_file_changes(monkeypatch):
     again = library.load()
     assert again is not first and parsed == [1]                      # an add is seen at once
     assert again.lookup("Acme Plastics", "PLA Max").local is not None
+
+
+# ---------- R85 section 1: the catalog state and the owner's entries are XML ----------
+
+def _local_entry(product="PLA Max"):
+    return {"schema_version": 1, "vendor": "Acme", "product": product, "material": "PLA", "updated": "2026-11-02",
+            "fields": {"nozzle_temperature_range_low": ["210"]}}
+
+
+def test_the_pointer_and_check_state_are_written_as_xml_and_read_back():
+    lib = config.paths().state / "library"
+    library._write_state("current.json", {"dir": "7-20261102T000000Z", "version": 7, "at": 1.5})
+    library._write_state("last_check.json", {"at": 2.5, "ok": False, "error": "x <&> y", "last_ok_at": None})
+    assert (lib / "current.xml").is_file() and not (lib / "current.json").exists()
+    assert library._read_state("current.json") == {"dir": "7-20261102T000000Z", "version": 7, "at": 1.5}
+    assert library.last_check() == {"at": 2.5, "ok": False, "error": "x <&> y"}
+    library._write_state("rolled_back.json", {"from": 9, "at": 3.0})
+    assert library.rolled_back_from() == 9
+    library._drop_state("rolled_back.json")
+    assert library.rolled_back_from() is None and not (lib / "rolled_back.xml").exists()
+
+
+def test_an_old_current_json_is_read_and_moved_once_and_left_as_it_was():
+    lib = config.paths().state / "library"
+    lib.mkdir(parents=True)
+    old = '{"dir": "7-x", "version": 7, "at": 1.0}'
+    (lib / "current.json").write_text(old, encoding="utf-8")
+    assert library._read_state("current.json") == {"dir": "7-x", "version": 7, "at": 1.0}
+    assert (lib / "current.xml").is_file() and (lib / "current.json").read_text(encoding="utf-8") == old
+    (lib / "current.json").write_text("{}", encoding="utf-8")          # the XML form now wins
+    assert library._read_state("current.json")["version"] == 7
+
+
+def test_a_damaged_current_xml_is_the_bundled_snapshot_not_a_crash():
+    lib = config.paths().state / "library"
+    lib.mkdir(parents=True)
+    (lib / "current.xml").write_text("<current version=", encoding="utf-8")
+    assert library.load().source == "bundled"
+    assert any("current.xml" in p for p in statexml.problems())
+
+
+def test_an_old_local_entry_json_is_read_and_moved_to_xml_and_xml_wins():
+    d = config.paths().state / "library-local" / "acme"
+    d.mkdir(parents=True)
+    (d / "3d-pla.json").write_text(dumps(_local_entry("3D PLA")), encoding="utf-8")
+    assert library.load().lookup("Acme", "3D PLA").local["product"] == "3D PLA"     # a name that starts with a digit
+    assert (d / "3d-pla.xml").is_file() and (d / "3d-pla.json").is_file()
+    (d / "3d-pla.json").write_text(dumps(_local_entry("Other")), encoding="utf-8")
+    assert library.load().lookup("Acme", "3D PLA").local is not None            # the XML form wins
+    assert library.remove_local("acme--3d-pla") is True
+    assert not list(d.parent.rglob("*.*"))
+
+
+def test_a_damaged_local_entry_xml_is_skipped_and_the_json_form_is_used():
+    d = config.paths().state / "library-local" / "acme"
+    d.mkdir(parents=True)
+    (d / "pla-max.json").write_text(dumps(_local_entry()), encoding="utf-8")
+    (d / "pla-max.xml").write_text("<entry", encoding="utf-8")
+    assert library.load().lookup("Acme", "PLA Max").local is not None
+    assert (d / "pla-max.xml").read_text(encoding="utf-8") == "<entry"       # never overwritten by a read

@@ -10,12 +10,13 @@ empty library and profiles are built from Spoolman values and the Bambu/Orca par
 already downloaded a copy keeps using it.
 
 Layout in the state directory:
-  library/current.json            {"dir", "version", "at"}: the version directory in use (absent = none)
-  library/previous.json           the current.json before the last update (absent = none)
-  library/last_check.json         {"at", "ok", "error", "last_ok_at"}
-  library/rolled_back.json        {"from", "at"}: the version a rollback left; scheduled updates skip it (absent = none)
+  library/current.xml             {"dir", "version", "at"}: the version directory in use (absent = none)
+  library/previous.xml            the current.xml before the last update (absent = none)
+  library/last_check.xml          {"at", "ok", "error", "last_ok_at"}
+  library/rolled_back.xml         {"from", "at"}: the version a rollback left; scheduled updates skip it (absent = none)
   library/versions/<v>-<stamp>/   index.json + library/<vendor>/<product>.json
-  library-local/<vslug>/<pslug>.json   the owner's own additions; never touched by `update`
+  library-local/<vslug>/<pslug>.xml    the owner's own additions; never touched by `update`
+(Each state file was a .json before; an old .json is read when there is no .xml and moved once, see profiles/statexml.)
 
 `validate` is a port of filament-library `tools/fl.py` (schema_version 1), so no jsonschema dependency.
 
@@ -49,6 +50,7 @@ from pathlib import Path
 
 from . import __version__, config, event_sink, release
 from .pairing import _write_atomic, give_to_state_owner, make_state_dir, open_lock
+from .profiles import statexml
 
 try:
     import fcntl
@@ -327,14 +329,23 @@ def _read_json(path: Path):
         return None
 
 
-def _write_json(path: Path, obj) -> None:
-    make_state_dir(path.parent)
-    _write_atomic(path, (json.dumps(obj, indent=2) + "\n").encode("utf-8"), 0o644, state_owned=True)
+def _read_state(name: str):
+    """library/<name> (current.json, previous.json, last_check.json, rolled_back.json) as its XML form; a file that
+    only exists as JSON is read and moved to XML (R85 section 1)."""
+    return statexml.read(_dir() / name, keep_version=True)
+
+
+def _write_state(name: str, obj: dict) -> None:
+    statexml.write(_dir() / name, obj)
+
+
+def _drop_state(name: str) -> None:
+    statexml.unlink(_dir() / name)
 
 
 def _pointer(name: str) -> dict | None:
-    """current.json / previous.json, or None when absent or unusable (= the bundled snapshot)."""
-    p = _read_json(_dir() / name)
+    """current / previous pointer, or None when absent or unusable (= the bundled snapshot)."""
+    p = _read_state(name)
     if not (isinstance(p, dict) and isinstance(p.get("dir"), str) and VERSION_DIR.fullmatch(p["dir"])):
         return None
     if not (_dir() / "versions" / p["dir"] / "index.json").is_file():
@@ -473,13 +484,49 @@ class Library:
         return out + local
 
 
+def _local_files(root: Path) -> list[Path]:
+    """The owner's entries as `<vslug>/<pslug>.json` paths, one per pair whichever form is on disk (XML wins)."""
+    names = {p.with_suffix(".json") for p in root.glob("*/*.xml")} | set(root.glob("*/*.json"))
+    return sorted(names)
+
+
+def _read_local(path: Path):
+    """One of the owner's entries (given by its JSON name): the XML form, else the JSON form, which is moved to XML
+    once (the JSON file stays as it was). The root element is `entry` for every file: a product name may start with a
+    digit, which no element name can."""
+    xp = path.with_suffix(".xml")
+    try:
+        raw = xp.read_bytes()
+    except OSError:
+        raw = None
+    if raw is not None:
+        try:
+            return statexml.loads(raw, "entry")
+        except statexml.StateXmlError as e:
+            log.warning("%s is not readable (%s)", xp, e)
+    e = _read_json(path)
+    if isinstance(e, dict) and raw is None:
+        moving = xp.with_name(xp.name + ".moving")
+        try:
+            _write_atomic(moving, statexml.dumps("entry", e), 0o644, state_owned=True)
+            try:
+                os.link(moving, xp)
+            except FileExistsError:
+                pass
+        except (OSError, statexml.StateXmlError, TypeError, ValueError) as err:
+            log.warning("%s could not be converted (%s)", path, err)
+        finally:
+            moving.unlink(missing_ok=True)
+    return e
+
+
 def _load_local() -> list[dict]:
     out = []
     root = _local_dir()
     if not root.is_dir():
         return out
-    for p in sorted(root.glob("*/*.json")):
-        e = _read_json(p)
+    for p in _local_files(root):
+        e = _read_local(p)
         if isinstance(e, dict) and not validate(e, local=True):
             out.append(e)
     return out
@@ -525,8 +572,9 @@ def _load_key() -> tuple:
     size, inode). A downloaded version is a folder that is never changed once it is in place, so the pointer is
     enough for it; an update, rollback, add or removal moves one of these."""
     local = _local_dir()
-    files = sorted(local.glob("*/*.json")) if local.is_dir() else []
-    return (str(_dir()), str(BUNDLED), _stat_key(_dir() / "current.json"), _stat_key(BUNDLED / "index.json"),
+    files = [f for p in _local_files(local) for f in (p.with_suffix(".xml"), p)] if local.is_dir() else []
+    return (str(_dir()), str(BUNDLED), _stat_key(_dir() / "current.xml"),
+            _stat_key(_dir() / "current.json"), _stat_key(BUNDLED / "index.json"),
             tuple((str(f), _stat_key(f)) for f in files))
 
 
@@ -571,7 +619,7 @@ def add_local(data: bytes) -> tuple[dict, str]:
     path = _local_dir() / rel_path(entry).removeprefix("library/")
     with _locked():
         make_state_dir(path.parent)
-        _write_atomic(path, dumps(entry).encode("utf-8"), 0o644, state_owned=True)
+        _write_atomic(path.with_suffix(".xml"), statexml.dumps("entry", entry), 0o644, state_owned=True)
     lid = line_id(entry["vendor"], entry["product"])
     event_sink.emit("catalog.changed", {"type": "hub"}, {"what": "entry_added", "entry": lid})
     return entry, lid
@@ -724,10 +772,11 @@ def remove_local(entry_id: str) -> bool:
     vslug, pslug = entry_id.split("--", 1)
     path = _local_dir() / vslug / f"{pslug}.json"
     with _locked():
-        e = _read_json(path)
+        e = _read_local(path)
         if not (isinstance(e, dict) and not validate(e, local=True)):
             return False
-        path.unlink()
+        for q in (path.with_suffix(".xml"), path):
+            q.unlink(missing_ok=True)
         try:
             path.parent.rmdir()
         except OSError:
@@ -785,7 +834,7 @@ def adopt(src: Path) -> int | None:
         except BaseException:
             shutil.rmtree(tmp, ignore_errors=True)
             raise
-        _write_json(_dir() / "current.json", {"dir": name, "version": idx["library_version"], "at": now})
+        _write_state("current.json", {"dir": name, "version": idx["library_version"], "at": now})
     return idx["library_version"]
 
 
@@ -1142,9 +1191,9 @@ def _parse_index(raw: bytes, current: int) -> tuple[dict, list[dict]]:
 
 
 def _record_check(now: float, error: str | None) -> None:
-    old = _read_json(_dir() / "last_check.json")
+    old = _read_state("last_check.json")
     last_ok = old.get("last_ok_at") if isinstance(old, dict) else None
-    _write_json(_dir() / "last_check.json",
+    _write_state("last_check.json",
                 {"at": now, "ok": error is None, "error": error, "last_ok_at": now if error is None else last_ok})
 
 
@@ -1283,13 +1332,13 @@ def update(url: str | None = None, *, opener=None, now: float | None = None, sch
             final = _dir() / "versions" / name
             os.replace(tmp, final)
             tmp = None
-            old = _read_json(_dir() / "current.json") if _pointer("current.json") else None
+            old = _read_state("current.json") if _pointer("current.json") else None
             if old is not None:
-                _write_json(_dir() / "previous.json", old)
+                _write_state("previous.json", old)
             else:
-                (_dir() / "previous.json").unlink(missing_ok=True)
-            _write_json(_dir() / "current.json", {"dir": name, "version": idx["library_version"], "at": now})
-            (_dir() / "rolled_back.json").unlink(missing_ok=True)
+                _drop_state("previous.json")
+            _write_state("current.json", {"dir": name, "version": idx["library_version"], "at": now})
+            _drop_state("rolled_back.json")
             _prune({name} | ({old["dir"]} if old else set()))
             _record_check(now, None)
             event_sink.emit("catalog.changed", {"type": "hub"},
@@ -1318,26 +1367,26 @@ def rollback() -> int:
         if cur is None and prev is None:
             raise LibraryError("there is no previous library version to roll back to")
         if prev is not None:
-            _write_json(_dir() / "current.json", prev)
+            _write_state("current.json", prev)
         else:
-            (_dir() / "current.json").unlink(missing_ok=True)
+            _drop_state("current.json")
         if cur is not None:
-            _write_json(_dir() / "previous.json", cur)
+            _write_state("previous.json", cur)
         else:
-            (_dir() / "previous.json").unlink(missing_ok=True)
+            _drop_state("previous.json")
         version = _current()[1]["library_version"]
         left = cur.get("version") if cur is not None else None
         if isinstance(left, int) and not isinstance(left, bool) and left > version:
-            _write_json(_dir() / "rolled_back.json", {"from": left, "at": time.time()})
+            _write_state("rolled_back.json", {"from": left, "at": time.time()})
         else:
-            (_dir() / "rolled_back.json").unlink(missing_ok=True)
+            _drop_state("rolled_back.json")
         event_sink.emit("catalog.changed", {"type": "hub"}, {"what": "rolled_back", "version": str(version)})
         return version
 
 
 def rolled_back_from() -> int | None:
     """The library version the last rollback went back from, until an update installs something newer; else None."""
-    got = _read_json(_dir() / "rolled_back.json")
+    got = _read_state("rolled_back.json")
     v = got.get("from") if isinstance(got, dict) else None
     return v if isinstance(v, int) and not isinstance(v, bool) else None
 
@@ -1357,7 +1406,7 @@ def due(cfg: dict, now: float) -> bool:
     gap = SCHEDULES[schedule(cfg)]
     if gap is None:
         return False
-    lc = _read_json(_dir() / "last_check.json")
+    lc = _read_state("last_check.json")
     last_ok = lc.get("last_ok_at") if isinstance(lc, dict) else None
     if not isinstance(last_ok, (int, float)):
         return True
@@ -1365,7 +1414,7 @@ def due(cfg: dict, now: float) -> bool:
 
 
 def last_check() -> dict | None:
-    lc = _read_json(_dir() / "last_check.json")
+    lc = _read_state("last_check.json")
     if not isinstance(lc, dict):
         return None
     return {"at": lc.get("at"), "ok": lc.get("ok") is True, "error": lc.get("error")}

@@ -9,6 +9,7 @@ from starlette.testclient import TestClient
 from filament_kit import config, intake_history, inventory, pairing
 from filament_kit.api import create_app
 from filament_kit.intake import read_labels
+from filament_kit.profiles import statexml
 from filament_kit.spoolman import Spoolman
 
 JPEG = b"\xff\xd8\xff\xe0" + b"x" * 100
@@ -434,3 +435,38 @@ def test_the_intake_station_save_is_recorded_with_its_photo(sm, monkeypatch):
     rec = intake_history.get(s["id"])
     assert rec["source"] == "station" and rec["photos"] == 1 and rec["weight"] == 1300
     assert rec["saved"][0]["spool_ids"] == [r["spool_id"]]
+
+
+# ---------------------------------------------------------------- R85 section 1: records as XML
+
+def test_a_record_and_a_pending_read_are_xml_files(sm):
+    out = read(sm)
+    pend = config.paths().state / "intake-history" / "pending" / out["read_id"]
+    assert (pend / "read.xml").is_file() and not (pend / "read.json").exists()
+    r, hid = add(sm, read_id=out["read_id"])
+    d = intake_history._dir(hid)
+    assert (d / "record.xml").is_file() and not (d / "record.json").exists()
+    rec = intake_history.get(hid)
+    assert rec["read"]["items"][0]["vendor"] == "SUNLU" and rec["photos"] == 2
+    assert intake_history.list_records(True)["count"] == 1
+
+
+def test_a_record_json_is_read_moved_once_and_keeps_its_version_count(sm):
+    r, hid = add(sm)
+    d = intake_history._dir(hid)
+    rec = intake_history._load(hid)
+    assert intake_history._version(rec) == 0
+    (d / "record.xml").unlink()
+    (d / "record.json").write_text(json.dumps(rec), encoding="utf-8")
+    got = intake_history._load(hid)
+    assert got == rec and intake_history._version(got) == 0
+    assert (d / "record.xml").is_file() and (d / "record.json").is_file()
+    assert intake_history.list_records(True)["count"] == 1
+
+
+def test_a_damaged_record_xml_is_no_such_record_not_a_crash(sm):
+    r, hid = add(sm)
+    (intake_history._dir(hid) / "record.xml").write_text("<record", encoding="utf-8")
+    with pytest.raises(intake_history.HistoryError):
+        intake_history._load(hid)
+    assert any("record.xml" in p for p in statexml.problems())

@@ -209,7 +209,7 @@ mkdir -p "$OPT"
 # Earlier versions bundled the spec library inside the program. Keep a copy of it before the venv is replaced and
 # hand it to the new program below, so an upgrade keeps its library (and its profiles do not change).
 LEGACY_LIB=""
-if [ ! -f "$STATE/library/current.json" ]; then
+if [ ! -f "$STATE/library/current.xml" ] && [ ! -f "$STATE/library/current.json" ]; then
     for d in "$VENV"/lib/python*/site-packages/filament_kit/library_data; do
         if [ -f "$d/index.json" ] && [ -d "$d/library" ]; then
             LEGACY_LIB=$(mktemp -d)
