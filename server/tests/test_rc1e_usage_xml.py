@@ -735,3 +735,28 @@ def test_a_pending_lock_held_by_another_process_is_waited_for_only_so_long(monke
     finally:
         _release(holder)
         usage._lost.clear()
+
+
+@needs_flock
+def test_one_process_draining_and_one_pending_at_once_lose_and_double_nothing():
+    ids = [f"{i:032x}" for i in range(1, 121)]
+    drain = os.linesep.join([
+        "import time", "from filament_kit.bridge import usage",
+        "for _ in range(150):",
+        "    with usage._flocked('%s'):" % SERIAL,
+        "        usage._drain('%s')" % SERIAL,
+        "    time.sleep(0.002)"])
+    pend = os.linesep.join([
+        "import sys, time", "from filament_kit.bridge import usage",
+        "for i in sys.argv[1:]:",
+        "    usage._pend('%s', {'id': i, 'at': '2026-11-12T10:00:00Z', 'job': 'j' + i, 'grams': 1.0, 'spool_id': 7, 'slot': 'A1', 'observe': False})" % SERIAL,
+        "    time.sleep(0.001)"])
+    procs = [subprocess.Popen([sys.executable, "-c", drain], env=_sub_env()),
+             subprocess.Popen([sys.executable, "-c", pend, *ids], env=_sub_env())]
+    assert [p.wait(120) for p in procs] == [0, 0]
+    with usage._flocked(SERIAL):                  # what the second process pended after the first one's last drain
+        assert usage._drain(SERIAL)
+    lines = [json.loads(x) for x in (_dir() / "usage.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert sorted(x["id"] for x in lines) == ids                      # each in usage.jsonl exactly once
+    assert sorted(e["id"] for e in usage.entries(SERIAL, days=10_000)) == ids        # and in the month file
+    assert not (_dir() / "usage" / usage.PENDING).exists() and not (_dir() / "usage" / usage.DRAINING).exists()
