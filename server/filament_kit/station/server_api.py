@@ -2,7 +2,7 @@
 
 Pairing: `sudo spoolwarden pair --station` on the server prints an fkit://pair link; `sudo spoolwarden station pair`
 on the station PC takes it, shows the server's certificate fingerprint for the owner to compare, and writes
-/etc/filament-kit-station/station_server.json (address, port, fingerprint) and .../station_token (0600, the
+/etc/filament-kit-station/station_server.xml (address, port, fingerprint) and .../station_token (0600, the
 station user's). Calls go to https://<ip>:<port> by IP (the unit allows only the server's address: no DNS, no
 mDNS), with the certificate pinned by its SHA-256 and `Authorization: Bearer <token>`.
 
@@ -76,7 +76,87 @@ def pairing_dir() -> Path:
 
 
 def server_file() -> Path:
+    return pairing_dir() / "station_server.xml"
+
+
+def old_server_file() -> Path:
+    """The JSON form of the server file: read when the XML form is absent, kept as it was for one release."""
     return pairing_dir() / "station_server.json"
+
+
+def _old_sha_file() -> Path:
+    return old_server_file().with_name(old_server_file().name + ".sha256")
+
+
+def _newer_old_server() -> dict | None:
+    """The data of station_server.json when an older release changed it after this code wrote it (a rollback: the
+    sidecar holds the hash of what was written), else None. Reads only."""
+    try:
+        want = _old_sha_file().read_text(encoding="ascii").strip()
+        raw = old_server_file().read_bytes()
+        if hashlib.sha256(raw).hexdigest() == want:
+            return None
+        data = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def read_server() -> dict:
+    """The server file's data: the XML form, else the old JSON form; an old JSON that an older release changed after
+    this code wrote it wins over the XML (it is the newer pairing). Raises OSError/ValueError when neither can be
+    read. Only reads: the station's user cannot write the folder, so the move is `move_server_file`."""
+    from ..profiles import statexml
+    try:
+        raw = server_file().read_bytes()
+    except FileNotFoundError:
+        data = json.loads(old_server_file().read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("station_server.json is not an object")
+        return data
+    data = statexml.loads(raw, "station-server")
+    newer = _newer_old_server()
+    return data if newer is None or newer == data else newer
+
+
+def move_server_file() -> None:
+    """Root's one-time move: write the XML form from the old JSON file when there is only that, or when an older release
+    changed that file after this code wrote it (the newer pairing wins once). The JSON file stays as it was. Silent when
+    there is nothing to move or the folder is not writable."""
+    if not old_server_file().is_file():
+        return
+    try:
+        if server_file().exists():
+            from ..profiles import statexml
+            data = _newer_old_server()
+            if data is None or data == statexml.loads(server_file().read_bytes(), "station-server"):
+                return
+        else:
+            data = json.loads(old_server_file().read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            _write_server(data, old=False)
+            _note_old_sha()
+    except (OSError, ValueError):
+        pass
+
+
+def _note_old_sha() -> None:
+    sha = _old_sha_file()
+    sha.write_text(hashlib.sha256(old_server_file().read_bytes()).hexdigest() + "\n", encoding="ascii")
+    os.chmod(sha, 0o644)
+
+
+def _write_server(data: dict, old: bool = True) -> None:
+    """The XML form (0644), then, when `old`, the old file in v0.6.2's shape (json.dumps indent=1 + newline) and its hash,
+    for a rollback: the station user cannot write this folder, so root's writer keeps it current (save_pairing chowns
+    them all)."""
+    from ..profiles import statexml
+    server_file().write_bytes(statexml.dumps("station-server", data))
+    os.chmod(server_file(), 0o644)  # whatever root's umask: the station's service user reads it
+    if old:
+        old_server_file().write_bytes((json.dumps(data, indent=1) + "\n").encode("utf-8"))
+        os.chmod(old_server_file(), 0o644)
+        _note_old_sha()
 
 
 def token_file() -> Path:
@@ -128,9 +208,7 @@ def save_pairing(link: Link, owner: str | None = "filament-kit-station", first: 
     ips = link.ips or [link.host]
     if first:
         ips = [first] + [i for i in ips if i != first]
-    server_file().write_text(json.dumps({"ips": ips, "port": link.port, "fp": link.fp,
-                                         "host": link.host}, indent=1) + "\n", encoding="utf-8")
-    os.chmod(server_file(), 0o644)  # whatever root's umask: the station's service user reads it
+    _write_server({"ips": ips, "port": link.port, "fp": link.fp, "host": link.host})
     tok = token_file()
     fd = os.open(tok, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -144,6 +222,8 @@ def save_pairing(link: Link, owner: str | None = "filament-kit-station", first: 
             return
         os.chown(d, 0, pw.pw_gid)          # root:filament-kit-station 0750: the service can read, others can't
         os.chown(server_file(), 0, pw.pw_gid)
+        os.chown(old_server_file(), 0, pw.pw_gid)
+        os.chown(_old_sha_file(), 0, pw.pw_gid)
         os.chown(tok, pw.pw_uid, pw.pw_gid)
 
 
@@ -252,7 +332,7 @@ class ServerApi:
     def __init__(self, timeout: float = TIMEOUT):
         self.timeout = timeout
         try:
-            cfg = json.loads(server_file().read_text(encoding="utf-8"))
+            cfg = read_server()
             self.ips, self.port, self.fp = list(cfg["ips"]), int(cfg["port"]), str(cfg["fp"])
             self.token = token_file().read_text(encoding="utf-8").strip()
             self.paired = bool(self.ips and self.token)

@@ -124,7 +124,7 @@ def paired_server_ips() -> list[str]:
     unreadable). Only literal IP addresses: they go into the unit's IPAddressAllow."""
     from .station import server_api
     try:
-        ips = json.loads(server_api.server_file().read_text(encoding="utf-8")).get("ips") or []
+        ips = server_api.read_server().get("ips") or []
     except (OSError, ValueError, AttributeError):
         return []
     out = []
@@ -912,8 +912,11 @@ def _station_pairing_owner(ex: _Exec) -> None:
         return
     group = "root:filament-kit-station"
     ex.cmd(["chown", group, str(server_api.pairing_dir())])
-    if server_api.server_file().exists():
-        ex.cmd(["chown", group, str(server_api.server_file())])
+    if not ex.dry:
+        server_api.move_server_file()
+    for f in (server_api.server_file(), server_api.old_server_file(), server_api._old_sha_file()):
+        if f.exists():
+            ex.cmd(["chown", group, str(f)])
     if server_api.token_file().exists():
         ex.cmd(["chown", "filament-kit-station:filament-kit-station", str(server_api.token_file())])
 

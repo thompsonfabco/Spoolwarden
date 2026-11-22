@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from filament_kit import apply, cli, modules, updates
+from filament_kit import apply, cli, config, modules, updates
 from test_updates import Runner, _cfg, _state, env, key, srv  # noqa: F401  (fixtures)
 
 OLD_SRC = Path(__file__).parent / "data" / "v0.3.0" / "modules.py.txt"   # v0.3.0:server/filament_kit/modules.py
@@ -76,11 +76,11 @@ def test_an_opt_in_module_switched_off_still_has_its_units_disabled():
 
 
 def _write(env, cfg):
-    (env / "etc" / "config.json").write_text(json.dumps(cfg), encoding="utf-8")
+    config.save(cfg)            # both forms: the rollback reads config.xml first
 
 
 def _read(env):
-    return json.loads((env / "etc" / "config.json").read_text(encoding="utf-8"))
+    return config.load_raw()
 
 
 def test_klipper_switched_off_here_is_dropped_before_a_rollback_to_0_3_0(env, old, capsys):

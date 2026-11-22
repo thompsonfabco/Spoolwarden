@@ -48,10 +48,11 @@ except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
 from . import __version__, config, event_sink, events, modules, output, release, steps
+from .profiles import statexml
 from .release import ReleaseError
 
 SCHEDULES = {"daily": 20 * 3600, "weekly": 6.5 * 86400}
-STATE = "state.json"
+STATE = "state.json"        # state.xml is the form written; this one is read when there is no XML, and left for a rollback
 MODULE = "updates"
 HW_ASSET = "bambu_hardware.xml"
 NOTES_LIMIT = 32 * 1024         # characters of a release's notes kept for the setup console
@@ -101,8 +102,15 @@ def version_text() -> str:
 
 
 def _read_state() -> dict:
+    f = store() / STATE
     try:
-        st = json.loads((store() / STATE).read_text(encoding="utf-8"))
+        return statexml.loads(statexml.xml_path(f).read_bytes(), statexml.tag_of(f))
+    except FileNotFoundError:
+        pass
+    except (OSError, statexml.StateXmlError):
+        pass                    # an XML file that cannot be read: the JSON form of an earlier release, else nothing
+    try:
+        st = json.loads(f.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return st if isinstance(st, dict) else {}
@@ -122,11 +130,7 @@ def _emit_updated(from_ver: str, to_ver: str, is_rollback: bool) -> None:
 def _write_state(**changes) -> None:
     st = _read_state()
     st.update(changes)
-    d = store()
-    d.mkdir(parents=True, exist_ok=True)
-    tmp = d / (STATE + ".tmp")
-    tmp.write_text(json.dumps(st, indent=2), encoding="utf-8")
-    os.replace(tmp, d / STATE)
+    statexml.write(store() / STATE, st, state_owned=False)       # root's file in /opt, world-readable as it was
 
 
 def default_fetcher(cfg: dict) -> release.Fetcher:
@@ -337,7 +341,8 @@ def _require_root() -> bool:
 
 
 def _installed() -> bool:
-    return (config.paths().etc / "config.json").is_file()
+    etc = config.paths().etc
+    return (etc / "config.xml").is_file() or (etc / "config.json").is_file()
 
 
 def due(cfg: dict, now: float) -> bool:
@@ -502,7 +507,7 @@ def job_refusal(name: str, *, verified: str | None = None) -> str | None:
     try:
         on = _modules_unfit(target)
     except (OSError, ValueError, ReleaseError) as e:
-        return f"cannot check config.json's modules for the rollback: {e}"
+        return f"cannot check the settings' modules for the rollback: {e}"
     return _unfit_text(target, on) if on else None
 
 
@@ -525,7 +530,7 @@ def _update(cfg: dict, *, scheduled: bool, fetcher: release.Fetcher | None,
     if not _require_root():
         return output.NEEDS_SUDO
     if not _installed():
-        print("error: Spoolwarden is not installed here (no config.json); install it with get.sh",
+        print("error: Spoolwarden is not installed here (no settings file); install it with get.sh",
               file=sys.stderr)
         return 1
     try:
@@ -803,9 +808,8 @@ def _restore(cfg: dict, cur: str, kept: bool, old_previous, run) -> int:
 
 
 def _unknown_to(target: str) -> tuple[dict, list[str]]:
-    """(config.json as it is, the modules it names that `target` does not know)."""
-    f = config.paths().etc / "config.json"
-    raw = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+    """(the settings as they are, the modules it names that `target` does not know)."""
+    raw = config.load_raw()                         # config.xml, else config.json
     old = release.parse_version(target)
     mods = raw.get("modules") if isinstance(raw, dict) else None
     if not isinstance(mods, dict):
@@ -826,11 +830,11 @@ def _unfit_text(target: str, on: list[str]) -> str:
 
 def _modules_fit(target: str) -> bool:
     """Before installing `target`: refuse when a module it does not know is on, and drop such a module's false
-    entry from config.json (the newer release wrote it when it was switched off). False on refusal."""
+    entry from the settings (the newer release wrote it when it was switched off). False on refusal."""
     try:
         raw, unknown = _unknown_to(target)
     except (OSError, ValueError, ReleaseError) as e:
-        print(f"error: cannot check config.json's modules for the rollback: {e}", file=sys.stderr)
+        print(f"error: cannot check the settings' modules for the rollback: {e}", file=sys.stderr)
         return False
     mods = raw.get("modules") if isinstance(raw, dict) else None
     on = [n for n in unknown if mods[n]]
@@ -841,7 +845,7 @@ def _modules_fit(target: str) -> bool:
         for n in unknown:
             del mods[n]
         config.save(raw)
-        print(f"Removed {', '.join(unknown)} (off) from config.json's modules: Spoolwarden {target} does not know it.")
+        print(f"Removed {', '.join(unknown)} (off) from the settings' modules: Spoolwarden {target} does not know it.")
     return True
 
 

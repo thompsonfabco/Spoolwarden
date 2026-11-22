@@ -127,3 +127,16 @@ def test_status_real_station_after_a_tap_reader_seen(capsys):
         srv.shutdown()
     out = capsys.readouterr().out
     assert "reader not seen" not in out and "--   Weigh Station scale not seen" in "\n".join(old_rows(out))
+
+
+def test_connectors_row_reads_oauth_xml_then_the_old_json(tmp_path):
+    from filament_kit import status
+    from filament_kit.profiles import statexml
+    old = tmp_path / "oauth.json"
+    with pytest.raises(FileNotFoundError):
+        status._oauth_state(old)
+    old.write_text(json.dumps({"clients": {"a": {}}}), encoding="utf-8")
+    assert status._oauth_state(old) == {"clients": {"a": {}}}
+    assert not (tmp_path / "oauth.xml").exists()                     # a reader never writes the hashed tokens
+    (tmp_path / "oauth.xml").write_bytes(statexml.dumps("oauth", {"clients": {"a": {}, "b": {}}}))
+    assert set(status._oauth_state(old)["clients"]) == {"a", "b"}

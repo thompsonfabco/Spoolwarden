@@ -369,6 +369,7 @@ def test_detect_odd_server_config_is_not_known(moonraker, answer):
 
 def test_detect_unreadable_config_is_not_known(moonraker):
     (config.paths().etc / "config.json").write_text("{not json", encoding="utf-8")
+    (config.paths().etc / "config.xml").write_text("<config", encoding="utf-8")       # both forms unreadable
     p = registry.add_klipper("Box", moonraker.host, moonraker.port)
     d = klipper_cli.detect(p)
     assert d["ok"] is True and d["problem"] is None and d["spoolman"] is None

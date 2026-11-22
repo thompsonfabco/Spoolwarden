@@ -3,7 +3,8 @@
 A port of filament-ops vm/server.py (Provider, Store, LanOnly, /login), unchanged in behaviour, so a migrated
 oauth.json keeps the Claude connector signed in. Claude registers itself (DCR, only its own callbacks), then the
 owner approves once on /login, which only answers the home LAN and needs the passphrase. Tokens and codes are
-stored as sha256 hashes in one JSON file (0600). The phone web app has no sign-in.
+stored as sha256 hashes in one XML file (oauth.xml, 0600; the JSON form of an older release is read once). The phone
+web app has no sign-in.
 
 Everything comes in as parameters (public URL, LAN ranges, file paths); the caller reads the config.
 """
@@ -14,7 +15,6 @@ import hmac
 import itertools
 import html
 import json
-import os
 import secrets
 import sys
 import threading
@@ -62,6 +62,7 @@ def _origin(public_url: str) -> str:
 
 from ..lan import IPV6_HINT, Networks, is_lan, over_ipv6, parse_lan  # noqa: E402,F401  (re-exported)
 from .. import shared_files  # noqa: E402
+from ..profiles import statexml  # noqa: E402
 from . import pages  # noqa: E402
 
 # the web app's refusal page (04 11.1): its own files only, no form
@@ -70,36 +71,59 @@ REFUSAL_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; frame-an
 
 # ---------- store ----------
 
+OLD_FORMAT = {}   # v0.6.2 wrote oauth.json with json.dump(d, f): compact, no newline
+
 class Store:
-    """Clients, codes and hashed tokens in one JSON file (single user, tiny volume). Same format as ops oauth.json:
-    clients, codes, access, refresh, used (rotated-out refresh token hashes). An old file's "sessions" (the phone
-    web app's sign-ins, gone) is dropped on load."""
+    """Clients, codes and hashed tokens in one XML file (single user, tiny volume; statexml, tag `oauth`). Same data as
+    ops oauth.json: clients, codes, access, refresh, used (rotated-out refresh token hashes). `path` is the JSON name
+    (`oauth.json`); the XML form is beside it. An old file's "sessions" (the phone web app's sign-ins, gone) is dropped
+    on load. The JSON form of an older release is read once when there is no XML form, moved to it, and left as it
+    was (a rollback finds it)."""
 
     def __init__(self, path: Path | str):
         self.path, self.lock = Path(path), threading.Lock()
-        self.d: dict[str, dict[str, Any]] = (json.loads(self.path.read_text(encoding="utf-8"))
-                                             if self.path.exists() else {})
+        self.d: dict[str, dict[str, Any]] = self._load()
         self.d.pop("sessions", None)
         for k in _KEYS:
             self.d.setdefault(k, {})
         self.pending: dict[str, dict[str, Any]] = {}  # authorize requests waiting on /login (memory only)
+
+    def _load(self) -> dict[str, Any]:
+        """The stored data; a start never fails for it. An XML file that cannot be read gives an empty store (the
+        JSON form is older than the XML one: it could bring back a token that was revoked since) and is kept as
+        `oauth.xml.unreadable` by the next save."""
+        xp = statexml.xml_path(self.path)
+        if xp.exists():
+            d = statexml.read(self.path, mode=0o600, state_owned=False)
+            if any(p.startswith(f"{xp} (") for p in statexml.problems()):
+                print(f"{xp.name} cannot be read; starting without sign-ins (reconnect in Claude)",
+                      file=sys.stderr, flush=True)
+                return {}
+            return d or {}
+        if not self.path.exists():
+            return {}
+        try:
+            d = json.loads(self.path.read_text(encoding="utf-8"))
+            if not isinstance(d, dict):
+                raise ValueError("not an object")
+        except (OSError, ValueError) as e:       # UnicodeDecodeError is a ValueError
+            print(f"{self.path.name} cannot be read ({type(e).__name__}); starting without sign-ins "
+                  "(reconnect in Claude)", file=sys.stderr, flush=True)
+            return {}
+        try:
+            # the old file stays byte for byte (a rollback reads it); 0600: the helper's default mode is 0644
+            statexml.migrate(self.path, d, mode=0o600, state_owned=False, old_format=OLD_FORMAT)
+        except (OSError, statexml.StateXmlError, TypeError, ValueError) as e:
+            print(f"{self.path.name} could not be converted ({type(e).__name__}); the next save writes the XML form",
+                  file=sys.stderr, flush=True)
+        return d
 
     def save(self) -> None:
         """Drop expired entries and write atomically; the file is 0600 from the moment it exists."""
         now = time.time()
         for k in _EXPIRING:
             self.d[k] = {t: v for t, v in self.d[k].items() if (v.get("expires_at") or now + 1) > now}
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_name(self.path.name + ".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(self.d, f)
-            os.chmod(tmp, 0o600)  # O_CREAT's mode does not apply to a leftover tmp file
-            os.replace(tmp, self.path)
-        except BaseException:
-            tmp.unlink(missing_ok=True)
-            raise
+        statexml.write(self.path, self.d, mode=0o600, state_owned=False, old_format=OLD_FORMAT)
 
 
 # ---------- OAuth provider ----------

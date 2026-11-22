@@ -10,7 +10,6 @@ The token must answer /api/station/hello over the pinned certificate before anyt
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -20,6 +19,7 @@ import sys
 from pathlib import Path
 
 from .. import apply, config, modules
+from ..profiles import statexml
 from . import pair_request, server_api
 
 log = logging.getLogger("intake-station")
@@ -79,11 +79,9 @@ def read_drop(path: Path) -> dict:
         if dfd is not None:
             os.close(dfd)
     try:
-        d = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError):
-        raise DropError("the drop file is not JSON") from None
-    if not isinstance(d, dict):
-        raise DropError("the drop file is not a JSON object")
+        d = statexml.loads(raw, "request")
+    except statexml.StateXmlError:
+        raise DropError("the drop file is not XML of the expected form") from None
     fp, token, port = d.get("fp"), d.get("token"), d.get("port")
     if not isinstance(fp, str) or not FP.fullmatch(fp) or not isinstance(token, str) or not TOKEN.fullmatch(token):
         raise DropError("the drop file has no usable fingerprint or token")
