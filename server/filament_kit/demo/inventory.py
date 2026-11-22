@@ -10,7 +10,6 @@ and `<locations>`. Written whole and atomically on every change (a few dozen rec
 """
 from __future__ import annotations
 
-import json
 import os
 import threading
 import urllib.parse

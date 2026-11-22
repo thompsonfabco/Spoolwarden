@@ -159,7 +159,10 @@ class Family:
 
     def tick(self) -> None:
         """Move time on: progress, the Voron's print and its runout, the end of a print. Tells the listeners when a
-        printer's state changed."""
+        printer's state changed. Does nothing while the demo is off (the pretend printers tell nobody then)."""
+        from . import is_on
+        if not is_on():
+            return
         with self._lock:
             now = self.clock()
             changed = []
@@ -451,6 +454,37 @@ class Family:
 
     def usage(self, pid: str, days: float) -> list[dict]:
         return usage_entries(pid, days)
+
+
+class Switch:
+    """One object in the Hub's wiring: the real family (a Bambu `Manager`, a `KlipperFamily`) while the demo is off, the
+    pretend one while it is on, decided at every call, so the demo can be switched on and off without a restart. The
+    watcher's listener goes to both; start and stop reach both. `real` is the family as it is wired (a family that is
+    off, `None`, is not wrapped)."""
+
+    def __init__(self, real, pretend: Family):
+        self._real, self._pretend = real, pretend
+
+    def _now(self):
+        from . import is_on
+        return self._pretend if is_on() else self._real
+
+    def add_listener(self, fn) -> None:
+        self._pretend.add_listener(fn)
+        self._real.add_listener(fn)
+
+    def start(self, *a, **k) -> None:
+        self._pretend.start()
+        self._real.start(*a, **k)
+
+    def stop(self) -> None:
+        self._pretend.stop()
+        self._real.stop()
+
+    def __getattr__(self, name: str):
+        if name.startswith("__") or name in ("_real", "_pretend"):
+            raise AttributeError(name)
+        return getattr(self._now(), name)
 
 
 # --- the demo's usage log (`<state>/demo/usage.xml`) ----------------------------------------------------------------

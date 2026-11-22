@@ -424,6 +424,50 @@ def test_the_alert_starts_again_when_the_demo_restarts(fams):
     assert k.live("garage-voron")["print"] == "paused"
 
 
+def test_the_switch_is_the_real_family_until_the_demo_is_on(env):
+    class Real:
+        def __init__(self):
+            self.heard, self.started = [], 0
+
+        def add_listener(self, fn):
+            self.heard.append(fn)
+
+        def start(self):
+            self.started += 1
+
+        def stop(self):
+            self.started -= 1
+
+        def state(self, pid):
+            return "real"
+    real = Real()
+    pretend = printers.Family("klipper", Spoolman("http://x"), Clock())
+    sw = printers.Switch(real, pretend)
+    heard = []
+    sw.add_listener(heard.append)
+    assert real.heard == [heard.append] and heard.append in pretend._listeners
+    assert sw.state("garage-voron") == "real"
+    sw.start()
+    sw.stop()
+    assert real.started == 0
+    on()
+    assert sw.state("garage-voron") == "connected" and sw.state("nothing") == "not_configured"
+    demo.leave()
+    assert sw.state("garage-voron") == "real"
+    with pytest.raises(AttributeError):
+        sw.__wrapped__
+
+
+def test_the_pretend_printers_tell_nobody_while_the_demo_is_off(env):
+    clock = Clock()
+    f = printers.Family("klipper", Spoolman("http://x"), clock)
+    heard = []
+    f.add_listener(lambda *a: heard.append(a))
+    clock.to(printers.ALERT_AT + 1)
+    f.tick()
+    assert heard == [] and f.p["garage-voron"].gcode == "IDLE"
+
+
 def test_the_thread_moves_time_and_stops(env):
     on()
     f = printers.Family("klipper", Spoolman("http://x"))
@@ -508,6 +552,7 @@ def test_on_and_off_need_root_without_the_test_switch(env, monkeypatch, capsys):
     monkeypatch.delenv("FK_NO_SYSTEMD")
     from filament_kit import cli
     monkeypatch.setattr(cli, "_is_root", lambda: False)
+    monkeypatch.setattr(cli, "_invoked", [])                  # what an earlier test's main() left would name its command
     assert demo_cli.run_demo(Args("on")) == 3 and not demo.is_on()
     assert demo_cli.run_demo(Args("off")) == 3
     assert "sudo spoolwarden demo on" in capsys.readouterr().err
