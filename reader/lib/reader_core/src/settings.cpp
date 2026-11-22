@@ -86,6 +86,7 @@ std::string settingsStamp(const Settings& s) {
   };
   mix(s.ssid); mix(s.pass); mix(s.base); mix(s.token); mix(s.otaKey); mix(s.rootCa);
   mix(s.buzzerLow ? "1" : "0");
+  if (!s.hubIp.empty()) mix(s.hubIp);   // only when set, so the stamp of a build without it is unchanged
   char out[17];
   snprintf(out, sizeof(out), "%016llx", h);
   return out;

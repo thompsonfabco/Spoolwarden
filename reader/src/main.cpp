@@ -235,6 +235,7 @@ void loadSettings() {
   compiled.rootCa = READER_ROOT_CA;
 #endif
   compiled.buzzerLow = COMPILED_BUZZER_LOW;
+  compiled.hubIp = READER_HUB_IP;   // copied into flash like the rest, so an update built without secrets.h keeps it
   std::string stamp = settingsStamp(compiled);
   if (adoptCompiled(cfg, savedStamp, stamp)) {
     cfg = compiled;
@@ -497,8 +498,7 @@ bool hubConnect(WiFiClientSecure& tls, uint32_t budgetMs) {
   ensureMdns();
   if (tls.connected()) return true;
   uint32_t t0 = millis();
-  std::vector<HubAddress> list = hubAddresses(cfg.base, cfg.hubIp, hubIpNow, mdnsSliceMs(budgetMs), mdnsLookup,
-                                              READER_HUB_IP);
+  std::vector<HubAddress> list = hubAddresses(cfg.base, cfg.hubIp, hubIpNow, mdnsSliceMs(budgetMs), mdnsLookup);
   tls.setHandshakeTimeout(HANDSHAKE_S);
   for (size_t i = 0; i < list.size(); i++) {
     uint32_t ms = connectSliceMs(budgetMs, millis() - t0, list.size() - i);

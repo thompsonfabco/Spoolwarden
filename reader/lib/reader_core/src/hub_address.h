@@ -59,11 +59,11 @@ struct HubAddress {
 HubAddress chooseHubAddress(const std::string& base, const std::string& hubIp, const MdnsLookup& lookup);
 
 // The addresses to try, in order, for a ".local" base: the cached one (no lookup then) or the mDNS answer, then hub_ip
-// when it is a valid address different from the first. The compiled address is considered only when hub_ip is empty.
-// A base that is not a ".local" name gives one ADDR_BY_NAME entry and `lookup` is not called; an unusable base gives none.
-// A failed first address is not the end: an mDNS answer can be a name clash's address or the wrong interface.
+// when it is a valid address different from the first. A base that is not a ".local" name gives one ADDR_BY_NAME entry
+// and `lookup` is not called; an unusable base gives none. A failed first address is not the end: the next entry is
+// tried (an mDNS answer can be a name clash's address or the wrong interface).
 std::vector<HubAddress> hubAddresses(const std::string& base, const std::string& hubIp, const std::string& cachedIp,
-                                     uint32_t mdnsMs, const MdnsLookup& lookup, const std::string& compiledHubIp = "");
+                                     uint32_t mdnsMs, const MdnsLookup& lookup);
 
 // Part of the budget the mDNS lookup may use: MDNS_TIMEOUT_MS, at most half the budget.
 uint32_t mdnsSliceMs(uint32_t budgetMs);

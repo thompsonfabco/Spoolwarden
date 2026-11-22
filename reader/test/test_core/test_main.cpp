@@ -792,43 +792,6 @@ void test_hub_addresses_fall_back_to_hub_ip_after_mdns() {
   TEST_ASSERT_EQUAL_UINT(0, hubAddresses("https://hub.local/reader", "", "", 1000, none).size());
 }
 
-void test_hub_addresses_use_compiled_ip_after_mdns() {
-  const std::string base = "https://hub.local:8443/reader";
-  MdnsLookup none = [](const std::string&, uint32_t, std::string&) { return false; };
-  auto fallback = hubAddresses(base, "", "", 1000, none, "192.168.1.20");
-  TEST_ASSERT_EQUAL_UINT(1, fallback.size());
-  TEST_ASSERT_EQUAL(ADDR_HUB_IP, fallback[0].source);
-  TEST_ASSERT_EQUAL_STRING("192.168.1.20", fallback[0].ip.c_str());
-  TEST_ASSERT_EQUAL_STRING("hub.local", fallback[0].host.c_str());
-  TEST_ASSERT_EQUAL_UINT16(8443, fallback[0].port);
-
-  MdnsLookup found = [](const std::string&, uint32_t, std::string& ip) { ip = "10.0.0.7"; return true; };
-  auto ordered = hubAddresses(base, "", "", 1000, found, "192.168.1.20");
-  TEST_ASSERT_EQUAL_UINT(2, ordered.size());
-  TEST_ASSERT_EQUAL(ADDR_MDNS, ordered[0].source);
-  TEST_ASSERT_EQUAL_STRING("10.0.0.7", ordered[0].ip.c_str());
-  TEST_ASSERT_EQUAL(ADDR_HUB_IP, ordered[1].source);
-  TEST_ASSERT_EQUAL_STRING("192.168.1.20", ordered[1].ip.c_str());
-}
-
-void test_hub_addresses_prefer_saved_ip_to_compiled_ip() {
-  MdnsLookup none = [](const std::string&, uint32_t, std::string&) { return false; };
-  auto addresses = hubAddresses("https://hub.local/reader", "192.168.1.21", "", 1000, none, "192.168.1.20");
-  TEST_ASSERT_EQUAL_UINT(1, addresses.size());
-  TEST_ASSERT_EQUAL(ADDR_HUB_IP, addresses[0].source);
-  TEST_ASSERT_EQUAL_STRING("192.168.1.21", addresses[0].ip.c_str());
-}
-
-void test_hub_addresses_without_a_compiled_ip_keep_the_same_fallback() {
-  const std::string base = "https://hub.local/reader";
-  MdnsLookup none = [](const std::string&, uint32_t, std::string&) { return false; };
-  TEST_ASSERT_TRUE(hubAddresses(base, "", "", 1000, none, "").empty());
-  TEST_ASSERT_TRUE(hubAddresses(base, "", "", 1000, none).empty());
-  auto addresses = hubAddresses(base, "192.168.1.21", "", 1000, none, "");
-  TEST_ASSERT_EQUAL_UINT(1, addresses.size());
-  TEST_ASSERT_EQUAL_STRING("192.168.1.21", addresses[0].ip.c_str());
-}
-
 void test_hub_addresses_cached_skips_the_lookup() {
   int asked = 0;
   MdnsLookup spy = [&](const std::string&, uint32_t, std::string& ip) { asked++; ip = "10.0.0.9"; return true; };
@@ -929,6 +892,27 @@ void test_compiled_settings_copied_again_when_they_change() {
   a = built; a.rootCa = "c"; TEST_ASSERT_TRUE(settingsStamp(a) != stamp);
   a = built; a.buzzerLow = true; TEST_ASSERT_TRUE(settingsStamp(a) != stamp);
   a = built; a.ssid = "Hom"; a.pass = "epw"; TEST_ASSERT_TRUE(settingsStamp(a) != stamp);
+  a = built; a.hubIp = "192.168.1.20"; TEST_ASSERT_TRUE(settingsStamp(a) != stamp);
+  a = built; a.hubIp.clear(); TEST_ASSERT_EQUAL_STRING(stamp.c_str(), settingsStamp(a).c_str());   // unset: the old stamp
+}
+
+void test_compiled_hub_ip_is_copied_into_flash_but_a_stored_one_wins() {
+  // loadSettings (main.cpp) sets compiled.hubIp = READER_HUB_IP and copies `compiled` whole when adoptCompiled says so.
+  Settings built; built.ssid = "Home"; built.pass = "pw"; built.base = "https://hub.local/reader"; built.token = "abcdefghijklmnop";
+  built.hubIp = "192.168.1.20";
+  std::string stamp = settingsStamp(built);
+  Settings flash;
+  TEST_ASSERT_TRUE(adoptCompiled(flash, "", stamp));                // first start: hub_ip goes into flash with the rest
+  flash = built;                                                    // a later image without secrets.h reads it from there
+  MdnsLookup none = [](const std::string&, uint32_t, std::string&) { return false; };
+  auto l = hubAddresses(flash.base, flash.hubIp, "", 1000, none);
+  TEST_ASSERT_EQUAL_UINT(1, l.size());
+  TEST_ASSERT_EQUAL(ADDR_HUB_IP, l[0].source);
+  TEST_ASSERT_EQUAL_STRING("192.168.1.20", l[0].ip.c_str());
+  Settings usb = built; usb.hubIp = "192.168.1.99";                 // FK-SET afterwards: same build, so the stored value wins
+  TEST_ASSERT_FALSE(adoptCompiled(usb, stamp, stamp));
+  l = hubAddresses(usb.base, usb.hubIp, "", 1000, none);
+  TEST_ASSERT_EQUAL_STRING("192.168.1.99", l[0].ip.c_str());
 }
 
 void test_commands() {
@@ -1015,6 +999,7 @@ int main(int, char**) {
   RUN_TEST(test_settings_optional_ones);
   RUN_TEST(test_settings_refused_leave_the_old_ones);
   RUN_TEST(test_compiled_settings_copied_again_when_they_change);
+  RUN_TEST(test_compiled_hub_ip_is_copied_into_flash_but_a_stored_one_wins);
   RUN_TEST(test_settings_hub_ip_and_printer);
   RUN_TEST(test_settings_bad_hub_ip_and_printer_refused);
   RUN_TEST(test_parse_base);
@@ -1023,9 +1008,6 @@ int main(int, char**) {
   RUN_TEST(test_hub_address_falls_back_to_hub_ip);
   RUN_TEST(test_hub_address_old_behaviour_for_other_hosts);
   RUN_TEST(test_hub_addresses_fall_back_to_hub_ip_after_mdns);
-  RUN_TEST(test_hub_addresses_use_compiled_ip_after_mdns);
-  RUN_TEST(test_hub_addresses_prefer_saved_ip_to_compiled_ip);
-  RUN_TEST(test_hub_addresses_without_a_compiled_ip_keep_the_same_fallback);
   RUN_TEST(test_hub_addresses_cached_skips_the_lookup);
   RUN_TEST(test_hub_connect_budget_is_shared);
   RUN_TEST(test_mdns_starts_whenever_wifi_is_up);
