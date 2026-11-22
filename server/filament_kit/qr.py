@@ -23,6 +23,15 @@ def svg(payload: str) -> str | None:
     return buf.getvalue().decode("utf-8")
 
 
+def modules(payload: str) -> list[list[bool]] | None:
+    """The code as rows of modules (True = dark), with no quiet zone: for a drawing that places the code itself (the spool
+    label, labels.py); None when the text does not fit one."""
+    try:
+        return [[bool(m & 1) for m in r] for r in _code(payload).matrix_iter(border=0)]
+    except (segno.DataOverflowError, ValueError):
+        return None
+
+
 def text(payload: str) -> str | None:
     """The link as terminal text: two modules per character row (half blocks), black on white, with the quiet zone;
     None when it does not fit one."""
