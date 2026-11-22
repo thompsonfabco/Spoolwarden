@@ -87,10 +87,10 @@ def test_json_is_read_once_and_moved(tmp_path):
     assert statexml.read(p) == {"stamp": "s", "at": 2.0, "written": ["A"]}
     assert (tmp_path / "installed.xml").is_file() and p.is_file()               # the JSON form stays one release
     assert not list(tmp_path.glob("*.moving"))
-    p.write_text(json.dumps({"stamp": "stale"}), encoding="utf-8")              # from now on only the XML is used
-    assert statexml.read(p)["stamp"] == "s"
-    statexml.write(p, {"stamp": "new"})
-    assert statexml.read(p) == {"stamp": "new"} and json.loads(p.read_text())["stamp"] == "stale"
+    p.write_text(json.dumps({"stamp": "stale"}), encoding="utf-8")              # an older release changed it: wins once
+    assert statexml.read(p)["stamp"] == "stale" and statexml.read(p)["stamp"] == "stale"
+    statexml.write(p, {"stamp": "new"})                                         # the JSON form follows every save
+    assert statexml.read(p) == {"stamp": "new"} and json.loads(p.read_text())["stamp"] == "new"
     assert statexml.exists(p)
     statexml.unlink(p)
     assert not statexml.exists(p) and not p.exists() and not (tmp_path / "installed.xml").exists()
@@ -149,16 +149,15 @@ def test_a_build_and_its_state_are_xml(env):
     folder = TB.profiles_dir()
     for name in ("current", "deleted", "lines", "build-state"):
         assert (folder / f"{name}.xml").is_file(), name
-        assert not (folder / f"{name}.json").exists(), name                     # nothing writes the old form again
-    assert (folder / "live" / "meta.xml").is_file() and not (folder / "live" / "meta.json").exists()
+        assert (folder / f"{name}.json").is_file(), name                        # the old form is kept for a rollback
+    assert (folder / "live" / "meta.xml").is_file() and (folder / "live" / "meta.json").is_file()
     b = folder / "builds" / stamp
     assert (b / "BUILD.xml").is_file() and (b / "BUILD.json").is_file() and (b / "SLICER.xml").is_file()
     assert statexml.read(b / "BUILD.json") == json.loads((b / "BUILD.json").read_text(encoding="utf-8"))
     assert builds.current()["stamp"] == stamp and builds.manifest(stamp)["stamp"] == stamp
     builds.record_installed(stamp, "a")
     assert (folder / "installed.xml").is_file() and builds._installed()["stamp"] == stamp
-    # the Hub's own settings are not part of this step
-    assert not (folder / "installed.json").exists()
+    assert (folder / "installed.json").is_file()
 
 
 def test_the_build_zip_in_either_form(env):
