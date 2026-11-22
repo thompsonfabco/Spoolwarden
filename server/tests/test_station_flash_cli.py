@@ -163,7 +163,7 @@ def test_failed_esptool_exits_1(bench, monkeypatch, capsys):
 
 
 def test_flash_without_hello_afterwards_exits_1(bench, monkeypatch, capsys):
-    monkeypatch.setattr(panel, "flash_panel", lambda dev, version: True)  # esptool ok, board stays silent
+    monkeypatch.setattr(panel, "flash_panel_result", _result(lambda dev, version: True))  # esptool ok, board stays silent
     assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 1
     assert "ttyACM0" in capsys.readouterr().err
     assert bench.probe.opened == ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyACM0"]

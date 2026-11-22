@@ -368,6 +368,7 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `recent revise <record> --note TEXT [--item N]` | Ask the Label Reader to correct it | Ask the Label Reader to correct it |
 | `recent edit <record> field=value... [--item N] [--spools 41,42]` | Edit by hand | Edit by hand, Save changes |
 | `recent undo <record>` | Undo the newest revision that is not undone | Undo revision N |
+| `spool` | Prints where spools are opened, tagged and moved | (none) |
 | `spools low` | The opened spools at or under the running-low threshold | Overview, Running low |
 | `spools [<words>] [--sealed \| --opened \| --loaded \| --low \| --checked-out]` | The spools, searched by words; `--checked-out` lists the spools taken out of a printer and not yet returned | Spools |
 | `spool show <n>` | One spool's facts | Spools |

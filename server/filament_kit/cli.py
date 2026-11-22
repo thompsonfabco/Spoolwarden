@@ -1907,6 +1907,10 @@ def _pointer(where: str, sentence: str, url: str) -> int:
     return 0
 
 
+def cmd_spool() -> int:
+    return _pointer("web app", "Spools are opened and tagged in the web app or app:", _intake_url())
+
+
 def cmd_add() -> int:
     return _pointer("web app", "Add spools in the web app, app or Weigh Station:", _intake_url())
 
@@ -6596,6 +6600,7 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
   '{recent_ask_title}'),
  ('`recent edit <record> field=value... [--item N] [--spools 41,42]`', 'Edit by hand', '{recent_edit}, {common_save_changes}'),
  ('`recent undo <record>`', 'Undo the newest revision that is not undone', 'Undo revision N'),
+ ('`spool`', 'Prints where spools are opened, tagged and moved', '(none)'),
  ('`spools low`', 'The opened spools at or under the running-low threshold', '{nav_overview}, {running_low_title}'),
  ('`spools [<words>] [--sealed \\| --opened \\| --loaded \\| --low \\| --checked-out]`',
   'The spools, searched by words; `--checked-out` lists the spools taken out of a printer and not yet returned', '{nav_spools}'),
@@ -7143,6 +7148,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lg.add_argument("--lines", type=int, choices=(50, 100, 200), default=100, help="how many lines (default 100)")
     sub.add_parser("add", help="where spools are added")
     spools_cli.add_parser(sub)         # spools, spool show|weigh|move|empty|return|home (its own module)
+    for action in sub.choices["spool"]._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            action.required = False    # a bare `spool` still says where spools are opened and tagged
     hp = sub.add_parser("help", help="help for a command; help aliases lists the old spellings; help --markdown the command table")
     hp.add_argument("topic", nargs="?", help="a command, or aliases")
     hp.add_argument("--markdown", action="store_true", help="the command table for the user guide")
@@ -7488,6 +7496,8 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return alerts_cli.run_events(args)
     if args.cmd == "spools" and args.words == ["low"] and args.filter is None:      # the old `spools low` keeps its table
         return alerts_cli.run_spools(args, sm_factory or _default_spoolman)
+    if args.cmd == "spool" and args.spool_cmd is None:
+        return cmd_spool()
     if args.cmd in ("spools", "spool"):
         return spools_cli.run(args, _server_api())
     if args.cmd == "recent":
