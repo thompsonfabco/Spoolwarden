@@ -216,9 +216,9 @@ def test_the_short_label_leaves_out_temperatures_then_lot_then_date_and_keeps_wh
 def test_a_label_text_loses_every_character_xml_does_not_allow():
     bad = "A\x00\x08\ufffe\uffff\ud800Z\U0001f600"
     d = labels.label_data(spool(lot_nr="L" + bad, filament={"name": "N" + bad, "vendor": {"name": "V" + bad}}))
-    assert d["name"] == "NAZ\U0001f600" and d["vendor"] == "VAZ\U0001f600" and d["lot"] == "LAZ\U0001f600"
+    assert d["name"] == "NA Z\U0001f600" and d["vendor"] == "VA Z\U0001f600" and d["lot"] == "LA Z\U0001f600"
     doc = labels.one_svg(d, "62x29", ADDRESS)
-    assert parse(doc).get("aria-label").startswith("Label of spool 214: VAZ")
+    assert parse(doc).get("aria-label").startswith("Label of spool 214: VA Z")
     for gone in ("\x00", "\x08", "\ufffe", "\uffff", "\ud800"):
         assert gone not in doc
     # data that did not come through label_data is cleaned where it is drawn
@@ -310,7 +310,7 @@ def test_a_sheet_is_one_page_with_the_labels_where_the_stock_has_them(size):
 
 def test_a_sheet_of_a_partly_filled_page_starts_at_the_top_left():
     root = parse(labels.file_svg([labels.label_data(spool(n)) for n in (5, 6)], "letter-66x25", HOME))
-    assert [(c.get("x"), c.get("y")) for c in root if c.tag == NS + "svg"] == [("4.76", "12.7"), ("74.61", "12.7")]
+    assert [(c.get("x"), c.get("y")) for c in root if c.tag == NS + "svg"] == [("4.7625", "12.7"), ("74.6125", "12.7")]
 
 
 # ---- the print page
@@ -391,9 +391,9 @@ def test_a_sheet_prints_on_its_stated_paper_with_the_stocks_margins_and_pitch(si
     (pw, ph), cols, rows, left, top, px, py, (lw, lh) = STOCK[size]
     paper = "A4" if pw == 210.0 else "letter"
     assert f"@page {{ size: {paper}; margin: 0; }}" in css and "size: auto" not in css
-    assert f"padding: {top:g}mm 0 0 {left:g}mm" in css or f"padding: {round(top, 2):g}mm 0 0 {round(left, 2):g}mm" in css
+    assert f"padding: {top:g}mm 0 0 {left:g}mm" in css
     assert f"grid-template-columns: repeat({cols}, {lw:g}mm)" in css
-    assert f"column-gap: {round(px - lw, 2):g}mm" in css and f"row-gap: {round(py - lh, 2):g}mm" in css
+    assert f"column-gap: {round(px - lw, 4):g}mm" in css and f"row-gap: {round(py - lh, 4):g}mm" in css
     assert "padding: 6mm 0 0" not in css                                                              # the fixed top padding is gone
 
 

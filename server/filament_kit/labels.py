@@ -205,7 +205,7 @@ def web_app_on(cfg: dict | None = None) -> bool:
 # ---------------------------------------------------------------- the drawing
 
 def _n(x: float) -> str:
-    return f"{x:.2f}".rstrip("0").rstrip(".")
+    return f"{x:.4f}".rstrip("0").rstrip(".")
 
 
 def _width(text: str, fs: float, bold: bool = False) -> float:
@@ -299,11 +299,11 @@ def _body(data: dict, size: str, address: str) -> str:
     net, nfs2 = _fit(TEXT_LABEL_NET.format(g=data["net_g"]) if data["net_g"] else "", room - taken, 2.6 * k, 2.0 * k)
     out.append(_text(right, y(20.0), nfs2, net, end=True))
     if (23.2 + 0.6) * k <= room_h + 1e-9:                       # the line of the date and the lot fits
-        added, afs = _fit(TEXT_LABEL_ADDED.format(date=data["added"]) if data["added"] else "", room, 2.4 * k, 1.6 * k)
-        out.append(_text(x0, y(23.2), afs, added))
-        lot, lfs = _fit(TEXT_LABEL_LOT.format(lot=data["lot"]) if data["lot"] else "",
-                        room - (_width(added, afs) + 1.5 if added else 0), 2.4 * k, 1.8 * k)
+        lot, lfs = _fit(TEXT_LABEL_LOT.format(lot=data["lot"]) if data["lot"] else "", room * 0.3, 2.4 * k, 1.8 * k)
         out.append(_text(right, y(23.2), lfs, lot, end=True))
+        added, afs = _fit(TEXT_LABEL_ADDED.format(date=data["added"]) if data["added"] else "",
+                          room - (_width(lot, lfs) + 1.5 if lot else 0), 2.4 * k, 1.6 * k)
+        out.append(_text(x0, y(23.2), afs, added))
     if (26.3 + 0.6) * k <= room_h + 1e-9:                       # the line of the temperatures fits
         if data["nozzle_c"] and data["bed_c"]:
             temps = TEXT_LABEL_TEMPS.format(nozzle=data["nozzle_c"], bed=data["bed_c"])
