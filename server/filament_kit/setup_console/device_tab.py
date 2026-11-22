@@ -29,6 +29,7 @@ import anyio
 from starlette.responses import Response
 
 from .. import __version__, config, pairing, reader_tokens, station_client
+from ..station import panel_setup
 
 KINDS = ("phone", "pc", "station", "web", "reader", "builtin")
 CLIENT_KINDS = {"android": "phone", "slicer-sync": "pc", "weigh-station": "station", "web": "web"}   # the header's names
@@ -130,6 +131,8 @@ def rows() -> list[dict]:
                "built_in": built_in, "page": kind == "station"}
         if d["id"] in reach:
             row["reachable"] = reach[d["id"]]
+        if kind == "station":       # R88 4.5: how its panel is connected
+            row["panel"] = panel_setup.TEXT_DEVICES_WIFI if config.panel_link(cfg) == "wifi" else panel_setup.TEXT_DEVICES_USB
         out.append(row)
     for t in _readers():
         made = str(t.get("created") or "").replace("T", " ")[:16]
