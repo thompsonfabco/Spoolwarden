@@ -374,7 +374,7 @@ class IntakeApp:
         try:
             return await anyio.to_thread.run_sync(run)
         except reader_corrections.CorrectionsError as e:
-            return JSONResponse({"error": str(e), "reason": e.code, **e.extra}, e.status)
+            return JSONResponse({"error": str(e), "code": e.code, **e.extra}, e.status)
 
     async def corrections_list(self, request: Request):
         from .. import reader_corrections
@@ -723,7 +723,7 @@ class IntakeApp:
             return storage_api.view(self.tools.storage_list(), inventory._used_locations(self.tools.sm))
         return await anyio.to_thread.run_sync(run)
 
-    EVENT_PARAMS = ("since", "since_at", "kinds", "limit", "alert", "client")
+    EVENT_PARAMS = ("since", "since_at", "kinds", "limit", "newest", "alert", "client")
     EVENT_WAIT_MAX = 20.0       # the channel to the Hub gives up after 30 s: a longer wait cannot be passed on
 
     @staticmethod
@@ -763,7 +763,7 @@ class IntakeApp:
         return await self._hub_get("/api/intake/share-corrections")
 
     # ----- history and data (R84 9.4): each passes one Hub route on, with the parameters that route has and no others -----
-    ACTIVITY_PARAMS = ("subject", "actor", "kinds", "since", "limit")
+    ACTIVITY_PARAMS = ("subject", "actor", "kinds", "since", "limit", "newest")
     EVENT_ID = re.compile(r"[A-Za-z0-9_.:-]{1,64}")
     EXPORT_SETS = {"usage": "usage.csv", "recent": "recent.csv", "spoolman-spools": "spoolman-spools.csv"}   # the sets a phone may download (R84 9.2)
 
@@ -774,9 +774,16 @@ class IntakeApp:
     async def activity_twin(self, request: Request):
         """The twin of `GET api/events?activity=1`: what was done, with who did it and whether it can be put back."""
         q = {k: request.query_params[k] for k in self.ACTIVITY_PARAMS if k in request.query_params}
-        if "limit" in q and not q["limit"].isdigit():
-            return self._bad("limit must be a number")
-        q["limit"] = str(min(int(q.get("limit") or 50), 200))
+        if "newest" in q:
+            if not q["newest"].isdigit() or int(q["newest"]) < 1:
+                return self._bad("newest must be a number")
+            if "since" in q:
+                return self._bad("give since or newest, not both")
+            q["newest"] = str(min(int(q["newest"]), 200))
+        else:
+            if "limit" in q and not q["limit"].isdigit():
+                return self._bad("limit must be a number")
+            q["limit"] = str(min(int(q.get("limit") or 50), 200))
         return await self._hub_get("/api/events?" + urlencode({"activity": "1", **q}))
 
     async def undo_twin(self, request: Request):

@@ -172,7 +172,7 @@ def test_bambu_add_by_address_reads_serial_refuses_three_cases_and_409_exists(sp
 
     monkeypatch.setattr(setup_page, "setup_serial", lambda ip, timeout=5: (_ for _ in ()).throw(OSError("timed out")))
     r1 = c.post("/api/printers", json={"family": "bambu", "address": "192.168.1.70", "access_code": "12345678"})
-    assert r1.status_code == 400 and "did not answer" in r1.json()["message"] and r1.json()["field"] == "serial"
+    assert r1.status_code == 400 and "did not answer" in r1.json()["message"] and r1.json()["field"] == "address"
 
     monkeypatch.setattr(setup_page, "setup_serial", lambda ip, timeout=5: None)
     r2 = c.post("/api/printers", json={"family": "bambu", "address": "192.168.1.70", "access_code": "12345678"})

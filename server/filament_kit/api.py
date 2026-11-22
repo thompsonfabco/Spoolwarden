@@ -537,7 +537,7 @@ def _printer_routes(printers) -> list[Route]:
 
             def run_by_address() -> dict:
                 try:
-                    res = setup_page.bambu_add_by_address(body, allow_replace=False)
+                    res = setup_page.bambu_add_by_address({**body, "require_certificate": True}, allow_replace=False)
                 except setup_page.Refused as e:
                     raise BadRequest(e.message, e.extra.get("field")) from None
                 serial = res["serial"]
@@ -1571,10 +1571,11 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         if since is not None and since < 0:
             raise BadRequest("since must be 0 or more", "since")
         newest = _number(q, "newest")
-        if newest is not None and newest < 1:
-            raise BadRequest("newest must be 1 or more", "newest")
-        if newest is not None and since is not None:
-            raise BadRequest("give since or newest, not both")
+        if newest is not None and (newest < 1 or newest > 1000):
+            raise BadRequest("newest must be between 1 and 1000", "newest")
+        wait_val = _number(q, "wait", float) or 0
+        if newest is not None and (since is not None or since_at or wait_val > 0):
+            raise BadRequest("give newest without since, since_at or wait")
         if since_at:
             try:
                 since_at = alerts_api.parse_time(since_at)
