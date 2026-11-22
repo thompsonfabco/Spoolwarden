@@ -533,14 +533,18 @@ fun SearchScreen(
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
-                        ToggleChip(stringResource(R.string.spools_sealed_only), ui.sealedOnly) { vm.setSealedOnly(!ui.sealedOnly) }
-                        // the Hub's running-low list (R80 section 7); no chip for a Hub that has none
-                        if (lowCount != null || ui.lowOnly) {
-                            ToggleChip(stringResource(R.string.running_low_chip, lowCount ?: ui.low.size), ui.lowOnly) { vm.setLowOnly(!ui.lowOnly) }
-                        }
-                        // spools with a remembered place (R88 1.6); no chip for a Hub without the filter
-                        ui.checkedCount?.let { n ->
-                            ToggleChip(CheckedOutTexts.chip(n), ui.checkedOnly) { vm.setCheckedOnly(!ui.checkedOnly) }
+                        // Sealed only, Checked out, Running low: the order TalkBack reads (searchChipOrder)
+                        searchChipOrder(hasChecked = ui.checkedCount != null, hasLow = lowCount != null || ui.lowOnly).forEach { chip ->
+                            when (chip) {
+                                SearchChip.SealedOnly ->
+                                    ToggleChip(stringResource(R.string.spools_sealed_only), ui.sealedOnly) { vm.setSealedOnly(!ui.sealedOnly) }
+                                // spools with a remembered place (R88 1.6); no chip for a Hub without the filter
+                                SearchChip.CheckedOut ->
+                                    ToggleChip(CheckedOutTexts.chip(ui.checkedCount ?: 0), ui.checkedOnly) { vm.setCheckedOnly(!ui.checkedOnly) }
+                                // the Hub's running-low list (R80 section 7); no chip for a Hub that has none
+                                SearchChip.RunningLow ->
+                                    ToggleChip(stringResource(R.string.running_low_chip, lowCount ?: ui.low.size), ui.lowOnly) { vm.setLowOnly(!ui.lowOnly) }
+                            }
                         }
                     }
                     val openOrToggle: (SpoolSummary) -> Unit = { spool ->
