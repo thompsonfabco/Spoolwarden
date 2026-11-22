@@ -309,7 +309,6 @@ def test_texts_already_in_the_catalogue_have_not_drifted():
     assert drift == {}
 
 
-@pytest.mark.xfail(reason="part B (after AF5 is merged into next) adds these keys to strings/en.json", strict=False)
 def test_every_cli_text_is_in_the_catalogue():
     catalogue = json.loads(EN.read_text(encoding="utf-8"))
     assert [k for k in spools_cli.catalogue_texts() if k not in catalogue] == []
