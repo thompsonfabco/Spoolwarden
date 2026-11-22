@@ -34,6 +34,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- spoolwarden://printers/{id}, spoolwarden://spools/{id} and spoolwarden://recent/{hid} (05-android-app 2.5) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="spoolwarden" android:host="printers" />
+                <data android:scheme="spoolwarden" android:host="spools" />
+                <data android:scheme="spoolwarden" android:host="recent" />
+            </intent-filter>
         </activity>
         <receiver
             android:name=".update.InstallResultReceiver"

@@ -152,6 +152,12 @@ sealed interface AlertTarget {
     data class Printer(val id: String) : AlertTarget
     data object RunningLow : AlertTarget
     data object AlertsList : AlertTarget
+
+    /** From a `spoolwarden://spools/{id}` link (05-android-app 2.5, Deep links). */
+    data class Spool(val id: Int) : AlertTarget
+
+    /** From a `spoolwarden://recent/{hid}` link. */
+    data class Record(val hid: String) : AlertTarget
 }
 
 fun alertTarget(place: String?, id: String?): AlertTarget = when (place) {
