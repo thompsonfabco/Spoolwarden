@@ -8,7 +8,7 @@ again on a long press of yellow while it shows "Not paired":
 2. It sends a commitment to a secret, gets the kit's nonce, then reveals the secret.
 3. It shows the six digits (comparison_code) on the panel and says them; the owner compares them on the setup page
    (Devices) and taps Pair.
-4. It polls; with the token it writes `pair/request.json` (fingerprint, token, port) into its own state folder. The
+4. It polls; with the token it writes `pair/request.xml` (fingerprint, token, port) into its own state folder. The
    station service cannot write its pairing files (they are root's, and the unit's file system is read-only), so a
    path unit starts filament-kit-station-pair.service, which saves them as root (pair_apply.py).
 
@@ -27,13 +27,14 @@ import time
 from pathlib import Path
 
 from .. import station_requests
+from ..profiles import statexml
 from . import server_api
 
 log = logging.getLogger("intake-station")
 
 POLL = 3.0
 LIMIT = station_requests.TTL
-REQUEST_FILE = "request.json"
+REQUEST_FILE = "request.xml"
 _running = threading.Lock()
 status = {"state": "idle", "code": None, "message": ""}     # what the screen shows (flow.screen reads it)
 
@@ -77,8 +78,8 @@ def write_drop(fp: str, token: str, port: int, folder: Path | None = None) -> Pa
     d.mkdir(mode=0o700, parents=True, exist_ok=True)
     tmp = d / (REQUEST_FILE + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        json.dump({"fp": fp, "token": token, "port": port}, fh)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(statexml.dumps("request", {"fp": fp, "token": token, "port": port}))
     os.replace(tmp, d / REQUEST_FILE)
     return d / REQUEST_FILE
 

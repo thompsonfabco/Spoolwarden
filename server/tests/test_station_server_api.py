@@ -16,6 +16,7 @@ from conftest import free_port, old_rows
 from filament_kit import cli, config, inventory, modules, pairing
 from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
+from filament_kit.profiles import statexml
 from filament_kit.station import server_api
 from step_lines import sentences
 
@@ -817,11 +818,32 @@ def test_a_server_that_does_not_answer_is_failed(tmp_path):
     assert pair_request.run_once("127.0.0.1", free_port(), "x", folder=tmp_path) == "failed"
 
 
+def test_the_drop_the_station_writes_is_xml_0600_in_a_0700_folder(tmp_path):
+    from filament_kit.station import pair_apply, pair_request
+    f = pair_request.write_drop("ab" * 32, "t" * 43, 8710, tmp_path / "pair")
+    raw = f.read_bytes()
+    assert f.name == "request.xml" and raw.startswith(b"<?xml") and b"<request " in raw
+    assert statexml.loads(raw, "request") == {"fp": "ab" * 32, "token": "t" * 43, "port": 8710}
+    assert sys.platform == "win32" or ((os.stat(f).st_mode & 0o777) == 0o600
+                                       and (os.stat(f.parent).st_mode & 0o777) == 0o700)
+    assert pair_apply.read_drop(f) == {"fp": "ab" * 32, "token": "t" * 43, "port": 8710} and not f.exists()
+
+
+def test_a_fingerprint_that_looks_like_a_number_survives_the_drop(tmp_path):
+    from filament_kit.station import pair_apply, pair_request
+    fp = "1" * 64                                                 # would read back as a number if it were an attribute
+    f = pair_request.write_drop(fp, "t" * 43, 8710, tmp_path / "pair")
+    assert pair_apply.read_drop(f)["fp"] == fp
+
+
 def _drop(tmp_path, body) -> Path:
     d = tmp_path / "pair"
     d.mkdir(exist_ok=True)
-    f = d / "request.json"
-    f.write_text(body if isinstance(body, str) else json.dumps(body), encoding="utf-8")
+    f = d / "request.xml"
+    if isinstance(body, dict):
+        f.write_bytes(statexml.dumps("request", body))
+    else:
+        f.write_text(body if isinstance(body, str) else json.dumps(body), encoding="utf-8")
     return f
 
 
@@ -829,7 +851,8 @@ GOOD = {"fp": "ab" * 32, "token": "t" * 43, "port": 8710}
 
 
 @pytest.mark.parametrize("body", [{**GOOD, "fp": "zz"}, {**GOOD, "token": "x"}, {**GOOD, "port": 0},
-                                  {**GOOD, "port": "8710"}, [1], "not json", "x" * 5000])
+                                  {**GOOD, "port": "8710"}, [1], "not xml", "x" * 5000,
+                                  json.dumps(GOOD), "<other version=\"1\" fp=\"x\"/>"])
 def test_the_root_side_refuses_a_bad_drop_and_removes_it(tmp_path, body):
     from filament_kit.station import pair_apply
     f = _drop(tmp_path, body)
@@ -842,15 +865,15 @@ def test_the_root_side_refuses_a_bad_drop_and_removes_it(tmp_path, body):
 def test_the_root_side_never_follows_a_link_or_a_second_name(tmp_path):
     from filament_kit.station import pair_apply
     secret = tmp_path / "secret"
-    secret.write_text(json.dumps(GOOD))
+    secret.write_bytes(statexml.dumps("request", GOOD))
     d = tmp_path / "pair"
     d.mkdir()
-    (d / "request.json").symlink_to(secret)
+    (d / "request.xml").symlink_to(secret)
     with pytest.raises(pair_apply.DropError):
-        pair_apply.read_drop(d / "request.json")
-    os.link(secret, d / "request.json")
+        pair_apply.read_drop(d / "request.xml")
+    os.link(secret, d / "request.xml")
     with pytest.raises(pair_apply.DropError):
-        pair_apply.read_drop(d / "request.json")
+        pair_apply.read_drop(d / "request.xml")
     assert secret.exists()
 
 
@@ -859,20 +882,20 @@ def test_the_root_side_never_reads_or_removes_through_a_linked_pair_folder(tmp_p
     from filament_kit.station import pair_apply
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
-    (elsewhere / "request.json").write_text(json.dumps(GOOD))
+    (elsewhere / "request.xml").write_bytes(statexml.dumps("request", GOOD))
     state = tmp_path / "station-state"
     state.mkdir()
     (state / "pair").symlink_to(elsewhere, target_is_directory=True)
     with pytest.raises(pair_apply.DropError, match="link"):
-        pair_apply.read_drop(state / "pair" / "request.json")
-    assert (elsewhere / "request.json").exists()            # neither read nor removed through the link
+        pair_apply.read_drop(state / "pair" / "request.xml")
+    assert (elsewhere / "request.xml").exists()            # neither read nor removed through the link
     assert not os.path.lexists(state / "pair")              # the link itself is gone, so the path unit stops
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX unlink of a folder")
 def test_a_folder_in_place_of_the_drop_file_is_refused_and_removed(tmp_path):
     from filament_kit.station import pair_apply
-    d = tmp_path / "pair" / "request.json"
+    d = tmp_path / "pair" / "request.xml"
     d.mkdir(parents=True)
     (d / "inside").write_text("x")
     with pytest.raises(pair_apply.DropError, match="plain file"):
@@ -906,7 +929,9 @@ def test_the_root_side_saves_nothing_when_the_token_does_not_answer(server, tmp_
 def test_the_units_and_the_drop_in():
     from filament_kit import apply, modules
     root = Path(__file__).resolve().parents[2] / "install" / "systemd"
-    assert "PathExists=/var/lib/filament-kit-station/pair/request.json" in (root / "filament-kit-station-pair.path").read_text()
+    assert "PathExists=/var/lib/filament-kit-station/pair/request.xml" in (root / "filament-kit-station-pair.path").read_text()
+    from filament_kit.station import pair_request
+    assert pair_request.REQUEST_FILE == "request.xml"             # the path unit watches the name the station writes
     assert "-m filament_kit.station.pair_apply" in (root / "filament-kit-station-pair.service").read_text()
     assert "StateDirectory=filament-kit-station" in (root / "filament-kit-station.service").read_text()
     assert "filament-kit-station-pair.path" in modules.MODULES["station"].units
