@@ -517,3 +517,176 @@ def test_an_older_hub_without_speak_is_spoken_from_the_display_lines(rig):
     nfc.on_tag("4:bb:bb")
     panel.on_line(b"P H")
     assert rig.said[-1] == "Recognised Elegoo PLA Galaxy Blue. Put it on the scale."
+
+
+# --- CO3: a checked-out spool opens the weigh step in returning mode (R88 1.5) ---------------------------------------------
+
+OUT = "4:cc:dd"
+OUT_SPOOL = {**SPOOL, "checked_out": True, "home": "Rack 1", "slot": "H2D - AMS 1"}
+
+
+def checked_out(rig, home="Rack 1", **extra):
+    """A Hub that knows checked-out spools: the tag's answer, the save with `return`, and the return route (stubs of CO2)."""
+    sp = {**OUT_SPOOL, "home": home}
+    real_lookup = rig.api.tag_lookup
+    rig.api.returns = []
+
+    def lookup(uid):
+        if uid != OUT:
+            return real_lookup(uid)
+        rig.api.calls.append(("tag", uid))
+        return 200, {"known": True, "uid": uid, "spool": sp,
+                     "display": ["PLA+ Black", "Home: %s" % home if home else "Home: not recorded"]}
+
+    def save(body):
+        rig.api.calls.append(("save", body))
+        if rig.api.mode == "not_out":
+            return 409, {"error": "not_checked_out", "message": "This spool is not checked out."}
+        return 200, {"spool_id": 123, "location": home, "display": ["Returned", "PLA+ Black"] + (
+            ["to %s" % home] if home else []) + ["%d g left" % (body["gross_g"] - 160)], **extra}
+
+    def give_back(uid, spool_id):
+        rig.api.returns.append((uid, spool_id))
+        rig.api.calls.append(("return", uid, spool_id))
+        if rig.api.mode == "not_out":
+            return 409, {"error": "not_checked_out", "message": "This spool is not checked out."}
+        return 200, {"spool_id": spool_id, "location": home,
+                     "display": ["Returned", "PLA+ Black"] + (["to %s" % home] if home else []), **extra}
+    rig.api.tag_lookup, rig.api.save, rig.api.return_spool = lookup, save, give_back
+
+
+def sent(rig):
+    return [c for c in rig.api.calls if c[0] in ("save", "return")]
+
+
+def test_a_checked_out_tag_opens_the_returning_step(rig):
+    checked_out(rig)
+    nfc.on_tag(OUT)
+    assert rig.step() == "weigh" and flow.flow["returning"] is True and rig.lamp() == "L 2 1"
+    assert [rig.row(n) for n in range(5)] == ["Returning", "PLA+ Black", "Home: Rack 1", "Yellow: weigh it",
+                                              "Hold: skip weighing"]
+    assert rig.said[-1] == "Checked out spool. Press yellow to weigh it, or hold yellow to skip weighing."
+
+
+def test_a_checked_out_spool_with_no_home_says_not_recorded(rig):
+    checked_out(rig, home=None)
+    nfc.on_tag(OUT)
+    assert rig.row(2) == "Home: not recorded"
+    panel.on_line(b"L H")
+    assert rig.step() == "done" and rig.said[-1] == "Returned."
+
+
+def test_a_missing_display_is_built_from_the_spool(rig):
+    checked_out(rig)
+    inner = rig.api.tag_lookup
+    rig.api.tag_lookup = lambda uid: (lambda s, r: (s, {**r, "display": []}))(*inner(uid))
+    nfc.on_tag(OUT)
+    assert (rig.row(1), rig.row(2)) == ("PLA+ Black", "Home: Rack 1")
+
+
+def test_short_press_weighs_then_the_save_also_returns(rig):
+    checked_out(rig)
+    nfc.on_tag(OUT)
+    panel.on_line(b"P H")
+    assert rig.step() == "weigh" and rig.row(4) == "Scale not settled" and rig.row(0) == "Returning"
+    scale(12.0)  # an empty pan: not a spool
+    panel.on_line(b"P H")
+    assert rig.step() == "weigh"
+    scale(800.0)
+    panel.on_line(b"P H")
+    assert rig.step() == "ready" and rig.row(0) == "800 g" and rig.row(3) == "Hold yellow: save"
+    assert rig.said[-1] == "800 grams. Hold yellow to save."
+    panel.on_line(b"L H")
+    assert rig.step() == "done" and rig.lamp() == "L 3 0"
+    (_, body), = [c for c in rig.api.calls if c[0] == "save"]
+    assert body == {"uid": OUT, "gross_g": 800.0, "spool_id": 123, "return": True}
+    assert [rig.row(n) for n in range(5)] == ["Returned", "PLA+ Black", "to Rack 1", "640 g left", ""]
+    assert rig.said[-1] == "Returned to Rack 1."
+    assert rig.api.returns == []  # the weighed return is one call: save
+
+
+def test_long_press_returns_without_weighing(rig):
+    checked_out(rig)
+    nfc.on_tag(OUT)
+    panel.on_line(b"L H")
+    assert rig.step() == "done" and rig.api.returns == [(OUT, 123)]
+    assert not [c for c in rig.api.calls if c[0] == "save"]
+    assert [rig.row(n) for n in range(5)] == ["Returned", "PLA+ Black", "to Rack 1", "", ""]  # no weight: no "g left"
+    assert rig.said[-1] == "Returned to Rack 1."
+
+
+def test_the_return_says_the_hubs_speak_text_when_there_is_one(rig):
+    checked_out(rig, speak="Returned to Shelf A")
+    nfc.on_tag(OUT)
+    panel.on_line(b"L H")
+    assert rig.said[-1] == "Returned to Shelf A"
+
+
+def test_the_place_the_rules_chose_is_said(rig):
+    """R88 02:05: a spool with no home is placed by the rules; the answer's location is what the voice says."""
+    checked_out(rig, home=None, location="Box 2")
+    nfc.on_tag(OUT)
+    panel.on_line(b"L H")
+    assert rig.said[-1] == "Returned to Box 2."
+
+
+def test_red_cancels_the_returning_step_and_nothing_is_sent(rig):
+    checked_out(rig)
+    nfc.on_tag(OUT)
+    panel.on_line(b"P D")
+    assert rig.step() == "idle" and flow.flow["returning"] is False and rig.said[-1] == "Cancelled."
+    assert sent(rig) == []
+    nfc.on_tag(LINKED)  # the next, plain spool is not in returning mode
+    assert flow.flow["returning"] is False and rig.row(0) == "Spool #123" and rig.row(3) == "Scale, then yellow"
+
+
+def test_red_after_weighing_cancels_too(rig):
+    checked_out(rig)
+    nfc.on_tag(OUT)
+    scale(800.0)
+    panel.on_line(b"P H")
+    panel.on_line(b"P D")
+    assert rig.step() == "idle" and sent(rig) == []
+
+
+def test_not_checked_out_shows_the_hubs_sentence_and_stays_on_the_step(rig):
+    checked_out(rig)
+    rig.api.mode = "not_out"
+    nfc.on_tag(OUT)
+    panel.on_line(b"L H")
+    assert rig.step() == "weigh" and rig.row(0) == "Returning" and rig.row(4) == "This spool is not che"  # cut to 21
+    assert rig.said[-1] == "This spool is not checked out."
+    scale(800.0)
+    panel.on_line(b"P H")
+    panel.on_line(b"L H")
+    assert rig.step() == "ready" and rig.row(4) == "This spool is not che"  # the weighed save, refused the same way
+
+
+def test_an_older_hub_runs_the_plain_flow(rig):
+    """R88 1.8: no `checked_out` in the answer, so nothing changes."""
+    nfc.on_tag(LINKED)
+    assert flow.flow["returning"] is False and rig.row(0) == "Spool #123" and rig.row(3) == "Scale, then yellow"
+    panel.on_line(b"L H")  # a long press at weigh stays a refusal, as before
+    assert rig.step() == "weigh" and sent(rig) == []
+    scale(1098.0)
+    panel.on_line(b"P H")
+    panel.on_line(b"L H")
+    assert [c for c in rig.api.calls if c[0] == "save"][-1][1] == {"uid": LINKED, "gross_g": 1098.0, "spool_id": 123}
+    assert rig.said[-1] == "Saved."
+
+
+def test_a_spool_that_is_not_checked_out_is_plain_even_when_the_hub_says_so(rig):
+    sp = {**SPOOL, "checked_out": False, "home": None, "slot": None}
+    rig.api.tag_lookup = lambda uid: (200, {"known": True, "uid": uid, "spool": sp,
+                                            "display": ["Spool #123", "SUNLU PLA+ Black", "640 g left"]})
+    nfc.on_tag(LINKED)
+    assert flow.flow["returning"] is False and rig.row(0) == "Spool #123"
+
+
+def test_a_late_return_after_a_new_scan_is_dropped(rig):
+    checked_out(rig)
+    real = rig.api.return_spool
+    rig.api.return_spool = lambda uid, sid: (nfc.on_tag(LINKED), real(uid, sid))[1]
+    nfc.on_tag(OUT)
+    panel.on_line(b"L H")
+    assert rig.step() == "weigh" and flow.flow["returning"] is False and flow.flow["spool"]["id"] == 123

@@ -930,3 +930,16 @@ def test_the_screen_shows_the_code_and_the_idle_hint(monkeypatch):
     assert rows[0] == "Pair code" and rows[1] == "123 456" and "Devices" in rows[3]
     monkeypatch.setitem(flow.flow, "step", "idle")
     assert flow.screen()[1] == "Hold yellow to ask"
+
+
+def test_return_spool_posts_the_uid_and_spool_to_the_return_route(monkeypatch):
+    """CO3: the station's return call (R88 1.7); a 409 `not_checked_out` comes back as the Hub's answer."""
+    api = server_api.ServerApi.from_link(
+        server_api.parse_link(f"fkit://pair?h=kit.example.com&p=8710&t={'t' * 43}&fp={'ab' * 32}&ip=192.0.2.5"))
+    sent = []
+    answers = [(200, {"spool_id": 7, "location": "Rack 1"}), (409, {"error": "not_checked_out", "message": "No."})]
+    monkeypatch.setattr(api, "_call", lambda method, path, body=None, ctype=None: (
+        sent.append((method, path, json.loads(body), ctype)), answers.pop(0))[1])
+    assert api.return_spool(UID, 7) == (200, {"spool_id": 7, "location": "Rack 1"})
+    assert api.return_spool(UID, 7)[0] == 409
+    assert sent[0] == ("POST", "/api/station/return", {"uid": UID, "spool_id": 7}, "application/json")
