@@ -26,25 +26,24 @@ interface CorrectionsBackend {
     /** Whether Share corrections is on; null from a Hub that has no such route. */
     suspend fun share(): ShareState?
 
-    /** The ids of the records Recently added keeps now, to tell a correction whose record is gone; null when the list cannot be had. */
-    suspend fun keptRecords(): Set<String>?
-
     companion object {
         /** Every call goes to the Api [current] gives at that moment (a trusted certificate or a re-pair is used at once). */
         fun of(current: () -> Api): CorrectionsBackend = object : CorrectionsBackend {
             override suspend fun waiting() = current().corrections()
             override suspend fun remove(id: String) = current().removeCorrection(id)
             override suspend fun share() = current().shareStateOrNull()
-            override suspend fun keptRecords() = try {
-                current().intakeHistory().records.map { it.id }.toSet()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                null
-            }
         }
     }
 }
+
+/** Only the Hub's own 401 is this phone's pairing; a 502 `unauthorized` is the reader refusing the Hub's token (the Hub says so). */
+internal fun ApiError.isPairingRefusal() = status == HTTP_UNAUTHORIZED && code == "unauthorized"
+
+/** A refusal in the Hub's own words where the app's states would blame the wrong thing (the reader's silence is not "the cloud"). */
+internal fun correctionFailure(e: ApiError): RecentFailure =
+    if (e.code == "unreachable" || e.code == "unauthorized") RecentFailure.Hub(e.message) else failureOf(e)
+
+private const val HTTP_UNAUTHORIZED = 401
 
 /** The state of Share corrections, or null when the Hub has no such route (404: a Hub older than the feature shows none of it). */
 internal suspend fun Api.shareStateOrNull(): ShareState? = try {
@@ -116,6 +115,9 @@ class CorrectionsViewModel(
     private var client: Any? = null
     private var clientKnown = false
 
+    /** Corrections whose Remove is running: a refresh in between keeps their button busy, so a second press is not sent. */
+    private val inFlight = mutableSetOf<String>()
+
     /** The session's client as the screen sees it now: a different one (paired again) than last time reloads. */
     fun clientSeen(now: Any?) {
         val changed = clientKnown && client !== now
@@ -143,12 +145,11 @@ class CorrectionsViewModel(
             } catch (_: Exception) {
                 null
             }
-            val kept = backend.keptRecords()
             _state.update {
                 it.copy(
-                    loaded = true, rows = w.entries.map { e -> rowOf(e, kept) }, notTaken = w.notQueued.map(::notTakenOf),
+                    loaded = true, rows = w.entries.map { e -> rowOf(e).withRemoving(e.id in inFlight) }, notTaken = w.notQueued.map(::notTakenOf),
                     count = w.count, bytes = w.bytes, share = share, readerDown = false, error = null, loadedAt = now(),
-                    unauthorized = false, mismatch = null, removed = it.removed && keepRemoved,
+                    unauthorized = false, mismatch = null, removed = it.removed && keepRemoved, removeFailure = null,
                 )
             }
         } catch (e: CancellationException) {
@@ -157,10 +158,10 @@ class CorrectionsViewModel(
             _state.update { it.copy(mismatch = e.expected to e.actual) }
         } catch (e: ApiError) {
             when {
-                e.code == "unauthorized" -> _state.update { it.copy(unauthorized = true) }
+                e.isPairingRefusal() -> _state.update { it.copy(unauthorized = true) }
                 // the reader's own silence is its own notice (the Hub says so with 503 `unreachable`), not "the cloud is down"
                 e.code == READER_DOWN -> _state.update { it.copy(readerDown = true, error = null, loaded = false) }
-                else -> _state.update { it.copy(error = failureOf(e), readerDown = false) }
+                else -> _state.update { it.copy(error = correctionFailure(e), readerDown = false) }
             }
         } catch (_: Exception) {
             _state.update { it.copy(error = RecentFailure.Unexpected) }
@@ -170,7 +171,8 @@ class CorrectionsViewModel(
     /** Takes correction [id] out of the queue; the record it came from is not touched. */
     fun remove(id: String) {
         val row = _state.value.rows.firstOrNull { it.id == id } ?: return
-        if (row.removing) return
+        if (id in inFlight) return
+        inFlight += id
         mark(id, true)
         _state.update { it.copy(removeFailure = null) }
         viewModelScope.launch {
@@ -186,16 +188,18 @@ class CorrectionsViewModel(
                 _state.update { it.copy(mismatch = e.expected to e.actual) }
             } catch (e: ApiError) {
                 mark(id, false)
-                if (e.code == "unauthorized") {
+                if (e.isPairingRefusal()) {
                     _state.update { it.copy(unauthorized = true) }
                 } else {
-                    _state.update { it.copy(removeFailure = failureOf(e)) }
-                    // gone already (taken out elsewhere): the list shows what is left
+                    // gone already (taken out elsewhere): the list shows what is left, then the notice (a load clears it)
                     if (e.code == "not_found") load(keepRemoved = false)
+                    _state.update { it.copy(removeFailure = correctionFailure(e)) }
                 }
             } catch (_: Exception) {
                 mark(id, false)
                 _state.update { it.copy(removeFailure = RecentFailure.Unexpected) }
+            } finally {
+                inFlight -= id
             }
         }
     }
@@ -231,7 +235,11 @@ internal fun changesOf(predicted: JsonObject, corrected: JsonObject): List<Corre
 /** The Hub's record id of a correction's `record` key: the first item's key is the id, a later item's is `<id>.<n>`. */
 internal fun recordIdOf(key: String?): String? = key?.substringBefore('.')?.trim()?.ifEmpty { null }
 
-internal fun rowOf(e: CorrectionEntry, kept: Set<String>?): CorrectionRow {
+/**
+ * A row of Corrections waiting. The Hub leaves `record` out when the record is gone (R87 3), so no record means gone:
+ * [CorrectionRow.recordKept] is false and the row shows the thumbnail alone.
+ */
+internal fun rowOf(e: CorrectionEntry): CorrectionRow {
     val record = recordIdOf(e.record)
     return CorrectionRow(
         id = e.id,
@@ -247,7 +255,7 @@ internal fun rowOf(e: CorrectionEntry, kept: Set<String>?): CorrectionRow {
         photos = e.photos,
         thumbnail = e.thumbnail?.let { runCatching { java.util.Base64.getMimeDecoder().decode(it) }.getOrNull() }?.takeIf { it.isNotEmpty() },
         record = record,
-        recordKept = if (record == null || kept == null) null else record in kept,
+        recordKept = record != null,
     )
 }
 

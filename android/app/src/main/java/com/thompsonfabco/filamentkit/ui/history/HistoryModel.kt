@@ -401,8 +401,9 @@ class HistoryListViewModel(
         viewModelScope.launch {
             guard(_state, { f -> _state.update { it.copy(error = f) } }, { u, m -> copy(unauthorized = u || unauthorized, mismatch = m ?: mismatch) }) {
                 val h = backend.list()
-                val share = backend.shareQuietly()
-                _state.update { it.copy(history = h, share = share, error = null, loadedAt = now(), unauthorized = false, mismatch = null) }
+                _state.update { it.copy(history = h, error = null, loadedAt = now(), unauthorized = false, mismatch = null) }
+                // the Hub asks the reader for this and can wait on it: the list does not
+                viewModelScope.launch { backend.shareQuietly().let { s -> _state.update { it.copy(share = s) } } }
             }
             _state.update { it.copy(loading = false) }
         }
@@ -575,13 +576,14 @@ class RecordViewModel(
         viewModelScope.launch {
             guard(_state, { f -> _state.update { it.copy(error = f) } }, auth) {
                 val r = backend.record(id)
-                val share = backend.shareQuietly()
                 _state.update {
                     it.copy(
-                        record = r, share = share, error = null, loadedAt = now(), unauthorized = false, mismatch = null,
+                        record = r, error = null, loadedAt = now(), unauthorized = false, mismatch = null,
                         edit = it.edit?.let { e -> if (e.failure == RecentFailure.Offline) e.copy(failure = null) else e },
                     )
                 }
+                // the Hub asks the reader for this and can wait on it: the record does not
+                viewModelScope.launch { backend.shareQuietly().let { s -> _state.update { it.copy(share = s) } } }
             }
             _state.update { it.copy(loading = false) }
         }

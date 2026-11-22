@@ -169,14 +169,13 @@ class CorrectionsScreensTest {
         override suspend fun waiting() = waiting.invoke()
         override suspend fun remove(id: String) { removed += id }
         override suspend fun share() = share
-        override suspend fun keptRecords(): Set<String>? = setOf("r1")
     }
 
-    private fun entry(id: String, record: String, source: String = "local") = CorrectionEntry(
+    private fun entry(id: String, record: String?, source: String = "local", photos: Int = 2) = CorrectionEntry(
         id, "2026-11-12T14:09:00+00:00",
         buildJsonObject { put("vendor", "Polymakr"); put("name", "PolyTerra PLA"); put("color_hex", "2B2B2E") },
         buildJsonObject { put("vendor", "Polymaker"); put("name", "PolyTerra PLA"); put("color_hex", "1F1F22") },
-        "brand is Polymaker", 2, record, source, null,
+        "brand is Polymaker", photos, record, source, null,
     )
 
     private fun screen(
@@ -193,7 +192,7 @@ class CorrectionsScreensTest {
     @Test fun theScreenShowsTheHeadTheRowsRemoveAndTheFoot() {
         val opened = mutableListOf<String>()
         screen(
-            Corrections({ CorrectionsWaiting(true, 2, 3_565_000, listOf(entry("fb-1", "r1"), entry("fb-2", "r9", "cloud")), emptyList()) }, on),
+            Corrections({ CorrectionsWaiting(2, 3_565_000, listOf(entry("fb-1", "r1"), entry("fb-2", null, "cloud", photos = 0)), emptyList()) }, on),
             opened::add,
         )
         rule.onNodeWithText("2 waiting · 3.4 MB").assertExists()
@@ -206,13 +205,14 @@ class CorrectionsScreensTest {
         rule.onNodeWithContentDescription("read by Cloud (Claude)", substring = true).assertExists()
         rule.onAllNodesWithContentDescription("Remove the correction for Polymaker PolyTerra PLA").assertCountEquals(2)
         rule.onNodeWithText("Sending is done on the Hub page, under Settings > Label Reader.").assertExists()
-        // the record that is still kept opens; the one that is gone says so
+        // the record that is still kept opens; the one the Hub sent no record for is gone, and says so with its photos
         rule.onNodeWithText("This record is no longer kept.").assertExists()
+        rule.onNodeWithText("The photos of this correction are no longer on the Hub.").assertExists()
     }
 
     @Test fun theHeadlineOpensTheRecordThatIsKept() {
         val opened = mutableListOf<String>()
-        screen(Corrections({ CorrectionsWaiting(true, 1, 10, listOf(entry("fb-1", "r1.1")), emptyList()) }, on), opened::add)
+        screen(Corrections({ CorrectionsWaiting(1, 10, listOf(entry("fb-1", "r1.1")), emptyList()) }, on), opened::add)
         rule.onNodeWithText("Polymaker PolyTerra PLA").performClick()
         assertEquals(listOf("r1"), opened)
     }
@@ -220,17 +220,17 @@ class CorrectionsScreensTest {
     @Test fun thePhotosOfAKeptRecordOpenTheViewerOnThatRecord() {
         val opened = mutableListOf<Pair<String, Int>>()
         screen(
-            Corrections({ CorrectionsWaiting(true, 1, 10, listOf(entry("fb-1", "r1.1")), emptyList()) }, on),
+            Corrections({ CorrectionsWaiting(1, 10, listOf(entry("fb-1", "r1.1")), emptyList()) }, on),
             onOpenPhoto = { id, n -> opened += id to n },
         )
         rule.onNodeWithContentDescription("Photos of the correction for Polymaker PolyTerra PLA: 2").performClick()
-        assertEquals(listOf("r1" to 0), opened)
+        assertEquals(listOf("r1" to 1), opened)
     }
 
     @Test fun aRecordThatIsGoneKeepsTheThumbnailOnlyAndSaysThePhotosAreGone() {
         val opened = mutableListOf<Pair<String, Int>>()
         screen(
-            Corrections({ CorrectionsWaiting(true, 1, 10, listOf(entry("fb-9", "r9")), emptyList()) }, on),
+            Corrections({ CorrectionsWaiting(1, 10, listOf(entry("fb-9", null, photos = 0)), emptyList()) }, on),
             onOpenPhoto = { id, n -> opened += id to n },
         )
         rule.onNodeWithText("The photos of this correction are no longer on the Hub.").assertExists()
@@ -239,7 +239,7 @@ class CorrectionsScreensTest {
     }
 
     @Test fun removeSendsTheRemoveAndTheRowLeaves() {
-        val fake = Corrections({ CorrectionsWaiting(true, 1, 10, listOf(entry("fb-1", "r1")), emptyList()) }, on)
+        val fake = Corrections({ CorrectionsWaiting(1, 10, listOf(entry("fb-1", "r1")), emptyList()) }, on)
         screen(fake)
         rule.onNodeWithText("Remove").performClick()
         rule.waitForIdle()
@@ -247,12 +247,12 @@ class CorrectionsScreensTest {
     }
 
     @Test fun withSharingOffTheHeadSaysNoNewCorrectionsAreAdded() {
-        screen(Corrections({ CorrectionsWaiting(true, 1, 10, listOf(entry("fb-1", "r1")), emptyList()) }, ShareState(saved = false)))
+        screen(Corrections({ CorrectionsWaiting(1, 10, listOf(entry("fb-1", "r1")), emptyList()) }, ShareState(saved = false)))
         rule.onNodeWithText("Share corrections is off, so no new corrections are added. These are still waiting.").assertExists()
     }
 
     @Test fun theEmptyState() {
-        screen(Corrections({ CorrectionsWaiting(true, 0, 0, emptyList(), emptyList()) }, on))
+        screen(Corrections({ CorrectionsWaiting(0, 0, emptyList(), emptyList()) }, on))
         rule.onNodeWithText("No corrections waiting").assertExists()
         rule.onNodeWithText("Corrections you make in Recently added, or while adding spools, appear here.").assertExists()
         rule.onNodeWithText("Remove").assertDoesNotExist()
@@ -275,7 +275,7 @@ class CorrectionsScreensTest {
         screen(
             Corrections({
                 CorrectionsWaiting(
-                    true, 0, 0, emptyList(),
+                    0, 0, emptyList(),
                     listOf(NotQueuedCorrection("r9", "2026-11-15T11:00:00+00:00", "SUNLU PLA+ Grey", "the Label Reader did not answer: down")),
                 )
             }, on),
@@ -283,5 +283,32 @@ class CorrectionsScreensTest {
         rule.onNodeWithText("Not waiting: the reader did not take this correction. the Label Reader did not answer: down").assertExists()
         rule.onNodeWithText("SUNLU PLA+ Grey").assertExists()
         rule.onNodeWithText("Remove").assertDoesNotExist()
+        // not the empty state: something is listed
+        rule.onNodeWithText("No corrections waiting").assertDoesNotExist()
+    }
+
+    @Test fun aRecordTheReaderDidNotTakeOpensItsRecord() {
+        val opened = mutableListOf<String>()
+        screen(
+            Corrections({
+                CorrectionsWaiting(
+                    0, 0, emptyList(),
+                    listOf(NotQueuedCorrection("r9.1", "2026-11-15T11:00:00+00:00", "SUNLU PLA+ Grey", "down")),
+                )
+            }, on),
+            opened::add,
+        )
+        rule.onNodeWithText("SUNLU PLA+ Grey").performClick()
+        assertEquals(listOf("r9"), opened)
+    }
+
+    @Test fun aRowWithoutAnEngineIsSpokenWithoutReadBy() {
+        screen(
+            Corrections({
+                CorrectionsWaiting(1, 10, listOf(entry("fb-1", "r1").copy(source = null)), emptyList())
+            }, on),
+        )
+        rule.onNodeWithContentDescription("read by", substring = true).assertDoesNotExist()
+        rule.onNodeWithContentDescription("(empty)", substring = true).assertDoesNotExist()
     }
 }

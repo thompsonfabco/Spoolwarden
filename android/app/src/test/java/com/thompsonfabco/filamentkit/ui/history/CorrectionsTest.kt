@@ -47,9 +47,8 @@ class CorrectionsTest {
         )
 
     private class Fake : CorrectionsBackend {
-        var list = CorrectionsWaiting(true, 0, 0, emptyList(), emptyList())
+        var list = CorrectionsWaiting(0, 0, emptyList(), emptyList())
         var share: ShareState? = ShareState(saved = true, count = 0)
-        var kept: Set<String>? = null
         var waitingError: Exception? = null
         var removeError: Exception? = null
         val removed = mutableListOf<String>()
@@ -63,13 +62,12 @@ class CorrectionsTest {
             list = list.copy(entries = list.entries.filter { it.id != id }, count = list.count - 1, bytes = list.bytes / 2)
         }
         override suspend fun share() = share
-        override suspend fun keptRecords() = kept
     }
 
     private val fake = Fake()
 
     private fun loaded(vararg entries: CorrectionEntry, bytes: Long = 3_565_000): CorrectionsViewModel {
-        fake.list = CorrectionsWaiting(true, entries.size, bytes, entries.toList(), emptyList())
+        fake.list = CorrectionsWaiting(entries.size, bytes, entries.toList(), emptyList())
         return CorrectionsViewModel(fake).also { it.refresh(); dispatcher.scheduler.runCurrent() }
     }
 
@@ -83,7 +81,7 @@ class CorrectionsTest {
             put("color_hex", "1F1F22"); put("vendor", "Polymaker"); put("name", "PolyTerra PLA"); put("density", 1.24)
         }
         val e = entry("fb-1", "0123456789ab", "cloud", now).copy(predicted = read)
-        val row = rowOf(e, kept = setOf("0123456789ab"))
+        val row = rowOf(e)
         assertEquals("Polymaker PolyTerra PLA", row.filament)
         assertEquals(Engine.Cloud, row.engine)
         // brand before colour (the record's order); the name and the density did not change
@@ -101,7 +99,7 @@ class CorrectionsTest {
             predicted = buildJsonObject { put("tare", 140.0); put("vendor", "Polymaker") },
             corrected = buildJsonObject { put("tare", 140); put("vendor", "Polymaker Ltd") },
         )
-        assertEquals(listOf("vendor"), rowOf(e, null).changes.map { it.field })
+        assertEquals(listOf("vendor"), rowOf(e).changes.map { it.field })
     }
 
     @Test fun aLaterItemsKeyBelongsToItsRecordAndARecordNotKeptIsNoLink() {
@@ -109,15 +107,20 @@ class CorrectionsTest {
         assertEquals("0123456789ab", recordIdOf("0123456789ab"))
         assertNull(recordIdOf(null))
         assertNull(recordIdOf(""))
-        assertEquals(true, rowOf(entry("a", "r1.2"), setOf("r1")).recordKept)
-        assertEquals(false, rowOf(entry("a", "r1"), setOf("r2")).recordKept)
-        // the list of records could not be had: no verdict, the headline stays a link
-        assertNull(rowOf(entry("a", "r1"), null).recordKept)
-        assertNull(rowOf(entry("a", null), setOf("r1")).recordKept)
+        assertEquals(true, rowOf(entry("a", "r1.2")).recordKept)
+    }
+
+    @Test fun anEntryWithNoRecordIsOneWhoseRecordIsGone() {
+        // R87 3: the Hub leaves `record` out and sends `photos` 0 when the record is gone
+        val row = rowOf(entry("a", null).copy(photos = 0))
+        assertEquals(false, row.recordKept)
+        assertNull(row.record)
+        assertEquals(0, row.photos)
+        assertNotNull(row.thumbnail)
     }
 
     @Test fun anEntryWithoutAnEngineOrAThumbnailStillMakesARow() {
-        val row = rowOf(entry("a", "r1", source = null).copy(thumbnail = null, photos = 0, note = " "), null)
+        val row = rowOf(entry("a", "r1", source = null).copy(thumbnail = null, photos = 0, note = " "))
         assertNull(row.engine)
         assertNull(row.thumbnail)
         assertNull(row.note)
@@ -156,7 +159,7 @@ class CorrectionsTest {
         assertFalse(s.loaded)
         // Try again
         fake.waitingError = null
-        fake.list = CorrectionsWaiting(true, 1, 10, listOf(entry("fb-1", "r1")), emptyList())
+        fake.list = CorrectionsWaiting(1, 10, listOf(entry("fb-1", "r1")), emptyList())
         vm.refresh()
         runCurrent()
         assertFalse(vm.state.value.readerDown)
@@ -179,9 +182,103 @@ class CorrectionsTest {
         assertTrue(vm.state.value.unauthorized)
     }
 
+    @Test fun aReaderThatRefusesTheHubsTokenIsTheHubsSentenceNotAnUnpairedPhone() = runTest(dispatcher) {
+        val said = "The reader did not accept the Hub's token. Set the token again in Settings > Label Reader."
+        fake.waitingError = ApiError(502, "unauthorized", said)
+        val vm = CorrectionsViewModel(fake)
+        vm.refresh()
+        runCurrent()
+        assertFalse(vm.state.value.unauthorized)
+        assertEquals(RecentFailure.Hub(said), vm.state.value.error)
+    }
+
+    @Test fun aFailedRemoveFromAReaderThatRefusesTheTokenOrIsDownSaysTheHubsWords() = runTest(dispatcher) {
+        val vm = loaded(entry("fb-1", "r1"))
+        val said = "The reader did not accept the Hub's token. Set the token again in Settings > Label Reader."
+        fake.removeError = ApiError(502, "unauthorized", said)
+        vm.remove("fb-1")
+        runCurrent()
+        assertFalse(vm.state.value.unauthorized)
+        assertEquals(RecentFailure.Hub(said), vm.state.value.removeFailure)
+        val down = "The reader does not answer, so the corrections waiting cannot be reached. They are kept."
+        fake.removeError = ApiError(503, "unreachable", down)
+        vm.remove("fb-1")
+        runCurrent()
+        // not "the cloud service is down"
+        assertEquals(RecentFailure.Hub(down), vm.state.value.removeFailure)
+    }
+
+    @Test fun theHubsOwn401IsThePhonesPairingForRemove() = runTest(dispatcher) {
+        val vm = loaded(entry("fb-1", "r1"))
+        fake.removeError = ApiError(401, "unauthorized", "no")
+        vm.remove("fb-1")
+        runCurrent()
+        assertTrue(vm.state.value.unauthorized)
+        assertNull(vm.state.value.removeFailure)
+    }
+
+    @Test fun aRemoveFailureClearsWhenTheListLoadsAgain() = runTest(dispatcher) {
+        val vm = loaded(entry("fb-1", "r1"))
+        fake.removeError = ApiError(502, "reader_error", "The reader refused: no")
+        vm.remove("fb-1")
+        runCurrent()
+        assertNotNull(vm.state.value.removeFailure)
+        vm.refresh()
+        runCurrent()
+        assertNull(vm.state.value.removeFailure)
+    }
+
+    @Test fun aRefreshWhileARemoveRunsKeepsItsButtonBusyAndItIsNotSentTwice() = runTest(dispatcher) {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val slow = object : CorrectionsBackend by fake {
+            override suspend fun remove(id: String) {
+                gate.await()
+                fake.remove(id)
+            }
+        }
+        fake.list = CorrectionsWaiting(1, 10, listOf(entry("fb-2", "r2")), emptyList())
+        val vm = CorrectionsViewModel(slow).also { it.refresh(); runCurrent() }
+        vm.remove("fb-2")
+        vm.refresh()
+        runCurrent()
+        assertTrue(vm.state.value.rows.single().removing)
+        vm.remove("fb-2")
+        gate.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("fb-2"), fake.removed)
+    }
+
+    @Test fun theListAndTheRecordShowBeforeTheReaderHasAnsweredAboutSharing() = runTest(dispatcher) {
+        val gate = kotlinx.coroutines.CompletableDeferred<ShareState?>()
+        val backend = object : HistoryBackend {
+            override suspend fun list() = IntakeHistory(20, 0, null, true)
+            override suspend fun record(id: String) = record()
+            override suspend fun photo(id: String, n: Int) = ByteArray(0)
+            override suspend fun revise(id: String, note: String, item: Int?): RevisionProposal = throw UnsupportedOperationException()
+            override suspend fun applyProposal(id: String, proposal: String) = record()
+            override suspend fun applyValues(id: String, item: Int, values: JsonObject) = record()
+            override suspend fun undo(id: String, revision: Int) = record()
+            override suspend fun share() = gate.await()
+        }
+        val list = HistoryListViewModel(backend)
+        list.refresh()
+        runCurrent()
+        assertNotNull(list.state.value.history)
+        assertNull(list.state.value.share)
+        val rec = RecordViewModel(backend, "a1")
+        rec.load()
+        runCurrent()
+        assertNotNull(rec.state.value.record)
+        assertNull(rec.state.value.share)
+        gate.complete(ShareState(saved = true, count = 1))
+        runCurrent()
+        assertEquals(true, list.state.value.share?.on)
+        assertEquals(true, rec.state.value.share?.on)
+    }
+
     @Test fun theRecordsTheReaderDidNotTakeAreListedAndNotCounted() = runTest(dispatcher) {
         fake.list = CorrectionsWaiting(
-            true, 0, 0, emptyList(),
+            0, 0, emptyList(),
             listOf(NotQueuedCorrection("r9", "2026-11-15T11:00:00-05:00", "SUNLU PLA+ Grey", "the Label Reader did not answer: down")),
         )
         val vm = CorrectionsViewModel(fake)
@@ -231,7 +328,7 @@ class CorrectionsTest {
 
     @Test fun aCorrectionGoneAlreadyIsSaidAndTheListReloads() = runTest(dispatcher) {
         val vm = loaded(entry("fb-1", "r1"), entry("fb-2", "r2"))
-        fake.list = CorrectionsWaiting(true, 1, 10, listOf(entry("fb-2", "r2")), emptyList())
+        fake.list = CorrectionsWaiting(1, 10, listOf(entry("fb-2", "r2")), emptyList())
         fake.removeError = ApiError(404, "not_found", "That correction is not waiting any more.")
         vm.remove("fb-1")
         runCurrent()

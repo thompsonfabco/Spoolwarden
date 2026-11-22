@@ -58,7 +58,9 @@ class ApiShareCorrectionsTest {
         // the Hub's setting is on but the reader does not answer: the correction is kept as "not queued", so the line stays
         assertTrue(ShareState(saved = true, reason = "no_answer").on)
         // off, or on where nothing can be kept (no reader here, an old one)
-        assertFalse(ShareState(saved = false, actual = true, differs = true).on)
+        // the reader's own answer decides: it keeps them (setting off on the Hub) or refuses them (setting on)
+        assertTrue(ShareState(saved = false, actual = true, differs = true).on)
+        assertFalse(ShareState(saved = true, actual = false, differs = true).on)
         assertFalse(ShareState(saved = true, reason = "off").on)
         assertFalse(ShareState(saved = true, reason = "not_installed").on)
         assertFalse(ShareState(saved = true, reason = "too_old").on)
@@ -87,7 +89,6 @@ class ApiShareCorrectionsTest {
         val q = take()
         assertEquals("GET", q.method)
         assertEquals("/api/label-reader/corrections", q.url.encodedPath)
-        assertTrue(w.optIn)
         assertEquals(2, w.count)
         assertEquals(3565L, w.bytes)
         assertEquals(listOf("fb-1", "7"), w.entries.map { it.id })
@@ -110,7 +111,6 @@ class ApiShareCorrectionsTest {
         val w = api.corrections()
         assertEquals(0, w.count)
         assertTrue(w.entries.isEmpty() && w.notQueued.isEmpty())
-        assertFalse(w.optIn)
     }
 
     @Test fun theReaderNotAnsweringIsTheHubsUnreachableRefusalWithItsOwnWords() {

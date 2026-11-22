@@ -243,8 +243,11 @@ data class ShareState(
     @Serializable(with = LenientNullableInt::class) val count: Int? = null,
     val reason: String? = null,
 ) {
-    /** Corrections are being kept: the setting is on and nothing but a silent reader stops it (a silent one shows as "not queued"). */
-    val on: Boolean get() = saved && (reason == null || reason == "no_answer")
+    /**
+     * Corrections are being kept: the reader's own answer ([actual]) when it gave one; otherwise the Hub's setting with
+     * nothing but a silent reader stopping it (a silent one shows as "not queued").
+     */
+    val on: Boolean get() = actual ?: (saved && (reason == null || reason == "no_answer"))
 }
 
 /** One correction waiting on the reader (`entries` of `GET /api/label-reader/corrections`; the reader's own summary). */
@@ -274,7 +277,6 @@ data class NotQueuedCorrection(
 
 /** `GET /api/label-reader/corrections`: what waits on the reader, its size in [bytes] and the records it did not take. */
 data class CorrectionsWaiting(
-    val optIn: Boolean,
     val count: Int,
     val bytes: Long,
     val entries: List<CorrectionEntry>,

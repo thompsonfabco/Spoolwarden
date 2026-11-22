@@ -139,7 +139,7 @@ private fun CorrectionsList(
 ) {
     val space = SpoolwardenTheme.space
     LazyColumn(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(space.s3)) {
-        if (s.rows.isEmpty()) {
+        if (s.rows.isEmpty() && s.notTaken.isEmpty()) {
             item {
                 SwEmptyState(
                     icon = R.drawable.sw_ic_clock,
@@ -147,7 +147,7 @@ private fun CorrectionsList(
                     text = CorrectionsTexts.EMPTY_TEXT,
                 )
             }
-        } else {
+        } else if (s.rows.isNotEmpty()) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(space.s1)) {
                     Text(
@@ -162,7 +162,7 @@ private fun CorrectionsList(
             }
         }
         items(s.rows, key = { it.id }) { row -> CorrectionCard(row, onRemove = { vm.remove(row.id) }, onOpenRecord = onOpenRecord, onOpenPhoto = onOpenPhoto) }
-        items(s.notTaken) { NotTakenCard(it) }
+        items(s.notTaken) { NotTakenCard(it, onOpenRecord) }
         item { Text(CorrectionsTexts.FOOT, color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodyMedium) }
     }
 }
@@ -195,11 +195,11 @@ private fun CorrectionCard(
     val name = row.filament ?: CorrectionsTexts.UNNAMED
     val engine = engineText(row.engine)
     val time = RecentValues.time(row.at)
-    val said = CorrectionsTexts.a11yRow(name, time, engine ?: stringResource(R.string.common_field_empty_value), row.changes.size)
+    val said = CorrectionsTexts.a11yRow(name, time, engine, row.changes.size)
     CorrectionCardFrame {
         Row(horizontalArrangement = Arrangement.spacedBy(space.s3)) {
             val photoOf = row.record?.takeIf { row.recordKept != false && row.photos > 0 }
-            CorrectionThumb(row, name, photoOf?.let { { onOpenPhoto(it, 0) } })
+            CorrectionThumb(row, name, photoOf?.let { { onOpenPhoto(it, 1) } })
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(space.s1)) {
                 // the headline carries the whole spoken row; the line under it is then not read again
                 val link = row.record?.takeIf { row.recordKept != false }
@@ -219,9 +219,7 @@ private fun CorrectionCard(
                 )
                 if (row.recordKept == false) {
                     Text(CorrectionsTexts.NO_RECORD, color = colors.muted, style = MaterialTheme.typography.bodySmall)
-                    if (row.thumbnail != null || row.photos > 0) {
-                        Text(CorrectionsTexts.NO_PHOTOS, color = colors.muted, style = MaterialTheme.typography.bodySmall)
-                    }
+                    Text(CorrectionsTexts.NO_PHOTOS, color = colors.muted, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -234,7 +232,7 @@ private fun CorrectionCard(
             Text(line, Modifier.clearAndSetSemantics { contentDescription = spoken }, style = SpoolwardenTheme.type.dataSmall)
         }
         row.note?.let { Text(CorrectionsTexts.note(it), style = MaterialTheme.typography.bodyMedium) }
-        val remove = CorrectionsTexts.a11yRemove(name)
+        val remove = if (row.removing) CorrectionsTexts.a11yRemoving(name) else CorrectionsTexts.a11yRemove(name)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             SwButton(
                 if (row.removing) CorrectionsTexts.REMOVING else stringResource(R.string.common_remove), onRemove,
@@ -246,10 +244,20 @@ private fun CorrectionCard(
 
 /** A record whose correction the reader did not take: it is not waiting, so there is nothing to remove. */
 @Composable
-private fun NotTakenCard(n: NotTaken) {
+private fun NotTakenCard(n: NotTaken, onOpenRecord: (String) -> Unit) {
     val colors = SpoolwardenTheme.colors
     CorrectionCardFrame {
-        Text(n.filament ?: CorrectionsTexts.UNNAMED, style = MaterialTheme.typography.titleSmall)
+        val name = n.filament ?: CorrectionsTexts.UNNAMED
+        val link = recordIdOf(n.record)
+        if (link != null) {
+            Text(
+                name,
+                Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(role = Role.Button) { onOpenRecord(link) },
+                color = colors.accentText, style = MaterialTheme.typography.titleSmall,
+            )
+        } else {
+            Text(name, style = MaterialTheme.typography.titleSmall)
+        }
         n.at?.let { Text(RecentValues.time(it), color = colors.muted, style = SpoolwardenTheme.type.dataSmall) }
         RecentStatusLine(
             R.drawable.sw_st_triangle, CorrectionsTexts.notWaiting(n.reason), colors.warn, large = true,
@@ -297,7 +305,8 @@ private fun CorrectionThumb(row: CorrectionRow, name: String, onOpen: (() -> Uni
         if (row.photos > 0) {
             Text(
                 row.photos.toString(),
-                Modifier.align(Alignment.BottomEnd).background(colors.surface, shape).padding(horizontal = SpoolwardenTheme.space.s1),
+                Modifier.align(Alignment.BottomEnd).clearAndSetSemantics { }.background(colors.surface, shape)
+                    .padding(horizontal = SpoolwardenTheme.space.s1),
                 color = colors.text, style = SpoolwardenTheme.type.dataSmall,
             )
         }

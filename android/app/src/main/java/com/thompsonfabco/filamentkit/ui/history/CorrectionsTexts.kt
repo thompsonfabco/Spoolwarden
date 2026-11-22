@@ -49,7 +49,10 @@ object CorrectionsTexts {
     /** Spoken forms. */
     fun a11yChange(field: String, read: String, now: String) = "$field, $read, becomes $now"
     fun a11yRemove(name: String) = "Remove the correction for $name"
-    fun a11yRow(name: String, time: String, engine: String, changes: Int) =
-        "$name, corrected $time, read by $engine, $changes ${if (changes == 1) "change" else "changes"}"
+    fun a11yRow(name: String, time: String, engine: String?, changes: Int): String {
+        val by = if (engine == null) "" else ", read by $engine"
+        return "$name, corrected $time$by, $changes ${if (changes == 1) "change" else "changes"}"
+    }
+    fun a11yRemoving(name: String) = "Removing the correction for $name"
     fun a11yPhotos(name: String, count: Int) = "Photos of the correction for $name: $count"
 }

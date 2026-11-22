@@ -1353,7 +1353,7 @@ internal fun FilamentKitApp(
                         HistoryListEntry(
                             ::currentApi, a,
                             onOpen = { nav.navigate(RecordRoute(it)) },
-                            onOpenCorrections = { nav.navigate(RecentCorrectionsRoute) },
+                            onOpenCorrections = { nav.navigate(RecentCorrectionsRoute) { launchSingleTop = true } },
                             onPairAgain = app.router::pairAgain,
                             recordDetail = { hid, embedded, onClose ->
                                 HistoryRecordEntry(
@@ -1367,7 +1367,7 @@ internal fun FilamentKitApp(
                                         SpoolCache.put(spool)
                                         nav.navigate(SpoolRoute(spool.id))
                                     },
-                                    onOpenCorrections = { nav.navigate(RecentCorrectionsRoute) },
+                                    onOpenCorrections = { nav.navigate(RecentCorrectionsRoute) { launchSingleTop = true } },
                                     onPairAgain = app.router::pairAgain,
                                     embedded = embedded,
                                 )
@@ -1413,7 +1413,7 @@ internal fun FilamentKitApp(
                                 SpoolCache.put(spool)
                                 nav.navigate(SpoolRoute(spool.id))
                             },
-                            onOpenCorrections = { nav.navigate(RecentCorrectionsRoute) },
+                            onOpenCorrections = { nav.navigate(RecentCorrectionsRoute) { launchSingleTop = true } },
                             onPairAgain = app.router::pairAgain,
                         )
                     }

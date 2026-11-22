@@ -1453,17 +1453,17 @@ open class ScreenSemanticsTest {
         val vm = CorrectionsViewModel(
             FakeCorrections(
                 CorrectionsWaiting(
-                    true, 0, 0, emptyList(),
+                    0, 0, emptyList(),
                     listOf(NotQueuedCorrection("r9", "2026-11-15T11:00:00+00:00", "SUNLU PLA+ Grey", "the Label Reader did not answer: down")),
                 ),
             ),
         )
         host("Corrections waiting") { CorrectionsScreen(vm, null, onOpenRecord = {}, onOpenPhoto = { _, _ -> }, onPairAgain = {}) }
-        auditAllFour("SUNLU PLA+ Grey", controls = false)
+        auditAllFour("SUNLU PLA+ Grey")
     }
 
     @Test fun recentCorrectionsWhenEmpty() {
-        val vm = CorrectionsViewModel(FakeCorrections(CorrectionsWaiting(true, 0, 0, emptyList(), emptyList())))
+        val vm = CorrectionsViewModel(FakeCorrections(CorrectionsWaiting(0, 0, emptyList(), emptyList())))
         host("Corrections waiting") { CorrectionsScreen(vm, null, onOpenRecord = {}, onOpenPhoto = { _, _ -> }, onPairAgain = {}) }
         auditAllFour("No corrections waiting", controls = false)
     }
@@ -1546,7 +1546,7 @@ open class ScreenSemanticsTest {
 
     private class FakeCorrections(
         val list: CorrectionsWaiting = CorrectionsWaiting(
-            true, 1, 3_565_000,
+            1, 3_565_000,
             listOf(
                 CorrectionEntry(
                     "fb-1", "2026-11-12T14:09:00+00:00",
@@ -1562,7 +1562,6 @@ open class ScreenSemanticsTest {
         override suspend fun waiting(): CorrectionsWaiting = error?.let { throw it } ?: list
         override suspend fun remove(id: String) = Unit
         override suspend fun share() = ShareState(saved = true, count = list.count)
-        override suspend fun keptRecords(): Set<String>? = setOf("r1")
     }
 
     private class FakeHistory(

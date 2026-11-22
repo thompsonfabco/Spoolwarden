@@ -174,7 +174,7 @@ class Api(
         }
         val bytes = (body["bytes"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toLong() ?: 0L
         val count = (body["count"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt() ?: entries.size
-        return CorrectionsWaiting((body["opt_in"] as? JsonPrimitive)?.contentOrNull == "true", count, bytes, entries, notQueued)
+        return CorrectionsWaiting(count, bytes, entries, notQueued)
     }
 
     /** Takes correction [id] out of the reader's queue; the record it came from is unchanged. 404 `not_found` when it is gone. */
