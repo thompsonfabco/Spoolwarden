@@ -61,8 +61,9 @@ def test_a_catalog_pointer_changed_by_an_older_release_wins_once():
                                      encoding="utf-8")                      # v0.6.2 after `update --rollback`
     got = library._read_state("previous.json")
     assert got["dir"] == "6-20261001"
-    (d / "previous.json").unlink()
-    assert library._read_state("previous.json")["dir"] == "6-20261001"      # the XML was written from it
+    assert library._read_state("previous.json")["dir"] == "6-20261001"      # the XML was written from it: no second win
+    (d / "previous.json").unlink()                                          # an older release deleted it: none, not the XML
+    assert library._read_state("previous.json") is None
 
 
 def test_a_dropped_catalog_state_leaves_neither_form_nor_hash():
@@ -83,8 +84,9 @@ def test_an_owner_entry_keeps_its_json_in_v062s_shape_and_an_older_change_wins_o
     older = {**e, "colors": ["Blue"]}
     jp.write_text(library.dumps(older), encoding="utf-8")                   # v0.6.2 edited the entry after a rollback
     assert library._read_local(jp)["colors"] == ["Blue"]
-    jp.unlink()
-    assert library._read_local(jp)["colors"] == ["Blue"]                    # now from the XML
+    assert library._read_local(jp)["colors"] == ["Blue"]                    # the XML was written from it
+    jp.unlink()                                                             # an older release deleted it: gone
+    assert library._read_local(jp) is None
     library.add_local(json.dumps({**e, "colors": ["Green"]}).encode("utf-8"))
     assert json.loads(jp.read_text(encoding="utf-8"))["colors"] == ["Green"]
 
@@ -108,8 +110,10 @@ def test_a_record_keeps_record_json_as_v062_wrote_it_and_an_older_change_wins_on
     older["device"] = "changed by v0.6.2"
     jp.write_text(json.dumps(older, indent=1), encoding="utf-8")
     assert intake_history._load(RID)["device"] == "changed by v0.6.2"
-    jp.unlink()
-    assert intake_history._load(RID)["device"] == "changed by v0.6.2"
+    assert intake_history._load(RID)["device"] == "changed by v0.6.2"      # the XML was written from it
+    jp.unlink()                                                             # an older release deleted it: no such record
+    with pytest.raises(intake_history.HistoryError):
+        intake_history._load(RID)
 
 
 @POSIX
@@ -148,8 +152,10 @@ def test_the_share_queue_keeps_share_json_as_v062_wrote_it_and_an_older_change_w
     assert jp.read_bytes() == json.dumps(st, indent=1).encode("utf-8") and sha(jp).is_file()
     jp.write_text(json.dumps({"entries": {RID: "fb-10"}, "failed": None}, indent=1), encoding="utf-8")
     assert share_queue._read(RID)["entries"] == {RID: "fb-10"}              # v0.6.2 queued a correction
-    jp.unlink()
-    assert share_queue._read(RID)["entries"] == {RID: "fb-10"}
+    assert share_queue._read(RID)["entries"] == {RID: "fb-10"}              # the XML was written from it
+    jp.unlink()                                                             # v0.6.2 drained the queue
+    assert share_queue._read(RID)["entries"] == {}
+    share_queue._write(RID, st)
     share_queue._write(RID, {"entries": {}, "failed": None})
     assert not jp.exists() and not sha(jp).exists() and not statexml.xml_path(jp).exists()
 
