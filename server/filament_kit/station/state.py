@@ -24,6 +24,7 @@ def volume_from_env() -> int:
 
 # the live voice values (R88 2.5): the ranges the station takes, and where each one sits in `settings`
 VOICE_RANGES = {"speaker": (0, 903), "speed": (50, 200), "volume": (0, 100)}
+VOICE_SPEED_STEP = 10      # the speed goes in steps of 10 (R88 2.5): the station checks it again
 VOICE_KEYS = {"speech": "speech", "speaker": "voice_speaker", "speed": "voice_speed", "volume": "speaker_volume"}
 # the sentences of the voice routes' refusals (the string catalogue's, the English as the fallback: RC9 / RG1 add the keys)
 _t = _station_page.catalogue_text
@@ -98,6 +99,7 @@ def clean_voice(body: dict) -> tuple[dict, dict]:
             ok = isinstance(v, bool)
         else:
             ok = isinstance(v, int) and not isinstance(v, bool) and VOICE_RANGES[name][0] <= v <= VOICE_RANGES[name][1]
+            ok = ok and (name != "speed" or v % VOICE_SPEED_STEP == 0)
         if ok:
             values[name] = v
         else:
