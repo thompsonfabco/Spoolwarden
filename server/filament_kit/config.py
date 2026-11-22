@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import socket
@@ -178,6 +179,22 @@ def _read_xml(xf: Path) -> dict | None:
     raise ValueError(f"{xf} cannot be read ({reason})")
 
 
+def _newer_json(stored: dict, f: Path) -> dict:
+    """config.xml's settings, unless config.json was changed after it was written (an older release after a rollback):
+    config.xml records the hash of the config.json it was saved with, as printers.xml does (registry.py `_read`)."""
+    sha = stored.pop("json_sha256", None)
+    if sha is None:
+        return stored                   # saved before the hash was recorded
+    try:
+        raw = f.read_bytes()
+        if hashlib.sha256(raw).hexdigest() == sha:
+            return stored
+        other = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError):
+        return stored
+    return other if isinstance(other, dict) and other != stored else stored
+
+
 def load_raw() -> dict:
     """What the settings files hold, with no defaults merged in ({} when there is none): config.xml when it reads, else
     config.json; an error (ValueError) only when no form reads."""
@@ -186,9 +203,9 @@ def load_raw() -> dict:
         stored = _read_xml(_xml_file())
     except ValueError as e:
         stored, damaged = None, e       # damaged: config.json is read, and an error only when it fails too
-    if stored is not None:
-        return stored
     f = _file()
+    if stored is not None:
+        return _newer_json(stored, f)
     if not f.exists():
         if damaged:
             raise damaged
@@ -222,11 +239,14 @@ def _write(f: Path, write) -> None:
 
 
 def save(cfg: dict) -> None:
-    """Both forms, config.xml first (R85 section 1.5: the JSON form stays for one release, for `update --rollback`)."""
+    """Both forms (R85 section 1.5: the JSON form stays for one release, for `update --rollback`)."""
     from .profiles import statexml
     xf = _xml_file()
     if any(x.startswith(f"{xf} (") for x in statexml.problems()) and xf.exists():     # never write over what could not be read
         os.replace(xf, xf.with_name(xf.name + ".unreadable"))
         statexml.clear_problem(xf)
-    _write(xf, lambda fh: fh.write(statexml.dumps("config", cfg)))
-    _write(_file(), lambda fh: fh.write(json.dumps(cfg, indent=2).encode("utf-8")))
+    js = json.dumps(cfg, indent=2).encode("utf-8")
+    # config.json first, then config.xml with its hash: a stop in between leaves a hash that does not match, and the
+    # next read takes the newer JSON
+    _write(_file(), lambda fh: fh.write(js))
+    _write(xf, lambda fh: fh.write(statexml.dumps("config", {**cfg, "json_sha256": hashlib.sha256(js).hexdigest()})))
