@@ -427,7 +427,7 @@ function devByAddress(list) {
 }
 // The station's own page (ruling R83 21:22): its address as text and Open this station's page. The Hub asks the station for a
 // one-time ticket (the page must be unlocked) and opens the answer in a new tab; it never fetches, frames or passes that page.
-function devOwnPage(d, address) {
+function devOwnPage(d, address, pageFrom) {
   const res = h("p", { class: "result", role: "status" });
   const go = SW.btn(devT("devices_open_station"), { action: "open-station-page", run: () => coded(res, async () => {
     SW.result(res, null);
@@ -439,7 +439,9 @@ function devOwnPage(d, address) {
     a.remove();
   }) });
   return h("div", { class: "devdetail__page" }, h("p", { class: "mono", textContent: devT("devices_own_page", { address }) }),
-    h("div", { class: "actions" }, go), h("p", { class: "muted", textContent: devT("devices_open_hint") }), res);
+    h("div", { class: "actions" }, go), h("p", { class: "muted", textContent: devT("devices_open_hint") }),
+    // R83 2026-11-18 01:14 point 1: a station set to the allow-list only says so under its link
+    pageFrom === "allowed" ? h("p", { class: "muted", textContent: devT("devices_station_allow_list_only") }) : null, res);
 }
 
 function devDetail(d) {
@@ -456,7 +458,7 @@ function devDetail(d) {
       const kids = [...devFacts(row)];
       if (row.kind === "reader") kids.push(devReaderLine());
       if (row.page && !r.status && !r.settings) kids.push(SW.banner({ kind: "warn", inline: true, text: devT("devices_down") }));
-      if (r.own_page) kids.push(devOwnPage(row, r.own_page));
+      if (r.own_page) kids.push(devOwnPage(row, r.own_page, r.page_from));
       if (r.photo) {
         const img = h("img", { class: "qr", alt: devT("devices_photo_alt"), src: `/setup/api/device/${id}/photo?t=${Date.now()}` });
         img.addEventListener("error", () => img.remove());

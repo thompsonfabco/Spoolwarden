@@ -209,6 +209,21 @@ def test_export_writes_the_csv_of_csv_io_and_needs_root(capsys, monkeypatch, tmp
     assert rc == 3 and "administrator rights" in err
 
 
+def test_sudo_export_printers_keeps_the_slot_columns(capsys, spoolman_url):
+    """R559 8 / R597 (Antigravity's point): `sudo spoolwarden export printers` goes through the command line (no live printers) and
+    still lists a slot's spool, read from the spools' Spoolman locations."""
+    from filament_kit import spoolman
+    from filament_kit.bridge import registry
+    config.save({"spoolman_url": spoolman_url})
+    registry.add_klipper("Voron", "voron.local", 7125)
+    sm = spoolman.Spoolman(spoolman_url)
+    fil = sm.post("filament", {"name": "Red PLA", "material": "PLA"})
+    spool = sm.post("spool", {"filament_id": fil["id"], "location": "Voron – T0"})
+    rc, out, _ = run(capsys, ["export", "printers"])
+    rows = [line.split(",") for line in out.strip().splitlines()]
+    assert rc == 0 and ["Voron", "klipper", "", "T0", str(spool["id"])] in rows
+
+
 def test_import_sends_the_file_as_it_is_and_adds_the_rows(capsys, tmp_path):
     f = tmp_path / "in.csv"
     f.write_text(csv_io.export_csv("locations") + "Garage,,,,,,,\n", encoding="utf-8")
