@@ -444,8 +444,9 @@ def test_the_intake_station_save_is_recorded_with_its_photo(sm, monkeypatch):
 def test_a_record_and_a_pending_read_are_xml_files(sm):
     out = read(sm)
     pend = config.paths().state / "intake-history" / "pending" / out["read_id"]
-    assert (pend / "read.xml").is_file() and not (pend / "read.json").exists()
+    assert (pend / "read.xml").is_file() and (pend / "read.json").is_file()          # both forms for one release
     r, hid = add(sm, read_id=out["read_id"])
+    assert not pend.exists()                                                    # taken: both forms of the read are gone
     d = intake_history._dir(hid)
     assert (d / "record.xml").is_file() and (d / "record.json").is_file()        # both forms for one release
     rec = intake_history.get(hid)

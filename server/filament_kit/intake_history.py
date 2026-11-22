@@ -196,7 +196,8 @@ def stash_read(read_id: str, images: list[bytes], result: dict, hint: str = "", 
                               for it in (result.get("items") or []) if isinstance(it, dict)],
                     "hint": hint or "", "tag": tag, "engine": result.get("engine"),
                     "confidence_rated": result.get("confidence_rated")}
-            statexml.write(d / "read.json", body, mode=0o600, keep_old_form=False)   # deleted right after use
+            # one release: v0.6.2 reads read.json when a save names the read, as it wrote it: json.dumps(body), no indent
+            statexml.write(d / "read.json", body, mode=0o600, old_format={})
     except Exception:  # noqa: BLE001 - history is a convenience; the read itself succeeded
         log.exception("intake history: cannot keep read %s", read_id)
 
@@ -220,8 +221,8 @@ def record_save(saved: list[dict], *, source: str, device: str | None = None, re
                 p = _pending(read_id)
                 for i, ph in enumerate(_photos(p), 1):
                     shutil.move(str(ph), str(d / f"photo{i}.jpg"))
-                read = statexml.read(p / "read.json", mode=0o600, keep_old_form=False)
-                shutil.rmtree(p, ignore_errors=True)
+                read = statexml.read(p / "read.json", mode=0o600)
+                shutil.rmtree(p, ignore_errors=True)         # both forms of the read go with the folder
             rec = {"id": rid, "at": _now(), "source": source if source in SOURCES else "phone",
                    "device": (device or "")[:80], "state": "detected", "read_id": read_id if read else None,
                    "read": ({"items": read.get("items") or [], "hint": read.get("hint") or "",

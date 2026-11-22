@@ -1,5 +1,5 @@
 """The rc1d-wave state files keep their JSON form one release through the statexml helper's keep_old_form: the shape
-v0.6.2 wrote, kept current on every write, with a change made by an older release winning once; read.json is not kept."""
+v0.6.2 wrote, kept current on every write, with a change made by an older release winning once (read.json too: v0.6.2 reads it when a save names the read)."""
 import json
 import os
 import stat
@@ -111,10 +111,24 @@ def test_a_record_json_is_private():
     assert stat.S_IMODE(os.stat(intake_history._dir(RID) / "record.json").st_mode) == 0o600
 
 
-def test_a_pending_read_is_not_kept_as_json():
-    intake_history.stash_read("r1", [b"\xff\xd8\xff\xe0" + b"x" * 100], {"items": [], "engine": {"reader": "local"}})
-    names = sorted(p.name for p in intake_history._pending("r1").iterdir())
-    assert "read.xml" in names and "read.json" not in names and "read.json.sha256" not in names
+def test_a_pending_read_keeps_read_json_as_v062_wrote_it_and_both_forms_go_when_it_is_taken():
+    intake_history.stash_read("r1", [b"\xff\xd8\xff\xe0" + b"x" * 100],
+                              {"items": [{"vendor": "SUNLU", "name": "Zo\u00e9"}], "engine": {"reader": "local"}})
+    pend = intake_history._pending("r1")
+    jp = pend / "read.json"
+    body = json.loads(jp.read_text(encoding="utf-8"))                         # what v0.6.2's record_save reads
+    assert body["items"][0]["vendor"] == "SUNLU" and body["engine"] == {"reader": "local"}
+    assert jp.read_bytes() == json.dumps(body).encode("utf-8")                # json.dumps(body): no indent, no newline
+    assert sha(jp).is_file() and statexml.xml_path(jp).is_file()
+    if hasattr(os, "geteuid"):
+        assert stat.S_IMODE(os.stat(jp).st_mode) == 0o600
+    older = {**body, "hint": "changed by v0.6.2"}
+    jp.write_text(json.dumps(older), encoding="utf-8")
+    assert statexml.read(jp)["hint"] == "changed by v0.6.2"                   # an older change wins once
+    saved = [{"values": {"vendor": "SUNLU"}, "spool_ids": [1], "filament_id": 2}]
+    rid = intake_history.record_save(saved, source="phone", read_id="r1")
+    assert intake_history._load(rid)["read"]["hint"] == "changed by v0.6.2"
+    assert not pend.exists()                                                  # read.xml, read.json and its hash go together
 
 
 # ---------- the share queue ----------
