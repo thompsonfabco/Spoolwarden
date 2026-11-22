@@ -1,6 +1,7 @@
 """RC1e: the Bambu Lab filament-used log is one XML file per month per printer (`usage/<yyyy-mm>.xml`): the round trip,
 the old usage.jsonl read once and left alone, a damaged month file, undo and its events, modes, and the reach of the
 reads (analytics reads every month)."""
+import hashlib
 import json
 import os
 import stat
@@ -302,3 +303,85 @@ def test_the_old_log_after_the_move_gets_the_new_entries_too_and_is_not_read_twi
     r = usage.append(SERIAL, {"job": "new"})
     assert [x["id"] for x in _v062_read(SERIAL)[0]] == [E1, r["id"]]
     assert sorted(e["id"] for e in usage.entries(SERIAL, days=10_000)) == sorted([E1, r["id"]])      # no entry twice
+
+
+def _v062_line(rec):
+    """What v0.6.2's _write_line appends to usage.jsonl."""
+    with open(_dir() / "usage.jsonl", "ab") as fh:
+        fh.write(json.dumps(rec, separators=(",", ":")).encode() + b"\n")
+
+
+def _new_entry_and_undo_by_the_older_release():
+    r = usage.append(SERIAL, {"job": "a", "grams": 4.0, "spool_id": 7, "slot": "A1", "observe": False})
+    _v062_line({"undo": r["id"], "at": usage._iso(usage._now())})
+    return r
+
+
+def test_an_undo_made_by_the_older_release_is_seen_after_updating_again():
+    r = _new_entry_and_undo_by_the_older_release()
+    sm = FakeSpoolman()
+    with pytest.raises(usage.AlreadyUndone):
+        usage.undo(r["id"], sm)
+    assert sm.used == []
+
+
+def test_entries_and_undo_marks_the_older_release_wrote_after_a_rollback_are_taken_in_once():
+    r = usage.append(SERIAL, {"job": "a", "grams": 4.0, "spool_id": 7, "slot": "A1", "observe": False})
+    _v062_line(_entry(E1, "2026-11-15T10:00:00Z", job="rolled-back"))
+    _v062_line({"undo": r["id"], "at": "2026-11-15T11:00:00Z"})
+    _v062_line({"undo": E1, "at": "2026-11-15T12:00:00Z"})
+    _v062_line({"undo_failed": E1, "at": "2026-11-15T12:00:05Z"})
+    for _ in range(3):
+        got = {e["id"]: e for e in usage.entries(SERIAL, days=30)}
+        assert set(got) == {r["id"], E1} and got[r["id"]]["undone"] and not got[E1]["undone"]
+    assert got[E1]["job"] == "rolled-back"
+    assert sum(1 for e in usage.entries(SERIAL, days=30) if e["id"] == E1) == 1
+    usage.append(SERIAL, {"job": "b"})                     # our own line after theirs: not read back as new
+    assert len(usage.entries(SERIAL, days=30)) == 3
+    assert usage.undo(E1, FakeSpoolman())["undone"]
+    assert [e["undone"] for e in usage.entries(SERIAL, days=30) if e["id"] == E1] == [True]
+
+
+def test_a_steady_state_read_does_not_open_the_old_log(monkeypatch):
+    usage.append(SERIAL, {"job": "a"})
+    calls = []
+    monkeypatch.setattr(usage, "_read_old", lambda serial: calls.append(serial))
+    usage.entries(SERIAL, days=30)
+    assert calls == []
+
+
+def test_a_truncated_old_log_is_read_again_from_its_start_without_doubles():
+    r = usage.append(SERIAL, {"job": "a", "grams": 4.0, "spool_id": 7, "slot": "A1", "observe": False})
+    usage.append(SERIAL, {"job": "b"})
+    f = _dir() / "usage.jsonl"
+    f.write_bytes(f.read_bytes().splitlines(True)[0])       # the second line is gone: shorter than what was taken in
+    _v062_line(_entry(E1, "2026-11-15T10:00:00Z"))
+    _v062_line({"undo": r["id"], "at": "2026-11-15T11:00:00Z"})
+    got = {e["id"]: e for e in usage.entries(SERIAL, days=30)}
+    assert len(usage.entries(SERIAL, days=30)) == 3 and set(got) >= {r["id"], E1} and got[r["id"]]["undone"]
+
+
+def test_a_rewritten_old_log_of_the_same_length_is_read_again_without_doubles():
+    r = usage.append(SERIAL, {"job": "a"})
+    f = _dir() / "usage.jsonl"
+    raw = f.read_bytes()
+    other = _entry(E3, "2026-11-15T10:00:00Z")
+    f.write_bytes(json.dumps(other).encode() + b"\n" + raw)       # longer, and the first bytes are not the ones taken in
+    got = [e["id"] for e in usage.entries(SERIAL, days=30)]
+    assert sorted(got) == sorted([r["id"], E3])
+
+
+def test_the_marker_counts_the_bytes_taken_in():
+    usage.append(SERIAL, {"job": "a"})
+    raw = (_dir() / "usage.jsonl").read_bytes()
+    text = (_dir() / "usage" / usage.MIGRATED).read_text()
+    assert text == f"usage.jsonl taken in: {len(raw)} {hashlib.sha256(raw).hexdigest()}\n"
+
+
+def test_a_marker_of_the_earlier_form_is_read_as_nothing_taken_in():
+    d = _dir()
+    (d / "usage").mkdir(parents=True)
+    (d / "usage" / usage.MIGRATED).write_text("moved from usage.jsonl\n")
+    (d / "usage.jsonl").write_text(json.dumps(_entry(E1, "2026-11-10T10:00:00Z")) + "\n", encoding="utf-8")
+    assert [e["id"] for e in usage.entries(SERIAL, days=10_000)] == [E1]
+    assert usage.entries(SERIAL, days=10_000) and (d / "usage" / usage.MIGRATED).read_text().startswith("usage.jsonl taken in: ")

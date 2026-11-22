@@ -37,15 +37,17 @@ until `mapping.LayoutWatch` re-maps the printer when it is idle (`mapping.reques
 slots all agreed resets the streak. Without a start layout (no AMS in the report) nothing is learned or checked.
 
 Log: `state/printers/<serial>/usage/<yyyy-mm>.xml`, one XML file per month per printer (tag `usage`, through
-`statexml`), written under a module lock and a file lock (`usage/.lock`), so the root CLI's reads and the service do not collide. Each file
+`statexml`), written under a module lock and a file lock (`usage/.lock`), so the root CLI and the service do not collide. Each file
 holds `entries` (a list of entry records) and `undone` (a list of {entry, at}):
   entry:  {"id", "at", "job", "grams", "spool_id", "slot", "observe"[, "error"]} and the newer fields, in the month of
           its `at`
   undone: {"entry": <entry id>, "at"}, in the month of the entry; a failed credit takes the record back
 Each append rewrites the month's file (atomic, mode 600, owned by the state owner). The old `usage.jsonl` of the release
-before (one JSON object per line: entries, {"undo": id, "at"} and {"undo_failed": id, "at"}) is read once into the month
-files (`usage/.migrated` marks it done). For one release every entry and undo record is also appended to it in the
-old form, so a rollback finds the current history.
+before (one JSON object per line: entries, {"undo": id, "at"} and {"undo_failed": id, "at"}) is taken into the month
+files; `usage/.migrated` holds how many bytes (and their sha256) were taken in, and a read takes in what the file holds
+beyond that (what the release before wrote after a rollback), merging entries by id. A file shorter than that, or whose
+first bytes differ, is read from its start again. For one release every entry and undo record is also appended to it in
+the old form (and counted taken in), so a rollback finds the current history.
 
 Entry shape returned by `entries` / `undo` (what `GET /api/printers/{id}/usage` and `POST /api/usage/{id}/undo`
 serve):
@@ -75,6 +77,7 @@ A Spoolman failure during undo raises `SpoolmanError` and leaves the entry not u
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import io
 import json
 import logging
@@ -104,9 +107,10 @@ except ImportError:  # Windows dev PCs: no cross-process lock (the service only 
 
 log = logging.getLogger(__name__)
 
-FILE = "usage.jsonl"            # the log of the release before: read once, then left alone
+FILE = "usage.jsonl"            # the log of the release before: its new lines are taken in, it is only appended to
 DIR = "usage"
-MIGRATED = ".migrated"
+MIGRATED = ".migrated"           # says how many bytes of usage.jsonl were taken in
+TAKEN = re.compile(r"usage\.jsonl taken in: (\d+) ([0-9a-f]{64})\n")
 MONTH_FILE = re.compile(r"\d{4}-(?:0[1-9]|1[0-2])\.xml")
 TAG = "usage"
 UNDO_DAYS = 7
@@ -125,7 +129,7 @@ FIELDS = ('id', 'at', 'job', 'grams', 'spool_id', 'slot', 'observe',
 
 _lock = threading.RLock()       # re-entrant: a reader migrates the old log under it
 _held: set[str] = set()         # printers whose usage/.lock this process holds (guarded by _lock)
-_reported: set[str] = set()     # files a problem was logged for (guarded by _lock)
+_reported: set[str] = set()     # files a problem was logged for
 _undoing: set[str] = set()      # entries an Undo is working on (guarded by _lock)
 
 
@@ -295,17 +299,22 @@ def _save(path: Path, data: dict) -> None:
     _write_atomic(path, statexml.dumps(TAG, data), 0o600, state_owned=True)
 
 
-def _old_log(serial: str) -> tuple[list[dict], dict[str, str]] | None:
-    """(entries, {undone entry id: undo time}) of the old usage.jsonl, or None when there is none."""
+def _read_old(serial: str) -> bytes | None:
+    """The bytes of the old usage.jsonl, or None when there is none (or it cannot be read: noted)."""
     path = _dir(serial) / FILE
     try:
-        raw = path.read_bytes()
+        return path.read_bytes()
     except FileNotFoundError:
         return None
     except OSError as e:
         _report(path, f"cannot read: {e.strerror or e}; its entries are not shown")
         return None
-    out, undone = [], {}
+
+
+def _parse_old(raw: bytes) -> tuple[list[dict], dict[str, str], list[tuple[str, str, Any]]]:
+    """(entries, {undone entry id: undo time}, [(kind, entry id, time) of each undo / undo_failed line in order]) of lines
+    of the old usage.jsonl."""
+    out, undone, ops = [], {}, []
     for line in raw.splitlines():
         try:
             rec = json.loads(line)
@@ -315,63 +324,100 @@ def _old_log(serial: str) -> tuple[list[dict], dict[str, str]] | None:
             continue
         if 'undo' in rec:
             undone.setdefault(str(rec['undo']), rec.get('at'))
+            ops.append(('undo', str(rec['undo']), rec.get('at')))
         elif 'undo_failed' in rec:
             undone.pop(str(rec['undo_failed']), None)
+            ops.append(('undo_failed', str(rec['undo_failed']), rec.get('at')))
         elif isinstance(rec.get('id'), str):
             out.append(rec)
-    return out, undone
+    return out, undone, ops
 
 
 def _month_of(at: Any) -> str | None:
     return at[:7] if isinstance(at, str) and re.fullmatch(r"\d{4}-\d{2}", at[:7]) else None
 
 
+def _taken(serial: str) -> tuple[int, str | None] | None:
+    """(bytes of usage.jsonl taken in, their sha256) from the marker; None without a marker. A marker of the earlier
+    form (no numbers) counts as nothing taken in."""
+    try:
+        text = (_dir(serial) / DIR / MIGRATED).read_text('ascii', errors='replace')
+    except OSError:
+        return None
+    m = TAKEN.fullmatch(text)
+    return (int(m[1]), m[2]) if m else (0, None)
+
+
+def _write_marker(serial: str, raw: bytes) -> None:
+    """Mark the first len(raw) bytes of usage.jsonl as taken in (with their hash, to tell a rewritten file)."""
+    make_state_dir(_dir(serial) / DIR)
+    _write_atomic(_dir(serial) / DIR / MIGRATED,
+                  f"usage.jsonl taken in: {len(raw)} {hashlib.sha256(raw).hexdigest()}\n".encode('ascii'),
+                  0o600, state_owned=True)
+
+
+def _start(raw: bytes, taken: tuple[int, str | None] | None) -> int:
+    """Where in `raw` the lines not yet taken in begin. A file shorter than what was taken in, or whose first bytes are
+    not the ones taken in, was truncated or rewritten: it is read from its start again (entries are merged by id, so
+    none is counted twice; an undo is only added and an undo_failed only takes back what the file says)."""
+    if taken is None or taken[1] is None:
+        return 0
+    off, digest = taken
+    if off > len(raw) or hashlib.sha256(raw[:off]).hexdigest() != digest:
+        return 0
+    return off
+
+
 def _migrate(serial: str) -> tuple[list[dict], dict[str, str]] | None:
-    """Move the old usage.jsonl into the month files once (the file stays as it was). None when there was nothing to
-    do or it was moved; the old log's (entries, undone) when the move failed (read from memory until it works)."""
+    """Take what the old usage.jsonl holds beyond what was taken in into the month files (the file stays as it was): the
+    first time its whole content, later what the release before wrote after a rollback. None when there was nothing to
+    do or it was moved; the not yet taken lines' (entries, undone) when the move failed (read from memory until it works)."""
     d = _dir(serial)
-    marker = d / DIR / MIGRATED
-    if marker.exists() or not (d / FILE).is_file():
+    try:
+        size = (d / FILE).stat().st_size
+    except OSError:
+        return None
+    taken = _taken(serial)
+    if taken is not None and taken[0] == size:          # steady state: no lock, no read
         return None
     try:
         with _flocked(serial):
             return _move(serial)
     except OSError as e:                # the lock could not be taken (a read-only reader): read it from memory
         _report(d / FILE, f"could not be converted ({e}); reading it until it can")
-        return _old_log(serial)
+        raw = _read_old(serial)
+        if raw is None:
+            return None
+        return _parse_old(raw[_start(raw, taken):])[:2]
 
 
 def _move(serial: str) -> tuple[list[dict], dict[str, str]] | None:
     d = _dir(serial)
-    marker = d / DIR / MIGRATED
-    if marker.exists():
+    raw = _read_old(serial)
+    if raw is None:
         return None
-    old = _old_log(serial)
-    if old is None:
+    taken = _taken(serial)
+    start = _start(raw, taken)
+    if taken is not None and taken[1] is not None and start == len(raw):
         return None
-    entries, undone = old
+    entries, undone, ops = _parse_old(raw[start:])
     month_of = {e['id']: _entry_month(e) for e in entries}
-    fresh: dict[str, dict] = {}
+    fresh: dict[str, list[dict]] = {}
     for e in entries:
-        fresh.setdefault(month_of[e['id']] or _iso(_now())[:7], {'entries': [], 'undone': []})['entries'].append(e)
-    for eid, at in undone.items():
-        m = month_of.get(eid) or _month_of(at)
-        if m:
-            fresh.setdefault(m, {'entries': [], 'undone': []})['undone'].append({'entry': eid, 'at': at})
+        fresh.setdefault(month_of[e['id']] or _iso(_now())[:7], []).append(e)
     try:
         for m, add in sorted(fresh.items()):          # idempotent: a stop half way is finished by the next run
             path = d / DIR / f"{m}.xml"
             data = _load(path, True)
             have = {e.get('id') for e in data['entries']}
-            gone = {u.get('entry') for u in data['undone']}
-            data['entries'] += [e for e in add['entries'] if e['id'] not in have]
-            data['undone'] += [u for u in add['undone'] if u['entry'] not in gone]
+            data['entries'] += [e for e in add if e['id'] not in have]
             _save(path, data)
-        make_state_dir(d / DIR)
-        _write_atomic(marker, b"moved from usage.jsonl\n", 0o600, state_owned=True)
+        for kind, eid, at in ops:
+            _mark(serial, eid, at, kind == 'undo')
+        _write_marker(serial, raw)
     except (OSError, statexml.StateXmlError, TypeError, ValueError) as e:
         _report(d / FILE, f"could not be converted ({e}); reading it until it can")
-        return old
+        return entries, undone
     _forget(d / FILE)
     return None
 
@@ -385,47 +431,58 @@ def _write_line(serial: str, rec: dict) -> None:
 
 
 def _old_form(serial: str, rec: dict) -> None:
-    """Append `rec` to usage.jsonl as the release before wrote it (one JSON line, fsynced, mode 600)."""
+    """Append `rec` to usage.jsonl as the release before wrote it (one JSON line, fsynced, mode 600), then mark it taken
+    in (the marker is written after the line, so a lost marker only makes the next read see the line again)."""
     f = _dir(serial) / FILE
     try:
+        line = (json.dumps(rec, separators=(',', ':')) + "\n").encode('utf-8')
+        taken = _taken(serial)
         new = not f.exists()
         fd = os.open(f, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, 'O_BINARY', 0), 0o600)
         try:
             if new:
                 give_to_state_owner(f)
-                marker = _dir(serial) / DIR / MIGRATED       # no old log was there: this one holds nothing to move
-                if not marker.exists():
-                    _write_atomic(marker, b"nothing to move from usage.jsonl\n", 0o600, state_owned=True)
-            os.write(fd, (json.dumps(rec, separators=(',', ':')) + "\n").encode('utf-8'))
+            before = os.fstat(fd).st_size
+            os.write(fd, line)
             os.fsync(fd)
         finally:
             os.close(fd)
+        if before == 0 or (taken is not None and taken[0] == before):       # nothing was waiting to be taken in
+            raw = f.read_bytes()
+            if len(raw) == before + len(line):
+                _write_marker(serial, raw)
     except (OSError, TypeError, ValueError) as e:       # the XML is the record: the old copy is for a rollback only
         log.warning("usage: printer %s: cannot append to %s (%s)", serial, FILE, e)
 
 
-def _store(serial: str, rec: dict) -> None:
+def _mark(serial: str, eid: str, at: Any, undone: bool) -> None:
+    """Add (undone) or take back an entry's undo record, in the month file of the entry (else of the undo time)."""
+    d = _dir(serial)
+    holder = None
+    for path in reversed(_month_files(serial)):
+        data = _load(path)
+        if any(e.get('id') == eid for e in data['entries']) or any(u.get('entry') == eid for u in data['undone']):
+            holder = path
+            break
+    if undone:
+        path = holder or d / DIR / f"{_month_of(at) or _iso(_now())[:7]}.xml"
+        data = _load(path, True)
+        if not any(u.get('entry') == eid for u in data['undone']):
+            data['undone'].append({'entry': eid, 'at': at})
+            _save(path, data)
+    elif holder is not None:                # takes the entry's undo back
+        data = _load(holder, True)
+        data['undone'] = [u for u in data['undone'] if u.get('entry') != eid]
+        _save(holder, data)
+
+
+def _store(serial: str, rec: dict, move: bool = True) -> None:
     d = _dir(serial)
     make_state_dir(d / DIR)
-    _migrate(serial)
+    if move:
+        _migrate(serial)
     if 'undo' in rec or 'undo_failed' in rec:
-        eid = str(rec['undo'] if 'undo' in rec else rec['undo_failed'])
-        holder = None
-        for path in reversed(_month_files(serial)):
-            data = _load(path)
-            if any(e.get('id') == eid for e in data['entries']) or any(u.get('entry') == eid for u in data['undone']):
-                holder = path
-                break
-        if 'undo' in rec:
-            path = holder or d / DIR / f"{_month_of(rec.get('at')) or _iso(_now())[:7]}.xml"
-            data = _load(path, True)
-            if not any(u.get('entry') == eid for u in data['undone']):
-                data['undone'].append({'entry': eid, 'at': rec.get('at')})
-                _save(path, data)
-        elif holder is not None:                # takes the entry's undo back
-            data = _load(holder, True)
-            data['undone'] = [u for u in data['undone'] if u.get('entry') != eid]
-            _save(holder, data)
+        _mark(serial, str(rec['undo'] if 'undo' in rec else rec['undo_failed']), rec.get('at'), 'undo' in rec)
         return
     path = d / DIR / f"{_entry_month(rec) or _iso(_now())[:7]}.xml"
     data = _load(path, True)
