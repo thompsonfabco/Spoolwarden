@@ -1,5 +1,5 @@
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | $forgets $spool goes back to ${}. | text of the EV7b screens; moves to the string catalogue with EV2, its proposed key is in the EV7b report
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | $it is back on ${}. | text of the EV7b screens; moves to the string catalogue with EV2, its proposed key is in the EV7b report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | $forgets ${} goes back to ${}. | text of the Auto and undo wording (as4b); moves to the string catalogue with EV2
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | ${} is back on ${}. | text of the Auto and undo wording (as4b); moves to the string catalogue with EV2
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | Clear slot $label? | text of the EV7b screens; moves to the string catalogue with EV2, its proposed key is in the EV7b report
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | Clear slot | text of the EV7b screens; moves to the string catalogue with EV2, its proposed key is in the EV7b report
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | Cleared slot $label. | text of the EV7b screens; moves to the string catalogue with EV2, its proposed key is in the EV7b report
