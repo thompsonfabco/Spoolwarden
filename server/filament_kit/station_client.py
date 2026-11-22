@@ -411,14 +411,16 @@ MAX_TEXT = 200
 SETTING_ID = re.compile(r"[a-z0-9_.-]{1,40}")
 SETTING_KINDS = ("switch", "choice", "number", "text")
 TICKET = re.compile(r"[A-Za-z0-9_-]{16,128}")
-def _catalogue_text(key: str) -> str:
+def _catalogue_text(key: str, fallback: str | None = None) -> str:
     text = (Path(__file__).resolve().parent / "shared_static" / "strings.js").read_text(encoding="utf-8")
     cat = json.loads(re.sub(r",\s*}$", "}", text[text.index("{"):text.rindex("}") + 1]))
     vals = {"product": cat.get("app_name", ""), "command": cat.get("command_name", "")}
-    return re.sub(r"\{(\w+)\}", lambda m: vals.get(m.group(1), m.group(0)), cat[key])
+    return re.sub(r"\{(\w+)\}", lambda m: vals.get(m.group(1), m.group(0)), cat[key] if fallback is None else cat.get(key, fallback))
 
 
 TEXT_STATION_NO_PIN = _catalogue_text("station_not_pinned")
+# the station refuses a page change of Speak or Volume once the Hub has sent values (409 `set_on_hub`); same key as the station's
+TEXT_STATION_SET_ON_HUB = _catalogue_text("station_voice_set_on_hub", "Speaking and volume are set on the Hub.")
 
 
 class StationCallError(Exception):
@@ -427,6 +429,10 @@ class StationCallError(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
         self.status, self.message = status, message
+
+
+class StationSetOnHub(StationCallError):
+    """The station refused a change of Speak or Volume: the Hub sets them (409 `set_on_hub`)."""
 
 
 class StationPinMissing(StationCallError):
@@ -532,6 +538,8 @@ def _json_reply(status: int, kind: str, data: bytes) -> dict:
         out = None
     if not isinstance(out, dict):
         raise StationCallError(502, "the Weigh Station's answer is not valid")
+    if status == 409 and out.get("error") == "set_on_hub":
+        raise StationSetOnHub(409, TEXT_STATION_SET_ON_HUB)
     if not 200 <= status < 300:
         why = out.get("message") or out.get("error")
         raise StationCallError(status if status in (400, 403, 404, 429) else 502,
@@ -647,4 +655,8 @@ def _clean_setting(s: dict) -> dict | None:
             choices.append(v if not isinstance(c, dict) else {"value": v, "label": lab})
         out["choices"] = choices
     out["value"] = value
+    if s.get("readonly") is True:                   # the station's own page shows it, but it is not changed there (VO1)
+        out["readonly"] = True
+    if isinstance(s.get("note"), str) and s["note"].strip():
+        out["note"] = s["note"].strip()[:MAX_TEXT]
     return out

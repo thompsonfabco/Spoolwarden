@@ -354,6 +354,7 @@ function devReaderLine() {
 // one setting of the station's page as a field of the field component
 function devSettingField(s) {
   const o = { row: true, label: s.label, name: s.id, attrs: { "aria-required": "false" } };
+  if (s.readonly) Object.assign(o, { disabled: true, hint: s.note || null });        // set on the Hub: shown, with its note, never an edit control
   if (s.kind === "switch") return SW.field({ ...o, type: "select", value: s.value ? "on" : "off", options: [{ value: "on", label: SW.t("status_on") }, { value: "off", label: SW.t("status_off") }] });
   if (s.kind === "choice") {
     const options = (s.choices || []).map((c) => (typeof c === "object" ? { value: String(c.value), label: c.label || c.text || String(c.value) } : { value: String(c), label: String(c) }));
@@ -385,7 +386,7 @@ function devSettingsForm(row, list, redo) {
   let plan = null;
   const g = SW.formGroup(form, { title: devT("devices_settings_title"), send: async (key) => {
     if (!plan) plan = api(path, { ...Object.fromEntries(g.changed().map((k) => [k, value(k)])), code: theCode() });
-    try { await plan; } catch (e) { plan = null; e.text = () => hubText(e.message); throw e; }
+    try { await plan; } catch (e) { plan = null; e.text = () => hubText((e.data && e.data.message) || e.message); throw e; }
     was.set(key, shown(key));
     return {};
   } });
