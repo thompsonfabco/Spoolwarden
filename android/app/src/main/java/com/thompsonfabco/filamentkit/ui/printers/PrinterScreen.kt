@@ -615,7 +615,7 @@ private fun SlotRow(slot: AmsSlot, onClick: () -> Unit) {
             slot.label, Modifier.width(SpoolwardenTheme.sizes.slotLabel),
             style = SpoolwardenTheme.type.data,
         )
-        ColorSwatch(slot.colorHex.ifBlank { spool?.colorHex }, empty = empty)
+        ColorSwatch(slot.colorHex.ifBlank { spool?.colorHex }, empty = empty && !waiting, waiting = waiting)
         Column(Modifier.weight(1f)) {
             Text(headline, style = MaterialTheme.typography.bodyLarge)
             if (left != null) Text(left, color = colors.muted, style = SpoolwardenTheme.type.dataSmall)
@@ -658,7 +658,7 @@ private fun SlotSheet(
                     Row(horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically) {
                         ColorSwatch(slot.colorHex.ifBlank { spool.colorHex }, empty = false)
                         Column {
-                            Text(PrinterHelp.spoolName(spool), style = MaterialTheme.typography.bodyLarge)
+                            Text(spoolHeadline(PrinterHelp.spoolName(spool)), style = MaterialTheme.typography.bodyLarge)
                             spool.remainingWeight?.let {
                                 Text(
                                     stringResource(R.string.printer_slot_left, it.roundToInt()),

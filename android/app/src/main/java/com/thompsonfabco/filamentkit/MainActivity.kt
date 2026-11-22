@@ -605,6 +605,17 @@ internal fun FilamentKitApp(
                 tabTapped(Tab.Spools)
             }
             AlertTarget.AlertsList -> nav.navigate(AlertsRoute) { launchSingleTop = true }
+            // a link builds its tab's stack, root first, so Back behaves as if the person had navigated there (05 2.5)
+            is AlertTarget.Spool -> {
+                nav.selectTab(Tab.Spools)
+                nav.popBackStack<SpoolsRoute>(inclusive = false)
+                nav.navigate(SpoolRoute(target.id))
+            }
+            is AlertTarget.Record -> {
+                nav.selectTab(Tab.Recent)
+                nav.popBackStack<RecentRoute>(inclusive = false)
+                nav.navigate(RecordRoute(target.hid))
+            }
         }
     }
     // a tapped alert notification
