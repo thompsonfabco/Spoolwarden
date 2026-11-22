@@ -295,8 +295,7 @@ def test_while_locked_a_wrong_code_sends_nothing_and_cancelling_puts_every_contr
 const wrongThenCancel = async (name, act) => {
   act();
   await giveCode("00000000");
-  await until(() => $("dialog[open] .field__error"), "the refusal");
-await sleep(300);                                          // the dialog is busy until the check ends
+  await until(() => text($("dialog[open] .field__error")), "the refusal");   // the error line is in the dialog from the start, empty: wait for its words
   out[name] = { error: text($("dialog[open] .field__error")), calls: calls.length };
   $('dialog[open] [data-action="cancel"]').click();
   await until(() => !$("dialog[open]"), "the prompt to close");
@@ -325,8 +324,7 @@ SW.setLock("locked");
 await sleep(150);
 testBtn().click();
 await giveCode("00000000");
-await until(() => $("dialog[open] .field__error"), "the refusal");
-await sleep(300);                                          // the dialog is busy until the check ends
+await until(() => text($("dialog[open] .field__error")), "the refusal");   // the error line is in the dialog from the start, empty: wait for its words
 $('dialog[open] [data-action="cancel"]').click();
 await until(() => !$("dialog[open]"), "the prompt to close");
 await sleep(150);
