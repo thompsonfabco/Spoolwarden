@@ -208,7 +208,7 @@ def test_get_voice_with_a_station():
     voice_state.save({"speaker": 5}, _cfg())
     got = voice_tab.get_voice(_cfg())
     assert got == {"station": True, "speech": True, "speaker": 5, "speed": 100, "volume": 50,
-                   "voice": "Piper, many speakers", "voice_file": "Piper, many speakers", "remote": False,
+                   "voice": "Piper, many speakers", "remote": False,
                    "speaker_range": [0, 903]}
     assert voice_tab.get_voice(_cfg(voice="en_US-ljspeech-medium"))["speaker_range"] is None
     assert voice_tab.get_voice(_cfg(tts="espeak"))["speaker_range"] is None
@@ -320,7 +320,7 @@ def test_the_page_route_refuses_with_the_sentence(station, env, monkeypatch, ans
 # ---- the page route that saves ----
 
 def _save_route():
-    fn, = [f for p, f, m in voice_tab.routes(_Page()) if p == "/station/voice"]
+    fn, = [f for p, f, m in voice_tab.routes(_Page()) if p == "/station/voice" and m == "POST"]
     return fn
 
 
@@ -526,20 +526,61 @@ def test_the_sender_proof_passes_the_station_check_of_both_voice_routes(wire, se
 
 # ---- the read answer the Hub page's group and the apps use ----
 
-def test_the_read_answer_has_the_four_values_remote_and_voice_file(monkeypatch):
+def test_the_read_answer_has_the_four_values_remote_and_voice(monkeypatch):
     monkeypatch.setattr(socket, "gethostname", lambda: "hubhost")
     monkeypatch.setattr(socket, "getfqdn", lambda: "hubhost.lan")
     monkeypatch.setattr(socket, "gethostbyname_ex", lambda n: (n, [], ["192.168.1.20"]))
     local = voice_tab.get_voice(_cfg("http://127.0.0.1:5003"))
-    assert local["remote"] is False and local["voice_file"] == voice_tab.VOICE_MANY
+    assert local["remote"] is False and local["voice"] == voice_tab.VOICE_MANY
     assert {"speech", "speaker", "speed", "volume"} <= set(local)
     far = voice_tab.get_voice(_cfg("http://192.168.1.99:5003", tts="espeak"))
-    assert far["remote"] is True and far["voice_file"] == voice_tab.VOICE_ESPEAK
+    assert far["remote"] is True and far["voice"] == voice_tab.VOICE_ESPEAK
     assert voice_tab.get_voice(_cfg(""))  == {"station": False}
 
 
 def test_the_page_route_with_no_values_reads_the_answer(env, monkeypatch):  # noqa: F811
     monkeypatch.setattr(config, "load", lambda: _cfg())
     got = anyio.run(_save_route(), None, {})
-    assert got["remote"] is False and got["voice_file"] == voice_tab.VOICE_MANY and got["speed"] == 100
+    assert got["remote"] is False and got["voice"] == voice_tab.VOICE_MANY and got["speed"] == 100
     assert not _file().exists()
+
+
+ANSWER_KEYS = {"station", "remote", "speech", "voice", "speaker", "speaker_range", "speed", "volume"}
+
+
+def test_the_view_read_answers_without_a_code_with_the_six_fields(app, station):  # noqa: F811
+    cfg = config.load()
+    cfg["station"]["url"] = "http://127.0.0.1:5003"
+    config.save(cfg)
+    r = client(app).get("/setup/api/station/voice")
+    assert r.status_code == 200
+    assert set(r.json()) == ANSWER_KEYS
+    assert r.json()["remote"] is False and r.json()["voice"] == voice_tab.VOICE_MANY and r.json()["speaker_range"] == [0, 903]
+    assert not _file().exists() and station.calls == []
+
+
+def test_a_change_through_post_still_needs_the_code(app, station):  # noqa: F811
+    cfg = config.load()
+    cfg["station"]["url"] = "http://127.0.0.1:5003"
+    config.save(cfg)
+    assert post(client(app), "station/voice", {"speed": 120}, code=None).status_code in (401, 403)
+    assert not _file().exists() and station.calls == []
+
+
+def test_every_answer_has_the_one_shape(app, station):  # noqa: F811
+    cfg = config.load()
+    cfg["station"]["url"] = "http://127.0.0.1:5003"
+    config.save(cfg)
+    assert set(client(app).get("/setup/api/station/voice").json()) == ANSWER_KEYS          # G, no code
+    assert set(post(client(app), "station/voice", {}).json()) == ANSWER_KEYS               # P, read form
+    assert set(post(client(app), "station/voice", {"speed": 120}).json()) == ANSWER_KEYS   # P, after a change
+    assert set(voice_tab.patch_voice({"speed": 130}, load=config.load)) == ANSWER_KEYS     # PATCH /api/voice
+    kit = _kit_client()
+    assert set(kit.get("/api/voice").json()) == ANSWER_KEYS
+    assert set(kit.patch("/api/voice", json={"volume": 20}).json()) == ANSWER_KEYS
+
+
+def test_the_speaker_range_is_null_for_a_one_speaker_voice_and_the_station_false_answer():
+    assert voice_tab.get_voice(_cfg(voice="en_US-ljspeech-medium"))["speaker_range"] is None
+    assert voice_tab.get_voice(_cfg())["speaker_range"] == [0, 903]
+    assert voice_tab.get_voice(_cfg(url=None)) == {"station": False}
