@@ -34,7 +34,7 @@ import time
 from pathlib import Path
 
 from . import config, library, local_reader, locks, modules, read_confidence, tagsources
-from .profiles import builds, lines
+from .profiles import builds, lines, statexml
 from .spoolman import Spoolman
 
 log = logging.getLogger(__name__)
@@ -333,12 +333,33 @@ def _sweep_failed() -> None:
             pass
 
 
+META, OLD_META = "meta.xml", "meta.json"      # a kept read's note; a read kept before the move has the JSON form only
+
+
+def _kept_meta(d: Path) -> dict:
+    """The hint and tag of a kept read: the XML form, else the old JSON form; {} when neither can be read (logged: a
+    damaged note never stops the retry, which then runs without the hint)."""
+    for name in (META, OLD_META):
+        try:
+            raw = (d / name).read_bytes()
+        except OSError:
+            continue
+        try:
+            meta = statexml.loads(raw, statexml.tag_of(Path(META))) if name == META else json.loads(raw.decode("utf-8"))
+        except (statexml.StateXmlError, ValueError) as e:
+            log.warning("a kept read's %s could not be read (%s)", name, e)
+            continue
+        if isinstance(meta, dict):
+            return meta
+    return {}
+
+
 def _keep(read_id: str, images: list[bytes], hint: str, tag_uid: str | None) -> None:
     d = _failed_dir() / read_id
     d.mkdir(parents=True, exist_ok=True)
     for i, data in enumerate(images):
         _write_new(d / f"photo{i}.jpg", data)
-    _write_new(d / "meta.json", json.dumps({"hint": hint, "tag_uid": tag_uid}).encode("utf-8"))
+    _write_new(d / META, statexml.dumps(statexml.tag_of(Path(META)), {"hint": hint, "tag_uid": tag_uid}))
 
 
 def _forget(read_id: str) -> None:
@@ -670,9 +691,6 @@ def retry(read_id: str, sm: Spoolman, client=None, *, orders: list[dict] | None 
         raise ReadError("not_found", "those photos are no longer kept (24 h); send them again")
     d = _failed_dir() / read_id
     images = [p.read_bytes() for p in sorted(d.glob("photo*.jpg"), key=lambda p: int(p.stem[5:]))]
-    try:
-        meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        meta = {}
+    meta = _kept_meta(d)
     return read_labels(sm, images, meta.get("hint") or "", meta.get("tag_uid"), client=client, read_id=read_id,
                        orders=orders, charge=charge)
