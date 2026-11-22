@@ -411,6 +411,11 @@ class ServerApi:
     def save(self, body: dict) -> tuple[int, dict]:
         return self._call("POST", "/api/station/save", json.dumps(body).encode(), "application/json")
 
+    def return_spool(self, uid: str, spool_id) -> tuple[int, dict]:
+        """A checked-out spool goes back to its home without a weighing (R88 1.7: 409 `not_checked_out` if it is not)."""
+        return self._call("POST", "/api/station/return", json.dumps({"uid": uid, "spool_id": spool_id}).encode(),
+                          "application/json")
+
 
 def hello_values(fp: str | None, port: int, plain: str | None = None) -> dict:
     """The three values of the hello call (R82 section 2.3): the SHA-256 of the station's certificate, its port, and
