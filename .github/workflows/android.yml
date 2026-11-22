@@ -33,20 +33,27 @@ jobs:
           # AGP downloads the platform and build-tools it needs itself
           packages: 'platform-tools'
           log-accepted-android-sdk-licenses: false
-      # a failure that is only the network (Gradle's own resolution lines: HTTP 429/5xx from the repository, a dependency that could not be
-      # downloaded) gets up to two more tries after a pause; any other failure fails the first time, and a failing test never retries
-      - name: Test and assemble
-        shell: bash          # GitHub runs this as bash -eo pipefail: the pipe below keeps gradlew's status
+      # Maven Central can answer HTTP 429 for a dependency jar. This step only downloads what the build and its unit tests resolve (the same
+      # classpaths), up to three tries with a pause; if it still fails it only warns, and the build step below resolves again and fails by itself.
+      - name: Download dependencies
         run: |
-          set -o pipefail      # also holds if the step's shell is ever changed
-          rc=0
+          cat > "$RUNNER_TEMP/fk-resolve.gradle" <<'EOF'
+          allprojects {
+            tasks.register("fkResolveDependencies") {
+              doLast {
+                ["debugCompileClasspath", "debugRuntimeClasspath", "debugUnitTestCompileClasspath", "debugUnitTestRuntimeClasspath"].each { name ->
+                  def c = project.configurations.findByName(name)
+                  if (c != null) c.files
+                }
+              }
+            }
+          }
+          EOF
           for attempt in 1 2 3; do
-            rc=0
-            ./gradlew testDebugUnitTest assembleDebug 2>&1 | tee gradle.log || rc=$?
-            [ "$rc" -eq 0 ] && exit 0
-            grep -qE 'There were failing tests|^[[:alnum:]_.$]+ > .+ FAILED$' gradle.log && exit "$rc"
-            grep -qE "Could not resolve all (files|dependencies) for configuration|Could not (GET|HEAD) 'http|Received status code (429|5[0-9][0-9]) from server|Read timed out|Connection (reset|timed out)" gradle.log || exit "$rc"
+            ./gradlew --init-script "$RUNNER_TEMP/fk-resolve.gradle" fkResolveDependencies && exit 0
             echo "::warning::dependency download failed (attempt $attempt of 3)"
             [ "$attempt" -lt 3 ] && sleep $((attempt * 60))
           done
-          exit "$rc"
+          echo "::warning::the dependencies could not be downloaded in advance; the next step resolves them again"
+          exit 0
+      - run: ./gradlew testDebugUnitTest assembleDebug
