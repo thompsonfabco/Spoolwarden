@@ -127,7 +127,7 @@ def test_every_slot_confirmed_and_restored(rig):
     assert len(printer.writes) == 12                         # 6 test writes + 6 restores
     assert_back_to_original(printer)
     assert steps and any("A1" in s for s in steps) and any(s.startswith("Restoring") for s in steps)
-    assert not (config.paths().state / "printers" / SERIAL / "slotmap.json").exists()   # Task 7 saves
+    assert not (config.paths().state / "printers" / SERIAL / "slotmap.xml").exists()   # Task 7 saves
 
 
 def test_print_starting_mid_test_aborts_and_restores(rig):
