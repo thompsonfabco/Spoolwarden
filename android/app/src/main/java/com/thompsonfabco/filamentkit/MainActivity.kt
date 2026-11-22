@@ -161,6 +161,7 @@ import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
+import com.thompsonfabco.filamentkit.net.SpoolFilter
 import com.thompsonfabco.filamentkit.session.CONNECTION_POLL_MS
 import com.thompsonfabco.filamentkit.session.AppViewModel
 import com.thompsonfabco.filamentkit.session.Startup
@@ -213,6 +214,7 @@ import com.thompsonfabco.filamentkit.ui.history.HistoryEditEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryListEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryPhotoEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
+import com.thompsonfabco.filamentkit.ui.history.UndoFlow
 import com.thompsonfabco.filamentkit.ui.history.showUndoable
 import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersViewModel
@@ -1196,6 +1198,9 @@ internal fun FilamentKitApp(
                                     loadLow = { currentApi().lowSpools().spools },
                                     loadSpoolmanUrl = { currentApi().spools("", null).spoolmanUrl },
                                     exportCsv = { file -> currentApi().exportCsv("spoolman-spools", file) },
+                                    loadChecked = { currentApi().spools("", SpoolFilter.CHECKED_OUT).spools },
+                                    returnSpool = { id -> currentApi().returnSpool(id) },
+                                    undoFlow = UndoFlow(SpoolBackend.of(::currentApi)),
                                 ) { q, sealedOnly ->
                                     currentApi().search(q, sealedOnly)
                                 }

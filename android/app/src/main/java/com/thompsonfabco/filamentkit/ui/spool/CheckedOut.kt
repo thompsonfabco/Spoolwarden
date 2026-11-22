@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.spool
 
+import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.ui.history.RecentValues
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -41,8 +42,14 @@ fun JsonObject.checkedOutInfo(): CheckedOutInfo? {
     return CheckedOutInfo(flag, o["home"].text(), o["checked_out_since"].text())
 }
 
+/** The toast of a Return: [text], with Undo when the Hub offers one ([event], found after the return). */
+data class ReturnToast(val text: String, val event: ActivityEvent?)
+
 /** The pure rules of the Checked out filter, the rows and Return (R88 section 1.6). */
 object CheckedOutRules {
+    /** The kind of event a Return writes; undone as an unload is (the Hub's record only). */
+    const val RETURNED_KIND = "spool.returned"
+
     /**
      * Whether the Hub has the filter. An older Hub ignores `filter=checked_out` and answers every spool without the
      * fields, so a non-empty answer in which a row lacks `checked_out` means no routes; an empty one is a Hub that has them.

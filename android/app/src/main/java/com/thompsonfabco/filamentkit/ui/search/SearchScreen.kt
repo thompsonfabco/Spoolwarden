@@ -49,8 +49,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.alerts.LowSpool
+import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.ui.components.DetailPresentation
+import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwButton
@@ -71,12 +73,21 @@ import com.thompsonfabco.filamentkit.ui.history.CsvOutcome
 import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
 import com.thompsonfabco.filamentkit.ui.history.csvFileName
 import com.thompsonfabco.filamentkit.ui.history.csvProblemText
+import com.thompsonfabco.filamentkit.ui.history.UndoFlow
+import com.thompsonfabco.filamentkit.ui.history.UndoOffer
+import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
 import com.thompsonfabco.filamentkit.ui.history.csvTarget
+import com.thompsonfabco.filamentkit.ui.history.showUndoable
+import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.history.shareCsv
+import com.thompsonfabco.filamentkit.ui.spool.CheckedOutRules
+import com.thompsonfabco.filamentkit.ui.spool.CheckedOutTexts
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
+import com.thompsonfabco.filamentkit.ui.spool.HubFailureNotice
 import com.thompsonfabco.filamentkit.ui.spool.HubNoticeOf
 import com.thompsonfabco.filamentkit.ui.spool.hubFailureText
 import com.thompsonfabco.filamentkit.ui.spool.secondsSince
+import com.thompsonfabco.filamentkit.ui.spool.ReturnToast
 import com.thompsonfabco.filamentkit.ui.spool.SpoolRow
 import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
 import com.thompsonfabco.filamentkit.ui.spool.hubFailure
@@ -119,6 +130,15 @@ data class SearchUi(
     /** Why the download did not happen: the words for an older Hub or a full phone, or a failure the usual notices say. */
     val csvProblem: String? = null,
     val csvFailure: HubFailure? = null,
+    /** The "Checked out" filter (R88 section 1.6): [checkedCount] is null for a Hub without it, so there is no chip. */
+    val checkedOnly: Boolean = false,
+    val checked: List<SpoolSummary> = emptyList(),
+    val checkedCount: Int? = null,
+    val checkedLoaded: Boolean = false,
+    /** The spool whose Return is on its way; the Hub's refusal of one (its own `message`) stays under the list. */
+    val returningId: Int? = null,
+    val returnFailure: HubFailure? = null,
+    val returnToast: ReturnToast? = null,
 )
 
 /** Spool search; [search] is `api.search(q, sealedOnly)`, asked of the session's current client at each call. */
@@ -130,6 +150,12 @@ class SearchViewModel(
     private val loadSpoolmanUrl: (suspend () -> String?)? = null,
     /** `api.exportCsv("spoolman-spools", file)` (R84 6.5); null: no Download as CSV item. */
     private val exportCsv: (suspend (File) -> Unit)? = null,
+    /** `api.spools("", "checked_out").spools`; null: no Checked out filter. */
+    private val loadChecked: (suspend () -> List<JsonObject>)? = null,
+    /** `api.returnSpool(id)`; null: no Return action. */
+    private val returnSpool: (suspend (Int) -> JsonObject)? = null,
+    /** Finds and undoes the event a Return wrote; null: the toast has no Undo. */
+    private val undoFlow: UndoFlow? = null,
     private val search: suspend (q: String, sealedOnly: Boolean) -> List<JsonObject>,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SearchUi())
@@ -222,7 +248,7 @@ class SearchViewModel(
 
     /** The "Running low" chip: shows the list of low spools (least first, as the Hub gives it) instead of the search. */
     fun setLowOnly(on: Boolean) {
-        _state.update { it.copy(lowOnly = on, failure = if (on) null else it.failure) }
+        _state.update { it.copy(lowOnly = on, checkedOnly = if (on) false else it.checkedOnly, failure = if (on) null else it.failure) }
         if (on) loadLowSpools()
     }
 
@@ -243,7 +269,86 @@ class SearchViewModel(
         }
     }
 
+    /**
+     * Reads the checked-out spools (the screen asks once, the chip and Try again ask again). A Hub that ignores the
+     * filter or has no such route leaves the chip off; any other failure keeps what was shown.
+     */
+    fun loadCheckedOut() {
+        val load = loadChecked ?: return
+        if (_state.value.checkedOnly) _state.update { it.copy(busy = true) }
+        checkedJob?.cancel()
+        checkedJob = viewModelScope.launch {
+            try {
+                val rows = load()
+                if (!CheckedOutRules.supported(rows)) {
+                    _state.update { it.copy(busy = false, checkedOnly = false, checkedCount = null, checked = emptyList()) }
+                } else {
+                    val spools = CheckedOutRules.rows(rows)
+                    _state.update {
+                        it.copy(busy = false, checked = spools, checkedCount = spools.size, checkedLoaded = true, loadedAt = System.currentTimeMillis(),
+                            failure = if (it.checkedOnly) null else it.failure)
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val gone = e is ApiError && (e.status == HTTP_NOT_FOUND || e.status == HTTP_BAD_REQUEST)
+                _state.update {
+                    it.copy(busy = false, checkedOnly = it.checkedOnly && !gone, checkedCount = if (gone) null else it.checkedCount,
+                        failure = if (it.checkedOnly && !gone) hubFailure(e) else it.failure)
+                }
+            }
+        }
+    }
+
+    /** The "Checked out" chip: the list of checked-out spools replaces the search. */
+    fun setCheckedOnly(on: Boolean) {
+        _state.update { it.copy(checkedOnly = on, lowOnly = if (on) false else it.lowOnly, failure = if (on) null else it.failure, returnFailure = null) }
+        if (on) loadCheckedOut()
+    }
+
+    /** "Return to <home>": asks nothing; the row leaves the list and the toast offers Undo through the activity. */
+    fun returnToHome(spool: SpoolSummary) {
+        val send = returnSpool ?: return
+        if (_state.value.returningId != null || !CheckedOutRules.canReturn(spool)) return
+        _state.update { it.copy(returningId = spool.id, returnFailure = null) }
+        viewModelScope.launch {
+            try {
+                send(spool.id)
+                val event = undoFlow?.find(UndoOffer(listOf("spool:${spool.id}"), setOf(CheckedOutRules.RETURNED_KIND)))
+                _state.update { s ->
+                    val left = s.checked.filter { it.id != spool.id }
+                    s.copy(
+                        returningId = null, checked = left, checkedCount = left.size,
+                        returnToast = ReturnToast(CheckedOutTexts.returned(spool.home), event),
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // a refusal (409 not_checked_out) says its own words; the list is read again, it may have changed
+                _state.update { it.copy(returningId = null, returnFailure = hubFailure(e)) }
+                if (e is ApiError && e.status != 0) loadCheckedOut()
+            }
+        }
+    }
+
+    /** The toast was shown (or replaced). */
+    fun returnToastShown() = _state.update { it.copy(returnToast = null) }
+
+    /** The toast's Undo; the list is read again whatever came of it. */
+    suspend fun undoReturn(event: ActivityEvent): UndoOutcome {
+        val flow = undoFlow ?: return UndoOutcome.Refused("")
+        val outcome = flow.undo(event)
+        loadCheckedOut()
+        return outcome
+    }
+
+    private var checkedJob: Job? = null
+
     private companion object {
+        const val HTTP_NOT_FOUND = 404
+        const val HTTP_BAD_REQUEST = 400
         const val MIN_TYPED = 2
         const val TYPING_PAUSE_MS = 300L
     }
@@ -307,6 +412,16 @@ fun SearchScreen(
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
     LaunchedEffect(vm) { vm.loadSpoolmanLink() }
+    LaunchedEffect(vm) { vm.loadCheckedOut() }
+    // a Return: the toast says where the spool went, with Undo for 10 seconds when the Hub offers one (R88 1.6)
+    val toast = LocalToast.current
+    val undoLabel = stringResource(R.string.common_undo)
+    val returned = ui.returnToast
+    LaunchedEffect(returned) {
+        if (returned == null) return@LaunchedEffect
+        vm.returnToastShown()
+        toast?.showUndoable(returned.text, undoLabel, returned.event, undoHoldMs(context), vm::undoReturn)
+    }
     // Download as CSV (R84 6.5): the file goes to the system share sheet
     val csv = ui.csvFile
     val csvSubject = stringResource(R.string.nav_spools)
@@ -406,6 +521,10 @@ fun SearchScreen(
                         if (lowCount != null || ui.lowOnly) {
                             ToggleChip(stringResource(R.string.running_low_chip, lowCount ?: ui.low.size), ui.lowOnly) { vm.setLowOnly(!ui.lowOnly) }
                         }
+                        // spools with a remembered place (R88 1.6); no chip for a Hub without the filter
+                        ui.checkedCount?.let { n ->
+                            ToggleChip(CheckedOutTexts.chip(n), ui.checkedOnly) { vm.setCheckedOnly(!ui.checkedOnly) }
+                        }
                     }
                     val openOrToggle: (SpoolSummary) -> Unit = { spool ->
                         when {
@@ -422,14 +541,15 @@ fun SearchScreen(
                             else -> onOpenSpool(spool)
                         }
                     }
-                    if (ui.query.isBlank() && !ui.lowOnly) TagHint(nfc, onNfcSettings ?: { openNfcSettings(context) })
+                    if (ui.query.isBlank() && !ui.lowOnly && !ui.checkedOnly) TagHint(nfc, onNfcSettings ?: { openNfcSettings(context) })
                     HubNoticeOf(ui.failure, onPairAgain)
                     HubNoticeOf(ui.csvFailure, onPairAgain)
                     (ui.csvProblem ?: ui.csvFailure?.let { hubFailureText(it) })?.let { NoticeCard(NoticeKind.Bad, it) }
                     if (ui.lowOnly) LowSpoolsList(ui, openOrToggle, online, onTryAgain = vm::loadLowSpools)
+                    if (ui.checkedOnly) CheckedOutList(ui, openOrToggle, online, onReturn = vm::returnToHome, onPairAgain = onPairAgain, onTryAgain = vm::loadCheckedOut)
                     val searched = ui.searched
                     // the states every Hub screen has (05 3.2): the progress line, the error card, offline
-                    if (!ui.lowOnly) ScreenState(
+                    if (!ui.lowOnly && !ui.checkedOnly) ScreenState(
                         loaded = searched != null,
                         loading = ui.busy,
                         isEmpty = searched != null && ui.results.isEmpty(),
@@ -587,6 +707,42 @@ private fun LowSpoolsList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: 
                         },
                         color = if (spool.lastOne) colors.warn else colors.muted,
                         style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The checked-out list (R88 1.6): each row says where the spool is, its home and since when, with "Return to <home>"
+ * under it. The Hub's refusal of a Return shows under the list in its own words.
+ */
+@Composable
+private fun CheckedOutList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: Boolean, onReturn: (SpoolSummary) -> Unit, onPairAgain: () -> Unit, onTryAgain: () -> Unit) {
+    val space = SpoolwardenTheme.space
+    val colors = SpoolwardenTheme.colors
+    ScreenState(
+        loaded = ui.checkedLoaded,
+        loading = ui.busy,
+        isEmpty = ui.checkedLoaded && ui.checked.isEmpty(),
+        empty = { Text(CheckedOutTexts.EMPTY, style = MaterialTheme.typography.bodyLarge) },
+        error = ui.failure?.let { hubFailureText(it) },
+        onTryAgain = onTryAgain,
+        offline = !online,
+        loadedSecondsAgo = secondsSince(ui.loadedAt),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
+            ui.returnFailure?.let { HubFailureNotice(it, onPairAgain) }
+            ui.checked.forEach { spool ->
+                Column {
+                    SpoolRow(spool, onClick = { onOpen(spool) })
+                    CheckedOutRules.lines(spool).forEach {
+                        Text(it, color = colors.muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                    SwButton(
+                        CheckedOutTexts.returnTo(spool.home), { onReturn(spool) },
+                        kind = SwButtonKind.Quiet, enabled = ui.returningId == null, busy = ui.returningId == spool.id,
                     )
                 }
             }
