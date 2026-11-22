@@ -182,6 +182,13 @@ def leave() -> dict:
     if not is_on():
         raise NotDemo()
     d = folder()
+    from .. import events                        # not at the top: events.py imports this module
+    try:                                         # the real log goes on above every id the demo gave: no cursor skips
+        high = events.EventStore(d / "events").last_id()
+        if high:
+            events.EventStore(config.paths().state / "events").carry(high)
+    except (OSError, events.EventError):
+        pass
     (d / MARKER).unlink()                        # off first, so a half-deleted folder is no demo
     shutil.rmtree(d, ignore_errors=True)
     return {"demo": False}

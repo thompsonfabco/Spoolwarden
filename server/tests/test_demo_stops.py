@@ -221,3 +221,30 @@ def test_the_catalog_download_stops_in_the_demo(env):
     on()
     with pytest.raises(library.LibraryError, match="Not in the demo."):
         library.update("https://example.invalid/library.tar.gz", opener=lambda *a, **k: pytest.fail("reached outside"))
+
+
+def test_usage_lands_in_the_demos_folder_and_not_in_the_real_state(env):
+    """R587 M1: the pretend printers' usage (the log, the monthly files, the slot map) never lands in <state>/printers."""
+    from filament_kit.bridge import usage
+    on()
+    usage.append("00M00A000000001", {"job": "j1", "grams": 5.0, "spool_id": 1, "slot": "A1", "observe": False})
+    assert usage.entries("00M00A000000001", days=3650)
+    assert not (env / "state" / "printers").exists()
+    assert list((env / "state" / "demo" / "printers" / "00M00A000000001").rglob("*.xml"))
+    demo.leave()
+    assert not (env / "state" / "printers").exists() and not (env / "state" / "demo").exists()
+
+
+def test_the_demos_event_ids_continue_above_the_real_log_and_the_real_log_above_the_demo(env):
+    """R587 M3: a cursor taken in the real log (or in the demo) never skips the events after a demo start (or leave)."""
+    who = {"type": "hub", "name": "Hub"}
+    real = [events.write("print.started", {"type": "printer", "id": "p1", "name": "P"}, who, {"job": f"j{i}"})
+            for i in range(5)]
+    top = real[-1]["id"]
+    on()
+    first = events.write("print.started", {"type": "printer", "id": "p1", "name": "P"}, who, {"job": "d1"})
+    second = events.write("print.started", {"type": "printer", "id": "p1", "name": "P"}, who, {"job": "d2"})
+    assert first["id"] > top and second["id"] == first["id"] + 1
+    demo.leave()
+    after = events.write("print.started", {"type": "printer", "id": "p1", "name": "P"}, who, {"job": "r6"})
+    assert after["id"] > second["id"]
