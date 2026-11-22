@@ -8,7 +8,6 @@ import pytest
 from fksync import statexml
 
 
-
 def _break(p, text=b"<lines version="):
     (p.parent / (p.stem + ".xml")).write_bytes(text)
 
@@ -124,9 +123,51 @@ def test_a_removal_that_fails_keeps_the_hash_and_notes_it(tmp_path, monkeypatch,
         return real(self, *a, **k)
 
     monkeypatch.setattr(Path, "unlink", deny)
-    assert statexml.read(p) == {"n": 1}                                    # the XML still wins this time
+    assert statexml.read(p) is None                                        # none, not the stale XML
+    assert statexml.read(p) is None                                        # and again: the stale data never answers
     assert (tmp_path / "pair-aside.json.sha256").is_file() and (tmp_path / "pair-aside.xml").is_file()
     assert any("pair-aside" in x and "could not be removed" in x for x in statexml.problems())
     monkeypatch.undo()
     assert statexml.read(p) is None                                        # the next read tries again and succeeds
     assert not (tmp_path / "pair-aside.xml").exists() and not (tmp_path / "pair-aside.json.sha256").exists()
+
+
+def test_a_save_while_the_stale_xml_remains_writes_only_what_the_caller_gives(tmp_path, monkeypatch):
+    p = tmp_path / "pair-aside.json"
+    statexml.write(p, {"token": "OLD"})
+    p.unlink()
+    real = Path.unlink
+
+    def deny(self, *a, **k):
+        if self.suffix == ".xml":
+            raise PermissionError(13, "denied")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", deny)
+    assert statexml.read(p) is None
+    monkeypatch.undo()
+    assert statexml.read(p) is None                                        # nothing was written: the old data stays gone
+    assert not (tmp_path / "pair-aside.xml").exists() and not p.exists()
+    statexml.write(p, {"token": "NEW"})
+    assert statexml.read(p) == {"token": "NEW"}
+
+
+def test_a_save_over_a_stale_xml_that_cannot_be_removed_replaces_it(tmp_path, monkeypatch):
+    p = tmp_path / "pair-aside.json"
+    statexml.write(p, {"token": "OLD"})
+    p.unlink()
+    real = Path.unlink
+
+    def deny(self, *a, **k):
+        if self.suffix == ".xml":
+            raise PermissionError(13, "denied")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", deny)
+    assert statexml.read(p) is None
+    statexml.write(p, {"token": "NEW"})                                    # the caller really has new data
+    assert statexml.read(p) == {"token": "NEW"}
+    monkeypatch.undo()
+    assert statexml.read(p) == {"token": "NEW"}
+    assert b"OLD" not in (tmp_path / "pair-aside.xml").read_bytes()
+

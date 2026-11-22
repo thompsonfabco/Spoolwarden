@@ -390,7 +390,7 @@ def _newer_json(path: Path, xml_data, t: str, is_list: bool, keep_version: bool,
             xml_path(path).unlink(missing_ok=True)
         except OSError as e:                    # not removed: keep the hash, so the next read tries again
             note_problem(path, f"deleted by an older release, but the XML form could not be removed: {e}")
-            return None
+            return _GONE                        # still none: the stale XML must not answer for a deleted file
         try:
             _sha_path(jp).unlink()
         except OSError:
