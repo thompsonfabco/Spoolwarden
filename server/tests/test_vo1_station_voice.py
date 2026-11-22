@@ -356,3 +356,66 @@ def test_test_refuses_a_value_out_of_range_before_anything_else(hub, monkeypatch
     for body in ({"speed": 49}, {"speed": 201}, {"volume": 101}, {"volume": -1}, {"speaker": -1}):
         assert post(hub, "/voice/test", body)[0] == 400
     assert speech.speech["text"] is None
+
+
+# ---- the hello answer
+
+class Api:
+    paired = True
+
+    def __init__(self, body):
+        self.body = body
+
+    def hello(self, values=None):
+        return 200, self.body
+
+
+VOICE = {"speech": False, "speaker": 321, "speed": 120, "volume": 33}
+
+
+def test_the_hello_answer_voice_goes_live_at_start():
+    assert server_api.announce(lambda: Api({"ok": True, "voice": VOICE}), "ab" * 32, 5003, tries=1)
+    assert st.voice_values() == VOICE
+
+
+def test_the_hello_answer_voice_goes_live_at_a_check_in():
+    taken = server_api.checkin(lambda: Api({"voice": VOICE}), "ab" * 32, 5003, sleep=lambda s: None, rounds=1)
+    assert taken == 1 and st.voice_values() == VOICE
+
+
+def test_an_older_hub_with_no_voice_leaves_the_values_alone():
+    st.live.update(speed=60)
+    assert server_api.announce(lambda: Api({"ok": True}), "ab" * 32, 5003, tries=1)
+    assert st.voice_values()["speed"] == 60
+    for odd in ("loud", None, [1], 7):
+        assert server_api.announce(lambda: Api({"voice": odd}), "ab" * 32, 5003, tries=1)
+    assert st.voice_values()["speed"] == 60
+
+
+def test_a_bad_value_in_the_hello_is_skipped_and_the_good_ones_are_taken():
+    assert server_api.announce(lambda: Api({"voice": {"speaker": 5000, "speed": 90, "volume": "loud", "other": 1}}),
+                               "ab" * 32, 5003, tries=1)
+    assert st.live == {"speed": 90}
+
+
+def test_the_hello_is_taken_even_if_applying_the_voice_fails(monkeypatch):
+    monkeypatch.setattr(speech, "apply_hello", lambda body: 1 / 0)
+    assert server_api.announce(lambda: Api({"voice": VOICE}), "ab" * 32, 5003, tries=1)
+
+
+def test_the_hello_volume_goes_to_a_c3_panel(monkeypatch):
+    sent = []
+    monkeypatch.setattr(wire, "panel_send", lambda d: sent.append(d) or True)
+    monkeypatch.setitem(st.ports, "panel_chip", "esp32c3")
+    server_api.announce(lambda: Api({"voice": {"volume": 12}}), "ab" * 32, 5003, tries=1)
+    assert sent == ["V 12"]
+
+
+def test_the_station_says_the_test_sentence_end_to_end(hub, piper):
+    """The queued test phrase reaches Piper with the speaker and the length scale from the request."""
+    post(hub, "/voice/test", {"speaker": 77, "speed": 200})
+    wav = speech.synth(speech.speech["text"], speech.speech["opts"])
+    (text, cfg), = FakePiper.calls
+    assert text == speech.SENTENCE and (cfg.speaker_id, cfg.length_scale) == (77, 0.5)
+    with wave.open(io.BytesIO(wav)) as w:
+        assert w.getnframes() == 10
