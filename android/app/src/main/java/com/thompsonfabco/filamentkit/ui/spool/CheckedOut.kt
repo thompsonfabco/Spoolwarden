@@ -19,6 +19,7 @@ object CheckedOutTexts {
     const val RETURN = "Return"
     const val HOME = "Home"
     const val CHANGE_HOME = "Change home"
+    const val HOME_NOT_RECORDED = "Home: not recorded"
 
     fun chip(count: Int) = "$CHIP ($count)"
     fun inPlace(place: String) = "In $place"
@@ -26,7 +27,7 @@ object CheckedOutTexts {
     fun since(time: String) = "since $time"
     fun returnTo(home: String?) = if (home.isNullOrBlank()) RETURN else "Return to $home"
     fun homeNow(location: String) = "Home is now $location."
-    fun returned(home: String?) = if (home.isNullOrBlank()) "Returned." else "Returned to $home."
+    fun returned(location: String?) = if (location.isNullOrBlank()) "Returned." else "Returned to $location."
 }
 
 /** What the Hub says of a spool's remembered place (`checked_out`, `home`, `checked_out_since`). */
@@ -78,8 +79,9 @@ object CheckedOutRules {
     /** Return is offered on a checked-out spool only. */
     fun canReturn(s: SpoolSummary): Boolean = s.checkedOut
 
-    /** The line of the spool's detail while it is checked out; null when it is not. */
-    fun homeLine(s: SpoolSummary): String? = s.home?.takeIf { s.checkedOut }?.let(CheckedOutTexts::home)
+    /** The line of the spool's detail while it is checked out ("Home: not recorded" without a home); null when it is not. */
+    fun homeLine(s: SpoolSummary): String? =
+        if (!s.checkedOut) null else s.home?.let(CheckedOutTexts::home) ?: CheckedOutTexts.HOME_NOT_RECORDED
 
     /** Home can be changed while the spool is checked out. */
     fun canChangeHome(s: SpoolSummary): Boolean = s.checkedOut

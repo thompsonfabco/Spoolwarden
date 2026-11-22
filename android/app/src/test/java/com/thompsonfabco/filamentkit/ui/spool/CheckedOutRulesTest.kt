@@ -80,6 +80,7 @@ class CheckedOutRulesTest {
         assertEquals("Return to Shelf B", CheckedOutTexts.returnTo("Shelf B"))
         assertEquals("Return", CheckedOutTexts.returnTo(null))
         assertEquals("Returned to Shelf B.", CheckedOutTexts.returned("Shelf B"))
+        assertEquals("Returned.", CheckedOutTexts.returned(null))
         assertEquals("Checked out (3)", CheckedOutTexts.chip(3))
         assertEquals("Home is now Dry box 1.", CheckedOutTexts.homeNow("Dry box 1"))
     }
@@ -89,6 +90,7 @@ class CheckedOutRulesTest {
         val back = row(7, false, "Shelf B").toSpoolSummary()
         assertEquals("Home: Shelf B", CheckedOutRules.homeLine(out))
         assertTrue(CheckedOutRules.canChangeHome(out))
+        assertEquals("Home: not recorded", CheckedOutRules.homeLine(row(7, true).toSpoolSummary()))
         assertNull(CheckedOutRules.homeLine(back))
         assertFalse(CheckedOutRules.canChangeHome(back))
         assertFalse(CheckedOutRules.canReturn(back))

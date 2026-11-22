@@ -371,7 +371,7 @@ class SpoolViewModel(
             _state.update {
                 it.copy(
                     spool = shown(updated), returning = false, loadedAt = now(), result = null, failure = it.failure.afterSuccess(),
-                    returnToast = ReturnToast(CheckedOutTexts.returned(spool.home), event),
+                    returnToast = ReturnToast(CheckedOutTexts.returned(updated.location), event),
                 )
             }
             loadActivity()

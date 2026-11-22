@@ -46,6 +46,7 @@ class SearchCheckedOutTest {
     private var rows: List<JsonObject> = listOf(spool(1, true), spool(2, true, "Dry box 1"))
     private var filters: List<String>? = listOf("sealed", "checked_out")
     private var loadError: Exception? = null
+    private var returnedAt: String? = "Shelf B"
     private var returnError: Exception? = null
     private val returned = mutableListOf<Int>()
     private var events = emptyList<ActivityEvent>()
@@ -58,7 +59,7 @@ class SearchCheckedOutTest {
 
     private fun vm() = SearchViewModel(
         loadChecked = { loadError?.let { throw it }; SpoolsAnswer(rows, null, filters) },
-        returnSpool = { id -> returnError?.let { throw it }; returned += id; spool(id, false) },
+        returnSpool = { id -> returnError?.let { throw it }; returned += id; buildJsonObject { put("id", id); returnedAt?.let { put("location", it) } } },
         undoFlow = UndoFlow(backend, now = { 1_000L }),
     ) { _, _ -> emptyList() }
 
@@ -117,6 +118,17 @@ class SearchCheckedOutTest {
         assertEquals("Returned to Shelf B.", vm.state.value.returnToast!!.text)
         assertEquals(8L, vm.state.value.returnToast!!.event!!.id)
         assertNull(vm.state.value.returningId)
+    }
+
+    @Test fun theResultNamesWhereTheHubPutTheSpoolAndSaysOnlyReturnedWithNoPlace() {
+        val vm = vm()
+        vm.setCheckedOnly(true)
+        returnedAt = "Dry box 1"
+        vm.returnToHome(vm.state.value.checked.first { it.id == 1 })
+        assertEquals("Returned to Dry box 1.", vm.state.value.returnToast!!.text)
+        returnedAt = null
+        vm.returnToHome(vm.state.value.checked.first { it.id == 2 })
+        assertEquals("Returned.", vm.state.value.returnToast!!.text)
     }
 
     @Test fun anOlderEventKindOffersNoUndo() {

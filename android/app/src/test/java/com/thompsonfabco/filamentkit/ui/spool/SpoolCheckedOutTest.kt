@@ -31,6 +31,7 @@ class SpoolCheckedOutTest {
     private val calls = mutableListOf<String>()
     private var events = emptyList<ActivityEvent>()
     private var refusal: ApiError? = null
+    private var returnedAt: String? = "Shelf B"
 
     private fun withFields(spool: JsonObject, out: Boolean, home: String?): JsonObject = buildJsonObject {
         spool.forEach { (k, v) -> put(k, v) }
@@ -41,7 +42,7 @@ class SpoolCheckedOutTest {
         override suspend fun returnSpool(spoolId: Int): JsonObject {
             calls += "return:$spoolId"
             refusal?.let { throw it }
-            return withFields(spoolJson(spoolId), out = false, home = null)
+            return withFields(spoolJson(spoolId, location = returnedAt), out = false, home = null)
         }
 
         override suspend fun setHome(spoolId: Int, home: String): JsonObject {
@@ -79,6 +80,19 @@ class SpoolCheckedOutTest {
         assertEquals("Returned to Shelf B.", vm.state.value.returnToast!!.text)
         assertEquals(8L, vm.state.value.returnToast!!.event!!.id)
         assertFalse(vm.state.value.returning)
+    }
+
+    @Test fun theResultNamesTheLocationInTheAnswerOrSaysOnlyReturned() = runTest(dispatcher) {
+        returnedAt = "Dry box 1"
+        val vm = vm()
+        vm.returnToHome()
+        advanceUntilIdle()
+        assertEquals("Returned to Dry box 1.", vm.state.value.returnToast!!.text)
+        returnedAt = null
+        val none = vm()
+        none.returnToHome()
+        advanceUntilIdle()
+        assertEquals("Returned.", none.state.value.returnToast!!.text)
     }
 
     @Test fun aRefusalReadsTheHubsMessageAndNothingChanges() = runTest(dispatcher) {
