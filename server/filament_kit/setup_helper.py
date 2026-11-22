@@ -593,6 +593,26 @@ def _tts(value) -> str:
     return value
 
 
+def _voice_speaker(value) -> int:
+    return _whole(value, 0, config.VOICE_SPEAKER_MAX)
+
+
+def _voice_speed(value) -> int:
+    n = _whole(value, config.VOICE_SPEED_MIN, config.VOICE_SPEED_MAX)
+    if n % config.VOICE_SPEED_STEP:
+        raise ValueError(f"must be a multiple of {config.VOICE_SPEED_STEP}, from {config.VOICE_SPEED_MIN} to "
+                         f"{config.VOICE_SPEED_MAX}")
+    return n
+
+
+def _hand_voice(cfg: dict, keys) -> None:
+    """The station takes Speak, Speaker, Speed and Volume at once, with no restart (R88 2.3); one that does not answer
+    does not undo the save."""
+    from .setup_console import voice_tab
+    if any(k in voice_tab.KEYS for k in keys):
+        voice_tab.hand_over(cfg)
+
+
 # What the page may write into config.json besides the two addresses in SETTINGS: key -> (check, then). Never in here:
 # port, station.allow, modules, or anything with a path. "restart": the server reads it once, when it starts.
 # "apply": `modules apply` acts on it.
@@ -602,6 +622,11 @@ GENERAL = {
     "reads_per_day": (lambda v: _whole(v, 1, 100000), "restart"),
     "intake.history_keep": (lambda v: _whole(v, 0, 500), None),     # read per record (intake_history.keep)
     "station.tts": (_tts, "apply"),
+    # handed to the running station when saved (_hand_voice): no restart, no apply
+    "station.speech": (_bool, None),
+    "station.voice_speaker": (_voice_speaker, None),
+    "station.voice_speed": (_voice_speed, None),
+    "station.speaker_volume": (lambda v: _whole(v, 0, 100), None),
     "appearance.theme": (_look, None),      # read on every page and api/info: no restart
     "setup.hosts": (_hosts, None),          # read on every request (setup_page.extra_hosts): no restart
     "web.printer_changes": (_bool, None),   # read on every request (printers_app.changes_allowed): no restart
@@ -667,6 +692,7 @@ def _general(req: dict) -> dict:
     if req.get("dry_run") is True:      # everything that can refuse has run: the caller may now do what must come first
         return {"key": key, "dry_run": True}
     config.save(cfg)
+    _hand_voice(cfg, (key,))
     _emit_settings_changed(group="general", names=key)
     if then == "apply":
         _start_apply(checked=True)
@@ -720,6 +746,7 @@ def _general_group(req: dict) -> dict:
     if req.get("dry_run") is True:      # see _general: checked, nothing saved
         return {"keys": list(checked), "dry_run": True}
     config.save(cfg)
+    _hand_voice(cfg, checked)
     _emit_settings_changed(group="general", names=",".join(sorted(checked)))
     if applies:
         _start_apply(checked=True)
