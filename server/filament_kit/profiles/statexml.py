@@ -213,6 +213,16 @@ def problems() -> list[str]:
     return [f"{k} ({v})" for k, v in sorted(_unreadable.items())]
 
 
+def note_problem(path: Path, reason: str) -> None:
+    """Record that `path` (any file, not only a state file) could not be read, for `problems()` and the Checks row."""
+    _unreadable[str(path)] = reason
+
+
+def clear_problem(path: Path) -> None:
+    """Forget the problem noted for `path` (it reads again, or was set aside)."""
+    _unreadable.pop(str(path), None)
+
+
 def _plain(path: Path):
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))

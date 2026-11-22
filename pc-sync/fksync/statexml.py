@@ -210,6 +210,24 @@ def tag_of(path: Path) -> str:
     return Path(path).stem.lower().replace("_", "-")
 
 
+_unreadable: dict[str, str] = {}
+
+
+def problems() -> list[str]:
+    """What could not be converted or read since this process started: ["<file> (<reason>)", ...]."""
+    return [f"{k} ({v})" for k, v in sorted(_unreadable.items())]
+
+
+def note_problem(path: Path, reason: str) -> None:
+    """Record that `path` (any file, not only a state file) could not be read, for `problems()` and the Checks row."""
+    _unreadable[str(path)] = reason
+
+
+def clear_problem(path: Path) -> None:
+    """Forget the problem noted for `path` (it reads again, or was set aside)."""
+    _unreadable.pop(str(path), None)
+
+
 def atomic_write(path: Path, data: bytes, mode: int = 0o600) -> None:
     """Write data to a temp file next to path, then replace path with it."""
     path = Path(path)
