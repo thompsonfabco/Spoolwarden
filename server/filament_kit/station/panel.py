@@ -232,8 +232,8 @@ def warn_swap_needs_fw9(version):
 
 def send_volume():
     """Tell the C3 panel the speaker volume (percent). A setting change rewrites the drop-in and restarts the
-    service, so one send when the panel is found covers changes."""
-    return wire.panel_send("V %d" % st.settings["speaker_volume"])
+    service, so one send when the panel is found covers changes; the Hub's live volume (`POST /voice`) is sent as it comes."""
+    return wire.panel_send("V %d" % st.voice_value("volume"))
 
 
 EMPTY_PASSES, SLOW_SECONDS = 3, 60  # after this many passes without a panel, look every SLOW_SECONDS

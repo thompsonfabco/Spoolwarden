@@ -150,9 +150,15 @@ class FakePiper:
         cls.loads.append(path)
         return cls()
 
-    def synthesize_wav(self, text, w):
+    def synthesize_wav(self, text, w, syn_config=None):
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050)
         w.writeframes(b"\x00\x01" * 100)
+
+
+class Synth:
+    """piper.SynthesisConfig: only the settings the station passes."""
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
 
 
 @pytest.fixture
@@ -161,7 +167,7 @@ def piper_env(tmp_path, monkeypatch):
     model.write_bytes(ONNX)
     monkeypatch.setitem(st.settings, "tts", "auto")
     monkeypatch.setitem(st.settings, "piper_voice", str(model))
-    monkeypatch.setitem(sys.modules, "piper", types.SimpleNamespace(PiperVoice=FakePiper))
+    monkeypatch.setitem(sys.modules, "piper", types.SimpleNamespace(PiperVoice=FakePiper, SynthesisConfig=Synth))
     speech.piper.clear()
     FakePiper.loads = []
     espeak = []
@@ -203,7 +209,7 @@ def test_a_broken_piper_falls_back_once_loaded(piper_env, monkeypatch):
 
 def test_a_phrase_piper_fails_on_goes_to_espeak(piper_env, monkeypatch):
     _, espeak = piper_env
-    monkeypatch.setattr(FakePiper, "synthesize_wav", lambda self, t, w: (_ for _ in ()).throw(ValueError("bad")))
+    monkeypatch.setattr(FakePiper, "synthesize_wav", lambda self, t, w, syn_config=None: (_ for _ in ()).throw(ValueError("bad")))
     assert speech.synth("a") == b"RIFFespeak" and len(espeak) == 1
 
 
