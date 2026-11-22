@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import config
+from .bridge import xmlfile
 from .profiles import statexml
 
 log = logging.getLogger(__name__)
@@ -122,6 +123,27 @@ def write_pending(answers: dict) -> None:
         json.dump(answers, fh)
 
 
+def _why(raw: bytes) -> str:
+    """Why an answers file is damaged, with no value in it (the answers hold the Wi-Fi password): for a typed value that is
+    not what its type says, the name of the field; else only the kind of damage."""
+    try:
+        statexml.loads(raw, statexml.tag_of(pending_path()))
+        return "damaged"
+    except statexml.StateXmlError as e:
+        text = str(e)
+    if text.startswith("a value is not"):
+        try:
+            for el in xmlfile.fromstring(raw):
+                try:
+                    statexml._slot(el)
+                except (ValueError, TypeError):
+                    return f"a value of the field {el.tag} is not what its type says"
+        except Exception:  # noqa: BLE001
+            pass
+        return "a value is not what its type says"
+    return next((k for k in ("not readable XML", "root element", "larger than") if text.startswith(k)), "damaged")
+
+
 def take_pending() -> dict | None:
     """The answers the page left, once: the file is deleted whatever it holds. None when there are none, or they are
     older than PENDING_MAX_AGE (a job that never ran). The XML form wins; a file left in the old JSON form is read
@@ -139,7 +161,7 @@ def take_pending() -> dict | None:
             try:
                 data = statexml.loads(raw, statexml.tag_of(path)) if p == path else json.loads(raw.decode("utf-8"))
             except (statexml.StateXmlError, ValueError) as e:
-                log.warning("%s could not be read (%s)", p.name, e if isinstance(e, statexml.StateXmlError) else "not JSON")
+                log.warning("%s could not be read (%s)", p.name, _why(raw) if p == path else "not JSON")
                 data = None
             break
     except OSError:

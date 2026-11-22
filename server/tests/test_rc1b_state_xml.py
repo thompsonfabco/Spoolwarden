@@ -116,6 +116,16 @@ def test_the_answers_are_deleted_in_one_place_only():
     assert "path.unlink(" not in text and "old.unlink(" not in text
 
 
+def test_a_damaged_typed_value_logs_the_field_not_the_value(caplog):
+    rf.pending_path().write_bytes(
+        b'<reader-setup version="1"><ssid>Home</ssid><port as="int">zq-secret-77</port><pass>12345678</pass></reader-setup>')
+    with caplog.at_level(logging.WARNING, logger="filament_kit.reader_flash"):
+        assert rf.take_pending() is None
+    assert "reader-setup.xml could not be read" in caplog.text and "port" in caplog.text
+    assert "zq-secret-77" not in caplog.text and "12345678" not in caplog.text
+    assert _left_over() == []
+
+
 def test_answers_of_another_root_element_are_not_taken():
     rf.pending_path().write_bytes(statexml.dumps("something-else", ANSWERS))
     assert rf.take_pending() is None
