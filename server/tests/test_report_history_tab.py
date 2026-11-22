@@ -47,21 +47,21 @@ def test_report_build_redacts_secrets_and_anonymizes_names(monkeypatch, env):
     monkeypatch.setattr(report.platform, "node", lambda: "my-secret-hub-host")
 
     from filament_kit.bridge import registry          # a real registry entry (D11: no fake with fields Printer lacks)
-    registry.upsert(registry.Printer("00M09A123456789", "Studio X1C", "X1C", "192.168.1.55", "12345678", True))
+    registry.upsert(registry.Printer("00M09A123456789", "Studio X1C", "X1C", "10.20.30.11", "12345678", True))
 
     from filament_kit import pairing
     monkeypatch.setattr(pairing, "devices", lambda: [{"name": "Kitchen Phone", "type": "android", "version": "1.4.0"}])
 
     cfg = {
         "server_name": "Workshop Hub",
-        "spoolman_url": "http://192.168.1.10:7912",
+        "spoolman_url": "http://10.20.30.12:7912",
         "modules": {"server": True, "printers": True},
         "backup": {"keep_days": 14, "backup_password": "supersecretvalue"},
     }
     text = report.build(
         cfg,
         journal_fn=lambda unit, n: [
-            "2026-11-12T14:00:00+0000 connected to 192.168.1.55 serial 00M09A123456789",
+            "2026-11-12T14:00:00+0000 connected to 10.20.30.11 serial 00M09A123456789",
             "2026-11-12T14:01:00+0000 Studio X1C paired with Kitchen Phone pairing_code=654321",
         ],
     )
@@ -69,7 +69,7 @@ def test_report_build_redacts_secrets_and_anonymizes_names(monkeypatch, env):
     assert lines[0] == "Spoolwarden Hub report"
     assert "What this holds:" in lines[2]
     assert "What this never holds:" in lines[3]
-    for secret in ("192.168.1.55", "192.168.1.10", "00M09A123456789", "supersecretvalue", "654321",
+    for secret in ("10.20.30.11", "10.20.30.12", "00M09A123456789", "supersecretvalue", "654321",
                    "Workshop Hub", "my-secret-hub-host", "Studio X1C", "Kitchen Phone"):
         assert secret not in text
     assert "printer-1" in text
