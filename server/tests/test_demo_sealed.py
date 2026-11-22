@@ -320,3 +320,17 @@ def test_firmware_download_and_the_klipper_printer_routes_with_bodies_stay_insid
     after = snapshot(tmp_path)
     written = {"write " + norm(k) for k in set(before) | set(after) if before.get(k) != after.get(k)}
     assert written | {"write " + norm(k) for k in out.wrote[w:]} == set()
+
+
+def test_a_printer_edit_in_the_demo_answers_the_stop_not_an_internal_error(hub, tmp_path):
+    """R609 N3: every registry writer stops in the demo, and the page's routes answer 409 "Not in the demo." for it."""
+    c, out, _ = hub
+    before = snapshot(tmp_path)
+    body = {"code": CODE, "name": "Renamed", "address": "192.0.2.99", "host": "192.0.2.99", "port": 7125, "api_key": "k",
+            "mode": "on", "access_code": "12345678"}
+    for pid, what in (("00M00A000000001", "rename"), ("00M00A000000001", "address"), ("00M00A000000001", "unpin"),
+                      ("garage-voron", "rename"), ("garage-voron", "address"), ("garage-voron", "api_key"),
+                      ("garage-voron", "lane_data"), ("mainsailos", "connect")):
+        r = c.post(f"/setup/api/printers/{pid}/{what}", json=body)
+        assert (r.status_code, r.json()) == (409, {"error": demo.NOT_IN_DEMO, "code": demo.NOT_IN_DEMO_CODE}), (pid, what)
+    assert snapshot(tmp_path) == before

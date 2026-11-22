@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import csv
+import functools
 import io
 import ipaddress
 import re
@@ -157,8 +158,18 @@ def routes(page) -> list[tuple]:
     from .. import klipper_cli
     from ..setup_page import Refused
 
-    w = lambda fn: page.guard(fn, write=True)  # noqa: E731
-    g = page.guard
+    def stopped_in_demo(fn):
+        """A registry writer stops in the demo (`demo.NotInDemo`): the route answers the stop, not "internal error"."""
+        @functools.wraps(fn)
+        async def route(request, body):
+            try:
+                return await fn(request, body)
+            except demo.NotInDemo:
+                raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE) from None
+        return route
+
+    w = lambda fn: page.guard(stopped_in_demo(fn), write=True)  # noqa: E731
+    g = lambda fn: page.guard(stopped_in_demo(fn))  # noqa: E731
 
     def not_in_demo() -> None:
         """The demo reaches no printer, no network and no download: add, probe, scan and the add-on pack stop here."""
