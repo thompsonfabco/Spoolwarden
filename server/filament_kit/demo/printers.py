@@ -421,7 +421,7 @@ class Family:
         if p.gcode == "RUNNING" and p.slots and p.slots[0].label == label:
             raise loading.SlotInUse(f"{p.name} is printing; load {label} when it is paused or done")
         patch = loading.target_patch(spool, loc)
-        moved = loading.send_back(sm, loading.occupants(sm, loc, spool["id"]), sealed_location, dry)
+        moved = loading.send_back(sm, loading.occupants(sm, loc, spool["id"]), dry)
         final = spool
         if not dry:
             if patch:
@@ -446,7 +446,7 @@ class Family:
         here = loading.occupants(sm, loc)
         if not here:
             raise loading.NotFound(f"no spool is in {p.name} slot {label}")
-        moved = loading.send_back(sm, here, sealed_location, dry)
+        moved = loading.send_back(sm, here, dry)
         first = min(here, key=lambda s: s["id"])
         spool = {**first, "location": moved[0]["location"]} if dry else sm.get(f"spool/{first['id']}")
         return {"spool": spool, "slot": {"label": label, "location": loc}, "preset": None, "dry_run": bool(dry),
