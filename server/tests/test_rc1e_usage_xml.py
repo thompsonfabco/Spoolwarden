@@ -206,7 +206,11 @@ def test_a_failed_move_is_logged_once_and_noted_until_it_works(monkeypatch, capl
     assert not any("usage.jsonl" in p for p in statexml.problems())            # moved: nothing to report
 
 
-needs_flock = pytest.mark.skipif(usage.fcntl is None, reason="flock: Linux only")
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
+needs_flock = pytest.mark.skipif(fcntl is None, reason="flock: Linux only")
 
 
 def _sub_env():
