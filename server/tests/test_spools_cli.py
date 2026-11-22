@@ -500,7 +500,7 @@ def test_return_asks_nothing_posts_and_names_undo(capsys, never_asked):
     api = return_api(out_view(12), returned())
     assert spools_cli.cmd_spool_return(api, "12") == 0
     out = capsys.readouterr().out
-    assert "[y/N]" not in out and out.splitlines() == ["Returned to Rack 1.", "To undo it: spoolwarden undo"]
+    assert "[y/N]" not in out and out.splitlines() == ["Returned to Rack 1.", "To undo it: sudo spoolwarden undo 7"]
     assert api.calls == [("POST", "/api/spools/12/return", {})]
 
 
@@ -514,7 +514,13 @@ def test_return_with_no_place_in_the_answer_is_just_returned(capsys, never_asked
     api = return_api(out_view(12, home=None), returned(None))
     assert spools_cli.cmd_spool_return(api, "12") == 0
     out = capsys.readouterr().out
-    assert out.splitlines() == ["Returned.", "To undo it: spoolwarden undo"]
+    assert out.splitlines() == ["Returned.", "To undo it: sudo spoolwarden undo 7"]
+
+
+def test_return_without_an_event_id_names_undo_without_it(capsys, never_asked):
+    api = return_api(out_view(12), lambda body: {"spool": {"id": 12, "location": "Rack 1"}})
+    assert spools_cli.cmd_spool_return(api, "12") == 0
+    assert capsys.readouterr().out.splitlines()[-1] == "To undo it: sudo spoolwarden undo"
 
 
 def test_return_json_gives_the_answer_without_asking(never_asked):
