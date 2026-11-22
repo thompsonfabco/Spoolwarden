@@ -32,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -87,8 +88,11 @@ fun SpoolScreen(
     online: Boolean = true,
     printersOn: Boolean = true,
     embedded: Boolean = false,
+    /** Where the label drawing comes from (Print a label, 7.10); null: the overflow has no such item. */
+    label: LabelSource? = null,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
+    var printing by rememberSaveable { mutableStateOf(false) }
     val space = SpoolwardenTheme.space
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
@@ -142,7 +146,7 @@ fun SpoolScreen(
                     Header(spool, ui.openedByTag)
                     Remaining(spool)
                     ui.result?.let { ResultLine(it) }
-                    Actions(vm, ui, online, printersOn, onLoad)
+                    Actions(vm, ui, online, printersOn, onLoad, onPrint = if (label != null) ({ printing = true }) else null)
                     Details(spool)
                     ActivityList(
                         ui.activity, ui.undoing, enabled = online && !ui.writing,
@@ -156,6 +160,8 @@ fun SpoolScreen(
         }
     }
 
+    val printable = ui.spool
+    if (printing && label != null && printable != null) PrintLabelSheet(printable, label) { printing = false }
     ui.weight?.let { WeightSheet(vm, it, ui.spool?.remaining, onPairAgain) }
     ui.move?.let { MoveSheet(vm, it, ui.spool?.location, onPairAgain) }
     if (ui.confirmEmpty) {
@@ -258,7 +264,9 @@ private const val PERCENT_FULL = 100f
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Actions(vm: SpoolViewModel, ui: SpoolUi, online: Boolean, printersOn: Boolean, onLoad: () -> Unit) {
+private fun Actions(
+    vm: SpoolViewModel, ui: SpoolUi, online: Boolean, printersOn: Boolean, onLoad: () -> Unit, onPrint: (() -> Unit)? = null,
+) {
     val space = SpoolwardenTheme.space
     val enabled = online && !ui.writing
     var menu by remember { mutableStateOf(false) }
@@ -278,6 +286,7 @@ private fun Actions(vm: SpoolViewModel, ui: SpoolUi, online: Boolean, printersOn
                         stringResource(R.string.spool_mark_empty), { menu = false; vm.askMarkEmpty() },
                         enabled = enabled && ui.spool?.state != SpoolState.Empty,
                     )
+                    if (onPrint != null) SwMenuItem(PrintTexts.MENU, { menu = false; onPrint() }, enabled = online)
                     SwMenuItem(stringResource(R.string.common_refresh), { menu = false; vm.refresh() }, enabled = online)
                 }
             }

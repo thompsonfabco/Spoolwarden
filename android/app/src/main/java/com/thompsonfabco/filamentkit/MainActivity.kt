@@ -136,6 +136,8 @@ import com.thompsonfabco.filamentkit.nav.TagLinkRoute
 import com.thompsonfabco.filamentkit.nav.TagRoute
 import com.thompsonfabco.filamentkit.nav.SpoolsGraph
 import com.thompsonfabco.filamentkit.nav.SpoolsScanRoute
+import com.thompsonfabco.filamentkit.ui.spool.LabelSource
+import com.thompsonfabco.filamentkit.ui.spool.hubAddress
 import com.thompsonfabco.filamentkit.ui.pair.LabelLookup
 import com.thompsonfabco.filamentkit.ui.pair.LabelScan
 import com.thompsonfabco.filamentkit.ui.pair.labelSpoolNumber
@@ -667,6 +669,7 @@ internal fun FilamentKitApp(
                 onPairAgain = app.router::pairAgain,
                 online = online,
                 printersOn = info?.printersOn != false,
+                label = LabelSource({ size -> currentApi().labelSvg(route.id, size) }, { hubAddress(app.session.baseUrl()) }),
             )
         }
 
@@ -1283,6 +1286,7 @@ internal fun FilamentKitApp(
                                     online = online,
                                     printersOn = info?.printersOn != false,
                                     embedded = embedded,
+                                    label = LabelSource({ size -> currentApi().labelSvg(spool.id, size) }, { hubAddress(app.session.baseUrl()) }),
                                 )
                             },
                         )
