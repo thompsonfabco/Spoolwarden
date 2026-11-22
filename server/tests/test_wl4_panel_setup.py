@@ -24,7 +24,7 @@ def env(tmp_path, monkeypatch):
     etc.mkdir()
     state.mkdir()
     monkeypatch.setenv("FK_ETC", str(etc))
-    monkeypatch.setenv("STATE_DIRECTORY", str(state))
+    monkeypatch.setattr(ps.st, "state_dir", lambda: state)    # not STATE_DIRECTORY: state_dir splits it at ":", a drive letter's too
     monkeypatch.setattr(statexml, "_unreadable", {})
     return etc, state
 
