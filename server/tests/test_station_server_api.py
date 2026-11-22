@@ -57,7 +57,7 @@ def test_parse_link():
 def test_save_pairing_writes_the_files(tmp_path):
     link = server_api.parse_link(f"fkit://pair?h=srv.local&p=8710&t={'y' * 43}&fp={FP}&ip=192.0.2.5")
     server_api.save_pairing(link, owner=None)
-    cfg = json.loads(server_api.server_file().read_text())
+    cfg = statexml.loads(server_api.server_file().read_bytes(), "station-server")
     assert cfg == {"ips": ["192.0.2.5"], "port": 8710, "fp": FP, "host": "srv.local"}
     assert server_api.token_file().read_text().strip() == "y" * 43
     if sys.platform != "win32":
@@ -106,8 +106,8 @@ def test_the_flow_over_pinned_tls(server):
 def test_a_changed_certificate_is_refused_before_sending(server):
     port, _ = server
     _pair(port)
-    cfg = json.loads(server_api.server_file().read_text())
-    server_api.server_file().write_text(json.dumps({**cfg, "fp": FP}))
+    cfg = server_api.read_server()
+    server_api.server_file().write_bytes(statexml.dumps("station-server", {**cfg, "fp": FP}))
     status, body = server_api.ServerApi(timeout=10).tag_lookup(UID)
     assert status == 0 and body["error"] == "cert_changed" and body["display"][0] == "Server changed"
 
@@ -115,8 +115,8 @@ def test_a_changed_certificate_is_refused_before_sending(server):
 def test_unreachable_server(server):
     port, _ = server
     _pair(port)
-    cfg = json.loads(server_api.server_file().read_text())
-    server_api.server_file().write_text(json.dumps({**cfg, "port": free_port()}))
+    cfg = server_api.read_server()
+    server_api.server_file().write_bytes(statexml.dumps("station-server", {**cfg, "port": free_port()}))
     status, body = server_api.ServerApi(timeout=3).tag_lookup(UID)
     assert status == 0 and body["error"] == "unreachable" and body["display"] == server_api.UNREACHABLE
 
@@ -238,10 +238,36 @@ def test_a_broken_pairing_file_does_not_stop_the_dropin():
     cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one")
     cfg["station"]["page_from"] = "allowed"
     server_api.pairing_dir().mkdir(parents=True, exist_ok=True)
-    server_api.server_file().write_text("{not json", encoding="utf-8")
+    server_api.server_file().write_text("<station-server", encoding="utf-8")
     assert _allow_line(apply.station_dropin(cfg, ["127.0.0.1"])) == "IPAddressAllow=localhost 127.0.0.1"
-    server_api.server_file().write_text(json.dumps({"ips": ["10.0.0.1; rm -rf /", "192.0.2.9"]}), encoding="utf-8")
+    server_api.server_file().write_bytes(statexml.dumps("station-server", {"ips": ["10.0.0.1; rm -rf /", "192.0.2.9"]}))
     assert _allow_line(apply.station_dropin(cfg, ["127.0.0.1"])) == "IPAddressAllow=localhost 127.0.0.1 192.0.2.9"
+
+
+def test_the_server_file_is_xml_and_the_old_json_form_is_read_then_moved_once():
+    d = server_api.pairing_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    old = {"ips": ["192.0.2.5"], "port": 8710, "fp": FP, "host": "srv.local"}
+    text = json.dumps(old, indent=1) + "\n"
+    server_api.old_server_file().write_text(text, encoding="utf-8")
+    assert server_api.server_file().name == "station_server.xml"
+    assert server_api.read_server() == old                       # the XML is absent: the old form answers
+    assert not server_api.server_file().exists()                 # a reader never writes (the station user cannot)
+    server_api.move_server_file()
+    assert statexml.loads(server_api.server_file().read_bytes(), "station-server") == old
+    assert server_api.old_server_file().read_text(encoding="utf-8") == text   # kept as it was
+    server_api.server_file().write_bytes(statexml.dumps("station-server", {**old, "port": 9}))
+    server_api.move_server_file()                                # never over a newer XML
+    assert server_api.read_server()["port"] == 9
+
+
+def test_a_damaged_server_xml_is_not_paired_and_is_not_replaced_by_the_old_form():
+    server_api.pairing_dir().mkdir(parents=True, exist_ok=True)
+    server_api.old_server_file().write_text(json.dumps({"ips": ["192.0.2.5"], "port": 1, "fp": FP}), encoding="utf-8")
+    server_api.server_file().write_text("<station-server", encoding="utf-8")
+    with pytest.raises((OSError, ValueError)):
+        server_api.read_server()
+    assert not server_api.ServerApi().paired
 
 
 def test_refresh_station_rewrites_the_dropin_and_restarts(tmp_path, monkeypatch):

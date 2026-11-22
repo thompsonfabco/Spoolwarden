@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, replace
+from pathlib import Path
 from typing import Iterable, Iterator
 
 from . import address_texts, config, modules, output, pairing, remote
@@ -509,6 +510,17 @@ def alerts_rows(cfg: dict | None = None) -> Iterator[Row]:
                   key="hub.running-low")
 
 
+def _oauth_state(old: Path) -> dict:
+    """The OAuth store's data: oauth.xml, else the old oauth.json. Only reads (the hashed tokens stay 0600: the
+    one-time move is the store's own). FileNotFoundError when neither exists."""
+    from .profiles import statexml
+    try:
+        raw = statexml.xml_path(old).read_bytes()
+    except FileNotFoundError:
+        return json.loads(old.read_text(encoding="utf-8"))
+    return statexml.loads(raw, statexml.tag_of(old))
+
+
 def numbers(cfg: dict | None = None) -> dict:
     """What `status --json` carries beside the rows (06 9.1): `storage` is the answer of GET api/storage-use,
     `running_low` the number of spools running low (null when the events cannot be read)."""
@@ -586,7 +598,7 @@ def web_rows(cfg: dict | None = None) -> Iterator[Row]:
                 yield Row(INFO, text, key="web.certificate")
                 yield Row(DETAIL, f"fix: {fix}", key="web.certificate.detail")
     try:
-        d = json.loads((config.paths().web / "oauth.json").read_text(encoding="utf-8"))
+        d = _oauth_state(config.paths().web / "oauth.json")
         now = time.time()
         live = sum(1 for v in (d.get("refresh") or {}).values() if (v.get("expires_at") or 0) > now)
         yield Row(DETAIL, f"connectors: {len(d.get('clients') or {})} registered, {live} signed in", key="web.connectors")
