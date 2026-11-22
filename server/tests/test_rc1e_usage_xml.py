@@ -59,7 +59,7 @@ def test_append_writes_one_xml_file_per_month_and_reads_back():
                               "material": "PLA", "vendor": "V", "name": "Basic", "color_hex": "123456",
                               "printer_name": "P", "outcome": "finished"})
     f = _dir() / "usage" / "2026-11.xml"
-    assert f.is_file() and not (_dir() / "usage.jsonl").exists()
+    assert f.is_file()
     assert stat.S_IMODE(f.stat().st_mode) == 0o600 or os.name == "nt"
     assert b"<usage " in f.read_bytes()
     [e] = usage.entries(SERIAL, days=30)
@@ -252,3 +252,49 @@ def test_two_processes_making_the_first_appends_lose_nothing():
     recs, _ = usage._read(SERIAL)
     assert sorted(r["job"] for r in recs if r["id"] != E1) == sorted(t + str(i) for t in "pq" for i in range(6))
     assert len({r["id"] for r in recs}) == 13
+
+
+def _v062_read(serial):
+    """The release before (v0.6.2) read usage.jsonl like this: entries in file order, {undone id: time}."""
+    try:
+        text = (_dir() / "usage.jsonl").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return [], {}
+    out, undone = [], {}
+    for line in text.splitlines():
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        if "undo" in rec:
+            undone.setdefault(str(rec["undo"]), rec.get("at"))
+        elif "undo_failed" in rec:
+            undone.pop(str(rec["undo_failed"]), None)
+        elif isinstance(rec.get("id"), str):
+            out.append(rec)
+    return out, undone
+
+
+def test_the_old_log_is_kept_current_for_a_rollback():
+    r = usage.append(SERIAL, {"job": "a", "grams": 4.0, "spool_id": 7, "slot": "A1", "observe": False})
+    recs, undone = _v062_read(SERIAL)
+    assert [x["id"] for x in recs] == [r["id"]] and recs[0]["grams"] == 4.0 and undone == {}
+    usage.undo(r["id"], FakeSpoolman())
+    recs, undone = _v062_read(SERIAL)
+    assert list(undone) == [r["id"]]                       # an older release shows it undone, and cannot debit twice
+    with pytest.raises(SpoolmanError):
+        r2 = usage.append(SERIAL, {"job": "b", "grams": 1.0, "spool_id": 7, "slot": "A1", "observe": False})
+        usage.undo(r2["id"], FakeSpoolman(fail=True))
+    recs, undone = _v062_read(SERIAL)
+    assert [x["job"] for x in recs] == ["a", "b"] and list(undone) == [r["id"]]      # the failed credit took its undo back
+
+
+def test_the_old_log_after_the_move_gets_the_new_entries_too_and_is_not_read_twice():
+    d = _dir()
+    d.mkdir(parents=True)
+    (d / "usage.jsonl").write_text(json.dumps(_entry(E1, "2026-11-10T10:00:00Z")) + "\n", encoding="utf-8")
+    r = usage.append(SERIAL, {"job": "new"})
+    assert [x["id"] for x in _v062_read(SERIAL)[0]] == [E1, r["id"]]
+    assert sorted(e["id"] for e in usage.entries(SERIAL, days=10_000)) == sorted([E1, r["id"]])      # no entry twice

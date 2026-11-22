@@ -377,9 +377,28 @@ def _move(serial: str) -> tuple[list[dict], dict[str, str]] | None:
 
 
 def _write_line(serial: str, rec: dict) -> None:
-    """Store an entry, or an {"undo": id, "at"} / {"undo_failed": id, "at"} record, in its month's file."""
+    """Store an entry, or an {"undo": id, "at"} / {"undo_failed": id, "at"} record, in its month's file, and (for one
+    release) as a line of the old usage.jsonl, so a rollback finds the history current."""
     with _flocked(serial):
         _store(serial, rec)
+        _old_form(serial, rec)
+
+
+def _old_form(serial: str, rec: dict) -> None:
+    """Append `rec` to usage.jsonl as the release before wrote it (one JSON line, fsynced, mode 600)."""
+    f = _dir(serial) / FILE
+    try:
+        new = not f.exists()
+        fd = os.open(f, os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, 'O_BINARY', 0), 0o600)
+        try:
+            if new:
+                give_to_state_owner(f)
+            os.write(fd, (json.dumps(rec, separators=(',', ':')) + "\n").encode('utf-8'))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except (OSError, TypeError, ValueError) as e:       # the XML is the record: the old copy is for a rollback only
+        log.warning("usage: printer %s: cannot append to %s (%s)", serial, FILE, e)
 
 
 def _store(serial: str, rec: dict) -> None:
