@@ -49,7 +49,7 @@ def test_the_station_409_set_on_hub_is_its_own_refusal_not_a_502(env_hub):
     c, st = env_hub
     st.fault["post"] = (409, {"error": "set_on_hub", "message": SENTENCE})
     r = SP.post(c, "device/d3/settings", {"volume": 50})
-    assert r.status_code == 409 and r.json() == {"error": "set_on_hub", "message": SENTENCE}
+    assert r.status_code == 409 and r.json() == {"error": SENTENCE, "code": "set_on_hub"}        # the page's shape
     st.fault["post"] = (409, {"error": "busy", "message": "x"})
     assert SP.post(c, "device/d3/settings", {"volume": 50}).status_code == 502        # any other 409 is as before
 
@@ -75,6 +75,6 @@ def test_a_readonly_row_is_drawn_disabled_with_its_note_and_the_others_are_not()
     assert not beep.get("disabled") and not beep.get("hint")
 
 
-def test_a_refusal_with_a_message_shows_the_message_in_the_form():
+def test_the_form_reads_only_the_error_sentence_not_a_message_field():
     src = (SP.STATIC / "setup_devices.js").read_text(encoding="utf-8")
-    assert "e.data.message" in src
+    assert "e.data.message" not in src

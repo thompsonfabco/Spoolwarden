@@ -386,7 +386,7 @@ function devSettingsForm(row, list, redo) {
   let plan = null;
   const g = SW.formGroup(form, { title: devT("devices_settings_title"), send: async (key) => {
     if (!plan) plan = api(path, { ...Object.fromEntries(g.changed().map((k) => [k, value(k)])), code: theCode() });
-    try { await plan; } catch (e) { plan = null; e.text = () => hubText((e.data && e.data.message) || e.message); throw e; }
+    try { await plan; } catch (e) { plan = null; e.text = () => hubText(e.message); throw e; }
     was.set(key, shown(key));
     return {};
   } });
