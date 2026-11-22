@@ -1108,7 +1108,7 @@ def apply_folder_updates(dirs: store.AppDirs, key: str, names: list[str] | None,
         for suffix in (".json", ".info"):
             (held / f"{name}{suffix}").unlink(missing_ok=True)
     if kept is not None:
-        statexml.write_plain(sd.installed / installer.KEPT, {"base": sorted(kept - set(written))}, also_json=True)
+        statexml.write(sd.installed / installer.KEPT, {"base": sorted(kept - set(written))}, 0o644, old_format={})
     rec["differing"] = [n for n in listed if n not in written]
     _save_state(sd, rec)
     msg = (f"wrote the build's copy of {len(written)} presets in {key} (backup {backup.name}): "
