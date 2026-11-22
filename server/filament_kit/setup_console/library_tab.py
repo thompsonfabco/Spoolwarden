@@ -15,6 +15,7 @@ from starlette.responses import JSONResponse
 
 from .. import library, redact
 from ..profiles import builds
+from .texts import say
 
 
 def _view() -> dict:
@@ -67,7 +68,7 @@ def routes(page) -> list[tuple]:
             try:
                 row = library.add_local_form(body)
             except library.FormError as e:
-                raise Refused(400, str(e) or "check the highlighted fields",
+                raise Refused(400, str(e) or say("hub_library_check_fields"),
                               code="invalid_entry", problems=e.problems) from None
             except ValueError as e:
                 raise Refused(400, f"entry not added: {e}") from None
@@ -81,12 +82,12 @@ def routes(page) -> list[tuple]:
     async def remove_form(request, body):
         entry_id = request.path_params.get("id", "")
         if not isinstance(entry_id, str) or not entry_id.strip():
-            raise Refused(400, "missing entry id")
+            raise Refused(400, say("hub_library_missing_id"))
 
         def run() -> bool:
             removed = library.remove_local(entry_id)
             if not removed:
-                raise Refused(404, "no such custom catalog entry")
+                raise Refused(404, say("hub_library_no_such_entry"))
             builds.request_rebuild(f"local library entry removed ({entry_id})")
             return removed
 

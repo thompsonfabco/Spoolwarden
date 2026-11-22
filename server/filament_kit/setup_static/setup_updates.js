@@ -9,7 +9,7 @@ const runningJob = () => {
   const a = S && S.apply;
   if (!a || !a.running) return null;
   const name = ["backup", "restore", "apply", "update", "rollback", "check", "library_update", "library_rollback", "remote_issue",
-    "station_pair", "reader_setup"].includes(a.name) ? a.name : "other";
+    "station_pair", "reader_setup", "port_change"].includes(a.name) ? a.name : "other";
   return SW.t("job_title_" + name);
 };
 

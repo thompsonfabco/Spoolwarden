@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-from types import SimpleNamespace
 
 import pytest
 from starlette.applications import Starlette
@@ -47,11 +46,8 @@ def test_report_build_redacts_secrets_and_anonymizes_names(monkeypatch, env):
     monkeypatch.setattr(report.socket, "gethostname", lambda: "my-secret-hub-host")
     monkeypatch.setattr(report.platform, "node", lambda: "my-secret-hub-host")
 
-    fake_printers = {
-        "p1": SimpleNamespace(id="p1", name="Studio X1C", kind="bambu", model="X1C", serial="00M09A123456789", ip="192.168.1.55"),
-    }
-    from filament_kit.bridge import registry
-    monkeypatch.setattr(registry, "load", lambda: fake_printers)
+    from filament_kit.bridge import registry          # a real registry entry (D11: no fake with fields Printer lacks)
+    registry.upsert(registry.Printer("00M09A123456789", "Studio X1C", "X1C", "192.168.1.55", "12345678", True))
 
     from filament_kit import pairing
     monkeypatch.setattr(pairing, "devices", lambda: [{"name": "Kitchen Phone", "type": "android", "version": "1.4.0"}])
@@ -156,7 +152,7 @@ def test_undo_route_code_gated_and_conflict_shape(env, helper, monkeypatch, spoo
     ok = post(c, f"events/{weighed}/undo", {})
     assert ok.status_code == 200
     assert ok.json()["undone"] is True and ok.json()["event"]["undo_of"] == weighed
-    assert ok.json()["event"]["actor"]["type"] in ("page", "hub")
+    assert ok.json()["event"]["actor"]["type"] == "page"                     # the Hub page's undo is `page` (D8)
     assert sm.get(f"spool/{sid}")["remaining_weight"] == 900
 
     again = post(c, f"events/{weighed}/undo", {})                              # already undone

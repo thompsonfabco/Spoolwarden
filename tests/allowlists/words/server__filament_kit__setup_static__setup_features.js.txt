@@ -1,4 +1,4 @@
-server/filament_kit/setup_static/setup_features.js | "server" | 4 | identifier, not shown
+server/filament_kit/setup_static/setup_features.js | "server" | 5 | identifier, not shown
 server/filament_kit/setup_static/setup_features.js | "station" | 2 | identifier, not shown
 server/filament_kit/setup_static/setup_features.js | all-in-one | 1 | identifier, not shown
 server/filament_kit/setup_static/setup_features.js | module | 4 | identifier, not shown

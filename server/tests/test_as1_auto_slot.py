@@ -486,18 +486,98 @@ def test_pending_rejects_auto_and_cancels_on_real_load(rig, sm, astore, monkeypa
     assert astore.active_view(SERIAL) is None
 
 
-def test_deferred_named_load_cancels_a_newer_auto_for_the_same_spool(rig, sm, astore, clock, monkeypatch):
+def test_an_auto_started_after_a_named_wait_for_the_same_spool_ends_that_wait(rig, sm, astore, clock, monkeypatch):
+    """D12: one spool, one pending placement; the newest scan wins. Before, the older named wait lived on and was
+    sent when its slot loaded, so the spool went to a slot the owner had given up."""
     m, _, _ = rig
     waiting = pending.Store(clock, start_thread=False)
     monkeypatch.setattr(pending, "STORE", waiting)
     pending.load_or_wait(m, sm, SERIAL, "A3", sm.sp["id"], False)
+    assert (SERIAL, "A3") in waiting.jobs()
     astore.start(m, sm, SERIAL, sm.sp["id"], dry=False)
+    assert waiting.jobs() == {} and astore.active_view(SERIAL)["state"] == "waiting"
+    sends = []
+    monkeypatch.setattr(loading, "load", lambda _m, _sm, serial, label, sid, dry, **kw: sends.append(label) or {})
+    _push(rig, _report(a2=FULL, bits="30007"))             # tray 2 (A3) is loaded
+    waiting.tick()
+    astore.tick()
+    clock.t += pending.SETTLE + 1
+    waiting.tick()
+    astore.tick()
+    assert sends == ["A3"] and astore.active_view(SERIAL) is None      # Auto loaded it; no named send
+
+
+def test_a_named_wait_for_a_spool_ends_its_earlier_named_wait_on_another_slot(rig, sm, clock, monkeypatch):
+    """D12: a newer named wait for the same spool replaces the older one, wherever it is."""
+    m, _, _ = rig
+    waiting = pending.Store(clock, start_thread=False)
+    monkeypatch.setattr(pending, "STORE", waiting)
+    sid = sm.sp["id"]
+    pending.load_or_wait(m, sm, SERIAL, "A3", sid, False)           # A3 and A4 are empty: both wait
+    pending.load_or_wait(m, sm, SERIAL, "A4", sid, False)
+    assert set(waiting.jobs()) == {(SERIAL, "A4")}
+
+
+def test_a_named_load_that_is_sent_ends_the_other_named_waits_for_the_spool(rig, sm, clock, monkeypatch):
+    """D12: a load that fulfils one placement ends the rest (two waits made before the rule, e.g. by two Hubs' calls)."""
+    m, _, _ = rig
+    waiting = pending.Store(clock, start_thread=False)
+    monkeypatch.setattr(pending, "STORE", waiting)
+    sid = sm.sp["id"]
+    waiting.add(m, sm, SERIAL, "A3", sid)
+    waiting.add(m, sm, SERIAL2, "A3", sid)
+    monkeypatch.setattr(loading, "load", lambda *a, **kw: {"confirmed": True})
     _push(rig, _report(a2=FULL, bits="30007"))
     waiting.tick()
     clock.t += pending.SETTLE + 1
     waiting.tick()
-    assert waiting.jobs()[SERIAL, "A3"].applied
-    assert astore.active_view(SERIAL) is None
+    assert set(waiting.jobs()) == {(SERIAL, "A3")} and waiting.jobs()[SERIAL, "A3"].applied
+
+
+def test_an_applied_auto_ends_a_named_wait_for_the_spool_on_another_printer(rig, sm, astore, clock, monkeypatch):
+    """R559 05 M2: the named wait on the other printer must not send the spool there later."""
+    m, _, _ = rig
+    waiting = pending.Store(clock, start_thread=False)
+    monkeypatch.setattr(pending, "STORE", waiting)
+    registry.upsert(Printer(SERIAL2, "Garage P1S", "C12", "10.0.0.6", "11112222", True))
+    monkeypatch.setattr(m, "state", lambda s: "connected")
+    sid = sm.sp["id"]
+    astore.start(m, sm, SERIAL, sid, dry=False)
+    waiting.add(m, sm, SERIAL2, "A3", sid)            # made directly, as a wait that came in during the Auto
+    monkeypatch.setattr(loading, "load", lambda *a, **kw: {"confirmed": True})
+    _push(rig, _report(a2=FULL, bits="30007"))
+    astore.tick()
+    clock.t += auto_slot.SETTLE + 1
+    astore.tick()
+    assert astore.jobs() == {}
+    assert (SERIAL2, "A3") not in waiting.jobs()
+
+
+def test_klipper_follow_mode_ends_every_wait_for_the_spool_it_loads(rig, moonraker, sm, astore, clock, monkeypatch):
+    """D3 on Klipper (R559 05 M1): a spool the printer shows in a lane (a tap, the touchscreen) ends the Auto and
+    the named waits for it on every printer."""
+    m, _, _ = rig
+    waiting = pending.Store(clock, start_thread=False)
+    monkeypatch.setattr(pending, "STORE", waiting)
+    sid = sm.sp["id"]
+    astore.start(m, sm, SERIAL, sid, dry=False)
+    waiting.add(m, sm, SERIAL, "A3", sid)
+    moonraker.objects = json.loads((DATA_KLIPPER / "SV08-MAX" / "objects.json").read_text())["objects"]
+    moonraker.status = json.loads((DATA_KLIPPER / "SV08-MAX" / "status.json").read_text())
+    moonraker.hostname = "SV08MAX"
+    pid = registry.add_klipper("SV08 MAX", moonraker.host, moonraker.port).serial
+    kf = KlipperFamily(sm, backoff=(0.1, 0.4))
+    kf.start()
+    try:
+        assert kf.wait_settled(pid, 8) == "connected"
+        moonraker.set_spool(sid)                       # an nfc2klipper tap on the printer
+        end = time.monotonic() + 8
+        while time.monotonic() < end and (astore.jobs() or waiting.jobs()):
+            time.sleep(0.03)
+        assert sm.get(f"spool/{sid}")["location"] == "SV08 MAX – T0"
+        assert astore.jobs() == {} and waiting.jobs() == {}
+    finally:
+        kf.stop()
 
 
 def test_auto_skips_a_slot_reserved_for_a_named_spool(rig, sm, astore, clock, monkeypatch):
@@ -550,8 +630,10 @@ def test_an_applied_auto_ends_other_printers_waiting_for_the_same_spool(rig, sm,
     monkeypatch.setattr(m, "status", lambda serial: report if serial == SERIAL2 else actual_status(serial))
     monkeypatch.setattr(loading, "load", lambda *args, **kw: {"confirmed": True})
     sid = sm.sp["id"]
-    astore.start(m, sm, SERIAL, sid, dry=False)
     astore.start(m, sm, SERIAL2, sid, dry=False)
+    astore.start(m, sm, SERIAL, sid, dry=False)
+    assert set(astore.jobs()) == {SERIAL}              # D12: the newest scan wins at once
+    astore._jobs[SERIAL2] = auto_slot.AutoJob(m, sm, SERIAL2, "Garage P1S", sid, "x", {}, clock(), "")  # one left over
     _push(rig, _report(a2=FULL, bits="30007"))
     astore.tick()
     clock.t += auto_slot.SETTLE + 1
@@ -730,12 +812,15 @@ def test_api_klipper_slot_load_cancels_active_auto(sm, astore):
                   json={"spool_id": sm.sp["id"], "dry_run": True}, headers=h).status_code == 200
     assert astore.active_view("KP1") is not None
 
-    # A real load that the printer did not confirm leaves Auto waiting.
+    # A real load that the printer did not confirm yet is still the spool's newest placement (D12; follow mode
+    # settles it): it ends Auto. Before, Auto went on waiting and could put the spool into a second printer (D3).
     assert c.post("/api/printers/KP1/slots/lane1/load",
                   json={"spool_id": sm.sp["id"], "dry_run": False}, headers=h).json()["confirmed"] is False
-    assert astore.active_view("KP1") is not None
+    assert astore.active_view("KP1") is None
 
     kf.confirmed = True
+    assert c.post("/api/printers/KP1/slots/auto/load", json={"spool_id": sm.sp["id"], "dry_run": False},
+                  headers=h).status_code == 200
     assert c.post("/api/printers/KP1/slots/lane1/load",
                   json={"spool_id": sm.sp["id"], "dry_run": False}, headers=h).status_code == 200
     assert astore.active_view("KP1") is None

@@ -447,3 +447,6 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .hubglance__links { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
 .catalog__entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
 .spools__spoolman { margin: 0 0 var(--s2); }
+
+/* The slot step with Automatic (R83 01:06 point 2): Automatic is the selected row when the step opens */
+.spools__row--selected > .spools__row { background: var(--accent-soft); color: var(--accent-text); }

@@ -110,7 +110,7 @@ const S2 = { id: 2, vendor: "Sunlu", name: "PETG Blue", material: "PETG", color_
 const S3 = { ...S2, id: 3, name: "PETG Red" };
 const ONE = { id: 1, vendor: "Polymaker", name: "PolyTerra PLA", material: "PLA", color_hex: "2B2B2E", net_g: 1000, tare_g: 200, remaining_g: 500, location: "Rack 1", tag: null, state: "opened", filament_id: 1, lot: null, loaded: null, low: false };
 const ST = { now: { ...ONE }, prev: null };
-const EVENTS = Array.from({ length: 12 }, (_, i) => ({ id: "h" + i, at: `2026-11-1${(i % 9) + 1}T10:0${i % 10}:00`, kind: "spool.weighed", actor: i % 2 ? { type: "web", id: "", name: "" } : { type: "device", id: "d1", name: "Weigh Station" },
+const EVENTS = Array.from({ length: 12 }, (_, i) => ({ id: "h" + i, at: `2026-11-1${(i % 9) + 1}T10:0${i % 10}:00`, kind: "spool.weighed", actor: i % 2 ? { type: "cli", id: "", name: "" } : { type: "device", id: "d1", name: "Weigh Station" },
   text: `Event number ${i}`, title: "Weighed", undone: i === 3, subject: { type: "spool", id: "1" } }));
 EV.mine = /^(spools|settings\/storage|activity)/;
 EV.handle = ({ method, path, body }) => {
@@ -118,7 +118,7 @@ EV.handle = ({ method, path, body }) => {
   if (/^spools\?/.test(path)) return [200, { spools: [ST.now, S2, S3], total: 3, offset: 0, has_more: false }];
   if (path === "spools/last-tag") return [200, { tag: { uid: "4:de:ad:be" } }];
   if (path === "settings/storage") return [200, { locations: [{ name: "Rack 1" }, { name: "Shelf B" }] }];
-  if ((x = /^activity\?subject=spool%3A(\d+)&limit=10$/.exec(path))) return x[1] === "1" ? [200, { events: EVENTS, next: null, oldest: null }] : x[1] === "2" ? [200, { events: [], next: null, oldest: null }] : [500, { error: "no history today" }];
+  if ((x = /^activity\?subject=spool%3A(\d+)&newest=10$/.exec(path))) return x[1] === "1" ? [200, { events: EVENTS, next: null, oldest: null }] : x[1] === "2" ? [200, { events: [], next: null, oldest: null }] : [500, { error: "no history today" }];
   if ((x = /^spools\/(\d+)(\/link)?$/.exec(path))) {
     if (method === "GET") return [200, { spool: x[1] === "1" ? ST.now : x[1] === "2" ? S2 : S3, last_use: null }];
     const before = { ...ST.now }, after = { ...ST.now };
@@ -263,12 +263,12 @@ set(field(1, "gross"), "540"); press(1, "Update weight"); await apply(1, 0);
 await until(() => evCalls(/^GET activity/).length > n, "the events read again");
 out.after = evCalls(/^GET activity/).slice(n).map((c) => c.path);
 """)
-    assert page["title"][:3] == ["State", "Last ten events", "Change this spool"]
-    assert len(page["rows"]) == 10 and page["rows"][0] == ["2026-11-11 10:00", "Event number 0 · Weigh Station"] and page["rows"][1][1] == "Event number 1 · web"
-    assert page["rows"][3][1].endswith("(undone)") and page["rows"][9][1] == "Event number 9 · web"
-    assert page["reads"] == ["activity?subject=spool%3A1&limit=10"]
-    assert page["none"] == "Nothing recorded yet." and page["error"] == "Could not read the events."
-    assert page["after"] == ["activity?subject=spool%3A1&limit=10"]
+    assert page["title"][:3] == ["State", "Latest events", "Change this spool"]
+    assert len(page["rows"]) == 10 and page["rows"][0] == ["2026-11-13 10:01", "Event number 11 · The command line"] and page["rows"][1][1] == "Event number 10 · Weigh Station"
+    assert page["rows"][8][1].endswith("(undone)") and page["rows"][9][1] == "Event number 2 · Weigh Station"      # the newest ten, newest first (D1, 03 16.3)
+    assert page["reads"] == ["activity?subject=spool%3A1&newest=10"]
+    assert page["none"] == "Nothing has been recorded for this spool yet." and page["error"] == "Could not read the events."
+    assert page["after"] == ["activity?subject=spool%3A1&newest=10"]
 
 
 def test_the_spools_menu_downloads_spoolmans_two_files_after_the_code_and_asks_nothing_while_locked(hub, tmp_path):

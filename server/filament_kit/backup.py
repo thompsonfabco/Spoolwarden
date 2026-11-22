@@ -1215,6 +1215,24 @@ def take_upload() -> Path:
     return out
 
 
+def nightly_encrypt(src: Path, dst: Path) -> int:
+    """`encrypt` for install/backup.sh: 0 written encrypted to `dst`; 2 no backup password is set (the archive stays
+    plain); 1 a password file is there but cannot be read: fail closed, so a password the owner set never yields a
+    plain archive (backup.sh then reports the failure and writes nothing)."""
+    try:
+        text = password_path().read_text(encoding="utf-8").rstrip("\r\n")
+    except FileNotFoundError:
+        return 2
+    except (OSError, UnicodeDecodeError) as e:
+        log.error("nightly backup: the backup password file cannot be read (%s); no backup was written",
+                  type(e).__name__)
+        return 1
+    if not text:
+        return 2                # an empty file is no password, as read_password says
+    backup_crypt.encrypt_file(src, dst, text)
+    return 0
+
+
 def keep_days(cfg: dict) -> int:
     v = (cfg.get("backup") or {}).get("keep_days", 14)
     return v if isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 365 else 14
@@ -1228,10 +1246,7 @@ if __name__ == "__main__":     # pragma: no cover - `python -m filament_kit.back
         except Exception:  # noqa: BLE001
             print(14)
     elif len(args) == 3 and args[0] == "encrypt":
-        pwd = read_password()
-        if pwd is None:
-            sys.exit(2)
-        backup_crypt.encrypt_file(Path(args[1]), Path(args[2]), pwd)
+        sys.exit(nightly_encrypt(Path(args[1]), Path(args[2])))
     elif len(args) == 5 and args[0] == "event-finished":
         _emit_event("backup.finished", "hub", {
             "file": args[1],

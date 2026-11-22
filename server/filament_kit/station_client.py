@@ -433,15 +433,16 @@ class StationPinMissing(StationCallError):
     """The Hub knows the station's address but has no certificate to check."""
 
 
-def proof_key() -> bytes | None:
-    """The key of the Hub's proofs for the one station pairing that holds a certificate: HKDF of the SHA-256 of its token,
+def proof_key(*, pinned: bool = True) -> bytes | None:
+    """The key of the Hub's proofs for the one station pairing that holds a certificate (`pinned=False`: the one station
+    pairing, also one that told the Hub no certificate and is called over plain HTTP): HKDF of the SHA-256 of its token,
     which is what the pairing record keeps (`hash`). None when there is no such pairing or there are two."""
     from . import pairing
     from .station import page
     try:
         with pairing._locked():
             found = [d for d in pairing._load_devices() if d.get("claimed") is not None
-                     and pairing.device_type(d) == "station" and d.get("fp")]
+                     and pairing.device_type(d) == "station" and (d.get("fp") or not pinned)]
     except (OSError, ValueError):
         return None
     if len(found) != 1 or not re.fullmatch(r"[0-9a-f]{64}", str(found[0].get("hash") or "")):
@@ -492,9 +493,9 @@ def _call(endpoint, method, path, body, cap=MAX_JSON, timeout=STATION_TIMEOUT):
         headers["Content-Type"] = "application/json"
     purpose = {("POST", "/ticket"): "ticket", ("POST", "/settings"): "settings"}.get((method, path))
     if purpose:
-        if fp is None:
-            raise StationPinMissing(503, TEXT_STATION_NO_PIN)
-        key = proof_key()
+        # the proof, not HTTPS, guards a change and a ticket (R83 2026-11-18 01:10); a station that told the Hub no
+        # certificate is called over plain HTTP (R82 00:28 point 1; `station_endpoint` never goes plain for a pinned one)
+        key = proof_key(pinned=fp is not None)
         if key is None:
             raise StationCallError(503, "the Hub cannot prove itself to the Weigh Station: pair it again")
         headers[page.PROOF_HEADER] = page.make_proof(key, purpose, body or b"")

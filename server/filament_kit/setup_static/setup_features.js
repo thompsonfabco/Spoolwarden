@@ -36,12 +36,9 @@ function isLoopbackReader(url) {
     return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]";
   } catch { return true; }
 }
-function isRemote443(text, data) {
-  if (data && data.code === "remote_443") return true;
-  const s = String(text || "");
-  if (!s) return false;
-  return s === SW.t("port_remote_refusal") || s.includes(SW.t("port_remote_refusal_short"))
-    || (/remote access/i.test(s) && /\b443\b/.test(s)) || /\bport 443\b/i.test(s);
+// a refusal is known by its code field, never by matching the English of its sentence
+function isRemote443(_text, data) {
+  return !!(data && data.code === "remote_443");
 }
 const readerPendingNodes = () => [
   SW.status("needs_look", { small: true, text: SW.t("features_reader_not_installed") }),
@@ -231,7 +228,8 @@ function featureDrawer(m, opener) {
   const turningOnReader = m.name === READER_FEATURE && !m.on;
   return previewDrawer({ title, place: m.name, opener, path: "modules", body: { name: m.name, on: !m.on },
     read: () => api(`modules/preview?name=${encodeURIComponent(m.name)}`),
-    refusal: (p) => (/disable server/i.test(String(p.refused || "")) ? SW.t("features_drawer_refused_server") : hubText(p.refused)) })
+    // the one refusal of switching the server module off is known by the module (or its code), not by its English words
+    refusal: (p) => (p.code === "server_module" || (m.name === "server" && m.on) ? SW.t("features_drawer_refused_server") : hubText(p.refused)) })
     .then((r) => (r ? featureSaved(opener, turningOnReader) : null));
 }
 

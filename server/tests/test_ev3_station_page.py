@@ -381,7 +381,8 @@ def test_the_page_says_to_open_it_from_the_hub_and_every_text_is_a_constant():
     assert "station_page_open_from_hub" in static_texts()["station.js"]
     used = set(re.findall(r'T\["(station_page_[a-z_]+)"\]', static_texts()["station.js"]))
     assert used <= set(page.TEXTS) and "station_page_open_from_hub" in used
-    assert all(k.startswith("station_page_") and v for k, v in page.TEXTS.items())
+    # the page's own texts, and the words for the station's step and scale ids that its status rows show (R560 M13)
+    assert all(k.startswith(("station_page_", "station_step_", "station_scale_")) and v for k, v in page.TEXTS.items())
 
 
 def test_without_a_session_the_page_shows_that_sentence_and_none_of_the_data(hub_ok, elsewhere):

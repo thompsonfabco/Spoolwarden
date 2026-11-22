@@ -34,6 +34,7 @@ from .bridge import registry, usage as bambu_usage
 from .bridge.klipper import usage as klipper_usage
 from .profiles import lines as lines_mod
 from .spoolman import Spoolman, SpoolmanError
+from .station.page import say as catalogue_say
 
 log = logging.getLogger("filament_kit.csv_io")
 
@@ -334,23 +335,52 @@ def _export_activity(*, days: float = 30) -> str:
     return _write_csv(("time", "who", "kind", "subject", "text"), rows)
 
 
-def _safe_printer_name(p: registry.Printer) -> str:
-    name = registry.display_name(p)
-    kind = getattr(p, "family", "bambu")
+def export_printer_name(name: str, kind: str, serial: str, addresses: tuple[str, ...]) -> str:
+    """The printer's name in printers.csv (the kit's, the command line's and the Hub page's export alike): as the owner
+    chose it, or "" when it is an address or the serial (R84 6.2: no address, serial or code). An address is an IP
+    literal, a dotted host name, the printer's own address, or a Klipper name that reads as the host it was added at
+    (a Klipper name defaults to the host, which may have changed since): one lower-case DNS label with a dash, such as
+    "workshop-voron". A name with a capital ("Ender-3", "Voron") was typed by the owner; a Bambu Lab name never
+    defaults to a host."""
     label = re.sub(r" \d+$", "", name)
     label = hostaddr.clean(re.sub(r"^(\[[^]]+\]|[^:]+):\d+$", r"\1", label))
-    address_name = (kind == "klipper" or "." in label or "-" in label or hostaddr.is_literal(label)) and hostaddr.form_error(label) is None
-    if (
-        address_name
-        or label.casefold() in {p.ip.casefold(), (getattr(p, "host", "") or "").casefold()}
-        or (kind == "bambu" and name == p.serial)
-    ):
+    host_label = kind == "klipper" and "-" in label and label == label.lower()
+    address_name = ("." in label or host_label or hostaddr.is_literal(label)) and hostaddr.form_error(label) is None
+    if (address_name or label.casefold() in {(a or "").casefold() for a in addresses}
+            or (kind == "bambu" and name == serial)):
         return ""
     return name
 
 
-def _export_printers(*, printers_mgr: Any = None) -> str:
+def _safe_printer_name(p: registry.Printer) -> str:
+    return export_printer_name(registry.display_name(p), getattr(p, "family", "bambu"), p.serial,
+                               (p.ip, getattr(p, "host", "") or ""))
+
+
+def _slots_from_locations(sm: Spoolman | None) -> dict[str, list[dict]]:
+    """{printer id: [{label, spool: {id}}]} from the spools Spoolman holds at a printer's slot location ("<name> – AMS
+    <label>", "<name> – <label>"): where a slot's spool comes from in a printer's status too. For an export made without
+    the Hub's printers (the command line, as root): the slots that hold a spool, in label order."""
+    if sm is None:
+        sm = Spoolman(config.load()["spoolman_url"])
+    ctx = inventory.view_context()
+    out: dict[str, list[dict]] = {}
+    try:
+        spools = sm.get("spool") or []
+    except SpoolmanError:
+        raise CsvError(catalogue_say("common_spoolman_unreachable"), status=502, code="spoolman_unreachable") from None
+    for s in spools:
+        where = ctx.slot_of(s.get("location")) if isinstance(s, dict) and not s.get("archived") else None
+        if where is not None:
+            out.setdefault(where["printer_id"], []).append({"label": where["slot"], "spool": {"id": s.get("id")}})
+    for slots in out.values():
+        slots.sort(key=lambda x: (x["label"].casefold(), x["spool"]["id"] if type(x["spool"]["id"]) is int else 0))
+    return out
+
+
+def _export_printers(*, printers_mgr: Any = None, sm: Spoolman | None = None) -> str:
     printers_map = registry.load()
+    held = _slots_from_locations(sm) if printers_mgr is None and any(p.configured for p in printers_map.values()) else {}
     rows: list[tuple[Any, ...]] = []
     for p in sorted(printers_map.values(), key=lambda x: (registry.display_name(x).casefold(), x.serial)):
         name = _safe_printer_name(p)
@@ -362,6 +392,8 @@ def _export_printers(*, printers_mgr: Any = None) -> str:
                 st = printers_mgr.status(p.serial)
             except Exception:
                 st = None
+        elif p.configured:
+            st = {"ams": [{"slots": held.get(p.serial, [])}]}
         units = (st.get("ams") if isinstance(st, dict) else None) or []
         slots = [slot for unit in units for slot in (unit.get("slots") or [])]
         if not slots:
@@ -436,7 +468,7 @@ def export_csv(
     if export_set == "activity":
         return _export_activity(days=days)
     if export_set == "printers":
-        return _export_printers(printers_mgr=printers_mgr)
+        return _export_printers(printers_mgr=printers_mgr, sm=sm)
     if export_set == "lines":
         return _export_lines()
     if export_set == "spoolman-spools":

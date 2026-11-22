@@ -67,6 +67,15 @@ def catalogue_text(key: str, fallback: str, **values: str) -> str:
     return re.sub(r"\{(\w+)\}", lambda m: subs.get(m.group(1), m.group(0)), raw)
 
 
+def say(key: str, /, **values) -> str:
+    """The catalogue's text of `key` with {product}, {command} and `values` filled in. Unlike `catalogue_text` there is
+    no fallback: a key the catalogue lacks is a KeyError (the Hub's own sentences, which always ship with it)."""
+    raw = _catalogue().get(key)
+    if not isinstance(raw, str):
+        raise KeyError(key)
+    return catalogue_text(key, raw, **{k: str(v) for k, v in values.items()})
+
+
 # What the page says (all keys live in strings/en.json). Every one is put on the page as text, never as markup.
 _PAGE_DEFAULTS = {
     "station_page_title": "Weigh Station",
@@ -76,7 +85,7 @@ _PAGE_DEFAULTS = {
     "station_page_status": "Status",
     "station_page_settings": "Settings",
     "station_page_page_from": "Page access: {mode}",
-    "station_page_page_from_subnets_note": "If the network changes, run sudo {command} modules apply on this Weigh Station.",
+    "station_page_page_from_subnets_note": "If this machine's network has changed, run: sudo {command} features apply",
     "station_page_save": "Save",
     "station_page_reset": "Back to the installed values",
     "station_page_saved": "Saved.",
@@ -87,14 +96,40 @@ _PAGE_DEFAULTS = {
     "station_page_last_weight": "Last weight",
     "station_page_panel": "Panel",
     "station_page_air": "Air",
-    "station_page_step": "Intake step",
+    "station_page_step": "Step",
     "station_page_version": "Software version",
     "station_page_none": "none",
-    "station_page_no_photo": "No photo.",
     "station_page_own_values": "These settings differ from the installed values.",
-    "station_page_on": "On",
-    "station_page_off": "Off",
-    "station_page_unreachable": "The station did not answer.",
+    "station_page_unreachable": "The Weigh Station did not answer.",
+    # the status rows' values (station.js `tx`, `word`): a value with its age, units, and the words for station ids
+    "station_page_age": "{value} ({seconds} s ago)",
+    "station_page_grams": "{grams} g",
+    "station_page_scale_value": "{grams} g, {status}",
+    "station_page_panel_firmware": "{panel} (firmware {version})",
+    "station_page_air_value": "{temp} °C, {rh} %",
+    "station_page_step_message": "{step}: {message}",
+    "station_page_mode_home": "Your home network",
+    "station_page_mode_subnets": "This machine's own networks",
+    "station_page_mode_allowed": "The allow-list only",
+    "station_step_pairing": "Asking the Hub to pair",
+    "station_step_idle": "Ready",
+    "station_step_lookup": "Looking up a tag",
+    "station_step_camera": "Show the spool to the camera",
+    "station_step_recognising": "Recognising the spool",
+    "station_step_weigh": "Put it on the scale",
+    "station_step_ready": "Weight taken",
+    "station_step_saving": "Saving",
+    "station_step_done": "Saved",
+    "station_step_phone": "Use the phone",
+    "station_scale_fault": "Fault",
+    "station_scale_zero": "At zero",
+    "station_scale_moving": "Settling",
+    "station_scale_stable": "Steady",
+    "station_scale_negative": "Below zero",
+    "station_scale_overload": "Too heavy for the scale",
+    "station_scale_calibrate": "Needs calibrating",
+    "station_scale_re_zero": "Needs zeroing",
+    "station_scale_unit": "Unknown unit",
 }
 TEXTS = {k: catalogue_text(k, v) for k, v in _PAGE_DEFAULTS.items()}
 

@@ -10,7 +10,8 @@ import urllib.parse
 from . import output
 from .spools_cli import confirmed, down, fail
 
-EVENTS_SHOWN = 200          # `activity` shows this many of the newest
+EVENTS_NEWEST = 50          # `activity` without --days shows this many of the newest (R86 22:35 point 4)
+EVENTS_DAYS_MAX = 1000      # `activity --days <n>` shows up to this many, oldest first
 UNDO_LOOK = 50              # plain `undo` looks at this many of the newest command-line changes
 WHO_LOOK = 1000             # `--who <device name>` finds the name among this many of the newest events
 
@@ -20,9 +21,10 @@ EXPORT_SETS = ("usage", "locations", "recent", "activity", "printers", "lines",
 # ---------- texts (catalogue keys) ----------
 
 CLI_ACTIVITY_EMPTY = "Nothing has been done in the last {days} days."
+CLI_ACTIVITY_EMPTY_EVER = "Nothing has been done yet."
 CLI_ACTIVITY_COUNT_ONE = "1 event in the last {days} days."
 CLI_ACTIVITY_COUNT = "{n} events in the last {days} days."
-CLI_ACTIVITY_MORE = "Showing the newest 200. Narrow it with --days, --who or --spool."
+CLI_ACTIVITY_MORE = "Showing the first 1000. Narrow it with --days, --who or --spool."
 CLI_ACTOR_HUB = "The Hub"
 CLI_ACTOR_PAGE = "Hub page"
 CLI_ACTOR_CLI = "command line"
@@ -45,10 +47,17 @@ CLI_IMPORT_BAD_CSV = "this is not a CSV file that Spoolwarden can read."
 CLI_IMPORT_DONE_SPOOLS = "Added {n} spools: {ids}."
 CLI_IMPORT_DONE_LOCATIONS = "Added {add}, changed {change} locations."
 CLI_REPORT_DONE = "Hub report written: {file}"
-CLI_BACKUP_PW_SET = "Backup password is set."
 CLI_BACKUP_PW_UNSET = "Backup password is not set."
-CLI_BACKUP_PW_REMOVED = "Backup password removed."
-CLI_BACKUP_PW_SAVED = "Backup password saved."
+CLI_BACKUP_PW_NEW = "New backup password, at least 10 characters: "
+CLI_BACKUP_PW_AGAIN = "New backup password again: "
+CLI_BACKUP_PW_MISMATCH = "the two passwords do not match."
+CLI_BACKUP_PW_SHORT = "use at least 10 characters."
+CLI_BACKUP_PW_WRITE_DOWN = ("Write this password down. Without it these backups cannot be restored, and Spoolwarden "
+                            "cannot recover it.")
+CLI_BACKUP_PW_SAVED = "Backup password set. Every backup is now encrypted."
+CLI_BACKUP_PW_REMOVE_ASK = ("Remove the backup password? New backups are plain again. Backups already made stay "
+                            "encrypted and need the password they were made with.")
+CLI_BACKUP_PW_REMOVED = "Removed the backup password."
 
 
 def catalogue_texts() -> dict[str, str]:
@@ -107,11 +116,13 @@ def _resolve_who(api, who: str) -> tuple[str | None, list[str]]:
 
 # ---------- activity ----------
 
-def cmd_activity(api, *, spool: int | None = None, who: str | None = None, days: int = 7) -> int:
+def cmd_activity(api, *, spool: int | None = None, who: str | None = None, days: int | None = None) -> int:
+    """06 9.22 (R86 22:35 point 4): without `days` the newest 50 (`newest=50`), newest first; with `days` the events
+    from that time on (`since_at`), up to 1000, oldest first. `--json` prints the Hub's answer as it came."""
     if api is None:
         return down()
     from .web.slots import SlotError
-    params: list[tuple[str, str]] = [("activity", "1"), ("newest", str(EVENTS_SHOWN + 1)), ("since_at", _since_at(days))]
+    params: list[tuple[str, str]] = [("activity", "1")]
     if spool is not None:
         params.append(("subject", f"spool:{spool}"))
     if who:
@@ -120,16 +131,23 @@ def cmd_activity(api, *, spool: int | None = None, who: str | None = None, days:
             output.error(CLI_WHO_UNKNOWN.format(who=who), CLI_WHO_UNKNOWN_FIX.format(names=", ".join(names)))
             return output.USAGE
         params.append(("actor", actor_param))
+    window = [("since_at", _since_at(days)), ("limit", str(EVENTS_DAYS_MAX))] if days is not None else [
+        ("newest", str(EVENTS_NEWEST))]
+    more = False
     try:
-        r = api.get("/api/events?" + urllib.parse.urlencode(params))
+        r = api.get("/api/events?" + urllib.parse.urlencode(params + window))
+        evs = list(r.get("events") or [])
+        if days is not None and len(evs) >= EVENTS_DAYS_MAX:
+            # a full page: more exist when the newest matching event is past the last one shown
+            top = (api.get("/api/events?" + urllib.parse.urlencode(params + [("newest", "1")])) or {}).get("events")
+            more = bool(top) and int(top[-1].get("id") or 0) > int(evs[-1].get("id") or 0)
     except SlotError as e:
         return fail(e)
-    evs = list(reversed(r.get("events") or []))
-    more = len(evs) > EVENTS_SHOWN
-    evs = evs[:EVENTS_SHOWN]
-    output.emit({**r, "events": evs})
+    if days is None:
+        evs.reverse()                                   # the newest first
+    output.emit(r)
     if not evs:
-        output.out(CLI_ACTIVITY_EMPTY.format(days=days))
+        output.out(CLI_ACTIVITY_EMPTY.format(days=days) if days is not None else CLI_ACTIVITY_EMPTY_EVER)
         return 0
     rows = []
     for ev in evs:
@@ -138,6 +156,8 @@ def cmd_activity(api, *, spool: int | None = None, who: str | None = None, days:
         rows.append([ev.get("id"), ev.get("at", "")[:16].replace("T", " "), _who_label(ev.get("actor") or {}),
                      what, mark])
     output.out_lines(output.table(["ID", "TIME", "WHO", "WHAT", ""], rows, long=3, right=(0,)))
+    if days is None:
+        return 0
     output.out()
     output.out(CLI_ACTIVITY_COUNT_ONE.format(days=days) if len(evs) == 1
                else CLI_ACTIVITY_COUNT.format(n=len(evs), days=days))
@@ -166,13 +186,17 @@ def cmd_undo(api, sm_factory, *, event_id: int | None = None, yes: bool = False)
     from .web.slots import SlotError
     target = None
     if event_id is None:
-        try:
+        try:        # `newest` alone: the Hub refuses it together with since_at (R86 D1); the 7 days are cut here
             r = api.get("/api/events?" + urllib.parse.urlencode([
-                ("activity", "1"), ("actor", "cli"), ("since_at", _since_at(7)), ("newest", str(UNDO_LOOK)),
+                ("activity", "1"), ("actor", "cli"), ("newest", str(UNDO_LOOK)),
             ]))
         except SlotError as e:
             return fail(e)
-        evs = [e for e in reversed(r.get("events") or []) if not e.get("undone")]
+        cutoff = _since_at(7)
+        # the newest command-line change that can still be undone: not a compensating event, an undone one, a spool
+        # added or an update (06 9.23, the Hub's rule in 03 2.9)
+        evs = [e for e in reversed(r.get("events") or [])
+               if (e.get("undo") or {}).get("possible") and str(e.get("at") or "") >= cutoff]
         if not evs:
             output.emit({"ok": False, "none": True})
             output.out(CLI_UNDO_NONE)
@@ -365,25 +389,53 @@ def read_password_file(path: str) -> str:
     return pathlib.Path(path).read_text(encoding="utf-8").rstrip("\r\n")
 
 
-def run_backup_password(*, remove: bool = False, show: bool = False, password: str | None = None) -> int:
-    """`backup password`: the helper's own functions, as `backup keep` calls them (the password file is root-only)."""
+def _ask_new_password() -> tuple[str | None, int]:
+    """06 8.7: the new password, typed twice (both secret). (password, 0) or (None, exit code after the error)."""
+    from . import backup, secret_input
+    first = secret_input.ask(CLI_BACKUP_PW_NEW)
+    if len(first) < backup.MIN_PASSWORD_LEN:
+        output.error(CLI_BACKUP_PW_SHORT)
+        return None, output.USAGE
+    if secret_input.ask(CLI_BACKUP_PW_AGAIN) != first:
+        output.error(CLI_BACKUP_PW_MISMATCH)
+        return None, output.USAGE
+    return first, 0
+
+
+def run_backup_password(*, remove: bool = False, show: bool = False, password: str | None = None,
+                        yes: bool = False) -> int:
+    """`backup password` (06 9.10, 7, 8.7): the helper's own functions, as `backup keep` calls them (the password file
+    is root-only). Setting asks twice unless `password` is given; `--remove` asks first; `--show` prints the password
+    (its JSON form is only `{"set": ...}`, a stored secret is never in JSON)."""
     from . import backup, setup_helper
     try:
         if show:
-            is_set = backup.password_set()
-            output.emit({"set": is_set})
-            output.out(CLI_BACKUP_PW_SET if is_set else CLI_BACKUP_PW_UNSET)
+            pw = backup.read_password() if backup.password_set() else None
+            output.emit({"set": pw is not None})
+            output.out(pw if pw is not None else CLI_BACKUP_PW_UNSET)
             return 0
         if remove:
-            r = setup_helper._backup_password_remove({})
-            output.emit({"ok": True, **r})
+            rc = confirmed(CLI_BACKUP_PW_REMOVE_ASK, "remove the backup password", "sudo spoolwarden backup password "
+                           "--remove", yes)
+            if rc is not None:
+                return rc
+            setup_helper._backup_password_remove({})
+            output.emit({"ok": True, "set": False})
             output.out(CLI_BACKUP_PW_REMOVED)
             return 0
-        r = setup_helper._backup_password_set({"password": password or ""})
+        if password is None:
+            password, rc = _ask_new_password()
+            if password is None:
+                return rc
+        elif len(password) < backup.MIN_PASSWORD_LEN:
+            output.error(CLI_BACKUP_PW_SHORT)
+            return output.USAGE
+        setup_helper._backup_password_set({"password": password})
     except setup_helper.Refused as e:
         output.error(str(e).rstrip(".") + ".")
         return output.USAGE
-    output.emit({"ok": True, **r})
+    output.emit({"ok": True, "set": True})
+    output.out(CLI_BACKUP_PW_WRITE_DOWN)
     output.out(CLI_BACKUP_PW_SAVED)
     return 0
 
@@ -410,7 +462,7 @@ def add_parser(sub) -> None:
     p = sub.add_parser("activity", help="show what was done on the Hub")
     p.add_argument("--spool", type=int, default=None, help="only this spool")
     p.add_argument("--who", default=None, help="filter by who did it")
-    p.add_argument("--days", type=int, default=7, help="how many days back (default 7)")
+    p.add_argument("--days", type=int, default=None, help="how many days back (default: the newest 50 events)")
 
     p = sub.add_parser("undo", help="undo a spool or slot change")
     p.add_argument("event_id", nargs="?", type=int, default=None, help="event id to undo (default: last CLI change)")
