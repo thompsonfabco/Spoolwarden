@@ -138,3 +138,77 @@ def test_a_share_json_is_private():
     intake_history.make_state_dir(intake_history._dir(RID))
     share_queue._write(RID, {"entries": {RID: "fb-9"}, "failed": None})
     assert stat.S_IMODE(os.stat(share_queue._path(RID)).st_mode) == 0o600
+
+
+# ---------- a JSON that v0.6.2 changed or deleted wins over the XML, and the next save keeps it (R610 F1) ----------
+
+def test_a_catalog_pointer_and_hold_changed_and_deleted_by_v062_win_and_the_next_save_keeps_them():
+    d = library._dir()
+    for name in ("7-20261101", "8-20261102"):
+        (d / "versions" / name).mkdir(parents=True)
+        (d / "versions" / name / "index.json").write_text("{}", encoding="utf-8")
+    library._write_state("current.json", {"dir": "7-20261101", "version": 7, "at": 1.0})
+    library._write_state("rolled_back.json", {"from": 9, "at": 1.5})
+    # v0.6.2 after `update --rollback`, then an update: it points current.json at 8 and deletes rolled_back.json
+    (d / "current.json").write_text(json.dumps({"dir": "8-20261102", "version": 8, "at": 2.0}, indent=2) + "\n",
+                                    encoding="utf-8")
+    (d / "rolled_back.json").unlink()
+    assert library._read_state("current.json")["version"] == 8
+    assert library._pointer("current.json")["dir"] == "8-20261102"
+    assert library.rolled_back_from() is None
+    assert not statexml.xml_path(d / "rolled_back.json").exists()                  # the hold is gone, not revived
+    assert (d / "rolled_back.xml.unreadable").is_file()                            # kept aside for the owner
+    library._write_state("last_check.json", {"at": 3.0, "ok": True, "error": None, "last_ok_at": 3.0})
+    assert json.loads((d / "current.json").read_text(encoding="utf-8"))["version"] == 8    # the next save keeps it
+    assert library._read_state("current.json")["version"] == 8
+
+
+def test_a_catalog_pointer_deleted_by_v062_is_none_not_the_old_xml():
+    d = library._dir()
+    library._write_state("previous.json", {"dir": "7-20261101", "version": 7, "at": 1.0})
+    (d / "previous.json").unlink()
+    assert library._read_state("previous.json") is None and library._pointer("previous.json") is None
+    assert not statexml.xml_path(d / "previous.json").exists()
+
+
+def test_an_owner_entry_changed_by_v062_survives_the_next_save_and_a_deleted_one_is_gone():
+    e, _ = library.add_local(json.dumps(v062_entry()).encode("utf-8"))
+    jp = library._local_dir() / "sunlu" / "pla-plus-2-0.json"
+    jp.write_text(library.dumps({**e, "colors": ["Blue"]}), encoding="utf-8")       # v0.6.2 edited it
+    assert [x["colors"] for x in library._load_local()] == [["Blue"]]
+    again = {**v062_entry(), "colors": ["Blue"], "material": "PETG"}                # the next save, from what was read
+    library.add_local(json.dumps(again).encode("utf-8"))
+    assert json.loads(jp.read_text(encoding="utf-8"))["colors"] == ["Blue"]
+    jp.unlink()                                                                       # v0.6.2 deleted it
+    assert library._read_local(jp) is None and library._load_local() == []
+    assert not statexml.xml_path(jp).exists() and statexml.xml_path(jp).with_name("pla-plus-2-0.xml.unreadable").is_file()
+    assert library.remove_local("sunlu--pla-plus-2-0") is False                    # nothing left to remove
+
+
+def test_a_record_changed_by_v062_survives_the_next_save_and_a_deleted_one_is_gone():
+    intake_history._save({"id": RID, "at": 1.0, "state": "detected", "device": "phone", "saved": [], "revisions": []})
+    jp = intake_history._dir(RID) / "record.json"
+    older = json.loads(jp.read_text(encoding="utf-8"))
+    older["device"] = "v062"                                                          # an apply or undo under v0.6.2
+    jp.write_text(json.dumps(older, indent=1), encoding="utf-8")
+    rec = intake_history._load(RID)
+    assert rec["device"] == "v062"
+    rec["state"] = "applied"
+    intake_history._save(rec)                                                         # the next save
+    saved = json.loads(jp.read_text(encoding="utf-8"))
+    assert saved["device"] == "v062" and saved["state"] == "applied"
+    assert intake_history._load(RID)["device"] == "v062"
+    jp.unlink()                                                                       # v0.6.2 deleted the record
+    with pytest.raises(intake_history.HistoryError):
+        intake_history._load(RID)
+    assert RID not in intake_history._ids_newest_first()
+    assert not statexml.xml_path(jp).exists()
+
+
+def test_a_share_json_deleted_by_v062_empties_the_queue_instead_of_reviving_it():
+    intake_history.make_state_dir(intake_history._dir(RID))
+    share_queue._write(RID, {"entries": {RID: "fb-9"}, "failed": None})
+    jp = share_queue._path(RID)
+    jp.unlink()                                                                       # v0.6.2 drained the queue
+    assert share_queue._read(RID) == {"entries": {}, "failed": None}
+    assert not statexml.xml_path(jp).exists()
