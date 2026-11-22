@@ -166,7 +166,9 @@ def panel_ttys() -> list[str]:
 def state_dir() -> Path:
     """The station's own state folder (systemd's StateDirectory, owned by its service user): its certificate and key
     (`tls/`) and its settings file (`settings.xml`)."""
-    return Path(os.environ.get("STATE_DIRECTORY", "/var/lib/filament-kit-station").split(":")[0])
+    value = os.environ.get("STATE_DIRECTORY", "/var/lib/filament-kit-station")
+    end = value.find(":", 2 if re.match(r"[A-Za-z]:[\\/]", value) else 0)      # systemd joins folders with ":"; a drive's is not one
+    return Path(value if end < 0 else value[:end])
 
 
 def tls_dir() -> Path:

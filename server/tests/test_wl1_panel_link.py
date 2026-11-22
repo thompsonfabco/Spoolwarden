@@ -13,7 +13,7 @@ import types
 
 import pytest
 
-from filament_kit.station import flow, http, nfc, panel, panel_net, wire
+from filament_kit.station import flow, http, nfc, panel, panel_net, panel_setup, wire
 from filament_kit.station import state as st
 
 TOKEN = "k3y-0123456789abcdef"
@@ -109,8 +109,8 @@ def usb_panel():
 @pytest.fixture(autouse=True)
 def station(tmp_path, monkeypatch):
     """A listener on a free port with the station's own certificate and a stored token; no panel, no scale reading."""
-    monkeypatch.setattr(st, "state_dir", lambda: tmp_path)       # (STATE_DIRECTORY is split at a colon)
-    (tmp_path / panel_net.TOKEN_FILE).write_text(TOKEN + "\n")
+    monkeypatch.setenv("STATE_DIRECTORY", str(tmp_path))
+    panel_setup.store_token(TOKEN)                                # the file `panel-wifi` writes: the one source
     cert, key, fp = st.ensure_cert(tmp_path / "tls")
     listener = panel_net.listen(0)
     net.port, net.fp, net.clients = listener.getsockname()[1], fp, []
@@ -233,10 +233,13 @@ def test_the_token_is_compared_in_constant_time(monkeypatch):
 
 def test_the_token_reader(tmp_path):
     assert panel_net.read_token() == TOKEN
-    (tmp_path / panel_net.TOKEN_FILE).write_text("   \n")
+    panel_setup.store_token("   ")
     assert panel_net.read_token() is None
-    (tmp_path / panel_net.TOKEN_FILE).unlink()
+    (tmp_path / panel_setup.TOKEN_FILE).write_text("not xml")
     assert panel_net.read_token() is None
+    panel_setup.forget_token()
+    assert panel_net.read_token() is None
+    assert not hasattr(panel_net, "TOKEN_FILE")                   # no second convention (`panel-token`)
 
 
 # (f) what must not take the station down
@@ -253,7 +256,7 @@ def test_a_wrong_token_is_refused_and_logged_without_the_token(token, caplog):
 
 
 def test_no_stored_token_refuses_every_panel(tmp_path):
-    (tmp_path / panel_net.TOKEN_FILE).unlink()
+    panel_setup.forget_token()
     p = FakePanel(net.port).hello(token="anything")
     assert p.line() == b"REFUSED token" and link() is None
 

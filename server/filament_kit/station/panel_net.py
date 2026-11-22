@@ -24,6 +24,7 @@ import ssl
 import threading
 import time
 
+from . import panel_setup
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -36,23 +37,14 @@ WRITE_SECONDS = 2         # a stalled write drops the link (it must not hold pan
 REFUSE_DELAY = 1.0        # a refused panel waits this long before the line (slows a token guesser)
 MAX_WAITING = 8           # connections in their HELLO at once; more are closed at once
 TICK = 0.3                # the session wakes this often to keep the lamps current (as the USB loop's readline)
-TOKEN_FILE = "panel-token"
 
 _waiting = threading.BoundedSemaphore(MAX_WAITING)
 
 
-def token_path():
-    return st.state_dir() / TOKEN_FILE
-
-
 def read_token() -> str | None:
-    """The panel's token: the one line of `panel-token` in the station's state folder, which `panel-wifi` (WL4) writes
-    when it sets a panel up and removes with `--off`. None when there is none (every panel is then refused)."""
-    try:
-        token = token_path().read_text(encoding="ascii", errors="replace").strip()
-    except OSError:
-        return None
-    return token or None
+    """The panel's token: the one `panel-wifi` stored in the station's state folder (`panel_setup.stored_token`, the
+    only place it is kept) and `--off` removes. None when there is none (every panel is then refused)."""
+    return (panel_setup.stored_token() or "").strip() or None
 
 
 def token_ok(given: bytes) -> bool:
