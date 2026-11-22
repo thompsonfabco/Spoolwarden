@@ -348,7 +348,7 @@ def test_the_spool_sheet_has_the_home_line_change_home_and_return():
     assert "returnSpool(id, " in sheet and "body: h(\"div\", { class: \"spools__sheet\" }, sum, homeBox," in sheet
     assert "paintCo();" in _cut(sheet, "function paintActions() {", "// Update weight")
     tab = _cut(js, "function openTab() {", "// ---------- Presets")
-    assert "lowBtn, co.chip)" in tab and "if (co.st.on) { co.load(); return; }" in tab
+    assert "co.chip, lowBtn)" in tab and "if (co.st.on) { co.load(); return; }" in tab
     assert "co.st.on = false; co.paint();" in _cut(tab, "function setLow(on)", "\n")      # one chip on at a time
 
 
