@@ -164,7 +164,7 @@ def test_the_server_way_carries_the_chosen_printer_and_refuses_a_bad_one(app, mo
     monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="": None)
     serial = _printer()
     assert post(client(app), "flash/server", {**ANSWERS, "printer": serial}).status_code == 200
-    assert json.loads(rf.pending_path().read_text())["printer"] == serial
+    assert statexml.loads(rf.pending_path().read_bytes(), "reader-setup")["printer"] == serial
     rf.pending_path().unlink()
     r = post(client(app), "flash/server", {**ANSWERS, "printer": "a b/c"})
     assert r.status_code == 400 and r.json()["field"] == "printer" and not rf.pending_path().exists()
