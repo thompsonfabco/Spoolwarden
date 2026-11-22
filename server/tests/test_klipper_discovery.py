@@ -253,6 +253,27 @@ def test_cli_detect_output_is_06_9_2(moonraker, capsys):
                                      "api-key sv08-max`")
 
 
+def test_detect_wait_line_shows_only_when_the_call_is_slow(moonraker, capsys, monkeypatch):
+    """The design's section 6.6: a progress line, once, on standard error, after PROGRESS_AFTER seconds with no other
+    output. The conftest holds that at 3600 for every test; here it is small and the call's speed decides."""
+    import time
+    from filament_kit import output
+    registry.add_klipper("SV08 MAX", moonraker.host, moonraker.port)
+    real = klipper_cli.detect
+
+    def slow(*a, **k):
+        time.sleep(0.4)
+        return real(*a, **k)
+    monkeypatch.setattr(output, "PROGRESS_AFTER", 0.05)
+    monkeypatch.setattr(klipper_cli, "detect", slow)
+    rc, out, err = _detect_cli(moonraker, capsys, "printer", "detect", "sv08-max")
+    assert rc == 0 and err.startswith("~ Asking SV08 MAX...\n") and err.count("~ ") == 1
+    monkeypatch.setattr(output, "PROGRESS_AFTER", 3600.0)
+    monkeypatch.setattr(klipper_cli, "detect", real)
+    rc, out, err = _detect_cli(moonraker, capsys, "printer", "detect", "sv08-max")
+    assert rc == 0 and "Asking" not in err and "~ " not in err
+
+
 def test_cli_detect_offline_is_an_error(capsys, monkeypatch):
     # the OS's connection-error text differs per platform (CI's is longer), so give the line room
     monkeypatch.setenv("COLUMNS", "400")
