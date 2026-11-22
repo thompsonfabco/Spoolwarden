@@ -252,11 +252,11 @@ if [ -e "$OLD_APPLY_UNIT" ]; then
     rm -f "$OLD_APPLY_UNIT"
     if [ "${FK_NO_SYSTEMD:-}" != 1 ]; then systemctl daemon-reload || true; fi
 fi
-# The button panel's firmware (a binary and its VERSION): the station reflashes a panel on another version.
+# The button panel's firmware (the whole image, the program image alone and its VERSION): the station reflashes a panel on another version.
 # In a release tarball it is install/panel/, in a source checkout station/panel/firmware/.
 if [ -d "$RES/panel" ]; then PANEL_FW_SRC="$RES/panel"; else PANEL_FW_SRC="$HERE/../station/panel/firmware"; fi
 install -d -m 755 "$OPT/resources/panel"
-install -m 644 "$PANEL_FW_SRC/intake-panel.bin" "$PANEL_FW_SRC/VERSION" "$OPT/resources/panel/"
+install -m 644 "$PANEL_FW_SRC/intake-panel.bin" "$PANEL_FW_SRC/intake-panel-program.bin" "$PANEL_FW_SRC/VERSION" "$OPT/resources/panel/"
 # The Printer Station's firmware (no settings in it: `spoolwarden reader setup` writes them over USB).
 # In a release tarball it is install/reader/, in a source checkout reader/firmware/.
 if [ -d "$RES/reader" ]; then READER_FW_SRC="$RES/reader"; else READER_FW_SRC="$HERE/../reader/firmware"; fi
