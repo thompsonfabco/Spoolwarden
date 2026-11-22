@@ -49,6 +49,9 @@ internal val AddProfileTitle: Int get() = R.string.catalog_title
 @Serializable data object SpoolsGraph
 @Serializable data object SpoolsRoute
 
+/** Scan a label (05-android-app 4.4, 7.1): the QR scanner in label mode; a label that is read opens [SpoolRoute]. */
+@Serializable data object SpoolsScanRoute
+
 // The spool screens and the tag screens are in the graph of every tab (05-android-app 2.5, "Shared"): they open on the stack
 // of the tab that is selected.
 /** [result] is a [com.thompsonfabco.filamentkit.ui.spool.SpoolResult] already shown by the screen that led here (a link), as its text. */

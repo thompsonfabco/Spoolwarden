@@ -135,6 +135,11 @@ import com.thompsonfabco.filamentkit.nav.TagLinkPreviewRoute
 import com.thompsonfabco.filamentkit.nav.TagLinkRoute
 import com.thompsonfabco.filamentkit.nav.TagRoute
 import com.thompsonfabco.filamentkit.nav.SpoolsGraph
+import com.thompsonfabco.filamentkit.nav.SpoolsScanRoute
+import com.thompsonfabco.filamentkit.ui.pair.LabelLookup
+import com.thompsonfabco.filamentkit.ui.pair.LabelScan
+import com.thompsonfabco.filamentkit.ui.pair.labelSpoolNumber
+import com.thompsonfabco.filamentkit.ui.pair.lookupLabelSpool
 import com.thompsonfabco.filamentkit.nav.SpoolsRoute
 import com.thompsonfabco.filamentkit.nav.Tab
 import com.thompsonfabco.filamentkit.nav.TabTap
@@ -566,7 +571,8 @@ internal fun FilamentKitApp(
     val phone = SpoolwardenTheme.window == WindowClass.Phone
     val imeVisible = WindowInsets.isImeVisible
     val openSettingsOverPairing: () -> Unit = { nav.navigate(SettingsGraph) { launchSingleTop = true } }
-    val navVisible = !inPairing && !settingsOverPairing && destination != null && !(phone && imeVisible)
+    val navVisible = !inPairing && !settingsOverPairing && destination != null && !(phone && imeVisible) &&
+        destination?.hasRoute(SpoolsScanRoute::class) != true
     // Panes on a phone (02 2.3, 08 9): the root page is the list of sections, choosing one drills in, and Back at that
     // section's root returns to the list with focus on its row; a screen deeper in a section keeps its own Back
     val listNav = LocalNavStyle.current == NavStyle.List
@@ -580,7 +586,7 @@ internal fun FilamentKitApp(
     val pairingOverMain = remember(entry) { nav.previousBackStackEntry != null }
     val atPairStart = destination?.hasRoute(PairRoute::class) == true || destination?.hasRoute(PairNetworkAccessRoute::class) == true
     val showBack = showsBackArrow(atTabRoot, inPairing, pairingOverMain, atPairStart) || settingsOverPairing || drilledIn
-    val scanning = destination?.hasRoute(PairScanRoute::class) == true
+    val scanning = destination?.hasRoute(PairScanRoute::class) == true || destination?.hasRoute(SpoolsScanRoute::class) == true
     val storedCertificate = destination?.hasRoute(PairCertificateRoute::class) == true &&
         entry?.toRoute<PairCertificateRoute>()?.source == MismatchSource.STORED.routeSource()
     val update = updater?.state?.collectAsStateWithLifecycle()?.value ?: UpdateUi()
@@ -1193,6 +1199,38 @@ internal fun FilamentKitApp(
                 }
 
                 navigation<SpoolsGraph>(startDestination = SpoolsRoute) {
+                    composable<SpoolsScanRoute> {
+                        if (api == null) {
+                            HubNoticePage(::pushPairing)
+                            return@composable
+                        }
+                        var notice by remember { mutableStateOf<String?>(null) }
+                        var rescan by remember { mutableIntStateOf(0) }
+                        val scanScope = rememberCoroutineScope()
+                        val leave = { nav.currentDestination?.hasRoute(SpoolsScanRoute::class) == true }
+                        QrScanner(
+                            onResult = { text ->
+                                val id = labelSpoolNumber(text)
+                                if (id != null && leave()) scanScope.launch {
+                                    notice = null
+                                    when (val found = lookupLabelSpool { currentApi().spoolById(id) }) {
+                                        LabelLookup.Found -> if (leave()) nav.navigate(SpoolRoute(id)) {
+                                            popUpTo<SpoolsScanRoute> { inclusive = true }
+                                        }
+                                        else -> {
+                                            notice = (found as? LabelLookup.Failed)?.text ?: LabelScan.NOT_FOUND_TEXT
+                                            delay(LabelScan.RESCAN_MS)
+                                            rescan++
+                                            delay(LabelScan.NOTICE_MS - LabelScan.RESCAN_MS)
+                                            notice = null
+                                        }
+                                    }
+                                }
+                            },
+                            onClose = { if (leave()) nav.popBackStack() },
+                            label = LabelScan(notice, rescan),
+                        )
+                    }
                     composable<SpoolsRoute> {
                         val a = api
                         if (a == null) {
@@ -1225,6 +1263,7 @@ internal fun FilamentKitApp(
                             },
                             onPairAgain = app.router::pairAgain,
                             online = online,
+                            onScanLabel = { nav.navigate(SpoolsScanRoute) { launchSingleTop = true } },
                             lowCount = alertsUi.lowCount,
                             spoolDetail = { spool, embedded, _ ->
                                 val spoolVm: SpoolViewModel = viewModel(

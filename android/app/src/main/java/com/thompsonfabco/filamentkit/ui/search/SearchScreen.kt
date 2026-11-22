@@ -55,6 +55,7 @@ import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.pair.LabelScan
 import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
@@ -300,6 +301,8 @@ fun SearchScreen(
     /** How many spools are running low, for the chip "Running low (n)"; null: no chip (the Hub has no such list). */
     lowCount: Int? = null,
     onNfcSettings: (() -> Unit)? = null,
+    /** Opens the scanner in label mode (Scan a label, 7.1); null: no button. */
+    onScanLabel: (() -> Unit)? = null,
     spoolDetail: (@Composable (spool: SpoolSummary, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()
@@ -423,6 +426,9 @@ fun SearchScreen(
                         }
                     }
                     if (ui.query.isBlank() && !ui.lowOnly) TagHint(nfc, onNfcSettings ?: { openNfcSettings(context) })
+                    if (onScanLabel != null && ui.query.isBlank() && !ui.lowOnly) {
+                        SwButton(LabelScan.SCAN_BUTTON, onScanLabel, Modifier.fillMaxWidth(), icon = R.drawable.sw_ic_camera)
+                    }
                     HubNoticeOf(ui.failure, onPairAgain)
                     HubNoticeOf(ui.csvFailure, onPairAgain)
                     (ui.csvProblem ?: ui.csvFailure?.let { hubFailureText(it) })?.let { NoticeCard(NoticeKind.Bad, it) }
