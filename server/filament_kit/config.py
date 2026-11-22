@@ -259,12 +259,42 @@ def _write(f: Path, write) -> None:
         raise
 
 
+KEEP_UNREADABLE = 5       # copies of a set-aside file kept: `.unreadable` (newest), `.unreadable.1` ... `.unreadable.4`
+
+
+def _parses_broken(xf: Path) -> bool:
+    """True only when config.xml was read and really is broken; a read that fails with an OSError (EACCES, EIO) says
+    nothing about the file, so it stays where it is (the statexml helper's rule)."""
+    from .profiles import statexml
+    try:
+        data = xf.read_bytes()
+    except OSError:
+        return False
+    try:
+        statexml.loads(data, "config")
+    except statexml.StateXmlError:
+        return True
+    return False
+
+
+def _set_aside(xf: Path) -> None:
+    """Keep config.xml as config.xml.unreadable; an earlier copy is renamed .1, .2, ... (five at most, the oldest
+    beyond that is replaced), never deleted unseen by a plain overwrite of the newest."""
+    names = [xf.with_name(xf.name + ".unreadable" + (f".{i}" if i else "")) for i in range(KEEP_UNREADABLE)]
+    if names[-1].exists():
+        names[-1].unlink()
+    for i in range(KEEP_UNREADABLE - 1, 0, -1):
+        if names[i - 1].exists():
+            os.replace(names[i - 1], names[i])
+    os.replace(xf, names[0])
+
+
 def save(cfg: dict) -> None:
     """Both forms (R85 section 1.5: the JSON form stays for one release, for `update --rollback`)."""
     from .profiles import statexml
     xf = _xml_file()
-    if any(x.startswith(f"{xf} (") for x in statexml.problems()) and xf.exists():     # never write over what could not be read
-        os.replace(xf, xf.with_name(xf.name + ".unreadable"))
+    if any(x.startswith(f"{xf} (") for x in statexml.problems()) and xf.exists() and _parses_broken(xf):
+        _set_aside(xf)                  # never write over what could not be read (a passing read error keeps the file)
         statexml.clear_problem(xf)
     js = json.dumps(cfg, indent=2).encode("utf-8")
     # config.json first, then config.xml with its hash: a stop in between leaves a hash that does not match, and the
