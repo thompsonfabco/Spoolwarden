@@ -106,7 +106,7 @@ out.client = { low: err("running_low_g"), warn: err("storage_warn_percent"), sen
 setField("running_low_g", "2000"); setField("storage_warn_percent", "94");
 await stub({ refuse: { error: "running_low_g must be at most 1500", errors: { running_low_g: "running_low_g must be at most 1500" }, field: "running_low_g" } });
 $("#set-alerts [type=submit]").click();
-await until(() => $("#set-alerts .group__foot .result[data-state=bad]"), "the refusal");
+await until(() => $("#set-alerts .group__foot .result[data-state=bad]") && result(), "the refusal");
 out.hub = { low: err("running_low_g"), warn: err("storage_warn_percent"), result: text($("#set-alerts .group__foot .result")), dirty: dirty().form, value: sw("running_low_g").value };
 """)
     assert page["client"] == {"low": T("alerts_error_whole", low=10, high=2000), "warn": T("alerts_error_whole", low=1, high=94), "sent": 0}
@@ -179,6 +179,7 @@ const test = $('[data-action="alerts-test"]', device());
 test.click();
 await until(() => window.__notes.length, "the browser notification");
 await until(() => $(".toasts .toast"), "the toast");
+await until(() => text($(".result__text", device())), "the sent line");
 const posts = await calls("alerts/test");
 out.test = { body: posts.map((c) => c.body), id: localStorage.getItem("spoolwarden.browser"), result: text($(".result__text", device())),
              note: window.__notes.map((n) => [n.title, n.body]), toast: text($(".toast__text")) };
