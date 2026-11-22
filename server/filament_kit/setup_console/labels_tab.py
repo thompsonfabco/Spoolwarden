@@ -1,7 +1,8 @@
 """Spool labels on the Hub page (R85 section 5 and 6.2): one spool's label as SVG, and the print page. Nothing here
 changes anything, so no code is asked for. The drawing and the page are `labels.py`; this file gives the Hub page's routes.
 
-    GET  spools/{id}/label.svg {size}      image/svg+xml: the label (size 62x29 | 50x30 | sheet24, default 62x29). 404 for an
+    GET  spools/{id}/label.svg {size}      image/svg+xml: the label (size 62x29 | 50x30 | a4-63x34 | a4-70x37 |
+                                       letter-66x25, default 62x29). 404 for an
                                        unknown number. No code
     GET  labels {ids=<n,n,...>, size}      the print page: HTML with the labels as inline SVG, the size choice, the line about
                                        the printed address and Print. A number the Hub does not know is named in its place.
