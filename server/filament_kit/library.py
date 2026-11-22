@@ -48,7 +48,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import __version__, config, event_sink, release
+from . import __version__, config, demo, event_sink, release
 from .pairing import _write_atomic, give_to_state_owner, make_state_dir, open_lock
 
 try:
@@ -303,9 +303,9 @@ def _locked():
         if fcntl is None:
             yield
             return
-        state = config.paths().state
-        state.mkdir(parents=True, exist_ok=True)
-        with open_lock(state / "library.lock") as fh:
+        lock = demo.where(config.paths().state / "library.lock", "library.lock")   # the demo keeps its own copy
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        with open_lock(lock) as fh:
             fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
             try:
                 yield
@@ -314,11 +314,11 @@ def _locked():
 
 
 def _dir() -> Path:
-    return config.paths().state / "library"
+    return demo.where(config.paths().state / "library", "library")
 
 
 def _local_dir() -> Path:
-    return config.paths().state / "library-local"
+    return demo.where(config.paths().state / "library-local", "library-local")
 
 
 def _read_json(path: Path):
@@ -1238,6 +1238,10 @@ def update(url: str | None = None, *, opener=None, now: float | None = None, sch
     the job starts (steps.py): the download, its check, putting it in place (not reached when nothing is new)."""
     step = step or (lambda _text: None)
     base = _check_url(configured_url() if url is None else url)
+    try:
+        demo.stop()             # no download from GitHub in the demo
+    except demo.NotInDemo as e:
+        raise LibraryError(str(e)) from None
     now = time.time() if now is None else now
     with _locked():
         cur_root, cur_idx, _ = _current()

@@ -33,7 +33,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, event_sink, read_confidence
+from . import config, demo, event_sink, read_confidence
 from .pairing import _write_atomic, make_state_dir
 from .profiles import statexml
 
@@ -72,7 +72,7 @@ class HistoryError(Exception):
 # ---------------------------------------------------------------- storage
 
 def _root() -> Path:
-    return config.paths().state / HISTORY
+    return demo.where(config.paths().state / HISTORY, HISTORY)
 
 
 def keep(cfg: dict | None = None) -> int:
