@@ -631,7 +631,7 @@ def _server_setup(ex: _Exec, arg: str) -> None:
         else:
             print("No key entered. Add it later with: sudo spoolwarden config  (Label Reader)")
         del key
-    for f in (etc / "config.json", key_file):
+    for f in (etc / "config.json", etc / "config.xml", key_file):
         if f.exists():
             ex.cmd(["chown", "root:filament-kit", str(f)])
             ex.cmd(["chmod", "640", str(f)])
