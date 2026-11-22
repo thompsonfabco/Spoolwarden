@@ -37,10 +37,11 @@ USER_COMMANDS = [
 ]
 
 
-def _route(tmp_path, args, station=False, result=False):
+def _route(tmp_path, args, station=False, result=False, stdin=False):
     stubs = tmp_path / "bin"
     stubs.mkdir(exist_ok=True)
-    for name, body in (("id", 'echo 0'), ("runuser", 'shift 3; echo "AS-USER $*"'),
+    runuser = 'shift 3; echo "AS-USER $*"' + ('; echo "STDIN:$(cat)"' if stdin else "")
+    for name, body in (("id", 'echo 0'), ("runuser", runuser),
                        ("systemctl", "exit 1"), ("pgrep", "exit 1"), ("fk", 'echo "AS-ROOT $*"')):
         p = stubs / name
         p.write_text(f"#!/usr/bin/env bash\n{body}\n", encoding="utf-8", newline="\n")
@@ -55,7 +56,8 @@ def _route(tmp_path, args, station=False, result=False):
     script = tmp_path / "wrapper.sh"
     script.write_text(text, encoding="utf-8", newline="\n")
     env = {**os.environ, "PATH": f"{stubs}:{os.environ.get('PATH', '')}"}
-    r = subprocess.run([BASH, str(script), *args], capture_output=True, text=True, env=env, timeout=30)
+    r = subprocess.run([BASH, str(script), *args], capture_output=True, text=True, env=env, timeout=30,
+                       **({"stdin": subprocess.DEVNULL} if stdin else {}))
     return r if result else r.stdout.strip()
 
 
@@ -114,11 +116,46 @@ def test_catalog_add_of_a_readable_file_is_run_by_the_user_on_standard_input(tmp
     assert got.startswith("AS-USER ") and got.endswith(f" {old} add -")
 
 
+def _file_case(tmp_path, old, args, name="entry.json"):
+    """Run `<old> add <args>` with `{f}` replaced by a readable entry file; (the program's argument line, what it read on stdin)."""
+    entry = tmp_path / name
+    entry.write_text('{"x": 1}', encoding="utf-8")
+    r = _route(tmp_path, [old, "add", *[str(entry) if a == "{f}" else a for a in args]], result=True, stdin=True)
+    return r, r.stdout.splitlines()
+
+
+@pytest.mark.parametrize("old", ["catalog", "library"])
+@pytest.mark.parametrize("args, shown", [
+    (["{f}"], "add -"), (["-y", "{f}"], "add -y -"), (["{f}", "-y"], "add -y -"), (["--yes", "{f}"], "add --yes -")],
+    ids=lambda v: " ".join(v) if isinstance(v, list) else v)
+def test_catalog_add_with_a_file_takes_the_file_branch_with_options_before_or_after(tmp_path, old, args, shown):
+    """The file is the first word after `add` that does not start with `-`: root opens it, the program reads it on stdin."""
+    r, lines = _file_case(tmp_path, old, args)
+    assert r.returncode == 0 and r.stderr == ""
+    assert lines[0].startswith("AS-USER ") and lines[0].endswith(f" {old} {shown}")
+    assert lines[1] == 'STDIN:{"x": 1}'
+
+
+@pytest.mark.parametrize("old", ["catalog", "library"])
+def test_catalog_add_with_a_file_name_with_spaces_keeps_it_whole(tmp_path, old):
+    r, lines = _file_case(tmp_path, old, ["-y", "{f}"], name="my entry (1).json")
+    assert r.returncode == 0 and lines[0].endswith(f" {old} add -y -") and lines[1] == 'STDIN:{"x": 1}'
+
+
 @pytest.mark.parametrize("old", ["catalog", "library"])
 @pytest.mark.parametrize("rest", [["--ask"], ["--ask", "-y"], ["-y", "--ask"], ["-y"], ["-"]], ids=" ".join)
-def test_catalog_add_with_a_third_word_that_starts_with_a_dash_is_not_a_file(tmp_path, old, rest):
-    """`catalog add --ask` and `catalog add -y ...` reach the program as they are, not "no readable file at --ask"."""
-    r = _route(tmp_path, [old, "add", *rest], result=True)
+def test_catalog_add_with_no_file_word_takes_the_service_path_as_it_is(tmp_path, old, rest):
+    """`--ask` (and `-y`, `-`) are not files: the program gets them untouched and nothing is read from a file."""
+    r = _route(tmp_path, [old, "add", *rest], result=True, stdin=True)
     assert r.returncode == 0 and r.stderr == ""
-    assert r.stdout.startswith("AS-USER ")
-    assert r.stdout.strip().endswith(" ".join([old, "add", *rest]))
+    lines = r.stdout.splitlines()
+    assert lines[0].startswith("AS-USER ") and lines[0].endswith(" ".join([old, "add", *rest])) and lines[1] == "STDIN:"
+
+
+@pytest.mark.parametrize("old", ["catalog", "library"])
+@pytest.mark.parametrize("args", [["-y", "none.json"], ["none.json", "-y"]], ids=" ".join)
+def test_catalog_add_of_a_missing_file_is_exit_2_with_options_too(tmp_path, old, args):
+    r = _route(tmp_path, [old, "add", *[str(tmp_path / a) if a.endswith(".json") else a for a in args]], result=True)
+    assert r.returncode == 2 and r.stdout == ""
+    assert r.stderr.startswith("Error: there is no readable file at ") and r.stderr.endswith("none.json.\nFix: give the path "
+                                                                                           "of one catalog entry as a JSON file.\n")

@@ -127,14 +127,21 @@ fi
 
 if [ "$(id -u)" -eq 0 ]; then
     # `catalog add <file>` (and the old `library add`): the service user may not be able to read a file in the
-    # caller's home folder, so root opens it and the CLI reads it on stdin. A third word that starts with `-` (`-`, `--ask`,
-    # `-y`) is not a file: it goes on to the program as it is.
-    if { [ "${1:-}" = catalog ] || [ "${1:-}" = library ]; } && [ "${2:-}" = add ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; then
-        if [ ! -f "$3" ] || [ ! -r "$3" ]; then
-            printf 'Error: there is no readable file at %s.\nFix: give the path of one catalog entry as a JSON file.\n' "$3" >&2
-            exit 2
+    # caller's home folder, so root opens it and the CLI reads it on stdin. The file is the first word after `add` that
+    # does not start with `-`; options may stand before or after it and go on to the program. With no such word (`--ask`,
+    # `-`) the program is run as it is.
+    if { [ "${1:-}" = catalog ] || [ "${1:-}" = library ]; } && [ "${2:-}" = add ]; then
+        file=""; have=0; rest=()
+        for a in "${@:3}"; do
+            if [ "$have" = 0 ] && [ -n "$a" ] && [ "${a#-}" = "$a" ]; then file=$a; have=1; else rest+=("$a"); fi
+        done
+        if [ "$have" = 1 ]; then
+            if [ ! -f "$file" ] || [ ! -r "$file" ]; then
+                printf 'Error: there is no readable file at %s.\nFix: give the path of one catalog entry as a JSON file.\n' "$file" >&2
+                exit 2
+            fi
+            run_as_user "$1" add ${rest[@]+"${rest[@]}"} - < "$file"
         fi
-        run_as_user "$1" add - < "$3"
     fi
     # `status`: the station's pairing folder is closed to the service user, so root looks and status gets the answer
     # (one line, never the token). With no folder there is no pairing to find, and status says so itself.
