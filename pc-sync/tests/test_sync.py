@@ -6,6 +6,7 @@ import zipfile
 import pytest
 
 import studio_fixture
+from fksync import statexml
 from fksync import client, installer, store, sync, treehash
 
 STAMP = "20261102-010203"
@@ -182,7 +183,7 @@ def test_matching_build_installs_reuploads_and_reports(env):
     assert got["nozzle_temperature"] == ["220"]
     assert json.loads((dirs.installed / "BUILD.json").read_text())["stamp"] == STAMP
     assert len(list(dirs.backups.iterdir())) == 1
-    assert not sync.marker_path(dirs).exists()
+    assert not statexml.exists(sync.marker_path(dirs))
     state = json.loads(dirs.state.read_text())
     assert state["last"]["outcome"] == "installed"
     assert f"installed build {STAMP}" in _log(dirs)
@@ -236,7 +237,7 @@ def test_refused(env, code, outcome):
     assert not [x for x in c.calls if x[0] == "installed"]
     if outcome == "refused":
         assert f"because reason-{code}" in _log(dirs)
-    assert not sync.marker_path(dirs).exists()
+    assert not statexml.exists(sync.marker_path(dirs))
 
 
 def test_build_json_for_other_hash_is_refused(env):
@@ -276,7 +277,7 @@ def test_unexpected_install_oserror_propagates_then_next_run_finishes(env):
     c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))
     with pytest.raises(OSError):
         _run(c, folders, dirs, install=crashing_install)
-    assert sync.marker_path(dirs).exists()
+    assert statexml.exists(sync.marker_path(dirs))
     assert not [x for x in c.calls if x[0] == "installed"]
     # the live folder is now ahead of the build's live hash; the marker makes the next run finish the install
     assert _hashes(folders)[0] != live
@@ -284,7 +285,7 @@ def test_unexpected_install_oserror_propagates_then_next_run_finishes(env):
     assert _run(c, folders, dirs, now=T0 + 600) == "installed"
     assert ("rebuild", _hashes(folders)[0]) not in c.calls
     assert c.calls[-2:] == [("installed", STAMP), ("upload", "live", folders.user_id)]
-    assert not sync.marker_path(dirs).exists()
+    assert not statexml.exists(sync.marker_path(dirs))
     assert "interrupted" in _log(dirs)
 
 
@@ -295,7 +296,7 @@ def test_report_retried_when_installed_call_failed(env):
     c.fail["installed"] = client.Offline("server unreachable")
     with pytest.raises(client.Offline):
         _run(c, folders, dirs)
-    assert not sync.marker_path(dirs).exists()  # the presets are in; only the report is pending
+    assert not statexml.exists(sync.marker_path(dirs))  # the presets are in; only the report is pending
     c.fail.clear()
     c.st["live_hash"] = _hashes(folders)[0]
     c.calls.clear()
@@ -338,7 +339,7 @@ def test_resume_refused_when_a_new_preset_was_edited_after_the_crash(env):
                    _build_zip(live_hash=live, presets=presets))
     with pytest.raises(OSError):
         _run(c, folders, dirs, install=crashing_install)
-    marker = json.loads(sync.marker_path(dirs).read_text())
+    marker = statexml.read(sync.marker_path(dirs))
     assert marker["stamp"] == STAMP and (dirs.backups / marker["backup"]).is_dir()
     # edited in Bambu Studio before the next run
     target = folders.user_filament / "base" / f"{new_name}.json"
@@ -347,7 +348,7 @@ def test_resume_refused_when_a_new_preset_was_edited_after_the_crash(env):
     c.calls.clear()
     assert _run(c, folders, dirs, now=T0 + 600) == "rebuild_requested"
     assert json.loads(target.read_text(encoding="utf-8")) == edited
-    assert not sync.marker_path(dirs).exists()
+    assert not statexml.exists(sync.marker_path(dirs))
     here = _hashes(folders)[0]
     assert ("upload", "live", folders.user_id, STAMP) in c.calls and ("rebuild", here) in c.calls
     assert not [x for x in c.calls if x[0] == "installed"]

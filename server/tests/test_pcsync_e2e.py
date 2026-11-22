@@ -17,6 +17,7 @@ import pytest
 import uvicorn
 
 from fakes import serving
+from filament_kit.profiles import statexml
 from filament_kit import config, library, pairing
 from filament_kit.api import create_app
 from filament_kit.bridge import registry
@@ -239,7 +240,7 @@ def test_full_cycle(tmp_path, server, monkeypatch):
     st = pc.client.state()
     assert st["installed"]["stamp"] == b1["stamp"]
     assert st["live_hash"] == builds.tree_hash(pc.folders.user_filament)     # re-uploaded after the install
-    assert json.loads((pc.dirs.installed / "BUILD.json").read_text(encoding="utf-8"))["stamp"] == b1["stamp"]
+    assert statexml.read(pc.dirs.installed / "BUILD.json")["stamp"] == b1["stamp"]
     assert pc.run() == "up_to_date"
 
     # 5. preset_for: the line's generated P id with int temps, never a Generic or system id

@@ -9,6 +9,7 @@ import sys
 import pytest
 from test_cli import LINK_TOKEN, _dirs, _link, _main, _respond, _studio_closed, paths, srv  # noqa: F401
 
+from fksync import statexml
 from fksync import client, store, studio, sync
 from tls_helper import TlsServer, make_cert
 
@@ -56,7 +57,7 @@ def test_a_dead_link_leaves_the_working_pairing_exactly_as_it_was(srv, paths, ot
     out = capsys.readouterr().out
     assert "your previous pairing is unchanged" in out and "expired" in out
     assert dirs.token.read_bytes() == tok and store.load_config(dirs) == cfg
-    assert not dirs.pair_aside.exists() and LINK_TOKEN not in out
+    assert not statexml.exists(dirs.pair_aside) and LINK_TOKEN not in out
 
 
 def test_another_certificate_leaves_it_too(srv, paths, other, monkeypatch, capsys):  # noqa: F811
@@ -75,7 +76,7 @@ def test_a_first_pairing_that_is_refused_leaves_nothing(paths, other, capsys):  
     bad = other(respond_with(status=401))
     assert _main(paths, "pair", stdin=_link(bad) + "\n") == 1
     dirs = _dirs(paths)
-    assert not dirs.token.exists() and not dirs.config.exists() and not dirs.pair_aside.exists()
+    assert not dirs.token.exists() and not dirs.config.exists() and not statexml.exists(dirs.pair_aside)
     assert "Not paired" in capsys.readouterr().out
 
 
@@ -108,13 +109,13 @@ def test_a_first_pairing_not_reached_has_nothing_to_keep(srv, paths, monkeypatch
     assert _main(paths, "pair", stdin=_link(srv) + "\n") == 1
     dirs = _dirs(paths)
     assert "previous pairing" not in capsys.readouterr().out
-    assert store.load_token(dirs) == LINK_TOKEN and not dirs.pair_aside.exists()
+    assert store.load_token(dirs) == LINK_TOKEN and not statexml.exists(dirs.pair_aside)
 
 
 def test_the_next_run_proves_it_and_the_old_one_goes(srv, paths, monkeypatch, capsys):  # noqa: F811
     dirs, _tok, _cfg = _on_trial(srv, paths, monkeypatch, capsys, srv)
     assert _main(paths, "run", "--quiet") == 0
-    assert store.load_token(dirs) == LINK_TOKEN and not dirs.pair_aside.exists()
+    assert store.load_token(dirs) == LINK_TOKEN and not statexml.exists(dirs.pair_aside)
     assert store.load_config(dirs).get("device")
 
 
@@ -124,7 +125,7 @@ def test_the_next_run_brings_the_old_one_back_when_the_link_has_died(srv, paths,
     assert store.load_config(dirs).get("host") != cfg["host"] or store.load_config(dirs).get("fp") != cfg["fp"]
     n = len(srv.requests)
     assert _main(paths, "run", "--quiet") == 0
-    assert dirs.token.read_bytes() == tok and store.load_config(dirs) == cfg and not dirs.pair_aside.exists()
+    assert dirs.token.read_bytes() == tok and store.load_config(dirs) == cfg and not statexml.exists(dirs.pair_aside)
     assert "the earlier pairing is back" in dirs.log_file.read_text(encoding="utf-8")
     assert len(srv.requests) > n                       # and the same run went on, with the old one
 
@@ -153,13 +154,13 @@ def test_a_second_link_on_trial_keeps_the_last_proven_pairing_aside(srv, paths, 
     capsys.readouterr()
     assert _main(paths, "pair", stdin=_link(bad) + "\n") == 1
     assert "your previous pairing is unchanged" in capsys.readouterr().out
-    assert dirs.token.read_bytes() == tok and store.load_config(dirs) == cfg and not dirs.pair_aside.exists()
+    assert dirs.token.read_bytes() == tok and store.load_config(dirs) == cfg and not statexml.exists(dirs.pair_aside)
 
 
 def test_unpair_drops_what_was_aside(srv, paths, monkeypatch, capsys):  # noqa: F811
     dirs, _tok, _cfg = _on_trial(srv, paths, monkeypatch, capsys, srv)
     assert _main(paths, "unpair") == 0
-    assert not dirs.pair_aside.exists() and not dirs.token.exists()
+    assert not statexml.exists(dirs.pair_aside) and not dirs.token.exists()
 
 
 @pytest.mark.parametrize("status,back", [(404, True), (403, True), (500, False), (503, False)])
@@ -168,7 +169,7 @@ def test_a_4xx_restores_and_a_5xx_waits(srv, paths, other, capsys, status, back)
     bad = other(lambda m, p, b: (status, "application/json", {"error": "x", "message": "no"}))
     assert _main(paths, "pair", stdin=_link(bad) + "\n") == 1
     if back:
-        assert dirs.token.read_bytes() == tok and store.load_config(dirs) == cfg and not dirs.pair_aside.exists()
+        assert dirs.token.read_bytes() == tok and store.load_config(dirs) == cfg and not statexml.exists(dirs.pair_aside)
     else:
         assert store.load_token(dirs) == LINK_TOKEN and store.pair_waiting(dirs)
 
@@ -190,7 +191,7 @@ def test_a_crash_between_the_saves_brings_the_old_one_back_at_the_next_run(srv, 
     store.save_token(dirs, NEW_TOKEN)                  # the process died here
     assert _main(paths, "run", "--quiet") == 0
     assert dirs.token.read_bytes() == tok and store.load_config(dirs).get("host") == cfg["host"]
-    assert not dirs.pair_aside.exists()
+    assert not statexml.exists(dirs.pair_aside)
     assert "interrupted" in dirs.log_file.read_text(encoding="utf-8")
 
 
@@ -218,14 +219,14 @@ def test_a_damaged_aside_changes_nothing(paths):  # noqa: F811
     dirs.token.write_bytes(b"keep")
     dirs.pair_aside.write_text("{nope", encoding="utf-8")
     assert store.restore_pair_aside(dirs) is False
-    assert dirs.token.read_bytes() == b"keep" and not dirs.pair_aside.exists()
+    assert dirs.token.read_bytes() == b"keep" and not statexml.exists(dirs.pair_aside)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
 def test_the_aside_is_as_private_as_the_token(srv, paths):  # noqa: F811
     dirs, _tok, _cfg = paired(srv, paths)
     store.set_pair_aside(dirs)
-    assert dirs.pair_aside.stat().st_mode & 0o077 == 0
+    assert statexml.xml_path(dirs.pair_aside).stat().st_mode & 0o077 == 0
 
 
 def test_a_run_in_progress_means_nothing_is_spent_or_changed(srv, paths, capsys):  # noqa: F811

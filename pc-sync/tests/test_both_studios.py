@@ -9,6 +9,7 @@ import time
 import pytest
 
 import studio_fixture
+from fksync import statexml
 from fksync import client, installer, store, studio, sync, treehash
 from test_sync import INFO, PRESET, STAMP, T0, FakeClient, _build_zip
 
@@ -109,9 +110,9 @@ def test_install_goes_into_the_primary_and_each_secondary(two):
     for f in (stable, beta):
         assert _bs(f, NEW) == _p(NEW)
     sd = _sec(dirs)
-    assert json.loads((sd.installed / "BUILD.json").read_text())["stamp"] == STAMP
+    assert statexml.read(sd.installed / \"BUILD.json\")["stamp"] == STAMP
     assert len(list(sd.backups.iterdir())) == 1 and len(list(dirs.backups.iterdir())) == 1
-    assert not sync.marker_path(sd).exists()
+    assert not statexml.exists(sync.marker_path(sd))
     rec = sync.load_state(sd)
     assert rec["installed"]["stamp"] == STAMP and rec["variant"] == "BambuStudioBeta" and rec["user_id"] == UID
     assert f"installed build {STAMP} into BambuStudioBeta user {UID}" in _log(dirs)
@@ -305,11 +306,11 @@ def test_an_interrupted_secondary_install_is_resumed(two):
     _build2(c, stable, [NEW])
     calls.append(0)
     assert _run(c, stable, dirs, [beta], now=T0 + 600, install=crash) == "installed"
-    m = json.loads(sync.marker_path(_sec(dirs)).read_text())
+    m = statexml.read(sync.marker_path(_sec(dirs)))
     assert m["stamp"] == STAMP2 and m["accept"] == {"base": [NEW]}
     c.st["live_hash"] = _live(stable)
     assert _run(c, stable, dirs, [beta], now=T0 + 600 + sync.UPLOAD_BACKOFF, install=crash) == "up_to_date"
-    assert not sync.marker_path(_sec(dirs)).exists()
+    assert not statexml.exists(sync.marker_path(_sec(dirs)))
     assert _bs(beta, NEW)["nozzle_temperature"] == ["240"] and _bs(beta, A)["nozzle_temperature"] == ["230"]
     assert "interrupted install" in _log(dirs)
 
@@ -394,7 +395,7 @@ def test_a_primary_change_is_that_folders_first_sync(two):
     assert "installed" not in st and not dirs.installed.exists()         # Beta's snapshot is not stable's
     # Beta's record moved into its own secondary record, with its snapshot and backup
     sd = _sec(dirs)
-    assert json.loads((sd.installed / "BUILD.json").read_text())["stamp"] == STAMP
+    assert statexml.read(sd.installed / \"BUILD.json\")["stamp"] == STAMP
     assert sync.load_state(sd)["installed"]["stamp"] == STAMP and list(sd.backups.iterdir())
     assert "Bambu Studio folder changed from BambuStudioBeta" in _log(dirs)
     # stable is never written by a build made from Beta's live presets
@@ -673,7 +674,7 @@ def test_apply_updates_for_one_folder(two, closed, capsys):
     rec = sync.load_state(_sec(dirs))
     assert rec["differing"] == []
     assert json.loads((_sec(dirs).installed / "base" / f"{A}.json").read_text())["nozzle_temperature"] == ["220"]
-    assert A not in json.loads((_sec(dirs).installed / installer.KEPT).read_text())["base"]   # the kit's now
+    assert A not in statexml.read(_sec(dirs).installed / installer.KEPT)["base"]   # the kit's now
     assert f"wrote the build's copy of 1 presets in {BETA_KEY}" in _log(dirs)     # the earlier "apply-updates" hint is not it
 
 
