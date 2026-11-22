@@ -10,12 +10,13 @@ empty library and profiles are built from Spoolman values and the Bambu/Orca par
 already downloaded a copy keeps using it.
 
 Layout in the state directory:
-  library/current.json            {"dir", "version", "at"}: the version directory in use (absent = none)
-  library/previous.json           the current.json before the last update (absent = none)
-  library/last_check.json         {"at", "ok", "error", "last_ok_at"}
-  library/rolled_back.json        {"from", "at"}: the version a rollback left; scheduled updates skip it (absent = none)
+  library/current.xml             {"dir", "version", "at"}: the version directory in use (absent = none)
+  library/previous.xml            the current.xml before the last update (absent = none)
+  library/last_check.xml          {"at", "ok", "error", "last_ok_at"}
+  library/rolled_back.xml         {"from", "at"}: the version a rollback left; scheduled updates skip it (absent = none)
   library/versions/<v>-<stamp>/   index.json + library/<vendor>/<product>.json
-  library-local/<vslug>/<pslug>.json   the owner's own additions; never touched by `update`
+  library-local/<vslug>/<pslug>.xml    the owner's own additions; never touched by `update`
+(Each state file was a .json before; an old .json is read when there is no .xml and moved once, see profiles/statexml.)
 
 `validate` is a port of filament-library `tools/fl.py` (schema_version 1), so no jsonschema dependency.
 
@@ -48,7 +49,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import __version__, config, event_sink, release
-from .pairing import _write_atomic, give_to_state_owner, make_state_dir, open_lock
+from .pairing import give_to_state_owner, make_state_dir, open_lock
 
 try:
     import fcntl
@@ -327,14 +328,27 @@ def _read_json(path: Path):
         return None
 
 
-def _write_json(path: Path, obj) -> None:
-    make_state_dir(path.parent)
-    _write_atomic(path, (json.dumps(obj, indent=2) + "\n").encode("utf-8"), 0o644, state_owned=True)
+def _read_state(name: str):
+    """library/<name> (current.json, previous.json, last_check.json, rolled_back.json) as its XML form; a file that
+    only exists as JSON is read and moved to XML (R85 section 1)."""
+    from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
+    return statexml.read(_dir() / name, keep_version=True)
+
+
+def _write_state(name: str, obj: dict) -> None:
+    from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
+    # one release: v0.6.2 reads these as JSON after `update --rollback` (the pointer, the hold), as it wrote them
+    statexml.write(_dir() / name, obj, old_format={"indent": 2})
+
+
+def _drop_state(name: str) -> None:
+    from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
+    statexml.unlink(_dir() / name)
 
 
 def _pointer(name: str) -> dict | None:
-    """current.json / previous.json, or None when absent or unusable (= the bundled snapshot)."""
-    p = _read_json(_dir() / name)
+    """current / previous pointer, or None when absent or unusable (= the bundled snapshot)."""
+    p = _read_state(name)
     if not (isinstance(p, dict) and isinstance(p.get("dir"), str) and VERSION_DIR.fullmatch(p["dir"])):
         return None
     if not (_dir() / "versions" / p["dir"] / "index.json").is_file():
@@ -473,13 +487,41 @@ class Library:
         return out + local
 
 
+def _local_files(root: Path) -> list[Path]:
+    """The owner's entries as `<vslug>/<pslug>.json` paths, one per pair whichever form is on disk (XML wins)."""
+    names = {p.with_suffix(".json") for p in root.glob("*/*.xml")} | set(root.glob("*/*.json"))
+    return sorted(names)
+
+
+def _local_damaged(xp: Path) -> bool:
+    """The XML form of an owner's entry exists and cannot be read."""
+    from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
+    try:
+        statexml.loads(xp.read_bytes(), "entry")
+    except FileNotFoundError:
+        return False
+    except (OSError, statexml.StateXmlError):
+        return True
+    return False
+
+
+def _read_local(path: Path):
+    """One of the owner's entries (given by its JSON name): the XML form, else the JSON form, which is moved to XML
+    once (the JSON file stays as it was); a JSON that v0.6.2 changed after a rollback wins once (statexml.read). The root
+    element is `entry` for every file: a product name may start with a digit, which no element name can. An XML form
+    that cannot be read is noted (`statexml.problems()`) and never overwritten: the JSON form beside it is used, or the
+    entry is skipped."""
+    from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
+    return statexml.read(path, tag="entry")
+
+
 def _load_local() -> list[dict]:
     out = []
     root = _local_dir()
     if not root.is_dir():
         return out
-    for p in sorted(root.glob("*/*.json")):
-        e = _read_json(p)
+    for p in _local_files(root):
+        e = _read_local(p)
         if isinstance(e, dict) and not validate(e, local=True):
             out.append(e)
     return out
@@ -525,8 +567,9 @@ def _load_key() -> tuple:
     size, inode). A downloaded version is a folder that is never changed once it is in place, so the pointer is
     enough for it; an update, rollback, add or removal moves one of these."""
     local = _local_dir()
-    files = sorted(local.glob("*/*.json")) if local.is_dir() else []
-    return (str(_dir()), str(BUNDLED), _stat_key(_dir() / "current.json"), _stat_key(BUNDLED / "index.json"),
+    files = [f for p in _local_files(local) for f in (p.with_suffix(".xml"), p)] if local.is_dir() else []
+    return (str(_dir()), str(BUNDLED), _stat_key(_dir() / "current.xml"),
+            _stat_key(_dir() / "current.json"), _stat_key(BUNDLED / "index.json"),
             tuple((str(f), _stat_key(f)) for f in files))
 
 
@@ -568,10 +611,11 @@ def add_local(data: bytes) -> tuple[dict, str]:
     if problems:
         raise ValueError("; ".join(problems))
     entry = canonical(entry)
+    from .profiles import statexml   # lazily, see _read_state
     path = _local_dir() / rel_path(entry).removeprefix("library/")
     with _locked():
-        make_state_dir(path.parent)
-        _write_atomic(path, dumps(entry).encode("utf-8"), 0o644, state_owned=True)
+        # a damaged XML is kept aside as <name>.xml.unreadable; v0.6.2 reads the owner's entries as JSON (the helper's shape)
+        statexml.write(path, entry, tag="entry")
     lid = line_id(entry["vendor"], entry["product"])
     event_sink.emit("catalog.changed", {"type": "hub"}, {"what": "entry_added", "entry": lid})
     return entry, lid
@@ -723,11 +767,16 @@ def remove_local(entry_id: str) -> bool:
         return False
     vslug, pslug = entry_id.split("--", 1)
     path = _local_dir() / vslug / f"{pslug}.json"
+    from .profiles import statexml   # lazily, see _read_state
+    xp = path.with_suffix(".xml")
     with _locked():
-        e = _read_json(path)
-        if not (isinstance(e, dict) and not validate(e, local=True)):
+        e = _read_local(path)
+        damaged = _local_damaged(xp)
+        if not (isinstance(e, dict) and not validate(e, local=True)) and not damaged:
             return False
-        path.unlink()
+        if damaged:
+            statexml.quarantine(path)             # an XML that cannot be read is kept aside, not deleted
+        statexml.unlink(path)                     # the XML, the JSON and its hash
         try:
             path.parent.rmdir()
         except OSError:
@@ -785,7 +834,7 @@ def adopt(src: Path) -> int | None:
         except BaseException:
             shutil.rmtree(tmp, ignore_errors=True)
             raise
-        _write_json(_dir() / "current.json", {"dir": name, "version": idx["library_version"], "at": now})
+        _write_state("current.json", {"dir": name, "version": idx["library_version"], "at": now})
     return idx["library_version"]
 
 
@@ -1142,9 +1191,9 @@ def _parse_index(raw: bytes, current: int) -> tuple[dict, list[dict]]:
 
 
 def _record_check(now: float, error: str | None) -> None:
-    old = _read_json(_dir() / "last_check.json")
+    old = _read_state("last_check.json")
     last_ok = old.get("last_ok_at") if isinstance(old, dict) else None
-    _write_json(_dir() / "last_check.json",
+    _write_state("last_check.json",
                 {"at": now, "ok": error is None, "error": error, "last_ok_at": now if error is None else last_ok})
 
 
@@ -1283,13 +1332,13 @@ def update(url: str | None = None, *, opener=None, now: float | None = None, sch
             final = _dir() / "versions" / name
             os.replace(tmp, final)
             tmp = None
-            old = _read_json(_dir() / "current.json") if _pointer("current.json") else None
+            old = _read_state("current.json") if _pointer("current.json") else None
             if old is not None:
-                _write_json(_dir() / "previous.json", old)
+                _write_state("previous.json", old)
             else:
-                (_dir() / "previous.json").unlink(missing_ok=True)
-            _write_json(_dir() / "current.json", {"dir": name, "version": idx["library_version"], "at": now})
-            (_dir() / "rolled_back.json").unlink(missing_ok=True)
+                _drop_state("previous.json")
+            _write_state("current.json", {"dir": name, "version": idx["library_version"], "at": now})
+            _drop_state("rolled_back.json")
             _prune({name} | ({old["dir"]} if old else set()))
             _record_check(now, None)
             event_sink.emit("catalog.changed", {"type": "hub"},
@@ -1318,26 +1367,26 @@ def rollback() -> int:
         if cur is None and prev is None:
             raise LibraryError("there is no previous library version to roll back to")
         if prev is not None:
-            _write_json(_dir() / "current.json", prev)
+            _write_state("current.json", prev)
         else:
-            (_dir() / "current.json").unlink(missing_ok=True)
+            _drop_state("current.json")
         if cur is not None:
-            _write_json(_dir() / "previous.json", cur)
+            _write_state("previous.json", cur)
         else:
-            (_dir() / "previous.json").unlink(missing_ok=True)
+            _drop_state("previous.json")
         version = _current()[1]["library_version"]
         left = cur.get("version") if cur is not None else None
         if isinstance(left, int) and not isinstance(left, bool) and left > version:
-            _write_json(_dir() / "rolled_back.json", {"from": left, "at": time.time()})
+            _write_state("rolled_back.json", {"from": left, "at": time.time()})
         else:
-            (_dir() / "rolled_back.json").unlink(missing_ok=True)
+            _drop_state("rolled_back.json")
         event_sink.emit("catalog.changed", {"type": "hub"}, {"what": "rolled_back", "version": str(version)})
         return version
 
 
 def rolled_back_from() -> int | None:
     """The library version the last rollback went back from, until an update installs something newer; else None."""
-    got = _read_json(_dir() / "rolled_back.json")
+    got = _read_state("rolled_back.json")
     v = got.get("from") if isinstance(got, dict) else None
     return v if isinstance(v, int) and not isinstance(v, bool) else None
 
@@ -1357,7 +1406,7 @@ def due(cfg: dict, now: float) -> bool:
     gap = SCHEDULES[schedule(cfg)]
     if gap is None:
         return False
-    lc = _read_json(_dir() / "last_check.json")
+    lc = _read_state("last_check.json")
     last_ok = lc.get("last_ok_at") if isinstance(lc, dict) else None
     if not isinstance(last_ok, (int, float)):
         return True
@@ -1365,7 +1414,7 @@ def due(cfg: dict, now: float) -> bool:
 
 
 def last_check() -> dict | None:
-    lc = _read_json(_dir() / "last_check.json")
+    lc = _read_state("last_check.json")
     if not isinstance(lc, dict):
         return None
     return {"at": lc.get("at"), "ok": lc.get("ok") is True, "error": lc.get("error")}

@@ -73,6 +73,11 @@ def waiting(cfg: dict) -> dict:
             "capabilities": caps, "not_queued": not_queued()}
 
 
+def _kept(d) -> bool:
+    """The record's folder holds its record: `record.xml` (R85 section 1) or, from before the move, `record.json`."""
+    return (d / "record.xml").is_file() or (d / "record.json").is_file()
+
+
 def _with_records(entries: list[dict]) -> list[dict]:
     """Each entry gets `record` and `photos` (R87): the record the Hub queued it from, by the entry ids the share queue
     keeps (else by the reader's own key, `<record>` or `<record>.<n>`); a record that is gone leaves no `record`."""
@@ -86,7 +91,7 @@ def _with_records(entries: list[dict]) -> list[dict]:
         if rid is None and isinstance(src.get("record"), str):
             rid = src["record"].split(".")[0]
         try:
-            kept = bool(rid) and (intake_history._dir(rid) / "record.json").is_file()
+            kept = bool(rid) and _kept(intake_history._dir(rid))
             n = len(intake_history._photos(intake_history._dir(rid))) if kept else None
         except intake_history.HistoryError:
             n = None

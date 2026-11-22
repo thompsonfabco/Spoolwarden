@@ -124,13 +124,12 @@ def test_a_record_by_hand_has_no_confidence(sm):
 def test_an_old_record_without_the_new_fields_still_reads(sm):
     out = intake.read_labels(sm, [JPEG], "", None, client=FakeClaude(copy.deepcopy(READ)))
     hid = save(sm, out["read_id"])
-    p = intake_history._dir(hid) / "record.json"
-    rec = json.loads(p.read_text())
+    rec = intake_history._load(hid)
     rec["read"].pop("engine")
     for it in rec["read"]["items"]:
         it.pop("confidence_levels", None)
         it.pop("confidence", None)
-    p.write_text(json.dumps(rec))
+    intake_history._save(rec)
     got = intake_history.get(hid)
     assert got["confidence"] is None and got["engine"] is None
     assert got["read"]["items"][0]["vendor"] == "SUNLU" and got["photos"] == 1
@@ -141,12 +140,11 @@ def test_an_old_cloud_record_with_high_levels_is_not_rated(sm):
     """A record kept by the first S2.6 build: Cloud levels "high", no `confidence_rated`."""
     out = intake.read_labels(sm, [JPEG], "", None, client=FakeClaude(copy.deepcopy(READ)))
     hid = save(sm, out["read_id"])
-    p = intake_history._dir(hid) / "record.json"
-    rec = json.loads(p.read_text())
+    rec = intake_history._load(hid)
     rec["read"].pop("confidence_rated")
     rec["read"]["items"][0]["confidence_levels"] = {**{k: "high" for k in read_confidence.READ_FIELDS},
                                                     "price_per_kg": "not_on_label"}
-    p.write_text(json.dumps(rec))
+    intake_history._save(rec)
     got = intake_history.get(hid)
     assert got["confidence_rated"] is False and got["confidence"]["level"] == "not_rated"
     assert got["confidence"]["not_on_label"] == ["price_per_kg"]

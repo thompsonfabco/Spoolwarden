@@ -1,6 +1,8 @@
 """The intake history (intake_history.py): records from saves, photos from reads, revisions, undo, retention."""
 import copy
 import json
+import os
+import stat
 
 import pytest
 from fakes.claude_fake import FakeClaude
@@ -9,6 +11,7 @@ from starlette.testclient import TestClient
 from filament_kit import config, intake_history, inventory, pairing
 from filament_kit.api import create_app
 from filament_kit.intake import read_labels
+from filament_kit.profiles import statexml
 from filament_kit.spoolman import Spoolman
 
 JPEG = b"\xff\xd8\xff\xe0" + b"x" * 100
@@ -434,3 +437,106 @@ def test_the_intake_station_save_is_recorded_with_its_photo(sm, monkeypatch):
     rec = intake_history.get(s["id"])
     assert rec["source"] == "station" and rec["photos"] == 1 and rec["weight"] == 1300
     assert rec["saved"][0]["spool_ids"] == [r["spool_id"]]
+
+
+# ---------------------------------------------------------------- R85 section 1: records as XML
+
+def test_a_record_and_a_pending_read_are_xml_files(sm):
+    out = read(sm)
+    pend = config.paths().state / "intake-history" / "pending" / out["read_id"]
+    assert (pend / "read.xml").is_file() and (pend / "read.json").is_file()          # both forms for one release
+    r, hid = add(sm, read_id=out["read_id"])
+    assert not pend.exists()                                                    # taken: both forms of the read are gone
+    d = intake_history._dir(hid)
+    assert (d / "record.xml").is_file() and (d / "record.json").is_file()        # both forms for one release
+    rec = intake_history.get(hid)
+    assert rec["read"]["items"][0]["vendor"] == "SUNLU" and rec["photos"] == 2
+    assert intake_history.list_records(True)["count"] == 1
+
+
+def test_a_record_json_is_read_moved_once_and_keeps_its_version_count(sm):
+    r, hid = add(sm)
+    d = intake_history._dir(hid)
+    rec = intake_history._load(hid)
+    assert intake_history._version(rec) == 0
+    (d / "record.xml").unlink()
+    (d / "record.json").write_text(json.dumps(rec), encoding="utf-8")
+    got = intake_history._load(hid)
+    assert got == rec and intake_history._version(got) == 0
+    assert (d / "record.xml").is_file() and (d / "record.json").is_file()
+    assert intake_history.list_records(True)["count"] == 1
+
+
+def test_a_damaged_record_xml_with_its_json_beside_it_serves_the_json_and_keeps_the_xml_aside(sm):
+    r, hid = add(sm)
+    d = intake_history._dir(hid)
+    assert (d / "record.json").is_file()                          # both forms, the usual state for one release
+    (d / "record.xml").write_text("<record", encoding="utf-8")
+    assert intake_history._load(hid)["id"] == hid
+    assert any("record.xml" in p for p in statexml.problems())
+    assert (d / "record.xml").read_text(encoding="utf-8") == "<record"       # a read never writes over it
+    rec = intake_history._load(hid)
+    intake_history._save(rec)                                     # the next save keeps the damaged file aside
+    assert (d / "record.xml.unreadable").read_text(encoding="utf-8") == "<record"
+    assert intake_history._load(hid)["id"] == hid and (d / "record.xml").is_file()
+
+
+def test_a_damaged_record_xml_is_no_such_record_not_a_crash(sm):
+    r, hid = add(sm)
+    (intake_history._dir(hid) / "record.json").unlink()          # with no JSON form beside it there is nothing to read
+    (intake_history._dir(hid) / "record.xml").write_text("<record", encoding="utf-8")
+    with pytest.raises(intake_history.HistoryError):
+        intake_history._load(hid)
+    assert any("record.xml" in p for p in statexml.problems())
+
+
+# ---------------------------------------------------------------- RC1d rework: the mode, and the old form for one release
+
+@pytest.mark.skipif(not hasattr(os, "geteuid"), reason="file modes are the Hub's on Linux")
+def test_a_record_json_moved_to_xml_keeps_its_private_mode(sm):
+    r, hid = add(sm)
+    d = intake_history._dir(hid)
+    rec = intake_history._load(hid)
+    (d / "record.xml").unlink()
+    rec.pop("version")
+    (d / "record.json").write_text(json.dumps(rec), encoding="utf-8")
+    os.chmod(d / "record.json", 0o600)
+    got = intake_history._load(hid)
+    assert stat.S_IMODE(os.stat(d / "record.xml").st_mode) == 0o600
+    assert intake_history._version(got) == 0                    # a record with no counter keeps counting from 0
+
+
+@pytest.mark.skipif(not hasattr(os, "geteuid"), reason="file modes are the Hub's on Linux")
+def test_a_pending_read_json_moved_to_xml_keeps_its_private_mode(sm, monkeypatch):
+    out = read(sm)
+    pend = config.paths().state / "intake-history" / "pending" / out["read_id"]
+    body = statexml.read(pend / "read.json")
+    (pend / "read.xml").unlink()
+    (pend / "read.json").write_text(json.dumps(body), encoding="utf-8")
+    os.chmod(pend / "read.json", 0o600)
+    modes = []
+    real = intake_history.shutil.rmtree
+
+    def rmtree(path, *a, **kw):                                 # the pending folder is deleted right after the read
+        if os.path.exists(os.path.join(path, "read.xml")):
+            modes.append(stat.S_IMODE(os.stat(os.path.join(path, "read.xml")).st_mode))
+        return real(path, *a, **kw)
+
+    monkeypatch.setattr(intake_history.shutil, "rmtree", rmtree)
+    r, hid = add(sm, read_id=out["read_id"])                    # record_save reads the pending read
+    assert modes == [0o600]                                     # moved to XML at the private mode, not 0644
+    assert intake_history.get(hid)["read"]["items"][0]["vendor"] == "SUNLU"
+
+
+def test_a_record_keeps_record_json_beside_record_xml_for_one_release(sm):
+    r, hid = add(sm)
+    d = intake_history._dir(hid)
+    if hasattr(os, "geteuid"):                                              # modes are the Hub's on Linux; the content runs everywhere
+        assert stat.S_IMODE(os.stat(d / "record.json").st_mode) == 0o600
+    old = json.loads((d / "record.json").read_text(encoding="utf-8"))      # what v0.6.2 reads after a rollback
+    assert old == intake_history._load(hid) and old["id"] == hid and old["saved"]
+    rec = intake_history._load(hid)
+    rec["device"] = "changed"
+    intake_history._save(rec)
+    assert json.loads((d / "record.json").read_text(encoding="utf-8"))["device"] == "changed"
+    assert intake_history.list_records(True)["count"] == 1

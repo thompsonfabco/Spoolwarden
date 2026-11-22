@@ -539,3 +539,66 @@ def test_cli_retry_needs_root(hub, capsys, monkeypatch):
     monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
     assert cli.main(["label-reader", "corrections", "retry", "abc"]) == output.NEEDS_SUDO
     assert "sudo spoolwarden label-reader corrections retry abc" in capsys.readouterr().err
+
+
+# ---------- RC1d: a record kept under either name; no refusal carries `reason` ----------
+
+def test_a_kept_record_is_found_under_either_file_name(hub):
+    _, data, _ = hub
+    hid = a_record()
+    d = intake_history._dir(hid)
+    add(data, hid)
+    assert reader_corrections.waiting(config.load())["entries"][0]["record"] == hid
+    (d / "record.json").unlink()                                    # the copy kept for one release
+    (d / "record.xml").rename(d / "record.json")                    # the name a record from before the move has
+    assert reader_corrections.waiting(config.load())["entries"][0]["record"] == hid
+    (d / "record.json").unlink()
+    assert "record" not in reader_corrections.waiting(config.load())["entries"][0]
+
+
+def test_no_refusal_of_the_hub_page_carries_a_reason(hub, monkeypatch):
+    c, data, _ = hub
+    bodies = [c.get(B + "/package"), post(c, "label-reader/corrections/fb-99/remove"),
+              post(c, "label-reader/corrections/send")]                       # empty, not found, empty
+    add(data, "r1")
+    monkeypatch.setattr(local_reader, "BUNDLE_CAP", 10)
+    monkeypatch.setattr(local_reader.feedback_bundle, "__defaults__", (10,))
+    bodies.append(c.get(B + "/package"))                                      # too large
+    good = data["health"]
+    data["health"] = {k: v for k, v in {**good, "api_version": "1.0"}.items() if k != "capabilities"}
+    bodies.append(c.get(B))                                                   # no_feedback
+    data["health"] = good
+    cfg = config.load()
+    cfg["modules"]["local_intake"] = False
+    config.save(cfg)
+    bodies.append(c.get(B))                                                   # no_reader
+    cfg["modules"]["local_intake"] = True
+    cfg["local_intake"] = {"url": "http://127.0.0.1:9"}
+    config.save(cfg)
+    bodies.append(c.get(B))                                                   # unreachable
+    assert [r.status_code for r in bodies] == [409, 404, 409, 413, 409, 409, 503]
+    for r in bodies:
+        assert "reason" not in r.json(), r.text
+
+
+def test_no_refusal_of_the_apps_api_carries_a_reason(phone):
+    pc, data = phone
+    refusals = [pc.post("/api/label-reader/corrections/fb-99/remove")]
+    cfg = config.load()
+    cfg["modules"]["local_intake"] = False
+    config.save(cfg)
+    refusals.append(pc.get("/api/label-reader/corrections"))
+    assert [r.status_code for r in refusals] == [404, 409]
+    for r in refusals:
+        assert "reason" not in r.json() and r.json()["error"] and r.json()["message"], r.text
+
+
+@pytest.mark.xfail(strict=True, reason="web/intake_app.py (the wave's file) still answers {error, reason}; its owner "
+                                       "switches it to {error: code, message} and drops this mark")
+def test_no_refusal_of_the_web_apps_corrections_routes_carries_a_reason(hub):
+    wc = _web()
+    cfg = config.load()
+    cfg["modules"]["local_intake"] = False
+    config.save(cfg)
+    r = wc.get("/intake/api/label-reader/corrections")
+    assert r.status_code == 409 and "reason" not in r.json()

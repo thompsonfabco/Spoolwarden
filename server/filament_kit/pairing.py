@@ -157,7 +157,7 @@ def _write_atomic(path: Path, data: bytes, mode: int, state_owned: bool = False)
                 os.fchmod(fh.fileno(), mode)
             else:
                 os.chmod(tmp, mode)
-            if state_owned and getattr(os, "geteuid", lambda: -1)() == 0:
+            if state_owned and hasattr(os, "fchown") and getattr(os, "geteuid", lambda: -1)() == 0:
                 st = os.stat(config.paths().state)
                 os.fchown(fh.fileno(), st.st_uid, st.st_gid)
         os.replace(tmp, path)

@@ -4,12 +4,12 @@ A record is made when a save succeeds (`record_save`, from the add paths: the AP
 station, the CLI). A save that followed a label read names its `read_id`; the read's photos and result were set aside by
 `stash_read` when the read succeeded (`pending/<read_id>`, kept PENDING_TTL), and move into the record.
 
-    <state>/intake-history/<id>/record.json   the record (below)
+    <state>/intake-history/<id>/record.xml    the record (below); a record.json from before is read, and moved once
     <state>/intake-history/<id>/photo<n>.jpg  the photos actually sent to the AI (n from 1)
-    <state>/intake-history/pending/<read_id>/ a read not saved yet: read.json + photo<n>.jpg
+    <state>/intake-history/pending/<read_id>/ a read not saved yet: read.xml + photo<n>.jpg
 
 share.json (share_queue.py): the corrections of this record waiting on the reader, or why one was not queued.
-record.json: {id, at, source, device, state, read_id, read: {items, hint, engine} | null, weight, tag,
+record.xml: {id, at, source, device, state, read_id, read: {items, hint, engine} | null, weight, tag,
               saved: [{item, values, spool_ids, filament_id}], revisions: [...], proposals: {...}}
 
 Revisions change Spoolman (`apply`) without ever editing a filament other spools share: identity fields (vendor, name,
@@ -35,6 +35,7 @@ from pathlib import Path
 
 from . import config, event_sink, read_confidence
 from .pairing import _write_atomic, make_state_dir
+from .profiles import statexml
 
 log = logging.getLogger(__name__)
 
@@ -91,12 +92,27 @@ def _dir(rid: str) -> Path:
     return _root() / rid
 
 
+def _old_form(data) -> bytes:
+    """record.json as v0.6.2 wrote it: json.dumps(rec, indent=1), no newline."""
+    return json.dumps(data, indent=1).encode("utf-8")
+
+
+def _read_record(path: Path):
+    """The record at `path` (given by its JSON name): record.xml, else record.json, moved to XML once. The record's
+    own `version` counter is the root's `version`, so a record from before it keeps counting from 0."""
+    if not statexml.xml_path(path).exists():
+        try:
+            old = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            old = None
+        if isinstance(old, dict):
+            statexml.migrate(path, {**old, "version": _version(old)}, mode=0o600, old_format=_old_form)
+    return statexml.read(path, keep_version=True, mode=0o600)
+
+
 def _load(rid: str) -> dict:
     d = _dir(rid)
-    try:
-        rec = json.loads((d / "record.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        raise HistoryError(404, "not_found", "no such intake record") from None
+    rec = _read_record(d / "record.json")
     if not isinstance(rec, dict):
         raise HistoryError(404, "not_found", "no such intake record")
     return rec
@@ -111,7 +127,9 @@ def _version(rec: dict) -> int:
 def _save(rec: dict) -> None:
     d = _dir(rec["id"])
     make_state_dir(d)
-    _write_atomic(d / "record.json", json.dumps(rec, indent=1).encode("utf-8"), 0o600, state_owned=True)
+    out = {**rec, "version": _version(rec)}
+    # one release: v0.6.2 lists and reads the records by record.json after a rollback
+    statexml.write(d / "record.json", out, mode=0o600, old_format=_old_form)
 
 
 def _photos(d: Path) -> list[Path]:
@@ -124,7 +142,7 @@ def _ids_newest_first() -> list[str]:
         return []
     out = []
     for d in root.iterdir():
-        if d.is_dir() and ID.fullmatch(d.name) and (d / "record.json").is_file():
+        if d.is_dir() and ID.fullmatch(d.name) and statexml.exists(d / "record.json"):
             out.append((d.stat().st_mtime if not (d / "made").is_file() else float((d / "made").read_text() or 0),
                         d.name))
     return [rid for _, rid in sorted(out, reverse=True)]
@@ -178,7 +196,8 @@ def stash_read(read_id: str, images: list[bytes], result: dict, hint: str = "", 
                               for it in (result.get("items") or []) if isinstance(it, dict)],
                     "hint": hint or "", "tag": tag, "engine": result.get("engine"),
                     "confidence_rated": result.get("confidence_rated")}
-            _write_atomic(d / "read.json", json.dumps(body).encode("utf-8"), 0o600, state_owned=True)
+            # one release: v0.6.2 reads read.json when a save names the read, as it wrote it: json.dumps(body), no indent
+            statexml.write(d / "read.json", body, mode=0o600, old_format={})
     except Exception:  # noqa: BLE001 - history is a convenience; the read itself succeeded
         log.exception("intake history: cannot keep read %s", read_id)
 
@@ -202,11 +221,8 @@ def record_save(saved: list[dict], *, source: str, device: str | None = None, re
                 p = _pending(read_id)
                 for i, ph in enumerate(_photos(p), 1):
                     shutil.move(str(ph), str(d / f"photo{i}.jpg"))
-                try:
-                    read = json.loads((p / "read.json").read_text(encoding="utf-8"))
-                except (OSError, ValueError):
-                    read = None
-                shutil.rmtree(p, ignore_errors=True)
+                read = statexml.read(p / "read.json", mode=0o600)
+                shutil.rmtree(p, ignore_errors=True)         # both forms of the read go with the folder
             rec = {"id": rid, "at": _now(), "source": source if source in SOURCES else "phone",
                    "device": (device or "")[:80], "state": "detected", "read_id": read_id if read else None,
                    "read": ({"items": read.get("items") or [], "hint": read.get("hint") or "",
