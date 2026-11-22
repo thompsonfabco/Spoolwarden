@@ -286,3 +286,22 @@ def test_history_cli_parsing():
 
     a6 = parser.parse_args(["report", "--out", "rep.txt"])
     assert (a6.cmd, a6.out) == ("report", "rep.txt")
+
+
+def test_undo_of_an_unload_and_a_return_puts_back_the_time_it_was_checked_out(store):
+    now = datetime.now(timezone.utc)
+    since = "2026-11-20T10:00:00Z"
+    for kind in ("spool.unloaded", "spool.returned", "slot.cleared"):
+        sm = _StubSM([_spool(1, weight=500.0, location="Shelf A")])
+        ev = store.write(kind, {"type": "spool", "id": "1"}, "page",
+                         {"spool": "1", "before_location": "X1 · A1", "after_location": "Shelf A",
+                          "before_slot": "A1", "before_since": since}, now=now)
+        assert undo.undo_event(ev["id"], sm, store=store, now=now + timedelta(hours=1))["undone"] is True
+        assert inventory.prev_entry(sm.spools[1]) == ("Shelf A", since)
+        assert json.loads(sm.spools[1]["extra"]["prev_location"]) == "Shelf A"      # still the plain home
+    sm = _StubSM([_spool(2, weight=500.0, location="Shelf A")])
+    ev = store.write("spool.returned", {"type": "spool", "id": "2"}, "page",
+                     {"spool": "2", "before_location": "X1 · A1", "after_location": "Shelf A", "before_slot": "A1"},
+                     now=now)
+    undo.undo_event(ev["id"], sm, store=store, now=now + timedelta(hours=1))
+    assert inventory.prev_entry(sm.spools[2]) == ("Shelf A", None)               # no time recorded: none

@@ -279,6 +279,7 @@ PRODUCT, COMMAND = "Spoolwarden", "spoolwarden"     # the catalogue holds {produ
 # spool.returned: not in strings/en.json yet (the catalogue is not this change's), so not in MESSAGES (the drift test).
 RETURNED_TITLE = "Spool {spool} returned"
 RETURNED_TEXT = "Returned {spool} from {slot} to {home}."
+RETURNED_TEXT_NO_HOME = "Returned {spool} from {slot}."     # the rules placed it nowhere: no place
 
 
 def say(key: str, /, **fill) -> str:
@@ -426,7 +427,9 @@ def words(ev: dict) -> tuple[str, str]:
             return title, say("event_text_spool_loaded", slot=_d(ev, "after_slot"))
         if what == "unloaded" and _d(ev, "before_slot"):
             return title, say("event_text_spool_unloaded", slot=_d(ev, "before_slot"))
-        if what == "returned" and _d(ev, "before_slot") and _d(ev, "after_location"):
+        if what == "returned" and _d(ev, "before_slot"):
+            if not _d(ev, "after_location"):
+                return title, RETURNED_TEXT_NO_HOME.format(spool=name, slot=_d(ev, "before_slot"))
             return title, RETURNED_TEXT.format(spool=name, slot=_d(ev, "before_slot"),
                                                home=_d(ev, "after_location"))
         if what in ("added", "opened", "emptied"):

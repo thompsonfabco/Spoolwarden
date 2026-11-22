@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 SEALED_COMMENT = "SEALED - tag when opened"
 NOT_CHECKED_OUT = "This spool is not checked out."
 RETURNED_TEXT = "Returned {spool} from {slot} to {home}."      # the activity sentence of spool.returned
+RETURNED_TEXT_NO_HOME = "Returned {spool} from {slot}."         # ... when the rules place it nowhere: no place
 
 # serializes add + placement (in this process and the other one) so two adds never pick the same box
 _LOCK = locks.ProcessLock(lambda: config.paths().state / "inventory.lock")
@@ -869,10 +870,17 @@ def auto_place(sm: Spoolman, spool: dict, rules) -> tuple[str, str]:
 def send_back(sm: Spoolman, spool: dict, *, rules=None, dry: bool = False) -> str:
     """The one way a spool goes back (Unload, Clear, a replacing load and Return): its location becomes its home
     (`prev_location`); with no home recorded it is placed as `auto_location` places it (`rules`, else the storage list
-    in force; an opened spool is not sealed stock); `prev_location` is emptied. Returns the new location; `dry` writes
-    nothing. The caller holds `_LOCK` and reports the event."""
+    in force; an opened spool is not sealed stock); `prev_location` (and `prev_since`) is emptied. Where the rules place
+    it nowhere (no rule, no free container) it does not fail: the location is emptied and "" is returned (the return
+    ends with "Returned." and no place). Returns the new location; `dry` writes nothing. The caller holds `_LOCK` and
+    reports the event."""
     home, _since = prev_entry(spool)
-    dest = home or auto_place(sm, spool, rules if rules is not None else storage.current())[0]
+    dest = home
+    if not dest:
+        try:
+            dest = auto_place(sm, spool, rules if rules is not None else storage.current())[0]
+        except SpoolEditError:
+            dest = ""
     if not dry:
         sm.patch(f"spool/{spool['id']}", {"location": dest,
                                           "extra": {**(spool.get("extra") or {}), **prev_extra("")}})
@@ -884,7 +892,8 @@ def return_spool(sm: Spoolman, spool_id: int, *, grams: float | None = None, rul
     record of the slot) becomes its home; the printer itself is not told here (a Klipper printer is, by
     `LoadsMixin.return_spool`). NotCheckedOut for a spool with no remembered home. `grams` (the weight just taken at
     the Weigh Station, already saved by the caller) is only recorded as `after_grams`. Reports spool.returned
-    (`before_location`, `after_location`, `before_slot`, `after_grams`). Answers `spool` (Spoolman's, after), `view`,
+    (`before_location`, `after_location` (left out when the rules place it nowhere), `before_slot`, `after_grams`,
+    `before_since`). Answers `spool` (Spoolman's, after), `view`,
     `before`, `dry`, `event_id` and `event`."""
     with event_sink.capture() as cap:
         with event_sink.held(), _LOCK:
@@ -900,7 +909,8 @@ def return_spool(sm: Spoolman, spool_id: int, *, grams: float | None = None, rul
                 slot = (view_context().slot_of(before.get("location")) or {}).get("slot")
                 with event_sink.batch_scope():
                     event_sink.emit_spool("spool.returned", before, spool_id, before_location=before.get("location"),
-                                          after_location=dest, before_slot=slot, after_grams=grams)
+                                          after_location=dest or None, before_slot=slot, after_grams=grams,
+                                          before_since=prev_entry(before)[1])
     out = {"spool": final, "view": spool_view(final), "before": spool_view(before), "dry": dry}
     if cap:
         out["event_id"] = cap[-1]["id"]

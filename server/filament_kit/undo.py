@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
-from . import event_sink, events, tags
+from . import event_sink, events, inventory, tags
 from .alerts_api import say
 
 UNDOABLE_KINDS: frozenset[str] = frozenset({
@@ -235,13 +235,13 @@ def _apply(ev: dict, sm, st, now, actor) -> dict:
     elif kind in ("spool.unloaded", "spool.returned"):
         after_loc = data.get("after_location", "")
         patch = {"location": before_loc,
-                 "extra": {**(cur.get("extra") or {}), "prev_location": json.dumps(after_loc)}}
+                 "extra": {**(cur.get("extra") or {}), **inventory.prev_extra(after_loc, data.get("before_since"))}}
         new_data.update(before_location=after_loc, after_location=before_loc,
                         before_slot=data.get("after_slot", ""), after_slot=data.get("before_slot", ""))
     elif kind == "slot.cleared":
         after_loc = data.get("after_location", "")
         patch = {"location": before_loc,
-                 "extra": {**(cur.get("extra") or {}), "prev_location": json.dumps(after_loc)}}
+                 "extra": {**(cur.get("extra") or {}), **inventory.prev_extra(after_loc, data.get("before_since"))}}
         new_data.update(slot=data.get("slot", ""), before_location=after_loc, after_location=before_loc)
 
     sm.patch(f"spool/{sid}", patch)

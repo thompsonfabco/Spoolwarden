@@ -851,3 +851,43 @@ def test_return_sends_a_spool_taken_out_by_hand_home_and_empties_the_hub_record(
     assert len(settings(client)) == sent                      # Bambu Lab: the Hub's record only, no slot write sent
     with pytest.raises(inventory.NotCheckedOut, match="not checked out"):
         inventory.return_spool(sm, s["id"])
+
+
+@pytest.fixture
+def nowhere(monkeypatch):
+    """The placement rules have no place for a spool (every container taken)."""
+    def full(*a, **kw):
+        raise inventory.placement.NoFreeContainer("every Storage box is taken")
+    monkeypatch.setattr(inventory.placement, "place", full)
+
+
+def _unplaced(sm, s):
+    got = sm.get(f"spool/{s['id']}")
+    return (got.get("location") or "") == "" and prev(got) == "" and inventory.prev_entry(got) == ("", None)
+
+
+def test_unload_of_a_spool_with_no_home_when_the_rules_place_it_nowhere_does_not_fail(rig, sm, fil, evstore, nowhere):
+    m, printer, client = rig
+    s = spool(sm, fil, LOC_A2)
+    r = loading.unload(m, sm, SERIAL, "A2", False)
+    assert r["moved_back"] == [{"id": s["id"], "location": ""}] and _unplaced(sm, s)
+    d = next(e for e in evstore.read()["events"] if e["kind"] == "spool.unloaded")["data"]
+    assert "after_location" not in d and d["before_slot"] == "A2"
+
+
+def test_clear_of_a_spool_with_no_home_when_the_rules_place_it_nowhere_does_not_fail(rig, sm, fil, evstore, nowhere):
+    m, printer, client = rig
+    s = spool(sm, fil, LOC_A2)
+    r = loading.clear(m, sm, SERIAL, "A2", False)
+    assert r["moved_back"] == [{"id": s["id"], "location": ""}] and _unplaced(sm, s)
+    assert "after_location" not in next(e for e in evstore.read()["events"] if e["kind"] == "slot.cleared")["data"]
+
+
+def test_a_replacing_load_over_a_spool_with_no_home_when_the_rules_place_it_nowhere_still_loads(rig, sm, fil, nowhere):
+    m, printer, client = rig
+    old = spool(sm, fil, LOC_A2)
+    new = spool(sm, fil, "Rack 2")
+    r = loading.load(m, sm, SERIAL, "A2", new["id"], False, preset_for=FakePresets())
+    assert r["moved_back"] == [{"id": old["id"], "location": ""}] and _unplaced(sm, old)
+    assert sm.get(f"spool/{new['id']}")["location"] == LOC_A2
+

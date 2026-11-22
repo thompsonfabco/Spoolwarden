@@ -1049,3 +1049,20 @@ def test_the_filter_names_and_counts(sm, printers):
     assert c["checked_out"] == 1 and c["loaded"] == 1 and c["low"] == 1 and c["opened"] == 2 and c["sealed"] == 0
     r = inventory.edit_spool(sm, s["id"], home="Overflow", dry=False, rules=RULES)
     assert r["home_text"] == "Home is now Overflow."
+
+
+def test_send_back_with_no_home_and_no_place_for_it_empties_the_location_and_does_not_raise(sm, printers, monkeypatch):
+    nohome = _opened(sm, 400, name="No home")
+    sm.patch(f"spool/{nohome['id']}", {"location": SLOT})
+    cur = sm.get(f"spool/{nohome['id']}")
+    assert inventory.send_back(sm, cur, rules=None, dry=True) != ""            # the rules do place it
+    monkeypatch.setattr(inventory, "auto_place", lambda *a, **k: (_ for _ in ()).throw(
+        inventory.SpoolEditError("there is no storage rule to place it by", "location")))
+    assert inventory.send_back(sm, cur, dry=True) == "" and sm.get(f"spool/{nohome['id']}")["location"] == SLOT
+    assert inventory.send_back(sm, cur) == ""
+    got = sm.get(f"spool/{nohome['id']}")
+    assert (got.get("location") or "") == "" and inventory.prev_entry(got) == ("", None)
+
+
+def test_the_returned_sentence_without_a_place_is_just_returned_from_the_slot():
+    assert inventory.RETURNED_TEXT_NO_HOME.format(spool="x", slot="A2") == "Returned x from A2."
