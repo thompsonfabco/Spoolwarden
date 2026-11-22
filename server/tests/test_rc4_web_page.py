@@ -62,6 +62,7 @@ const HUB_PAGE = "";
 const fill = async (region, thing, fn) => { try { region.kids = [await fn()]; } catch (e) { region.failed = String(e); } };
 %(corr)s
 %(run)s
+const ENTRY = %(entry)s;
 (async () => {
   const out = {};
   if (RUN.has("leave")) {
@@ -97,8 +98,15 @@ const fill = async (region, thing, fn) => { try { region.kids = [await fn()]; } 
   // MED 13: what the page's policy (img-src 'self' blob:) lets through
   out.thumbs = [thumbSrc("data:image/png;base64,iVBORw0KGgo="), thumbSrc("iVBORw0KGgo="), thumbSrc("https://reader.example/t.jpg"),
     thumbSrc("/elsewhere/t.jpg"), thumbSrc(`${BASE}/api/history/r1/photos/1`), thumbSrc("")];
-  const card = corrCard({ id: "c2", thumbnail: "https://reader.example/t.jpg", corrected: { name: "X" } }, new Set());
+  const card = corrCard({ id: "c2", thumbnail_b64: "https://reader.example/t.jpg", corrected: { name: "X" } }, new Set());
   out.blockedThumb = JSON.stringify(card.kids[0].props);
+  }
+  if (RUN.has("fields")) {
+  // R574 13 (re-review): an entry exactly as the reader fake answers it, its record no longer kept: its own thumbnail and its time
+  records = [];
+  const card = corrCard(ENTRY, new Set());
+  const img = card.kids[0].kids.find((k) => k.tag === "img");
+  out.fields = { thumb: card.kids[0].props.class, src: img ? img.props.src : null, words: words(card) };
   }
   if (RUN.has("pages")) {
   // LOW: the not-queued records are listed with the triangle line, and Try again when the reader does not answer
@@ -206,6 +214,45 @@ const ask = async (path) => { let hit = null; handlers.fetch({ request: { method
 """
 
 
+LABELS_HARNESS = r"""
+const base = "/intake";
+let reply = null, asked = 0;
+const fetch = async (url) => { asked++; const r = typeof reply === "function" ? reply(url) : reply; return r; };
+async function leaveRun() {
+%(leave)s
+}
+%(views)s
+(async () => {
+  const out = {};
+  const answer = (status, body) => ({ ok: status < 300, status, json: async () => body });
+  for (const [status, body] of [[200, { demo: false }], [409, { error: "not_in_demo", message: "The demo is not on." }],
+                                [409, { error: "busy", message: "The Hub is restoring a backup." }]]) {
+    reply = answer(status, body);
+    try { out[status + (body.error || "")] = await leaveRun(); } catch (e) { out[status + (body.error || "")] = "refused: " + e.text(); }
+  }
+  reply = answer(200, { view: { id: 3, vendor: "Polymaker" } }); asked = 0;
+  await Promise.all([viewOf(3), viewOf(3), viewOf(4)]); await viewOf(3);
+  out.views = asked;
+  console.log(JSON.stringify(out));
+})().catch((e) => { console.error("harness: " + (e && e.stack || e)); process.exit(3); });
+"""
+
+GUIDED_HARNESS = r"""
+const box = (v) => ({ _control: { value: v } });
+const f = { kAddr: box(""), kPort: box("7125"), kName: box(""), bAddr: box("") };
+const st = {}, steps = [];
+const go = (s) => steps.push(s);
+%(guided)s
+const out = {};
+useKlipper({ host: "voron.local", port: 7126, name: "Voron" }); typeKlipper();
+out.cleared = [f.kAddr._control.value, f.kPort._control.value, f.kName._control.value];
+useKlipper({ host: "voron.local", port: 7126, name: "Voron" }); f.kAddr._control.value = "trident.local"; typeKlipper();
+out.typed = [f.kAddr._control.value, f.kPort._control.value];
+out.steps = steps;
+console.log(JSON.stringify(out));
+"""
+
+
 def _cut(text: str, start: str, end: str) -> str:
     i = text.index(start)
     return text[i:text.index(end, i)]
@@ -232,10 +279,11 @@ def _maybe(text: str, start: str, end: str) -> str:
         return ""                     # a part this run does not call (a script from before it existed runs the rest)
 
 
-def _page(tmp_path, *run):
+def _page(tmp_path, *run, entry=None):
     """Runs the named sections only, each on the functions it calls, so that each test proves its own finding."""
     js = _app()
     return _node(tmp_path, HARNESS % {
+        "entry": json.dumps(entry),
         "says": _cut(js, "function says(e, o = {}) {", "// Data that loads for a block"),
         "leave": _cut(js, "async function leaveDemo(opener) {", "// The own entries of the Filament Catalog"),
         "share": _maybe(js, "let SHARE = null;", "function historyTab() {"),
@@ -315,3 +363,40 @@ def test_the_service_worker_keeps_a_languages_texts_for_offline(tmp_path):
     assert out["online"].startswith("from the Hub") and "/intake/api/strings/de.js" in out["kept"]
     assert out["offline"] == "copy https://x/intake/api/strings/de.js"         # the app opens offline in the language last used
     assert out["otherApi"] == "not handled" and out["badName"] == "not handled"
+
+
+def test_the_corrections_page_reads_the_entry_the_reader_sends(tmp_path):
+    """R574 13 (re-review): the reader's entry, as the fake answers GET /v1/feedback and the Hub passes it on, carries
+    `thumbnail_b64` and `created_at`; the card shows that thumbnail (as a blob, the page's policy) and that time."""
+    import base64
+
+    from fakes import local_reader_fake as lrf
+    from starlette.testclient import TestClient
+    data = lrf.new_data()
+    c = TestClient(lrf.app(data))
+    jpeg = b"\xff\xd8\xff\xe0" + b"x" * 64
+    assert c.post("/v1/feedback", json={"images_b64": [base64.b64encode(jpeg).decode()], "predicted": {"vendor": "Polymakr"},
+                                        "corrected": {"vendor": "Polymaker", "name": "PolyTerra"}, "record": "r9", "source": "local"}).status_code == 200
+    entry = c.get("/v1/feedback").json()["entries"][0]
+    out = _page(tmp_path, "fields", entry=entry)["fields"]
+    assert out["thumb"] == "thumb" and out["src"].startswith("blob:")             # the entry's own thumbnail: its record is gone
+    assert entry["created_at"] in out["words"]                                     # and its time
+
+
+def test_the_print_pages_leave_demo_and_spool_reads(tmp_path):
+    """R574 LOWs (re-review): only 409 not_in_demo is "already off"; a spool is read once for all its draws."""
+    lj = (STATIC / "labels.js").read_text(encoding="utf-8")
+    out = _node(tmp_path, LABELS_HARNESS % {
+        "leave": _cut(lj, "      const r = await fetch(`${base}/api/demo/leave`", "    } });\n    if (done)"),
+        "views": _cut(lj, "const views = new Map();", "async function one(id) {")})
+    assert out["200"] is True and out["409not_in_demo"] is True
+    assert out["409busy"] == "refused: The Hub is restoring a backup."              # another 409 is the Hub's refusal
+    assert out["views"] == 2                                                       # spools 3 and 4, once each
+
+
+def test_type_a_klipper_address_after_back_starts_empty(tmp_path):
+    """R574 LOW (re-review): a found row's values do not follow into "Type a Klipper printer's address"; what was typed stays."""
+    pj = (STATIC / "printers.js").read_text(encoding="utf-8")
+    out = _node(tmp_path, GUIDED_HARNESS % {"guided": _cut(pj, "    function pickFamily(fam)", "    function invalid(fields) {")})
+    assert out["cleared"] == ["", "7125", ""]
+    assert out["typed"] == ["trident.local", "7125"]

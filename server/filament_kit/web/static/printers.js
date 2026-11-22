@@ -293,7 +293,7 @@ function printersTab() {
           rows.length ? h("ul", { class: "pfound" }, rows) : h("p", { class: "muted" }, st.scan === "running" ? tg("printer_guided_looking") : tg("printer_guided_none")),
           // no family choice (R87 00:55; 04 6.9): a printer that was not found is typed, under the list, always shown, in this order
           h("div", { class: "pguided__choice" }, SW.btn(tg("printer_guided_type_bambu"), { action: "type-bambu", run: () => typeBambu() }),
-            SW.btn(tg("printer_guided_type_klipper"), { action: "type-klipper", run: () => pickFamily("klipper") })));
+            SW.btn(tg("printer_guided_type_klipper"), { action: "type-klipper", run: () => typeKlipper() })));
         foot.replaceChildren(cancel);
       } else if (step === "details") {
         const bambu = st.family === "bambu";
@@ -318,9 +318,19 @@ function printersTab() {
       f.bAddr._control.value = p.ip || ""; st.serial = p.id || ""; st.foundAt = p.ip || "";
       go("details");
     }
+    function typeKlipper() {                                // the same for Klipper: what a found row filled in and was not changed goes
+      const k = st.kFound;
+      if (k && f.kAddr._control.value.trim() === k.host) f.kAddr._control.value = "";
+      if (k && f.kPort._control.value.trim() === k.port) f.kPort._control.value = "7125";
+      if (k && k.name && f.kName._control.value.trim() === k.name) f.kName._control.value = "";
+      st.kFound = null;
+      pickFamily("klipper");
+    }
     function useKlipper(p) {
       st.family = "klipper"; f.kAddr._control.value = p.host || ""; f.kPort._control.value = (p.port ? String(p.port) : "7125");
-      if (p.name && !f.kName._control.value) f.kName._control.value = p.name;
+      const named = !!p.name && !f.kName._control.value;
+      if (named) f.kName._control.value = p.name;
+      st.kFound = { host: f.kAddr._control.value, port: f.kPort._control.value, name: named ? p.name : "" };
       go("details");
     }
     function invalid(fields) {

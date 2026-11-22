@@ -50,9 +50,13 @@ if (root.dataset.demo === "1") {
   const leave = SW.btn(tx("demo_leave"), { action: "leave-demo", run: async (e) => {
     const done = await SW.ask({ kind: "destructive", title: tx("demo_leave_title"), text: tx("demo_leave_text"), confirm: tx("demo_leave"), opener: e.currentTarget, run: async () => {
       const r = await fetch(`${base}/api/demo/leave`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: "{}" });
-      if (r.ok || r.status === 409) return true;          // 409 not_in_demo: it is off already
+      if (r.ok) return true;
       let text = "";
-      try { const j = await r.json(); text = j.message || j.error || ""; } catch (err) { /* not JSON */ }
+      try {
+        const j = await r.json();
+        if (r.status === 409 && j.error === "not_in_demo") return true;   // it is off already; any other 409 is the Hub's refusal
+        text = j.message || j.error || "";
+      } catch (err) { /* not JSON */ }
       throw Object.assign(new Error(text), { text: () => text });
     } });
     if (done) location.reload();
@@ -67,9 +71,13 @@ function ariaOf(id, v) {
   if (!name || !v.material || typeof v.net_g !== "number") return tx("labels_aria_plain", { number: id });
   return tx("labels_aria", { number: id, name, material: v.material, net: tx("labels_net", { grams: Math.round(v.net_g) }) });
 }
-async function viewOf(id) {
-  try { const r = await fetch(`${base}/api/spools/${id}`, { credentials: "same-origin" }); return r.ok ? (await r.json()).view || null : null; }
-  catch (e) { return null; }
+const views = new Map();                                    // a spool is read once: a size change asks only for the labels again
+function viewOf(id) {
+  if (!views.has(id)) views.set(id, (async () => {
+    try { const r = await fetch(`${base}/api/spools/${id}`, { credentials: "same-origin" }); return r.ok ? (await r.json()).view || null : null; }
+    catch (e) { return null; }
+  })().then((v) => { if (!v) views.delete(id); return v; }));      // a spool not read is asked again at the next draw
+  return views.get(id);
 }
 async function one(id) {
   const [r, view] = await Promise.all([fetch(`${base}/api/spools/${id}/label.svg?size=${encodeURIComponent(size)}`, { credentials: "same-origin" }), viewOf(id)]);

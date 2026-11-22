@@ -366,8 +366,9 @@ function historyTab() {
   function corrCard(e, kept) {
     const c = e.corrected || {}, name = [c.vendor || c.brand, c.name].filter(Boolean).join(" ") || String(e.id);
     const rec = e.record && kept.has(e.record) ? e.record : null;
-    const img = rec && e.photos ? photo(rec, 1) : thumbSrc(e.thumbnail);
-    const when = e.at || e.time || e.created;
+    // the reader's entry as the Hub passes it on (R87 00:30.1): `thumbnail_b64` and `created_at` (R574 13)
+    const img = rec && e.photos ? photo(rec, 1) : thumbSrc(e.thumbnail_b64);
+    const when = e.created_at;
     const line = h("p", { class: "result", role: "status" });
     const rm = needsHub(SW.btn(tt("corr_remove"), { action: "remove-correction", label: tt("corr_remove_named", { name }), run: (ev) => {
       const button = ev.currentTarget;                         // kept now: after the await the event has no currentTarget
@@ -1129,8 +1130,9 @@ function tt(key, vars) {
     checked_out_home_none: "Home: not recorded", checked_out_since: "since {time}", checked_out_empty: "No spool is checked out.",
     checked_out_return_to: "Return to {home}", checked_out_return: "Return", checked_out_returned_to: "Returned to {location}.",
     checked_out_returned: "Returned.", checked_out_change_home: "Change home", checked_out_home_title: "Home",
-    checked_out_home_now: "Home is now {location}.",
+    checked_out_home_now: "Home is now {location}.", checked_out_shown: "{shown} of {count} shown.",
     voice_speak: "Speak", voice_name: "Voice: {voice}", voice_change_on_hub: "Change the voice on the Hub page.", voice_speaker: "Speaker",
+    voice_chosen_on_station: "Chosen on the Weigh Station's own computer: spoolwarden config.",
     voice_speaker_hint: "This voice has {count} speakers. Try a few with Test.", voice_speaker_error: "Enter a whole number from {min} to {max}.",
     voice_speed: "Speed", voice_speed_value: "{value} %", voice_volume: "Volume", voice_test: "Test",
     voice_test_played: "Played on the Weigh Station.", voice_test_no_answer: "The Weigh Station did not answer.",
@@ -1403,14 +1405,19 @@ function checkedOutFilter(o) {
   }
   function draw() {
     if (!st.rows) { o.box.replaceChildren(h("p", { class: "muted", textContent: SW.t("common_working") })); return; }
-    o.box.replaceChildren(st.rows.length ? h("ul", { class: "spools__rows" }, ...st.rows.map(row)) : h("p", { class: "spools__none", textContent: tt("checked_out_empty") }));
+    o.box.replaceChildren(...[st.rows.length ? h("ul", { class: "spools__rows" }, ...st.rows.map(row)) : h("p", { class: "spools__none", textContent: tt("checked_out_empty") }),
+      st.total > st.rows.length ? h("p", { class: "muted", textContent: tt("checked_out_shown", { shown: st.rows.length, count: st.total }) }) : null].filter(Boolean));   // one page of the Hub's: the chip counts them all
   }
   return { chip, st, load, draw, paint };
 }
 
 // ----- Weigh Station voice (R88 01:35 point 5, 01:50, 02:00 point 2; 04 9.2): Speak, Voice (read only), Speaker, Speed, Volume and Test, each
 // row applying when its control is let go, with no Save. The twins GET voice, PATCH voice and POST voice/test; a Hub without them (404), or
-// without a Weigh Station (`station: false`), shows no panel. On the public address the panel is read only and says so. -----
+// without a Weigh Station (`station: false`), shows no panel. On the public address the panel is read only and says so. While the Hub is
+// away the panel is still drawn (the values last read, or the line that the Hub cannot be reached) and every control is marked as needing
+// the Hub (04 9.2, 10.3; R88 01:35 points 4 and 5); it is read again when the Hub answers. -----
+// (functions, and the state on voiceGroup itself: Settings can be drawn before this part of the script has run)
+function voiceAway(e) { return e instanceof SW.HubError && (!!e.unreachable || [e.data?.error, e.data?.code].includes("unreachable")); }
 function voiceTestText(e) {                                  // Test's refusals in the words of 03 10.10; anything else is the Hub's own
   const words = { busy: "voice_test_busy", off: "voice_test_off", no_answer: "voice_test_no_answer" };
   const c = e instanceof SW.HubError ? [e.data?.error, e.data?.code, e.error].find((k) => words[k]) : null;
@@ -1418,19 +1425,24 @@ function voiceTestText(e) {                                  // Test's refusals 
 }
 function voiceGroup(group) {
   const home = !!HUB_PAGE;                                   // the home address: the public one has no Hub page link
-  const box = h("div", { class: "voice" });
+  // last: the last answer of GET voice, at: when it came, again: the open panel's read when the Hub answers
+  const vs = voiceGroup.state || (voiceGroup.state = { last: null, at: 0, again: null });
+  if (!vs.hooked) { vs.hooked = true; hubBack.push(() => { if (vs.again) vs.again(); }); }
+  const box = hubGroup(h("div", { class: "voice" }), () => vs.at);   // the Hub away: "Last update <age>: the Hub did not answer."
   const sec = group(SW.t("settings_group_voice"), box);
   sec.hidden = true;                                         // until the Hub says it has a Weigh Station
   let now = null;                                            // the values as the Hub last gave them
-  const patch = async (body) => { const r = await api("voice", { method: "PATCH", body }); now = { ...now, ...r }; return r; };
+  const patch = async (body) => { const r = await api("voice", { method: "PATCH", body }); now = { ...now, ...r }; vs.last = { ...vs.last, ...r }; return r; };
+  const mark = (c) => (home ? needsHub(c) : c);              // every control of the panel needs the Hub (on the public address they are read only)
   // a slider sends its value when it is let go (`change`); a refusal shows at its row and the slider goes back
   function slider(label, key, lo, hi, step, show) {
     const id = SW.uid("voice"), line = resultLine(), out = h("output", { class: "voice__value mono", for: id });
-    const input = h("input", { class: "voice__range", type: "range", id, min: String(lo), max: String(hi), step: String(step), value: String(now[key] ?? lo), disabled: !home, "data-voice": key });
+    const input = mark(h("input", { class: "voice__range", type: "range", id, min: String(lo), max: String(hi), step: String(step), value: String(now[key] ?? lo), disabled: !home, "data-voice": key }));
     const paint = () => { out.textContent = show(input.value); };
     input.oninput = paint;                                   // the value beside it follows the thumb
     input.addEventListener("change", async () => {
       const was = now[key], v = Number(input.value);
+      if (hubGone) { input.value = String(was ?? lo); paint(); return; }   // marked as needing the Hub: nothing is sent
       try { await patch({ [key]: v }); SW.result(line, "ok", SW.t("common_saved")); }
       catch (e) { input.value = String(was ?? lo); paint(); failed(line, e); }
     });
@@ -1441,8 +1453,10 @@ function voiceGroup(group) {
     const line = resultLine();
     const f = SW.field({ type: "number", label: tt("voice_speaker"), hint: tt("voice_speaker_hint", { count: hi - lo + 1 }), value: String(now.speaker ?? lo),
       disabled: !home, attrs: { "data-voice": "speaker" } });
+    mark(f._control);
     f._control.addEventListener("change", async () => {
       const was = now.speaker ?? lo, raw = f._control.value.trim(), v = Number(raw);
+      if (hubGone) { f._control.value = String(was); return; }
       if (!/^\d+$/.test(raw) || v < lo || v > hi) { f._control.value = String(was); SW.fieldError(f, tt("voice_speaker_error", { min: lo, max: hi })); return; }
       SW.fieldError(f, null);
       try { await patch({ speaker: v }); SW.result(line, "ok", SW.t("common_saved")); }
@@ -1454,6 +1468,7 @@ function voiceGroup(group) {
     const range = Array.isArray(now.speaker_range) && now.speaker_range.length === 2 ? now.speaker_range.map(Number) : null;
     const speak = SW.toggle({ label: tt("voice_speak"), checked: !!now.speech, disabled: !home,
       apply: async (on) => { await patch({ speech: on }); return SW.t("common_saved"); } });
+    mark(speak._control).addEventListener("click", (e) => { if (hubGone) e.preventDefault(); });   // the switch stays as it is
     const speaker = range ? speakerRow(range[0], range[1]) : null;
     const test = home ? needsHub(SW.btn(tt("voice_test"), { action: "voice-test", run: (e) => play(e.currentTarget) })) : null;
     async function play(button) {                            // with the values on the screen, saved or not
@@ -1467,19 +1482,40 @@ function voiceGroup(group) {
       finally { SW.idle(button); }
     }
     return [speak,
-      h("p", { class: "voice__name" }, tt("voice_name", { voice: now.voice || "" })), h("p", { class: "muted" }, tt("voice_change_on_hub")),
+      // the Voice row is read only; where it is changed depends on `remote` (R88 04:15, 04:20)
+      h("p", { class: "voice__name" }, tt("voice_name", { voice: now.voice || "" })), h("p", { class: "muted" }, tt(now.remote === true ? "voice_chosen_on_station" : "voice_change_on_hub")),
       speaker,
       slider(tt("voice_speed"), "speed", 50, 200, 10, (v) => tt("voice_speed_value", { value: v })),
       slider(tt("voice_volume"), "volume", 0, 100, 1, (v) => String(v)),
       test ? h("p", {}, test) : null,
       home ? null : h("p", { class: "muted" }, tt("voice_at_home"))];
   }
-  (async () => {
-    try { now = await api("voice"); } catch (e) { return; }  // an older Hub (404), or one that does not answer: no panel
-    if (!now || now.station !== true) return;                // no Weigh Station on this Hub: nothing to show
-    box.replaceChildren(...rows().filter(Boolean));
+  let waiting = false;                                       // drawn while the Hub was away: read again when it answers
+  function draw(v, away) {
+    now = v;
+    box.replaceChildren(...[away && !hubGone ? note("warn", SW.t("shell_hub_cannot_be_reached")) : null, ...rows()].filter(Boolean));
     sec.hidden = false;
-  })();
+  }
+  function away() {                                          // the values last read, or the line that says why there are none
+    waiting = true;
+    if (vs.last && vs.last.station === true) { draw(vs.last, true); return; }
+    if (vs.last) return;                                   // the Hub said it has no Weigh Station
+    box.replaceChildren(note("warn", SW.t("shell_hub_cannot_be_reached")), h("p", {}, SW.btn(SW.t("common_try_again"), { action: "try-again", run: () => read() })));
+    sec.hidden = false;
+  }
+  async function read() {
+    let v;
+    try { v = await api("voice"); }
+    catch (e) {
+      if (voiceAway(e)) { away(); return; }
+      vs.last = null; waiting = false; sec.hidden = true; box.replaceChildren(); return;   // an older Hub (404): no panel
+    }
+    waiting = false; vs.last = v; vs.at = Date.now();
+    if (!v || v.station !== true) { sec.hidden = true; box.replaceChildren(); return; }   // no Weigh Station on this Hub: nothing to show
+    draw(v, false);
+  }
+  vs.again = () => { if (waiting && sec.isConnected) read(); };
+  if (hubGone) away(); else read();                          // the Hub away when Settings opens: the panel at once, not nothing
   return sec;
 }
 
@@ -2675,7 +2711,10 @@ function openTab() {
     paintLow(); if (low) drawLow();
   }
   function setLow(on) { low = on; if (on) { co.st.on = false; co.paint(); } paintLow(); if (on) { drawLow(); loadLow(); } else find(lastQ); }
-  function setCo(on) { co.st.on = on; if (on) low = false; co.paint(); paintLow(); if (on) { co.draw(); co.load(); } else find(lastQ); }
+  function setCo(on) {
+    co.st.on = on; if (on) low = false; co.paint(); paintLow();
+    if (on) { findStamp++; searchField._busy(false); co.draw(); co.load(); } else find(lastQ);   // a search still on its way no longer draws over the list
+  }
   async function find(q) {
     lastQ = q;
     if (low) { loadLow(); return; }
@@ -2760,11 +2799,11 @@ function openTab() {
     async function setHome(l) {
       await act(homeAns, SW.t("common_saving"), async () => {
         const r = await api(`spools/${id}`, { body: { home: l, dry_run: false } });
-        const now = (r.view && r.view.home) || l;
+        const now = r && r.view && r.view.home;                 // only the Hub's answer says the home; none: the Hub did not take it, so no line
         changed = true;
-        if (r.view) applyView(r.view); else { view = { ...view, home: now }; paintCo(); }
-        return tt("checked_out_home_now", { location: now });
-      });
+        if (r && r.view) applyView(r.view);
+        return now ? tt("checked_out_home_now", { location: now }) : null;
+      }, { button: homeBtn });
     }
     async function sendBack(button) {                          // Return: at once, no preview; the summary follows the returned spool
       await act(actAns, SW.t("common_working"), async () => {

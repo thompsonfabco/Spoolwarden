@@ -227,8 +227,10 @@ def test_the_print_page(env, monkeypatch):
     assert c.get("/intake/labels?ids=3").text.count("data-size='62x29'") == 1
     for size in FIVE:
         assert c.get(f"/intake/labels?ids=3&size={size}").status_code == 200, size
-    for q in ("ids=", "ids=a", "ids=1,,2", "ids=1&size=a4", "ids=1&size=sheet24", "", "ids=" + ",".join(["1"] * 101)):
+    for q in ("ids=", "ids=a", "ids=1,,2", "ids=1&size=a4", "ids=1&size=sheet24", "", "ids=" + ",".join(["1"] * 101),
+              "ids=0", "ids=3,0"):                                     # whole numbers of 1 or more, as the refusal says (R574 LOW)
         assert c.get("/intake/labels?" + q).status_code == 400, q
+    assert c.get("/intake/labels?ids=0").text.startswith("Give the spool numbers")
     assert c.get("/intake/labels?ids=1&size=sheet24").text == BAD_SIZE
     assert signed(make_app(env, kit), AWAY).get("/intake/labels?ids=3").status_code == 403
     js = c.get("/intake/labels.js")

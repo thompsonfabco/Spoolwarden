@@ -467,7 +467,7 @@ class IntakeApp:
     # ---------- the page's language and the demo (R85 3.7, 4.5) ----------
     LANG_CODE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?")
     LABEL_SIZES = ("62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25")     # R85 00:50 point 6
-    LABEL_IDS = re.compile(r"\d{1,9}(?:,\d{1,9}){0,99}")
+    LABEL_IDS = re.compile(r"[1-9]\d{0,8}(?:,[1-9]\d{0,8}){0,99}")          # whole numbers of 1 or more, as the refusal says
     # RC4's sentences the string catalogue does not hold yet (the keys file names them for RC9); the catalogue's own text wins (D13)
     STUB_TEXTS = {"labels_bad_size": "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25.",
                   "labels_bad_ids": "Give the spool numbers as ids=<n,n,...>, whole numbers of 1 or more.",
