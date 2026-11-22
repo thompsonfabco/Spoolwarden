@@ -99,6 +99,17 @@ TEMPORARY_HELD_ROUTE_LEAKS: dict[str, list[str]] = {
     "POST /setup/api/printers/{serial}/forget": [ANSWERS_500],
 }
 
+# Command-line leaks found by the CLI walk (first run on testbox-linux, DPROOF-02): each needs a demo stop in cli.py (held) or
+# the module it calls. Held exactly like the route list: the test fails when a leak is gone (the entry must go) or a new one
+# appears, so the dict can only shrink toward empty. "write x" is a write outside the demo's folder, "never ends" a command that
+# waits for a pairing in the demo (no outside reach was recorded while it waited).
+TEMPORARY_HELD_CLI_LEAKS: dict[str, list[str]] = {
+    "never ends": ["pair"],
+    "write etc/config.json": ["features setup server", "local-intake remove --yes", "modules set server"],
+    "write etc/config.xml": ["features setup server", "local-intake remove --yes", "modules set server"],
+    "write state/alert-test": ["alerts test"],
+}
+
 JPEG = bytes([0xFF, 0xD8, 0xFF, 0xE0]) + bytes(64)                  # a photo as far as the Hub checks one
 ZIP = b"PK" + bytes([3, 4]) + bytes(64)                             # an upload as far as the page checks one
 BACKUP = "filament-kit-backup-kit-20260101-0000-v0.6.3.zip"
@@ -644,7 +655,7 @@ def test_routes_waiting_for_a_held_file_leak_exactly_what_is_listed(hub, tmp_pat
 
 def leak_lists() -> dict[str, object]:
     return {"LEAKS": LEAKS, "LEAKS_WITH_BODY": LEAKS_WITH_BODY, "KLIPPER_ROUTE_LEAKS": KLIPPER_ROUTE_LEAKS,
-            "TEMPORARY_HELD_ROUTE_LEAKS": TEMPORARY_HELD_ROUTE_LEAKS}
+            "TEMPORARY_HELD_ROUTE_LEAKS": TEMPORARY_HELD_ROUTE_LEAKS, "TEMPORARY_HELD_CLI_LEAKS": TEMPORARY_HELD_CLI_LEAKS}
 
 
 def not_mountable_yet(mountable: bool, lists: dict[str, object]) -> list[str]:
@@ -1183,7 +1194,6 @@ CLI_NOT_RUN: dict[str, str] = {
 }
 
 
-@pytest.mark.skip(reason="DPROOF-01: not proven yet; the first run on the test box ended in a failure with no report (item 7 stays open)")
 def test_every_command_of_the_command_line_stays_inside_in_the_demo(tmp_path, monkeypatch):
     """R85 4.3: every command the command line has (read from its argparse tree), alone and with `--yes` where it has one, run
     in the demo with Spoolman, Claude, the printers' clients, the sockets, the name lookups, the child processes and every
@@ -1227,6 +1237,7 @@ def test_every_command_of_the_command_line_stays_inside_in_the_demo(tmp_path, mo
             found |= {"write " + norm(k) for k in out.wrote[w:]}
             for k in found:
                 leaks.setdefault(k, set()).add(" ".join([*argv, *extra]))
-    print("DPROOF-CLI", json.dumps({k: str(v) for k, v in results.items()}))
+    sys.stdout, sys.stderr = sys.__stdout__, sys.__stderr__       # a command that closed or swapped them must not hide the result
+    print("DPROOF-CLI", json.dumps({k: str(v) for k, v in results.items()}), file=sys.__stderr__, flush=True)
     report = "\n".join(f"    {k!r}: {sorted(v)[:6]}" for k, v in sorted(leaks.items()))
-    assert leaks == {}, "\n" + report
+    assert {k: sorted(v) for k, v in leaks.items()} == {k: sorted(v) for k, v in TEMPORARY_HELD_CLI_LEAKS.items()}, "\n" + report
