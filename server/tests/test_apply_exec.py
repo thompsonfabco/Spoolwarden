@@ -421,7 +421,7 @@ def test_prints_reach_the_output_before_each_command(tmp_path, monkeypatch):
     assert "==> Building presets" in seen[0]
 
 
-# ---------------------------------------------------------------- the job's step lines (docs/design 02 8.4)
+# ---------------------------------------------------------------- the job's step lines (the design, components 8.4)
 
 def test_execute_tells_one_step_where_the_sentence_changes(tmp_path, monkeypatch):
     told = []

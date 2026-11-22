@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end run of filament-kit on a disposable Ubuntu 24.04+ host, made for WSL Ubuntu (docs/testing-e2e.md):
+# End-to-end run of filament-kit on a disposable Ubuntu 24.04+ host, made for WSL Ubuntu:
 #
 #   wsl -d Ubuntu -- sudo bash /mnt/c/<checkout>/tools/e2e/run.sh [--only a,d,c,b,e,f,g,h] [--results FILE]
 #                                                                 [--keep-work] [--previous vX.Y.Z]

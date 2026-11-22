@@ -382,7 +382,7 @@ def test_settings_are_not_sent_to_a_board_that_does_not_answer(env):
     assert not any(l.startswith("FK-SET") for l in board.lines)
 
 
-# ---------------------------------------------------------------- the job's step lines (docs/design 02 8.4)
+# ---------------------------------------------------------------- the job's step lines (the design, components 8.4)
 
 def test_a_blank_board_goes_through_the_five_steps(env):
     clock = Clock()

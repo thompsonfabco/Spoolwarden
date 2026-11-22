@@ -1,4 +1,4 @@
-"""Design source tests of docs/design/08-platform-mapping.md 3.4 ("Proposed tests"), one test function per check.
+"""Design source tests of the design, platform mapping 3.4 ("Proposed tests"), one test function per check.
 
 Test 2 here: tokens.json is complete and well-formed. Test 4: every token a component uses is a token. Test 6: the icon
 sources, the sprite and the drawables. Later steps add the others to this file.

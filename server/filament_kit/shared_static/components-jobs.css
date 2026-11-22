@@ -1,4 +1,4 @@
-/* Spoolwarden shared components, the job strip addition (02-components.md 1.5, 8.4): loaded after components.css, only
+/* Spoolwarden shared components, the job strip addition (the design, components 1.5, 8.4): loaded after components.css, only
 by the pages that run background jobs. */
 .job{position:fixed;right:calc(var(--s4) + env(safe-area-inset-right));bottom:calc(var(--s4) + env(safe-area-inset-bottom));z-index:30;width:min(25rem,100vw - 2 * var(--s4));overflow:hidden;border:var(--hairline) solid var(--border-strong);border-radius:var(--r);background:var(--surface);box-shadow:var(--e0)}
 .job__head,.job__lost,.job__reason,.job__foot{display:flex;align-items:center;gap:var(--s2)}

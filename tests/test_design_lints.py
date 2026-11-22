@@ -1,5 +1,5 @@
-"""Lint checks of docs/design/07-accessibility.md section 15 (AUT-2, AUT-3, AUT-4, AUT-6, AUT-7) and of
-docs/design/08-platform-mapping.md 3.4 test 5, one test function per lint.
+"""Lint checks of the design, accessibility section 15 (AUT-2, AUT-3, AUT-4, AUT-6, AUT-7) and of
+the design, platform mapping 3.4 test 5, one test function per lint.
 
 They read the web sources (`setup_static/*`, `web/static/*`, `web-shared/*`) and the app's Kotlin (see test_design_sources.py). Today's
 findings are in the allow-lists next to this file, one line each: `<path> | <finding> | <count> | <reason>`, the count
@@ -433,7 +433,7 @@ def test_no_literal_values_in_components():
 # ---- AUT-2 / CON-9: --accent only as the fill of a labelled part ----
 
 ACCENT_USE = re.compile(r"var\(\s*--accent\s*[,)]")
-# the labelled fills of 07 CON-9, by their class in 02-components.md: the main button, the skip link, the icon tile of
+# the labelled fills of 07 CON-9, by their class in the design, components: the main button, the skip link, the icon tile of
 # the current section in the list navigation (the chosen segment is --accent-soft with --accent-text, 02 5.7)
 LABELLED_FILLS = ("btn--primary", "skip", "nav__icon")
 LABELLED_FILL = re.compile(r"\.(?:" + "|".join(re.escape(c) for c in LABELLED_FILLS) + r")(?![\w-])")

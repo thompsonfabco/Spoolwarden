@@ -662,7 +662,7 @@ def test_zip_bytes_are_a_standard_zip(kit):
     assert data[:4] == b"PK\x03\x04" and zipfile.is_zipfile(io.BytesIO(data))
 
 
-# ---------------------------------------------------------------- the job's step lines (docs/design 02 8.4)
+# ---------------------------------------------------------------- the job's step lines (the design, components 8.4)
 
 def test_the_backup_command_writes_its_three_steps(kit, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: True)

@@ -1,4 +1,4 @@
-// Spoolwarden shared components, the job addition (02-components.md 8.4, 8.5; 03-hub-page.md 3.5 to 3.7): loaded after
+// Spoolwarden shared components, the job addition (the design, components 8.4, 8.5; the design, Hub page 3.5 to 3.7): loaded after
 // components.js, only by the Hub page (the web app starts no jobs). It adds window.SW_JOBS.create(): the background-job
 // strip, the top-bar job indicator, the Hub-is-restarting state and the Hub-not-answering banner. It also fills the
 // core's two hooks, waitJob and waitHub. Text from the Hub goes in as textContent, never as markup.

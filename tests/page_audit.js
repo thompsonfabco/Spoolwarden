@@ -1,4 +1,4 @@
-// Spoolwarden page audit, AUT-5 of docs/design/07-accessibility.md section 15. Paste it into the browser's console
+// Spoolwarden page audit, AUT-5 of the design, accessibility section 15. Paste it into the browser's console
 // on a rendered page (the console is not limited by the page's Content-Security-Policy), or inject it from a test
 // runner. It returns the list of findings and prints them; window.swPageAudit() runs it again (for example after a
 // change of view, so the title check can compare the two views). An empty list is a pass for this view only: run it
@@ -184,7 +184,7 @@
     }
     return norm(s);
   }
-  // the element's box, or the box its ::after hit-area extension draws when that is larger (02-components.md 1.2)
+  // the element's box, or the box its ::after hit-area extension draws when that is larger (the design, components 1.2)
   function hitBox(el) {
     const r = el.getBoundingClientRect();
     if (!r.width && !r.height) return null;

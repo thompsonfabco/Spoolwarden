@@ -179,11 +179,6 @@ with `sudo spoolwarden catalog update`, or turn on the `library` Feature to also
   the Weigh Station, the Claude connector and the web app, remote access, order history, troubleshooting.
 - [docs/klipper.md](docs/klipper.md): Klipper printers (Moonraker), the Klipper add-on and Spool Sync.
 - [docs/known-gaps.md](docs/known-gaps.md): what doesn't work the way the how-tos describe yet.
-- For maintainers and contributors: [docs/maintainer.md](docs/maintainer.md) (releases, signing keys, secrets),
-  [docs/testing-e2e.md](docs/testing-e2e.md) and [docs/android-e2e.md](docs/android-e2e.md) (the end-to-end
-  tests).
-- For contributors building the interfaces: [docs/design/](docs/design/README.md), the design system (names, tokens,
-  components, every screen of the Hub page, web app, app and command line, accessibility rules, build order).
 
 Spoolwarden is GPL-3.0 (see [LICENSE](LICENSE)). What else a release contains or installs, and under what
 terms: [THIRD-PARTY.md](THIRD-PARTY.md).

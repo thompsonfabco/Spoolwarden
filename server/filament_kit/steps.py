@@ -1,4 +1,4 @@
-"""The step lines of the counted background jobs (docs/design 02 section 8.4, "Steps").
+"""The step lines of the counted background jobs (the design, components section 8.4, "Steps").
 
 A command that has countable steps writes `==> step K of N <sentence>` when each step starts, on stdout where its
 other progress lines go, so the setup page's job log and the command line show the same sentences.

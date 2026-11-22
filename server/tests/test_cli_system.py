@@ -597,36 +597,6 @@ def test_help_aliases_lists_every_old_spelling_with_the_new_one(capsys):
     assert all(len(line) <= 79 for line in out.splitlines())
 
 
-# Commands of 06 3.2 this program does not have: they come with their own steps or went away with the migrations.
-NOT_HERE = ("label-reader corrections", "migrate-ops", "migrate-scanner")
-
-
-def _design_commands() -> list[str]:
-    text = (ROOT / "docs" / "design" / "06-command-line.md").read_text(encoding="utf-8")
-    table = text[text.index("### 3.2 Every command"):text.index("## 4. Old and new spellings")]
-    found = []
-    for line in table.splitlines():
-        m = re.match(r"\| `([^`]+)`", line)
-        if m:
-            found.append(re.split(r" [\[<(|-]", m.group(1))[0].strip())
-    return found
-
-
-# The three rows this program words otherwise until their steps: the product name (the rename steps) and pair --no-wait.
-_RENAME_STEPS = {
-    r"| `pair [--slicer-sync \| --weigh-station] [--text]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |":
-    r"| `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link for the Slicer Sync / Link for the Weigh Station |",
-}
-
-
-def _design_rows() -> list[str]:
-    text = (ROOT / "docs" / "design" / "06-command-line.md").read_text(encoding="utf-8")
-    table = text[text.index("### 3.2 Every command"):text.index("## 4. Old and new spellings")]
-    # the design's own section references ("(9.2)", "(section 10)") are left out of the printed help (design 11:55)
-    return [re.sub(r" \((?:section )?\d+(?:\.\d+)?\)", "", ln.strip()) for ln in table.splitlines()
-            if re.match(r"\| `", ln) and not ln[3:].startswith(NOT_HERE)]
-
-
 def _cells(row: str) -> list[str]:
     return re.split(r" \| ", row.strip()[2:-2])      # the escaped pipes of a command (" \| ") do not split
 
@@ -653,26 +623,6 @@ def test_help_place_names_come_from_the_string_catalogue(capsys):
         assert _cells(next(r for r in md.splitlines() if r.startswith(f"| {command} |")))[2] == _catalogue_place(place)
     assert "| Bring back deleted presets |" in md and "| Show what would change |" in md
     assert "| Restore deleted presets |" not in md and "| Show what would be accepted |" not in md
-
-
-def test_help_markdown_lists_every_command_of_the_design(capsys):
-    rc, md, _ = run(capsys, ["help", "--markdown"])
-    wanted = [c for c in _design_commands() if not c.startswith(NOT_HERE)]
-    assert rc == 0 and len(wanted) > 70
-    rows = md.splitlines()
-    for command in wanted:
-        assert f"| `{command}" in md, command
-    helped = {_cells(r)[0]: _cells(r) for r in rows[2:]}
-    raw = {c: p for c, _w, p in cli._COMMAND_TABLE}
-    for row in _design_rows():                      # every row: the command and what it does whole; the place as below
-        want = _cells(_RENAME_STEPS.get(row, row))
-        got = helped[want[0]]
-        assert got[:2] == want[:2], row
-        # a place that names a Hub button or section is the catalogue text of the key the Hub page uses (design amends 06 3.2)
-        assert got[2] == (_catalogue_place(raw[want[0]]) if "{" in raw[want[0]] else want[2]), row
-    assert md.splitlines()[:2] == ["| Command | What it does | Hub page place |", "| --- | --- | --- |"]
-    assert not any(f"| `{c}" in md for c in NOT_HERE)
-    assert not re.search(r"\((?:section )?\d+(?:\.\d+)?\)", md), "a design section number in the help"
 
 
 def test_every_command_the_help_lists_is_a_command_of_the_parser(capsys):
