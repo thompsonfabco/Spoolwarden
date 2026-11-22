@@ -80,7 +80,7 @@ SHELL_SCRIPTS = (
     "setup_tabs.js", "setup_start.js", "setup_overview.js", "setup_features.js", "setup_updates.js",
     "setup_settings.js", "setup_devices.js", "setup_printer_live.js", "setup_printers.js", "setup_trust.js",
     "setup_presets.js", "setup_backup.js", "setup_storage.js", "setup_logs.js", "setup_intake.js",
-    "setup_spools.js", "setup_analytics.js", "setup_flash.js",
+    "setup_spools.js", "setup_analytics.js", "setup_flash.js", "setup_voice.js",
 )
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "

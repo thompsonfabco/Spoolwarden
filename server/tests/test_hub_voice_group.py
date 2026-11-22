@@ -1,25 +1,15 @@
 """Settings > Weigh Station voice on the Hub page (DECISIONS R88 2.1 to 2.4 and the 02:00 ruling, step VO3), in a real headless browser:
 the rows Speak, Voice, Speaker, Speed, Volume and Test; no Save button, each row applies as it is changed (a slider when it is let go);
 the Speaker row for the many-speaker voice only; the line under Voice; the four results of Test; a refused change going back; and a
-Weigh Station on another computer. The group is built by setup_voice.js, which RG1 registers; until then this test loads it the way RG1
-will (its script next to the others, its builder in the Voice row of SET_GROUPS). The Hub's side (VO2) is a stub here: the page's `api`
+Weigh Station on another computer. The group is built by setup_voice.js, registered in setup_page.SHELL_SCRIPTS and the Voice row of SET_GROUPS. The Hub's side (VO2) is a stub here: the page's `api`
 is wrapped, so station/voice (the view read G, which needs no code, and the save by P of Speak, Speaker, Speed and Volume), the Voice row's settings/general write and
 station/voice/test answer from the test. The settings values of the four are decoys: the group must read only the answer. The same skip rules as the page audit: no Node 22 or no
 browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
 
-import pytest
-
-from filament_kit import setup_page
 from test_hub_page_audit import hub_app  # noqa: F401
 from test_hub_presets_ui import _drive, hub  # noqa: F401
 from test_hub_settings import PRELUDE
-
-
-@pytest.fixture(autouse=True)
-def _voice_files(monkeypatch):
-    """The script is served as RG1 will have it listed (an autouse fixture runs before the Hub is built)."""
-    monkeypatch.setattr(setup_page, "SHELL_SCRIPTS", (*setup_page.SHELL_SCRIPTS, "setup_voice.js"))
 
 
 HELPERS = r"""
