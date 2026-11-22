@@ -30,15 +30,17 @@ from . import output
 
 # ---------- texts (catalogue keys; {name} fields are filled with str.format) ----------
 
+COMMAND = "spoolwarden"
+
 CLI_HUB_DOWN = "the Hub is not running, so nothing can be read or changed."
-CLI_HUB_DOWN_FIX = "start it: sudo systemctl start filament-kit"
+CLI_HUB_DOWN_FIX = "start it: sudo systemctl start filament-kit.service"
 CLI_SPOOLS_EMPTY = "No spools yet. Add your first one from your phone."
 CLI_SPOOLS_NONE_MATCH = "No spool matches."
 CLI_SPOOLS_COUNT_ONE = "1 spool."
 CLI_SPOOLS_COUNT = "{n} spools."
 CLI_SPOOLMAN_LINE = "Spoolman: {url}"
 CLI_SPOOL_NOT_FOUND = "there is no spool {n}."
-CLI_SPOOL_NOT_FOUND_FIX = "list the spools: spoolwarden spools"
+CLI_SPOOL_NOT_FOUND_FIX = "list the spools: {command} spools"
 CLI_SPOOL_NUMBER_BAD = "{value} is not a spool number."
 CLI_GRAMS_BAD = "{value} is not a number of grams."
 CLI_NUMBER_BAD = "{value} is not a number."
@@ -55,11 +57,11 @@ CLI_SPOOL_EMPTY_DONE = "Spool {n} is marked empty."
 CLI_SPOOL_NOT_PLACED = "no place"
 CLI_SPOOL_IN_PRINTER = "in {printer}, {slot}"
 CLI_CATALOG_LOCAL_EMPTY = "No entries of your own yet."
-CLI_CATALOG_LOCAL_EMPTY_FIX = "Add one: spoolwarden catalog add --ask"
+CLI_CATALOG_LOCAL_EMPTY_FIX = "Add one: {command} catalog add --ask"
 CLI_CATALOG_REMOVE_ASK = "Remove {brand} {name} from your own entries? Slicer presets are rebuilt."
 CLI_CATALOG_REMOVE_DONE = "Removed {brand} {name}. Slicer presets are rebuilt in a minute."
 CLI_CATALOG_NOT_FOUND = "there is no entry {id} of your own."
-CLI_CATALOG_NOT_FOUND_FIX = "list them: spoolwarden catalog local"
+CLI_CATALOG_NOT_FOUND_FIX = "list them: {command} catalog local"
 CLI_CATALOG_ASK_BRAND = "Brand: "
 CLI_CATALOG_ASK_NAME = "Name: "
 CLI_CATALOG_ASK_MATERIAL = "Material (for example PLA, PETG, ABS, or Other): "
@@ -77,9 +79,9 @@ CLI_CATALOG_ADD_ASK = "Add {brand} {name} ({material})?"
 CLI_CATALOG_ADD_DONE = "Added. Slicer presets are rebuilt in a minute."
 CLI_CATALOG_ADD_PROBLEM = "{field}: {text}"
 CLI_CATALOG_ADD_NO_TERMINAL = "asking for the entry needs a terminal."
-CLI_CATALOG_ADD_NO_TERMINAL_FIX = "give an entry file instead: spoolwarden catalog add <file>"
+CLI_CATALOG_ADD_NO_TERMINAL_FIX = "give an entry file instead: {command} catalog add <file>"
 CLI_DEVICE_NOT_FOUND = "there is no device {name}."
-CLI_DEVICE_NOT_FOUND_FIX = "list them: spoolwarden devices"
+CLI_DEVICE_NOT_FOUND_FIX = "list them: {command} devices"
 CLI_DEVICE_AMBIGUOUS = "{name} fits more than one device: {names}."
 CLI_DEVICE_AMBIGUOUS_FIX = "give the id."
 CLI_DEVICE_NO_SETTINGS = "{name} has no settings the Hub can change."
@@ -206,7 +208,7 @@ def _number(value) -> int | None:
 
 def _spool_error(e, n: int) -> int:
     if getattr(e, "http", None) == 404 or getattr(e, "code", None) == "not_found":
-        output.error(CLI_SPOOL_NOT_FOUND.format(n=n), CLI_SPOOL_NOT_FOUND_FIX)
+        output.error(CLI_SPOOL_NOT_FOUND.format(n=n), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
         return output.USAGE
     return fail(e)
 
@@ -214,7 +216,7 @@ def _spool_error(e, n: int) -> int:
 def cmd_spool_show(api, number) -> int:
     n = _number(number)
     if n is None:
-        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), CLI_SPOOL_NOT_FOUND_FIX)
+        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
         return output.USAGE
     if api is None:
         return down()
@@ -239,7 +241,7 @@ def _change(api, number, body: dict, *, command: str, preview, ask, done, yes: b
     (`ask(after)`), the real change, its result line (`done(after)`; None: nothing changes, a line says so)."""
     n = _number(number)
     if n is None:
-        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), CLI_SPOOL_NOT_FOUND_FIX)
+        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
         return output.USAGE
     if api is None:
         return down()
@@ -321,7 +323,7 @@ def cmd_catalog_local(api) -> int:
     entries = r.get("entries") or []
     if not entries:
         output.out(CLI_CATALOG_LOCAL_EMPTY)
-        output.out(CLI_CATALOG_LOCAL_EMPTY_FIX)
+        output.out(CLI_CATALOG_LOCAL_EMPTY_FIX.format(command=COMMAND))
         return 0
     output.out_lines(output.table(["Id", "Brand", "Name", "Material", "Added"],
                                   [[e.get("id"), e.get("brand"), e.get("name"), e.get("material"), e.get("added") or ""]
@@ -339,7 +341,7 @@ def cmd_catalog_local_remove(api, entry_id: str, yes: bool = False) -> int:
         return fail(e)
     entry = next((e for e in entries if str(e.get("id")) == entry_id), None)
     if entry is None:
-        output.error(CLI_CATALOG_NOT_FOUND.format(id=entry_id), CLI_CATALOG_NOT_FOUND_FIX)
+        output.error(CLI_CATALOG_NOT_FOUND.format(id=entry_id), CLI_CATALOG_NOT_FOUND_FIX.format(command=COMMAND))
         return output.USAGE
     rc = confirmed(CLI_CATALOG_REMOVE_ASK.format(**{k: entry.get(k) for k in ("brand", "name")}),
                    f"removing {entry.get('brand')} {entry.get('name')}", f"spoolwarden catalog local remove {entry_id}", yes)
@@ -355,7 +357,7 @@ def cmd_catalog_local_remove(api, entry_id: str, yes: bool = False) -> int:
 
 
 def _missing_entry(entry_id: str) -> int:
-    output.error(CLI_CATALOG_NOT_FOUND.format(id=entry_id), CLI_CATALOG_NOT_FOUND_FIX)
+    output.error(CLI_CATALOG_NOT_FOUND.format(id=entry_id), CLI_CATALOG_NOT_FOUND_FIX.format(command=COMMAND))
     return output.USAGE
 
 
@@ -370,7 +372,7 @@ def cmd_catalog_add_ask(api, *, ask=input, yes: bool = False) -> int:
     the form's order. The Hub builds the entry from the values (`POST /api/library/local/form`). `ask(prompt)`: the
     terminal's input (a test's own)."""
     if not output.terminal() and ask is input:
-        output.error(CLI_CATALOG_ADD_NO_TERMINAL, CLI_CATALOG_ADD_NO_TERMINAL_FIX)
+        output.error(CLI_CATALOG_ADD_NO_TERMINAL, CLI_CATALOG_ADD_NO_TERMINAL_FIX.format(command=COMMAND))
         return output.USAGE
     if api is None:
         return down()
@@ -435,7 +437,7 @@ def _find_device(page, ident: str):
         output.error(CLI_DEVICE_AMBIGUOUS.format(name=ident, names=", ".join(f"{r['name']} ({r['id']})" for r in found)),
                      CLI_DEVICE_AMBIGUOUS_FIX)
     else:
-        output.error(CLI_DEVICE_NOT_FOUND.format(name=ident), CLI_DEVICE_NOT_FOUND_FIX)
+        output.error(CLI_DEVICE_NOT_FOUND.format(name=ident), CLI_DEVICE_NOT_FOUND_FIX.format(command=COMMAND))
     return None, output.USAGE
 
 

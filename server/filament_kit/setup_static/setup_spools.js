@@ -61,6 +61,23 @@ const spSTUB = {
   spools_done_empty: "Marked empty.",
   spools_ask_empty_title: "Mark spool {id} empty?",
   spools_ask_empty_text: "{name} is recorded as used up: 0 g left, and it leaves this list.",
+  spools_toast_weight: "Updated {name} ({id}): {grams} g left.",
+  spools_toast_move: "Moved {name} ({id}) to {location}.",
+  spools_toast_empty: "Marked {name} ({id}) empty.",
+  spools_toast_link: "Linked tag {tag} to {name} ({id}).",
+  spools_undo_name: "Undo: {what}",
+  spools_put_back: "Put back.",
+  spools_undo_refused: "This changed again since, so it cannot be undone.",
+  spools_undo_failed: "Could not undo: {reason}",
+  spools_events_title: "Last ten events",
+  spools_events_none: "Nothing recorded yet.",
+  spools_events_error: "Could not read the events.",
+  spools_event_undone: "undone",
+  spools_download_csv: "Download as CSV",
+  spools_csv_spools: "Spools (Spoolman's file)",
+  spools_csv_filaments: "Filaments (Spoolman's file)",
+  spools_csv_failed: "Could not download the file: {reason}",
+  spools_more_actions: "More actions for spools",
 };
 const tx = (key, vars) => {
   if (window.SW_TEXT && window.SW_TEXT[key] != null) return SW.t(key, vars);
@@ -91,6 +108,47 @@ const ago = (iso) => {
 const slotBox = () => spE("p", "result result--block", { role: "status" });
 const spaddressOf = (id) => `#${SECTION}${id != null ? "/" + id : ""}`;
 const addressId = () => { const m = /^#spools\/(\d+)$/.exec(location.hash); return m ? Number(m[1]) : null; };
+
+// ----- Undo (R84 3): the answer of a change names its event; the toast says what happened and offers Undo for 10 seconds -----
+const spEventId = (r) => {
+  const e = r && r.event;
+  if (e && e.id != null) return e.undo && e.undo.possible === false ? null : e.id;
+  return r && r.event_id != null ? r.event_id : null;      // the Hub's own words for it (R84 ruling 4); none: no Undo
+};
+// Undo answers "Put back." (and the Hub's note), or the Hub's refusal (409) in its words
+const spUndo = (id, view) => needCode(async () => {
+  try {
+    const r = await api(`events/${encodeURIComponent(id)}/undo`, { code: theCode() });
+    SW.toast([tx("spools_put_back"), r.note].filter(Boolean).join(" "), "ok");
+    const one = await api(`spools/${view.v.id}`).catch(() => null);
+    if (one && one.spool) view.update(one.spool);
+    view.events(true);
+  } catch (e) {
+    if (e.locked) throw e;
+    const raw = e.data && e.data.error && e.data.error !== "bad origin" ? e.data.error : "";
+    if (e.status === 409) SW.toast(raw && !/^[a-z0-9_]+$/.test(raw) ? hubText(raw) : tx("spools_undo_refused"), "warn");
+    else SW.toast(tx("spools_undo_failed", { reason: hubText(e.message) }), "bad");
+  }
+});
+function spToast(text, r, view) {
+  const id = hubHasHistory("event_undo") ? spEventId(r) : null;
+  SW.toast(text, "ok", id == null ? {} : { action: { label: tx("common_undo"), name: tx("spools_undo_name", { what: text }), run: () => spUndo(id, view) } });
+}
+
+// ----- Download as CSV (R84 6): Spoolman's own files, passed on by the Hub; unlocked, as a file leaves the Hub -----
+async function spDownloadCsv(set, fallback) {
+  const r = await fetch(`/setup/api/export/${set}.csv`, { credentials: "same-origin", headers: { "X-Setup-Code": theCode() } });
+  if (!r.ok) { let d = {}; try { d = await r.json(); } catch { /* not JSON */ } throw hubError(r.status, d); }
+  const m = /filename="([^"]+)"/.exec(r.headers.get("Content-Disposition") || "");
+  const url = URL.createObjectURL(await r.blob());
+  const a = spX("a", { href: url, download: m ? m[1] : fallback });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+const spCsvItem = (set, key) => ({ label: tx(key), icon: "download", action: `download-${set}`,
+  run: () => needCode(async () => { try { await spDownloadCsv(set, set + ".csv"); } catch (e) { if (e.locked) throw e; SW.toast(tx("spools_csv_failed", { reason: hubText(e.message) }), "bad"); } }) });
 
 // ----- what the section knows -----
 const st = { q: "", filter: "", rows: [], total: 0, more: false, url: null, ready: false };
@@ -146,6 +204,7 @@ function item(v) {
     if (!it.dataset.state) delete it.dataset.state;
     view.paintDetail(nv);
   };
+  if (open) view.events();
   const it = spX("div", { class: "coll__item", role: "rowgroup", "data-id": String(v.id) },
     spE("div", "coll__row", { role: "row" }, spCell("expand", 1, expand), c.visual, c.number, title, c.material, c.left, c.where, c.state),
     spE("div", "coll__row coll__row--detail", { role: "row", hidden: !open }, spX("div", { class: "coll__cell", role: "cell", "aria-colspan": 8 }, region)));
@@ -167,6 +226,7 @@ function table(rows) {
     if (!btn) return;
     if (link) { e.preventDefault(); btn.click(); return; }
     const id = Number(btn.getAttribute("aria-controls").replace("spool-detail-", "")), open = btn.getAttribute("aria-expanded") === "true";
+    if (open && views.has(id)) views.get(id).events();
     if (open) {
       if (SW.phone()) for (const o of el.querySelectorAll('.coll__expand[aria-expanded="true"]')) if (o !== btn) { wanted.delete(Number(o.getAttribute("aria-controls").replace("spool-detail-", ""))); o.click(); }
       wanted.add(id);
@@ -180,6 +240,13 @@ function table(rows) {
 function spHeader() {
   const meta = spE("p", "page-head__meta spools-head", spE("span", "spools-count", tx("spools_count", { count: st.total })));
   if (st.url) meta.append(spX("a", { class: "btn btn--ghost spools-link", href: st.url, target: "_blank", rel: "noopener" }, tx("spools_open_spoolman")));
+  const csv = [hubCanExport("spoolman-spools") ? spCsvItem("spoolman-spools", "spools_csv_spools") : null,
+    hubCanExport("spoolman-filaments") ? spCsvItem("spoolman-filaments", "spools_csv_filaments") : null].filter(Boolean);
+  if (csv.length) {
+    const more = SW.iconBtn("more", tx("spools_more_actions"), { cls: "spools-more" });
+    SW.menu(more, [{ heading: tx("spools_download_csv") }, ...csv], { label: tx("spools_more_actions") });
+    meta.append(more);
+  }
   return meta;
 }
 const CHIPS = [["sealed", "common_sealed"], ["opened", "spool_state_opened"], ["loaded", "spools_chip_loaded"], ["low", "spools_chip_low"]];
@@ -284,6 +351,8 @@ function spChange(view, out, o) {
       view.update(r.spool);
       if (o.after) o.after(r);
       SW.result(out, "ok", o.done(r));
+      view.events(true);
+      if (o.toast) spToast(o.toast(r), r, view);
     });
   };
   return async () => {
@@ -315,7 +384,8 @@ function detail(v0, view, id) {
     if (bad) { weight._control.focus(); return; }
     spChange(view, weightBox, { label: tx("spool_update_weight"), body: () => ({ gross: Number(weight._control.value.replace(",", ".")) }),
       say: (r) => (r.spool.remaining_g === r.before.remaining_g ? null : tx("spools_preview_weight", { left: grams(r.before.remaining_g) ?? "?", after: grams(r.spool.remaining_g) })),
-      done: (r) => tx("spools_done_weight", { grams: grams(r.spool.remaining_g) }) })();
+      done: (r) => tx("spools_done_weight", { grams: grams(r.spool.remaining_g) }),
+      toast: (r) => tx("spools_toast_weight", { name: spName(r.spool), id: r.spool.id, grams: grams(r.spool.remaining_g) }) })();
   });
 
   // Move
@@ -324,7 +394,8 @@ function detail(v0, view, id) {
   const moveGo = SW.btn(tx("spool_move"), { cls: "btn--primary", name: `${tx("spool_move")}: ${spName(v0)}` });
   moveGo.addEventListener("click", spChange(view, moveBox, { label: tx("spool_move"), body: () => (move._control.value ? { location: move._control.value } : { auto_location: true }),
     say: (r) => (r.spool.location === r.before.location ? null : tx(r.placed_text ? "spools_preview_move_why" : "spools_preview_move", { before: r.before.location || tx("spools_no_place"), after: r.spool.location, why: r.placed_text })),
-    done: (r) => tx("spool_result_moved", { location: r.spool.location }) }));
+    done: (r) => tx("spool_result_moved", { location: r.spool.location }),
+    toast: (r) => tx("spools_toast_move", { name: spName(r.spool), id: r.spool.id, location: r.spool.location || tx("spools_no_place") }) }));
 
   // Link the last tapped tag
   const linkBox = slotBox(), linkGo = SW.btn(tx("spools_link_last"), { name: `${tx("spools_link_last")}: ${spName(v0)}` });
@@ -336,7 +407,8 @@ function detail(v0, view, id) {
     tapped = last.tag;
     spChange(view, linkBox, { label: tx("spools_link_last"), path: "/link", body: () => ({ tag: tapped.uid }),
       say: (r) => (r.spool.tag === r.before.tag ? null : [tx("spools_preview_link", { tag: r.spool.tag }), r.before.state === "sealed" && r.spool.state === "opened" ? " " + tx("spools_preview_link_opens") : ""].join("")),
-      done: () => tx("spool_result_tag_linked") })();
+      done: () => tx("spool_result_tag_linked"),
+      toast: (r) => tx("spools_toast_link", { tag: r.spool.tag, name: spName(r.spool), id: r.spool.id }) })();
   });
 
   // Mark empty: apart, and it asks first
@@ -344,8 +416,21 @@ function detail(v0, view, id) {
   emptyGo.addEventListener("click", spChange(view, emptyBox, { label: tx("spool_mark_empty"), applyLabel: tx("spool_mark_empty"), body: () => ({ empty: true }),
     say: (r) => (r.before.state === "empty" ? null : tx("spools_preview_empty", { left: grams(r.before.remaining_g) ?? 0 })),
     ask: (v) => ({ kind: "destructive", title: tx("spools_ask_empty_title", { id: v.id }), text: tx("spools_ask_empty_text", { name: spName(v) }), confirm: tx("spool_mark_empty") }),
-    done: () => tx("spools_done_empty") }));
+    done: () => tx("spools_done_empty"),
+    toast: (r) => tx("spools_toast_empty", { name: spName(r.spool), id: r.spool.id }) }));
 
+  // the last ten events of this spool (R84 2.2): read when the detail first opens, and again after each change
+  const eventsBox = spE("div", "spools-events");
+  let asked = false;
+  view.events = async (again) => {
+    if (!hubHasHistory("activity") || (asked && !again)) return;
+    asked = true;
+    let r;
+    try { r = await api(`activity?subject=${encodeURIComponent("spool:" + v0.id)}&limit=10`); } catch { eventsBox.replaceChildren(spE("p", "muted", tx("spools_events_error"))); return; }
+    const list = (r.events || []).slice(0, 10), who = (ev) => (ev.actor && (ev.actor.name || ev.actor.type)) || "";
+    eventsBox.replaceChildren(list.length ? spKv(list.map((ev) => [when(ev.at), [ev.text || ev.title || ev.kind, who(ev) ? " · " + who(ev) : "", ev.undone ? ` (${tx("spools_event_undone")})` : ""].join("")]))
+      : spE("p", "muted", tx("spools_events_none")));
+  };
   const actions = (field, button, out) => spE("div", "spools-act", spE("div", "spools-act__row", field, button), out);
   view.paintDetail = (nv) => { title.textContent = spName(nv); paintFacts(nv); };
   paintFacts(v0);
@@ -353,6 +438,7 @@ function detail(v0, view, id) {
   const region = spX("section", { class: "detail", id, "aria-labelledby": id + "-title", hidden: true }, spE("header", "detail__head", back, title, closeBtn),
     spE("div", "detail__body",
       spE("div", "detail__section", spE("h3", "detail__heading", tx("spools_fact_state")), facts),
+      hubHasHistory("activity") ? spE("div", "detail__section", spE("h3", "detail__heading", tx("spools_events_title")), eventsBox) : null,
       spE("div", "detail__section",
         spE("h3", "detail__heading", tx("spools_group_change")),
         actions(weight, weightGo, weightBox), actions(move, moveGo, moveBox), spE("div", "spools-act", spE("div", "spools-act__row", linkGo), linkBox),

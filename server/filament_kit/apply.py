@@ -38,6 +38,16 @@ SETUP_TMPFILES = "/etc/tmpfiles.d/filament-kit-setup.conf"
 SETUP_TMPFILES_TEXT = "d /run/filament-kit-setup 0750 root filament-kit -\n"
 DROPIN = "/etc/systemd/system/filament-kit-station.service.d/kit.conf"
 SPOOLMAN_DROPIN = "/etc/systemd/system/spoolman.service.d/kit.conf"
+# station.page_from (R83 01:14): which addresses the station's unit admits for its page, besides station.allow
+PAGE_FROM = ("home", "subnets", "allowed")
+HOME_RANGES = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "fc00::/7", "fe80::/10")
+PAGE_MARK = "# page_from="      # the drop-in says which value wrote it: an older drop-in has no such line
+PAGE_UNREAD = "(the subnets could not be read)"
+TEXT_PAGE_NOW_HOME = ("Weigh Station: its page now opens from computers on your home network; its data still answers "
+                      "only the Hub and a browser the Hub has let in. To keep it to the allow-list: "
+                      "sudo spoolwarden config set station.page_from allowed")
+TEXT_PAGE_UNREAD = ("Weigh Station: the subnets of this machine could not be read, so its page opens from the home "
+                    "network ranges, as for station.page_from home.")
 # udev applies rules in file-name order and the last GROUP= wins: the name sorts after the ops station's
 # 99-intake-station.rules (C-I1). OLD_UDEV_RULE is the kit's name before that; apply removes it.
 UDEV_RULE = "/etc/udev/rules.d/99-zz-filament-kit-station.rules"
@@ -160,13 +170,54 @@ def _volume(v) -> int:
     return max(0, min(100, v))
 
 
-def station_dropin(cfg: dict, addresses: list[str]) -> str:
+def own_subnets(*, run=subprocess.run) -> list[str] | None:
+    """The subnets this machine's own interfaces are on (global scope, loopback left out), read with `ip -j addr`, or
+    None when they cannot be read (no `ip`, no output, nothing found)."""
+    try:
+        data = json.loads(run(["ip", "-j", "addr"], capture_output=True, text=True, timeout=10, check=True,
+                              stdin=subprocess.DEVNULL).stdout)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    nets: list[str] = []
+    for ifc in data if isinstance(data, list) else []:
+        if not isinstance(ifc, dict) or "LOOPBACK" in (ifc.get("flags") or []):
+            continue
+        for ai in ifc.get("addr_info") or []:
+            if not isinstance(ai, dict) or ai.get("scope") != "global":
+                continue
+            try:
+                nets.append(str(ipaddress.ip_interface(f"{ai['local']}/{ai['prefixlen']}").network))
+            except (KeyError, ValueError):
+                continue
+    return _uniq(nets) or None
+
+
+def page_ranges(cfg: dict, subnets: Callable[[], list[str] | None] | None = None) -> tuple[str, list[str]]:
+    """(the value as the drop-in records it, the ranges besides station.allow) for station.page_from: `home`, the
+    private and link-local ranges; `subnets`, this machine's own (home's when they cannot be read); `allowed`, none."""
+    mode = config._merge(config.DEFAULTS["station"], cfg.get("station") or {}).get("page_from")
+    if mode not in PAGE_FROM:
+        raise ModuleError(f"station.page_from is {mode!r}; fix: use one of {', '.join(PAGE_FROM)}")
+    if mode == "allowed":
+        return mode, []
+    if mode == "subnets":
+        found = (subnets or own_subnets)()
+        if found:
+            return mode, found
+        return f"home {PAGE_UNREAD}", list(HOME_RANGES)
+    return mode, list(HOME_RANGES)
+
+
+def station_dropin(cfg: dict, addresses: list[str], *, subnets: Callable[[], list[str] | None] | None = None) -> str:
     """Text of the station drop-in (spec section 5); `addresses` are already resolved. The unit denies every
     address but these, so the paired server's addresses (its LAN IPs in an all-in-one) are let through too: the
-    flow calls the server there."""
+    flow calls the server there. Besides them it admits what station.page_from says (`page_ranges`): the page opens
+    from the home network unless the owner narrows it."""
     st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
+    mark, ranges = page_ranges(cfg, subnets)
     allow = _uniq(["127.0.0.1", *addresses])
     env = [f"STATION_ALLOW={' '.join(allow)}",
+           f"STATION_PAGE_RANGES={' '.join(ranges)}",
            f"STATION_PORT={int(st['port'])}",
            f"NFC_DEVICE={st['nfc_device']}",
            f"STATION_BEEP={1 if st['beep'] else 0}",
@@ -184,9 +235,28 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
     if server:          # the station asks this server to pair it (station/pair_request.py), as typed
         env += [f"STATION_SERVER={server}", f"STATION_SERVER_PORT={int(cfg.get('port', 8710))}"]
     env_line = "Environment=" + " ".join(_env_assign(e) for e in env)
-    ip_allow = " ".join(["localhost", *_uniq([*addresses, *paired_server_ips()])])
+    ip_allow = " ".join(["localhost", *_uniq([*ranges, *addresses, *paired_server_ips()])])
     # a port below 1024 (a new station on 443): the unit's empty capability sets get exactly CAP_NET_BIND_SERVICE
-    return f"[Service]\n{env_line}\nIPAddressAllow={ip_allow}\n{hubport.capability_lines(st['port'])}"
+    return (f"[Service]\n{env_line}\n{PAGE_MARK}{mark}\nIPAddressAllow={ip_allow}\n"
+            f"{hubport.capability_lines(st['port'])}")
+
+
+def _read_text(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return None
+
+
+def _dropin_says(old: str | None, new: str) -> None:
+    """What the apply tells about a station drop-in it has just changed (never said twice: the drop-in carries its
+    page_from line). `old` is None for a new install: nothing was open before, so nothing changed for anyone."""
+    if old == new:
+        return
+    if PAGE_UNREAD in new:
+        print(TEXT_PAGE_UNREAD)
+    if old is not None and PAGE_MARK not in old and f"{PAGE_MARK}allowed\n" not in new:
+        print(TEXT_PAGE_NOW_HOME)
 
 
 def _resolve_all(cfg: dict, resolve: Callable[[str], list[str]]) -> list[str]:
@@ -220,7 +290,8 @@ def _library_missing() -> bool:
         return False
 
 
-def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) -> list[Action]:
+def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve,
+         subnets: Callable[[], list[str] | None] | None = None) -> list[Action]:
     modules.validate(cfg)
     on = modules.enabled(cfg)
     # Resolve first: a failure must stop everything before any action is returned.
@@ -268,7 +339,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
             A("disable_ext", "ModemManager"),
             A("mask_sleep"),
             A("alsa_unmute"),
-            A("install_file", (DROPIN, station_dropin(cfg, addrs), "0644", "root:root")),
+            A("install_file", (DROPIN, station_dropin(cfg, addrs, subnets=subnets), "0644", "root:root")),
             A("install_unit", STATION_UNIT),
             *[A("install_unit", u) for u in _unit_files("filament-kit-station-pair.path")],
         ]
@@ -862,7 +933,10 @@ def _step(ex: _Exec, a: Action) -> None:
         ex.write(f"/etc/systemd/system/{arg}", (ex.resources / "systemd" / arg).read_bytes(), 0o644)
     elif k == "install_file":
         dest, content, mode, owner = arg
+        old = _read_text(_under(ex.root, dest)) if dest == DROPIN else None
         ex.write(dest, content.encode("utf-8"), int(mode, 8), owner)
+        if dest == DROPIN and not ex.dry:
+            _dropin_says(old, content)
     elif k == "remove_file":
         f = _under(ex.root, arg)
         if f.exists():
@@ -1015,19 +1089,18 @@ def execute(actions: list[Action], *, run: Callable[[list[str]], None] = run_che
 
 
 def refresh_station(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, root: Path = Path("/"),
-                    resolve: Callable[[str], list[str]] = default_resolve) -> str:
-    """After `spoolwarden station pair`: rewrite the station drop-in (its IPAddressAllow now names the paired
-    server) and restart the station, so the unit lets it reach the server. With the drop-in already right it does
+                    resolve: Callable[[str], list[str]] = default_resolve,
+                    subnets: Callable[[], list[str] | None] | None = None) -> str:
+    """After `spoolwarden station pair` or a change of station.allow or station.page_from: rewrite the station
+    drop-in (its IPAddressAllow names the paired server, the allow-list and what page_from admits) and restart the station, so the unit lets it reach the server. With the drop-in already right it does
     neither: a restart costs the reader about 6 s and resets the panel, and the running flow picks up new pairing
     files by itself (flow.api); a stopped station is started. Returns what it did: "restarted", "started" or
     "unchanged". Raises ApplyError or ModuleError."""
     modules.validate(cfg)
-    data = station_dropin(cfg, _resolve_all(cfg, resolve)).encode("utf-8")
+    data = station_dropin(cfg, _resolve_all(cfg, resolve), subnets=subnets).encode("utf-8")
     ex = _Exec(run, Path("."), Path(root))
-    try:
-        same = _under(ex.root, DROPIN).read_bytes() == data
-    except OSError:  # none yet, or unreadable: write it
-        same = False
+    old = _read_text(_under(ex.root, DROPIN))   # none yet, or unreadable: write it
+    same = old is not None and old.encode("utf-8") == data
     try:
         if same:
             if ex.probe(["systemctl", "is-active", "--quiet", STATION_UNIT]):
@@ -1039,6 +1112,8 @@ def refresh_station(cfg: dict, *, run: Callable[[list[str]], None] = run_checked
         ex.cmd(["systemctl", "restart", STATION_UNIT])
     except (subprocess.CalledProcessError, OSError) as e:
         raise ApplyError(f"station drop-in: {e}") from e
+    if not ex.dry:
+        _dropin_says(old, data.decode("utf-8"))
     return "restarted"
 
 
@@ -1126,7 +1201,7 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
         parts.append("Pair another phone: sudo spoolwarden pair")
     if "station" in on:
         st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
-        parts.append(f"Station: http://{host}.local:{int(st['port'])}/state")
+        parts.append(f"Station: {_station_address(host, st['port'])}")
     print("\n" + "   ".join(parts))
     if "server" in on and pairing and guided:
         _setup_line(cfg)                    # Guided Setup ends with the address, then the firewall line
@@ -1134,6 +1209,16 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
         _firewall_note(cfg, set(on))
     if "server" in on and pairing and not guided:
         _setup_line(cfg)
+
+
+def _station_address(host: str, port) -> str:
+    """The address the Weigh Station answers: https, with no port on 443 (hubport.url_port); plain http only for a
+    station that told the Hub it could not make its certificate."""
+    try:
+        plain = bool(pairing.station_plain_reason())
+    except (OSError, ValueError):
+        plain = False
+    return f"{'http' if plain else 'https'}://{host}.local{hubport.url_port(port)}/state"
 
 
 def _firewall_note(cfg: dict, on: set) -> None:

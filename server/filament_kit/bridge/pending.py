@@ -77,7 +77,7 @@ class Store:
         self._start_thread = start_thread
         self._jobs: dict[tuple[str, str], Job] = {}
         self._lock = threading.Lock()
-        self._sends: dict[tuple[str, str], threading.Lock] = {}
+        self._sends: dict[tuple[str, str], threading.RLock] = {}
         self._thread: threading.Thread | None = None
 
     # --- the API ---
@@ -85,7 +85,7 @@ class Store:
     def add(self, manager, sm, serial: str, label: str, spool_id, **kw) -> None:
         """Wait for the filament in `label`; replaces any older assignment of that slot."""
         key = (serial, label)
-        with self._send_lock(key), self._lock:
+        with self.slot_lock(serial, label), self._lock:
             old = self._jobs.get(key)
             self._jobs[key] = Job(manager, sm, int(spool_id), self.clock(), kw)
         log.info("pending %s %s spool %s: waiting for the filament to load%s", serial, label, spool_id,
@@ -95,7 +95,7 @@ class Store:
     def cancel(self, serial: str, label: str, why: str = "a newer assignment") -> bool:
         """Forget the assignment of that slot; a send of it in progress finishes first."""
         key = (serial, label)
-        with self._send_lock(key), self._lock:
+        with self.slot_lock(serial, label), self._lock:
             job = self._jobs.pop(key, None)
         if job is not None:
             log.info("dropped %s %s spool %s: %s", serial, label, job.spool_id, why)
@@ -116,9 +116,10 @@ class Store:
 
     # --- the watcher ---
 
-    def _send_lock(self, key) -> threading.Lock:
+    def slot_lock(self, serial: str, label: str):
+        """Serialize writes and pending assignment changes for a slot, under the spool lock for loads."""
         with self._lock:
-            return self._sends.setdefault(key, threading.Lock())
+            return self._sends.setdefault((serial, label), threading.RLock())
 
     def _ensure_thread(self) -> None:
         if not self._start_thread:
@@ -193,8 +194,11 @@ class Store:
         self._send(key, job)
 
     def _send(self, key, job: Job) -> None:
+        from . import auto_slot
+
         serial, label = key
-        with self._send_lock(key):
+        auto = auto_slot.default_store()
+        with auto.spool_lock(job.spool_id), self.slot_lock(serial, label):
             with self._lock:
                 if self._jobs.get(key) is not job:
                     return                           # replaced or cancelled meanwhile: stale, not sent
@@ -204,6 +208,7 @@ class Store:
                 return self._end(key, job, f"refused: {e}")
             except Exception as e:  # noqa: BLE001 - busy, offline, slot in use ...: not a send, try again
                 return self._wait(key, job, type(e).__name__, f"{type(e).__name__}: {e}")
+            auto.cancel_for_spool(job.spool_id)
             job.waiting = None
             job.sends += 1
             p = (r or {}).get("preset") or {}
@@ -224,21 +229,27 @@ def load_or_wait(manager, sm, serial: str, label: str, spool_id, dry: bool, *, s
     """`loading.load`, except that a real load of a slot that is not clearly loaded waits (see the module doc):
     the reply is the dry-run plan with `pending: true`, `confirmed: null` and a `message`; nothing was sent and
     Spoolman is unchanged. A load that goes at once cancels the slot's older waiting assignment."""
+    from . import auto_slot
+    if auto_slot.is_reserved_label(label):
+        raise ValueError("'auto' is a reserved slot label")
     store = store or STORE
     if dry:
         return loading.load(manager, sm, serial, label, spool_id, True, **kw)
-    if (manager.status(serial) or {}).get("presence") == "tray_type":
-        store.cancel(serial, loading._label(serial, label))     # no presence sensor: present can never show
-        return loading.load(manager, sm, serial, label, spool_id, False, **kw)    # loaded, so send at once
     lab = loading._label(serial, label)
-    found = slot_view(manager, serial, lab)
-    if found is not None and is_loaded(*found):
-        store.cancel(serial, lab)
-        return loading.load(manager, sm, serial, label, spool_id, False, **kw)
-    plan = loading.load(manager, sm, serial, label, spool_id, True, **kw)     # the same refusals as a real load
-    store.add(manager, sm, serial, lab, spool_id, **kw)
-    return {**plan, "dry_run": False, "pending": True, "confirmed": None,
-            "message": f"waiting for the spool to load in slot {lab}"}
+    auto = auto_slot.default_store()
+    with auto.spool_lock(spool_id), store.slot_lock(serial, lab):
+        no_sensor = (manager.status(serial) or {}).get("presence") == "tray_type"
+        found = None if no_sensor else slot_view(manager, serial, lab)
+        if no_sensor or (found is not None and is_loaded(*found)):
+            result = loading.load(manager, sm, serial, label, spool_id, False, **kw)
+            store.cancel(serial, lab)
+        else:
+            plan = loading.load(manager, sm, serial, label, spool_id, True, **kw)  # same refusals as a real load
+            store.add(manager, sm, serial, lab, spool_id, **kw)
+            result = {**plan, "dry_run": False, "pending": True, "confirmed": None,
+                      "message": f"waiting for the spool to load in slot {lab}"}
+        auto.cancel_for_spool(spool_id)
+        return result
 
 
 def _end_for(serial: str, label: str, dry: bool, why: str, store: Store) -> bool:
@@ -253,6 +264,9 @@ def _end_for(serial: str, label: str, dry: bool, why: str, store: Store) -> bool
 def unload(manager, sm, serial: str, label: str, dry: bool, *, store: Store | None = None, **kw) -> dict:
     """`loading.unload`, which also ends the slot's waiting assignment: the result gains `waiting_ended` (on a dry
     run: the assignment would end)."""
+    from . import auto_slot
+    if auto_slot.is_reserved_label(label):
+        raise ValueError("'auto' is a reserved slot label")
     store = store or STORE
     lab = loading._label(serial, label)
     r = loading.unload(manager, sm, serial, label, dry, **kw)
@@ -263,6 +277,9 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, store: Store | No
 def clear_slot(manager, sm, serial: str, label: str, dry: bool, *, store: Store | None = None, **kw) -> dict:
     """Clear slot `label` (`loading.clear`): a waiting assignment for it ends, then the recorded spool goes back
     where it was. The answer of the kit route (`loading.clear_view`). A refused clear (slot in use) ends nothing."""
+    from . import auto_slot
+    if auto_slot.is_reserved_label(label):
+        raise ValueError("'auto' is a reserved slot label")
     store = store or STORE
     lab = loading._label(serial, label)
     r = loading.clear(manager, sm, serial, label, dry, **kw)

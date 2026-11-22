@@ -65,10 +65,24 @@ class StubHub:
         if scope["type"] != "http" or not path.startswith("/setup/api/"):
             return await self.app(scope, receive, send)
         name = path[len("/setup/api/"):]
+        if name == "state":
+            chunks, status = [], 200
+
+            async def capture(msg):
+                nonlocal status
+                if msg["type"] == "http.response.start":
+                    status = msg["status"]
+                elif msg["type"] == "http.response.body":
+                    chunks.append(msg.get("body", b""))
+
+            await self.app(scope, receive, capture)
+            data = json.loads(b"".join(chunks))
+            data["history"] = {**(data.get("history") or {}), "activity": True, "report": True, "event_undo": True, "exports": ["activity"]}
+            return await self.reply(send, status, data)
         if name == "logs" or name == "logs/units":
             self.calls.append((name, None))
             return await self.app(scope, receive, send)
-        if not (name == "activity" or name in ("report", "report/download") or (name.startswith("events/") and name.endswith("/undo"))):
+        if not (name == "activity" or name == "export/activity.csv" or name in ("report", "report/download") or (name.startswith("events/") and name.endswith("/undo"))):
             return await self.app(scope, receive, send)
         body = b""
         while True:
@@ -85,6 +99,15 @@ class StubHub:
                 rows = [e for e in rows if e["kind"] in q["kinds"].split(",")]
             rows = sorted(rows, key=lambda e: -e["id"])[:int(q["limit"])]
             return await self.reply(send, 200, {"events": rows, "next": max((e["id"] for e in self.rows), default=0), "oldest": min((e["id"] for e in self.rows), default=0)})
+        if name == "export/activity.csv":
+            q = {k: v[0] for k, v in parse_qs(scope["query_string"].decode()).items()}
+            hdrs = {k.lower(): v.decode() for k, v in scope.get("headers") or []}
+            has_code = hdrs.get(b"x-setup-code") == CODE
+            self.calls.append(("export/activity.csv", q, "code" if has_code else "no code"))
+            if not has_code:
+                return await self.reply(send, 403, {"error": "the setup code is needed", "field": "code"})
+            return await self.reply(send, 200, b"time,who,kind,subject,text\n", "text/csv; charset=utf-8",
+                                    [(b"content-disposition", b'attachment; filename="activity.csv"')])
         self.calls.append((name, "code" if sent.get("code") == CODE else "no code"))
         if sent.get("code") != CODE:
             return await self.reply(send, 403, {"error": "the setup code is needed", "field": "code"})
@@ -105,8 +128,18 @@ class StubHub:
 
 
 @pytest.fixture
-def stubbed(hub_app):  # noqa: F811
+def stubbed(request, monkeypatch):
     """The Hub page served through the stub: (the page's address, the stub)."""
+    from filament_kit import setup_console
+
+    mounted = setup_console.routes
+    monkeypatch.setattr(setup_console, "routes", lambda page: mounted(page) + [
+        (path, page.guard(page.state), method) for path, method in [
+            ("/activity", "GET"), ("/export/activity.csv", "GET"), ("/events/{id}/undo", "POST"),
+            ("/report", "POST"), ("/report/download", "POST"),
+        ]
+    ])
+    hub_app = request.getfixturevalue("hub_app")
     stub = StubHub(hub_app[0], events())
     running = _serve(AsHttps(stub), hub_app[1])
     try:
@@ -253,7 +286,7 @@ out.focus = document.activeElement.dataset ? document.activeElement.dataset.id :
 
 def test_a_refused_undo_says_the_hubs_reason_and_the_row_then_says_it_too(stubbed, tmp_path):
     url, stub = stubbed
-    stub.undo["9"] = (409, {"error": "changed_since", "text": CHANGED})
+    stub.undo["9"] = (409, {"error": CHANGED, "code": "changed_since", "text": "NOT THIS", "message": "NOT THIS"})
     page = drive(url, tmp_path, r"""
 await unlock();
 $(".btn", cellOf(rowOf(9), "actions")).click();
@@ -312,7 +345,10 @@ await until(() => grabbed.length, "the download");
 out.grabbed = await Promise.all(grabbed);
 out.result = text($(".logs__report .result"));
 """)
-    assert page["grabbed"] == [{"name": "hub-report-2026-11-17.txt", "type": "text/plain; charset=utf-8", "text": stub.report_text}]
+    assert len(page["grabbed"]) == 1
+    assert page["grabbed"][0]["name"] == "hub-report-2026-11-17.txt"
+    assert page["grabbed"][0]["type"].split(";")[0] == "text/plain"
+    assert page["grabbed"][0]["text"] == stub.report_text
     assert [c for c in stub.calls if c[0].startswith("report")] == [("report/download", "code")]
     assert page["result"] in (None, "")
 
@@ -401,3 +437,58 @@ def test_the_table_is_readable_in_all_four_looks(stubbed, tmp_path, width):
             assert i["btn"] is None or (i["btn"]["inside"] and i["btn"]["h"] < 64 and i["btn"]["w"] >= 32), (where, i["id"], i["btn"])
         assert {i["id"] for i in s["items"] if i["btn"]} == {"9", "6"}, where
         assert all(w >= 120 for w in s["filters"]), (where, "a filter is squeezed", s["filters"])
+
+
+def test_activity_menu_downloads_csv_with_the_code_and_hides_on_service_logs(stubbed, tmp_path):
+    url, stub = stubbed
+    page = drive(url, tmp_path, r"""
+const downloads = [];
+HTMLAnchorElement.prototype.click = function () { if (this.hasAttribute("download")) { downloads.push(this.getAttribute("download")); return; } return HTMLElement.prototype.click.call(this); };
+const more = () => $(".logs__actmore");
+out.label = more().getAttribute("aria-label");
+more().click();
+await until(() => $(".menu__heading"), "the activity menu");
+out.heading = text($(".menu__heading"));
+out.items = $$(".menu__item").map(text);
+// locked: asks for the code first, sends nothing
+$('.menu__item[data-action="download-csv-7"]').click();
+const dlg = await until(unlockDialog, "the unlock dialog");
+out.locked = { dialog: !!dlg, lock: SW.lock.state };
+$('[data-action="cancel"]', dlg).click();
+await until(() => !unlockDialog(), "dialog closed");
+await unlock();
+for (const act of ["download-csv-7", "download-csv-30", "download-csv-365"]) {
+  more().click();
+  await until(() => $(`.menu__item[data-action="${act}"]`), act);
+  $(`.menu__item[data-action="${act}"]`).click();
+}
+await until(() => downloads.length === 3, "three csv files");
+out.files = downloads;
+// switching to Service logs hides the Activity page menu; switching back restores it
+$('input[name="logs-view"][value="service"]').click();
+await until(() => !$(".logs__actmore"), "hidden on service logs");
+out.onService = !!$(".logs__actmore");
+$('input[name="logs-view"][value="activity"]').click();
+await until(() => $(".logs__actmore"), "restored on activity");
+out.onActivity = !!$(".logs__actmore");
+// refused download reads error, never text or message
+const inner = window.fetch.bind(window);
+window.fetch = async (u, i) => (String(u).includes("export/activity.csv") ? new Response(JSON.stringify({ error: "the file is not for this page", text: "NOT THIS", message: "NOT THIS" }), { status: 403, headers: { "Content-Type": "application/json" } }) : inner(u, i));
+more().click();
+await until(() => $('.menu__item[data-action="download-csv-7"]'), "next menu");
+$('.menu__item[data-action="download-csv-7"]').click();
+await until(() => $(".toast__text"), "refusal toast");
+out.refused = text($(".toast__text"));
+""")
+    assert page["label"] == "More actions for Activity"
+    assert page["heading"] == "Download as CSV" and page["items"] == ["Last 7 days", "Last 30 days", "Last 12 months"]
+    assert page["locked"] == {"dialog": True, "lock": "locked"}
+    assert page["files"] == ["activity.csv", "activity.csv", "activity.csv"]
+    assert page["onService"] is False and page["onActivity"] is True
+    assert page["refused"] == "Could not download the file: The file is not for this page."
+    csv_calls = [c for c in stub.calls if c[0] == "export/activity.csv"]
+    assert csv_calls == [
+        ("export/activity.csv", {"days": "7"}, "code"),
+        ("export/activity.csv", {"days": "30"}, "code"),
+        ("export/activity.csv", {"days": "365"}, "code"),
+    ]

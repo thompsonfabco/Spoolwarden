@@ -10,6 +10,9 @@ Printers routes have them.
         action: pause | resume | stop | light_on | light_off; `stop` needs `confirm: true`. Answers {ok: true, reply} or a refusal:
         409 `not_supported` (the printer has no such control), 409 `printer_offline`, 409 `refused` (the printer said no, its words
         in `error`), 504 `no_reply`
+    POST printers/{serial}/slots/auto/load {code, spool_id[, dry_run]}   the Automatic slot choice route (registered before `{label}`)
+    POST printers/{serial}/auto/choose {code, slot}                     pick which slot when two slots changed at once
+    POST printers/{serial}/auto/cancel {code}                           stop waiting for an Automatic load
     POST printers/{serial}/slots/{label}/load {code, spool_id[, dry_run]}   POST .../unload {code[, dry_run]}   POST .../clear {code[, dry_run]}
         as the kit routes answer (dry_run defaults to true); a load of a slot not loaded yet answers `pending: true`. A refusal is 409
         with `code` (slot_in_use, printer_busy, no_preset, needs_developer_mode ...) and its sentence in `error`
@@ -43,6 +46,11 @@ from ..bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, NoReply, Printer
 from ..bridge.slottest import NoStatus, PrinterBusy
 from ..spoolman import Spoolman, SpoolmanError
 
+try:
+    from ..bridge import auto_slot
+except ImportError:  # AS1 adds bridge/auto_slot.py beside this step
+    auto_slot = None  # type: ignore[assignment]
+
 LABEL = re.compile(r"[A-Za-z0-9-]{1,16}")
 SESSION_COOKIE = "fk_setup_camera"      # R83 ruled 22:20; a session cookie (no Max-Age): the Hub's memory decides the end
 MAX_DAYS = 366.0
@@ -61,10 +69,29 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
     def hub():
         return camera_hub if camera_hub is not None else getattr(page, "camera_hub", None)
 
+    def auto_mod():
+        if auto_slot is not None:
+            return auto_slot
+        try:
+            from ..bridge import auto_slot as mod
+        except ImportError:
+            return None
+        return mod
+
+    def is_auto_label(label: str) -> bool:
+        mod = auto_mod()
+        fn = getattr(mod, "is_reserved_label", None)
+        return bool(fn(label)) if callable(fn) else str(label).strip().lower() == "auto"
+
     def refused(e: Exception) -> Refused | None:
         """The bridge's errors as the page's refusals, with the kit routes' codes beside the sentence (None: not one of them)."""
         def r(status, code, text=None):
             return Refused(status, text if text is not None else str(e), code=code)
+        mod = auto_mod()
+        err_types = tuple(t for t in (getattr(mod, "AutoError", None), getattr(mod, "NoSlot", None)) if isinstance(t, type))
+        if err_types and isinstance(e, err_types):
+            code = getattr(e, "code", None) or "auto_not_possible"
+            return r(409, str(code), str(getattr(e, "message", None) or e))
         if isinstance(e, usage.UsageError):
             return r(e.status, e.code)
         if isinstance(e, mapping.AlreadyRunning):
@@ -141,7 +168,27 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
             summary = printers.summary(serial)
         except Exception:  # noqa: BLE001 - one odd report must not fail the view
             summary = None
-        status = pending.annotate(serial, printers.status(serial))
+        try:
+            raw_status = printers.status(serial)
+        except KeyError:
+            raw_status = None
+        status = pending.annotate(serial, raw_status)
+        mod = auto_mod()
+        if status is not None and "auto_possible" not in status:
+            if mod is not None and hasattr(mod, "annotate"):
+                status = mod.annotate(serial, status)
+            elif mod is not None and hasattr(mod, "default_store") and hasattr(mod.default_store(), "annotate"):
+                status = mod.default_store().annotate(serial, status)
+            else:
+                status = {**status}
+                status.setdefault("auto_possible", False)
+                if "ams" in status and isinstance(status["ams"], list):
+                    status["ams"] = [
+                        {**u, "slots": [({**sl, "watchable": sl.get("watchable", False)} if isinstance(sl, dict) else sl)
+                                        for sl in (u.get("slots") or [])]}
+                        if isinstance(u, dict) else u
+                        for u in status["ams"]
+                    ]
         kf = klipper_of(serial)
         light = False
         if kf is not None:
@@ -152,8 +199,13 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
         elif status is not None:
             light = status.get("light") is not None
         cam = kf.camera_kind(serial) if kf is not None else camera_kind_of(p)
-        return {"summary": summary, "status": status, "state": state, "family": p.family, "name": registry.display_name(p),
+        view = {"summary": summary, "status": status, "state": state, "family": p.family, "name": registry.display_name(p),
                 "camera": {"kind": cam}, "controls": {"light": light}}
+        if status is None and hasattr(mod, "default_store"):
+            store = mod.default_store()
+            if hasattr(store, "active_view") and (active := store.active_view(serial)) is not None:
+                view["auto"] = active
+        return view
 
     def camera_kind_of(p):
         from ..bridge.models import camera_kind
@@ -187,6 +239,8 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
     # ---- slots ----
     def label_of(request: Request) -> str:
         label = request.path_params["label"]
+        if is_auto_label(label):
+            raise Refused(400, '"auto" is reserved for Automatic slot choice, not a slot label', field="label", code="invalid_slot")
         if not LABEL.fullmatch(label):
             raise Refused(404, f"no slot {label!r}", code="not_found")
         return label
@@ -213,7 +267,11 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
             known(serial)
             kf = klipper_of(serial)
             if kf is not None:
-                r = kf.load(spoolman(), serial, label, spool_id, dry, sealed_location=sealed())
+                load_named = getattr(auto_mod(), "load_named_klipper", None)
+                if load_named is None:
+                    r = kf.load(spoolman(), serial, label, spool_id, dry, sealed_location=sealed())
+                else:
+                    r = load_named(kf, spoolman(), serial, label, spool_id, dry, sealed_location=sealed())
                 return {**r, "confirmed": r.get("confirmed") if dry else bool(r.get("confirmed"))}
             if page.printers.state(serial) == "cert_changed":
                 raise mapping.CertChanged(serial)
@@ -265,6 +323,82 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
         r = await call(run)
         if not dry:
             page.audit(request, f"printer {serial} slot {label} cleared")
+        return r
+
+    async def auto_load(request, body):
+        serial = page._serial(request)
+        spool_id = body.get("spool_id")
+        if not isinstance(spool_id, int) or isinstance(spool_id, bool):
+            raise Refused(400, "spool_id must be a whole number", field="spool_id")
+        dry = dry_of(body)
+
+        def run() -> dict:
+            known(serial)
+            if page.printers.state(serial) == "cert_changed" and klipper_of(serial) is None:
+                raise mapping.CertChanged(serial)
+            not_mapping(serial)
+            mod = auto_mod()
+            if mod is None:
+                raise Refused(409, "This printer has no slots the Hub can watch. Choose a slot.", code="auto_not_possible")
+            try:
+                r = mod.default_store().start(page.printers, spoolman(), serial, spool_id, dry=dry)
+            except ValueError as e:
+                raise Refused(409, str(e), code="auto_not_possible") from e
+            return r if isinstance(r, dict) else dict(r)
+        r = await call(run)
+        if not dry:
+            page.audit(request, f"printer {serial} automatic slot load, spool {spool_id}")
+        return r
+
+    async def auto_choose(request, body):
+        serial = page._serial(request)
+        slot = body.get("slot")
+        if not isinstance(slot, str) or not slot.strip():
+            raise Refused(400, "slot must be a slot label", field="slot")
+        slot = slot.strip()
+        if is_auto_label(slot) or not LABEL.fullmatch(slot):
+            raise Refused(400, "slot must be a valid slot label", field="slot", code="invalid_slot")
+
+        def run() -> dict:
+            known(serial)
+            if page.printers.state(serial) == "cert_changed" and klipper_of(serial) is None:
+                raise mapping.CertChanged(serial)
+            not_mapping(serial)
+            mod = auto_mod()
+            if mod is None:
+                raise Refused(409, "No spool is waiting to be chosen on this printer.", code="nothing_to_choose")
+            try:
+                return mod.default_store().choose(page.printers, spoolman(), serial, slot)
+            except loading.SlotWriteFailed as e:
+                if page.printers.state(serial) == "needs_developer_mode" or DEVELOPER_MODE_REASON.search(str(e)):
+                    raise Refused(409, f"{e}; turn on Developer Mode (LAN-only mode) on the printer and try again",
+                                  code="needs_developer_mode") from e
+                raise Refused(409, str(e), code="write_refused") from e
+            except ValueError as e:
+                raise Refused(409, str(e), code="nothing_to_choose") from e
+        r = await call(run)
+        page.audit(request, f"printer {serial} automatic slot chose {slot}")
+        return r
+
+    async def auto_cancel(request, body):
+        serial = page._serial(request)
+
+        def run() -> dict:
+            known(serial)
+            mod = auto_mod()
+            if mod is None:
+                raise Refused(409, "No spool is waiting to be loaded automatically on this printer.", code="not_waiting")
+            try:
+                r = mod.default_store().cancel(serial)
+            except ValueError as e:
+                raise Refused(409, str(e), code="not_waiting") from e
+            if isinstance(r, bool):
+                if not r:
+                    raise Refused(409, "No spool is waiting to be loaded automatically on this printer.", code="not_waiting")
+                return {"cancelled": True}
+            return r if isinstance(r, dict) else {"cancelled": True}
+        r = await call(run)
+        page.audit(request, f"printer {serial} automatic slot stopped")
         return r
 
     # ---- Filament used ----
@@ -363,8 +497,10 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
 
     one = "/printers/{serial}"
     return [(one + "/live", g(live), "GET"), (one + "/command", w(command), "POST"),
+            (one + "/slots/auto/load", w(auto_load), "POST"),
             (one + "/slots/{label}/load", w(slot_load), "POST"), (one + "/slots/{label}/unload", w(slot_unload), "POST"),
             (one + "/slots/{label}/clear", w(slot_clear), "POST"),
+            (one + "/auto/choose", w(auto_choose), "POST"), (one + "/auto/cancel", w(auto_cancel), "POST"),
             (one + "/usage", g(usage_list), "GET"), ("/usage/{entry_id}/undo", w(usage_undo), "POST"),
             (one + "/camera/ticket", w(ticket), "POST"), (one + "/camera/close", g(close), "POST"),
             (one + "/camera.mjpeg", g(mjpeg), "GET"), (one + "/camera/{name:path}", g(hls), "GET")]

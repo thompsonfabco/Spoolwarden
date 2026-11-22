@@ -217,8 +217,19 @@ const sections = h("div");
 // A section's own parts of the page header (02 2.1): `meta`, a line under the title, and `actions`, its buttons at the right.
 // Drawn again with the section's region; cleared when the section is drawn again or another opens.
 let headParts = [];
+let webMenuTrigger;
+const hubWebUrl = "/intake";
+const hubWebMenuItem = () => ({ label: SW.t("start_open_web_app"), run: () => window.open(hubWebUrl, "_blank", "noopener") });
 function pageHead(meta, actions) {
   for (const el of headParts) el.remove();
+  if (webMenuTrigger) webMenuTrigger.remove();
+  if (S?.passphrase.web && (tabNow() !== "printers" || !S.printers.on)) {
+    const label = SW.t("common_page_actions");
+    webMenuTrigger = SW.iconBtn("more", label, {});
+    SW.menu(webMenuTrigger, [hubWebMenuItem()], { label });
+    if (!actions) actions = h("div", { class: "page-head__actions" });
+    actions.append(webMenuTrigger);
+  }
   headParts = [meta, actions].filter(Boolean);
   if (meta) pageTitle.after(meta);
   if (actions) page.firstElementChild.append(actions);
@@ -301,6 +312,8 @@ function redraw(r, sent) {
 const TABS = {
   overview: ["nav_overview", "overview", () => [overviewTab]],
   printers: ["nav_printers", "printer", () => printersTab()],
+  spools: ["nav_spools", "spool", () => spoolsTab()],
+  analytics: ["nav_analytics", "scale", () => [analyticsTab]],
   recent: ["nav_recently_added", "recent", () => [intakeTab]],
   devices: ["nav_devices", "devices", () => [pairCard, stationAsksCard, webAppCard, readersCard, trustCard]],
   presets: ["nav_slicer_presets", "presets", () => [presetsTab]],
@@ -310,7 +323,7 @@ const TABS = {
   updates: ["nav_updates", "updates", () => [updatesTab]],
   logs: ["nav_logs", "logs", () => [logsTab]],
 };
-const GROUPS = [["everyday", "nav_everyday", 0, 5], ["system", "nav_system", 5, 10]];
+const GROUPS = [["everyday", "nav_everyday", 0, 7], ["system", "nav_system", 7, 12]];
 const BAR = new Set(["overview", "printers", "recent", "settings"]);   // the phone bottom bar (02 2.4); the rest are in More
 const MOVED = { modules: "features", intake: "recent" };              // the tabs' old addresses
 // the document title: the section's name, and a place inside it (a Settings group) first
@@ -346,6 +359,7 @@ async function refresh(at, sent) {
   hubName.replaceChildren(S.server_name);
   hubVersion.replaceChildren(SW.h("span", { class: "sr", text: SW.t("topbar_version_prefix") }), S.version);
   SW.configure({ hub: S.server_name, noCode: !S.code_set });
+  hubReadHistorySummaries();
   if (!at) render();
   else if (r && r.isConnected) {
     const also = r._make.also && [...sections.children].find((x) => x._make === r._make.also);
@@ -398,7 +412,7 @@ function navItem(s) {
 // the live summaries of the More sheet, from the replies the page already has (02 12: a section without data shows none)
 function summaries() {
   const put = (s, text) => { const el = navEl.querySelector(`a[href="#${s}"] .nav__summary`); if (el) el.textContent = text || ""; };
-  if (S.summaries) { for (const s of Object.keys(TABS)) put(s, S.summaries[s]); return; }      // the Hub's own lines (N7)
+  if (S.summaries) { for (const s of Object.keys(TABS)) put(s, hubHistorySummary[s] ?? S.summaries[s]); return; }      // the Hub's own lines (N7)
   const P = S.printers.on ? S.printers.list.filter((p) => p.configured) : [];      // an older Hub: what the page can tell
   const up = P.filter((p) => p.state === "connected").length;
   put("printers", P.length ? SW.t("nav_summary_printers", { connected: up, offline: P.length - up }) : "");

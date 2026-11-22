@@ -339,7 +339,17 @@ def _is_slot_location(loc: str) -> bool:
     return any(loc.startswith(f"{n} {status.DASH} ") for n in registry.klipper_names())
 
 
-def _send_back(sm, spools: list[dict], sealed: str, dry: bool) -> list[dict]:
+def _slot_from_location(loc: str | None) -> str:
+    loc = loc or ""
+    if SLOT_MARK in loc:
+        return loc.split(SLOT_MARK, 1)[1].strip()
+    if f" {status.DASH} " in loc:
+        return loc.split(f" {status.DASH} ", 1)[1].strip()
+    return ""
+
+
+def _send_back(sm, spools: list[dict], sealed: str, dry: bool, *, kind: str = "spool.unloaded",
+               slot: str | None = None) -> list[dict]:
     """Move each spool to its prev_location (or the sealed location) and clear the prev_location."""
     out = []
     for s in sorted(spools, key=lambda s: s["id"]):
@@ -347,8 +357,12 @@ def _send_back(sm, spools: list[dict], sealed: str, dry: bool) -> list[dict]:
         if not dry:
             sm.patch(f"spool/{s['id']}", {"location": dest,
                                           "extra": {**(s.get("extra") or {}), "prev_location": json.dumps("")}})
-            event_sink.emit_spool("spool.unloaded", s, s["id"], before_location=s.get("location"),
-                                  after_location=dest)
+            if kind == "slot.cleared":
+                event_sink.emit_spool("slot.cleared", s, s["id"], slot=slot or _slot_from_location(s.get("location")),
+                                      before_location=s.get("location"), after_location=dest)
+            else:
+                event_sink.emit_spool("spool.unloaded", s, s["id"], before_location=s.get("location"),
+                                      after_location=dest, before_slot=slot or _slot_from_location(s.get("location")))
         out.append({"id": s["id"], "location": dest})
     return out
 
@@ -363,7 +377,8 @@ def report_loaded(before: dict, patch: dict, label: str) -> None:
     """spool.loaded for a spool a load just moved into slot `label` (`patch` is `_target_patch`'s; empty: no move)."""
     if patch:
         event_sink.emit_spool("spool.loaded", before, before.get("id"), before_location=before.get("location"),
-                              after_location=patch["location"], after_slot=label)
+                              after_location=patch["location"], before_slot=_slot_from_location(before.get("location")),
+                              after_slot=label)
 
 
 def _target_patch(s: dict, loc: str) -> dict:
@@ -439,7 +454,7 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
             result["problems"].append(f"{label}: not confirmed (no report showed the new setting within "
                                       f"{CONFIRM_TIMEOUT:g} s)")
             log.warning("load on %s: %s not confirmed", serial, label)
-        with inventory._LOCK, event_sink.batch_scope():       # what leaves and what enters: one batch
+        with event_sink.capture() as cap, inventory._LOCK, event_sink.batch_scope():       # what leaves and what enters: one batch
             moved = _send_back(sm, _occupants(sm, loc, spool["id"], old_loc), sealed_location, dry=False)
             fresh = sm.get(f"spool/{spool['id']}")
             patch = _target_patch(fresh, loc)
@@ -447,7 +462,9 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
                 sm.patch(f"spool/{spool['id']}", patch)
                 report_loaded(fresh, patch, label)
             final = sm.get(f"spool/{spool['id']}")
-    return {**result, "spool": final, "confirmed": confirmed, "moved_back": moved}
+    ev = cap[-1] if cap else None
+    return {**result, "spool": final, "confirmed": confirmed, "moved_back": moved,
+            **({"event_id": ev["id"], "event": ev} if ev else {})}
 
 
 def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: str = SEALED) -> dict:
@@ -468,18 +485,20 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: 
     if why:
         raise SlotInUse(f"{why}; unload it once the print is done")
     guard = mapping.load_guard(serial) if not dry else contextlib.nullcontext()
-    with guard, _slot_lock(serial, label), inventory._LOCK, event_sink.batch_scope():
+    with event_sink.capture() as cap, guard, _slot_lock(serial, label), inventory._LOCK, event_sink.batch_scope():
         here = _occupants(sm, loc, also=old_loc)
         if not here:
             raise NotFound(f"no spool is in {name} slot {label}")
-        moved = _send_back(sm, here, sealed_location, dry)
+        moved = _send_back(sm, here, sealed_location, dry, slot=label)
         first = min(here, key=lambda s: s["id"])
         if dry:
             spool = {**first, "location": moved[0]["location"],
                      "extra": {**(first.get("extra") or {}), "prev_location": json.dumps("")}}
         else:
             spool = sm.get(f"spool/{first['id']}")
-    return {"spool": spool, "slot": slot, "preset": None, "dry_run": bool(dry), "moved_back": moved}
+    ev = cap[-1] if (not dry and cap) else None
+    return {"spool": spool, "slot": slot, "preset": None, "dry_run": bool(dry), "moved_back": moved,
+            **({"event_id": ev["id"], "event": ev} if ev else {})}
 
 
 STILL_SHOWS = "The printer still shows the old filament for this slot until a spool is loaded."   # R83, ruled 20:33
@@ -506,9 +525,11 @@ def clear(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: s
     if why:
         raise SlotInUse(f"{why}; clear it once the print is done")
     guard = mapping.load_guard(serial) if not dry else contextlib.nullcontext()
-    with guard, _slot_lock(serial, label), inventory._LOCK, event_sink.batch_scope():
+    with event_sink.capture() as cap, guard, _slot_lock(serial, label), inventory._LOCK, event_sink.batch_scope():
         here = _occupants(sm, loc, also=old_loc)
-        moved = _send_back(sm, here, sealed_location, dry) if here else []
+        moved = _send_back(sm, here, sealed_location, dry, kind="slot.cleared", slot=label) if here else []
+        if not here and not dry:
+            event_sink.emit("slot.cleared", {"type": "printer", "id": serial, "name": name}, {"slot": label})
         first = min(here, key=lambda s: s["id"]) if here else None
         if first is None:
             spool = None
@@ -517,8 +538,9 @@ def clear(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: s
                      "extra": {**(first.get("extra") or {}), "prev_location": json.dumps("")}}
         else:
             spool = sm.get(f"spool/{first['id']}")
+    ev = cap[-1] if (not dry and cap) else None
     return {"slot": slot, "spool": spool, "moved_back": moved, "printer_cleared": False, "dry_run": bool(dry),
-            "text": STILL_SHOWS}
+            "text": STILL_SHOWS, **({"event_id": ev["id"], "event": ev} if ev else {})}
 
 
 def clear_view(r: dict, waiting_ended: bool) -> dict:
@@ -530,7 +552,8 @@ def clear_view(r: dict, waiting_ended: bool) -> dict:
     return {"slot": r["slot"]["label"], "spool": inventory.spool_view(sp) if sp else None,
             "moved_back": moved[0]["location"] if moved else None, "waiting_ended": bool(waiting_ended),
             "printer_cleared": bool(r.get("printer_cleared")), "dry_run": bool(r["dry_run"]),
-            **({"text": r["text"]} if r.get("text") else {})}
+            **({"text": r["text"]} if r.get("text") else {}),
+            **({"event_id": r["event_id"]} if "event_id" in r else {})}
 
 
 # the Spoolman moves, shared with the Klipper family (bridge.klipper.loads)

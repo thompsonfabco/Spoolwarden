@@ -65,6 +65,20 @@ function tile(name, to, value, line, off) {
     h("span", { class: "tile__value" + (off ? " muted" : ""), textContent: off ? SW.t("common_switched_off") : null }, off ? null : value),
     off || !line ? null : h("span", { class: "tile__line muted", textContent: line })));
 }
+function overviewStart() {
+  const checklist = h("div"), todo = h("div", { hidden: true }, todoCard());
+  gettingStartedCard(checklist, {
+    hubName: S.server_name,
+    onChange: (r) => { todo.hidden = Boolean(r?.show); },
+    api: async (body) => {
+      if (body === undefined) return api("start");
+      let answer;
+      await needCode(async () => { answer = await api("start", { ...body, code: theCode() }); });
+      return answer;
+    },
+  });
+  return h("div", {}, checklist, todo);
+}
 function printersTile() {
   const P = S.printers.on ? S.printers.list.filter((p) => p.configured) : [];
   const up = P.filter((p) => p.state === "connected").length, down = P.length - up;
@@ -87,15 +101,23 @@ function recentTile() {
   }, () => none("overview_tile_recent_error")));
   return t;
 }
+function devicesTile() {
+  const list = tile(SW.t("nav_devices"), "#devices", SW.t("overview_tile_devices_paired", { count: S.devices.length }),
+    SW.t("overview_tile_devices_readers", { count: S.readers.list.length }), false);
+  later(api("devices").then((r) => {
+    const count = r.devices.filter((d) => d.out_of_date).length;
+    if (count) list.querySelector("a").append(SW.status("needs_look", { small: true, text: SW.t("overview_tile_devices_outdated", { count }) }));
+  }, () => {}));
+  return list;
+}
 function tiles() {
-  const readers = S.readers.list.length;
   const cloud = S.cloud_reads;
   return h("ul", { class: "tiles", "aria-label": SW.t("overview_tiles_label") },
-    printersTile(), recentTile(),
-    tile(SW.t("nav_devices"), "#devices", SW.t("overview_tile_devices_paired", { count: S.devices.length }),
-      SW.t("overview_tile_devices_readers", { count: readers }), false),
-    tile(SW.t("common_label_reader"), "#settings/label-reader", SW.t("overview_tile_reader_value", { used: cloud.used, limit: cloud.limit }),
-      SW.t("overview_tile_reader_line"), !S.anthropic.ai_intake));
+    printersTile(), recentTile(), devicesTile(),
+    S.reader_install_pending
+      ? tile(SW.t("common_label_reader"), "#settings/label-reader", SW.t("features_reader_not_installed"), SW.t("features_reader_finish"), false)
+      : tile(SW.t("common_label_reader"), "#settings/label-reader", SW.t("overview_tile_reader_value", { used: cloud.used, limit: cloud.limit }),
+        SW.t("overview_tile_reader_line"), !S.anthropic.ai_intake));
 }
 
 // ----- the header meta line (03 4.2): the version, the setup, an update, the job, and when it was checked -----
@@ -234,7 +256,11 @@ function overviewTab() {
   const head = h("div", { class: "page-head__actions" }, again);      // Run the checks again, in the section header
   pageHead(null, head);
   whenOpen(body, (now) => { open = now; return read(now); });
-  return [banner, todoCard(), ovLowCard(), tiles(),
+  if (S.reader_install_pending === false) window.__swReaderLeftEarly = false;
+  const reader = S.reader_install_pending && window.__swReaderLeftEarly === true ? h("div", { class: "banner banner--warn" },
+    SW.shape("s-triangle"), h("p", { class: "banner__text", textContent: SW.t("reader_not_installed") }),
+    h("a", { class: "btn", href: "#settings/label-reader", textContent: SW.t("features_reader_finish") })) : null;
+  return [banner, reader, overviewStart(), ovLowCard(), tiles(), hubFilamentLine(),
     h("section", { class: "card overview__checks", "aria-labelledby": "overview-checks-title" },
       h("div", { class: "overview__head" }, h("h2", { id: "overview-checks-title", textContent: SW.t("overview_checks_title") }), badges),
       body), note];

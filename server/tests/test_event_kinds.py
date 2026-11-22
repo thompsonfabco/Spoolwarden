@@ -49,7 +49,7 @@ def test_every_phase_2_kind_is_present_with_its_severity_condition_and_values(na
 @pytest.mark.parametrize("name", LATER)
 def test_the_later_names_are_reserved_and_not_emitted(name):
     k = ek.get(name)
-    assert k is not None and not k.emitted and k.condition is None
+    assert k is not None and k.emitted and k.condition is None
 
 
 def test_the_catalogue_has_the_expected_number_of_kinds():

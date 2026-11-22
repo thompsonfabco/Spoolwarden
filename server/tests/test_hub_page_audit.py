@@ -32,7 +32,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / "tests" / "aut5_run.mjs"
 ALLOW = ROOT / "tests" / "allowlists" / "aut5_hub"      # a folder, one file per section
 COMMAND = json.loads((ROOT / "strings" / "en.json").read_text("utf-8"))["command_name"]     # the command the pages print
-SECTIONS = ["overview", "printers", "recent", "devices", "presets", "features", "settings", "flash", "updates", "logs"]
+SECTIONS = ["overview", "printers", "spools", "analytics", "recent", "devices", "presets", "features", "settings", "flash", "updates", "logs"]
 VIEWS = ",".join("#" + s for s in SECTIONS)
 ITEM = {"vendor": "Polymaker", "name": "PolyTerra PLA Charcoal Black", "material": "PLA", "color_hex": "2B2B2E",
         "net": 1000, "tare": 200, "density": 1.24, "count": 1, "nozzle": 220, "bed": 55, "sealed": False}
@@ -204,7 +204,7 @@ def test_the_page_audit_passes_on_every_section(hub):
     run = _run("--url", hub, "--views", VIEWS, "--allow", str(ALLOW))
     assert run.returncode == 0, run.stdout + run.stderr
     out = json.loads(run.stdout)
-    assert out["views"] == len(SECTIONS) * 2 * 2 and out["failing"] == 0      # ten sections, two widths, light and dark
+    assert out["views"] == len(SECTIONS) * 2 * 2 and out["failing"] == 0      # two widths, light and dark
 
 
 def test_devices_and_flash_do_not_scroll_sideways_at_320_px_in_a_wide_font(monkeypatch, hub):
@@ -232,9 +232,12 @@ LOGS_PRELUDE = """
     await until("the page did not finish its first reads", () => !document.querySelector(".chip--lock .skeleton__line")
       && !document.querySelector('[aria-busy="true"]:not(button)'));
     SW.setLock("unlocked", { code: %r });
+  };
+  // Open Service logs if this Hub also offers Activity.
+  const serviceLogs = async () => {
     const choice = () => document.querySelector('input[name="logs-view"][value="service"]');
-    await until("no Service logs choice", choice);
-    choice().click();      // Logs opens on Activity: the log is under Service logs
+    await until("no Service logs choice or Show button", () => choice() || show());
+    if (choice()) choice().click();
     await until("no Show button", () => show());
   };
 """ % CODE
@@ -243,6 +246,7 @@ LOGS_PRELUDE = """
 LOGS_UNLOCKED = """(async () => {""" + LOGS_PRELUDE + """
   const SVC = "div:not(.logs__activity) > .logs__out";      // the Service logs block (Activity has its own .logs__out)
   await unlocked();
+  await serviceLogs();
   show().click();
   await until("no outcome after Show", () => document.querySelector(SVC + " .code"), 20000);
   if (document.querySelector(SVC + " .error-state")) throw new Error("Logs: the read failed: " + document.querySelector(SVC).innerText);
@@ -258,6 +262,7 @@ LOGS_LOCKED_MIDWAY = """(async () => {""" + LOGS_PRELUDE + """
   window.fetch = (u, o) => (String(u).endsWith("/api/logs") && o && o.method === "POST"
     ? real(u, o).then((r) => new Promise((res) => { release = () => res(r); })) : real(u, o));
   await unlocked();
+  await serviceLogs();
   show().click();
   await until("the read was not sent", () => release, 20000);
   SW.setLock("locked");
@@ -406,6 +411,7 @@ FEATURES_PRELUDE += """
 # a feature turned off and on again with the keyboard's own actions only: focus a button, press it (click), press Apply
 FEATURES_TURN_OFF_AND_ON = """(async () => {""" + FEATURES_PRELUDE + """
   await unlocked();
+  await until("no Nightly backup button", () => row("backup")?.querySelector("button"));
   const on = async () => (await (await fetch("/setup/api/state")).json()).modules.find((m) => m.name === "backup").on;
   for (const [word, named, title, now] of [["Turn off", "Turn off Nightly backup", "Turn off Nightly backup?", false],
                                            ["Turn on", "Turn on Nightly backup", "Turn on Nightly backup?", true]]) {
@@ -430,7 +436,9 @@ FEATURES_TURN_OFF_AND_ON = """(async () => {""" + FEATURES_PRELUDE + """
 # the web feature needs an address: the drawer asks for it, refuses an empty one, and stays open for the audit
 FEATURES_DRAWER_OPEN = """(async () => {""" + FEATURES_PRELUDE + """
   await unlocked();
-  const cards = [...document.querySelectorAll(".segmented--cards .segmented__input")];
+  const setupCards = () => document.querySelectorAll(".segmented--cards .segmented__input");
+  await until("the setup cards were not drawn", () => setupCards().length >= 4);
+  const cards = [...setupCards()];
   if (cards.map((c) => c.value).join() !== "server,all-in-one,station,custom") throw new Error("Features: setups " + cards.map((c) => c.value));
   if (!cards[3].checked || cards[0].checked || !cards[2].disabled) throw new Error("Features: Custom (printers are on) is not the checked setup or Weigh Station only is not off");
   if (!document.querySelector(".card .code__text").textContent.includes("features setup weigh-station --hub ")) throw new Error("Features: no command for a Weigh Station only machine");

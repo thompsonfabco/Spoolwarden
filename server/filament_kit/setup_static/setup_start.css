@@ -1,0 +1,26 @@
+.start__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s2) var(--s3); margin-bottom: var(--s3); }
+.start__head-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2); }
+.start__title { margin: 0; font-size: var(--fs-l); font-weight: var(--fw-title); line-height: var(--lh-title); }
+.start__count { font-size: var(--fs-s); }
+.start__restore { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2) var(--s3); margin-bottom: var(--s3); border: var(--hairline) solid var(--border); border-radius: var(--r); background: var(--surface-2); font-size: var(--fs-m); }
+.start__allset { margin-bottom: var(--s3); }
+.start__steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+.start__step { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s2) var(--s3); padding: var(--s2) 0; border-top: var(--hairline) solid var(--border); }
+.start__step:first-child { border-top: 0; padding-top: 0; }
+.start__step-body { min-width: 0; display: grid; gap: var(--s1); }
+.start__step-top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.start__step-title { font-size: var(--fs-b); font-weight: var(--fw-text); }
+.start__step--next .start__step-title { font-weight: var(--fw-label); }
+.start__step--done .start__step-title { color: var(--muted); }
+.start__step-line,
+.start__step-note { margin: 0; font-size: var(--fs-s); }
+.start__step-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s2); flex: 0 0 auto; }
+.start__badge { display: inline-flex; align-items: center; padding: 0 var(--s2); border-radius: var(--r-s); font-size: var(--fs-xs); font-weight: var(--fw-label); line-height: var(--lh-body); }
+.start__badge--next { background: var(--accent-soft); color: var(--accent-text); }
+.start__badge--open { background: var(--surface-2); }
+.start__hidden { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); margin-bottom: var(--s3); font-size: var(--fs-s); }
+.start__skel-title { width: 40%; margin-bottom: var(--s3); }
+@media (max-width: 600px) {
+  .start__step { flex-direction: column; }
+  .start__step-actions { justify-content: flex-start; }
+}

@@ -47,7 +47,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import __version__, config, release
+from . import __version__, config, event_sink, release
 from .pairing import _write_atomic, give_to_state_owner, make_state_dir, open_lock
 
 try:
@@ -572,7 +572,9 @@ def add_local(data: bytes) -> tuple[dict, str]:
     with _locked():
         make_state_dir(path.parent)
         _write_atomic(path, dumps(entry).encode("utf-8"), 0o644, state_owned=True)
-    return entry, line_id(entry["vendor"], entry["product"])
+    lid = line_id(entry["vendor"], entry["product"])
+    event_sink.emit("catalog.changed", {"type": "hub"}, {"what": "entry_added", "entry": lid})
+    return entry, lid
 
 
 # ---------- the catalog form: one function builds the entry ----------
@@ -730,6 +732,7 @@ def remove_local(entry_id: str) -> bool:
             path.parent.rmdir()
         except OSError:
             pass                      # other entries of the brand stay
+    event_sink.emit("catalog.changed", {"type": "hub"}, {"what": "entry_removed", "entry": entry_id})
     return True
 
 
@@ -1289,6 +1292,8 @@ def update(url: str | None = None, *, opener=None, now: float | None = None, sch
             (_dir() / "rolled_back.json").unlink(missing_ok=True)
             _prune({name} | ({old["dir"]} if old else set()))
             _record_check(now, None)
+            event_sink.emit("catalog.changed", {"type": "hub"},
+                            {"what": "updated", "version": str(idx["library_version"])})
             return UpdateResult(True, idx["library_version"], downloaded, None, note=note)
         except Exception as e:  # noqa: BLE001 - every failure must clean up and be recorded, never half-swap
             if tmp is not None:
@@ -1326,6 +1331,7 @@ def rollback() -> int:
             _write_json(_dir() / "rolled_back.json", {"from": left, "at": time.time()})
         else:
             (_dir() / "rolled_back.json").unlink(missing_ok=True)
+        event_sink.emit("catalog.changed", {"type": "hub"}, {"what": "rolled_back", "version": str(version)})
         return version
 
 

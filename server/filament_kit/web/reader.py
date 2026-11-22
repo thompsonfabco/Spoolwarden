@@ -298,8 +298,10 @@ def _kit_error(e: slots.SlotError) -> JSONResponse:
     if e.code == "not_found":
         return reply(404, "error", msg)
     if e.code in ("printer_busy", "already_running", "needs_developer_mode", "write_refused", "module_off",
-                  "slot_in_use"):
+                  "slot_in_use", "auto_not_possible", "nothing_to_choose", "not_waiting"):
         return reply(409, "error", msg)
+    if isinstance(e.http, int) and 400 <= e.http < 500:
+        return reply(e.http, "error", msg)
     return reply(502, "error", msg)
 
 
@@ -444,11 +446,16 @@ class Reader:
 
         def build() -> list[dict]:
             view = self.tools.kit_bridge().get(slots.printer_path(pid))
-            return cap_slots([{"label": s["label"], "say": say_tokens(s.get("say")),
+            st = view.get("status") or {}
+            pv = view.get("printer") or {}
+            rows = [{"label": s["label"], "say": say_tokens(s.get("say")),
                      "kind": clip("external" if s.get("kind") == "ext" else s.get("kind") or ""),
                      "present": s.get("present") if isinstance(s.get("present"), bool) else None,
                      "type": clip(s.get("type") or ""), "spool": _short_spool(s.get("spool"))}
-                    for s in reader_slots(slots.status_slots(view.get("status") or {}), pid)], pid)
+                    for s in reader_slots(slots.status_slots(st), pid)]
+            if pv.get("auto_possible") or st.get("auto_possible"):
+                rows = [{"label": "auto", "say": "Auto"}] + [r for r in rows if slots.label_key(r["label"]) != "AUTO"]
+            return cap_slots(rows, pid)
         return JSONResponse(await run_in_threadpool(build))
 
     async def scan(self, request: Request):
@@ -491,6 +498,16 @@ class Reader:
         pname = pv.get("name") or printer
         if pv.get("state") in OFFLINE_STATES:
             return reply(200, "offline", f"{pname} is {pv.get('state').replace('_', ' ')}", filament=name)
+        if slot.strip().lower() == "auto":
+            r = kit.post(f"{slots.printer_path(printer)}/slots/auto/load",
+                         {"spool_id": int(sp["id"]), "dry_run": dry})
+            extra = {"filament": name, "slot": "auto"}
+            if dry:
+                extra["dry_run"] = True
+            rep = (r or {}).get("replaces") if isinstance(r, dict) else None
+            if isinstance(rep, dict):
+                extra["replaces"] = {"spool_id": rep.get("spool_id"), "name": clip(rep.get("name") or "")}
+            return reply(200, "queued", "Auto: load any slot (waits 15 min)", **extra)
         found = slots.status_slots(view.get("status") or {})
         try:
             label = slots.kit_label(slot, [s["label"] for s in found])

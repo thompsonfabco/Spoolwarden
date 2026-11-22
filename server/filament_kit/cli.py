@@ -25,7 +25,7 @@ from pathlib import Path
 
 from . import __version__
 from . import storage, storage_api
-from . import hostaddr, alerts, alerts_api, alerts_cli, apply, config, event_sink, inventory, klipper_cli, library, locations_cli, menu_ui, modules, output, pairing, qr, secret_input, steps
+from . import address_cli, address_texts, firstrun, getting_started, history_cli, hostaddr, hubport, alerts, alerts_api, alerts_cli, apply, config, event_sink, inventory, klipper_cli, library, locations_cli, menu_ui, modules, output, pairing, qr, secret_input, steps
 from . import status as status_rows
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
@@ -100,10 +100,16 @@ def cmd_status(client_factory, station_pairing: str | None = None) -> int:
     user, which can't read the station's pairing."""
     with output.wait("Checking…", programs=True):
         rows = list(status_rows.rows(client_factory=client_factory, station_pairing=station_pairing))
+    hub = "server" in modules.enabled(config.load())
+    started = getting_started.view() if hub else None
     if not (output.json_mode() or output.quiet()):
         output.out(status_rows.header_line())
         output.out()
-    extra = status_rows.numbers() if output.json_mode() and "server" in modules.enabled(config.load()) else None
+        if started:                         # 06 9.1: while steps remain and the list is not hidden
+            block = address_cli.started_lines(started)
+            if block:
+                output.out_lines(block + [""])
+    extra = {**status_rows.numbers(), "getting_started": started} if output.json_mode() and hub else None
     return 0 if status_rows.print_rows(rows, summary=True, extra=extra) else output.FAILED
 
 
@@ -171,10 +177,13 @@ def _wait_for_device(device_id: str | None, expires: float, who: str, cmd: str) 
     return 0
 
 
-def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, text: bool = False, wait: bool = True) -> int:
+def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, home_assistant: bool = False,
+             text: bool = False, wait: bool = True) -> int:
     """`pair` (06 9.4): what the Hub page's pairing dialog shows, in its order (the QR code for a phone, the instruction,
     the pairing code, the certificate fingerprint, the expiry), then waits for the device. `--json` ends after the document."""
-    cmd = "sudo spoolwarden pair" + (" --slicer-sync" if slicer_sync else " --weigh-station" if weigh_station else "")
+    cmd = "sudo spoolwarden pair" + (
+        " --slicer-sync" if slicer_sync else " --weigh-station" if weigh_station else " --home-assistant" if home_assistant else ""
+    )
     cfg = config.load()                 # unreadable: main() says to run it with sudo
     if "server" not in modules.enabled(cfg):
         # a Weigh Station (or another machine without the Hub): no certificate here, and none is needed
@@ -183,8 +192,11 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, text: bool 
                      "run it on the Hub" + (f" ({addr}, from station.allow)." if addr else "."))
         return 1
     try:
-        pr = pairing.issue(device_hint="pc" if slicer_sync else "station" if weigh_station else "",
-                           scope="station" if weigh_station else None)
+        pr = pairing.issue(
+            device_hint="pc" if slicer_sync else "station" if weigh_station else "home-assistant" if home_assistant else "",
+            role="viewer" if home_assistant else None,
+            scope="station" if weigh_station else None,
+        )
     except pairing.PairingError as e:
         # /etc/filament-kit is root's: as a user the certificate cannot be read (or even seen)
         unreadable = isinstance(e, pairing.CertUnreadable) or not _is_root()
@@ -195,9 +207,10 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, text: bool 
         output.emit({"ok": True, "code": pr.code, "link": pr.qr, "fingerprint": fp, "expires": _iso(pr.expires)})
         return 0
     text = text or output.plain()       # --plain: no QR code (06 6.2)
-    if slicer_sync or weigh_station:
+    if slicer_sync or weigh_station or home_assistant:
         # no QR scanner there: the link is pasted (printed by design, never logged)
         output.out("Paste this link into the Slicer Sync when it asks:" if slicer_sync else
+                   "Paste this link or code into Home Assistant:" if home_assistant else
                    "On the Weigh Station run: sudo spoolwarden station pair, then paste this link:")
         output.out(pr.qr)
     elif text:
@@ -208,8 +221,8 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, text: bool 
         print(_qr_text(pr.qr), flush=True)
         output.out("Open the Spoolwarden app and scan this code, or type the pairing code.")
     output.out(f"Pairing code: {pr.code[:3]} {pr.code[3:]}")
-    output.out("Certificate fingerprint (" + ("the phone asks for two groups of it" if not (slicer_sync or weigh_station)
-               else f"check it matches the one the {'Slicer Sync' if slicer_sync else 'Weigh Station'} shows") + "):")
+    output.out("Certificate fingerprint (" + ("the phone asks for two groups of it" if not (slicer_sync or weigh_station or home_assistant)
+               else f"check it matches the one {'Home Assistant' if home_assistant else 'the Slicer Sync' if slicer_sync else 'the Weigh Station'} shows") + "):")
     output.out_lines(_fingerprint_lines(fp))
     output.out(f"Expires at {time.strftime('%H:%M', time.localtime(pr.expires))} "
                f"(in {max(1, -(-int(pr.expires - time.time()) // 60))} min).")
@@ -217,7 +230,7 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, text: bool 
         output.out(f"The code works until {time.strftime('%H:%M', time.localtime(pr.expires))}.")
         return 0
     return _wait_for_device(_pending_device(pr.token), pr.expires,
-                            "Slicer Sync" if slicer_sync else "the Weigh Station" if weigh_station else "the phone", cmd)
+                            "Slicer Sync" if slicer_sync else "the Weigh Station" if weigh_station else "Home Assistant" if home_assistant else "the phone", cmd)
 
 
 def _paired_with_hub(link, result) -> None:
@@ -403,11 +416,17 @@ def cmd_station_pair_local() -> int:
 _BACKUP_KIND = {"made": "made here", "pre-restore": "before a restore", "daily": "nightly"}     # the Hub page's words
 
 
-def cmd_backup(action: str, out: str | None, days: int | None = None) -> int:
-    """`backup create`, `list` and `keep <days>` (06 9.10); the same helper functions the Hub page's routes use."""
+def cmd_backup(action: str, out: str | None, days: int | None = None, *,
+               remove: bool = False, show: bool = False) -> int:
+    """`backup create`, `list`, `keep <days>` and `password` (06 9.10); the same helper functions the Hub page's routes use."""
     from . import backup, setup_helper
     if not _is_root():
         return output.need_sudo(_sudo_command(f"sudo spoolwarden backup {action}" + (f" {days}" if days else "")))
+    if action == "password":
+        pw = None
+        if not remove and not show:
+            pw = secret_input.ask("Backup password: ") if hasattr(secret_input, "ask") else input("Backup password: ")
+        return history_cli.run_backup_password(_server_api(), remove=remove, show=show, password=pw)
     if action == "keep":
         try:
             r = setup_helper._backup_keep({"days": days})
@@ -460,7 +479,8 @@ def _restore_out(text: str) -> None:
         output.out(text)
 
 
-def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = False) -> int:
+def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = False,
+                password_file: str | None = None) -> int:
     from . import backup
     if not _is_root():
         return output.need_sudo(_sudo_command("sudo spoolwarden restore <backup.zip>"))
@@ -494,8 +514,18 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
                 held.clear()
                 return input(prompt)
         with waiting:
-            return backup.restore(path, yes=yes, ask=ask, out=say,
-                                  step=steps.Steps(backup.restore_steps()).next)
+            import inspect
+            _params = inspect.signature(backup.restore).parameters
+            _has_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in _params.values())
+            kw = {"yes": yes, "ask": ask, "out": say, "step": steps.Steps(backup.restore_steps()).next}
+            if "password_file" in _params or _has_varkw:
+                kw["password_file"] = Path(password_file) if password_file else None
+            if "actor" in _params or _has_varkw:
+                kw["actor"] = "cli"
+            rc = backup.restore(path, **kw)
+        if rc == 0:                     # R82 s4 p6: a restored Hub starts with Getting started hidden
+            firstrun.hide_after_restore()
+        return rc
     finally:
         if uploaded:
             path.unlink(missing_ok=True)
@@ -769,6 +799,9 @@ _ITEMS = {i.id: i for i in (
     _Item("days", "Keep nightly backups for", "int", "backup.keep_days", low=1, high=365, words="1 to 365"),
     _Item("public", "Public address", "text", "web.public_url"),
     _Item("station", "Weigh Station address", "text", "station.url"),
+    _Item("station_page_from", "Weigh Station page access", "choice", "station.page_from",
+          choices=tuple((mode, mode) for mode in apply.PAGE_FROM)),
+    _Item("station_allow", "Weigh Station allow-list", "list", "station.allow", sep=" "),
     _Item("hosts", "Names for this page", "list", "setup.hosts", sep=" "),
     _Item("changes", "Allow printer changes from the public address", "bool", "web.printer_changes"),
     _Item("passphrase", "New passphrase", "secret", "web_passphrase"),
@@ -1609,13 +1642,19 @@ def cmd_config_set(key: str, raw: str) -> int:
     session = _ConfigMenu(config.load(), None)
     shown = session.show(item, value).split(' (')[0] if item.kind == 'choice' else session.show(item, value)
     sentence = f"Nightly backups are kept for {shown} days." if item.id == "days" else f"{item.label} is {shown}."
+    station_policy = item.key in ("station.page_from", "station.allow")
+    refresh_station = station_policy and "station" in modules.enabled(session.cfg) and not _no_systemd()
     if value == session.stored(item):
+        if refresh_station and not _refresh_station_policy(session.cfg):
+            return output.FAILED
         output.emit({"ok": True, "key": item.key, "changed": False})
         output.result(f"Unchanged: {sentence}")
         return 0
     session.staged[item.id] = value
     new = copy.deepcopy(session.cfg)
     err = session.build(new)
+    if not err and station_policy:
+        err = _plan_error(new)
     if err:
         output.error(f"nothing was saved: {err.rstrip('.')}.")
         return 1
@@ -1625,8 +1664,10 @@ def cmd_config_set(key: str, raw: str) -> int:
         output.error(f"nothing was saved: {str(e).rstrip('.')}.")
         return 1
     _hub_audit(f"setting {item.key} changed")
+    if refresh_station and not _refresh_station_policy(new):
+        return output.FAILED
     output.emit({"ok": True, "key": item.key, "changed": True, "restarts": item.restarts,
-                 "applies": item.key in _APPLY_KEYS})
+                 "applies": item.key in _APPLY_KEYS or refresh_station})
     output.result(f"Saved: {sentence}")
     if item.key in _APPLY_KEYS:
         rc = _run_apply(pairing=False)
@@ -1637,6 +1678,16 @@ def cmd_config_set(key: str, raw: str) -> int:
             _restart_service()
         output.result("The Hub is back.")
     return 0
+
+
+def _refresh_station_policy(cfg: dict) -> bool:
+    try:
+        apply.refresh_station(cfg)
+    except (apply.ApplyError, modules.ModuleError) as e:
+        output.error(f"the saved Weigh Station policy could not be applied ({e}).",
+                     cmd="sudo spoolwarden modules apply")
+        return False
+    return True
 
 
 _THEME_WORDS = {"console": "dense and technical; the default", "workbench": "calm cards",
@@ -1728,7 +1779,7 @@ def _intake_url() -> str:
     """The web app's address on this Hub, for the lines that say where something is (06 10)."""
     ips = pairing.local_ips()
     host = ips[0] if ips else f"{pairing.short_hostname()}.local"
-    return f"https://{host}:{int(config.load().get('port', 8710))}/intake"
+    return f"https://{host}{hubport.url_port(config.load().get('port', 8710))}/intake"
 
 
 def _pointer(where: str, sentence: str, url: str) -> int:
@@ -2231,6 +2282,7 @@ def _apply_features(ui, cfg: dict, chosen, explicit, on, raw_apply) -> tuple[boo
         rc = _run_apply(pairing=False)
         if rc == 0:
             output.out(f"Features applied: {short}.")
+            address_cli.after_features(on, chosen, bool(short))
         return True, rc
 
 
@@ -3701,11 +3753,79 @@ def cmd_printer_test(arg: str) -> int:
     return 0 if r["reachable"] else 1
 
 
+_addr_say = address_texts.say
+
+
+def _found_printers(klipper: bool) -> tuple[str, int] | None:
+    """`printer add`, the found list (R82 s5 p1, 06 9.2): at a terminal with no address given, the Klipper printers the
+    Hub's search finds (`POST /printers/scan`), one per line to pick by number; Enter types an address instead. A Bambu
+    Lab printer cannot be listed (the Hub does not hear them announce), so that case says so. (address, port) of the
+    pick, or None."""
+    import asyncio
+    from types import SimpleNamespace
+    if not klipper:
+        output.out(_addr_say("printer_guided_bambu_by_address"))
+        return None
+    hub = _hub()
+    try:
+        with output.wait(_addr_say("cli_printer_add_looking")):
+            hub.page._manager("klipper")
+            r = asyncio.run(hub.route("/printers/scan")(SimpleNamespace(path_params={}, headers={}, client=None), {}))
+    except Exception:       # noqa: BLE001 - a search that is refused or fails is no list: the address is typed instead
+        r = {"found": []}
+    printers = registry.load()
+    rows = [(f, printers[f["serial"]]) for f in r["found"] if f["serial"] in printers and not f["configured"]]
+    if not rows:
+        output.out(_addr_say("cli_printer_add_none"))
+        return None
+    output.out(_addr_say("cli_printer_add_found"))
+    for n, (f, p) in enumerate(rows, 1):
+        output.out(_addr_say("cli_printer_add_found_row", number=n, name=registry.display_name(p),
+                             family="Klipper", address=f"{f['host']}:{f['port']}"))
+    pick = _prompted(None, _addr_say("cli_printer_add_pick"))
+    if pick and pick.isdigit() and 1 <= int(pick) <= len(rows):
+        f = rows[int(pick) - 1][0]
+        return f["host"], f["port"]
+    return None
+
+
+def _klipper_test(host: str, port: int, key: str) -> bool:
+    """The test before a Klipper printer is saved (R82 s5 p3): the Hub asks the printer for its info. This is the
+    existing probe (`Moonraker.info`) run from the command line's own process: the kit route `POST /api/printers/test`
+    (EV1 part B) is not there yet."""
+    from .bridge.klipper.moonraker import Moonraker, MoonrakerError
+    try:
+        Moonraker(host, port, api_key=key, timeout=5).info()
+    except MoonrakerError:
+        return False
+    return True
+
+
+def _map_offer(serial: str | None, manager_factory) -> int:
+    """`Map its slots now? [Y/n]` after an add at a terminal (R82 s5 p4): yes runs `printer map` (a Klipper printer's is
+    the one by loading), no says how to do it later."""
+    p = registry.load().get(serial) if serial else None
+    if p is None or not output.terminal():
+        return 0
+    output.out(_addr_say("printer_guided_map_body"))
+    answer = _ask(_addr_say("cli_printer_map_ask") + " [Y/n] ")
+    if answer is not None and answer.strip().lower() in ("", "y", "yes"):
+        return cmd_printer_map(serial, manager_factory or _default_manager, manual=p.family == "klipper")
+    output.out(_addr_say("cli_printer_map_later", name=registry.display_name(p)))
+    return 0
+
+
 def cmd_printer_add(*, klipper: bool = False, address: str | None = None, port: int | None = None,
                     name: str | None = None, serial: str | None = None, access_code: str | None = None,
-                    api_key: str | None = None) -> int:
-    """`printer add` (06 9.2): asks for what the flags do not give (06 8.7). A Bambu Lab printer is added by the Hub
-    page's own route, a Klipper printer as the Klipper commands always did."""
+                    api_key: str | None = None, manager_factory=None) -> int:
+    """`printer add` (06 9.2, R82 s5): the guided order, and flags answer their questions and skip them: the found list
+    (at a terminal, with no address given), the details (06 8.7), the test (a Klipper printer is asked before anything
+    is saved; when it does not answer `Add anyway? [y/N]`, which `--yes` does not answer), then `Map its slots now?`. A
+    Bambu Lab printer is added by the Hub page's own route, which reads its certificate and fails with the Hub's text."""
+    if address is None and output.terminal():
+        picked = _found_printers(klipper)
+        if picked:
+            address, port = picked[0], (port if port is not None else picked[1])
     address = _prompted(address, "Address: " if klipper else "IP address or name (e.g. 192.0.2.40 or printer.local): ")
     if address is None:
         output.error("printer add needs an address, and there is no terminal to ask.", "give it with --address.")
@@ -3714,20 +3834,38 @@ def cmd_printer_add(*, klipper: bool = False, address: str | None = None, port: 
         output.error("give the printer's address.", "give it with --address.")
         return output.USAGE
     if klipper:
-        if port is None:
-            raw = _prompted(None, "Port [7125]: ")
-            try:
-                port = int(raw) if raw else 7125
-            except ValueError:
-                output.error("the port must be a number from 1 to 65535")
-                return output.USAGE
+        from .setup_console import printers_tab
+        from .setup_page import Refused
+
+        raw_port = _prompted(port, "Port [7125]: ")
+        port_body = {"port": raw_port} if raw_port not in (None, "") else {}
+        try:
+            _hub().page._manager("klipper")         # the module is off: the Hub's refusal, before any test
+            port = printers_tab.port_of(port_body)
+            host, _, _ = printers_tab.checked_address({"host": address}, "host")
+        except Refused as e:
+            return _Hub.refused(e)
         name = _prompted(name, "Name (optional): ") or ""
         key = ""
         if api_key == "-" or (api_key is None and output.terminal()):
             key = _secret_answer(api_key, "Moonraker API key (optional): ", "--api-key", "printer add")
         if key is None or not _api_key_ok(key):
             return output.USAGE
-        return _klipper_add(name, address, port, key)
+        at = f"{hostaddr.url_host(host)}:{port}"
+        with output.wait(_addr_say("cli_printer_add_asking", address=at)):
+            answers = _klipper_test(host, port, key)
+        if not answers:
+            output.error(_addr_say("printer_guided_test_failed", address=at))
+            if not output.terminal():           # nothing is saved, and nobody can be asked
+                return 1
+            if output.confirm(_addr_say("cli_printer_add_anyway"), yes=False, doing="adding the printer") is not None:
+                output.out(_addr_say("cli_printer_add_not_added"))
+                return 1
+        rc = _klipper_add(name, address, port, key)
+        if rc == 0:
+            found = registry.klipper_at(registry.load(), host, port)
+            rc = _map_offer(found.serial if found else None, manager_factory)
+        return rc
     code = _secret_answer(access_code, "Access Code (on the printer: Settings > Network/LAN): ", "--access-code",
                           "printer add")
     if code is None:
@@ -3748,7 +3886,7 @@ def cmd_printer_add(*, klipper: bool = False, address: str | None = None, port: 
     output.result(f"Added {shown} (serial {r['serial']}).")
     if r.get("note"):
         output.note(r["note"])
-    return 0
+    return _map_offer(r["serial"], manager_factory)
 
 
 def cmd_printer_use(arg: str, api_key: str | None = None) -> int:
@@ -4011,7 +4149,7 @@ def cmd_printer_live(arg: str) -> int:
         return output.USAGE
     ips = pairing.local_ips()
     host = ips[0] if ips else f"{pairing.short_hostname()}.local"
-    url = f"https://{host}:{int(config.load().get('port', 8710))}/intake#printers"
+    url = f"https://{host}{hubport.url_port(config.load().get('port', 8710))}/intake#printers"
     output.emit({"available": False, "where": "web app", "url": url})
     output.out(f"Camera and controls are in the web app: {url}")
     return 0
@@ -4041,7 +4179,7 @@ def _dispatch_printer(a, manager_factory) -> int:
         return cmd_printer_scan(a.subnet)
     if c == "add":
         return cmd_printer_add(klipper=a.klipper, address=a.address, port=a.port, name=a.name, serial=a.serial,
-                               access_code=a.access_code, api_key=a.api_key)
+                               access_code=a.access_code, api_key=a.api_key, manager_factory=manager_factory)
     simple = {"show": cmd_printer_show, "test": cmd_printer_test, "detect": cmd_printer_detect,
               "reports": cmd_printer_reports, "live": cmd_printer_live}
     if c in simple:
@@ -4861,10 +4999,13 @@ def _features_report(cfg: dict, before, explicit, notes=(), *, plan_shown: bool 
         output.out(plan)
     rc = _save_and_apply(cfg, notes)
     if rc == 0:
+        step = address_cli.reader_next(before, after)
         output.emit({"ok": True, "changed": bool(short),
                      "on": [_KEY_OF[n] for n in modules.MODULES if n in after and n not in before],
-                     "off": [_KEY_OF[n] for n in modules.MODULES if n in before and n not in after]})
+                     "off": [_KEY_OF[n] for n in modules.MODULES if n in before and n not in after],
+                     **({"next": step} if step else {})})
         output.result(f"Features applied: {short}." if short else "Unchanged.")
+        address_cli.after_features(before, after, bool(short))
     return rc
 
 
@@ -6250,6 +6391,7 @@ _HELP_GROUPS = [('Everyday',
    ('web', "Access from outside the home, and Claude's connector"),
    ('remote', 'Remote access: certificate and firewall rules'),
    ('setup-code', "The Hub page's address and setup code"),
+   ('port', "The Hub's port: show or change"),
    ('certificate', "The Hub's certificate and its fingerprint"),
    ('spoolman', "Spoolman: its address and Spoolwarden's extra fields"),
    ('update', 'Check, install or roll back Spoolwarden'),
@@ -6361,6 +6503,7 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`remote firewall`', 'Print the firewall rules (changes nothing)', '{settings_network_firewall}'),
  ('`remote get-certificate`', 'Get the public certificate now', '{settings_network_certificate}'),
  ('`setup-code [--new] [--revoke-trusted]`', 'Hub page address and setup code', '{unlock_field_label}, {devices_trusted_title}'),
+ ('`port [<number>]`', "Show the Hub's port, or move the Hub to another", '{nav_settings} > {settings_group_network}, {port_row_label}'),
  ('`certificate`', "Make the Hub's certificate if missing; print its fingerprint", '(none)'),
  ('`spoolman fields`', "Make Spoolwarden's extra fields in Spoolman", '{nav_overview}, {overview_make_fields}'),
  ('`spoolman address [<url>]`',
@@ -6762,13 +6905,17 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     sub = ap.add_subparsers(dest="cmd", required=False)
     stat = sub.add_parser("status", help="check services, Spoolman, key, certificate")
     stat.add_argument("--station-pairing", help=argparse.SUPPRESS)  # passed by the wrapper, from its check as root
+    stat.add_argument("--history", action="store_true", help="show check changes in the last 7 or 30 days")
+    stat.add_argument("--days", type=int, default=7, choices=(7, 30), help="how many days back for --history (7 or 30)")
     pp = sub.add_parser("pair", help="show a QR code and code to pair a phone, then wait for it (--slicer-sync, "
-                                     "--weigh-station: a link to paste instead)")
+                                     "--weigh-station, --home-assistant: a link to paste instead)")
     pkind = pp.add_mutually_exclusive_group()
     pkind.add_argument("--slicer-sync", "--pc", dest="slicer_sync", action="store_true",
                        help="pair the Slicer Sync on a PC: print the link, no QR code")
     pkind.add_argument("--weigh-station", "--station", dest="weigh_station", action="store_true",
                        help="pair a Weigh Station on another computer: print the link")
+    pkind.add_argument("--home-assistant", dest="home_assistant", action="store_true",
+                       help="pair Home Assistant (viewer role): print the code and link")
     pp.add_argument("--no-wait", action="store_true", help="show the code and end without waiting for the device")
     _add_weigh_station(sub, "weigh-station", alias=False)
     _add_weigh_station(sub, "station", alias=True)
@@ -6792,6 +6939,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     cfs.add_argument("value", help="its new value")
     _add_locations(sub)
     alerts_cli.add_parsers(sub)
+    address_cli.add_parser(sub)
     sub.add_parser("certificate", help="make the Hub's certificate if missing; print its fingerprint")
     sub.add_parser("cert", help="the old spelling of certificate")
     _add_recent(sub, "recent", "Recently added: the last spool additions, their photos and revisions", alias=False)
@@ -6937,10 +7085,15 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     bksub.add_parser("list", help="the backups in /var/backups/filament-kit")
     bkk = bksub.add_parser("keep", help="keep the nightly backups for this many days (1 to 365)")
     bkk.add_argument("days", type=int)
+    bkp = bksub.add_parser("password", help="set, show, or remove the backup encryption password (root)")
+    bkpg = bkp.add_mutually_exclusive_group()
+    bkpg.add_argument("--remove", action="store_true", help="remove the backup password")
+    bkpg.add_argument("--show", action="store_true", help="say whether a backup password is set")
     rs = sub.add_parser("restore", help="bring this machine to the state in a backup zip (root)")
     rs_what = rs.add_mutually_exclusive_group(required=True)
     rs_what.add_argument("zip", nargs="?", help="the backup zip")
     rs_what.add_argument("--uploaded", action="store_true", help="the zip the setup page received")
+    rs.add_argument("--password-file", default=None, help="read the backup password from this file")
     _add_yes(rs, "ask nothing, the typed word included (no terminal: the installer, the setup page)")
     rm_ = sub.add_parser("remote", help="remote access: get the certificate, show the firewall rules")
     rmsub = rm_.add_subparsers(dest="remote_cmd", required=True)
@@ -6968,6 +7121,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                     help="forget every trusted computer, so each needs the setup code again (alone, or with --new)")
     _add_yes(sc)
     klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
+    history_cli.add_parser(sub)       # activity, undo, usage, export, import, report (HD2)
     args = ap.parse_args(argv)
     if args.cmd is None:                        # no command: the top-level help (06 3.1)
         return _print_help(ap.format_help())
@@ -7102,10 +7256,12 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "klipper":
         return klipper_cli.run(args)
     if args.cmd == "status":
+        if getattr(args, "history", False):
+            return history_cli.run_status_history(_server_api(), days=args.days)
         return cmd_status(client_factory or _default_client, station_pairing=args.station_pairing)
     if args.cmd == "pair":
-        return cmd_pair(slicer_sync=args.slicer_sync, weigh_station=args.weigh_station, text=args.text,
-                        wait=not args.no_wait)
+        return cmd_pair(slicer_sync=args.slicer_sync, weigh_station=args.weigh_station,
+                        home_assistant=args.home_assistant, text=args.text, wait=not args.no_wait)
     if args.cmd == "weigh-station" and args.station_cmd == "pair" and args.local:
         return cmd_station_pair_local()
     if args.cmd == "weigh-station" and args.station_cmd == "flash-display":
@@ -7201,11 +7357,15 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "tag-reader":
         return cmd_reader({"list": "tokens", "new-token": "token"}.get(args.tag_reader_cmd, args.tag_reader_cmd),
                           getattr(args, "name", None), getattr(args, "ref", None), yes=getattr(args, "yes", False))
+    if args.cmd in ("activity", "undo", "usage", "export", "import", "report"):
+        return history_cli.run(args, _server_api())
     if args.cmd == "backup":
         return cmd_backup(args.backup_cmd, args.out if args.backup_cmd == "create" else None,
-                          days=args.days if args.backup_cmd == "keep" else None)
+                          days=args.days if args.backup_cmd == "keep" else None,
+                          remove=getattr(args, "remove", False), show=getattr(args, "show", False))
     if args.cmd == "restore":
-        return cmd_restore(args.zip, uploaded=args.uploaded, yes=args.yes)
+        return cmd_restore(args.zip, uploaded=args.uploaded, yes=args.yes,
+                           password_file=getattr(args, "password_file", None))
     if args.cmd == "remote":
         from . import remote
         cfg = config.load()
@@ -7258,4 +7418,6 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return cmd_modules_apply(pair=not args.no_pair)
     if args.cmd == "setup-code":
         return cmd_setup_code(args.new, args.revoke_trusted, yes=args.yes)
+    if args.cmd == "port":
+        return address_cli.cmd_port(args.number, yes=args.yes)
     return cmd_ensure_fields()

@@ -59,6 +59,33 @@ async function setParent(line, target, box, opener) {
     (values) => ({ parent: values[0], target }), () => say(box, SW.t("presets_parent_saved"), true));
 }
 
+// ----- Download as CSV (R84 6): the file the Hub gives for GET export/lines.csv, unlocked as a file leaves the Hub -----
+// Texts the catalogue does not have yet (only HD2 opens it): the catalogue's own wins once the key is there.
+const PRESETS_STUB = { presets_download_csv: "Download as CSV", presets_csv_failed: "Could not download the file: {reason}" };
+const presetsT = (key, vars) => {
+  const v = SW.t(key, vars);
+  return v !== key || !(key in PRESETS_STUB) ? v : PRESETS_STUB[key].replace(/\{([a-z]+)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m));
+};
+async function presetsDownloadCsv(set, fallback) {
+  const r = await fetch(`/setup/api/export/${set}.csv`, { credentials: "same-origin", headers: { "X-Setup-Code": theCode() } });
+  if (!r.ok) { let d = {}; try { d = await r.json(); } catch { /* not JSON */ } throw hubError(r.status, d); }
+  const m = /filename="([^"]+)"/.exec(r.headers.get("Content-Disposition") || "");
+  const url = URL.createObjectURL(await r.blob());
+  const a = h("a", { href: url, download: m ? m[1] : fallback });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+function presetsHeadMore() {
+  if (!hubCanExport("lines")) return null;
+  const more = SW.iconBtn("more", SW.t("common_more_actions_for", { name: SW.t("presets_lines_title") }), { cls: "presets-headmore" });
+  SW.menu(more, () => [{ label: presetsT("presets_download_csv"), icon: "download", action: "download-csv",
+    run: () => needCode(async () => { try { await presetsDownloadCsv("lines", "lines.csv"); } catch (e) { if (e.locked) throw e; SW.toast(presetsT("presets_csv_failed", { reason: hubText(e.message) }), "bad"); } }) }],
+  { label: SW.t("common_actions_for", { name: SW.t("presets_lines_title") }) });
+  return more;
+}
+
 // ----- the section header (02 2.1): a line under the title and the main action at the right -----
 function drawHead(v) {
   if (!v.on) { pageHead(); return; }
@@ -68,7 +95,7 @@ function drawHead(v) {
       : SW.t("presets_meta_build", { stamp: b.stamp, count: v.presets, orca })) : SW.t("presets_build_none")),
     v.pc ? SW.status("ok", { text: SW.t("presets_meta_sync") }) : null),
     h("div", { class: "page-head__actions" },
-      SW.btn(SW.t("presets_build_now"), { cls: "btn--primary", action: "build", run: once(() => buildNow()) })));
+      SW.btn(SW.t("presets_build_now"), { cls: "btn--primary", action: "build", run: once(() => buildNow()) }), presetsHeadMore()));
 }
 const buildNow = () => { const box = boxFor("presets"); return change(box, "presets/build", {}, () => say(box, SW.t("presets_build_asked"), true)); };
 

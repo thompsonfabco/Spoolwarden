@@ -104,7 +104,9 @@ MAX_SLICE_INFO = 4 * 1024 * 1024
 MAX_3MF = 512 * 1024 * 1024        # a sliced job is tens of MB; more is not read into memory
 MAX_USED_G = 5000.0        # more than this on one plate is a damaged or hostile file, not a print
 ENTRY_ID = re.compile(r"[0-9a-f]{32}")
-FIELDS = ('id', 'at', 'job', 'grams', 'spool_id', 'slot', 'observe')
+OUTCOMES = ('finished', 'failed', 'cancelled', 'unknown')
+FIELDS = ('id', 'at', 'job', 'grams', 'spool_id', 'slot', 'observe',
+          'material', 'vendor', 'name', 'color_hex', 'printer_name', 'outcome')
 
 _lock = threading.Lock()
 _undoing: set[str] = set()      # entries an Undo is working on (guarded by _lock)
@@ -238,21 +240,73 @@ def _read(serial: str) -> tuple[list[dict], dict[str, str]]:
 
 
 def _view(rec: dict, undone: dict) -> dict:
-    e = {k: rec.get(k) for k in FIELDS}
+    base = ('id', 'at', 'job', 'grams', 'spool_id', 'slot', 'observe')
+    e = {k: rec.get(k) for k in base}
     e['observe'] = bool(e['observe'])
     e['undone'] = rec['id'] in undone
+    for k in ('material', 'vendor', 'name', 'color_hex', 'printer_name'):
+        if rec.get(k):
+            e[k] = rec[k]
+    if rec.get('outcome') in OUTCOMES:
+        e['outcome'] = rec['outcome']
     if rec.get('error'):
         e['error'] = rec['error']
     return e
 
 
-def entries(serial: str, days: float = UNDO_DAYS) -> list[dict]:
-    """The printer's entries of the last `days` days, newest first. UsageNotFound for a malformed serial; a
-    printer without a log has none."""
+def _entry_month(e: dict) -> str | None:
+    at = e.get('at')
+    if isinstance(at, str) and len(at) >= 7 and at[4] == '-':
+        return at[:7]
+    ended = e.get('ended')
+    if isinstance(ended, (int, float)):
+        return dt.datetime.fromtimestamp(ended, dt.timezone.utc).strftime('%Y-%m')
+    return None
+
+
+def by_month(items: list[dict]) -> list[dict]:
+    """Aggregate usage entries into monthly summaries, newest month first (undone entries excluded)."""
+    buckets: dict[str, dict] = {}
+    mats: dict[str, dict[str, float]] = {}
+    for e in items:
+        if e.get('undone'):
+            continue
+        m = _entry_month(e)
+        if not m:
+            continue
+        b = buckets.setdefault(m, {'month': m, 'grams': 0.0, 'prints': 0, 'unfinished_prints': 0})
+        b['prints'] += 1
+        if e.get('outcome') in ('failed', 'cancelled', 'unknown'):
+            b['unfinished_prints'] += 1
+        g = e.get('grams')
+        if isinstance(g, (int, float)) and not isinstance(g, bool) and g > 0:
+            b['grams'] += float(g)
+            mat = e.get('material')
+            if isinstance(mat, str) and mat.strip():
+                mm = mats.setdefault(m, {})
+                mm[mat] = mm.get(mat, 0.0) + float(g)
+    out = []
+    for m in sorted(buckets, reverse=True):
+        row = buckets[m]
+        row['grams'] = round(row['grams'], 2)
+        mm = mats.get(m)
+        if mm:
+            row['top_material'] = max(mm.items(), key=lambda kv: (kv[1], kv[0]))[0]
+        out.append(row)
+    return out
+
+
+def entries(serial: str, days: float = UNDO_DAYS, *, by: str | None = None) -> list[dict] | dict:
+    """The printer's entries of the last `days` days, newest first (or `{months: [...]}` when `by='month'`).
+    UsageNotFound for a malformed serial; a printer without a log has none."""
     recs, undone = _read(serial)
     since = _now() - max(0.0, float(days)) * 86400
     out = [_view(r, undone) for r in recs if (_epoch(r.get('at')) or 0) >= since]
     out.reverse()
+    if by == 'month':
+        return {'months': by_month(out)}
+    if by is not None:
+        raise UsageError(f"unsupported grouping {by!r}")
     return out
 
 
@@ -310,6 +364,11 @@ def undo(entry_id: str, spoolman) -> dict:
             _undoing.discard(entry_id)
     log.info("usage: printer %s: undid %s g on spool %s (%s)", serial, rec['grams'], rec['spool_id'], rec.get('job'))
     undone[entry_id] = _iso(_now())
+    p = registry.load().get(serial)
+    pname = rec.get('printer_name') or (registry.display_name(p) if p else serial)
+    event_sink.emit("usage.undone", {"type": "printer", "id": serial, "name": pname},
+                    {"printer": serial, "job": rec.get('job'), "spool": rec.get('spool_id'),
+                     "grams": rec.get('grams'), "entry": entry_id})
     return _view(rec, undone)
 
 
@@ -578,10 +637,21 @@ class Tracker:
             if job['subtask'].startswith(CALIB_PREFIXES):
                 return
             pct = 100.0 if gs == 'FINISH' else float(status._int(report.get('mc_percent'), 0) or 0)
+            if gs == 'FINISH':
+                outcome = 'finished'
+            else:
+                fr = str(report.get('fail_reason') or '').strip().lower()
+                if fr == 'cancelled':
+                    outcome = 'cancelled'
+                elif status._print_error(report) or fr:
+                    outcome = 'failed'
+                else:
+                    outcome = 'unknown'
+            settled_job = {**job, 'outcome': outcome}
             log.info("usage: printer %s: %s %s at %s %%", serial, job['subtask'], gs, pct)
             self._futures = [f for f in self._futures if not f.done()]
             try:
-                self._futures.append(self._pool.submit(self._settle, serial, job, pct))
+                self._futures.append(self._pool.submit(self._settle, serial, settled_job, pct))
             except RuntimeError:          # stopped meanwhile
                 pass
 
@@ -596,11 +666,14 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
     """Settle one ended job (`{subtask, plate, mapping}`) at `pct` %: deduct and log; returns the new entries."""
     name = job.get('subtask') or ''
     p = registry.load().get(serial)
+    pname = registry.display_name(p) if p is not None else serial
+    outcome = job.get('outcome') if job.get('outcome') in OUTCOMES else 'unknown'
 
     def fail(error: str) -> list[dict]:
         log.warning("usage: printer %s: job %r not settled: %s", serial, name, error)
         return [append(serial, {'job': name, 'grams': None, 'spool_id': None, 'slot': None, 'observe': False,
-                                'error': error})]
+                                'material': None, 'vendor': None, 'name': None, 'color_hex': None,
+                                'printer_name': pname, 'outcome': outcome, 'error': error})]
     if p is None or not name:
         return fail('file_not_found')
     if not isinstance(job.get('mapping'), list) or not job['mapping']:
@@ -686,8 +759,17 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
             if old:     # a spool still at the holder's older location ("<name> – AMS Ext" for Ext-L)
                 here = here + spools.get(status.location(pname, old), [])
         spool = here[0] if len(here) == 1 else None
+        fil = (spool.get('filament') or {}) if spool else {}
+        raw_color = fil.get('color_hex') or f.get('color') or ''
+        color_hex = str(raw_color).strip().lstrip('#')[:6].upper() or None
         entry = {'job': name, 'grams': grams, 'spool_id': spool.get('id') if spool else None, 'slot': label,
-                 'observe': observe}
+                 'observe': observe,
+                 'material': fil.get('material') or f.get('type') or None,
+                 'vendor': (fil.get('vendor') or {}).get('name') or None,
+                 'name': fil.get('name') or None,
+                 'color_hex': color_hex,
+                 'printer_name': pname,
+                 'outcome': outcome}
         if smap.calibrated and g is not None and g >= 0 and label is None:
             entry['error'] = 'unmapped_slot'     # a slot the map does not know: run Map slots
         elif not ok:

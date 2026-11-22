@@ -362,3 +362,41 @@ def announce(api_of, fp: str | None, port: int, tries: int = 20, wait: float = 3
             sleep(min(wait, 3 * 2 ** n))     # 3, 6, 12, 24 s, then `wait`: a Hub starting beside it is found quickly
     return False
 
+
+
+CHECKIN_SECONDS = 300  # R83 section 9 point 3: the Hub's "last seen" for a station means "running", not "last used"
+
+
+def checkin(api_of, fp: str | None, port: int, every: float = CHECKIN_SECONDS, sleep=time.sleep, rounds: int | None = None,
+            plain: str | None = None) -> int:
+    """The station's check-in: its hello call again every `every` seconds (5 minutes) with the same three values as
+    `announce` (no new Hub route), so the Hub sees the station running and its version as it is now. Waits first (the
+    start's own hello is `announce`); an unpaired station or a Hub that does not answer is skipped until the next round and
+    never ends the loop. `rounds` bounds the loop (tests); the count of calls the Hub took is returned."""
+    taken, n = 0, 0
+    while rounds is None or n < rounds:
+        sleep(every)
+        n += 1
+        try:
+            api = api_of()
+            if not api.paired:
+                continue
+            status, body = api.hello(hello_values(fp, port, plain))
+        except Exception:  # noqa: BLE001 - one bad round must not end the check-ins for the rest of the run
+            log.exception("check-in")
+            continue
+        if status == 200:
+            taken += 1
+        else:
+            log.info("check-in with the Hub: %s %s", status, body.get("error") or "")
+    return taken
+
+
+def proof_key() -> bytes | None:
+    """The key of the Hub's proofs (page.py), from this station's pairing token; None when it is not paired."""
+    from . import page
+    try:
+        token = token_file().read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return page.token_key(token) if token else None

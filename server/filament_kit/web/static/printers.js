@@ -242,6 +242,11 @@ function printersTab() {
     printer_clear_goes_back: "{name} goes back to {location}.", printer_clear_goes_back_noplace: "{name} goes back to where it was before.",
     printer_clear_line: "Slot {slot} cleared.", printer_clear_waiting_ended: "The spool that was waiting for slot {slot} is not waiting any more.",
     printer_clear_still_shows: "The printer still shows the old filament for this slot until a spool is loaded.",
+    auto_load_any: "Load a spool", auto_option: "Automatic", auto_option_hint: "The slot where the spool appears.",
+    auto_plan: "{spool} goes into the slot where it appears ({slots}). The Hub waits up to 15 minutes.", auto_replaces: "Replaces {spool}, which was waiting.",
+    auto_waiting: "Waiting for {spool} to be loaded into any slot of {printer}.", auto_stop: "Stop waiting", auto_stopped: "Stopped waiting for {spool}.",
+    auto_choose: "Two slots were loaded. Which one got {spool}?", auto_chosen: "{spool} is loaded into {slot}.",
+    auto_started: "Waiting for {spool} to appear in a slot of {printer}.", auto_not_possible: "This printer has no slots the Hub can watch. Choose a slot.",
     printer_used_by_month: "By month", printer_used_show_list: "Show the list", printer_used_month_none: "No months to show yet.",
     printer_used_col_month: "Month", printer_used_col_grams: "Grams", printer_used_col_prints: "Prints", printer_used_col_unfinished: "Did not finish",
     printer_used_col_material: "Most used material", printer_used_download: "Download as CSV",
@@ -395,10 +400,12 @@ function printersTab() {
     g.progRow = h("div", { class: "printer__prog", hidden: true }, g.progBar, g.pct);
     g.detail = h("p", { class: "muted" }); g.temps = h("p", { class: "mono printer__temps" });
     g.alerts = h("div"); g.notes = h("div"); g.stream = h("p", { class: "result", role: "status" });
+    g.autoBox = h("div", { class: "pauto" }); g.autoSig = "";
     g.statusBox = h("div", { class: "printer__live" });
     g.controls = h("div", { class: "printer__controls" });
     g.msg = resultLine();
     g.camBtn = needsHub(SW.btn(t("printer_camera_show"), { icon: "camera", action: "camera", run: () => camera(!g.camOn) }));
+    g.loadAny = needsHub(SW.btn(tg("auto_load_any"), { action: "load-any", run: () => openLoad(null, g.loadAny) })); g.loadAny.hidden = true;
     g.camBox = h("div", { class: "pcam", hidden: true });
     g.units = h("div"); g.slotsBox = h("div");
     g.usageBox = h("div"); g.usageLine = resultLine();
@@ -406,7 +413,7 @@ function printersTab() {
     g.manualLine = resultLine();
     g.setLine = resultLine(); g.setBox = h("div");
     const top = h("div", { class: "group" },
-      h("div", { class: "group__body" }, g.facts, g.conn, g.statusBox, g.stream, g.controls, g.msg, h("div", {}, g.camBtn), g.camBox));
+      h("div", { class: "group__body" }, g.facts, g.conn, g.statusBox, g.stream, g.controls, g.autoBox, g.msg, h("div", { class: "printer__buttons" }, g.camBtn, g.loadAny), g.camBox));
     g.slots = group("printers_col_slots", g.slotsBox);
     g.used = group("printer_group_used", g.usageBox, g.usageLine);
     g.used.head.append(h("span", { class: "muted printer__days" }, t("printer_used_last_days")));
@@ -494,7 +501,7 @@ function printersTab() {
   function render(d) {
     const g = page, p = { ...(known(g.id) || {}), ...(d.printer || {}) }, s = d.status || {};
     if (g.statusLoad) { g.statusLoad.done(...g.statusNodes); g.slotsLoad.done(g.units); g.statusLoad = g.slotsLoad = null; }
-    paintHead(p); paintStatus(p, s); paintControls(p, s); paintSlots(p, s); paintFilled();
+    paintHead(p); paintStatus(p, s); paintControls(p, s); paintSlots(p, s); paintAuto(p, d.auto); paintFilled();
   }
   function paintHead(state) {
     const g = page, p = { ...(known(g.id) || {}), ...(state || {}), id: g.id }, m = meta(g.id);
@@ -505,7 +512,46 @@ function printersTab() {
       ...(addedId === g.id && !isUp(p) ? [sentence("ok", t("printers_added_connecting"))] : []));
     if (addedId === g.id && isUp(p)) addedId = null;
     g.up = isUp(p);
+    g.loadAny.hidden = !g.up;                           // Load a spool is in the header whenever the printer is connected (R83 addition 4)
     if (!g.camOn) g.camBtn.hidden = !g.camKind();       // the list may learn of a camera later
+  }
+  // ----- Auto (R83 addition, contract A6): the waiting notice with Stop waiting, and the choice when two slots were loaded -----
+  const autoSpool = (a) => { const s = (a && a.spool) || {}; return `${s.vendor || ""} ${s.name || ""}`.trim() || t("spool_title", { id: (a && a.spool_id) ?? s.id ?? "?" }); };
+  function paintAuto(p, auto) {
+    const g = page;
+    const sig = JSON.stringify([auto || null, g.up]);
+    if (sig === g.autoSig) return;
+    g.autoSig = sig;
+    if (!auto || typeof auto !== "object") { g.autoBox.replaceChildren(); return; }
+    const spool = autoSpool(auto), choose = auto.state === "choose";
+    const text = choose ? tg("auto_choose", { spool }) : tg("auto_waiting", { spool, printer: nameOf(g.id) });
+    const line = resultLine();
+    const kids = [sentence("info", auto.text && !choose ? String(auto.text) : text)];
+    if (choose) {
+      kids.push(h("div", { class: "pauto__choices" }, ...(auto.slots || []).map((label) =>
+        needsHub(SW.btn(label, { action: "auto-choose", name: tg("auto_chosen", { spool, slot: label }), run: () => autoChoose(label, line) })))));
+    }
+    kids.push(h("div", { class: "pauto__buttons" }, needsHub(SW.btn(tg("auto_stop"), { cls: "btn--ghost", action: "auto-stop", run: () => autoStop(spool, line) }))), line);
+    g.autoBox.replaceChildren(...kids);
+  }
+  async function autoStop(spool, line) {                // no question: stopping loses nothing (R83 addition 01:06)
+    const g = page;
+    await act(line, t("common_working"), async () => {
+      await pj(`${enc(g.id)}/auto/cancel`, {});
+      g.autoSig = ""; g.autoBox.replaceChildren();
+      SW.toast(tg("auto_stopped", { spool }));
+      return null;
+    }, { again: () => autoStop(spool, line) });
+  }
+  async function autoChoose(label, line) {
+    const g = page;
+    await act(line, t("common_load_wait"), async () => {
+      const r = await pj(`${enc(g.id)}/auto/choose`, { slot: label });
+      g.autoSig = ""; g.autoBox.replaceChildren();
+      SW.toast(t(r && r.confirmed ? "spool_load_loaded_toast" : "spool_load_sent_toast", { slot: label }));
+      slotSay(label, [t(r && r.confirmed ? "spool_load_loaded_toast" : "spool_load_sent_line", { slot: label }), ...((r && r.problems) || [])], "ok");
+      return null;
+    }, { again: () => autoChoose(label, line) });
   }
   function paintStatus(p, s) {
     const g = page, up = isUp(p), live = up && isLive(s);
@@ -644,11 +690,15 @@ function printersTab() {
   const slotSay = (label, lines, kind) => SW.result(slotLine(label), kind, lineNodes(lines));
 
   // Load into <slot>: pick a spool (last tapped tag, or search), see the plan from a dry run, then Load sends it for real
+  // `sl` is null from the printer's "Load a spool": the spool first, then ONE list of targets (Automatic first and selected, then the slots)
   function openLoad(sl, opener) {
-    const g = page, label = sl.label;
-    let spool = null, dryAgain = false;
-    clear(slotLine(label));
-    const line = resultLine(), plan = resultLine(), results = h("div", { class: "list" });
+    const g = page;
+    let spool = null, dryAgain = false, target = sl ? sl.label : null;       // "auto" is the reserved label of Automatic
+    if (sl) clear(slotLine(sl.label));
+    const slotsOf = () => (((g.lastSnap || {}).status || {}).ams || []).flatMap((u) => u.slots || []);
+    const autoOk = () => !!((g.lastSnap || {}).printer || known(g.id) || {}).auto_possible;
+    const where = h("div", { class: "pload__where", hidden: true });
+    const line = resultLine(), autoRefusal = resultLine(), plan = resultLine(), results = h("div", { class: "list" });
     const hint = h("p", { class: "muted" }, t("spool_load_pick_hint"));
     const find = SW.field({ type: "search", label: t("common_search"), placeholder: t("common_search_placeholder"), onSearch: (text) => search(text) });
     const picked = h("div", { class: "pload__picked", hidden: true });
@@ -657,8 +707,19 @@ function printersTab() {
     const go = needsHub(SW.btn(t("common_load"), { cls: "btn--primary", action: "load", run: () => doLoad(false) }));
     const tap = needsHub(SW.btn(t("spool_load_last_tag"), { action: "last-tag", run: () => lastTap() }));
     disabled(go, t("spool_load_pick_first"), () => find._control);
-    const dlg = SW.sheet({ title: t("spool_load_title", { slot: label }), foot: [cancel, go],
-      body: h("div", { class: "pload" }, tap, h("p", { class: "muted pload__or" }, t("spool_load_or")), search_, picked, plan) });
+    const dlg = SW.sheet({ title: sl ? t("spool_load_title", { slot: sl.label }) : tg("auto_load_any"), foot: [cancel, go],
+      body: h("div", { class: "pload" }, tap, h("p", { class: "muted pload__or" }, t("spool_load_or")), search_, picked, where, autoRefusal, plan) });
+    function pickTarget() {                              // ONE list: Automatic (when the printer can do it) first and selected, then every slot
+      const entries = [...(autoOk() ? [{ value: "auto", label: tg("auto_option") }] : []), ...slotsOf().map((x) => ({
+        value: x.label, label: [x.label, x.spool ? spoolTitle(x.spool) : x.type || t("common_empty")].join(" · "),
+      }))];
+      if (!entries.length) { where.hidden = true; return; }
+      if (!entries.some((e) => e.value === target)) target = entries[0].value;
+      where.hidden = false;
+      const seg = SW.segmented({ legend: t("spool_load_which_slot", { printer: nameOf(g.id) }), name: "pload-target", cls: "slot-targets", wide: true, value: target, options: entries });
+      seg.addEventListener("change", (ev) => { target = ev.target.value; clear(autoRefusal); clear(plan); doLoad(true); });
+      where.replaceChildren(seg, ...(entries[0].value === "auto" ? [h("p", { class: "muted" }, tg("auto_option_hint"))] : []));
+    }
     openHere(dlg, opener);
     function row(s) {
       const b = h("button", { class: "pick", type: "button", on: { click: () => pick(s) } }, h("strong", {}, t("printer_load_row_id", { id: s.id }) + " "), spoolTitle(s),
@@ -686,23 +747,37 @@ function printersTab() {
       }, { button: tap });
     }
     function pick(s) {
-      spool = s; clear(plan); disabled(go, t("spool_load_working_out"));
+      spool = s; clear(autoRefusal); clear(plan); disabled(go, t("spool_load_working_out"));
       search_.hidden = true;
       picked.hidden = false;
+      if (!sl) pickTarget();
       picked.replaceChildren(h("p", {}, t("spool_load_picked", { id: s.id, name: spoolTitle(s), location: s.location || "?", grams: s.remaining_g != null ? Math.round(s.remaining_g) : "?" })),
         SW.btn(t("common_change"), { cls: "btn--ghost", action: "change", run: () => { spool = null; picked.hidden = true; search_.hidden = false; clear(plan); disabled(go, t("spool_load_pick_first"), () => find._control); find._control.focus(); } }));
       doLoad(true);                                     // the dry run first: the plan is shown before anything is sent
     }
     // dry: the plan (preset, nozzle, spools going back); then Load sends `dry_run: false`
     async function doLoad(dry) {
-      if (!spool) return;
+      if (!spool || !target) return;
       if (g.slotBusy) { if (dry) dryAgain = true; return; }     // not dropped: runs for the latest pick when the call under way ends
-      const s = spool;
+      const s = spool, label = target, auto = label === "auto";
       g.slotBusy = true; disabled(go, t(dry ? "spool_load_working_out" : "common_load_wait"));
       SW.result(plan, "run", t(dry ? "spool_load_working_out" : "common_load_wait"));
       try {
-        const r = await pj(`${slotPath(g, label)}/load`, { spool_id: s.id, dry_run: dry });
-        if (spool !== s) return;                         // another spool was picked meanwhile
+        const r = await pj(auto ? `${enc(g.id)}/slots/auto/load` : `${slotPath(g, label)}/load`, { spool_id: s.id, dry_run: dry });
+        if (spool !== s || target !== label) return;     // another spool or another target was picked meanwhile
+        if (auto) {                                      // Automatic: the Hub watches the slots; nothing is loaded yet (contract A6)
+          if (dry) {
+            const rep = r.replaces ? tg("auto_replaces", { spool: r.replaces.name || t("spool_title", { id: r.replaces.spool_id ?? "?" }) }) : "";
+            SW.result(plan, "ok", lineNodes([tg("auto_plan", { spool: spoolTitle(s), slots: (r.watching || []).join(", ") || "?" }), rep].filter(Boolean)));
+            disabled(go, null);
+          } else {
+            dlg.close();
+            const said = r.message || tg("auto_started", { spool: spoolTitle(s), printer: nameOf(g.id) });
+            SW.toast(said); SW.result(g.msg, "ok", said);
+            pollStates();
+          }
+          return;
+        }
         const moved = (r.moved_back || []).filter((m) => m.id !== s.id)
           .map((m) => (m.location ? t("spool_load_plan_goes_back", { id: m.id ?? "?", slot: label, location: m.location }) : t("spool_load_plan_goes_back_noplace", { id: m.id ?? "?", slot: label })));
         const problems = (r.problems || []).map((x) => sentence("bad", x));
@@ -717,7 +792,20 @@ function printersTab() {
           slotSay(label, [t(r.confirmed ? "spool_load_loaded_toast" : "spool_load_sent_line", { slot: label }), ...moved, ...(r.problems || [])], "ok");
         }
       } catch (e) {
-        if (spool === s) { failed(plan, e, () => doLoad(dry)); disabled(go, dry ? t("spool_load_see_above") : null); }   // a refused Load can be pressed again; a failed plan has to be picked again
+        if (spool !== s || target !== label) return;
+        if (auto && autoNotPossible(e)) {
+          clear(plan);
+          SW.result(autoRefusal, "bad", tg("auto_not_possible"));
+          disabled(go, t("spool_load_see_above"));
+          const first = slotsOf()[0];
+          if (first) {
+            target = first.label;
+            pickTarget();
+            dryAgain = true;
+          }
+          return;
+        }
+        failed(plan, e, () => doLoad(dry)); disabled(go, dry ? t("spool_load_see_above") : null);   // a refused Load can be pressed again; a failed plan has to be picked again
       } finally {
         g.slotBusy = false;
         if (dryAgain && spool && dlg.isConnected) { dryAgain = false; doLoad(true); }

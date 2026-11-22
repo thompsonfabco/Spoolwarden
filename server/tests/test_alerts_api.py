@@ -55,12 +55,22 @@ def hub(env, sm):
     return TestClient(create_app(sm=sm))
 
 
+def _redeem_quietly(device: str, **issue_kw) -> dict:
+    prev = event_sink.sink()
+    event_sink.set_sink(None)
+    try:
+        token = pairing.redeem_code(pairing.issue(device, **issue_kw).code)
+    finally:
+        event_sink.set_sink(prev)
+    return {"Authorization": "Bearer " + token}
+
+
 def phone() -> dict:
-    return {"Authorization": "Bearer " + pairing.redeem_code(pairing.issue("Pixel").code)}
+    return _redeem_quietly("Pixel")
 
 
 def web() -> dict:
-    return {"Authorization": "Bearer " + pairing.redeem_code(pairing.issue("web (MCP)", role=pairing.WEB_ROLE).code)}
+    return _redeem_quietly("web (MCP)", role=pairing.WEB_ROLE)
 
 
 def write(store, kind, data=None, subject=None, **kw):

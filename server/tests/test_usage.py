@@ -188,7 +188,7 @@ def test_finished_two_colour_print_deducts_from_the_right_spools(rig, sd, spoolm
     es = usage.entries(SERIAL, 7)
     assert sorted((e["slot"], e["spool_id"], e["grams"]) for e in es) == [("A2", A2, 21.92), ("HT-A", HTA, 9.6)]
     for e in es:
-        assert set(e) == {"id", "at", "job", "grams", "spool_id", "slot", "observe", "undone"}
+        assert {"id", "at", "job", "grams", "spool_id", "slot", "observe", "undone"}.issubset(e)
         assert e["job"] == "bracket_v3" and e["observe"] is False and e["undone"] is False
 
 

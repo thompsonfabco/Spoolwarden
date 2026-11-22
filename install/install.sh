@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # filament-kit installer for Ubuntu 24.04 or newer.
 # Run as root: sudo ./install.sh [--mode MODE | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP]
-#                                [--restore BACKUP.zip]   (--restore: this machine takes the backup's modules and data)
+#                                [--restore BACKUP.zip|.enc] [--password-file FILE]
 # MODE: server (default), station, all-in-one. A first install at a terminal asks first whether to finish in the
 # browser (Guided Setup: the usual choices, no other question), else for the mode (and offers custom). A first install
 # of the Hub takes port 443 when it is free; when it is not (or Remote access, which uses 443, is chosen) the terminal
@@ -22,7 +22,7 @@ say() { printf '\n==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 # get.sh deletes its unpacked folder, so telling people to rerun this script would point at nothing
 AGAIN='curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh'
-usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP] [--restore BACKUP.zip]" >&2; exit 2; }
+usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP] [--restore BACKUP.zip|.enc [--password-file FILE]]" >&2; exit 2; }
 # one host name or address: station.allow never takes a range
 bad_addr() { case "$1" in "" | */* | *"*"* | *" "*) return 0 ;; esac; return 1; }
 
@@ -41,6 +41,7 @@ CUSTOM=""
 SETS=""
 SERVER_ADDR=""
 RESTORE=""
+PASSWORD_FILE=""
 GUIDED=0                   # 1: the first question was answered Yes
 GUIDED_DEFAULT=y           # open point 5: the answer Enter gives (y or n)
 ASKED=""                   # the first-run marks this run earns by asking (firstrun.py): features
@@ -60,12 +61,18 @@ while [ $# -gt 0 ]; do
         --hub=*) SERVER_ADDR="${1#--hub=}"; shift ;;
         --restore) [ $# -ge 2 ] || usage; RESTORE="$2"; shift 2 ;;
         --restore=*) RESTORE="${1#--restore=}"; shift ;;
+        --password-file) [ $# -ge 2 ] || usage; PASSWORD_FILE="$2"; shift 2 ;;
+        --password-file=*) PASSWORD_FILE="${1#--password-file=}"; shift ;;
         *) usage ;;
     esac
 done
 if [ -n "$RESTORE" ]; then
-    [ -f "$RESTORE" ] || die "$RESTORE: no such file (give the backup zip from the setup page or spoolwarden backup create)"
+    [ -f "$RESTORE" ] || die "$RESTORE: no such file (give the backup .zip or .enc from the setup page or spoolwarden backup create)"
     RESTORE="$(cd "$(dirname "$RESTORE")" && pwd)/$(basename "$RESTORE")"
+fi
+if [ -n "$PASSWORD_FILE" ]; then
+    [ -f "$PASSWORD_FILE" ] || die "$PASSWORD_FILE: no such password file"
+    PASSWORD_FILE="$(cd "$(dirname "$PASSWORD_FILE")" && pwd)/$(basename "$PASSWORD_FILE")"
 fi
 case "$MODE" in            # the Hub's setup names are the old words under new names
     hub) MODE=server ;;
@@ -267,6 +274,9 @@ chmod -R go-w "$OPT"
 
 # ---------- restore: the backup's modules and data instead of the questions below ----------
 if [ -n "${RESTORE:-}" ]; then
+    if [ -n "${PASSWORD_FILE:-}" ]; then
+        exec /usr/local/bin/spoolwarden restore --yes --password-file "$PASSWORD_FILE" "$RESTORE"
+    fi
     exec /usr/local/bin/spoolwarden restore --yes "$RESTORE"
 fi
 

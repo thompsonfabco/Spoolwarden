@@ -23,6 +23,8 @@ def env(tmp_path, monkeypatch):
         monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
     kh._reset_cache()
     config.save({**config.load(), "modules": {"printers": True, "klipper": True}})       # Klipper is opt-in
+    # the test before a Klipper printer is saved (R82 s5 p3) is test_af5_printer_add.py's; these are about the address
+    monkeypatch.setattr(cli, "_klipper_test", lambda host, port, key: True)
     yield
     kh._reset_cache()
 

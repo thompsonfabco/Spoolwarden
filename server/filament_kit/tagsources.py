@@ -36,8 +36,8 @@ TAG_FRESH = 300  # a tap or a weight this recent (seconds) belongs to the spool 
 
 MAX_BYTES = 64 * 1024  # a lasttag reply is a few hundred bytes; refuse anything past this
 
-TEXT_NOT_HTTPS = "The tag service at {address} is not using HTTPS. Update it."
-TEXT_CERT_CHANGED = "The tag service at {address} presents a different certificate than the one the Hub trusts."
+TEXT_NOT_HTTPS = "The tag source {address} is not using HTTPS."
+TEXT_CERT_CHANGED = "The certificate of the tag source {address} has changed."
 TEXT_CERT_FIX = "Save the tag source again to trust the new certificate."
 PIN_KIND = "tag"
 
@@ -122,7 +122,10 @@ def _fetch(url: str, via_station: bool = False) -> dict | None:
 
 def _web(url: str) -> bool:
     """Only http(s): urllib would also open file: and ftp: URLs from the config (A-M2)."""
-    return urllib.parse.urlsplit(url).scheme.lower() in ("http", "https")
+    try:
+        return urllib.parse.urlsplit(url).scheme.lower() in ("http", "https")
+    except ValueError:
+        return False
 
 
 def _sources(cfg: dict) -> list[tuple[str, str]]:
@@ -210,16 +213,23 @@ def issues(cfg: dict, timeout: float = 2) -> list[dict]:
     out = []
     for name, url in _sources({"tag_sources": cfg.get("tag_sources")}):
         u = urllib.parse.urlsplit(url)
-        address = f"{u.hostname}:{u.port}" if u.port else str(u.hostname)
-        if u.scheme.lower() == "http" and not _loopback(u.hostname):
+        try:
+            port = u.port
+        except ValueError:
+            continue
+        host = u.hostname
+        if not host:
+            continue
+        address = f"{host}:{port}" if port else host
+        if u.scheme.lower() == "http" and not _loopback(host):
             out.append({"name": name, "url": url, "kind": "plain", "text": TEXT_NOT_HTTPS.format(address=address),
                         "fix": None})
-        elif u.scheme.lower() == "https" and u.hostname:
+        elif u.scheme.lower() == "https":
             pin = station_client.pin_get(PIN_KIND, origin(url))
             if not pin:
                 continue
             try:
-                seen = station_client.peer_fingerprint(u.hostname, u.port or 443, timeout)
+                seen = station_client.peer_fingerprint(host, port or 443, timeout)
             except OSError:
                 continue
             if seen != pin:

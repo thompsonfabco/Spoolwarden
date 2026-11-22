@@ -35,6 +35,7 @@ def test_legacy_config_plans_todays_install():
 
 def test_all_in_one_station_localhost_only():
     cfg = set_mode(_cfg(), "all-in-one")
+    cfg["station"]["page_from"] = "allowed"         # the default (home) adds the private ranges: test_af2b_station_dropin
     acts = apply.plan(cfg, resolve=lambda h: [h])
     (dest, content, mode, owner), = [
         a.arg for a in acts if a.kind == "install_file" and a.arg[0] == apply.DROPIN]
@@ -49,6 +50,7 @@ def test_all_in_one_station_localhost_only():
 def test_station_mode_resolves_server_name():
     cfg = set_mode(_cfg(), "station")
     cfg["station"]["allow"] = ["spoolman.example.lan"]
+    cfg["station"]["page_from"] = "allowed"
     acts = apply.plan(cfg, resolve=lambda h: {"spoolman.example.lan": ["192.0.2.10"]}[h])
     content = [a.arg[1] for a in acts if a.kind == "install_file"
                and a.arg[0].endswith("kit.conf")][0]

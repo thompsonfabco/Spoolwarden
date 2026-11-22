@@ -31,6 +31,8 @@ CLI_DEVICE = "command line (this server)"         # `filament-kit printer map|re
 UNPAIRED = (f"the Hub no longer accepts this web unit (the device '{DEVICE_NAME}' was unpaired); "
             "pair it again: sudo spoolwarden modules apply")
 NOT_PAIRED = "this web unit is not paired with the Hub yet; pair it: sudo spoolwarden modules apply"
+# These refusals can also arrive as {error: sentence, code} from an older Hub.
+AUTO_UNDO_REFUSALS = ("auto_not_possible", "changed_since", "too_old", "already_undone", "not_undoable")
 
 
 def pair_token(f: Path, role: str | None = None, name: str = DEVICE_NAME) -> str:
@@ -170,8 +172,11 @@ class KitApi:
                 self._refuse()
                 raise SlotError(UNPAIRED, code="unpaired", http=401) from None
             err = err if isinstance(err, dict) else {}
-            raise SlotError(err.get("message") or f"the kit server answered {e.code}",
-                            code=err.get("error") if isinstance(err.get("error"), str) else None,
+            code = err.get("error") if isinstance(err.get("error"), str) else None
+            message = err.get("message")
+            if code not in AUTO_UNDO_REFUSALS and err.get("code") in AUTO_UNDO_REFUSALS:
+                message, code = message or code, err["code"]
+            raise SlotError(message or f"the kit server answered {e.code}", code=code,
                             http=e.code, field=err.get("field") if isinstance(err.get("field"), str) else None,
                             body=err if e.code == 400 and err.get("error") == "invalid_entry" else None) from None
         except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:

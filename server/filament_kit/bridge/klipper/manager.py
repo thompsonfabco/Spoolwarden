@@ -595,7 +595,12 @@ class KlipperFamily(LoadsMixin):
         }
         with c.lock:
             out["spoolman_warning"] = kusage.with_connection(c.spoolman_warning, c.spoolman_connected)
-        return out
+        from .. import auto_slot
+        try:
+            adapter_name = self.model(pid)[2].name
+        except Exception:  # noqa: BLE001
+            adapter_name = None
+        return auto_slot.annotate(pid, out, adapter=adapter_name)
 
     # --- usage ---------------------------------------------------------------------------------------------------
     def usage(self, pid: str, days: float) -> list[dict]:

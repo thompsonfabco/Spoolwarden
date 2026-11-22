@@ -296,6 +296,10 @@ CLI_SLOT_LOAD_PREVIEW = "Load spool {n}, {name}, into slot {slot} of {printer}."
 CLI_SLOT_LOAD_ASK = "Load spool {n} into slot {slot} of {printer}?"
 CLI_SLOT_LOAD_DONE = "Spool {n} is loaded in slot {slot} of {printer}."
 CLI_SLOT_LOAD_WAITING = "Waiting for the spool to load in {slot}."
+CLI_SLOT_AUTO_PREVIEW = "Watch {slots} on {printer} for spool {n}."
+CLI_SLOT_AUTO_REPLACES = "Replaces waiting for spool {n}, {name}."
+CLI_SLOT_AUTO_ASK = "Start watching on {printer} for spool {n}?"
+CLI_SLOT_AUTO_DONE = "Watching {slots} on {printer} for spool {n}. Put the spool in any empty slot."
 CLI_SLOT_UNLOAD_PREVIEW = "Unload slot {slot} of {printer}: spool {n}, {name}, goes back to {place}."
 CLI_SLOT_UNLOAD_ASK = "Unload slot {slot} of {printer}?"
 CLI_SLOT_UNLOAD_DONE = "Slot {slot} of {printer} is unloaded. Spool {n} is at {place}."
@@ -308,9 +312,9 @@ CLI_SLOT_WAITING_ENDS = "The spool waiting for slot {slot} stops waiting."
 CLI_SLOT_PRINTER_CLEARED = "The slot's setting on the printer is cleared."
 CLI_SLOT_NO_SPOOL = "No spool is recorded in slot {slot}."
 CLI_SLOT_BAD = "{value} is not a slot of a printer."
-CLI_SLOT_BAD_FIX = "see the slots: spoolwarden printer show <name>"
+CLI_SLOT_BAD_FIX = "see the slots: {command} printer show <name>"
 CLI_SLOT_REFUSED = "the Hub did not change slot {slot}: {why}"
-CLI_USAGE_EMPTY = "No filament used in the last {days} days."
+CLI_PRINTER_USAGE_EMPTY = "No filament used in the last {days} days."
 CLI_USAGE_EMPTY_DEFAULT = "No filament used lately."
 CLI_USAGE_NO_SPOOL = "no spool"
 CLI_USAGE_UNDONE = "undone"
@@ -353,13 +357,14 @@ def _q(name: str) -> str:
 def cmd_printer_slot(api, printer: dict, action: str, slot: str, spool=None, yes: bool = False) -> int:
     """`printer load|unload|clear <name> <slot> [<spool n>]`: the preview (a dry run), the question, the change."""
     if not _SLOT.fullmatch(slot or ""):
-        output.error(CLI_SLOT_BAD.format(value=slot), CLI_SLOT_BAD_FIX)
+        output.error(CLI_SLOT_BAD.format(value=slot), CLI_SLOT_BAD_FIX.format(command=spools_cli.COMMAND))
         return output.USAGE
     body: dict = {}
     if action == "load":
         n = spools_cli._number(spool)
         if n is None:
-            output.error(spools_cli.CLI_SPOOL_NUMBER_BAD.format(value=spool), spools_cli.CLI_SPOOL_NOT_FOUND_FIX)
+            output.error(spools_cli.CLI_SPOOL_NUMBER_BAD.format(value=spool),
+                         spools_cli.CLI_SPOOL_NOT_FOUND_FIX.format(command=spools_cli.COMMAND))
             return output.USAGE
         body = {"spool_id": n}
     if api is None:
@@ -374,7 +379,14 @@ def cmd_printer_slot(api, printer: dict, action: str, slot: str, spool=None, yes
     sid, label = spool_v.get("id"), _spool_label(spool_v)
     back = [m for m in plan.get("moved_back") or [] if isinstance(m, dict)]
     place = next((m.get("location") for m in back if m.get("id") == sid), None) or spool_v.get("location") or "its place"
-    if action == "load":
+    if action == "load" and slot.strip().lower() == "auto":
+        watching = ", ".join(plan.get("watching") or []) or "slots"
+        lines = [CLI_SLOT_AUTO_PREVIEW.format(slots=watching, printer=name, n=body["spool_id"])]
+        rep = plan.get("replaces")
+        if isinstance(rep, dict):
+            lines.append(CLI_SLOT_AUTO_REPLACES.format(n=rep.get("spool_id", ""), name=rep.get("name", "")))
+        ask = CLI_SLOT_AUTO_ASK.format(printer=name, n=body["spool_id"])
+    elif action == "load":
         lines = [CLI_SLOT_LOAD_PREVIEW.format(n=body["spool_id"], name=label, slot=slot, printer=name)]
         lines += [CLI_SLOT_MOVED_BACK.format(n=m.get("id"), place=m.get("location")) for m in back]
         ask = CLI_SLOT_LOAD_ASK.format(n=body["spool_id"], slot=slot, printer=name)
@@ -398,7 +410,10 @@ def cmd_printer_slot(api, printer: dict, action: str, slot: str, spool=None, yes
     except SlotError as e:
         return _slot_refused(e, slot)
     output.emit(r)
-    if action == "load":
+    if action == "load" and slot.strip().lower() == "auto":
+        watching = ", ".join(r.get("watching") or []) or "slots"
+        output.out(CLI_SLOT_AUTO_DONE.format(slots=watching, printer=name, n=body["spool_id"]))
+    elif action == "load":
         output.out(CLI_SLOT_LOAD_WAITING.format(slot=slot) if r.get("pending") else
                    CLI_SLOT_LOAD_DONE.format(n=body["spool_id"], slot=slot, printer=name))
     elif action == "unload":
@@ -443,7 +458,7 @@ def cmd_printer_usage(api, printer: dict, days=None) -> int:
     output.emit(r)
     entries = r.get("entries") or []
     if not entries:
-        output.out(CLI_USAGE_EMPTY.format(days=f"{float(days):g}") if days is not None else CLI_USAGE_EMPTY_DEFAULT)
+        output.out(CLI_PRINTER_USAGE_EMPTY.format(days=f"{float(days):g}") if days is not None else CLI_USAGE_EMPTY_DEFAULT)
         return 0
 
     def note(e: dict) -> str:

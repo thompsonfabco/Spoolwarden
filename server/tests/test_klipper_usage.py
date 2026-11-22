@@ -82,13 +82,16 @@ def test_record_same_job_once():
     assert len(kusage.entries("p", 36500)) == 1
 
 
-def test_cap_2000(monkeypatch):
-    assert kusage.KEEP == 2000     # the shortened cap below is only a stand-in for this one
-    monkeypatch.setattr(kusage, "KEEP", 5)
-    for i in range(8):
-        kusage.record("p", history_job(job_id=f"{i:06d}"), 1)
+def test_cap_2000():
+    assert kusage.RETENTION_MONTHS == 13
+    old_ts = time.time() - 450 * 86400
+    kusage._write("p", [{
+        "id": "k-old", "job": "old", "file": "old.gcode", "started": old_ts - 60, "ended": old_ts,
+        "status": "completed", "spool_id": 1, "filament_mm": 100.0, "grams": 10.0, "source": "moonraker",
+    }])
+    kusage.record("p", history_job(job_id="new"), 1)
     ids = [e["job"] for e in kusage.entries("p", 36500)]
-    assert len(ids) == 5 and "000007" in ids and "000000" not in ids
+    assert "new" in ids and "old" not in ids
 
 
 def test_entries_missing_or_broken_file(tmp_path):

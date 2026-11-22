@@ -7,17 +7,10 @@ import httpx
 import pytest
 from starlette.testclient import TestClient
 
-from filament_kit import inventory, setup_console, storage
-from filament_kit.setup_console import spools_tab
+from filament_kit import inventory, storage
 from filament_kit.storage import MATERIALS, Location, Storage
 from test_hub_page_audit import hub_app  # noqa: F401
 from test_setup_page import CODE
-
-
-@pytest.fixture(autouse=True)
-def mounted(monkeypatch):
-    real = setup_console.routes
-    monkeypatch.setattr(setup_console, "routes", lambda page: real(page) + spools_tab.routes(page))
 
 
 @pytest.fixture

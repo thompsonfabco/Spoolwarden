@@ -1,1 +1,2 @@
+server/filament_kit/setup_static/setup.js | intake | 1 | web app URL, not shown
 server/filament_kit/setup_static/setup.js | presets | 4 | identifier, not shown

@@ -92,6 +92,7 @@ DEFAULTS: dict = {
                 "nfc_device": "auto", "beep": True, "beep_device": "",
                 "speech": True, "tts": "auto", "voice": None, "camera": "auto", "panel_flash": True,
                 "panel_swap": False,  # the panel's yellow and red are wired to each other's pins
+                "page_from": "home",  # who the unit admits for the page: home, subnets or allowed (apply.page_ranges)
                 "speaker_volume": 50},  # the C3 panel's speaker, percent
     # merge-ops: web unit, remote access, orders file, tag readers, slot service, slicer/presets/intake extras
     "web": {"port": 8101, "public_url": None, "push": False,   # push: Web Push alerts (needs internet egress)

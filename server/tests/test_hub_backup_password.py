@@ -32,12 +32,12 @@ window.fetch = async (u, init) => {
   hub.calls.push({ path, password: body.password, name: body.name, sha256: body.sha256, confirm: body.confirm });
   if (path === "backups/list") return reply(200, { backups: hub.rows, keep_days: 14, folder: "/var/backups/filament-kit", password_set: hub.set });
   if (path === "backups/password") {
-    if (body.password.length < hub.minimum) return reply(400, { error: "too_short", text: "The server wants at least " + hub.minimum + " characters." });
+    if (body.password.length < hub.minimum) return reply(400, { error: "The server wants at least " + hub.minimum + " characters.", code: "too_short", text: "NOT THIS", message: "NOT THIS" });
     hub.set = true; hub.last = body.password;
     return reply(200, { set: true });
   }
   if (path === "backups/password/remove") { hub.set = false; return reply(200, { set: false }); }
-  if (path === "restore/password") return body.password === "right password" ? reply(200, { ok: true }) : reply(400, { error: "wrong_password", text: "Wrong password, or the file is damaged. Nothing was changed." });
+  if (path === "restore/password") return body.password === "right password" ? reply(200, { ok: true }) : reply(400, { error: "Wrong password, or the file is damaged. Nothing was changed.", code: "wrong_password", text: "NOT THIS", message: "NOT THIS" });
   if (path === "restore/forget") return reply(200, { ok: true });
   return reply(200, { job: "restore" });
 };

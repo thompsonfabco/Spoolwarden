@@ -55,6 +55,15 @@ case "${1:-}" in
         run_as_root "$@"
         ;;
 esac
+# Let the CLI validate a supplied port as the original caller. Reading the port stays unprivileged.
+if [ "${1:-}" = port ]; then
+    for arg in "${@:2}"; do
+        case "$arg" in
+            -y | --yes | -h | --help | --) ;;
+            *) run_as_root "$@" ;;
+        esac
+    done
+fi
 # `spoolman address` saves the Hub's settings and applies them; `spoolman fields` runs as the user below.
 if [ "${1:-}" = spoolman ] && [ "${2:-}" = address ] && [ -n "${3:-}" ]; then
     run_as_root "$@"

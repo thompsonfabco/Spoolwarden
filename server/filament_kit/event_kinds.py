@@ -37,7 +37,8 @@ class Kind:
 
 # What a person or the Hub changes about a spool: the spool, and the before and after of what changed.
 _SPOOL_CHANGE = ("spool", "before_location", "after_location", "before_grams", "after_grams",
-                 "before_slot", "after_slot", "batch")      # batch: all spool events of one request (R80 E5)
+                 "before_slot", "after_slot", "before_tag", "after_tag", "before_archived",
+                 "batch")      # batch: all spool events of one request (R80 E5)
 # Every print.* event of one print run and its usage.recorded carry `run`; Klipper ones also `printer_job` (R80 E5).
 _RUN = ("run", "printer_job")
 
@@ -63,7 +64,7 @@ def _kinds() -> dict[str, Kind]:
     add("spool.low", "warn", ("spool", "filament", "material", "grams", "in_stock"), RAISES, "spool-low")
     add("spool.ok", "ok", ("spool",), CLEARS, "spool-low")
     for name in ("added", "opened", "weighed", "moved", "emptied", "loaded", "unloaded"):
-        add(f"spool.{name}", "info", _SPOOL_CHANGE)
+        add(f"spool.{name}", "info", _SPOOL_CHANGE + (("auto",) if name == "loaded" else ()))
     add("storage.low", ("warn", "bad"), ("free", "total", "percent", "direction"), RAISES, "storage-low", keyed=False)
     add("storage.ok", "ok", ("free", "total"), CLEARS, "storage-low", keyed=False)
     # a later raise replaces the stored condition (R80 E2); `direction` = down when the disk fell from bad to warn
@@ -74,13 +75,40 @@ def _kinds() -> dict[str, Kind]:
     add("device.up", "ok", (), CLEARS, "device-down")
     add("check.failed", "warn", ("text",), RAISES, "check")
     add("check.ok", "ok", ("text",), CLEARS, "check")
-    for name in ("hub.started", "hub.updated", "backup.finished", "backup.failed", "device.paired", "device.removed",
-                 "settings.changed"):
-        add(name, "info", emitted=False)           # Later (phase 4): the values are added when the phase emits it
+    add("slot.cleared", "info", _SPOOL_CHANGE + ("slot",))
+    add("hub.started", "info", ("version",))
+    add("hub.updated", "info", ("from", "to", "rollback"))
+    add("hub.restored", "info", ("backup", "made_at"))
+    add("backup.finished", "ok", ("file", "bytes", "encrypted", "nightly"))
+    add("backup.failed", "warn", ("reason", "nightly"))
+    add("device.paired", "info", ("kind",))
+    add("device.removed", "info", ("kind",))
+    add("settings.changed", "info", ("group", "names", "feature", "on"))
+    add("printer.added", "info", ("family", "names"))
+    add("printer.changed", "info", ("family", "names"))
+    add("printer.removed", "info", ("family", "names"))
+    add("catalog.changed", "info", ("what", "entry", "version"),
+        choices=(("what", ("entry_added", "entry_removed", "updated", "rolled_back")),))
+    add("usage.undone", "info", ("printer", "job", "spool", "grams", "entry"))
+    add("record.changed", "info", ("record", "what"), choices=(("what", ("revised", "undone")),))
     return out
 
 
 KINDS: dict[str, Kind] = _kinds()
+
+ACTIVITY_KINDS: frozenset[str] = frozenset({
+    "spool.added", "spool.opened", "spool.weighed", "spool.moved", "spool.emptied", "spool.loaded", "spool.unloaded",
+    "slot.cleared",
+    "usage.recorded", "usage.undone",
+    "location.renamed",
+    "hub.started", "hub.updated", "hub.restored",
+    "backup.finished", "backup.failed",
+    "device.paired", "device.removed",
+    "settings.changed",
+    "printer.added", "printer.changed", "printer.removed",
+    "catalog.changed",
+    "record.changed",
+})
 
 
 def get(name: str) -> Kind | None:

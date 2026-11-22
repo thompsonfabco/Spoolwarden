@@ -32,9 +32,10 @@ const BK_TEXT = {
 const bkT = (key, vars) => { const v = SW.t(key, vars); return v !== key ? v : BK_TEXT[key]; };
 
 // A reply that is a file: saved by the browser under the name the server gives.
-async function download(path, body, fallback) {
-  const r = await fetch("/setup/api/" + path, { method: "POST", credentials: "same-origin",
-    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+async function download(path, body, fallback, code = "") {
+  const init = body === undefined ? { method: "GET", headers: { "X-Setup-Code": code } }
+    : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const r = await fetch("/setup/api/" + path, { ...init, credentials: "same-origin" });
   if (!r.ok) { let d = {}; try { d = await r.json(); } catch { /* not JSON */ } throw hubError(r.status, d); }
   const m = /filename="([^"]+)"/.exec(r.headers.get("Content-Disposition") || "");
   const url = URL.createObjectURL(await r.blob());
@@ -115,8 +116,13 @@ function passwordPane(r, said, result) {
       working(res, SW.t("common_saving"));
       try { await api("backups/password", { password: one._control.value, code: theCode() }); } catch (x) {
         if (x.locked) { SW.result(res, null); throw x; }
-        if (x.data && x.data.error === "too_short") { SW.result(res, null); SW.fieldError(one, x.data.text || bkT("settings_backups_password_short")); one._control.focus(); return; }
-        say(res, hubText(x.data && x.data.text || x.message), false);
+        const code = x.data && x.data.code;
+        const err = x.data && x.data.error;
+        if (code === "too_short" || err === "too_short") {
+          const text = err && err !== "too_short" && err !== "bad origin" ? hubText(err) : bkT("settings_backups_password_short");
+          SW.result(res, null); SW.fieldError(one, text); one._control.focus(); return;
+        }
+        say(res, hubText((err && err !== "bad origin" ? err : "") || x.message), false);
         return;
       }
       one._control.value = two._control.value = "";
@@ -163,8 +169,13 @@ function restoreAsk(s, opener) {
           r = await api("job", { name: "restore", confirm: values[values.length - 1].trim(), sha256: s.sha256, code: theCode() });
         } catch (x) {
           if (x.locked) throw x;
-          const wrong = x.data && x.data.error === "wrong_password";
-          SW.result(result, "bad", wrong ? (x.data.text || bkT("settings_restore_wrong_password")) : hubText(x.message));
+          const code = x.data && x.data.code;
+          const err = x.data && x.data.error;
+          const wrong = code === "wrong_password" || err === "wrong_password";
+          const msg = wrong
+            ? (err && err !== "wrong_password" && err !== "bad origin" ? hubText(err) : bkT("settings_restore_wrong_password"))
+            : hubText((err && err !== "bad origin" ? err : "") || x.message);
+          SW.result(result, "bad", msg);
           if (wrong && pw) pw._control.focus();
         }
       });

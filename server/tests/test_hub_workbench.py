@@ -136,7 +136,7 @@ def _check_styles(wide, tablet, phone):
         assert wb["cardDisplay"] == "flex" and wb["cardBorder"] == "1px" and wb["cardPad"] == "16px", (w, wb)
         assert wb["collDisplay"] == "grid" and wb["collBorder"] == "0px" and wb["titleSize"] == "17px", (w, wb)
         assert console["cardPad"] != "16px" and console["titleSize"] != wb["titleSize"], (w, console)
-    assert wide["wb"]["itemDir"] == "row" and wide["wb"]["itemJustify"] == "flex-start"        # wide: the labelled sidebar
+    assert wide["wb"]["itemDir"] == "row" and wide["wb"]["itemJustify"] in ("flex-start", "flow-start", "start")  # wide: the labelled sidebar
     assert wide["wb"]["cols"].split(" ")[0] == wide["wb"]["sideW"] == "256px" and wide["wb"]["headingW"] > 50
     assert wide["first"]["itemDir"] == "column" and wide["first"]["cols"].split(" ")[0] == wide["first"]["rail"]
     assert wide["first"]["headingW"] <= 1

@@ -84,7 +84,7 @@ def test_a_changed_certificate_is_refused_and_the_fix_is_to_save_the_source_agai
     assert station_client.pin_get("tag", tagsources.origin(url)) == "ab" * 32    # never re-pinned by itself
     (row,) = tagsources.issues(_cfg(url))
     assert row["kind"] == "changed" and row["fix"] == "Save the tag source again to trust the new certificate."
-    assert row["text"] == f"The tag service at 127.0.0.1:{port} presents a different certificate than the one the Hub trusts."
+    assert row["text"] == f"The certificate of the tag source 127.0.0.1:{port} has changed."
     assert tagsources.trust(url) == fp                                      # saved again: the new certificate is kept
     assert tagsources.issues(_cfg(url)) == []
     assert tagsources.latest(_cfg(url))["nfc_id"] == "04:aa:bb"
@@ -114,7 +114,16 @@ def test_a_plain_http_source_is_read_as_before_and_named_for_the_checks(servers)
     assert tagsources.issues(_cfg(url)) == []                               # this machine's own address: nothing to say
     (row,) = tagsources.issues(_cfg("http://192.0.2.9:5002/last-tag", name="sv08"))
     assert row == {"name": "sv08", "url": "http://192.0.2.9:5002/last-tag", "kind": "plain", "fix": None,
-                   "text": "The tag service at 192.0.2.9:5002 is not using HTTPS. Update it."}
+                   "text": "The tag source 192.0.2.9:5002 is not using HTTPS."}
+
+
+@pytest.mark.parametrize("bad_url", ["https://[broken/last-tag", "https://reader.local:wrong/last-tag",
+                                    "https://reader.local:65536/last-tag", "http:///last-tag"])
+def test_a_malformed_source_does_not_hide_other_checks(bad_url):
+    url = "http://192.0.2.9:5002/last-tag"
+    cfg = {"tag_sources": [{"url": bad_url}, {"name": "sv08", "url": url}]}
+    (row,) = tagsources.issues(cfg)
+    assert row["url"] == url and row["text"] == "The tag source 192.0.2.9:5002 is not using HTTPS."
 
 
 def test_a_source_that_is_down_is_no_issue_and_a_pin_is_not_made_for_it():

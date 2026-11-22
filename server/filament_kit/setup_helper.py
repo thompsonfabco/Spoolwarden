@@ -12,7 +12,6 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
                                                readers) ask this first; the server never checks a code itself
     key_set {key}  key_remove                  the Anthropic key (cli.write_key / cli.remove_key)
     passphrase_set {passphrase}                the web passphrase (cli.write_passphrase: scrypt, root:filament-kit 640)
-    library_token_set {token}  library_token_remove   /etc/filament-kit/github_token (library.write_token)
     local_intake_token_set {token}  local_intake_token_remove   /etc/filament-kit/local_intake_token (the local label
                                                reader's bearer token, local_reader.write_token)
     module {name, on[, settings]}              one module on/off with the checklist's rules (modules.toggle,
@@ -50,6 +49,8 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
                                                left root-only in /etc/filament-kit/reader-setup.json for the job
                                                `reader_setup` (`reader setup --pending`), which deletes the file as it
                                                reads it; a job that does not start deletes it here
+    port_change {port}                         change the Hub's web port: validated, written root-only to
+                                               /etc/filament-kit/pending_port for the job `port_change` (`port <n> --yes`)
 
 Every request carries the setup code and the page's client address, and this process is the only place a code is
 checked (setup_code.check on the root-only hash, against the per-client and global lockout in
@@ -88,7 +89,7 @@ try:
 except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
-from . import config, modules, setup_code, trusted
+from . import config, events, modules, setup_code, trusted
 
 log = logging.getLogger(__name__)
 
@@ -114,7 +115,10 @@ JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update", "--yes"
         # Send now on the corrections waiting: the reader does the upload, the job only asks it (and may wait long)
         "corrections_send": ("label-reader", "corrections", "send"),
         # the "Flash a device" tab, Printer Station plugged into the server: the answers wait in reader_flash.PENDING
-        "reader_setup": ("reader", "setup", "--pending")}
+        "reader_setup": ("reader", "setup", "--pending"),
+        # the port number itself waits root-only in /etc/filament-kit/pending_port
+        "port_change": ("port", "--yes"),
+        "report": ("report",)}
 WRAPPER = "/usr/local/bin/spoolwarden"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
@@ -141,7 +145,9 @@ BUSY = {"apply": APPLYING, "update": "an update is running; wait until it has fi
         "local_intake_remove": "the local label reader is being removed; wait until it has finished",
         "local_intake_share": "the Label Reader is being set for sharing corrections; wait until it has finished",
         "corrections_send": "the corrections are being sent; wait until it has finished",
-        "reader_setup": "a Tag Reader is being set up; wait until it has finished"}
+        "reader_setup": "a Tag Reader is being set up; wait until it has finished",
+        "port_change": "the Hub's port is being changed; wait until it has finished",
+        "report": "a Hub report is being collected; wait until it has finished"}
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)
 _PROMPT_KEYS = {v: k for k, v in modules._SETTING_PROMPTS.items()}
 
@@ -345,17 +351,28 @@ def _not_applying() -> None:
         raise Refused(409, _busy_text())
 
 
+def _emit_settings_changed(**data: str) -> None:
+    try:
+        events.write("settings.changed", "hub", "page", {k: v for k, v in data.items() if v is not None})
+    except (events.EventError, OSError):
+        pass
+
+
 # ---------- the operations ----------
 
 def _key_set(req: dict) -> dict:
     from . import cli
     cli.write_key(_text(req, "key", 400, word=True))
+    _emit_settings_changed(group="ai", names="anthropic_key")
     return {}
 
 
 def _key_remove(req: dict) -> dict:
     from . import cli
-    return {"removed": cli.remove_key()}
+    removed = cli.remove_key()
+    if removed:
+        _emit_settings_changed(group="ai", names="anthropic_key")
+    return {"removed": removed}
 
 
 def _passphrase_set(req: dict) -> dict:
@@ -369,18 +386,8 @@ def _passphrase_set(req: dict) -> dict:
         raise Refused(500, f"{e}; nothing was changed") from None
     except ValueError as e:
         raise Refused(400, str(e), field="passphrase") from None
+    _emit_settings_changed(group="web", names="web_passphrase")
     return {}
-
-
-def _library_token_set(req: dict) -> dict:
-    from . import library
-    library.write_token(_text(req, "token", 400, word=True))
-    return {}
-
-
-def _library_token_remove(req: dict) -> dict:
-    from . import library
-    return {"removed": library.remove_token()}
 
 
 def _local_intake_token_set(req: dict) -> dict:
@@ -389,12 +396,16 @@ def _local_intake_token_set(req: dict) -> dict:
         local_reader.write_token(_text(req, "token", 400, word=True))
     except ValueError as e:
         raise Refused(400, str(e)) from None
+    _emit_settings_changed(group="label_reader", names="local_intake_token")
     return {}
 
 
 def _local_intake_token_remove(req: dict) -> dict:
     from . import local_reader
-    return {"removed": local_reader.remove_token()}
+    removed = local_reader.remove_token()
+    if removed:
+        _emit_settings_changed(group="label_reader", names="local_intake_token")
+    return {"removed": removed}
 
 
 def _answers(raw) -> dict[str, str]:
@@ -454,6 +465,12 @@ def _module(req: dict) -> dict:
     if err:
         raise Refused(400, err)
     config.save(cfg)
+    _emit_settings_changed(
+        group="modules",
+        feature=name,
+        on="true" if want else "false",
+        names=",".join(sorted(answers)) if answers else None,
+    )
     _start_apply(checked=True)
     return {"changed": True, "notes": notes, "modules": sorted(modules.enabled(cfg))}
 
@@ -491,6 +508,7 @@ def _setting(req: dict) -> dict:
     if err:
         raise Refused(400, err)
     config.save(cfg)
+    _emit_settings_changed(group=key.split(".")[0], names=key)
     _start_apply(checked=True)
     return {}
 
@@ -648,6 +666,7 @@ def _general(req: dict) -> dict:
     if req.get("dry_run") is True:      # everything that can refuse has run: the caller may now do what must come first
         return {"key": key, "dry_run": True}
     config.save(cfg)
+    _emit_settings_changed(group="general", names=key)
     if then == "apply":
         _start_apply(checked=True)
     elif then == "restart":
@@ -700,6 +719,7 @@ def _general_group(req: dict) -> dict:
     if req.get("dry_run") is True:      # see _general: checked, nothing saved
         return {"keys": list(checked), "dry_run": True}
     config.save(cfg)
+    _emit_settings_changed(group="general", names=",".join(sorted(checked)))
     if applies:
         _start_apply(checked=True)
     if restarts:
@@ -730,6 +750,7 @@ def _spoolman_url(req: dict) -> dict:
     if err:
         raise Refused(400, err)
     config.save(cfg)
+    _emit_settings_changed(group="spoolman", names="spoolman_url")
     _start_apply(checked=True)
     return {}
 
@@ -766,6 +787,7 @@ def _mode(req: dict) -> dict:
     if err:
         raise Refused(400, err)
     config.save(out)
+    _emit_settings_changed(group="modules", names="mode")
     _start_apply(checked=True)
     return {"changed": True, "notes": notes, "modules": sorted(modules.enabled(out))}
 
@@ -807,14 +829,38 @@ def _backup_keep(req: dict) -> dict:
     cfg = config.load()
     cfg.setdefault("backup", {})["keep_days"] = days
     config.save(cfg)
+    _emit_settings_changed(group="backup", names="keep_days")
     return {"days": days}
+
+
+def _backup_password_set(req: dict) -> dict:
+    from . import backup
+    pw = req.get("password")
+    if not isinstance(pw, str):
+        raise Refused(400, f"Backup password must be at least {backup.MIN_PASSWORD_LEN} characters.",
+                      field="password")
+    try:
+        backup.write_password(pw)
+    except ValueError as e:
+        raise Refused(400, str(e), field="password") from None
+    _emit_settings_changed(group="backup", names="backup_password")
+    return {"set": True}
+
+
+def _backup_password_remove(req: dict) -> dict:
+    from . import backup
+    removed = backup.remove_password()
+    if removed:
+        _emit_settings_changed(group="backup", names="backup_password")
+    return {"set": False}
 
 
 def _backup_list(req: dict) -> dict:
     from . import backup
-    rows = [{"name": e.name, "download": e.download, "size": e.size, "kind": e.kind,
+    rows = [{"name": e.name, "download": e.download, "size": e.size, "kind": e.kind, "encrypted": e.encrypted,
              "at": time.strftime("%Y-%m-%d %H:%M", time.localtime(e.at))} for e in backup.listing()]
-    return {"backups": rows, "keep_days": backup.keep_days(config.load()), "folder": str(backup.backups_dir())}
+    return {"backups": rows, "keep_days": backup.keep_days(config.load()),
+            "folder": str(backup.backups_dir()), "password_set": backup.password_set()}
 
 
 def _backup_last() -> dict:
@@ -829,12 +875,33 @@ def _restore_pin(req: dict) -> dict:
     from . import backup
     try:
         m, sha = backup.pin_upload()
+    except backup.NeedsPassword as e:
+        return {"needs_password": True, "sha256": e.sha256}
     except backup.Unfit as e:
         raise Refused(409, str(e)) from None
     except backup.BackupError as e:
         raise Refused(400, str(e)) from None
     except OSError as e:
         raise Refused(500, f"the uploaded backup cannot be kept ({type(e).__name__})") from None
+    return m.summary() | {"sha256": sha, "other_host": bool(m.host) and m.host != backup.host(),
+                          "replaces_data": (config.paths().etc / "config.json").exists()}
+
+
+def _restore_password(req: dict) -> dict:
+    from . import backup, backup_crypt
+    pw = req.get("password")
+    if not isinstance(pw, str) or not pw:
+        raise Refused(400, backup_crypt.WRONG_MESSAGE, field="password")
+    try:
+        m, sha = backup.unlock_pending(pw)
+    except backup_crypt.WrongPasswordOrDamaged as e:
+        raise Refused(400, str(e), field="password") from None
+    except backup.Unfit as e:
+        raise Refused(409, str(e)) from None
+    except backup.BackupError as e:
+        raise Refused(400, str(e)) from None
+    except OSError as e:
+        raise Refused(500, f"the uploaded backup cannot be read ({type(e).__name__})") from None
     return m.summary() | {"sha256": sha, "other_host": bool(m.host) and m.host != backup.host(),
                           "replaces_data": (config.paths().etc / "config.json").exists()}
 
@@ -922,6 +989,77 @@ def _reader_usb(req: dict) -> dict:
     return {"name": "reader_setup"}
 
 
+def _pending_port_path() -> Path:
+    return config.paths().etc / "pending_port"
+
+
+def _write_pending_port(port: int) -> Path:
+    path = _pending_port_path()
+    path.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
+    if path.is_symlink():
+        raise Refused(400, "pending port file is a symbolic link")
+    tmp = path.parent / f".pending_port.{os.getpid()}.{time.monotonic_ns()}.tmp"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(tmp, flags, 0o600)
+    try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        os.write(fd, f"{port}\n".encode("ascii"))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    try:
+        os.replace(tmp, path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
+    return path
+
+
+def _consume_pending_port() -> int:
+    path = _pending_port_path()
+    if path.is_symlink():
+        raise ValueError("pending port is a symbolic link")
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        raw = os.read(fd, 32).decode("ascii", errors="strict").strip()
+    finally:
+        os.close(fd)
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    if not raw.isdigit():
+        raise ValueError("pending port is not a number")
+    port = int(raw)
+    if port != 443 and not (1024 <= port <= 65535):
+        raise ValueError(f"pending port out of range: {port}")
+    return port
+
+
+def _port_change(req: dict) -> dict:
+    from . import hubport
+    raw = req.get("port")
+    if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+        raise Refused(400, "give the port number", field="port")
+    text = str(raw).strip()
+    cfg = config.load()
+    cur = hubport.parse_port(cfg.get("port")) or hubport.FALLBACK_PORT
+    num, why = hubport.check_port(text, current=cur, allow_443=("remote" not in modules.enabled(cfg)),
+                                  state=lambda _p: False)
+    if num is None or (num != 443 and not (1024 <= num <= 65535)):
+        raise Refused(400, why or "invalid port", field="port")
+    _not_applying()
+    path = _write_pending_port(num)
+    try:
+        _start_job("port_change", checked=True)
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    _emit_settings_changed(group="general", names="port")
+    return {"name": "port_change"}
+
+
 def _station_pairing(req: dict) -> dict:
     from .station import server_api
     return {"state": server_api.pairing_state()}
@@ -988,7 +1126,9 @@ def _trust_revoke_all(req: dict) -> dict:
 def _trust_enabled(req: dict) -> dict:
     if not isinstance(req.get("enabled"), bool):
         raise Refused(400, "enabled must be true or false")
-    return {"forgotten": trusted.set_enabled(req["enabled"])}
+    forgotten = trusted.set_enabled(req["enabled"])
+    _emit_settings_changed(group="trusted", names="enabled")
+    return {"forgotten": forgotten}
 
 
 def _apply(req: dict) -> dict:
@@ -998,17 +1138,19 @@ def _apply(req: dict) -> dict:
 
 
 OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
-       "library_token_set": _library_token_set, "library_token_remove": _library_token_remove,
        "local_intake_token_set": _local_intake_token_set, "local_intake_token_remove": _local_intake_token_remove,
        "module": _module, "setting": _setting, "general": _general, "general_group": _general_group, "backup_last": lambda req: _backup_last(), "spoolman_url": _spoolman_url, "apply": _apply, "mode": _mode, "job": _job,
-       "journal": _journal, "backup_keep": _backup_keep, "backup_list": _backup_list, "backup_open": _backup_open, "restore_pin": _restore_pin,
+       "journal": _journal, "backup_keep": _backup_keep, "backup_list": _backup_list, "backup_open": _backup_open,
+       "backup_password_set": _backup_password_set, "backup_password_remove": _backup_password_remove,
+       "restore_pin": _restore_pin, "restore_password": _restore_password,
        "restore_forget": _restore_forget, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
        "trust_list": _trust_list, "trust_rename": _trust_rename, "trust_revoke": _trust_revoke,
-       "trust_revoke_all": _trust_revoke_all, "trust_enabled": _trust_enabled, "reader_usb": _reader_usb}
+       "trust_revoke_all": _trust_revoke_all, "trust_enabled": _trust_enabled, "reader_usb": _reader_usb,
+       "port_change": _port_change}
 
 
 # what may save a setting and start a job: these run under _job_lock, whole
-LOCKED_OPS = ("module", "setting", "general", "general_group", "spoolman_url", "mode", "backup_keep", "apply", "job", "reader_usb")
+LOCKED_OPS = ("module", "setting", "general", "general_group", "spoolman_url", "mode", "backup_keep", "apply", "job", "reader_usb", "port_change")
 NO_CODE_OPS = ("trust_status",      # it answers only about the token it was given
                "backup_last")       # the time of the newest backup, and nothing else (N12)
 
@@ -1049,9 +1191,21 @@ def run_job(name: str, cmd: list[str] | None = None) -> int:
         if root:
             os.fchmod(fh.fileno(), 0o640)
             os.fchown(fh.fileno(), 0, setup_code._gid(setup_code.GROUP))
-        cmd = cmd or [WRAPPER, *JOBS[name]]
-        fh.write(header(name) + "\n")
-        fh.flush()
+        if cmd is None and name == "port_change":
+            fh.write(header(name) + "\n")
+            fh.flush()
+            try:
+                port = _consume_pending_port()
+            except (OSError, UnicodeDecodeError, ValueError) as e:
+                fh.write(f"error: {e}\n")
+                fh.write(f"\n{FINISHED} 1)\n")
+                log.info("setup: job %s failed before start (%s)", name, e)
+                return 1
+            cmd = [WRAPPER, "port", str(port), "--yes"]
+        else:
+            cmd = cmd or [WRAPPER, *JOBS[name]]
+            fh.write(header(name) + "\n")
+            fh.flush()
         # systemd's SIGTERM reaches the command too, whose own handler puts the kit back (updates._sigterm_exits): wait
         # for it, so its exit lands in the log (subprocess.run would kill it on an exception here)
         old = None

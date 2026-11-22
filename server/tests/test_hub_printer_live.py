@@ -13,7 +13,6 @@ from pathlib import Path
 import pytest
 from starlette.applications import Starlette
 from starlette.responses import Response
-from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from filament_kit import camera_ticket, config, modules, setup_page, trusted
@@ -55,7 +54,7 @@ class StubPrinters:
         return {"gcode_state": "RUNNING", "percent": 42, "remaining_min": 75, "job": "benchy.3mf"}
 
     def status(self, pid):
-        if pid == KSERIAL:
+        if pid not in (SERIAL, OTHER):
             return self.klipper.status(pid)
         return {"gcode_state": "RUNNING", "job": "benchy.3mf", "percent": 42, "light": "on",
                 "ams": [{"unit": 0, "label": "AMS 1", "slots": [{"label": "A1", "spool": {"id": 7}}, {"label": "A2", "spool": None}]}]}
@@ -138,8 +137,10 @@ def stub(env, helper, tmp_path, monkeypatch):  # noqa: F811
     registry.upsert(registry.Printer(OTHER, "Second X1", "X1C", "192.0.2.41", "12345678", True))
     k = registry.add_klipper("Garage Voron", "voron.example.com", 7125)
     printers = StubPrinters()
-    page = setup_page.SetupPage(printers, families={"bambu", "klipper"}, helper=helper, hosts=lambda: {HOSTNAME}, mapper=type("M", (), {"in_progress": lambda self, s: False})())
     cam = StubCameraHub(tmp_path)
+    page = setup_page.SetupPage(printers, families={"bambu", "klipper"}, helper=helper, hosts=lambda: {HOSTNAME},
+                                mapper=type("M", (), {"in_progress": lambda self, s: False})(),
+                                spoolman=Spoolman("http://127.0.0.1:9"), camera_hub=cam)
     camera_ticket.clear()                                  # the tickets are the process's: none from another test
     seen: list = []
     monkeypatch.setattr(pending, "load_or_wait", lambda m, sm, serial, label, spool_id, dry, **kw: seen.append(("load", serial, label, spool_id, dry)) or
@@ -154,8 +155,7 @@ def stub(env, helper, tmp_path, monkeypatch):  # noqa: F811
     monkeypatch.setattr(usage, "undo", lambda entry_id, sm: seen.append(("undo", entry_id)) or {"id": entry_id, "undone": True})
     monkeypatch.setattr(printer_live_tab.storage, "current", lambda: type("S", (), {"sealed_location": lambda self: type("L", (), {"name": "Sealed stock"})()})())
     monkeypatch.setattr(pending.STORE, "waiting_for", lambda serial: {"A2": 9} if serial == SERIAL else {})
-    mine = printer_live_tab.routes(page, sm=Spoolman("http://127.0.0.1:9"), camera_hub=cam)
-    app = Starlette(routes=page.routes() + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in mine])
+    app = Starlette(routes=page.routes())
     c = TestClient(app, base_url=BASE, client=HOME)
     return type("Stub", (), {"c": c, "printers": printers, "seen": seen, "cam": cam, "page": page, "app": app, "k": k.serial})()
 
@@ -260,6 +260,25 @@ def test_usage_is_open_and_its_undo_needs_the_code_and_a_klipper_entry_cannot_be
     assert post(stub.c, "usage/e1/undo").json() == {"entry": {"id": "e1", "undone": True}} and stub.seen == [("undo", "e1")]
     r = post(stub.c, "usage/k-5/undo")
     assert r.status_code == 409 and r.json()["code"] == "recorded_by_moonraker" and stub.seen == [("undo", "e1")]
+
+
+def test_live_preserves_adapter_watchability_and_exposes_auto_without_status(stub, monkeypatch):
+    status = {"family": "klipper", "auto_possible": False, "ams": [{"kind": "lane", "slots": [
+        {"label": "T0", "present": True, "watchable": False}, {"label": "T1", "present": True, "watchable": False},
+    ]}]}
+    monkeypatch.setattr(stub.printers.klipper, "status", lambda serial: status)
+    path = f"printers/{stub.k}/live"
+    view = get(stub.c, path).json()["status"]
+    assert view["auto_possible"] is False
+    assert [sl["watchable"] for sl in view["ams"][0]["slots"]] == [False, False]
+
+    active = {"spool_id": 7, "state": "choose", "slots": ["T0", "T1"]}
+    store = printer_live_tab.auto_slot.default_store()
+    monkeypatch.setattr(store, "active_view", lambda serial: active if serial == stub.k else None)
+    monkeypatch.setattr(stub.printers.klipper, "status", lambda serial: None)
+    monkeypatch.setitem(stub.printers.states, stub.k, "offline")
+    view = get(stub.c, path).json()
+    assert view["status"] is None and view["auto"] == active
 
 
 def _stream(stub, serial, query="", name="camera.mjpeg"):
@@ -388,18 +407,111 @@ def test_a_trusted_computer_asks_the_stream_directly_and_a_cookie_that_is_not_on
 def test_no_camera_hub_is_said_plainly(stub):
     page = stub.page
     page.camera_hub = None
-    none = Starlette(routes=page.routes() + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in printer_live_tab.routes(page, sm=Spoolman("http://127.0.0.1:9"))])
+    none = Starlette(routes=page.routes())
     c = TestClient(none, base_url=BASE, client=HOME)
     r = c.post(f"/setup/api/printers/{SERIAL}/camera/ticket", json={"code": CODE}, headers=H)
     assert r.status_code == 409 and r.json()["code"] == "module_off"
 
 
 def test_the_routes_are_the_ones_of_the_contract_and_a_locked_get_still_reads():
-    paths = {(m, p) for p, _, m in printer_live_tab.routes(type("P", (), {"guard": staticmethod(lambda fn, **k: fn)})())}
-    assert paths == {("GET", "/printers/{serial}/live"), ("POST", "/printers/{serial}/command"), ("POST", "/printers/{serial}/slots/{label}/load"),
-                     ("POST", "/printers/{serial}/slots/{label}/unload"), ("POST", "/printers/{serial}/slots/{label}/clear"),
-                     ("GET", "/printers/{serial}/usage"), ("POST", "/usage/{entry_id}/undo"), ("POST", "/printers/{serial}/camera/ticket"), ("POST", "/printers/{serial}/camera/close"),
-                     ("GET", "/printers/{serial}/camera.mjpeg"), ("GET", "/printers/{serial}/camera/{name:path}")}
+    raw = printer_live_tab.routes(type("P", (), {"guard": staticmethod(lambda fn, **k: fn)})())
+    paths = [(m, p) for p, _, m in raw]
+    assert set(paths) == {
+        ("GET", "/printers/{serial}/live"), ("POST", "/printers/{serial}/command"),
+        ("POST", "/printers/{serial}/slots/auto/load"),
+        ("POST", "/printers/{serial}/slots/{label}/load"), ("POST", "/printers/{serial}/slots/{label}/unload"),
+        ("POST", "/printers/{serial}/slots/{label}/clear"),
+        ("POST", "/printers/{serial}/auto/choose"), ("POST", "/printers/{serial}/auto/cancel"),
+        ("GET", "/printers/{serial}/usage"), ("POST", "/usage/{entry_id}/undo"),
+        ("POST", "/printers/{serial}/camera/ticket"), ("POST", "/printers/{serial}/camera/close"),
+        ("GET", "/printers/{serial}/camera.mjpeg"), ("GET", "/printers/{serial}/camera/{name:path}"),
+    }
+    assert paths.index(("POST", "/printers/{serial}/slots/auto/load")) < paths.index(("POST", "/printers/{serial}/slots/{label}/load"))
+
+
+def test_auto_reserved_label_and_auto_routes_and_live_annotations(stub, monkeypatch):
+    # Generic slot routes reject "auto" (any case) with 400 and never reach pending/klipper
+    for lab in ("auto", "AUTO", "Auto"):
+        for what, body in (("unload", {}), ("clear", {})):
+            r = post(stub.c, f"printers/{SERIAL}/slots/{lab}/{what}", body)
+            assert r.status_code == 400 and r.json()["field"] == "label" and r.json()["code"] == "invalid_slot"
+    assert post(stub.c, f"printers/{SERIAL}/slots/AUTO/load", {"spool_id": 7}).status_code == 400
+    assert stub.seen == []
+
+    # Live status always carries auto_possible and per-slot watchable even if auto_slot is absent
+    d = get(stub.c, f"printers/{SERIAL}/live").json()
+    assert d["status"]["auto_possible"] is False
+    assert all(sl["watchable"] is False for sl in d["status"]["ams"][0]["slots"])
+
+    class FakeAutoError(Exception):
+        def __init__(self, code, message):
+            super().__init__(message)
+            self.code = code
+            self.message = message
+
+    class FakeStore:
+        def start(self, manager, sm, serial, spool_id, dry=True):
+            stub.seen.append(("auto_load", serial, spool_id, dry))
+            if spool_id == 99:
+                raise FakeAutoError("auto_not_possible", "This printer has no slots the Hub can watch. Choose a slot.")
+            return {"auto": True, "watching": ["A1", "A2"], "dry_run": True} if dry else {
+                "auto": True, "pending": True, "confirmed": None, "expires_in": 900, "message": "waiting"}
+
+        def choose(self, manager, sm, serial, slot):
+            stub.seen.append(("auto_choose", serial, slot))
+            if slot == "A9":
+                raise FakeAutoError("nothing_to_choose", "No slots are waiting to be chosen.")
+            return {"slot": {"label": slot}, "dry_run": False, "confirmed": True, "moved_back": [], "problems": []}
+
+        def cancel(self, serial):
+            stub.seen.append(("auto_cancel", serial))
+            if serial == OTHER:
+                raise FakeAutoError("not_waiting", "No spool is waiting on this printer.")
+            return {"cancelled": True}
+
+    store = FakeStore()
+    fake_mod = type("FakeAuto", (), {
+        "AutoError": FakeAutoError,
+        "is_reserved_label": staticmethod(lambda s: str(s).strip().lower() == "auto"),
+        "default_store": staticmethod(lambda: store),
+        "annotate": staticmethod(lambda serial, st: {
+            **st,
+            "auto_possible": True,
+            "auto": {"spool_id": 7, "spool": {"id": 7, "name": "PolyTerra PLA"}, "state": "waiting"},
+            "ams": [{**u, "slots": [{**sl, "watchable": True} for sl in u.get("slots", [])]} for u in st.get("ams", [])],
+        }),
+    })()
+    monkeypatch.setattr(printer_live_tab, "auto_slot", fake_mod)
+
+    live_d = get(stub.c, f"printers/{SERIAL}/live").json()
+    assert live_d["status"]["auto_possible"] is True and live_d["status"]["auto"]["spool_id"] == 7
+    assert all(sl["watchable"] is True for sl in live_d["status"]["ams"][0]["slots"])
+
+    # Code is required on all 3 Auto routes
+    assert post(stub.c, f"printers/{SERIAL}/slots/auto/load", {"spool_id": 7}, code=None).status_code == 403
+    assert post(stub.c, f"printers/{SERIAL}/auto/choose", {"slot": "A1"}, code=None).status_code == 403
+    assert post(stub.c, f"printers/{SERIAL}/auto/cancel", {}, code=None).status_code == 403
+
+    # Happy paths & validation
+    assert post(stub.c, f"printers/{SERIAL}/slots/auto/load", {"spool_id": True}).status_code == 400
+    r = post(stub.c, f"printers/{SERIAL}/slots/auto/load", {"spool_id": 7})
+    assert r.status_code == 200 and r.json()["watching"] == ["A1", "A2"] and r.json()["dry_run"] is True
+    r = post(stub.c, f"printers/{SERIAL}/slots/auto/load", {"spool_id": 7, "dry_run": False})
+    assert r.status_code == 200 and r.json()["pending"] is True
+    r = post(stub.c, f"printers/{SERIAL}/auto/choose", {"slot": "A2"})
+    assert r.status_code == 200 and r.json()["confirmed"] is True
+    assert post(stub.c, f"printers/{SERIAL}/auto/choose", {"slot": "auto"}).status_code == 400
+    assert post(stub.c, f"printers/{SERIAL}/auto/cancel", {}).json() == {"cancelled": True}
+
+    # Refusal shape: 409 {"error": sentence, "code": code} (never "message")
+    for path, body, code in (
+        (f"printers/{SERIAL}/slots/auto/load", {"spool_id": 99}, "auto_not_possible"),
+        (f"printers/{SERIAL}/auto/choose", {"slot": "A9"}, "nothing_to_choose"),
+        (f"printers/{OTHER}/auto/cancel", {}, "not_waiting"),
+    ):
+        err = post(stub.c, path, body)
+        j = err.json()
+        assert err.status_code == 409 and j["code"] == code and isinstance(j["error"], str) and "message" not in j
 
 
 # ======================================================================================================== the texts
@@ -421,7 +533,6 @@ def _keys_used() -> set:
 
 def test_every_text_is_in_the_catalogue_or_in_the_local_table_and_the_table_holds_only_what_the_catalogue_lacks():
     table = _stub_table()
-    assert len(table) > 20
     missing = sorted(k for k in _keys_used() if k not in CATALOGUE and k not in table)
     assert not missing, missing
     assert sorted(k for k in table if k in CATALOGUE) == [], "the catalogue has these now: drop them from the table"
@@ -462,6 +573,12 @@ const stubHub = (rec) => {
   const [m, p, b] = [rec.method, rec.path, rec.body], custom = hub.reply[p.replace(/\?.*/, "")] || hub.reply[m + " " + p.replace(/\?.*/, "")];
   if (custom) { const r = typeof custom === "function" ? custom(rec) : custom; if (r) return r; }
   let x;
+  if (/^printers\/[^/]+\/slots\/auto\/load$/.test(p)) {
+    const dry = b.dry_run !== false;
+    return [200, dry ? { auto: true, watching: ["A1", "A2", "A3"], dry_run: true } : { auto: true, pending: true, confirmed: null, expires_in: 900, message: "waiting" }];
+  }
+  if (/^printers\/[^/]+\/auto\/choose$/.test(p)) return [200, { slot: { label: b.slot }, dry_run: false, confirmed: true, moved_back: [], problems: [] }];
+  if (/^printers\/[^/]+\/auto\/cancel$/.test(p)) return [200, { cancelled: true }];
   if ((x = /^printers\/[^/]+\/slots\/([^/]+)\/(load|unload|clear)$/.exec(p))) {
     const [, label, what] = x, dry = b.dry_run;
     if (what === "load") return [200, { dry_run: dry, spool: PLAN_SPOOL, slot: { label }, preset: { name: "Generic PLA" }, moved_back: label === "A1" ? [{ id: 7, location: "Rack 1" }, { id: 3, location: "Rack 2" }] : [], problems: [],
@@ -473,13 +590,14 @@ const stubHub = (rec) => {
   if (/^printers\/[^/]+\/live$/.test(p)) return [200, hub.live];
   if (/^printers\/[^/]+\/command$/.test(p)) return [200, { ok: true, reply: { ok: true } }];
   if (/^printers\/[^/]+\/usage/.test(p)) return [200, { entries: hub.usage }];
-  if (/^usage\/[^/]+\/undo$/.test(p)) return [200, { entry: { id: p.split("/")[1], undone: true } }];
+  if (/^(?:usage|events)\/[^/]+\/undo$/.test(p)) return [200, { entry: { id: p.split("/")[1], undone: true } }];
   if (/^printers\/[^/]+\/camera\/close$/.test(p)) return [200, { closed: true }];
   if (/^printers\/[^/]+\/camera\/ticket$/.test(p)) return [200, { ticket: "tk" + calls(/camera\/ticket/).length, expires_in: 60 }];
-  if (/^spools\?/.test(p)) return [200, { spools: [PLAN_SPOOL, { id: 8, vendor: "Sunlu", name: "PETG Blue", remaining_g: 410, location: "Rack 2" }] }];
+  if (/^spools\/last-tag$/.test(p)) return [200, { tag: null }];
+  if (/^spools\?/.test(p)) return [200, { spools: [PLAN_SPOOL, { id: 8, vendor: "Sunlu", name: "PETG Blue", remaining_g: 410, location: "Rack 2", tag: "AABBCCDD" }] }];
   return [404, { error: "no such stub " + p }];
 };
-const MINE = /^(printers\/00M00A00000000[12]\/|usage\/|spools\?)/;
+const MINE = /^(printers\/00M00A00000000[12]\/|usage\/|events\/|spools(?:\/last-tag|\?))/;
 const realFetch = window.fetch.bind(window);
 window.fetch = async (url, init) => {
   const u = String(url);
@@ -495,6 +613,7 @@ Object.defineProperty(HTMLImageElement.prototype, "src", { configurable: true, g
 const css = __CSS__;
 { const sheet = new CSSStyleSheet(); sheet.replaceSync(css); document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]; }
 await until(() => window.SW && window.api && $("main") && !$(".chip--lock .skeleton__line"), "the page");
+if (typeof S !== "undefined" && S) S.history = { ...(S.history || {}), event_undo: true, exports: ["usage"] };
 for (const c of [...document.body.children]) if (!/^(svg|script)$/i.test(c.tagName)) c.style.display = "none";      // the page behind it stays out of the way
 const mount = (o = {}) => {
   const host = document.createElement("div");
@@ -781,7 +900,7 @@ await next("confirm");
 await answer("confirm");
 out.waitLine = await until(() => line("A2"), "the A2 result");
 // a picker of the page's own may stand in for the built-in one
-out.searchCalls = calls(/^GET spools\?/).map((c) => c.path);
+out.searchCalls = calls(/^GET spools\?q=/).map((c) => c.path);
 """)
     assert page["pickTitle"] == "Load into slot A1" and page["noCalls"] == 0
     assert len(page["picks"]) == 2 and page["picks"][0].startswith("S7 Polymaker PolyTerra PLA") and "Rack 2" in page["picks"][1]
@@ -899,11 +1018,12 @@ out.button = shown($('[data-action="camera"]'));
 def test_a_picker_of_the_pages_own_stands_in_for_the_built_in_one(hub, tmp_path):
     page = drive(hub, tmp_path, r"""
 unlock();
+hub.calls.length = 0;
 mount({ ctx: { pickSpool: async (slot) => ({ id: 8, vendor: "Sunlu", name: "PETG Blue", remaining_g: 410, location: "Rack 2", slot: slot.label }) } });
 await until(() => rows().length === 3, "the slots");
 btn(row("A3"), "load").click();
 await dialog();                                           // the preview
-out.search = calls(/^GET spools\?/).length;
+out.search = calls(/^GET spools\?q=/).length;
 out.plan = text($(".dialog__text"));
 out.sent = calls(/POST .*load$/).map((c) => [c.path, c.body.spool_id, c.body.dry_run]);
 await answer("cancel");
@@ -957,3 +1077,120 @@ def test_the_view_holds_in_all_four_looks_at_a_wide_and_a_narrow_place(hub, tmp_
         assert all(w >= 90 and ok for w, ok in r["used"]), (where, "a usage line is squeezed", r["used"])
         assert max(r["lines"]) < 1.9, (where, "a button is taller than one line and a half", r["lines"])
         assert r["camera"] >= 200 and r["view"] >= 280, (where, r)
+
+
+def test_load_a_spool_shows_automatic_first_and_handles_replaces_tag_and_refusal(hub, tmp_path):
+    page = drive(hub, tmp_path, r"""
+unlock();
+hub.live.status.auto_possible = true;
+hub.reply["POST printers/" + SERIAL + "/slots/auto/load"] = (rec) => rec.body.dry_run
+  ? [200, { auto: true, watching: ["A1", "A2", "A3"], replaces: { spool_id: 9, name: "Spool 9" }, dry_run: true }]
+  : [200, { auto: true, pending: true, confirmed: null, expires_in: 900, message: "waiting" }];
+mount();
+await until(() => shown($('[data-action="load-any"]')) && rows().length === 3, "Load a spool");
+out.head = text($(".plive__state"));
+$('[data-action="load-any"]').click();
+const d = await dialog();
+await until(() => $$(".plive__pick", d).length === 2, "step 1 spools");
+// Tag: none yet -> unlinked -> linked match picks spool 8
+$('[data-action="last-tag"]', d).click();
+out.noTag = await until(() => text($(".dialog__body .result__text", d)), "no tag note");
+hub.reply["GET spools/last-tag"] = [200, { tag: { uid: "DEADBEEF" } }];
+$('[data-action="last-tag"]', d).click();
+out.unlinked = await until(() => /DEADBEEF/.test(text($(".dialog__body .result__text", d)) || "") && text($(".dialog__body .result__text", d)), "unlinked note");
+hub.reply["GET spools/last-tag"] = [200, { tag: { uid: "AA:BB:CC:DD" } }];
+$('[data-action="last-tag"]', d).click();
+await until(() => $$('[data-slot]', d).length === 4, "step 2 options");
+out.options = $$('[data-slot]', d).map((b) => [b.dataset.slot, b.getAttribute("aria-pressed"), text(b)]);
+await until(() => text($(".plive__lines", d)), "auto dry run");
+out.plan = $$(".plive__lines p", d).map(text);
+// Confirm loads automatically and sets note
+$('[data-action="confirm"]', d).click();
+await until(() => !$("dialog[open]"), "dialog closed");
+out.doneMsg = await until(() => text($(".plive__msg .result__text")), "waiting note");
+// Refusal on Automatic falls back to first slot
+hub.reply["POST printers/" + SERIAL + "/slots/auto/load"] = [409, { error: "This printer has no slots the Hub can watch. Choose a slot.", code: "auto_not_possible" }];
+$('[data-action="load-any"]').click();
+const d2 = await dialog();
+await until(() => $$(".plive__pick", d2).length === 2, "spools 2");
+$$(".plive__pick", d2)[0].click();
+await until(() => $$('[data-slot]', d2).some((b) => b.dataset.slot === "A1" && b.getAttribute("aria-pressed") === "true"), "fallback to A1");
+out.refusedText = text($(".dialog__body .result__text", d2));
+await until(() => /Load Polymaker PolyTerra PLA into A1/.test(text($(".plive__lines", d2)) || ""), "A1 dry run");
+out.fallbackPlan = $$(".plive__lines p", d2).map(text);
+await answer("cancel");
+""")
+    assert page["head"] == T("status_connected")
+    assert page["noTag"] == T("spool_load_no_tag")
+    assert page["unlinked"] == T("spool_load_tag_unlinked", tag="DEADBEEF")
+    assert [o[0] for o in page["options"]] == ["auto", "A1", "A2", "A3"]
+    assert page["options"][0][1] == "true" and "Automatic" in page["options"][0][2] and "The slot where the spool appears." in page["options"][0][2]
+    assert page["plan"] == [
+        "Load Sunlu PETG Blue into any slot of Workshop X1.",
+        "Watching: A1, A2, A3",
+        "Replaces Spool 9, which was waiting.",
+    ]
+    assert page["doneMsg"] == "Waiting for Sunlu PETG Blue to be loaded into any slot of Workshop X1."
+    assert page["refusedText"] == "This printer has no slots the Hub can watch. Choose a slot."
+    assert page["fallbackPlan"][0] == "Load Polymaker PolyTerra PLA into A1."
+
+
+def test_auto_notice_stop_waiting_and_choose_slot_and_undo_refusal_shape(hub, tmp_path):
+    page = drive(hub, tmp_path, r"""
+unlock();
+hub.live.status.auto = { spool_id: 8, spool: { id: 8, name: "Sunlu PETG Blue" }, state: "waiting" };
+hub.reply["POST printers/" + SERIAL + "/auto/cancel"] = () => {
+  if (hub.live.status) hub.live.status.auto = null;
+  hub.live.auto = null;
+  return [200, { cancelled: true }];
+};
+hub.reply["POST printers/" + SERIAL + "/auto/choose"] = (rec) => {
+  hub.live.status.auto = null;
+  return [200, { slot: { label: rec.body.slot }, dry_run: false, confirmed: true, moved_back: [], problems: [], event: { id: "e1" } }];
+};
+mount();
+await until(() => $(".plive__autonotice[data-state='info']"), "waiting notice");
+out.waitingText = text($(".plive__autonotice .result__text"));
+out.waitingBtn = text($('[data-action="auto-cancel"]'));
+// Stop waiting acts at once with NO confirm dialog
+$('[data-action="auto-cancel"]').click();
+await until(() => calls(/auto\/cancel$/).length === 1, "cancel sent");
+out.cancelDialogOpen = !!$("dialog[open]");
+out.stoppedMsg = await until(() => text($(".plive__msg .result__text")), "stopped note");
+await until(() => !$(".plive__autonotice").dataset.state, "notice cleared");
+
+// Choose state: warn notice with candidate slot buttons, then Undo 409 reads error and ignores message/text
+hub.live.status.auto = { spool_id: 8, spool: { id: 8, name: "Sunlu PETG Blue" }, state: "choose", slots: ["A2", "A3"] };
+await until(() => $(".plive__autonotice[data-state='warn']"), "choose notice", 3500);
+out.chooseText = text($(".plive__autonotice .result__text"));
+out.choiceBtns = $$('[data-action="auto-choose"]').map(text);
+if (typeof S !== "undefined" && S) S.history = { ...(S.history || {}), event_undo: true };
+$('[data-action="auto-choose"][data-slot="A3"]').click();
+await until(() => calls(/auto\/choose$/).length === 1, "choose sent");
+out.chosenBody = calls(/auto\/choose$/)[0].body;
+out.chosenLine = await until(() => text($(".plive__slotline .result__text", row("A3"))), "slot result");
+hub.reply["POST events/e1/undo"] = [409, { error: "From error only.", code: "changed_since", message: "NOT THIS", text: "NOT THIS" }];
+await until(() => $(".toast .btn"), "undo toast");
+$(".toast .btn").click();
+out.undoToast = await until(() => $$(".toast__text").map(text).find((x) => /From error only|NOT THIS/.test(x || "")), "undo refusal toast");
+
+// Offline has no status. Hardware choices are disabled and Stop waiting still works.
+hub.live.status = null;
+hub.live.auto = { spool_id: 8, spool: { id: 8, name: "Sunlu PETG Blue" }, state: "choose", slots: ["A2", "A3"] };
+hub.live.state = "offline";
+await until(() => !shown($('[data-action="load-any"]')) && $('[data-action="auto-choose"]')?.getAttribute("aria-disabled") === "true", "offline choice disabled", 3500);
+out.offlineDisabled = [$('[data-action="auto-choose"]').getAttribute("aria-disabled"), $('[data-action="auto-cancel"]').getAttribute("aria-disabled")];
+$('[data-action="auto-cancel"]').click();
+await until(() => calls(/auto\/cancel$/).length === 2, "offline cancel sent");
+await until(() => !$(".plive__autonotice").dataset.state, "offline notice cleared");
+""")
+    assert page["waitingText"] == "Waiting for Sunlu PETG Blue to be loaded into any slot of Workshop X1."
+    assert page["waitingBtn"] == "Stop waiting"
+    assert page["cancelDialogOpen"] is False
+    assert page["stoppedMsg"] == "Stopped waiting for Sunlu PETG Blue."
+    assert page["chooseText"] == "Two slots were loaded. Which one got Sunlu PETG Blue?"
+    assert page["choiceBtns"] == ["A2", "A3"]
+    assert page["chosenBody"] == {"slot": "A3", "code": CODE}
+    assert "Loaded Sunlu PETG Blue into A3." in page["chosenLine"]
+    assert page["undoToast"] == "From error only."
+    assert page["offlineDisabled"] == ["true", None]

@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import time
 
-from . import alerts_tab, backup_tab, corrections_tab, flash_tab, general_tab, intake_tab, jobs, station_tab, library_tab, logs_tab, modes, overview, presets_tab, printers_tab, storage_tab, trust_tab, updates_tab, webapp_tab
+from . import (
+    alerts_tab, analytics_tab, backup_tab, corrections_tab, device_tab, flash_tab, general_tab, history_tab,
+    intake_tab, jobs, library_tab, logs_tab, modes, overview, presets_tab, printer_live_tab, printers_tab,
+    spools_tab, start_tab, station_tab, storage_tab, trust_tab, updates_tab, webapp_tab,
+)
 
 
 class Cached:
@@ -33,4 +37,7 @@ def routes(page) -> list[tuple]:
     return (jobs.routes(page) + modes.routes(page) + overview.routes(page) + updates_tab.routes(page)
             + printers_tab.routes(page) + trust_tab.routes(page) + presets_tab.routes(page) + webapp_tab.routes(page)
             + logs_tab.routes(page) + library_tab.routes(page) + general_tab.routes(page) + backup_tab.routes(page) + station_tab.routes(page)
-            + intake_tab.routes(page) + flash_tab.routes(page) + corrections_tab.routes(page) + storage_tab.routes(page) + alerts_tab.routes(page))
+            + intake_tab.routes(page) + flash_tab.routes(page) + corrections_tab.routes(page) + storage_tab.routes(page)
+            + alerts_tab.routes(page) + device_tab.routes(page) + spools_tab.routes(page) + start_tab.routes(page)
+            + analytics_tab.routes(page) + history_tab.routes(page)
+            + printer_live_tab.routes(page, sm=page.spoolman))

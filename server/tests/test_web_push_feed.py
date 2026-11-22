@@ -267,7 +267,7 @@ def test_twins_pass_the_hub_answer_and_its_parameters(env):
     assert c.get("/intake/api/storage-use").json()["filesystems"] == []
     kit.down = True
     r = c.get("/intake/api/events")
-    assert r.status_code == 502 and "not reachable" in r.json()["error"]
+    assert r.status_code == 502 and "not reachable" in r.json()["message"] and r.json()["error"] == "unreachable"
 
 
 def test_twins_are_for_the_home_network_only(env):

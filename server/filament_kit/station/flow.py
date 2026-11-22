@@ -29,6 +29,7 @@ log = logging.getLogger("intake-station")
 # Lamps (yellow = Hold, red = Discard), modes 0 off, 1 on, 2 blink, 3 three blinks, 4 rapid blink
 STEP_LAMPS = {"pairing": (2, 0), "idle": (0, 0), "lookup": (4, 1), "camera": (2, 1), "recognising": (4, 1), "weigh": (2, 1),
               "ready": (1, 1), "saving": (4, 1), "done": (3, 0), "phone": (0, 1)}
+LAMP_CHOICES = ("off", "yellow", "red", "both")  # what the station's page offers for a step (settings.py)
 DONE_SECONDS = 10  # done -> idle
 TITLE_WIDTH, LINE_WIDTH = 16, 21  # the OLED's title row (bold) and body rows (6x10 font)
 
@@ -261,10 +262,28 @@ def ask_to_pair() -> bool:
     return started
 
 
+def lamp_default(step) -> str:
+    """The lamp the table above lights for `step`: "off", "yellow", "red" or "both"."""
+    y, r = STEP_LAMPS[step]
+    return "both" if y and r else "yellow" if y else "red" if r else "off"
+
+
+def lamp_modes(step, choice=None):
+    """(yellow, red) lamp modes for `step` when the owner chose `choice` for it on the station's page (R83 section 9: one
+    lamp per step of the intake). The table's own pattern stays (a blink is still a blink); only which lamp shows it
+    changes: with one lamp chosen that lamp takes the step's pattern (the yellow lamp's, else the red's), "both" gives each
+    lamp its own pattern (or the shared one where the table leaves it dark), "off" none. No choice: the table."""
+    y, r = STEP_LAMPS[step]
+    if choice not in LAMP_CHOICES or choice == lamp_default(step):
+        return y, r
+    pattern = y or r
+    return {"off": (0, 0), "yellow": (pattern, 0), "red": (0, pattern), "both": (y or pattern, r or pattern)}[choice]
+
+
 def lamps(now):
     """(yellow, red) lamp modes for the step; red blinks three times after a cancel."""
     with st.lock:
-        y, r = STEP_LAMPS[flow["step"]]
+        y, r = lamp_modes(flow["step"], st.lamp_map.get(flow["step"]))
         if now < st.state["blink_until"]:
             r = 3
     return y, r

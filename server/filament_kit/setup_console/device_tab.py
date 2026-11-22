@@ -14,18 +14,15 @@ seconds, a redirect is an error, only the address stored for that pairing. Every
 The kind and version of a pairing come from the pairing record once it holds them (`kind`, `version`; the client header of
 R83 section 9.2); until then a row has no kind, or "station" when it is a Weigh Station pairing.
 
-The station's side (EV3): GET /state (with `photo: true` when it has one), GET /settings, POST /settings, GET /photo, and
-POST /ticket -> {ticket, expires_in: 60}; the station's page hands the ticket to its own POST /session. The Hub's proof
-for POST /settings and POST /ticket is `_proof_headers` (EV3's pinned client gives it).
+The station's side (EV3): GET /state (its `photo` object reduced to a bool by `station_client.read_state`),
+GET /settings, POST /settings, GET /photo, and POST /ticket -> {ticket, expires_in: 60}; the station's page hands
+the ticket to its own POST /session. All station calls go through `station_client` (pinned TLS, single 5 s deadline,
+no redirect/proxy, and `X-Station-Proof` on POST /settings and POST /ticket).
 """
 from __future__ import annotations
 
-import http.client
-import json
+import ipaddress
 import re
-import socket
-import threading
-import time
 import urllib.parse
 
 import anyio
@@ -35,25 +32,17 @@ from .. import __version__, config, pairing, reader_tokens, station_client
 
 KINDS = ("phone", "pc", "station", "web", "reader", "builtin")
 CLIENT_KINDS = {"android": "phone", "slicer-sync": "pc", "weigh-station": "station", "web": "web"}   # the header's names
-SETTING_ID = re.compile(r"[a-z0-9_.-]{1,40}")
-SETTING_KINDS = ("switch", "choice", "number", "text")
-TICKET = re.compile(r"[A-Za-z0-9_-]{16,128}")
-MAX_SETTINGS = 60
-MAX_LABEL = 80
-MAX_TEXT = 200
-MAX_JSON = 256 * 1024
-MAX_PHOTO = 4 * 1024 * 1024
-STATION_TIMEOUT = 5
-OPEN_SCHEMES = ("https",)           # the station's own page is opened only over https
+SETTING_ID = station_client.SETTING_ID
+SETTING_KINDS = station_client.SETTING_KINDS
+TICKET = station_client.TICKET
+MAX_SETTINGS = station_client.MAX_SETTINGS
+MAX_LABEL = station_client.MAX_LABEL
+MAX_TEXT = station_client.MAX_TEXT
+MAX_JSON = station_client.MAX_JSON
+MAX_PHOTO = station_client.MAX_PHOTO
+STATION_TIMEOUT = station_client.STATION_TIMEOUT
 DROPPED_NOTE = "Some of this device's settings could not be shown."
-
-
-class StationError(Exception):
-    """The Hub could not get a checked answer from the station: `status` is what the Hub page says (502, 503...)."""
-
-    def __init__(self, status: int, message: str):
-        super().__init__(message)
-        self.status, self.message = status, message
+clean_settings = station_client.clean_settings
 
 
 # ---------- what the Hub offers (out of date is a comparison with these) ----------
@@ -150,68 +139,6 @@ def rows() -> list[dict]:
 
 
 # ---------- the station: data only, checked ----------
-def _proof_headers() -> dict:
-    """The proof the station wants for a change or a ticket (R83 section 13 item 3); EV3's pinned client gives it."""
-    return {}
-
-
-def call_station(url: str, method: str, path: str, body: bytes | None = None, cap: int = MAX_JSON) -> tuple[int, str, bytes]:
-    """(status, content type, body) of one call to the stored address of the station, at a fixed `path`. The whole call
-    (connect, headers, body) has ONE deadline of STATION_TIMEOUT seconds: a station that trickles its answer is cut off, the
-    socket is shut at the deadline. A redirect (any 3xx), a slow answer or one larger than `cap` is a StationError. It
-    is plain http.client, so no proxy of the environment is ever used and nothing is followed. The pinned certificate comes
-    with EV3's client, which takes this one's place; the page routes and the tests go through this name only."""
-    u = urllib.parse.urlsplit(url)
-    secure = u.scheme == "https"
-    conn = (http.client.HTTPSConnection if secure else http.client.HTTPConnection)(u.hostname, u.port, timeout=STATION_TIMEOUT)
-    deadline = time.monotonic() + STATION_TIMEOUT
-
-    held: list = [None]         # the socket, kept: getresponse() lets conn.sock go for an answer that ends by closing
-
-    def cut():
-        sock = held[0] or conn.sock
-        if sock is not None:
-            try:
-                sock.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-        # the socket is only SHUT here (the reading thread sees the end and returns); closing the connection from this thread
-        # would pull the response's file out from under a read in progress, and the `finally` below closes it
-
-    timer = threading.Timer(STATION_TIMEOUT, cut)
-    timer.daemon = True
-    timer.start()
-    headers = {"Accept": "*/*", **_proof_headers(), **({"Content-Type": "application/json"} if body is not None else {})}
-    try:
-        conn.request(method, u.path.rstrip("/") + "/" + path, body=body, headers=headers)
-        held[0] = conn.sock
-        resp = conn.getresponse()
-        status, kind = resp.status, resp.getheader("Content-Type", "") or ""
-        if 300 <= status < 400:
-            raise StationError(502, "the Weigh Station answered with a redirect")
-        data = bytearray()
-        while True:
-            chunk = resp.read1(8192)             # what has arrived, not a wait for 8192 bytes or the end
-            if not chunk:
-                break
-            data += chunk
-            if len(data) > cap:
-                raise StationError(502, "the Weigh Station's answer is too large")
-            if time.monotonic() > deadline:
-                raise StationError(502, "the Weigh Station answers too slowly")
-    except StationError:
-        raise
-    except (http.client.HTTPException, OSError, ValueError, AttributeError) as e:      # AttributeError: http.client closing under a shut socket
-        slow = time.monotonic() >= deadline - 0.05
-        raise StationError(502, "the Weigh Station answers too slowly" if slow else f"the Weigh Station does not answer ({type(e).__name__})") from None
-    finally:
-        timer.cancel()
-        conn.close()
-    if time.monotonic() > deadline:
-        raise StationError(502, "the Weigh Station answers too slowly")
-    return status, kind, bytes(data)
-
-
 def _station_for(device_id: str) -> str:
     """The stored address of the station behind a device row; the Hub knows one station address, so the pairing must be the
     one station pairing (as `station_reach` has it)."""
@@ -235,86 +162,19 @@ def _origin(url) -> str | None:
         return None
 
 
-def own_page(url) -> str | None:
-    o = _origin(url)
-    return o + "/" if o else None
-
-
-def _station_json(url: str, method: str, path: str, body: dict | None = None) -> dict:
-    from ..setup_page import Refused
-    raw = None if body is None else json.dumps(body).encode()
+def own_page(endpoint: tuple[str, int, str], hub_host: str) -> str:
+    """Use the pinned Station port. A co-hosted Station uses the browser's already validated Hub hostname."""
+    host, port, _fp = endpoint
     try:
-        status, kind, data = call_station(url, method, path, raw)
-    except StationError as e:
-        raise Refused(e.status, e.message) from None
-    if kind.split(";")[0].strip().lower() != "application/json":
-        raise Refused(502, "the Weigh Station did not answer with JSON")
-    try:
-        out = json.loads(data or b"{}")
+        loopback = ipaddress.ip_address(host).is_loopback
     except ValueError:
-        out = None
-    if not isinstance(out, dict):
-        raise Refused(502, "the Weigh Station's answer is not valid")
-    if not 200 <= status < 300:
-        err = out.get("error")
-        raise Refused(502 if status >= 500 else status if status in (400, 403, 404) else 502,
-                      str(err)[:MAX_TEXT] if isinstance(err, str) and err else f"the Weigh Station answered {status}")
-    return out
-
-
-def _text(v, limit: int = MAX_TEXT) -> str | None:
-    return v if isinstance(v, str) and len(v) <= limit else None
-
-
-def clean_settings(raw) -> tuple[list[dict], bool]:
-    """(the settings that pass the checks, whether any was dropped): `id` [a-z0-9_.-]{1,40}, `kind` one of four, `label` at
-    most 80 characters, at most 60 settings, a value of the kind's own type."""
-    if not isinstance(raw, list):
-        return [], bool(raw)
-    out, seen, dropped = [], set(), len(raw) > MAX_SETTINGS
-    for s in raw[:MAX_SETTINGS]:
-        item = _clean_setting(s) if isinstance(s, dict) else None
-        if item is None or item["id"] in seen:
-            dropped = True
-            continue
-        seen.add(item["id"])
-        out.append(item)
-    return out, dropped
-
-
-def _number(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) < 1e12
-
-
-def _clean_setting(s: dict) -> dict | None:
-    sid, kind, label, value = s.get("id"), s.get("kind"), _text(s.get("label"), MAX_LABEL), s.get("value")
-    if not (isinstance(sid, str) and SETTING_ID.fullmatch(sid)) or kind not in SETTING_KINDS or not label:
-        return None
-    out = {"id": sid, "label": label, "kind": kind}
-    if kind == "switch":
-        if not isinstance(value, bool):
-            return None
-    elif kind == "number":
-        if not _number(value):
-            return None
-        for k in ("min", "max"):
-            if _number(s.get(k)):
-                out[k] = s[k]
-    elif kind == "text":
-        if _text(value) is None:
-            return None
-    else:
-        if not (_text(value) is not None or _number(value)):
-            return None
-        choices = []
-        for c in (s.get("choices") if isinstance(s.get("choices"), list) else [])[:40]:
-            v, lab = (c.get("value"), c.get("label")) if isinstance(c, dict) else (c, c)
-            if _text(v, MAX_LABEL) is None or _text(lab, MAX_LABEL) is None:
-                return None
-            choices.append(v if not isinstance(c, dict) else {"value": v, "label": lab})
-        out["choices"] = choices
-    out["value"] = value
-    return out
+        loopback = host.rstrip(".").lower() == "localhost"
+    if loopback and hub_host:
+        host = hub_host
+    authority = f"[{host}]" if ":" in host else host
+    if port != 443:
+        authority += f":{port}"
+    return f"https://{authority}/"
 
 
 def clean_status(v, depth: int = 0):
@@ -326,12 +186,12 @@ def clean_status(v, depth: int = 0):
         return [clean_status(x, depth + 1) for x in v[:60]]
     if isinstance(v, str):
         return v[:MAX_TEXT]
-    return v if isinstance(v, bool) or _number(v) else None
+    return v if isinstance(v, bool) or station_client._number(v) else None
 
 
 # ---------- routes ----------
 def routes(page) -> list[tuple]:
-    from ..setup_page import Refused
+    from ..setup_page import Refused, _host_of
 
     async def listing(request, body):
         return {"devices": await anyio.to_thread.run_sync(rows)}
@@ -342,39 +202,39 @@ def routes(page) -> list[tuple]:
             raise Refused(404, "no such device")
         return row
 
-    def detail(device_id: str) -> dict:
+    def detail(device_id: str, hub_host: str) -> dict:
         row = find(device_id)
         out: dict = {"device": row, "photo": False}
         if row["page"]:
             url = _station_for(device_id)
-            out["own_page"] = own_page(url)
             try:
-                status = _station_json(url, "GET", "state")
-                got = _station_json(url, "GET", "settings")
-            except Refused:
+                out["own_page"] = own_page(station_client.pinned_endpoint(url), hub_host)
+                status = station_client.read_state(url)
+                settings_list, dropped = station_client.read_settings(url)
+            except station_client.StationCallError:
                 out["device"] = {**row, "reachable": False}
                 return out
             out["status"] = clean_status(status)
             out["photo"] = status.get("photo") is True
-            out["settings"], dropped = clean_settings(got.get("settings"))
+            out["settings"] = settings_list
             if dropped:
                 out["settings_dropped"] = True
         return out
 
     async def one(request, body):
-        return await anyio.to_thread.run_sync(detail, request.path_params["id"])
+        return await anyio.to_thread.run_sync(detail, request.path_params["id"], _host_of(request.headers.get("host", "")))
 
     def photo(device_id: str) -> Response:
         if not find(device_id)["page"]:
             raise Refused(404, "no photo")
         url = _station_for(device_id)
         try:
-            status, kind, data = call_station(url, "GET", "photo", None, MAX_PHOTO)
-        except StationError as e:
-            raise Refused(e.status, e.message) from None
-        if status != 200 or kind.split(";")[0].strip().lower() != "image/jpeg" or not data.startswith(b"\xff\xd8"):
+            data = station_client.read_photo(url)
+        except station_client.StationCallError as e:
+            raise Refused(e.status or 502, e.message) from None
+        if not isinstance(data, (bytes, bytearray)) or len(data) > MAX_PHOTO or not data.startswith(b"\xff\xd8"):
             raise Refused(502, "the Weigh Station's photo is not a JPEG picture")
-        return Response(data, 200, media_type="image/jpeg",
+        return Response(bytes(data), 200, media_type="image/jpeg",
                         headers={"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'"})
 
     async def photo_route(request, body):
@@ -394,8 +254,10 @@ def routes(page) -> list[tuple]:
                 if not SETTING_ID.fullmatch(k) or isinstance(v, (dict, list)) or v is None:
                     raise Refused(400, f"{k[:40]} is not a setting this page can change")
             sent = values
-        got = _station_json(_station_for(device_id), "POST", "settings", sent)
-        settings, dropped = clean_settings(got.get("settings"))
+        try:
+            settings, dropped = station_client.change_settings(_station_for(device_id), sent)
+        except station_client.StationCallError as e:
+            raise Refused(e.status or 502, e.message) from None
         return {"settings": settings, **({"settings_dropped": True} if dropped else {})}
 
     async def settings(request, body):
@@ -404,18 +266,18 @@ def routes(page) -> list[tuple]:
         page.audit(request, f"Weigh Station {device_id} settings changed")
         return out
 
-    def open_page(device_id: str) -> dict:
+    def open_page(device_id: str, hub_host: str) -> dict:
         """The address that opens the station's own page for this browser: its one-time ticket after the `#`."""
         if not find(device_id)["page"]:
             raise Refused(404, "this device has no page of its own")
         url = _station_for(device_id)
-        base = own_page(url)
-        if not base or urllib.parse.urlsplit(base).scheme not in OPEN_SCHEMES:
-            raise Refused(409, "the Weigh Station's own page is opened over https only")
-        if _origin(base) != _origin(url):
-            raise Refused(502, "the Weigh Station's ticket is not valid")
-        got = _station_json(url, "POST", "ticket", {})
-        ticket = got.get("ticket")
+        try:
+            endpoint = station_client.pinned_endpoint(url)
+            base = own_page(endpoint, hub_host)
+            got = station_client.ticket(url, endpoint=endpoint)
+        except station_client.StationCallError as e:
+            raise Refused(e.status or 502, e.message) from None
+        ticket = got.get("ticket") if isinstance(got, dict) else None
         if not (isinstance(ticket, str) and TICKET.fullmatch(ticket)) or got.get("expires_in") != 60 or isinstance(got.get("expires_in"), bool):
             raise Refused(502, "the Weigh Station's ticket is not valid")
         address = f"{base}#ticket={ticket}"
@@ -425,7 +287,7 @@ def routes(page) -> list[tuple]:
 
     async def open_route(request, body):
         device_id = request.path_params["id"]
-        out = await anyio.to_thread.run_sync(open_page, device_id)
+        out = await anyio.to_thread.run_sync(open_page, device_id, _host_of(request.headers.get("host", "")))
         page.audit(request, f"Weigh Station {device_id} page opened")        # no ticket in the log
         return out
 

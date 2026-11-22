@@ -346,6 +346,43 @@ def words(ev: dict) -> tuple[str, str]:
     if kind == "location.renamed":
         return say("event_title_location_renamed"), say("event_text_location_renamed", **{
             "from": _d(ev, "from"), "to": _d(ev, "to"), "spools": _d(ev, "spools") or "0"})
+    if kind == "slot.cleared":
+        slot = _d(ev, "slot") or _d(ev, "before_slot") or "slot"
+        return f"Slot {slot} cleared", f"{_spool_name(ev)} was cleared from {slot}."
+    if kind == "hub.started":
+        ver = _d(ev, "version")
+        return "Hub started", (f"Version {ver}." if ver else "The Hub started.")
+    if kind == "hub.updated":
+        to_v = _d(ev, "to")
+        return "Hub updated", (f"Updated to {to_v}." if to_v else "The Hub was updated.")
+    if kind == "hub.restored":
+        b = _d(ev, "backup")
+        return "Hub restored from backup", (f"Restored from {b}." if b else "Restored from a backup.")
+    if kind == "backup.finished":
+        f = _d(ev, "file")
+        return "Backup finished", (f"Saved {f}." if f else "Backup completed.")
+    if kind == "backup.failed":
+        r = _d(ev, "reason")
+        return "Backup failed", (f"{r}." if r else "The backup did not finish.")
+    if kind in ("device.paired", "device.removed"):
+        name = sub.get("name") or sub.get("id") or say("alert_device_unknown")
+        verb = "paired" if kind == "device.paired" else "removed"
+        return f"Device {verb}: {name}", f"{name} was {verb}."
+    if kind == "settings.changed":
+        grp = _d(ev, "group") or _d(ev, "feature") or "Hub"
+        names = _d(ev, "names")
+        return f"Settings changed ({grp})", (f"Updated {names}." if names else f"{grp} settings changed.")
+    if kind in ("printer.added", "printer.changed", "printer.removed"):
+        verb = kind.split(".", 1)[1]
+        return f"Printer {verb}: {_printer(ev)}", f"{_printer(ev)} was {verb}."
+    if kind == "catalog.changed":
+        what = _d(ev, "what") or "updated"
+        return "Filament Catalog changed", f"Catalog {what.replace('_', ' ')}."
+    if kind == "usage.undone":
+        return f"Usage undone on {_printer(ev)}", f"Undid {number(_d(ev, 'grams'))} g on {_job(ev)}."
+    if kind == "record.changed":
+        what = _d(ev, "what") or "changed"
+        return "Intake record changed", f"Record {what}."
     return kind, ""
 
 
@@ -370,10 +407,14 @@ def event_view(ev: dict, settings: dict | None = None) -> dict:
     """An event as the API gives it (R80 section 8): what is stored, whether an alert type that is on covers it, and
     its title, sentence and action in the Hub's language."""
     title, text = words(ev)
-    return {"id": ev["id"], "at": ev["at"], "kind": ev["kind"], "severity": ev["severity"],
-            "subject": dict(ev["subject"]), "actor": dict(ev["actor"]), "data": dict(ev["data"]),
-            "condition": dict(ev["condition"]) if ev.get("condition") else None,
-            "alert": alerts.is_alert(ev, settings), "title": title, "text": text, "action": action_of(ev)}
+    out = {"id": ev["id"], "at": ev["at"], "kind": ev["kind"], "severity": ev["severity"],
+           "subject": dict(ev["subject"]), "actor": dict(ev["actor"]), "data": dict(ev["data"]),
+           "condition": dict(ev["condition"]) if ev.get("condition") else None,
+           "alert": alerts.is_alert(ev, settings), "title": title, "text": text, "action": action_of(ev)}
+    for k in ("undo", "undone", "undo_of"):
+        if k in ev:
+            out[k] = ev[k]
+    return out
 
 
 # ---------------------------------------------------------------- GET api/events
@@ -391,7 +432,8 @@ def parse_time(text: str) -> str:
 
 
 def events_answer(*, since: int | None = None, since_at: str | None = None, wait: float = 0, kinds=None,
-                  limit: int = events.LIMIT_DEFAULT, alert: bool = False, callers=()) -> dict:
+                  limit: int = events.LIMIT_DEFAULT, alert: bool = False, callers=(),
+                  activity: bool = False, subject: str | None = None, actor: str | None = None) -> dict:
     """`GET api/events`: {events, next, oldest, gap, test, conditions}. `since` (an id) or `since_at` (a time, UTC);
     `wait` up to 55 s waits for news; `alert` keeps only the events an alert type that is on covers (the cursor still
     moves over the others); `callers` are the keys this caller is known by (`device:<id>`, `client:<browser id>`),
@@ -402,7 +444,8 @@ def events_answer(*, since: int | None = None, since_at: str | None = None, wait
     deadline = time.monotonic() + min(max(float(wait or 0), 0.0), WAIT_MAX)
     cur, shown, res = max(int(since or 0), 0), [], {"events": [], "next": 0}
     while True:
-        res = store.read(cur, limit, kinds, max(0.0, deadline - time.monotonic()), since_at=since_at)
+        res = store.read(cur, limit, kinds, max(0.0, deadline - time.monotonic()),
+                         since_at=since_at, activity=activity, subject=subject, actor=actor)
         found = res["events"]
         shown = [e for e in found if alerts.is_alert(e, settings)] if alert else found
         cur = res["next"]

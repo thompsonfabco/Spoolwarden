@@ -297,10 +297,10 @@ def test_catalogue_texts_are_named_like_keys_and_use_known_fields():
     assert len(texts) > 60 and all(re.fullmatch(r"cli_[a-z0-9_]+", k) for k in texts)
     for key, text in texts.items():
         assert text.strip(), key
-        assert set(re.findall(r"\{(\w+)\}", text)) <= {"n", "name", "slot", "printer", "place", "why", "value", "days", "url",
-                                                          "brand", "material", "field", "text", "id", "names", "setting",
-                                                          "ids", "choices", "low", "high", "label", "device", "after",
-                                                          "before"}, key
+        assert set(re.findall(r"\{(\w+)\}", text)) <= {"n", "name", "slot", "slots", "printer", "place", "why", "value",
+                                                          "days", "url", "brand", "material", "field", "text", "id",
+                                                          "names", "setting", "ids", "choices", "low", "high", "label",
+                                                          "device", "after", "before", "command"}, key
 
 
 def test_texts_already_in_the_catalogue_have_not_drifted():

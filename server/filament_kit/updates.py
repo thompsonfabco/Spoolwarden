@@ -47,7 +47,7 @@ try:
 except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
-from . import __version__, config, modules, output, release, steps
+from . import __version__, config, events, modules, output, release, steps
 from .release import ReleaseError
 
 SCHEDULES = {"daily": 20 * 3600, "weekly": 6.5 * 86400}
@@ -106,6 +106,17 @@ def _read_state() -> dict:
     except (OSError, ValueError):
         return {}
     return st if isinstance(st, dict) else {}
+
+
+def _emit_updated(from_ver: str, to_ver: str, is_rollback: bool) -> None:
+    try:
+        events.write("hub.updated", "hub", "hub", {
+            "from": from_ver,
+            "to": to_ver,
+            "rollback": "true" if is_rollback else "false",
+        })
+    except (events.EventError, OSError):
+        pass
 
 
 def _write_state(**changes) -> None:
@@ -576,6 +587,7 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
     previous = cur if _kept(cur) and not nightly_now else old_previous if isinstance(old_previous, str) else None
     _write_state(last_ok_at=now, previous=previous, held=None, failed=None)
     _prune({latest, cur} | ({previous} if previous else set()))
+    _emit_updated(cur, latest, False)
     output.out_lines(output.status_row("done", f"Installed {latest}. The Hub is back."
                                        + ("" if previous else " No rollback copy is kept.")))
     return _feed_after_install(cfg, fetcher, rel, run)
@@ -853,6 +865,7 @@ def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int
         return 1
     held = cur if cur != target else st.get("held")    # after a half-done update this process may say `target`
     _write_state(previous=None, held=held)
+    _emit_updated(cur, target, True)
     output.out_lines(output.status_row("done", f"Rolled back to {target}. The Hub is back."))
     if held:
         output.out(f"Automatic updates will not install {held} again; sudo spoolwarden update does.")

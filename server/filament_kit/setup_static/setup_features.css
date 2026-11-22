@@ -13,6 +13,8 @@
 .segmented--cards .segmented__line{font-size:var(--fs-s);font-weight:var(--fw-text)}
 .features__meta{margin:0 0 var(--s3)}
 .features__after{font-weight:var(--fw-label)}
+.features__lead{font-size:var(--fs-m)}
+.features__pending{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s1) var(--s2);margin-top:var(--s1);font-size:var(--fs-s)}
 .features__preview{display:flex;flex-direction:column;gap:var(--s3)}
 .features__preview p{margin:0}
 .features__filter{margin-left:auto}

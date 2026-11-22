@@ -192,7 +192,7 @@ def test_parents_with_no_sync_yet(app):
 def test_the_page_loads_the_tab_and_writes_no_html():
     assert modules.MODULES["presets"]
     src = (STATIC / "setup_presets.js").read_text(encoding="utf-8")
-    assert not re.search(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|fetch\(", src)
+    assert not re.search(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(", src)
     assert 'presets: ["nav_slicer_presets", "presets", () => [presetsTab]]' in (STATIC / "setup.js").read_text(encoding="utf-8")
     # a null in replaceChildren prints the word: this file uses fill for anything that may be null
     assert "replaceChildren(null" not in src

@@ -20,30 +20,15 @@ const JOB_WORD = { RUNNING: "printer_job_printing", PAUSE: "printer_job_paused",
 const DONE = { pause: "printer_result_paused", resume: "printer_resumed_line", stop: "printer_stopped_line", light_on: "printer_light_on_line",
   light_off: "printer_result_light_off" };
 
-// The texts the catalogue does not have yet (EV2 adds them): the catalogue's text wins once it has the key.
+// The live texts are in the catalogue (strings/en.json); keep the empty STUB fallback table only if an entry is added later.
 const STUB = {
-  live_head: "Live view", live_alerts: "Printer alerts", live_locked: "Unlock the page to use the camera, the controls and the slot actions.",
-  live_load_slot: "Load into slot {slot}", live_unload_slot: "Unload slot {slot}", live_clear_slot: "Clear slot {slot}", live_clear: "Clear slot",
-  live_slots: "Filament",
-  live_clear_title: "Clear slot {slot}?",
-  live_clear_body: "Clear slot {slot}? The Hub forgets the spool recorded here.",
-  live_clear_body_spool: "Clear slot {slot}? The Hub forgets the spool recorded here. {name} goes back to {location}.",
-  live_clear_body_spool_noplace: "Clear slot {slot}? The Hub forgets the spool recorded here. {name} goes back to its previous place.",
-  live_clear_waiting: "The spool waiting for this slot is no longer waiting.",
-  live_clear_done: "Slot {slot} cleared.", live_clear_printer: "The slot's setting on the printer is cleared too.",
-  live_unload_waiting: "The assignment waiting for this slot ends.",
-  live_load_waiting: "Waiting for the spool to load in {slot}.", live_load_done: "Loaded {name} into {slot}.", live_load_sent: "Sent to {slot}.",
-  live_pick_title: "Load into slot {slot}", live_pick_none: "Pick a spool first.", live_pick_failed: "The spools could not be listed.",
-  live_plan: "Load {name} into {slot}.",
-  live_not_supported: "This printer has no such control.",
-  live_too_many: "Too many camera views are open. Close one first."
 };
 const fillText = (text, vars) => (vars ? String(text).replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : String(text));
 const t = (key, vars) => {
   const v = SW.t(key, vars);
   return v !== key || !(key in STUB) ? v : fillText(STUB[key], vars);
 };
-const hx = SW.h;
+const hx = (...args) => SW.h(...args);
 const plE = (tag, cls, ...kids) => hx(tag, { class: cls }, ...kids);
 const enc = encodeURIComponent;
 const plhexOf = (s) => (/^[0-9A-Fa-f]{6}$/.test(s.color_hex || "") ? "#" + s.color_hex : "");
@@ -53,6 +38,7 @@ const clockOf = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTim
 const plstamp = (at) => String(at || "").replace("T", " ").slice(0, 16);
 const spoolName = (s) => `${s.vendor || ""} ${s.name || ""}`.trim() || t("spool_title", { id: s.id });
 const plsentence = (kind, shape, text) => plE("span", "status status--" + kind, SW.shape(shape), text);
+const plHubText = (m) => (typeof hubText === "function" ? hubText(m) : String(m || "").trim());
 
 function printerLive(p, ctx = {}) {
   const path = (what) => (ctx.path ? ctx.path(what) : `printers/${enc(p.serial)}/${what}`);
@@ -64,19 +50,50 @@ function printerLive(p, ctx = {}) {
   const alerts = plE("div", "plive__alerts"), notes = plE("div", "plive__notes"), msg = hx("p", { class: "result plive__msg", role: "status" });
   const locked = plE("div", "plive__locked");
   const controls = plE("div", "plive__controls actions"), camBtn = SW.btn(t("printer_camera_show"), { icon: "camera", action: "camera", run: () => cameraToggle() });
+  const loadAnyBtn = SW.btn(t("live_load_any"), { action: "load-any", run: () => runLoadAny(loadAnyBtn) });
   const camBox = hx("div", { class: "plive__cam", hidden: true });
+  const autoNotice = hx("div", { class: "result result--block plive__autonotice", role: "status" });
   const units = plE("div", "plive__units"), usageBox = plE("div", "plive__log"), usageMsg = hx("p", { class: "result", role: "status" });
+  // Download as CSV (R84 6): GET export/usage.csv for this printer, unlocked as a file leaves the Hub
+  async function downloadUsage() {
+    const r = await fetch(`/setup/api/export/usage.csv?printer=${enc(p.serial)}`, { credentials: "same-origin", headers: { "X-Setup-Code": theCode() } });
+    if (!r.ok) { let d = {}; try { d = await r.json(); } catch { /* not JSON */ } throw hubError(r.status, d); }
+    const m = /filename="([^"]+)"/.exec(r.headers.get("Content-Disposition") || "");
+    const url = URL.createObjectURL(await r.blob());
+    const a = hx("a", { href: url, download: m ? m[1] : "usage.csv" });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+  function usageMenu() {
+    if (typeof hubCanExport === "function" && !hubCanExport("usage")) return null;
+    const more = SW.iconBtn("more", t("live_usage_more"), { cls: "plive__usagemore" });
+    SW.menu(more, () => [{ label: t("live_download_csv"), icon: "download", action: "download-csv",
+      run: () => needCode(async () => { try { await downloadUsage(); } catch (e) { if (e.locked) throw e; SW.toast(t("live_csv_failed", { reason: plHubText(e.message) }), "bad"); } }) }], { label: t("live_usage_more") });
+    return plE("div", "actions plive__usagebar", more);
+  }
   const titled = (key, ...kids) => { const id = SW.uid("pl"); return hx("section", { class: "plive__group", "aria-labelledby": id }, hx("h3", { class: "plive__title", id }, t(key)), ...kids); };
   const root = hx("section", { class: "plive", "aria-label": t("live_head"), data: { printer: p.serial != null ? "live" : null } },
-    locked, head, job, prog, detail, temps, alerts, notes, controls, msg, plE("div", "plive__camrow", camBtn), camBox,
-    titled("live_slots", units), titled("printer_usage_title", usageBox, usageMsg));
+    locked, plE("div", "plive__camrow", head, loadAnyBtn), job, prog, detail, temps, alerts, notes, controls, msg, plE("div", "plive__camrow", camBtn), camBox,
+    titled("live_slots", autoNotice, units), titled("printer_usage_title", usageMenu(), usageBox, usageMsg));
   prog.hidden = detail.hidden = temps.hidden = true;
   camBtn.hidden = true;
+  loadAnyBtn.hidden = true;
 
   // ----- the looks of one read -----
   const up = () => !!S.live && UP.includes(S.live.state);
   const gcode = () => (S.live && S.live.status && S.live.status.gcode_state) || "";
   const active = () => up() && ACTIVE.includes(gcode());
+  const printerName = () => p.name || (S.live && S.live.name) || p.serial || "";
+  const autoState = () => (S.live && ((S.live.status && S.live.status.auto) || S.live.auto)) || null;
+  const canAuto = () => !!(S.live && ((S.live.status && S.live.status.auto_possible) || S.live.auto_possible));
+  const autoSpoolName = (a) => {
+    const sp = a && a.spool;
+    if (sp && (sp.vendor || sp.name)) return `${sp.vendor || ""} ${sp.name || ""}`.trim();
+    const id = sp && sp.id != null ? sp.id : (a && a.spool_id);
+    return id != null ? t("spool_title", { id }) : t("live_the_spool");
+  };
   function paintState() {
     const L = S.live, s = (L && L.status) || {}, st = L ? L.state : "";
     if (!L) { head.replaceChildren(plE("span", "muted", t("printer_waiting"))); return; }
@@ -106,6 +123,7 @@ function printerLive(p, ctx = {}) {
       ...(err && !hms.length ? [plsentence("bad", "s-octagon", t("printer_alert_code", { code: err }))] : [])] : []));
     alerts.setAttribute("aria-label", t("live_alerts"));
     notes.replaceChildren(...[...(s.notes || []), s.spoolman_warning].filter((n) => typeof n === "string" && n).map((n) => plE("p", "muted", n)));
+    loadAnyBtn.hidden = !up();
     camBtn.hidden = !S.camOn && !(L.camera && L.camera.kind);
   }
 
@@ -128,6 +146,28 @@ function printerLive(p, ctx = {}) {
     controls.replaceChildren(...row);
   }
   const post = (what, body) => call(path(what), { ...body, code: theCode() });
+  // ----- Undo (R84 3): the answer names its event; the toast says what happened and offers Undo for 10 seconds; none named: no Undo -----
+  const eventId = (r) => {
+    const e = r && r.event;
+    if (e && e.id != null) return e.undo && e.undo.possible === false ? null : e.id;
+    return r && r.event_id != null ? r.event_id : null;
+  };
+  const undoEvent = (id) => needCode(async () => {
+    try {
+      const r = await call(`events/${enc(id)}/undo`, { code: theCode() });
+      SW.toast([t("live_put_back"), r.note].filter(Boolean).join(" "), "ok");
+      refresh();
+    } catch (e) {
+      if (e.locked) throw e;
+      const raw = e.data && e.data.error && e.data.error !== "bad origin" ? e.data.error : "";
+      if (e.status === 409) SW.toast(raw && !/^[a-z0-9_]+$/.test(raw) ? plHubText(raw) : t("live_undo_refused"), "warn");
+      else SW.toast(t("live_undo_failed", { reason: plHubText(e.message) }), "bad");
+    }
+  });
+  const slotToast = (text, r) => {
+    const id = typeof hubHasHistory !== "function" || hubHasHistory("event_undo") ? eventId(r) : null;
+    SW.toast(text, "ok", id == null ? {} : { action: { label: t("common_undo"), name: t("live_undo_name", { what: text }), run: () => undoEvent(id) } });
+  };
   // a change goes through the lock: Locked opens the unlock dialog and the work carries on after the code
   const unlocked = (run) => needCode(run);
   async function command(action, button, confirm) {
@@ -232,6 +272,68 @@ function printerLive(p, ctx = {}) {
     const el = units.querySelector(`.plive__slotline[data-slot="${CSS.escape(label)}"]`);
     if (el) SW.result(el, kind, body.cloneNode(true));
   };
+  async function doAutoCancel(a) {
+    await unlocked(async () => {
+      if (S.busy) return;
+      S.busy = true;
+      try {
+        await post("auto/cancel", {});
+        SW.result(msg, "info", t("live_auto_stopped", { name: autoSpoolName(a) }));
+        if (S.live && S.live.status && S.live.status.auto) delete S.live.status.auto;
+        if (S.live && S.live.auto) delete S.live.auto;
+        S.sig.auto = "";
+        paintAuto();
+      } catch (e) {
+        if (e.locked) throw e;
+        SW.result(msg, e.status === 409 ? "info" : "bad", plHubText(e.message));
+      } finally { S.busy = false; }
+    });
+    refresh();
+  }
+  async function doAutoChoose(label, a) {
+    await unlocked(async () => {
+      if (S.busy) return;
+      S.busy = true;
+      try {
+        const done = await post("auto/choose", { slot: label });
+        const name = autoSpoolName(a);
+        const text = done.pending ? t("live_load_waiting", { slot: label }) : t(done.confirmed ? "live_load_done" : "live_load_sent", { name, slot: label });
+        const moved = (done.moved_back || []).map((m) => (m.location ? t("spool_load_plan_goes_back", { id: m.id ?? "?", slot: label, location: m.location }) : t("spool_load_plan_goes_back_noplace", { id: m.id ?? "?", slot: label })));
+        slotToast(text, done);
+        slotSay(label, "ok", [text, ...moved, ...(done.problems || [])]);
+        if (S.live && S.live.status && S.live.status.auto) delete S.live.status.auto;
+        if (S.live && S.live.auto) delete S.live.auto;
+        S.sig.auto = "";
+        paintAuto();
+      } catch (e) {
+        if (e.locked) throw e;
+        SW.result(msg, e.status === 409 && e.data && e.data.code === "nothing_to_choose" ? "info" : "bad", plHubText(e.message));
+      } finally { S.busy = false; }
+    });
+    refresh();
+  }
+  function paintAuto() {
+    const a = autoState();
+    const key = JSON.stringify([a && a.state, a && a.spool_id, a && a.spool, a && a.slots, up(), printerName()]);
+    if (key === S.sig.auto) return;
+    S.sig.auto = key;
+    if (!a) { autoNotice.replaceChildren(); autoNotice.removeAttribute("data-state"); return; }
+    const stopBtn = SW.btn(t("live_auto_stop"), { action: "auto-cancel", run: () => doAutoCancel(a) });
+    if (a.state === "choose") {
+      autoNotice.dataset.state = "warn";
+      const choices = (a.slots || []).map((label) => {
+        const b = SW.btn(label, { action: "auto-choose", run: () => doAutoChoose(label, a) });
+        b.dataset.slot = label;
+        if (!up()) SW.disable(b, t("slot_load_disabled"));
+        return b;
+      });
+      autoNotice.replaceChildren(SW.shape("s-triangle"), plE("span", "result__text", t("live_auto_choose", { name: autoSpoolName(a) })),
+        plE("div", "actions plive__autochoices", ...choices), stopBtn);
+      return;
+    }
+    autoNotice.dataset.state = "info";
+    autoNotice.replaceChildren(SW.shape("s-hollow"), plE("span", "result__text", t("live_auto_waiting", { name: autoSpoolName(a), printer: printerName() })), stopBtn);
+  }
   function paintSlots() {
     const L = S.live, st = (L && L.status) || {}, list = st.ams || [], key = JSON.stringify([list, up()]);
     if (key === S.sig.slots) return;
@@ -282,6 +384,7 @@ function printerLive(p, ctx = {}) {
       text: where ? t("printer_unload_body", { name, slot: sl.label, location: where }) : t("printer_unload_body_noplace", { name, slot: sl.label }),
       run: () => slotPost(sl, "unload", { dry_run: false }) });
     if (!done) { S.results.delete(sl.label); return; }
+    slotToast(t("printer_unload_line", { name, slot: sl.label }), done);
     slotSay(sl.label, "ok", [t("printer_unload_line", { name, slot: sl.label }), ...(done.moved_back || []).map((m) => (m.location ? t("printer_unload_moved_back", { id: m.id ?? "?", location: m.location }) : t("printer_unload_moved_back_noplace", { id: m.id ?? "?" }))),
       done.waiting_ended ? t("live_unload_waiting") : ""]);
   });
@@ -295,6 +398,7 @@ function printerLive(p, ctx = {}) {
     const done = await SW.ask({ kind: "confirm", title: t("live_clear_title", { slot: sl.label }), opener: button, confirm: t("live_clear"), text,
       body: plan.waiting_ended ? plE("p", "", t("live_clear_waiting")) : null, run: () => slotPost(sl, "clear", { dry_run: false }) });
     if (!done) { S.results.delete(sl.label); return; }
+    slotToast(t("live_clear_done", { slot: sl.label }), done);
     slotSay(sl.label, "ok", [t("live_clear_done", { slot: sl.label }), done.waiting_ended ? t("live_clear_waiting") : "", done.printer_cleared ? t("live_clear_printer") : "", done.text || ""]);
   });
   // Load: a spool is picked (ctx.pickSpool, else the search below), the dry run says what would happen, then Load sends it
@@ -334,7 +438,184 @@ function printerLive(p, ctx = {}) {
       text: t("live_plan", { name: spoolName(sp), slot: sl.label }), body: [plan.preset && plan.preset.name ? plE("p", "", t("printer_load_preset", { name: plan.preset.name })) : null, ...moved.map((m) => plE("p", "", m)),
         ...(plan.problems || []).map((x) => plE("p", "", x))], run: () => slotPost(sl, "load", { spool_id: sp.id, dry_run: false }) });
     if (!done) return;
+    slotToast(done.pending ? t("live_load_waiting", { slot: sl.label }) : t(done.confirmed ? "live_load_done" : "live_load_sent", { name: spoolName(sp), slot: sl.label }), done);
     slotSay(sl.label, "ok", [done.pending ? t("live_load_waiting", { slot: sl.label }) : t(done.confirmed ? "live_load_done" : "live_load_sent", { name: spoolName(sp), slot: sl.label }), ...moved, ...(done.problems || [])]);
+  });
+
+  // Load a spool (header button): Step 1 picks a spool (last tapped tag or search); Step 2 chooses Automatic or a slot and previews
+  const allSlots = () => ((S.live && S.live.status && S.live.status.ams) || []).flatMap((u) => u.slots || []);
+  const normTag = (x) => String(x || "").replace(/[:\s-]/g, "").toLowerCase();
+  const runLoadAny = (button) => unlocked(async () => {
+    let chosen = null, selectedSlot = null, plan = null, planBusy = false, planSeq = 0, asked = 0;
+    let dlgRef = null, confirmBtn = null;
+    const syncBtn = () => {
+      if (!confirmBtn) return;
+      if (!chosen) SW.disable(confirmBtn, t("spool_load_pick_first"));
+      else if (planBusy) SW.disable(confirmBtn, t("spool_load_working_out"));
+      else if (!selectedSlot || !plan) SW.disable(confirmBtn, t("spool_load_pick_first"));
+      else SW.disable(confirmBtn, null);
+    };
+    // Step 1
+    const step1Note = hx("p", { class: "result", role: "status" }), picks = hx("div", { class: "plive__picks" });
+    const tagBtn = SW.btn(t("spool_load_last_tag"), { action: "last-tag", run: () => useLastTag() });
+    const find = SW.field({ type: "search", label: t("common_search"), placeholder: t("common_search_placeholder"), onSearch: (q) => search(q) });
+    const spoolRow = (s) => hx("button", { class: "btn plive__pick", type: "button", data: { spool: s.id }, on: { click: () => chooseSpool(s) } },
+      t("printer_load_row_id", { id: s.id }) + " " + spoolName(s), " ",
+      plE("span", "muted", t("printer_load_row_where", { location: s.location || "?", grams: s.remaining_g != null ? Math.round(s.remaining_g) : "?" })));
+    const search = async (q) => {
+      const mine = ++asked;
+      try {
+        const r = await call(`spools?q=${enc(q)}&limit=12`);
+        if (mine !== asked) return;
+        picks.replaceChildren(...((r.spools || []).length ? r.spools.map(spoolRow) : [plE("p", "muted", t("spools_empty_filtered"))]));
+      } catch { if (mine === asked) SW.result(step1Note, "bad", t("live_pick_failed")); }
+    };
+    const useLastTag = async () => {
+      SW.busy(tagBtn, t("common_working"));
+      SW.result(step1Note, null);
+      try {
+        const r = await call("spools/last-tag");
+        if (r && r.spool && r.spool.id != null) { chooseSpool(r.spool); return; }
+        const uid = r && r.tag && (typeof r.tag === "string" ? r.tag : r.tag.uid);
+        if (!uid) { SW.result(step1Note, "info", t("spool_load_no_tag")); return; }
+        const sr = await call(`spools?q=${enc(uid)}&limit=10`);
+        const hit = (sr.spools || []).find((s) => s.tag && normTag(s.tag) === normTag(uid));
+        if (!hit) { SW.result(step1Note, "warn", t("spool_load_tag_unlinked", { tag: uid })); return; }
+        chooseSpool(hit);
+      } catch (e) { if (e.locked) throw e; SW.result(step1Note, "bad", plHubText(e.message)); }
+      finally { SW.idle(tagBtn); }
+    };
+    const step1 = plE("div", "plive__group", plE("div", "actions", tagBtn, plE("span", "muted", t("spool_load_or"))),
+      find, picks, plE("p", "muted", t("spool_load_pick_hint")), step1Note);
+    // Step 2
+    const pickedBar = plE("div", "plive__camrow"), slotList = hx("div", { class: "plive__picks" });
+    const errLine = hx("p", { class: "result", role: "status" }), planBox = plE("div", "plive__lines"), planNote = hx("p", { class: "result", role: "status" });
+    const step2 = plE("div", "plive__group", pickedBar, plE("p", "", t("live_which_slot")), slotList, errLine, planNote, planBox);
+    step2.hidden = true;
+    const renderPlan = (target, p_) => {
+      if (target === "auto") {
+        const rep = p_.replaces;
+        const repName = rep ? (rep.name || (rep.spool_id != null ? t("spool_title", { id: rep.spool_id }) : t("live_the_spool"))) : "";
+        const lines = [
+          t("live_auto_plan", { name: spoolName(chosen), printer: printerName() }),
+          (p_.watching || []).length ? t("live_auto_watching", { slots: p_.watching.join(", ") }) : null,
+          rep ? t("live_auto_replaces", { name: repName }) : null,
+          ...(p_.problems || []),
+        ].filter(Boolean);
+        planBox.replaceChildren(...lines.map((ln) => plE("p", "", ln)));
+        return;
+      }
+      const moved = (p_.moved_back || []).filter((m) => m.id !== chosen.id).map((m) => (m.location ? t("spool_load_plan_goes_back", { id: m.id ?? "?", slot: target, location: m.location }) : t("spool_load_plan_goes_back_noplace", { id: m.id ?? "?", slot: target })));
+      const lines = [
+        t("live_plan", { name: spoolName(chosen), slot: target }),
+        p_.preset && p_.preset.name ? t("printer_load_preset", { name: p_.preset.name }) : null,
+        ...moved,
+        ...(p_.problems || []),
+      ].filter(Boolean);
+      planBox.replaceChildren(...lines.map((ln) => plE("p", "", ln)));
+    };
+    const selectTarget = async (target, clearError = true) => {
+      selectedSlot = target;
+      plan = null;
+      for (const b of slotList.children) b.setAttribute("aria-pressed", String(b.dataset.slot === target));
+      if (clearError) SW.result(errLine, null);
+      planBox.replaceChildren();
+      if (!target) { SW.result(planNote, null); syncBtn(); return; }
+      const mine = ++planSeq;
+      planBusy = true;
+      syncBtn();
+      SW.result(planNote, "run", t("spool_load_working_out"));
+      try {
+        const r = target === "auto"
+          ? await post("slots/auto/load", { spool_id: chosen.id, dry_run: true })
+          : await post(`slots/${enc(target)}/load`, { spool_id: chosen.id, dry_run: true });
+        if (mine !== planSeq || !dlgRef || !dlgRef.open) return;
+        plan = r;
+        planBusy = false;
+        SW.result(planNote, null);
+        renderPlan(target, r);
+        syncBtn();
+      } catch (e) {
+        if (mine !== planSeq || !dlgRef || !dlgRef.open) return;
+        planBusy = false;
+        SW.result(planNote, null);
+        if (target === "auto" && e.data && e.data.code === "auto_not_possible") {
+          SW.result(errLine, "bad", e.message || t("live_auto_refused"));
+          const first = allSlots()[0];
+          if (first) { selectTarget(first.label, false); return; }
+        } else {
+          SW.result(errLine, "bad", plHubText(e.message));
+        }
+        syncBtn();
+      }
+    };
+    const buildChoices = () => {
+      const slots = allSlots(), rows_ = [];
+      if (canAuto()) {
+        rows_.push(hx("button", { class: "btn plive__pick", type: "button", "aria-pressed": "false", data: { slot: "auto" },
+          on: { click: () => selectTarget("auto", true) } }, plE("span", "", t("live_auto_option")), " ", plE("span", "muted", t("live_auto_hint"))));
+      }
+      for (const sl of slots) {
+        const sp = sl.spool;
+        const what = sp ? spoolName(sp) : sl.pending ? t("slot_waiting") : sl.present === false ? t("common_empty") : (sl.type || t("printer_slot_unknown"));
+        rows_.push(hx("button", { class: "btn plive__pick", type: "button", "aria-pressed": "false", data: { slot: sl.label },
+          on: { click: () => selectTarget(sl.label, true) } }, plE("span", "mono", sl.label), " ", what, sl.active ? " · " + t("slot_in_use") : null));
+      }
+      slotList.replaceChildren(...rows_);
+      if (!canAuto() && !slots.length) { SW.result(errLine, "bad", t("spool_load_no_slots")); return null; }
+      return canAuto() ? "auto" : slots[0].label;
+    };
+    const backToStep1 = () => {
+      ++planSeq; chosen = null; selectedSlot = null; plan = null; planBusy = false;
+      step1.hidden = false; step2.hidden = true;
+      SW.result(errLine, null); SW.result(planNote, null); planBox.replaceChildren();
+      syncBtn();
+      if (find._control) find._control.focus();
+    };
+    const chooseSpool = (s) => {
+      chosen = s;
+      step1.hidden = true; step2.hidden = false;
+      SW.result(step1Note, null);
+      pickedBar.replaceChildren(
+        plE("span", "", t("spool_load_picked", { id: s.id, name: spoolName(s), location: s.location || t("common_unknown"), grams: s.remaining_g != null ? Math.round(s.remaining_g) : "?" })),
+        SW.btn(t("common_change"), { cls: "btn--ghost", action: "change-spool", run: backToStep1 })
+      );
+      const first = buildChoices();
+      selectTarget(first, true);
+      const sel = slotList.querySelector('[aria-pressed="true"]'); if (sel) sel.focus();
+    };
+    search("");
+    const res = await SW.ask({
+      kind: "confirm", title: t("live_load_any"), opener: button, confirm: t("common_load"), body: [step1, step2],
+      open: (dlg, opener) => { SW.openModal(dlg, opener); dlgRef = dlg; confirmBtn = dlg.querySelector('[data-action="confirm"]'); syncBtn(); },
+      run: async () => {
+        if (!chosen || !selectedSlot || planBusy || !plan) return false;
+        try {
+          if (selectedSlot === "auto") {
+            const done = await post("slots/auto/load", { spool_id: chosen.id, dry_run: false });
+            return { mode: "auto", chosen, done };
+          }
+          const sl = allSlots().find((x) => x.label === selectedSlot) || { label: selectedSlot };
+          const done = await slotPost(sl, "load", { spool_id: chosen.id, dry_run: false });
+          return { mode: "slot", sl, chosen, moved: (plan.moved_back || []).filter((m) => m.id !== chosen.id), done };
+        } catch (e) {
+          if (e.locked) throw e;
+          SW.result(errLine, "bad", plHubText(e.message));
+          return false;
+        }
+      }
+    });
+    if (!res) return;
+    if (res.mode === "auto") {
+      SW.result(msg, "info", t("live_auto_waiting", { name: spoolName(res.chosen), printer: printerName() }));
+      refresh();
+      return;
+    }
+    const label = res.sl.label, text = res.done.pending ? t("live_load_waiting", { slot: label }) : t(res.done.confirmed ? "live_load_done" : "live_load_sent", { name: spoolName(res.chosen), slot: label });
+    const moved = res.moved.map((m) => (m.location ? t("spool_load_plan_goes_back", { id: m.id ?? "?", slot: label, location: m.location }) : t("spool_load_plan_goes_back_noplace", { id: m.id ?? "?", slot: label })));
+    slotToast(text, res.done);
+    slotSay(label, "ok", [text, ...moved, ...(res.done.problems || [])]);
+    refresh();
   });
 
   // ----- Filament used, with Undo per entry -----
@@ -378,7 +659,7 @@ function printerLive(p, ctx = {}) {
     try { S.live = await call(path("live")); } catch (e) { SW.result(msg, "bad", e.message); return; }
     const was = S.wasActive;
     S.wasActive = active();
-    paintState(); paintControls(); paintSlots();
+    paintState(); paintControls(); paintAuto(); paintSlots();
     if (!S.usage || (was && !S.wasActive)) loadUsage();           // a job ended: its entry is new
   }
   function schedule(ms) {
@@ -410,7 +691,7 @@ function printerLive(p, ctx = {}) {
   document.addEventListener("visibilitychange", onVisible);
   document.addEventListener("sw:lock", onLock);
   window.addEventListener("pagehide", closeSession);
-  paintState(); paintSlots(); paintControls();
+  paintState(); paintAuto(); paintSlots(); paintControls();
   schedule(0);
   root.stop = teardown;
   return root;

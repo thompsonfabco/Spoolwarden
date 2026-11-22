@@ -49,6 +49,9 @@ def settings_from_env() -> dict:
 
 
 settings = settings_from_env()
+# the lamp the owner chose for a step of the intake flow on the station's page (settings.py): {step: "yellow" | "red" |
+# "both" | "off"}; a step with no entry keeps the lamps flow.STEP_LAMPS gives it
+lamp_map: dict[str, str] = {}
 
 MIN_GRAMS = 20  # an empty pan reads 0; anything under this isn't a spool
 
@@ -98,10 +101,15 @@ def panel_ttys() -> list[str]:
     return _by_number(acm) + usb_ttys()
 
 
+def state_dir() -> Path:
+    """The station's own state folder (systemd's StateDirectory, owned by its service user): its certificate and key
+    (`tls/`) and its settings file (`settings.xml`)."""
+    return Path(os.environ.get("STATE_DIRECTORY", "/var/lib/filament-kit-station").split(":")[0])
+
+
 def tls_dir() -> Path:
-    """`tls/` in the station's own state folder (systemd's StateDirectory, owned by its service user): its certificate
-    and key, made at the first start."""
-    return Path(os.environ.get("STATE_DIRECTORY", "/var/lib/filament-kit-station").split(":")[0]) / "tls"
+    """`tls/` in the station's own state folder: its certificate and key, made at the first start."""
+    return state_dir() / "tls"
 
 
 def ensure_cert(folder: Path | None = None) -> tuple[Path, Path, str]:

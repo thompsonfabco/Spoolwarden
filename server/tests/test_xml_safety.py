@@ -1,4 +1,6 @@
 """C1: XML 1.0 cannot hold most control characters; a name from the LAN must never make a data file unreadable."""
+import time
+
 from filament_kit.bridge import registry, xmlfile
 from filament_kit.bridge.klipper import detect
 from filament_kit.bridge.klipper import usage as kusage
@@ -21,8 +23,9 @@ def test_registry_survives_a_control_character_in_a_name(tmp_path, monkeypatch):
 
 def test_usage_log_survives_a_control_character_in_a_filename(tmp_path, monkeypatch):
     monkeypatch.setenv("FK_STATE", str(tmp_path))
-    kusage.record("p", {"job_id": "1", "filename": "a\x01b.gcode", "status": "completed", "end_time": 1e9}, 3)
-    kusage.record("p", {"job_id": "2", "filename": "c.gcode", "status": "completed", "end_time": 1e9}, 3)
+    now = time.time()
+    kusage.record("p", {"job_id": "1", "filename": "a\x01b.gcode", "status": "completed", "end_time": now - 10}, 3)
+    kusage.record("p", {"job_id": "2", "filename": "c.gcode", "status": "completed", "end_time": now}, 3)
     assert [e["job"] for e in kusage.entries("p", 1e6)] == ["2", "1"]
 
 

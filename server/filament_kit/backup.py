@@ -14,6 +14,7 @@ name the certificate is made again, so phones and the PC sync pair again.
 """
 from __future__ import annotations
 
+import getpass
 import hashlib
 import hmac
 import io
@@ -38,7 +39,7 @@ from typing import Callable, Iterable
 
 from defusedxml import ElementTree as SafeET
 
-from . import API_VERSION, __version__, config, events, modules, output, release
+from . import API_VERSION, __version__, backup_crypt, config, events, modules, output, release
 
 log = logging.getLogger(__name__)
 
@@ -52,10 +53,16 @@ MAX_TOTAL = 8 * 2**30          # what a zip may unpack to
 CHUNK = 2**20
 UPLOAD = "restore-upload"      # in the state folder: what the setup page received, until the restore job takes it
 # Relative to their root: left out, as install/backup.sh leaves them out.
-EXCLUDE = {"var/lib/filament-kit": ("profiles/live/system", "library/versions", UPLOAD)}
+EXCLUDE = {
+    "etc/filament-kit": ("backup_password",),
+    "var/lib/filament-kit": ("profiles/live/system", "library/versions", UPLOAD),
+}
 EXCLUDE_GLOB = {"var/lib/filament-kit": (re.compile(r"profiles/builds/[^/]+\.tmp(/.*)?"),)}
-NAME = re.compile(r"(filament-kit-backup|spoolwarden-backup|pre-restore)-[A-Za-z0-9-]{1,63}-\d{8}-\d{4}(-\d+)?-v\d+\.\d+\.\d+\.zip")
-DAILY = re.compile(r"\d{4}-\d{2}-\d{2}\.tar\.gz")
+NAME = re.compile(r"(filament-kit-backup|spoolwarden-backup|pre-restore)-[A-Za-z0-9-]{1,63}-\d{8}-\d{4}(-\d+)?-v\d+\.\d+\.\d+\.zip(\.enc)?")
+DAILY = re.compile(r"\d{4}-\d{2}-\d{2}\.tar\.gz(\.enc)?")
+PASSWORD_FILE = "backup_password"
+MIN_PASSWORD_LEN = 10
+MAX_PASSWORD_LEN = 1024
 
 
 class BackupError(Exception):
@@ -64,6 +71,77 @@ class BackupError(Exception):
 
 class Unfit(BackupError):
     """A sound backup this kit will not restore (refusal: a newer kit made it, say)."""
+
+
+class NeedsPassword(BackupError):
+    """An encrypted upload could not be opened with the stored password and needs one from the owner."""
+
+    def __init__(self, sha256: str = "", message: str = "this backup is encrypted; enter its password"):
+        super().__init__(message)
+        self.sha256 = sha256
+
+
+def password_path() -> Path:
+    return config.paths().etc / PASSWORD_FILE
+
+
+def password_set() -> bool:
+    return read_password() is not None
+
+
+def read_password() -> str | None:
+    p = password_path()
+    try:
+        text = p.read_text(encoding="utf-8").rstrip("\r\n")
+    except (OSError, UnicodeDecodeError):
+        return None
+    return text or None
+
+
+def write_password(password: str) -> Path:
+    if not isinstance(password, str) or any(c in password for c in ("\r", "\n", "\0")):
+        raise ValueError("Backup password must be plain text.")
+    if len(password) < MIN_PASSWORD_LEN:
+        raise ValueError(f"Backup password must be at least {MIN_PASSWORD_LEN} characters.")
+    if len(password) > MAX_PASSWORD_LEN:
+        raise ValueError(f"Backup password must be at most {MAX_PASSWORD_LEN} characters.")
+    dest = password_path()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    data = (password + "\n").encode("utf-8")
+    try:
+        if os.name == "nt":
+            tmp.write_bytes(data)
+        else:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            with os.fdopen(fd, "wb") as fh:
+                os.fchmod(fh.fileno(), 0o600)
+                fh.write(data)
+                fh.flush()
+                os.fsync(fh.fileno())
+            if _is_root():
+                os.chown(tmp, 0, 0, follow_symlinks=False)
+        os.replace(tmp, dest)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return dest
+
+
+def remove_password() -> bool:
+    p = password_path()
+    existed = p.exists()
+    p.unlink(missing_ok=True)
+    return existed
+
+
+def _emit_event(kind: str, actor: str | None, data: dict[str, str]) -> None:
+    if not actor:
+        return
+    try:
+        events.write(kind, "hub", actor, data)
+    except (events.EventError, OSError) as e:
+        log.debug("event %s not written (%s)", kind, e)
 
 
 def roots() -> list[tuple[str, Path]]:
@@ -272,43 +350,62 @@ def _spoolman_copy(w: _Writer, scratch: Path) -> None:
         w.spoolman(fh, st.st_mtime, st.st_mode, *_names(st))
 
 
-def zip_name(prefix: str = PREFIX, now: float | None = None) -> str:
+def zip_name(prefix: str = PREFIX, now: float | None = None, *, encrypted: bool = False) -> str:
     stamp = time.strftime("%Y%m%d-%H%M", time.localtime(time.time() if now is None else now))
-    return f"{prefix}-{host()}-{stamp}-v{__version__}.zip"
+    ext = ".zip.enc" if encrypted else ".zip"
+    return f"{prefix}-{host()}-{stamp}-v{__version__}{ext}"
 
 
 def create(dest: Path | None = None, *, prefix: str = PREFIX, now: float | None = None,
-           step: Callable[[str], None] | None = None) -> Path:
-    """Write a backup zip into `dest` (default the backups folder); its path. Root, on an install. `step(sentence)`
-    is told when each of the three steps of the backup job starts (steps.py)."""
+           step: Callable[[str], None] | None = None, actor: str = "hub") -> Path:
+    """Write a backup zip (or `.zip.enc` when a backup password is set) into `dest` (default the backups folder);
+    its path. Root, on an install. `step(sentence)` is told when each of the three steps of the backup job starts."""
     step = step or (lambda _text: None)
     dest = Path(dest) if dest is not None else backups_dir()
     dest.mkdir(mode=0o700, parents=True, exist_ok=True)
     if dest == backups_dir():
         os.chmod(dest, 0o700)       # root only: a backup holds the setup code and the TLS key; the page gets one via the helper
-    name = zip_name(prefix, now)
+    pwd = read_password()
+    encrypted = pwd is not None
+    name = zip_name(prefix, now, encrypted=encrypted)
     out, n = dest / name, 1
+    suffix = f"-v{__version__}.zip.enc" if encrypted else f"-v{__version__}.zip"
     while out.exists():
         n += 1
-        out = dest / name.replace(f"-v{__version__}.zip", f"-{n}-v{__version__}.zip")
+        out = dest / name.replace(suffix, f"-{n}{suffix}")
     part = out.with_name(out.name + ".part")
     mods = _modules_here()
-    with tempfile.TemporaryDirectory(dir=dest, prefix=".backup-") as scratch:
-        fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
-        try:
-            with os.fdopen(fd, "wb") as fh:
-                w = _Writer(fh)
-                step("Copying the Spoolman database")
-                _spoolman_copy(w, Path(scratch))
-                step("Collecting the settings and pairings")
-                _walk(w)
-                step("Writing the zip")
-                w.finish(kit=__version__, created=time.time() if now is None else now, mods=mods,
-                         units=_units(mods), source="made")
-            os.replace(part, out)
-        except BaseException:
-            part.unlink(missing_ok=True)
-            raise
+    try:
+        with tempfile.TemporaryDirectory(dir=dest, prefix=".backup-") as scratch:
+            scratch_dir = Path(scratch)
+            zip_target = scratch_dir / "plain.zip" if encrypted else part
+            fd = os.open(zip_target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
+            try:
+                with os.fdopen(fd, "wb") as fh:
+                    w = _Writer(fh)
+                    step("Copying the Spoolman database")
+                    _spoolman_copy(w, scratch_dir)
+                    step("Collecting the settings and pairings")
+                    _walk(w)
+                    step("Writing the zip")
+                    w.finish(kit=__version__, created=time.time() if now is None else now, mods=mods,
+                             units=_units(mods), source="made")
+                if encrypted:
+                    assert pwd is not None
+                    backup_crypt.encrypt_file(zip_target, part, pwd)
+                os.replace(part, out)
+            except BaseException:
+                part.unlink(missing_ok=True)
+                raise
+    except Exception as e:
+        _emit_event("backup.failed", actor, {"reason": str(e) or type(e).__name__, "nightly": "false"})
+        raise
+    _emit_event("backup.finished", actor, {
+        "file": out.name,
+        "bytes": str(out.stat().st_size),
+        "encrypted": "true" if encrypted else "false",
+        "nightly": "false",
+    })
     return out
 
 
@@ -357,12 +454,13 @@ class Entry:
     size: int
     at: float
     kind: str           # made | pre-restore | daily
+    encrypted: bool = False
 
 
 def open_for_download(name: str) -> tuple[int, str]:
-    """(an open file descriptor of the zip, the name to save it as) for the backup `name` in the listing: a stored zip
-    as it is, a nightly tar.gz turned into the zip in an anonymous temporary file. Root: the folder is root only.
-    BackupError when there is no such backup."""
+    """(an open file descriptor of the zip or .zip.enc, the name to save it as) for the backup `name` in the listing:
+    a stored zip or .zip.enc as it is, a nightly tar.gz(.enc) turned into the zip(.enc) in an anonymous temporary file.
+    Root: the folder is root only. BackupError when there is no such backup."""
     found = next((e for e in listing() if e.name == name), None)
     if found is None:
         raise BackupError("no such backup")
@@ -371,7 +469,23 @@ def open_for_download(name: str) -> tuple[int, str]:
         return os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)), found.download
     tmp = tempfile.TemporaryFile()
     try:
-        from_daily(path, tmp)
+        if found.encrypted:
+            pwd = read_password()
+            if pwd is None:
+                raise BackupError(backup_crypt.WRONG_MESSAGE)
+            with tempfile.TemporaryDirectory(prefix=".daily-dl-") as scratch:
+                tar_plain = Path(scratch) / "daily.tar.gz"
+                zip_plain = Path(scratch) / "daily.zip"
+                try:
+                    backup_crypt.decrypt_file(path, tar_plain, pwd)
+                except backup_crypt.WrongPasswordOrDamaged as e:
+                    raise BackupError(str(e)) from None
+                with open(zip_plain, "wb") as zfh:
+                    from_daily(tar_plain, zfh)
+                with open(zip_plain, "rb") as in_fh:
+                    backup_crypt.encrypt_stream(in_fh, tmp, pwd)
+        else:
+            from_daily(path, tmp)
         tmp.flush()
         fd = os.dup(tmp.fileno())
     finally:
@@ -391,15 +505,16 @@ def listing(folder: Path | None = None) -> list[Entry]:
         p = folder / n
         if not p.is_file() or p.is_symlink():
             continue
+        encrypted = n.endswith(".enc")
         if NAME.fullmatch(n):
             kind, download = ("pre-restore" if n.startswith(PRE_RESTORE) else "made"), n
         elif DAILY.fullmatch(n):
             kind = "daily"
-            download = zip_name(now=p.stat().st_mtime)
+            download = zip_name(now=p.stat().st_mtime, encrypted=encrypted)
         else:
             continue
         st = p.stat()
-        out.append(Entry(n, download, st.st_size, st.st_mtime, kind))
+        out.append(Entry(n, download, st.st_size, st.st_mtime, kind, encrypted=encrypted))
     return sorted(out, key=lambda e: e.at, reverse=True)
 
 
@@ -663,135 +778,220 @@ def _carry_event_ids(last: int) -> None:
         log.warning("restore: the event counter could not be carried over (%s)", e)
 
 
+def _prompt_password(ask: Callable[[str], str]) -> str:
+    if ask is input:
+        try:
+            return getpass.getpass("Password of this backup: ")
+        except (EOFError, OSError, RuntimeError):
+            return ""
+    try:
+        return ask("Password of this backup: ")
+    except (EOFError, OSError, RuntimeError):
+        return ""
+
+
+def _open_encrypted_for_restore(
+    enc_path: Path,
+    dec_dir: Path,
+    *,
+    password: str | None = None,
+    password_file: Path | None = None,
+    yes: bool = False,
+    ask: Callable[[str], str] = input,
+) -> tuple[Path, str]:
+    """Decrypt `enc_path` into `dec_dir / 'backup.zip'` and return `(decrypted_path, opening_password)`.
+    Raises `backup_crypt.WrongPasswordOrDamaged` if no password opens it."""
+    candidates: list[str] = []
+    if password is not None:
+        candidates.append(password)
+    sidecar = enc_path.with_name(enc_path.name + ".password")
+    if sidecar.is_file():
+        try:
+            candidates.append(sidecar.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            pass
+        finally:
+            sidecar.unlink(missing_ok=True)
+    if password_file is not None:
+        try:
+            candidates.append(Path(password_file).read_text(encoding="utf-8").rstrip("\r\n"))
+        except (OSError, UnicodeDecodeError):
+            raise backup_crypt.WrongPasswordOrDamaged() from None
+    stored = read_password()
+    if stored is not None and stored not in candidates:
+        candidates.append(stored)
+
+    dec_zip = dec_dir / "backup.zip"
+    for cand in candidates:
+        if not cand:
+            continue
+        try:
+            backup_crypt.decrypt_file(enc_path, dec_zip, cand)
+            return dec_zip, cand
+        except backup_crypt.WrongPasswordOrDamaged:
+            continue
+
+    if not yes and password is None and password_file is None:
+        entered = _prompt_password(ask)
+        if entered:
+            backup_crypt.decrypt_file(enc_path, dec_zip, entered)
+            return dec_zip, entered
+
+    raise backup_crypt.WrongPasswordOrDamaged()
+
+
 def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = input,
             run: Callable[[list[str]], int] | None = None, out=print,
-            step: Callable[[str], None] | None = None) -> int:
+            step: Callable[[str], None] | None = None,
+            password: str | None = None, password_file: Path | None = None,
+            actor: str = "hub") -> int:
     """Bring this machine to the state in the backup. 0 when the data is back and the apply worked. `step(sentence)` is
     told when each of the restore_steps() steps starts (steps.py)."""
     run = run or default_run
     step = step or (lambda _text: None)
+    zip_path = Path(zip_path)
     step("Checking the backup")
-    try:
-        m = verify(Path(zip_path))
-    except BackupError as e:
-        out(f"error: {e}. Nothing was changed.")
-        return 1
-    why = refusal(m)
-    if why:
-        out(f"error: {why}. Nothing was changed.")
-        return 1
-    s = m.summary()
-    titles = [modules.MODULES[n].title for n in m.modules if n in modules.MODULES]
-    out(f"Backup of {m.host or 'a kit'} made {m.created} by filament-kit {m.kit}:\n{s['files']} files"
-        + (" and the Spoolman database" if m.spoolman else "") + f". Features: {', '.join(titles) or 'none'}.")
-    other_host = bool(m.host) and m.host != host()
-    if _has_data():
-        out("This replaces the spools, settings, printers and pairings on this Hub.\n"
-            "What is here now is saved as a backup first.")
-    out("The Hub restarts, and afterwards the setup code is the one from the backup.")
-    if not yes:
+    with tempfile.TemporaryDirectory(prefix=".restore-dec-") as dec_dir:
+        opened_with: str | None = None
+        work_zip = zip_path
+        if backup_crypt.is_encrypted(zip_path):
+            try:
+                work_zip, opened_with = _open_encrypted_for_restore(
+                    zip_path, Path(dec_dir),
+                    password=password, password_file=password_file, yes=yes, ask=ask,
+                )
+            except backup_crypt.WrongPasswordOrDamaged as e:
+                out(f"Error: {e}")
+                return 1
         try:
-            said = ask("Type restore to go on: ")
-        except (EOFError, OSError, RuntimeError):       # the end of input is a no
-            said = ""
-        if said.strip().lower() != "restore":
-            out("Nothing changed.")
-            return output.CANCELLED
-    if _has_data():
-        step("Keeping what is here now as a backup")
-        try:
-            kept = create(prefix=PRE_RESTORE)
-            out(f"What was here is kept in {kept}.")
-        except (OSError, sqlite3.Error) as e:
-            out(f"error: could not keep a backup of what is here first ({type(e).__name__}). Nothing was changed.")
+            m = verify(work_zip)
+        except BackupError as e:
+            out(f"error: {e}. Nothing was changed.")
             return 1
-    step("Stopping the services")
-    _stop_kit(run)
-    step("Putting the backup in place")
-    last_event = _last_event_id()       # the ids this Hub has given: the restored store must go on above them (R80 E6)
-    here = dict(roots())
-    folders = {}            # each root folder's owner and mode on this install: the restored one keeps them
-    for name, target in here.items():
+        why = refusal(m)
+        if why:
+            out(f"error: {why}. Nothing was changed.")
+            return 1
+        s = m.summary()
+        titles = [modules.MODULES[n].title for n in m.modules if n in modules.MODULES]
+        out(f"Backup of {m.host or 'a kit'} made {m.created} by filament-kit {m.kit}:\n{s['files']} files"
+            + (" and the Spoolman database" if m.spoolman else "") + f". Features: {', '.join(titles) or 'none'}.")
+        other_host = bool(m.host) and m.host != host()
+        if _has_data():
+            out("This replaces the spools, settings, printers and pairings on this Hub.\n"
+                "What is here now is saved as a backup first.")
+        if opened_with is not None and not password_set():
+            out("This backup's password will become this Hub's backup password if none is set.")
+        out("The Hub restarts, and afterwards the setup code is the one from the backup.")
+        if not yes:
+            try:
+                said = ask("Type restore to go on: ")
+            except (EOFError, OSError, RuntimeError):       # the end of input is a no
+                said = ""
+            if said.strip().lower() != "restore":
+                out("Nothing changed.")
+                return output.CANCELLED
+        if _has_data():
+            step("Keeping what is here now as a backup")
+            try:
+                kept = create(prefix=PRE_RESTORE, actor=actor)
+                out(f"What was here is kept in {kept}.")
+            except (OSError, sqlite3.Error) as e:
+                out(f"error: could not keep a backup of what is here first ({type(e).__name__}). Nothing was changed.")
+                return 1
+        step("Stopping the services")
+        _stop_kit(run)
+        step("Putting the backup in place")
+        last_event = _last_event_id()       # the ids this Hub has given: the restored store must go on above them (R80 E6)
+        here = dict(roots())
+        folders = {}            # each root folder's owner and mode on this install: the restored one keeps them
+        for name, target in here.items():
+            try:
+                st = os.stat(target)
+                folders[name] = (st.st_uid, st.st_gid, stat.S_IMODE(st.st_mode))
+            except OSError:
+                folders[name] = None
+        swapped: list[tuple[Path, Path | None]] = []        # (target, its old copy or None)
+        db_target, db_old = spoolman_db(), None
         try:
-            st = os.stat(target)
-            folders[name] = (st.st_uid, st.st_gid, stat.S_IMODE(st.st_mode))
-        except OSError:
-            folders[name] = None
-    swapped: list[tuple[Path, Path | None]] = []        # (target, its old copy or None)
-    db_target, db_old = spoolman_db(), None
-    try:
-        with zipfile.ZipFile(zip_path) as zf:
-            for name in sorted({i.root for i in m.items}):
-                target = here[name]
-                new = target.with_name(target.name + NEW)
-                shutil.rmtree(new, ignore_errors=True)
-                _extract(zf, [i for i in m.items if i.root == name], new, folders.get(name))
-                old = target.with_name(target.name + OLD)
-                shutil.rmtree(old, ignore_errors=True)
-                if target.exists():
-                    os.replace(target, old)
-                    swapped.append((target, old))
-                else:
-                    swapped.append((target, None))
-                os.replace(new, target)
-            if m.spoolman:
-                db_target.parent.mkdir(parents=True, exist_ok=True)
-                tmp = db_target.with_name(db_target.name + NEW)
-                with open(tmp, "wb") as fh, zf.open("spoolman/spoolman.db") as src:
-                    shutil.copyfileobj(src, fh, CHUNK)
-                if db_target.exists():
-                    db_old = db_target.with_name(db_target.name + OLD)
-                    os.replace(db_target, db_old)
-                os.replace(tmp, db_target)
-                _spoolman_own(db_target, m.spoolman)
-    except (OSError, zipfile.BadZipFile, KeyError, zlib.error, EOFError, NotImplementedError) as e:
-        for target, old in reversed(swapped):
-            shutil.rmtree(target, ignore_errors=True)
+            with zipfile.ZipFile(work_zip) as zf:
+                for name in sorted({i.root for i in m.items}):
+                    target = here[name]
+                    new = target.with_name(target.name + NEW)
+                    shutil.rmtree(new, ignore_errors=True)
+                    _extract(zf, [i for i in m.items if i.root == name], new, folders.get(name))
+                    old = target.with_name(target.name + OLD)
+                    shutil.rmtree(old, ignore_errors=True)
+                    if target.exists():
+                        os.replace(target, old)
+                        swapped.append((target, old))
+                    else:
+                        swapped.append((target, None))
+                    os.replace(new, target)
+                if m.spoolman:
+                    db_target.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = db_target.with_name(db_target.name + NEW)
+                    with open(tmp, "wb") as fh, zf.open("spoolman/spoolman.db") as src:
+                        shutil.copyfileobj(src, fh, CHUNK)
+                    if db_target.exists():
+                        db_old = db_target.with_name(db_target.name + OLD)
+                        os.replace(db_target, db_old)
+                    os.replace(tmp, db_target)
+                    _spoolman_own(db_target, m.spoolman)
+        except (OSError, zipfile.BadZipFile, KeyError, zlib.error, EOFError, NotImplementedError) as e:
+            for target, old in reversed(swapped):
+                shutil.rmtree(target, ignore_errors=True)
+                if old is not None:
+                    os.replace(old, target)
+            if db_old is not None:
+                os.replace(db_old, db_target)
+            why = f"{type(e).__name__}: {e.strerror if isinstance(e, OSError) else e}"
+            if _has_data() and run([WRAPPER, "modules", "apply", "--no-pair"]) == 0:      # it was stopped above
+                out(f"error: the restore stopped ({why}); what was here is back in place and running again.")
+            else:
+                out(f"error: the restore stopped ({why}); what was here is back in place. Start the kit again with: "
+                    "sudo spoolwarden modules apply")
+            return 1
+        _carry_event_ids(last_event)
+        if opened_with is not None and not password_set():
+            try:
+                write_password(opened_with)
+            except (OSError, ValueError) as e:
+                log.warning("restore: could not save backup password (%s)", e)
+        if other_host:
+            for n in ("cert.pem", "key.pem"):
+                (config.paths().etc / n).unlink(missing_ok=True)
+            out(f"The backup is from {m.host}, this machine is {host()}: the server gets a new certificate. Pair the phones "
+                "and the PC sync again (Devices on the setup page).")
+        out("The data is back. Setting up the modules it names (this installs their packages and may take a while)...")
+        step("Starting the services")
+        rc = run([WRAPPER, "modules", "apply", "--no-pair"])
+        # the apply made the users the kit's modules need: the files restored before them get their owners now
+        for i in m.items:
+            try:
+                _own(here[i.root] / i.path if i.path else here[i.root], i, folders.get(i.root))
+            except OSError:
+                pass
+        if not _no_systemd():          # they started under the apply, perhaps before their files were theirs
+            from . import apply
+            services = sorted({f for n in m.modules if n in modules.MODULES for u in modules.MODULES[n].units
+                               for f in apply._unit_files(u) if f.endswith(".service") and "@" not in f})
+            if services:
+                run(["systemctl", "try-restart", *services])
+        if rc != 0:
+            out("error: the data is back, but setting up the modules failed. Finish with: sudo spoolwarden modules apply"
+                + "".join(f"\n  the earlier {t} is in {o}" for t, o in swapped if o is not None))
+            return 1
+        for _target, old in swapped:
             if old is not None:
-                os.replace(old, target)
+                shutil.rmtree(old, ignore_errors=True)
         if db_old is not None:
-            os.replace(db_old, db_target)
-        why = f"{type(e).__name__}: {e.strerror if isinstance(e, OSError) else e}"
-        if _has_data() and run([WRAPPER, "modules", "apply", "--no-pair"]) == 0:      # it was stopped above
-            out(f"error: the restore stopped ({why}); what was here is back in place and running again.")
-        else:
-            out(f"error: the restore stopped ({why}); what was here is back in place. Start the kit again with: "
-                "sudo spoolwarden modules apply")
-        return 1
-    _carry_event_ids(last_event)
-    if other_host:
-        for n in ("cert.pem", "key.pem"):
-            (config.paths().etc / n).unlink(missing_ok=True)
-        out(f"The backup is from {m.host}, this machine is {host()}: the server gets a new certificate. Pair the phones "
-            "and the PC sync again (Devices on the setup page).")
-    out("The data is back. Setting up the modules it names (this installs their packages and may take a while)...")
-    step("Starting the services")
-    rc = run([WRAPPER, "modules", "apply", "--no-pair"])
-    # the apply made the users the kit's modules need: the files restored before them get their owners now
-    for i in m.items:
-        try:
-            _own(here[i.root] / i.path if i.path else here[i.root], i, folders.get(i.root))
-        except OSError:
-            pass
-    if not _no_systemd():          # they started under the apply, perhaps before their files were theirs
-        from . import apply
-        services = sorted({f for n in m.modules if n in modules.MODULES for u in modules.MODULES[n].units
-                           for f in apply._unit_files(u) if f.endswith(".service") and "@" not in f})
-        if services:
-            run(["systemctl", "try-restart", *services])
-    if rc != 0:
-        out("error: the data is back, but setting up the modules failed. Finish with: sudo spoolwarden modules apply"
-            + "".join(f"\n  the earlier {t} is in {o}" for t, o in swapped if o is not None))
-        return 1
-    for _target, old in swapped:
-        if old is not None:
-            shutil.rmtree(old, ignore_errors=True)
-    if db_old is not None:
-        db_old.unlink(missing_ok=True)
-    out("Restored. The Hub is back.")
-    step("Checking that everything answers")
-    run([WRAPPER, "status"])
-    return 0
+            db_old.unlink(missing_ok=True)
+        _emit_event("hub.restored", actor, {"backup": zip_path.name, "made_at": m.created})
+        out("Restored. The Hub is back.")
+        step("Checking that everything answers")
+        run([WRAPPER, "status"])
+        return 0
 
 
 def uploaded() -> Path:
@@ -801,10 +1001,43 @@ def uploaded() -> Path:
 
 PENDING = ".restore-pending.zip"        # in the root-only backups folder: the upload the owner saw summarised
 CONFIRMED = ".restore-pending.sha256"   # its hash, once the owner typed restore (the helper, before the job)
+PENDING_PASSWORD = ".restore-pending.password"
 
 
 def pending() -> Path:
     return backups_dir() / PENDING
+
+
+def _write_pending_password(password: str) -> None:
+    p = backups_dir() / PENDING_PASSWORD
+    tmp = p.with_name(p.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(password)
+        os.replace(tmp, p)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def take_pending_password() -> str | None:
+    p = backups_dir() / PENDING_PASSWORD
+    try:
+        pwd = p.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    finally:
+        p.unlink(missing_ok=True)
+    return pwd or None
+
+
+def _verify_pending_zip(path: Path) -> Manifest:
+    m = verify(path)
+    why = refusal(m)
+    if why:
+        raise Unfit(why)
+    return m
 
 
 def _sha256(path: Path) -> str:
@@ -846,6 +1079,7 @@ def pin_upload() -> tuple[Manifest, str]:
     dest.mkdir(parents=True, exist_ok=True)
     out, tmp = dest / PENDING, dest / (PENDING + ".tmp")
     (dest / CONFIRMED).unlink(missing_ok=True)
+    (dest / PENDING_PASSWORD).unlink(missing_ok=True)
     tmp.unlink(missing_ok=True)
     h = hashlib.sha256()
     try:
@@ -861,15 +1095,48 @@ def pin_upload() -> tuple[Manifest, str]:
     finally:
         os.close(fd)
         tmp.unlink(missing_ok=True)
+    sha = h.hexdigest()
+    if backup_crypt.is_encrypted(out):
+        pwd = read_password()
+        if pwd is None:
+            raise NeedsPassword(sha)
+        with tempfile.TemporaryDirectory(dir=dest, prefix=".pin-dec-") as scratch:
+            dec = Path(scratch) / "backup.zip"
+            try:
+                backup_crypt.decrypt_file(out, dec, pwd)
+            except backup_crypt.WrongPasswordOrDamaged:
+                raise NeedsPassword(sha) from None
+            try:
+                m = _verify_pending_zip(dec)
+            except BackupError:
+                out.unlink(missing_ok=True)
+                raise
+        _write_pending_password(pwd)
+        return m, sha
     try:
-        m = verify(out)
-        why = refusal(m)
-        if why:
-            raise Unfit(why)
+        m = _verify_pending_zip(out)
     except BackupError:
         out.unlink(missing_ok=True)
         raise
-    return m, h.hexdigest()
+    return m, sha
+
+
+def unlock_pending(password: str) -> tuple[Manifest, str]:
+    """Decrypt the pinned encrypted upload with `password` and verify its manifest and hashes."""
+    p = pending()
+    if not p.is_file():
+        raise BackupError("upload the backup zip first")
+    if not backup_crypt.is_encrypted(p):
+        m = _verify_pending_zip(p)
+        return m, _sha256(p)
+    if not isinstance(password, str) or not password:
+        raise backup_crypt.WrongPasswordOrDamaged()
+    with tempfile.TemporaryDirectory(dir=backups_dir(), prefix=".unlock-dec-") as scratch:
+        dec = Path(scratch) / "backup.zip"
+        backup_crypt.decrypt_file(p, dec, password)
+        m = _verify_pending_zip(dec)
+    _write_pending_password(password)
+    return m, _sha256(p)
 
 
 def confirm_pending(sha: str) -> None:
@@ -888,7 +1155,7 @@ def confirm_pending(sha: str) -> None:
 
 
 def forget_pending() -> None:
-    for name in (PENDING, CONFIRMED):
+    for name in (PENDING, CONFIRMED, PENDING_PASSWORD):
         (backups_dir() / name).unlink(missing_ok=True)
 
 
@@ -905,6 +1172,9 @@ def take_upload() -> Path:
         raise BackupError("the uploaded backup changed since it was confirmed; nothing was restored")
     out = backups_dir() / f".restore-{int(time.time())}.zip"
     os.replace(p, out)
+    pw_src = backups_dir() / PENDING_PASSWORD
+    if pw_src.is_file():
+        os.replace(pw_src, out.with_name(out.name + ".password"))
     c.unlink(missing_ok=True)
     return out
 
@@ -914,9 +1184,27 @@ def keep_days(cfg: dict) -> int:
     return v if isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 365 else 14
 
 
-if __name__ == "__main__":     # pragma: no cover - `python -m filament_kit.backup keep-days` for install/backup.sh
-    if sys.argv[1:] == ["keep-days"]:
+if __name__ == "__main__":     # pragma: no cover - `python -m filament_kit.backup ...` for install/backup.sh
+    args = sys.argv[1:]
+    if args == ["keep-days"]:
         try:
             print(keep_days(config.load()))
         except Exception:  # noqa: BLE001
             print(14)
+    elif len(args) == 3 and args[0] == "encrypt":
+        pwd = read_password()
+        if pwd is None:
+            sys.exit(2)
+        backup_crypt.encrypt_file(Path(args[1]), Path(args[2]), pwd)
+    elif len(args) == 5 and args[0] == "event-finished":
+        _emit_event("backup.finished", "hub", {
+            "file": args[1],
+            "bytes": args[2],
+            "encrypted": args[3],
+            "nightly": args[4],
+        })
+    elif len(args) == 3 and args[0] == "event-failed":
+        _emit_event("backup.failed", "hub", {
+            "reason": args[1],
+            "nightly": args[2],
+        })

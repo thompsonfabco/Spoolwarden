@@ -1,7 +1,5 @@
-"""The Spools section of the Hub page (R83 sections 1 and 10.2; 03 section 5a), in a real headless browser. The section is new files
-only: its routes (setup_console/spools_tab.py) are mounted on the page's own guard here and its script, style and the registry's
-three lines (a TABS entry after Printers, GROUPS 6 and 5) are added to the served page by a wrapper, as the registry step will add
-them for good. The routes answer from the fake Spoolman of the page audit's data plus a stock of 62 spools: 3 sealed, 2 running low,
+"""The Spools section of the Hub page (R83 sections 1 and 10.2; 03 section 5a), in a real headless browser. The routes answer
+from the fake Spoolman of the page audit's data plus a stock of 62 spools: 3 sealed, 2 running low,
 2 in a printer, one with a tag, the rest opened, and one empty (not listed). Covered: the list (header count, the Open Spoolman
 link, the 50 rows, Show more, search, each chip, the empty states), the detail and each change (the preview first, then Apply,
 the code asked while the page is locked, Spoolman holding the result), and the section in the four looks at 1280 and 390 px. The
@@ -9,62 +7,18 @@ same skip rules as the page audit: no Node 22 or no browser is a skip (a failure
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
 import pytest
 
-from filament_kit import inventory, setup_console
-from filament_kit.setup_console import spools_tab
+from filament_kit import inventory
 from test_hub_page_audit import hub_app, _serve  # noqa: F401
 from test_hub_presets_ui import AsHttps, _drive, T  # noqa: F401
 
-STATIC = Path(spools_tab.__file__).parents[1] / "setup_static"
-SHIM = """// what the registry step adds (R83 section 12, EV5): the Spools entry after Printers, and the group sizes of the navigation
-(() => {
-  const entries = Object.entries(TABS);
-  for (const [k] of entries) delete TABS[k];
-  for (const [k, v] of entries) { TABS[k] = v; if (k === "printers") TABS.spools = ["nav_spools", "spool", () => spoolsTab()]; }
-  GROUPS[0][3] = 6; GROUPS[1][2] = 6; GROUPS[1][3] = 11;
-})();
-"""
-SERVED = {"/setup/setup_spools.js": ("text/javascript", (STATIC / "setup_spools.js").read_bytes()),
-          "/setup/setup_spools.css": ("text/css", (STATIC / "setup_spools.css").read_bytes()),
-          "/setup/spools_shim.js": ("text/javascript", SHIM.encode())}
-
-
-class Mounted(AsHttps):
-    """The page with the Spools section added: its files are served, and the page's HTML names them."""
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and scope["path"] in SERVED:
-            kind, body = SERVED[scope["path"]]
-            await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", kind.encode()), (b"content-length", str(len(body)).encode())]})
-            await send({"type": "http.response.body", "body": body})
-            return
-        page = scope["type"] == "http" and scope["path"] == "/setup"
-
-        async def out(message):
-            if page and message["type"] == "http.response.start":
-                message["headers"] = [(k, v) for k, v in message["headers"] if k.lower() != b"content-length"]
-            elif page and message["type"] == "http.response.body":
-                message["body"] = (message["body"].replace(b"<body>", b"<link rel=stylesheet href='/setup/setup_spools.css'><body>")
-                                   .replace(b"</body>", b"<script src='/setup/setup_spools.js'></script><script src='/setup/spools_shim.js'></script></body>"))
-            await send(message)
-        await super().__call__(scope, receive, out)
-
-
-@pytest.fixture(autouse=True)
-def mounted(monkeypatch):
-    """The section's routes join the page's own (before the app is built)."""
-    real = setup_console.routes
-    monkeypatch.setattr(setup_console, "routes", lambda page: real(page) + spools_tab.routes(page))
-
-
 @pytest.fixture
 def hub(hub_app):  # noqa: F811
-    running = _serve(Mounted(hub_app[0]), hub_app[1])
+    running = _serve(AsHttps(hub_app[0]), hub_app[1])
     try:
         yield running.url + "/setup"
     finally:

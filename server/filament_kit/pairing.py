@@ -24,7 +24,7 @@ from pathlib import Path
 # cryptography is imported where a certificate is read or made, so the file helpers below (_write_atomic,
 # open_lock ...) import without it: the release job's library build uses them with a plain Python.
 
-from . import config
+from . import config, event_sink
 
 try:
     import fcntl
@@ -360,8 +360,13 @@ def redeem_code(code: str) -> str:
                 d["hash"] = _hash(token)
                 d["paired"] = d["claimed"] = d["last_seen"] = now
                 _write("devices.json", devs)
-                return token
-        raise PairingError("device for this code no longer exists")
+                kind = device_type(d) or d.get("role") or "phone"
+                emit_args = ("device.paired", {"type": "device", "id": d["id"], "name": d.get("name", "")}, {"kind": kind})
+                break
+        else:
+            raise PairingError("device for this code no longer exists")
+    event_sink.emit(*emit_args)
+    return token
 
 
 def authorize(token: str) -> tuple[str, str | None] | None:
@@ -369,6 +374,8 @@ def authorize(token: str) -> tuple[str, str | None] | None:
     "station" for a token from `pair --station`, "web" for the web unit's (from its role, so a pairing made before this
     needs nothing done), else None (every route but the web unit's own)."""
     h = _hash(token)
+    emit_args = None
+    result = None
     with _locked():
         devs = _load_devices()
         for d in devs:
@@ -381,14 +388,23 @@ def authorize(token: str) -> tuple[str, str | None] | None:
                     _write("pending.json", pend)   # the QR claim uses the code up
                     _write("spent.json", _spent_add(_spent_read(now), [p["code"] for p in allp if p["device"] == d["id"]], now))
                     _write("devices.json", devs)
+                    kind = device_type(d) or d.get("role") or "phone"
+                    emit_args = ("device.paired", {"type": "device", "id": d["id"], "name": d.get("name", "")},
+                                 {"kind": kind})
                 elif d["last_seen"] is None or now - d["last_seen"] > LAST_SEEN_STALE:
                     d["last_seen"] = now
                     _write("devices.json", devs)
                 # a device paired as "station" before scopes existed is scoped too
-                if d.get("scope") or device_type(d):
-                    return d["id"], d.get("scope") or "station"
-                return d["id"], "web" if d.get("role") == WEB_ROLE else None
-        return None
+                if d.get("scope") or device_type(d) == "station":
+                    result = (d["id"], d.get("scope") or "station")
+                elif d.get("role") in (WEB_ROLE, VIEWER_ROLE):
+                    result = (d["id"], d["role"])
+                else:
+                    result = (d["id"], None)
+                break
+    if emit_args is not None:
+        event_sink.emit(*emit_args)
+    return result
 
 
 def check(token: str) -> str | None:
@@ -397,16 +413,26 @@ def check(token: str) -> str | None:
 
 
 def revoke(device_id: str) -> bool:
+    to_emit = []
     with _locked():
         devs = _load_devices()
+        gone = [d for d in devs if d["id"] == device_id]
         kept = [d for d in devs if d["id"] != device_id]
         if len(kept) == len(devs):
             return False
         _write("devices.json", kept)
-        return True
+        for d in gone:
+            if d.get("claimed") is not None:
+                kind = device_type(d) or d.get("role") or "phone"
+                to_emit.append(("device.removed", {"type": "device", "id": d["id"], "name": d.get("name", "")},
+                                {"kind": kind}))
+    for args in to_emit:
+        event_sink.emit(*args)
+    return True
 
 
 WEB_ROLE = "web"     # the web unit's pairing: the kit API's web-only routes (GET /api/intake/orders) serve it
+VIEWER_ROLE = "viewer"  # read-only integration pairing (Home Assistant)
 
 
 def role_of(device_id: str) -> str | None:
@@ -435,9 +461,13 @@ def set_role_by_name(name: str, role: str) -> int:
 
 
 def device_type(d: dict) -> str | None:
-    """What a pairing is for: "station" (a Weigh Station), else None. A pairing made before scopes existed has no
-    scope, only the name `pair --station` gave it, so the name counts as well (as in `authorize`)."""
-    return "station" if d.get("scope") == "station" or d.get("name") == "station" else None
+    """What a pairing is for: "station" (a Weigh Station), "home-assistant" (viewer), else None. A pairing made
+    before scopes existed has no scope, only the name `pair --station` gave it, so the name counts as well."""
+    if d.get("scope") == "station" or d.get("name") == "station":
+        return "station"
+    if d.get("role") == VIEWER_ROLE:
+        return "home-assistant"
+    return None
 
 
 def devices() -> list[dict]:

@@ -17,12 +17,13 @@ from __future__ import annotations
 import hashlib
 import http.client
 import json
+import re
+import socket
 import ssl
 import threading
 import time
 import urllib.error
 import urllib.parse
-import urllib.request
 import xml.etree.ElementTree as ET
 
 from .pairing import AmbiguousStation
@@ -90,6 +91,129 @@ def pinned_get(host: str, port: int, path: str, fp: str | None, timeout: float, 
         r = c.getresponse()
         return r.status, r.read(cap + 1), c.seen
     finally:
+        c.close()
+
+
+# Name resolution has no socket timeout. Cap the number of outstanding lookups so stuck system
+# DNS cannot leave an unbounded number of threads behind after the request's deadline.
+_RESOLVERS = threading.BoundedSemaphore(4)
+
+
+def _remaining(deadline: float) -> float:
+    seconds = deadline - time.monotonic()
+    if seconds <= 0:
+        raise TimeoutError("the answer is too slow")
+    return seconds
+
+
+def _resolve_before(address, deadline: float):
+    host, port = address
+    try:
+        return socket.getaddrinfo(host, port, type=socket.SOCK_STREAM, flags=socket.AI_NUMERICHOST)
+    except socket.gaierror:
+        pass
+    if not _RESOLVERS.acquire(timeout=_remaining(deadline)):
+        raise TimeoutError("the address lookup is too slow")
+    ready = threading.Event()
+    result = []
+
+    def lookup():
+        try:
+            result.append(socket.getaddrinfo(host, port, type=socket.SOCK_STREAM))
+        except (OSError, UnicodeError) as e:
+            result.append(OSError(str(e)))
+        finally:
+            _RESOLVERS.release()
+            ready.set()
+
+    try:
+        threading.Thread(target=lookup, daemon=True).start()
+    except RuntimeError:
+        _RESOLVERS.release()
+        raise
+    if not ready.wait(max(0, deadline - time.monotonic())):
+        raise TimeoutError("the address lookup is too slow")
+    found, = result
+    if isinstance(found, OSError):
+        raise found
+    return found
+
+
+def _connect_before(address, deadline: float) -> socket.socket:
+    error: OSError = OSError("no address found")
+    for family, kind, protocol, _, target in _resolve_before(address, deadline):
+        seconds = _remaining(deadline)
+        try:
+            sock = socket.socket(family, kind, protocol)
+        except OSError as e:
+            error = e
+            continue
+        try:
+            sock.settimeout(seconds)
+            sock.connect(target)
+            sock.settimeout(_remaining(deadline))
+        except OSError as e:
+            sock.close()
+            error = e
+        else:
+            return sock
+    _remaining(deadline)
+    raise error
+
+
+def bounded_call(host: str, port: int, fp: str | None, method: str, path: str, body: bytes | None = None,
+                 headers: dict | None = None, cap: int = 1 << 20, timeout: float = 5,
+                 plain: bool = False) -> tuple[int, str, bytes]:
+    """One call with ONE deadline of `timeout` seconds for the whole of it (connect, headers and body: a station that
+    trickles its answer is cut off, the read after the deadline raises TimeoutError). (status, content type, body of at
+    most `cap` bytes). No redirect is followed (a 3xx comes back as its status), no proxy of the environment is used.
+    HTTPS accepts only the certificate with the SHA-256 `fp` (PinMismatch); `plain` is for an older station that has told
+    the Hub no certificate. Raises ValueError when the answer is larger than `cap`, OSError, http.client.HTTPException."""
+    deadline = time.monotonic() + timeout
+    c = http.client.HTTPConnection(host, port, timeout=timeout) if plain else PinnedConnection(host, port, fp, timeout)
+    c._create_connection = lambda address, *_: _connect_before(address, deadline)
+    held: list = [None]         # the socket, kept: getresponse() lets c.sock go for an answer that ends by closing
+
+    fired = [False]
+
+    def cut():
+        fired[0] = True
+        sock = held[0] or c.sock
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)       # only SHUT: the reading thread sees the end; it closes in `finally`
+            except OSError:
+                pass
+    timer = threading.Timer(timeout, cut)
+    timer.daemon = True
+    timer.start()
+    try:
+        c.connect()
+        held[0] = c.sock
+        _remaining(deadline)
+        c.request(method, path, body=body, headers=headers or {})
+        r = c.getresponse()
+        data = bytearray()
+        while True:
+            chunk = r.read1(8192)       # what has arrived, not a wait for the whole 8192 bytes
+            if not chunk:
+                break
+            data += chunk
+            if len(data) > cap:
+                raise ValueError("the answer is too large")
+            if time.monotonic() > deadline:
+                raise TimeoutError("the answer is too slow")
+        if fired[0] or time.monotonic() > deadline:     # the cut ends a slow answer as if it were complete: it is not
+            raise TimeoutError("the answer is too slow")
+        return r.status, r.getheader("Content-Type", "") or "", bytes(data)
+    except (OSError, http.client.HTTPException):
+        if fired[0]:                        # whatever the shut socket made of it (a broken pipe, a reset): it was too slow
+            raise TimeoutError("the answer is too slow") from None
+        raise
+    except AttributeError as e:             # http.client closing under a shut socket
+        raise TimeoutError("the answer is too slow") if time.monotonic() >= deadline - 0.05 else OSError(str(e)) from None
+    finally:
+        timer.cancel()
         c.close()
 
 
@@ -171,18 +295,21 @@ class StationClient:
         except AmbiguousStation as e:
             self._fail()
             raise StationUnreachable(str(e)) from e
-        host = urllib.parse.urlsplit(self.url).hostname
         try:
-            if info and host:       # the station said hello with a certificate: HTTPS, that certificate only
-                status, raw, _seen = pinned_get(host, info["port"], "/state", info["fp"], self.timeout)
-                if status != 200:
-                    raise StationUnreachable(f"station answered {status}")
-                data = json.loads(raw)
+            u = urllib.parse.urlsplit(self.url)
+            if not u.hostname or u.scheme not in ("https", "http"):
+                raise StationUnreachable("the station address must be HTTP or HTTPS")
+            if info:
+                port, fp = info["port"], info["fp"]
+            elif u.scheme == "https":
+                raise StationUnreachable(TEXT_STATION_NO_PIN)
             else:
-                with urllib.request.urlopen(f"{self.url}/state", timeout=self.timeout) as resp:
-                    if resp.status != 200:
-                        raise StationUnreachable(f"station answered {resp.status}")
-                    data = json.loads(resp.read())
+                port, fp = u.port or 80, None
+            status, _kind, raw = bounded_call(u.hostname, port, fp, "GET", "/state", timeout=self.timeout,
+                                              plain=info is None)
+            if status != 200:
+                raise StationUnreachable(f"station answered {status}")
+            data = json.loads(raw)
             if not isinstance(data, dict):
                 raise ValueError("not an object")
         except StationUnreachable:
@@ -238,8 +365,8 @@ def station_https(url: str | None) -> str | None:
         return None
     try:
         if _station_info() is None:
-            return "plain"
-    except AmbiguousStation:
+            return "unreachable" if urllib.parse.urlsplit(url).scheme == "https" else "plain"
+    except (AmbiguousStation, ValueError):
         return "unreachable"
     try:
         StationClient(url, timeout=2, backoff=0).state()
@@ -266,3 +393,206 @@ def station_https_row(url: str | None) -> str | None:
     return (TEXT_STATION_NOT_HTTPS_WHY.format(address=address, reason=reason) if reason
             else TEXT_STATION_NOT_HTTPS_AT.format(address=address))
 
+
+
+# ---- the Hub's checked calls to the station's own routes (R83 section 10.4 and the rulings of 2026-11-17 21:18 and 21:22) ----
+# What the Hub takes from a station is data, checked: JSON only (`application/json`), at most 256 KiB, one 5 second deadline
+# for the whole call, a redirect is an error, only the stored host with the port and certificate of that pairing (never plain
+# HTTP). A change or a ticket carries the proof of the pairing (station/page.py: an HMAC with a key both sides derive from the
+# token, which never travels: the Hub keeps the token's SHA-256 in the pairing, the station has the token).
+
+STATION_TIMEOUT = 5
+MAX_JSON = 256 * 1024
+MAX_PHOTO = 4 * 1024 * 1024
+MAX_SETTINGS = 60
+MAX_LABEL = 80
+MAX_TEXT = 200
+SETTING_ID = re.compile(r"[a-z0-9_.-]{1,40}")
+SETTING_KINDS = ("switch", "choice", "number", "text")
+TICKET = re.compile(r"[A-Za-z0-9_-]{16,128}")
+TEXT_STATION_NO_PIN = ("The Weigh Station has not told the Hub its certificate yet. Update it, then restart it "
+                       "(sudo systemctl restart filament-kit-station).")
+
+
+class StationCallError(Exception):
+    """The Hub could not get a checked answer from the station: `status` is what the Hub page says (502, 503 ...)."""
+
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status, self.message = status, message
+
+
+def proof_key() -> bytes | None:
+    """The key of the Hub's proofs for the one station pairing that holds a certificate: HKDF of the SHA-256 of its token,
+    which is what the pairing record keeps (`hash`). None when there is no such pairing or there are two."""
+    from . import pairing
+    from .station import page
+    try:
+        with pairing._locked():
+            found = [d for d in pairing._load_devices()
+                     if d.get("claimed") is not None and pairing.device_type(d) and d.get("fp")]
+    except (OSError, ValueError):
+        return None
+    if len(found) != 1 or not re.fullmatch(r"[0-9a-f]{64}", str(found[0].get("hash") or "")):
+        return None
+    return page.proof_key(found[0]["hash"])
+
+
+def pinned_endpoint(url: str | None) -> tuple[str, int, str]:
+    """Resolve the stored Station host and the port and certificate announced by the paired Station."""
+    try:
+        host = urllib.parse.urlsplit(url or "").hostname
+        info = _station_info()
+    except (AmbiguousStation, ValueError) as e:
+        raise StationCallError(503, str(e)) from None
+    if not host:
+        raise StationCallError(503, "the Hub does not know the Weigh Station's address")
+    if info is None:
+        raise StationCallError(503, TEXT_STATION_NO_PIN)
+    return host, info["port"], info["fp"]
+
+
+def call(url: str | None, method: str, path: str, body: bytes | None = None, cap: int = MAX_JSON,
+         timeout: float = STATION_TIMEOUT) -> tuple[int, str, bytes]:
+    """(status, content type, body) of one pinned call to the Station, with one deadline and no redirects."""
+    return _call(pinned_endpoint(url), method, path, body, cap, timeout)
+
+
+def _call(endpoint, method, path, body, cap=MAX_JSON, timeout=STATION_TIMEOUT):
+    from .station import page
+
+    host, port, fp = endpoint
+    headers = {"Accept": "*/*"}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    purpose = {("POST", "/ticket"): "ticket", ("POST", "/settings"): "settings"}.get((method, path))
+    if purpose:
+        key = proof_key()
+        if key is None:
+            raise StationCallError(503, "the Hub cannot prove itself to the Weigh Station: pair it again")
+        headers[page.PROOF_HEADER] = page.make_proof(key, purpose, body or b"")
+    try:
+        status, kind, data = bounded_call(host, port, fp, method, path, body, headers, cap, timeout)
+    except (PinMismatch, ssl.SSLError):
+        raise StationCallError(502, f"{TEXT_STATION_CERT_CHANGED} {TEXT_STATION_CERT_FIX}") from None
+    except TimeoutError:
+        raise StationCallError(502, "the Weigh Station answers too slowly") from None
+    except ValueError:
+        raise StationCallError(502, "the Weigh Station's answer is too large") from None
+    except (OSError, http.client.HTTPException) as e:
+        raise StationCallError(502, f"the Weigh Station does not answer ({type(e).__name__})") from None
+    if 300 <= status < 400:
+        raise StationCallError(502, "the Weigh Station answered with a redirect")
+    return status, kind, data
+
+
+def call_json(url: str | None, method: str, path: str, body: dict | None = None) -> dict:
+    """The JSON object a station answers with a 2xx: `application/json` only. A refusal of the station (4xx) is a
+    StationCallError with its status and its own reason (`error` or `message`, at most 200 characters)."""
+    return _json_reply(*call(url, method, path, None if body is None else json.dumps(body).encode()))
+
+
+def _json_reply(status: int, kind: str, data: bytes) -> dict:
+    if kind.split(";")[0].strip().lower() != "application/json":
+        raise StationCallError(502, "the Weigh Station did not answer with JSON")
+    try:
+        out = json.loads(data or b"{}")
+    except ValueError:
+        out = None
+    if not isinstance(out, dict):
+        raise StationCallError(502, "the Weigh Station's answer is not valid")
+    if not 200 <= status < 300:
+        why = out.get("message") or out.get("error")
+        raise StationCallError(status if status in (400, 403, 404, 429) else 502,
+                               str(why)[:MAX_TEXT] if isinstance(why, str) and why else f"the Weigh Station answered {status}")
+    return out
+
+
+def ticket(url: str | None, *, endpoint: tuple[str, int, str] | None = None) -> dict:
+    """A one-time ticket for the station's own page, `{ticket, expires_in: 60}` (the proof goes with the call). The
+    caller opens `<the station's address>#ticket=<ticket>` for the browser: the ticket is never in a request line."""
+    got = _json_reply(*_call(endpoint if endpoint is not None else pinned_endpoint(url), "POST", "/ticket", b"{}"))
+    t, expires = got.get("ticket"), got.get("expires_in")
+    if not (isinstance(t, str) and TICKET.fullmatch(t)) or expires != 60 or isinstance(expires, bool):
+        raise StationCallError(502, "the Weigh Station's ticket is not valid")
+    return {"ticket": t, "expires_in": 60}
+
+
+def read_state(url: str | None) -> dict:
+    """The station's `GET /state` as checked data: an object, with the station's `photo` reduced to a bool."""
+    out = call_json(url, "GET", "/state")
+    out["photo"] = bool(out.get("photo"))
+    return out
+
+
+def read_settings(url: str | None) -> tuple[list[dict], bool]:
+    """(the settings that pass the checks, whether any was dropped), from `GET /settings`."""
+    return clean_settings(call_json(url, "GET", "/settings").get("settings"))
+
+
+def change_settings(url: str | None, values: dict) -> tuple[list[dict], bool]:
+    """`POST /settings` with the proof: `{<id>: <value>}` or `{reset: true}`; the new list, checked as `read_settings`."""
+    return clean_settings(call_json(url, "POST", "/settings", values).get("settings"))
+
+
+def read_photo(url: str | None) -> bytes:
+    """The station's photo: only `image/jpeg`, at most 4 MiB, and it must begin as a JPEG does."""
+    status, kind, data = call(url, "GET", "/photo", cap=MAX_PHOTO)
+    if status != 200 or kind.split(";")[0].strip().lower() != "image/jpeg" or not data.startswith(b"\xff\xd8"):
+        raise StationCallError(502, "the Weigh Station's photo is not a JPEG picture")
+    return data
+
+
+def _text(v, limit: int = MAX_TEXT) -> str | None:
+    return v if isinstance(v, str) and len(v) <= limit else None
+
+
+def _number(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) < 1e12
+
+
+def clean_settings(raw) -> tuple[list[dict], bool]:
+    """(the settings that pass the checks, whether any was dropped): `id` [a-z0-9_.-]{1,40}, `kind` one of switch, choice,
+    number, text, `label` at most 80 characters, at most 60 settings, a value of the kind's own type; any other is dropped."""
+    if not isinstance(raw, list):
+        return [], bool(raw)
+    out, seen, dropped = [], set(), len(raw) > MAX_SETTINGS
+    for s in raw[:MAX_SETTINGS]:
+        item = _clean_setting(s) if isinstance(s, dict) else None
+        if item is None or item["id"] in seen:
+            dropped = True
+            continue
+        seen.add(item["id"])
+        out.append(item)
+    return out, dropped
+
+
+def _clean_setting(s: dict) -> dict | None:
+    sid, kind, label, value = s.get("id"), s.get("kind"), _text(s.get("label"), MAX_LABEL), s.get("value")
+    if not (isinstance(sid, str) and SETTING_ID.fullmatch(sid)) or kind not in SETTING_KINDS or not label:
+        return None
+    out = {"id": sid, "label": label, "kind": kind}
+    if kind == "switch":
+        if not isinstance(value, bool):
+            return None
+    elif kind == "number":
+        if not _number(value):
+            return None
+        for k in ("min", "max"):
+            if _number(s.get(k)):
+                out[k] = s[k]
+    elif kind == "text":
+        if _text(value) is None:
+            return None
+    else:
+        if not (_text(value) is not None or _number(value)):
+            return None
+        choices = []
+        for c in (s.get("choices") if isinstance(s.get("choices"), list) else [])[:40]:
+            v, lab = (c.get("value"), c.get("label")) if isinstance(c, dict) else (c, c)
+            if _text(v, MAX_LABEL) is None or _text(lab, MAX_LABEL) is None:
+                return None
+            choices.append(v if not isinstance(c, dict) else {"value": v, "label": lab})
+        out["choices"] = choices
+    out["value"] = value
+    return out

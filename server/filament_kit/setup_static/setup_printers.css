@@ -25,6 +25,7 @@
 .printers-line .status { white-space: normal; }
 /* the expansion */
 .detail .detail__section > .actions .btn, .detail .actions--list .btn { white-space: normal; text-align: left; }
+.detail__section > .plive + .kv { padding-top: var(--s3); border-top: var(--hairline) solid var(--border); }
 .printers-slots .slot-strip__row { grid-template-columns: calc(var(--s6) - var(--s1) / 2) calc(var(--s4) + var(--s1) / 2) minmax(0, 1fr) auto auto; }
 .printers-lane { display: grid; gap: var(--s1); }
 .printers-lane .field__hint { margin: 0; }

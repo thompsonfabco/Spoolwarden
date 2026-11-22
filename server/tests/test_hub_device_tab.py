@@ -2,21 +2,25 @@
 settings, and "Open this device's page" (R83 section 9, 10.2 and the rulings of 2026-11-17 21:18 and 21:22;
 setup_console/device_tab.py). Nothing a station sends is served by the Hub: the checks on what it takes are pinned here.
 
-The Hub's other parts (a pairing's kind and version, the reader's build, the station's own routes and its pinned client) are
-not in the tree yet: a stub Hub lends the rows their kind and version, and a stub station (a thread with the ruled routes
-of 10.4 and /ticket) stands in for the station. The registry that mounts the routes is not this step's either: the tests mount them.
+The Hub's other parts (a pairing's kind and version, the reader's build) are stubbed on device_tab for the row table,
+while station calls run end-to-end through `station_client` over pinned TLS with `X-Station-Proof` against a TLS stub
+station. The registry that mounts the routes is not this step's either: the tests mount them.
 The same skip rules as test_hub_devices.py (no Node 22 or no browser is a skip, a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
 
 import pytest
 
-from filament_kit import config, pairing, setup_console
+from filament_kit import config, pairing, station_client
 from filament_kit.setup_console import device_tab
+from filament_kit.station import http as station_http
+from filament_kit.station import page as station_page
+from filament_kit.station import state as station_state
 from filament_kit.web.slots import INTAKE_DEVICE
 
 from test_hub_devices import DEVICES_PRELUDE, _T
@@ -34,15 +38,20 @@ SETTINGS = [{"id": "beep", "label": "Beep", "kind": "switch", "value": True},
             {"id": "volume", "label": "Volume", "kind": "number", "value": 60, "min": 0, "max": 100},
             {"id": "lamp.weigh", "label": "Lamp for weighing", "kind": "choice", "value": "yellow", "choices": ["yellow", "red", "off"]}]
 STATE = {"tag": {"uid": "04A1B2"}, "scale": None, "last_weight": {"grams": 612.5}, "panel": "v1.2", "version": "0.7.0",
-         "settings_changed": False, "photo": True}
+         "settings_changed": False, "photo": {"url": "/photo", "taken_at": "2026-11-18T00:00:00+00:00", "age_seconds": 3}}
 TICKET = "t" * 32
+TOKEN = "T0ken_for_the_station_pairing_0123456789"
+TOKEN_HASH = hashlib.sha256(TOKEN.encode("utf-8")).hexdigest()
 
 
 class Station:
-    """A station's own listener with the routes of 10.4 and /ticket. `fault` makes one route misbehave: {path: what}."""
+    """A station's own pinned TLS listener with the routes of 10.4 and /ticket. `fault` makes one route misbehave: {path: what}."""
 
-    def __init__(self):
+    def __init__(self, cert_dir):
         self.calls, self.settings, self.fault = [], json.loads(json.dumps(SETTINGS)), {}
+        cert, key, self.fp = station_state.ensure_cert(cert_dir)
+        self.hash = TOKEN_HASH
+        self.access = station_page.Access(lambda: station_page.token_key(TOKEN))
         me = self
 
         class H(BaseHTTPRequestHandler):
@@ -67,6 +76,8 @@ class Station:
                     return self._send(302, b"", "text/plain", [("Location", "http://127.0.0.1:9/elsewhere")])
                 if what == "list":
                     return self._send(200, b"[1, 2]", "application/json")
+                if isinstance(what, tuple):
+                    return self._send(what[0], json.dumps(what[1]).encode(), "application/json")
                 if callable(what):
                     obj = what(obj)
                 self._send(200, json.dumps(obj).encode(), "application/json")
@@ -91,24 +102,29 @@ class Station:
             def do_POST(self):
                 raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
                 me.calls.append(("POST", self.path, json.loads(raw or b"{}")))
+                if self.path not in ("/ticket", "/settings"):
+                    return self._send(404, b'{"error": "no such page"}', "application/json")
+                purpose = "ticket" if self.path == "/ticket" else "settings"
+                if not me.access.proof_ok(purpose, self.headers.get(station_page.PROOF_HEADER), raw):
+                    return self._send(403, json.dumps({"error": "forbidden", "message": "This proof is not valid."}).encode(), "application/json")
                 if self.path == "/ticket":
                     return self._json("ticket", {"ticket": TICKET, "expires_in": 60})
-                if self.path != "/settings":
-                    return self._send(404, b'{"error": "no such page"}', "application/json")
                 got = json.loads(raw)
-                if got.get("reset"):
-                    me.settings = json.loads(json.dumps(SETTINGS))
-                else:
-                    for s in me.settings:
-                        if s["id"] in got:
-                            s["value"] = got[s["id"]]
+                if not me.fault.get("post"):
+                    if got.get("reset"):
+                        me.settings = json.loads(json.dumps(SETTINGS))
+                    else:
+                        for s in me.settings:
+                            if s["id"] in got:
+                                s["value"] = got[s["id"]]
                 self._json("post", {"settings": me.settings})
 
             def log_message(self, *a):
                 pass
-        self.server = HTTPServer(("127.0.0.1", 0), H)
+        self.server = station_http.TlsServer(("127.0.0.1", 0), H, station_http.tls_context(cert, key))
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
-        self.url = f"http://127.0.0.1:{self.server.server_port}"
+        self.port = self.server.server_port
+        self.url = f"https://127.0.0.1:{self.port}"
 
     def posts(self):
         return [c[2] for c in self.calls if c[0] == "POST" and c[1] == "/settings"]
@@ -127,20 +143,19 @@ READERS = [{"id": "r1", "name": "Tag Reader for Workshop X1", "created": "2026-1
 
 
 @pytest.fixture
-def stub(monkeypatch):
-    """The Hub the Devices rows are built on, as the other Hub steps will leave it, and a station (over http: the stub has no
-    certificate, so the https-only rule of Open this device's page is lifted here and tested on its own)."""
-    st = Station()
+def stub(monkeypatch, tmp_path):
+    """The Hub the Devices rows are built on, and a pinned TLS station."""
+    st = Station(tmp_path / "station-tls")
     monkeypatch.setattr(device_tab, "_pairings", lambda: [dict(p) for p in PAIRINGS])
     monkeypatch.setattr(device_tab, "_readers", lambda: [dict(r) for r in READERS])
     monkeypatch.setattr(device_tab, "_phone_offer", lambda: "1.5.0")
     monkeypatch.setattr(device_tab, "_reader_offer", lambda: "7")
     monkeypatch.setattr(device_tab, "__version__", "0.7.0")
-    monkeypatch.setattr(device_tab, "OPEN_SCHEMES", ("http", "https"))
-    # the mounting EV5 does: the page routes (there is no pass-through route any more)
-    orig_console = setup_console.routes
-    monkeypatch.setattr(setup_console, "routes", lambda page: orig_console(page) + device_tab.routes(page))
-    return st
+    station_client._reach.clear()
+    yield st
+    if st.server.fileno() != -1:
+        st.server.shutdown()
+        st.server.server_close()
 
 
 def _station_url(st):
@@ -149,9 +164,21 @@ def _station_url(st):
     config.save(cfg)
 
 
+def _pair_station(st, fp=None, port=None, hash_=None, pinned=True):
+    pairing._write("devices.json", [
+        {"id": p["id"], "name": p["name"],
+         "hash": (hash_ if hash_ is not None else st.hash) if p["type"] == "station" else "0" * 64,
+         "paired": 1.0, "last_seen": 1.0, "expires": 0, "claimed": 1.0,
+         **({"scope": "station", **({"fp": fp or st.fp, "port": port or st.port} if pinned else {})}
+            if p["type"] == "station" else {})}
+        for p in PAIRINGS
+    ])
+
+
 @pytest.fixture
 def env_hub(env, helper, manager, stub):
     _station_url(stub)
+    _pair_station(stub)
     return SP.client(SP.make(env, helper, manager)), stub
 
 
@@ -197,7 +224,7 @@ def test_a_station_detail_reads_status_settings_and_its_own_address_and_a_phone_
     one = c.get("/setup/api/device/d3").json()
     assert one["device"]["name"] == "Bench station" and one["status"]["tag"]["uid"] == "04A1B2" and one["photo"] is True
     assert [s["id"] for s in one["settings"]] == ["beep", "voice", "volume", "lamp.weigh"] and "settings_dropped" not in one
-    assert one["own_page"] == stub.url + "/"
+    assert one["own_page"] == f"https://{SP.HOSTNAME}:{stub.port}/"
     plain = c.get("/setup/api/device/d1").json()
     assert plain["device"]["name"] == "Kitchen phone" and plain["photo"] is False
     assert not ({"status", "settings", "own_page"} & set(plain))
@@ -304,7 +331,7 @@ def test_open_gives_the_address_with_the_ticket_in_the_fragment_and_only_when_un
     with caplog.at_level("DEBUG"):
         r = SP.post(c, "device/d3/open")
     assert r.status_code == 200, r.text
-    assert r.json() == {"address": f"{stub.url}/#ticket={TICKET}"} and "?" not in r.json()["address"]
+    assert r.json() == {"address": f"https://{SP.HOSTNAME}:{stub.port}/#ticket={TICKET}"} and "?" not in r.json()["address"]
     assert [x for x in st.calls if x[1] == "/ticket"] == [("POST", "/ticket", {})]
     assert TICKET not in caplog.text and TICKET not in str(c.get("/setup/api/device/d3").json())
     assert SP.post(c, "device/d1/open").status_code == 404 and SP.post(c, "device/zz/open").status_code == 404
@@ -327,19 +354,71 @@ def test_a_ticket_from_a_station_that_sends_anything_but_json_is_refused(env_hub
     assert SP.post(c, "device/d3/open").status_code == 502
 
 
-def test_the_station_page_is_opened_over_https_only(env_hub, monkeypatch):
+def test_open_uses_the_announced_tls_port_and_the_browser_hub_host_for_a_cohosted_station(env_hub):
     c, st = env_hub
-    monkeypatch.setattr(device_tab, "OPEN_SCHEMES", ("https",))
+    cfg = config.load()
+    cfg["station"] = {**cfg["station"], "url": "http://127.0.0.1:5003"}
+    config.save(cfg)
+    detail = c.get("/setup/api/device/d3").json()
+    assert detail["own_page"] == f"https://{SP.HOSTNAME}:{st.port}/"
     r = SP.post(c, "device/d3/open")
-    assert r.status_code == 409 and "https" in r.json()["error"]
-    assert not [x for x in st.calls if x[1] == "/ticket"]               # no ticket is asked for
+    assert r.status_code == 200, r.text
+    assert r.json()["address"] == f"https://{SP.HOSTNAME}:{st.port}/#ticket={TICKET}"
+    assert [x for x in st.calls if x[1] == "/ticket"] == [("POST", "/ticket", {})]
 
 
-def test_an_address_of_a_foreign_origin_is_refused(env_hub, monkeypatch):
+def test_open_will_not_issue_a_ticket_to_an_unrecognised_hub_host(env_hub):
     c, st = env_hub
-    monkeypatch.setattr(device_tab, "own_page", lambda url: "http://evil.example/")
-    r = SP.post(c, "device/d3/open")
-    assert r.status_code == 502 and "ticket is not valid" in r.json()["error"]
+    r = SP.post(c, "device/d3/open", headers={"Host": "evil.example", "Origin": "https://evil.example"})
+    assert r.status_code == 403
+    assert not [x for x in st.calls if x[1] == "/ticket"]
+
+
+def test_detail_converts_dict_photo_and_none_photo_via_read_state(env_hub):
+    c, st = env_hub
+    for removed in ("_proof_headers", "call_station", "StationError"):
+        assert not hasattr(device_tab, removed), removed
+    one = c.get("/setup/api/device/d3").json()
+    assert one["photo"] is True and one["status"]["photo"] is True
+    st.fault["state"] = lambda o: {**o, "photo": None}
+    none_photo = c.get("/setup/api/device/d3").json()
+    assert none_photo["photo"] is False and none_photo["status"]["photo"] is False
+
+
+def test_station_call_error_handling_across_detail_photo_settings_and_open(env_hub, monkeypatch):
+    c, st = env_hub
+    _pair_station(st, pinned=False)
+    detail = c.get("/setup/api/device/d3")
+    assert detail.status_code == 200 and detail.json()["device"]["reachable"] is False
+    for call in (lambda: c.get("/setup/api/device/d3/photo"),
+                 lambda: SP.post(c, "device/d3/settings", {"beep": False}),
+                 lambda: SP.post(c, "device/d3/open")):
+        r = call()
+        assert r.status_code == 503 and r.json() == {"error": station_client.TEXT_STATION_NO_PIN}
+
+    _pair_station(st, fp="ab" * 32)
+    for call in (lambda: c.get("/setup/api/device/d3/photo"),
+                 lambda: SP.post(c, "device/d3/settings", {"beep": False}),
+                 lambda: SP.post(c, "device/d3/open")):
+        r = call()
+        assert r.status_code == 502 and station_client.TEXT_STATION_CERT_CHANGED in r.json()["error"]
+
+    _pair_station(st, hash_="1" * 64)
+    assert SP.post(c, "device/d3/settings", {"beep": False}).status_code == 403
+    assert SP.post(c, "device/d3/open").status_code == 403
+
+    _pair_station(st)
+    st.fault["post"] = (400, {"error": "bad_request", "message": "volume: out of range"})
+    bad_set = SP.post(c, "device/d3/settings", {"volume": 500})
+    assert bad_set.status_code == 400 and bad_set.json() == {"error": "volume: out of range"}
+    st.fault["ticket"] = (429, {"error": "too_many_wrong_tickets", "message": "Too many tickets are waiting."})
+    many = SP.post(c, "device/d3/open")
+    assert many.status_code == 429 and many.json() == {"error": "Too many tickets are waiting."}
+
+    monkeypatch.setattr(station_client, "read_photo",
+                        lambda url: (_ for _ in ()).throw(station_client.StationCallError(0, "unexpected")))
+    zero = c.get("/setup/api/device/d3/photo")
+    assert zero.status_code == 502 and zero.json() == {"error": "unexpected"}
 
 
 def test_the_web_apps_home_address_drops_the_port_on_443(env_hub):
@@ -459,8 +538,12 @@ return out;
 def test_the_rows_open_and_the_station_settings_work_in_every_look_at_both_widths(stub, hub_change, tmp_path, look, width):
     _station_url(stub)
     stub.settings[0]["label"] = EVIL
-    pairing._write("devices.json", [{"id": p["id"], "name": p["name"], "hash": "0" * 64, "paired": 1.0, "last_seen": 1.0, "expires": 0, "claimed": 1.0,
-                                     **({"scope": "station"} if p["type"] == "station" else {})} for p in PAIRINGS])
+    pairing._write("devices.json", [
+        {"id": p["id"], "name": p["name"], "hash": stub.hash if p["type"] == "station" else "0" * 64,
+         "paired": 1.0, "last_seen": 1.0, "expires": 0, "claimed": 1.0,
+         **({"scope": "station", "fp": stub.fp, "port": stub.port} if p["type"] == "station" else {})}
+        for p in PAIRINGS
+    ])
     page = _drive(hub_change + "#devices", tmp_path, ROWS_SCRIPT, width, look)
     rows = page["rows"]
     # the kind and version line, the out-of-date sentence, "Version not known", the name alone
@@ -512,8 +595,10 @@ import socket
 import time
 
 
-def _trickle(mode: str):
-    """A station that answers one byte every 2 s: of the body (`body`) or of the status line (`head`)."""
+def _trickle(mode: str, cert_dir):
+    """A pinned TLS station that answers one byte every 2 s: of the body (`body`), status line (`head`), or HTTP/1.0."""
+    cert, key, fp = station_state.ensure_cert(cert_dir)
+    ctx = station_http.tls_context(cert, key)
     srv = socket.socket()
     srv.bind(("127.0.0.1", 0))
     srv.listen(4)
@@ -522,56 +607,63 @@ def _trickle(mode: str):
     def serve():
         while True:
             try:
-                conn, _ = srv.accept()
+                raw, _ = srv.accept()
             except OSError:
                 return
-            threading.Thread(target=answer, args=(conn,), daemon=True).start()
+            threading.Thread(target=answer, args=(raw,), daemon=True).start()
 
-    def answer(conn):
-        if True:
-            try:
-                conn.settimeout(3)
-                conn.recv(4096)
-                if old:         # HTTP/1.0, no Content-Length, ends by closing
-                    conn.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n")
-                    for _ in range(40):
-                        conn.sendall(b" ")
-                        time.sleep(2)
-                elif mode == "body":
-                    conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 400\r\n\r\n")
-                    for _ in range(40):
-                        conn.sendall(b" ")
-                        time.sleep(2)
-                else:
-                    for ch in b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{}":
-                        conn.sendall(bytes([ch]))
-                        time.sleep(2)
-            except OSError:
-                pass
-            finally:
-                conn.close()
+    def answer(raw):
+        conn = None
+        try:
+            raw.settimeout(3)
+            conn = ctx.wrap_socket(raw, server_side=True)
+            conn.settimeout(3)
+            conn.recv(4096)
+            if old:         # HTTP/1.0, no Content-Length, ends by closing
+                conn.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n")
+                for _ in range(40):
+                    conn.sendall(b" ")
+                    time.sleep(2)
+            elif mode == "body":
+                conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 400\r\n\r\n")
+                for _ in range(40):
+                    conn.sendall(b" ")
+                    time.sleep(2)
+            else:
+                for ch in b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{}":
+                    conn.sendall(bytes([ch]))
+                    time.sleep(2)
+        except OSError:
+            pass
+        finally:
+            (conn or raw).close()
     threading.Thread(target=serve, daemon=True).start()
-    return srv, f"http://127.0.0.1:{srv.getsockname()[1]}"
+    port = srv.getsockname()[1]
+    return srv, f"https://127.0.0.1:{port}", fp, port
 
 
 @pytest.mark.parametrize("mode", ["body", "head", "http10"])
-def test_a_station_that_trickles_its_answer_is_cut_off_at_one_deadline(mode):
-    srv, url = _trickle(mode)
+def test_a_station_that_trickles_its_answer_is_cut_off_at_one_deadline(mode, tmp_path):
+    srv, url, fp, port = _trickle(mode, tmp_path / "tls")
+    pairing._write("devices.json", [{"id": "d3", "name": "Bench station", "hash": TOKEN_HASH, "paired": 1.0,
+                                     "last_seen": 1.0, "expires": 0, "claimed": 1.0, "scope": "station",
+                                     "fp": fp, "port": port}])
     try:
         t = time.monotonic()
-        with pytest.raises(device_tab.StationError) as e:
-            device_tab.call_station(url, "GET", "state")
+        with pytest.raises(station_client.StationCallError) as e:
+            station_client.call(url, "GET", "/state")
         took = time.monotonic() - t
         assert 4.5 < took < 6.5 and e.value.status == 502, (took, e.value.message)
     finally:
         srv.close()
 
 
-def test_the_photo_and_the_ticket_calls_have_the_same_deadline(env_hub, monkeypatch):
+def test_the_photo_and_the_ticket_calls_have_the_same_deadline(env_hub, monkeypatch, tmp_path):
     c, st = env_hub
     monkeypatch.setattr(device_tab.station_client, "station_reach", lambda devs, url: {})      # that probe is station_client's own
-    srv, url = _trickle("body")
+    srv, url, fp, port = _trickle("body", tmp_path / "trickle-tls")
     try:
+        _pair_station(st, fp=fp, port=port)
         cfg = config.load()
         cfg["station"] = {**cfg["station"], "url": url}
         config.save(cfg)
@@ -590,8 +682,9 @@ def test_the_station_call_never_goes_through_a_proxy(env_hub, monkeypatch):
     monkeypatch.delenv("NO_PROXY", raising=False)
     monkeypatch.delenv("no_proxy", raising=False)
     assert c.get("/setup/api/device/d3").json()["status"]["tag"]["uid"] == "04A1B2"
-    src = open(device_tab.__file__, encoding="utf-8").read()
-    assert "urllib.request" not in src and "build_opener" not in src      # no opener, so no proxy handler
+    for mod in (device_tab, station_client):
+        src = open(mod.__file__, encoding="utf-8").read()
+        assert "urllib.request" not in src and "build_opener" not in src      # no opener, so no proxy handler
 
 
 def test_an_empty_status_key_is_dropped_and_ids_that_are_properties_of_the_form_collection_are_kept():
@@ -626,7 +719,9 @@ def test_the_label_of_a_status_key_handles_an_empty_or_missing_key():
 def test_settings_ids_that_are_properties_of_the_form_collection_can_be_saved(stub, hub_change, tmp_path):      # BROWSER: not run in this batch
     _station_url(stub)
     stub.settings = [{"id": i, "label": i, "kind": "text", "value": "a"} for i in ("length", "item")]
-    pairing._write("devices.json", [{"id": "d3", "name": "Bench station", "hash": "0" * 64, "paired": 1.0, "last_seen": 1.0, "expires": 0, "claimed": 1.0, "scope": "station"}])
+    pairing._write("devices.json", [{"id": "d3", "name": "Bench station", "hash": stub.hash, "paired": 1.0,
+                                     "last_seen": 1.0, "expires": 0, "claimed": 1.0, "scope": "station",
+                                     "fp": stub.fp, "port": stub.port}])
     page = _drive(hub_change + "#devices", tmp_path, DEVICES_PRELUDE + """
 unlock();
 await until(() => $$(".coll--paired .coll__item").length, "the rows");

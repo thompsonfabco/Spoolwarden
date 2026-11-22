@@ -23,6 +23,9 @@ const ACT_TEXT = {
   activity_show_more: "Show more", activity_showing: "Showing {count} entries.",
   activity_empty_title: "No activity yet", activity_empty_text: "What is done on this Hub is listed here.",
   activity_empty_filtered: "Nothing matches these choices.", activity_error: "Could not read the activity.",
+  activity_download_csv: "Download as CSV",
+  activity_csv_7: "Last 7 days", activity_csv_30: "Last 30 days", activity_csv_365: "Last 12 months",
+  activity_csv_failed: "Could not download the file: {reason}",
   report_text: "One text file with the versions, checks, settings and recent logs. Addresses, serial numbers and names are left out, so it can be sent with a problem report.",
   report_collect: "Collect a Hub report", report_download: "Download the latest report",
 };
@@ -158,7 +161,7 @@ function activityView() {
     const note = ev.undone ? actT("activity_undone") : ev.undo_of ? actT("activity_put_back_row")
       : ev.undo && !ev.undo.possible ? actWhy(ev.undo.why_not) : "";
     const href = actPlace(ev.action), name = ev.subject && ev.subject.name;
-    const undo = ev.undo && ev.undo.possible && !ev.undone
+    const undo = hubHasHistory("event_undo") && ev.undo && ev.undo.possible && !ev.undone
       ? SW.btn(actT("activity_undo"), { cls: "btn--ghost", icon: "undo", action: "undo", name: actT("activity_undo_of", { what }),
         run: () => undoEvent(ev) })
       : null;
@@ -214,7 +217,7 @@ function activityView() {
       if (mine === turn) out.removeAttribute("aria-busy");
     }
   }
-  // Undo: the Hub answers {undone, event, note?}, or 409 {error, text}; either way the list is read again, as the Hub's state moved
+  // Undo: the Hub answers {undone, event, note?}, or 409 {error, code?}; either way the list is read again, as the Hub's state moved
   const undoEvent = (ev) => needCode(async () => {
     const id = String(ev.id);
     try {
@@ -222,7 +225,10 @@ function activityView() {
       say(said, [actT("activity_put_back"), r.note ? hubText(r.note) : ""].filter(Boolean).join(" "), true);
     } catch (e) {
       if (e.locked) throw e;
-      say(said, hubText((e.data && e.data.text) || actWhy(e.data && e.data.error) || e.message), false);
+      const err = e.data && e.data.error && e.data.error !== "bad origin" ? e.data.error : "";
+      const raw = err && !ACT_TEXT["activity_why_" + err] ? err : "";
+      const why = actWhy(e.data && (e.data.code || err));
+      say(said, hubText(raw || why || e.message), false);
     }
     await load();
     const mine = [...out.querySelectorAll(".coll__item")].find((r) => r.dataset.id === id);
@@ -260,12 +266,36 @@ function reportBar() {
 }
 
 function logsTab() {
+  if (!hubHasHistory("activity")) {
+    const service = h("div");
+    later(readRegion(service, "logs", () => api("logs/units"), (r) => {
+      fill(service, r.units.length ? logsView(r.units) : SW.empty({ icon: "logs", title: SW.t("logs_none"), level: 3 }));
+    }));
+    return [card(SW.t("nav_logs"), service), hubHasHistory("report") ? card(actT("report_collect"), reportBar()) : null];
+  }
   if (wantedUnit()) logsShows = "service";
   const shows = logsShows || (logsShows = "activity");
   const modes = SW.segmented({ legend: actT("logs_view"), legendSr: true, name: "logs-view", value: shows,
     options: [{ value: "activity", label: actT("logs_activity") }, { value: "service", label: actT("logs_service_logs") }] });
   const activity = h("div", { hidden: shows !== "activity" }, activityView());
   const service = h("div", { hidden: shows !== "service" });
+  const actCsvItem = (days, labelKey, action) => ({
+    label: actT(labelKey), icon: "download", action,
+    run: () => needCode(async () => {
+      try { await download(`export/activity.csv?days=${days}`, undefined, "activity.csv", theCode()); }
+      catch (e) { if (e.locked) throw e; SW.toast(actT("activity_csv_failed", { reason: hubText(e.message) }), "bad"); }
+    }),
+  });
+  const actMore = SW.iconBtn("more", SW.t("common_more_actions_for", { name: actT("logs_activity") }), { cls: "logs__actmore" });
+  SW.menu(actMore, () => [
+    { heading: actT("activity_download_csv") },
+    actCsvItem(7, "activity_csv_7", "download-csv-7"),
+    actCsvItem(30, "activity_csv_30", "download-csv-30"),
+    actCsvItem(365, "activity_csv_365", "download-csv-365"),
+  ], { label: SW.t("common_actions_for", { name: actT("logs_activity") }) });
+  const actHead = h("div", { class: "page-head__actions" }, actMore);
+  const syncHead = () => pageHead(null, logsShows === "activity" && hubCanExport("activity") ? actHead : null);
+  syncHead();
   let serviceRead = false;
   // the units are read once Service logs is first chosen (or at once when the address names one)
   const readService = () => {
@@ -281,8 +311,9 @@ function logsTab() {
     logsShows = modes.querySelector("input:checked").value;
     activity.hidden = logsShows !== "activity";
     service.hidden = logsShows !== "service";
+    syncHead();
     if (logsShows === "activity" && wantedUnit()) history.replaceState(null, "", "#logs");
     if (logsShows === "service") readService();
   });
-  return [card(SW.t("nav_logs"), modes, activity, service), card(actT("report_collect"), reportBar())];
+  return [card(SW.t("nav_logs"), modes, activity, service), hubHasHistory("report") ? card(actT("report_collect"), reportBar()) : null];
 }
