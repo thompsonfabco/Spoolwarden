@@ -42,7 +42,7 @@ def _read_build(stamp: str) -> dict | None:
 def _build() -> dict | None:
     path = builds._dir() / "current.json"
     try:
-        key = path.stat().st_mtime_ns
+        key = builds._state_stat(path).stat().st_mtime_ns
     except OSError:
         return None
     with _cache_lock:

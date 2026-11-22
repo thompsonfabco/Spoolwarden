@@ -4,6 +4,8 @@ lives in the reader; the Hub keeps nothing, and the upload is the reader's own (
 corrections send`, only asks the reader to do it: the Hub names no address and makes no new outbound connection).
 
     waiting(cfg)          {opt_in, endpoint_configured, count, bytes, bundle_mb, capabilities, entries, not_queued}
+                          each entry also has `record` (the Recently added record it was made from) and `photos`
+                          (that record's photo count); a record that is gone: no `record`, `photos` 0
     retry(rid)            queue a record's correction again (it was shown as not queued): its new state
     remove(cfg, id)       {ok, removed: id}
     remove_all(cfg)       {ok, removed: n}
@@ -67,7 +69,36 @@ def waiting(cfg: dict) -> dict:
         out = local_reader.feedback_list(cfg)
     except local_reader.LocalReaderError as e:
         raise _wrap(e) from None
-    return {**out, "bytes": round(out["bundle_mb"] * 1048576), "capabilities": caps, "not_queued": not_queued()}
+    return {**out, "entries": _with_records(out["entries"]), "bytes": round(out["bundle_mb"] * 1048576),
+            "capabilities": caps, "not_queued": not_queued()}
+
+
+def _kept(d) -> bool:
+    """The record's folder holds its record: `record.xml` (R85 section 1) or, from before the move, `record.json`."""
+    return (d / "record.xml").is_file() or (d / "record.json").is_file()
+
+
+def _with_records(entries: list[dict]) -> list[dict]:
+    """Each entry gets `record` and `photos` (R87): the record the Hub queued it from, by the entry ids the share queue
+    keeps (else by the reader's own key, `<record>` or `<record>.<n>`); a record that is gone leaves no `record`."""
+    from . import intake_history, share_queue
+    known = share_queue.entry_records()
+    out = []
+    for src in entries:
+        e = {k: v for k, v in src.items() if k not in ("record", "photos")}
+        e["photos"] = 0
+        rid = known.get(str(src.get("id")))
+        if rid is None and isinstance(src.get("record"), str):
+            rid = src["record"].split(".")[0]
+        try:
+            kept = bool(rid) and _kept(intake_history._dir(rid))
+            n = len(intake_history._photos(intake_history._dir(rid))) if kept else None
+        except intake_history.HistoryError:
+            n = None
+        if n is not None:
+            e["record"], e["photos"] = rid, n
+        out.append(e)
+    return out
 
 
 def not_queued() -> list[dict]:

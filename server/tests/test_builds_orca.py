@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from filament_kit.profiles import statexml
 from filament_kit import config
 from filament_kit.profiles import builds, lines as lines_mod
 
@@ -54,8 +55,13 @@ def _family_build(env) -> str:
 
 def _family_files(stamp: str) -> dict[str, bytes]:
     return {"build.zip": builds.build_zip(stamp),
-            "current.json": (TB.profiles_dir() / "current.json").read_bytes(),
-            "deleted.json": (TB.profiles_dir() / "deleted.json").read_bytes()}
+            "current.json": _json_of(TB.profiles_dir() / "current.json"),
+            "deleted.json": _json_of(TB.profiles_dir() / "deleted.json")}
+
+
+def _json_of(path: Path) -> bytes:
+    """A state file as the JSON text the golden files hold (the files themselves are XML now: RC1c)."""
+    return (json.dumps(statexml.read(path), indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 def _same_as_golden(name: str, got: bytes) -> None:
@@ -169,7 +175,7 @@ def test_two_tree_build_zip_and_build_json(orca_cfg, tmp_path):
     cur = builds.current()
     assert cur["orca_live_hash"] == meta["orca_live_hash"]
     assert builds.state_view("a")["build"]["orca_live_hash"] == meta["orca_live_hash"]
-    deleted = json.loads((TB.profiles_dir() / "deleted.json").read_text(encoding="utf-8"))
+    deleted = statexml.read(TB.profiles_dir() / "deleted.json")
     assert deleted == {"deleted_before": [], "orca_deleted_before": []}
     # pc-sync takes the zip as it is
     zips = load_pc_sync("zips")
@@ -233,7 +239,7 @@ def test_orca_edits_and_deletions_from_a_fresh_orca_live_folder(orca_cfg):
     m = builds.manifest(r["stamp"])
     assert m["orca_inapp"] == {TGO.sv08("0.4"): {"nozzle_temperature": ["233"]}} and m["inapp"] == {}
     assert m["orca_deleted"] == [gone] and m["deleted"] == []
-    saved = json.loads((TB.profiles_dir() / "deleted.json").read_text(encoding="utf-8"))
+    saved = statexml.read(TB.profiles_dir() / "deleted.json")
     assert saved["orca_deleted_before"] == [gone] and saved["deleted_before"] == []
     builds.restore_deleted_next()
     builds.request_rebuild("restore")
@@ -347,7 +353,7 @@ def test_orca_store_alone_leaves_the_family_build_and_lines_unchanged(env, fixed
     got = _family_files(stamp)
     for n in got:
         _same_as_golden(n, got[n])
-    row = json.loads((TB.profiles_dir() / "lines.json").read_text(encoding="utf-8"))["lines"][0]
+    row = statexml.read(TB.profiles_dir() / "lines.json")["lines"][0]
     assert (row["orca_parent"], row["orca_parent_source"]) == ("Generic PLA", "material")     # not re-chosen
 
 
@@ -398,7 +404,7 @@ def test_base_only_install_keeps_the_orca_snapshot(orca_cfg):
     orca_synced()
     b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
     builds.record_installed(b1, "a", ["base", "orca"])
-    inst = json.loads((TB.profiles_dir() / "installed.json").read_text(encoding="utf-8"))
+    inst = statexml.read(TB.profiles_dir() / "installed.json")
     assert inst["orca_stamp"] == b1 and inst["orca_at"] == inst["at"]
     TB.tick()
     builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")
@@ -410,7 +416,7 @@ def test_base_only_install_keeps_the_orca_snapshot(orca_cfg):
     assert new_orca
     TB.tick()
     builds.record_installed(b2, "a")                       # an older PC sync: no trees = ["base"]
-    inst = json.loads((TB.profiles_dir() / "installed.json").read_text(encoding="utf-8"))
+    inst = statexml.read(TB.profiles_dir() / "installed.json")
     assert inst["stamp"] == b2 and inst["orca_stamp"] == b1
     TB.tick()
     builds.store_upload("live", io.BytesIO(TB._live_zip_of(b2)), device_id="a", user_id="1")
@@ -430,7 +436,7 @@ def test_no_orca_install_yet_means_the_orca_folder_is_never_diffed(orca_cfg):
     orca_synced()
     b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
     builds.record_installed(b1, "a")                       # base/ only
-    assert "orca_stamp" not in json.loads((TB.profiles_dir() / "installed.json").read_text(encoding="utf-8"))
+    assert "orca_stamp" not in statexml.read(TB.profiles_dir() / "installed.json")
     TB.tick()
     builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")
     edit = {TGO.sv08("0.4"): {"nozzle_temperature": ["233"]}}
@@ -483,10 +489,10 @@ def test_install_report_counts_orca_only_for_a_build_with_an_orca_tree(env):
     b1 = builds.run_build(env, now=TG.NOW)["stamp"]
     assert not (TB.profiles_dir() / "builds" / b1 / "orca").exists()
     builds.record_installed(b1, "a", ["base", "orca"])
-    inst = json.loads((TB.profiles_dir() / "installed.json").read_text(encoding="utf-8"))
+    inst = statexml.read(TB.profiles_dir() / "installed.json")
     assert "orca_stamp" not in inst
     builds.record_installed(b1, "a", ["base", "base"])
-    assert json.loads((TB.profiles_dir() / "installed.json").read_text(encoding="utf-8"))["stamp"] == b1
+    assert statexml.read(TB.profiles_dir() / "installed.json")["stamp"] == b1
 
 
 def test_new_sync_pc_keeps_migrated_orca_owner_edits_after_a_base_only_install(orca_cfg):
@@ -502,7 +508,7 @@ def test_new_sync_pc_keeps_migrated_orca_owner_edits_after_a_base_only_install(o
     TB.tick()
     TB.pair("b")
     builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="b", user_id="1")
-    oe = json.loads((TB.profiles_dir() / "owner-edits.json").read_text(encoding="utf-8"))
+    oe = statexml.read(TB.profiles_dir() / "owner-edits.json")
     assert oe["orca_inapp"] == seeded["orca_inapp"]
     assert oe["stamp"] == b1 and "inapp" in oe
     r = builds.run_build(orca_cfg, now=TG.NOW + 1)
