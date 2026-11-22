@@ -358,6 +358,26 @@ def station_reach(devs: list[dict], url: str | None) -> dict[str, bool]:
     return {ids[0]: hit[1]}
 
 
+_panel_seen: dict[str, tuple[float, str | None]] = {}
+
+
+def station_panel(url: str | None) -> str | None:
+    """How the Weigh Station's panel is connected, from its `GET /state` `panel`: "usb" or "wifi"; None when it has no panel
+    connected or does not answer (the Devices row then says nothing). Reused for REACH_KEEP seconds."""
+    if not url:
+        return None
+    now = time.monotonic()
+    hit = _panel_seen.get(url)
+    if hit is None or now - hit[0] > REACH_KEEP:
+        try:
+            value = StationClient(url, timeout=2, backoff=0).state().get("panel")
+        except (StationUnreachable, StationCertChanged):
+            value = None
+        hit = (now, value if value in ("usb", "wifi") else None)
+        _panel_seen[url] = hit
+    return hit[1]
+
+
 def station_https(url: str | None) -> str | None:
     """How the Hub reaches the Weigh Station at `url`, for the Checks: None (no url), "plain" (it has told the Hub no
     certificate: not updated; the row TEXT_STATION_NOT_HTTPS), "https" (answers with the pinned certificate),

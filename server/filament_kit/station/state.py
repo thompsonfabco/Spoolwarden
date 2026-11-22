@@ -23,6 +23,14 @@ def volume_from_env() -> int:
         return 50
 
 
+def panel_port_from_env() -> int:
+    """STATION_PANEL_PORT clamped to 1-65535; 5004 when unset or not a number."""
+    try:
+        return max(1, min(65535, int(os.environ.get("STATION_PANEL_PORT", "5004"))))
+    except ValueError:
+        return 5004
+
+
 # the live voice values (R88 2.5): the ranges the station takes, and where each one sits in `settings`
 VOICE_RANGES = {"speaker": (0, 903), "speed": (50, 200), "volume": (0, 100)}
 VOICE_SPEED_STEP = 10      # the speed goes in steps of 10 (R88 2.5): the station checks it again
@@ -64,7 +72,7 @@ def settings_from_env() -> dict:
         "panel_swap": os.environ.get("STATION_PANEL_SWAP", "0") == "1",
         # the panel's carrier (R88 4.3): usb (default) or wifi, which turns the TLS listener on `panel_port` on (WL4 writes both)
         "panel_link": "wifi" if os.environ.get("STATION_PANEL_LINK", "usb") == "wifi" else "usb",
-        "panel_port": int_from_env("STATION_PANEL_PORT", 5004, 1, 65535),
+        "panel_port": panel_port_from_env(),
         "speaker_volume": volume_from_env(),  # the C3 panel's speaker, percent
         # the voice's speaker number (Piper's many-speaker voice only) and speaking speed in percent: only the Hub sets
         # these (`live`, R88 2.5), so no drop-in key reads them

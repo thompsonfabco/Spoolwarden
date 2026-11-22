@@ -132,7 +132,9 @@ def rows() -> list[dict]:
         if d["id"] in reach:
             row["reachable"] = reach[d["id"]]
         if kind == "station":       # R88 4.5: how its panel is connected
-            row["panel"] = panel_setup.TEXT_DEVICES_WIFI if config.panel_link(cfg) == "wifi" else panel_setup.TEXT_DEVICES_USB
+            panel = station_client.station_panel(_station_url(cfg))      # the station's own /state; nothing when it is silent
+            if panel:
+                row["panel"] = panel_setup.TEXT_DEVICES_WIFI if panel == "wifi" else panel_setup.TEXT_DEVICES_USB
         out.append(row)
     for t in _readers():
         made = str(t.get("created") or "").replace("T", " ")[:16]

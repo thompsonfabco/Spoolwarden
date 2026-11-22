@@ -39,18 +39,31 @@ UNASKED = re.compile(r"(AIR|P|L|TAG|NFC|HELLO)(?![A-Za-z0-9])")
 
 TOKEN_FILE = "panel_link.xml"             # in the station's state folder: {token, created}; 0600, the station user's
 
-# Plain constants (key, English text): RG1 puts them in the string catalogue
-TEXT_DEVICES_USB = "Panel: on USB"                                          # key: check_panel_on_usb
-TEXT_DEVICES_WIFI = "Panel: on Wi-Fi"                                       # key: check_panel_on_wifi
-TEXT_KEY_PASSWORD = "A 64-digit key cannot be used. Type the Wi-Fi password instead."      # key: panel_setup_key_password
-TEXT_ADDRESS_LONG = f"The address is too long ({MAX_ADDRESS} characters at most)."          # key: panel_setup_address_long
-TEXT_FIRMWARE_OLD = ("This panel's firmware is too old for Wi-Fi. "
-                     "Flash it first: sudo spoolwarden weigh-station flash-display")       # key: panel_setup_firmware_old
-TEXT_NOT_ACCEPTED = "The panel did not accept the Wi-Fi settings."                        # key: panel_setup_not_accepted
-TEXT_TIMEOUT = "The panel did not answer in time."                                         # key: panel_setup_timeout
-TEXT_NOT_CONNECTED = "The Weigh Station's panel is not connected."          # key: check_panel_not_connected
-TEXT_NOT_CONNECTED_FIX = ("check the panel has power and is in Wi-Fi range; to go back to the USB cable: "
-                          "sudo spoolwarden weigh-station panel-wifi --off")      # key: check_panel_not_connected_fix
+# Sentences: each resolves from the string catalogue by its key (the English text is the fallback until RG1 adds the key)
+def _t(key: str, text: str) -> str:
+    from .page import catalogue_text
+    return catalogue_text(key, text)
+
+
+TEXT_DEVICES_USB = _t("check_panel_on_usb", "Panel: on USB")
+TEXT_DEVICES_WIFI = _t("check_panel_on_wifi", "Panel: on Wi-Fi")
+TEXT_SSID = _t("panel_setup_ssid", "The Wi-Fi name must be 1 to 32 characters.")
+TEXT_PASSWORD = _t("panel_setup_password", "The Wi-Fi password must be 8 to 63 characters, or empty for an open network.")
+TEXT_KEY_PASSWORD = _t("panel_setup_key_password", "A 64-digit key cannot be used. Type the Wi-Fi password instead.")
+TEXT_ADDRESS = _t("panel_setup_address", "The Weigh Station's address must be one name or number with no spaces.")
+TEXT_ADDRESS_LONG = _t("panel_setup_address_long", f"The address is too long ({MAX_ADDRESS} characters at most).")
+TEXT_PORT = _t("panel_setup_port", "The port must be a number from 1 to 65535.")
+TEXT_PORT_SAME = _t("panel_setup_port_same", "The panel's port must differ from the Weigh Station's own port ({port}).")
+TEXT_FINGERPRINT = _t("panel_setup_fingerprint", "The certificate fingerprint must be 64 hex digits (SHA-256).")
+TEXT_FIRMWARE_OLD = _t("panel_setup_firmware_old", "This panel's firmware is too old for Wi-Fi. "
+                       "Flash it first: sudo spoolwarden weigh-station flash-display")
+TEXT_NO_ANSWER_USB = _t("panel_setup_no_answer_usb", "The panel did not answer over USB. Check the cable and try again.")
+TEXT_NOT_ACCEPTED = _t("panel_setup_not_accepted", "The panel did not accept the Wi-Fi settings.")
+TEXT_TIMEOUT = _t("panel_setup_timeout", "The panel did not answer in time.")
+TEXT_NOT_CONNECTED = _t("check_panel_not_connected", "The Weigh Station's panel is not connected.")
+TEXT_NOT_CONNECTED_FIX = _t("check_panel_not_connected_fix", "check the panel has power and is in Wi-Fi range; to go back to "
+                            "the USB cable: sudo spoolwarden weigh-station panel-wifi --off")
+
 
 
 class PanelSetupError(ValueError):
@@ -71,20 +84,20 @@ def check_values(*, ssid: str, password: str, address: str, port: int, fingerpri
     """The fingerprint without separators, in lower case; PanelSetupError for a value the panel cannot take. The Wi-Fi
     name is 1 to 32 bytes, the password empty (an open network) or 8 to 63 bytes (WPA)."""
     if not ssid or len(ssid.encode("utf-8")) > 32:
-        raise PanelSetupError("The Wi-Fi name must be 1 to 32 characters.")
+        raise PanelSetupError(TEXT_SSID)
     if len(password.encode("utf-8")) == 64:
         raise PanelSetupError(TEXT_KEY_PASSWORD)
     if password and not 8 <= len(password.encode("utf-8")) <= 63:
-        raise PanelSetupError("The Wi-Fi password must be 8 to 63 characters, or empty for an open network.")
+        raise PanelSetupError(TEXT_PASSWORD)
     if len(address) > MAX_ADDRESS:
         raise PanelSetupError(TEXT_ADDRESS_LONG)
     if not address or re.search(r"\s", address):
-        raise PanelSetupError("The Weigh Station's address must be one name or number with no spaces.")
+        raise PanelSetupError(TEXT_ADDRESS)
     if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
-        raise PanelSetupError("The port must be a number from 1 to 65535.")
+        raise PanelSetupError(TEXT_PORT)
     fp = re.sub(r"[\s:]", "", fingerprint or "").lower()
     if not re.fullmatch(r"[0-9a-f]{64}", fp):
-        raise PanelSetupError("The certificate fingerprint must be 64 hex digits (SHA-256).")
+        raise PanelSetupError(TEXT_FINGERPRINT)
     return fp
 
 
@@ -108,7 +121,7 @@ def _answer(send: Callable[[str | None], str], line: str | None) -> None:
         try:
             reply = (send(line) or "").strip()
         except OSError:
-            raise PanelSetupError("The panel did not answer over USB. Check the cable and try again.") from None
+            raise PanelSetupError(TEXT_NO_ANSWER_USB) from None
         line = None
         if not reply:
             raise PanelSetupError(TEXT_TIMEOUT)
@@ -128,12 +141,29 @@ def token_path(folder: Path | None = None) -> Path:
     return (folder or st.state_dir()) / TOKEN_FILE
 
 
+def _set_aside(path: Path) -> None:
+    """A panel_link.xml that cannot be read is kept as `panel_link.xml.unreadable` and noted, never written over (as
+    voice.xml)."""
+    from ..profiles import statexml
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return
+    try:
+        statexml.loads(raw, "panel-link")
+    except (ValueError, statexml.StateXmlError) as e:
+        kept = path.with_name(path.name + ".unreadable")
+        os.replace(path, kept)
+        statexml.note_problem(kept, f"{path.name} could not be read and is kept aside ({e})")
+
+
 def store_token(token: str, folder: Path | None = None) -> None:
     """Keep the token in the station's state folder as XML, 0600, handed to the folder's owner (the station's user) when
     this runs as root; written whole through a temp file and a rename."""
     from ..profiles import statexml
     path = token_path(folder)
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _set_aside(path)
     data = statexml.dumps("panel-link", {"token": token, "created": datetime.now().astimezone().isoformat(timespec="seconds")})
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
     try:
@@ -158,7 +188,10 @@ def stored_token(folder: Path | None = None) -> str | None:
     from ..profiles import statexml
     try:
         tok = statexml.loads(token_path(folder).read_bytes(), "panel-link").get("token")
-    except (OSError, ValueError, statexml.StateXmlError):
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError, statexml.StateXmlError) as e:
+        statexml.note_problem(token_path(folder), f"{TOKEN_FILE} could not be read ({e})")
         return None
     return tok if isinstance(tok, str) and tok else None
 
@@ -190,6 +223,9 @@ def enable(send: Callable[[str | None], str], *, version: str | None, ssid: str,
     were. The caller then applies the config (`spoolwarden modules apply`), which writes the drop-in and restarts the
     station: the listener comes up. Returns `{"panel_link": "wifi", "panel_port": <port>}`: never the password."""
     check_version(version)
+    station_port = int(config._merge(config.DEFAULTS["station"], config.load_raw().get("station") or {})["port"])
+    if port == station_port:
+        raise PanelSetupError(TEXT_PORT_SAME.format(port=station_port))
     fp = check_values(ssid=ssid, password=password, address=address, port=port, fingerprint=fingerprint)
     token = new_token()
     _send_all(send, setup_lines(ssid=ssid, password=password, address=address, port=port, fingerprint=fp, token=token))
@@ -215,15 +251,16 @@ def disable(send: Callable[[str | None], str] | None = None, *, folder: Path | N
 
 
 def panel_rows(cfg: dict, station_state: dict | None, *, has_station: bool | None = None) -> Iterator:
-    """The rows for the lists: under Devices "Panel: on USB" / "Panel: on Wi-Fi" (a note) when the Hub has a Weigh Station,
-    and under Weigh Station "The Weigh Station's panel is not connected." (needs a look) when the link is `wifi`, the
+    """The rows for the lists: under Devices "Panel: on USB" / "Panel: on Wi-Fi" (a note) when the Hub has a Weigh Station
+    and its `/state` `panel` says so (nothing when it does not answer or has no panel), and under Weigh Station "The Weigh Station's panel is not connected." (needs a look) when the link is `wifi`, the
     station answered (`station_state` is its `/state`; None when it did not) and it has no panel. `status.Row`s; the
     caller puts them in its list."""
     from ..status import FAIL, INFO, Row
     link = config.panel_link(cfg)
     if has_station is None:
         has_station = bool((cfg.get("station") or {}).get("url"))
-    if has_station:
-        yield Row(INFO, TEXT_DEVICES_WIFI if link == "wifi" else TEXT_DEVICES_USB, group="Devices", key="devices.panel-link")
+    panel = (station_state or {}).get("panel")      # the station's own word (usb | wifi | null), nothing when it did not answer
+    if has_station and panel in ("usb", "wifi"):
+        yield Row(INFO, TEXT_DEVICES_WIFI if panel == "wifi" else TEXT_DEVICES_USB, group="Devices", key="devices.panel-link")
     if link == "wifi" and station_state is not None and not station_state.get("panel"):
         yield Row(FAIL, TEXT_NOT_CONNECTED, TEXT_NOT_CONNECTED_FIX, group="Weigh Station", key="weigh-station.panel")

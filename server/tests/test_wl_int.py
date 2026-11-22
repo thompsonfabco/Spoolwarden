@@ -69,7 +69,7 @@ def test_off_removes_the_token_and_the_panel_is_refused():
     p = FakePanel(net.port).hello(token=token)
     assert p.line() == b"REFUSED token" and link() is None
     assert config.load()["station"]["panel_link"] == "usb"
-    assert rows() == [("Devices", "Panel: on USB", status.INFO)]
+    assert rows() == []                       # no panel on the station: no Devices row (and no FAIL row: the link is usb)
 
 
 @pytest.mark.parametrize("value, folder", [
@@ -151,3 +151,49 @@ def test_a_usb_search_with_no_panel_at_all_still_clears_the_facts(monkeypatch):
     monkeypatch.setattr(st, "panel_ttys", lambda: [])
     assert panel.find_panel() is None
     assert (st.ports["panel_version"], st.ports["panel_chip"], st.ports["panel_nfc"]) == (None, None, None)
+
+
+# ---- the Hub's voice call end to end: the sender (VO2) against the station's real handler (VO1) ----
+
+from test_vo1_station_voice import fresh, hub  # noqa: E402,F401  (a real station HTTP handler allowing 127.0.0.1)
+
+
+@pytest.fixture
+def sender(hub, monkeypatch):
+    """`station_client`'s real request building, the network replaced by a call to the real handler. The two sides share
+    the pairing key; the station's clock follows the real time because the sender stamps its proofs with it."""
+    import time as _time
+    from filament_kit import station_client
+    sent = []
+    hub.clock.t = _time.time()
+    monkeypatch.setattr(station_client, "station_endpoint", lambda url: ("127.0.0.1", hub.port, "ab" * 32))
+    monkeypatch.setattr(station_client, "proof_key", lambda: hub.key)
+
+    def bounded(host, port, fp, method, path, body=None, headers=None, cap=0, timeout=0, **kw):
+        sent.append((method, path, dict(headers or {}), body))
+        status, _, payload = hub.call(method, path, headers=headers, raw=body)
+        return status, "application/json", payload
+    monkeypatch.setattr(station_client, "bounded_call", bounded)
+    return station_client, sent
+
+
+def test_the_station_accepts_the_senders_voice_call(sender):
+    client, sent = sender
+    client.send_voice("http://h", {"speed": 120, "volume": 40})
+    assert st.live["speed"] == 120 and st.live["volume"] == 40
+    assert sent[0][1] == "/voice"
+
+
+def test_the_station_refuses_a_tampered_body_or_the_settings_purpose(hub, sender):
+    from filament_kit.station import page
+    client, sent = sender
+    client.send_voice("http://h", {"speed": 120})
+    _, path, headers, body = sent[0]
+    st.live.clear()
+    status, _, _ = hub.call("POST", path, headers=headers, raw=body.replace(b"120", b"200"))
+    assert status in (401, 403) and "speed" not in st.live
+    other = {page.PROOF_HEADER: page.make_proof(hub.key, "settings", body, now=hub.clock())}
+    status, _, _ = hub.call("POST", path, headers=other, raw=body)
+    assert status in (401, 403) and "speed" not in st.live
+    voice = {page.PROOF_HEADER: page.make_proof(hub.key, "voice", body, now=hub.clock())}   # control: the right purpose
+    assert hub.call("POST", path, headers=voice, raw=body)[0] == 200 and st.live["speed"] == 120
