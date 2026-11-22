@@ -169,7 +169,7 @@ def test_bundled_firmware_is_version_14_and_flashes_an_older_c3_panel(fw, monkey
                    os.path.join(bundled, "intake-panel.bin")]]
     st.flashed.clear()
     fw.clear()
-    FakeSerial.VERSIONS = {"/dev/ttyACM1": "13 esp32c3"}
+    FakeSerial.VERSIONS = {"/dev/ttyACM1": "14 esp32c3"}
     assert panel.update_firmware(panel.find_panel()) is False and fw == []
 
 
