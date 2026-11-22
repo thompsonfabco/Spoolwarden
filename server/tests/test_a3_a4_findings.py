@@ -1,4 +1,4 @@
-"""Review findings on plan steps A3 and A4 (R734, R738): the Share corrections item of the Label Reader screen (its
+"""Review findings on plan steps A3 and A4: the Share corrections item of the Label Reader screen (its
 sub-heading, the waiting count, the singular), the program-name constant in the texts, `sudo` in the catalog add fix.
 The wrapper's cases are in test_cli_wrapper_routing.py, the screen's numbering in test_cli_menus.py."""
 import contextlib
@@ -45,7 +45,7 @@ def _menu():
 
 
 def test_share_corrections_stands_under_its_own_sub_heading_and_adds_the_waiting_count(monkeypatch):
-    """06-command-line.md 8.3: `Share corrections` above Share corrections, after Recently added's Records kept; the
+    """The design (config menu, Label Reader screen): `Share corrections` above Share corrections, after Recently added's Records kept; the
     row adds `12 waiting` when there are any."""
     monkeypatch.setattr(sc, "state", lambda cfg, h=None: {"count": 12})
     screen, targets = _menu().group_screen("reader")
@@ -84,6 +84,6 @@ def test_the_share_corrections_description_names_the_command(monkeypatch):
 
 
 def test_the_catalog_add_ask_fixes_say_sudo(monkeypatch, capsys):
-    """06-command-line.md 8.3 (Filament Catalog screen): `sudo spoolwarden catalog add --ask`."""
+    """The design (config menu, Filament Catalog screen): `sudo spoolwarden catalog add --ask`."""
     assert cli.main(["catalog", "add"]) == output.USAGE
     assert "run: sudo spoolwarden catalog add --ask" in capsys.readouterr().err

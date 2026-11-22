@@ -173,7 +173,7 @@ def test_the_label_reader_screen_numbers_straight_through_under_its_sub_headings
     all_features(local_intake=True)
     assert run(monkeypatch, "5\nq\nq\n") == 0
     screen = capsys.readouterr().out.split("Settings > Label Reader")[1].split("  c check the key")[0]
-    for heading in ("Cloud (Claude)", "On this Hub", "Recently added", "Share corrections"):   # 06-command-line.md 8.3
+    for heading in ("Cloud (Claude)", "On this Hub", "Recently added", "Share corrections"):   # the design: its own sub-heading
         assert f"\n  {heading}\n" in screen
     rows = [ln.split() for ln in screen.splitlines() if ln[:4].strip().isdigit()]
     assert [(r[0], " ".join(r[1:3])) for r in rows] == [
