@@ -528,11 +528,11 @@ def test_a_pending_read_json_moved_to_xml_keeps_its_private_mode(sm, monkeypatch
     assert intake_history.get(hid)["read"]["items"][0]["vendor"] == "SUNLU"
 
 
-@pytest.mark.skipif(not hasattr(os, "geteuid"), reason="file modes are the Hub's on Linux")
 def test_a_record_keeps_record_json_beside_record_xml_for_one_release(sm):
     r, hid = add(sm)
     d = intake_history._dir(hid)
-    assert stat.S_IMODE(os.stat(d / "record.json").st_mode) == 0o600
+    if hasattr(os, "geteuid"):                                              # modes are the Hub's on Linux; the content runs everywhere
+        assert stat.S_IMODE(os.stat(d / "record.json").st_mode) == 0o600
     old = json.loads((d / "record.json").read_text(encoding="utf-8"))      # what v0.6.2 reads after a rollback
     assert old == intake_history._load(hid) and old["id"] == hid and old["saved"]
     rec = intake_history._load(hid)
