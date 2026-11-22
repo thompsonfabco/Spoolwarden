@@ -164,6 +164,48 @@ def play_test(cfg: dict, body) -> None:
     raise VoiceError(502, "no_answer", TEXT_VOICE_NO_ANSWER)
 
 
+# ---- the kit routes, for api.py to mount ----
+
+def kit_routes(authed) -> list:
+    """`GET` / `PATCH /api/voice` and `POST /api/voice/test` as Starlette routes, each wrapped in api.py's `_authed`. The
+    service is the one writer: the apps and the command line (`spoolwarden config` runs as root and calls the PATCH over
+    loopback with its own token, `slots.KitApi.patch`) never write voice.xml themselves. api.py mounts them with
+    `*voice_tab.kit_routes(_authed)`."""
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    def refusal(e: VoiceError):
+        extra = {"field": e.field} if e.field else {}
+        return JSONResponse({"error": e.code, "message": e.message, **extra}, status_code=e.status)
+
+    async def body_of(request):
+        try:
+            return await request.json()
+        except ValueError:
+            return None             # `check` refuses it as "the request must be a JSON object"
+
+    async def get(request):
+        return JSONResponse(await anyio.to_thread.run_sync(lambda: get_voice(config.load())))
+
+    async def patch(request):
+        body = await body_of(request)
+        try:
+            return JSONResponse(await anyio.to_thread.run_sync(lambda: patch_voice(body)))
+        except VoiceError as e:
+            return refusal(e)
+
+    async def test(request):
+        body = await body_of(request)
+        try:
+            await anyio.to_thread.run_sync(lambda: play_test(config.load(), body))
+        except VoiceError as e:
+            return refusal(e)
+        return JSONResponse({})
+
+    return [Route("/api/voice", authed(get)), Route("/api/voice", authed(patch), methods=["PATCH"]),
+            Route("/api/voice/test", authed(test), methods=["POST"])]
+
+
 # ---- the Hub page's route ----
 
 def routes(page) -> list[tuple]:

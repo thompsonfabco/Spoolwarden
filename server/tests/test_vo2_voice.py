@@ -384,3 +384,44 @@ def test_the_real_router_mounts_the_voice_routes_and_writes_voice_xml(app, stati
     assert post(client(app), "station/voice", {"speed": 55}).status_code == 400
     assert post(client(app), "station/voice/test", {}).status_code == 200
     assert post(client(app), "station/voice", {"speed": 120}, code="wrong").status_code in (401, 403)
+
+
+# ---- the kit routes: the service's entry for the apps and the command line ----
+
+def _kit_client(authed=lambda fn: fn):
+    from starlette.applications import Starlette
+    from starlette.testclient import TestClient
+    return TestClient(Starlette(routes=voice_tab.kit_routes(authed)))
+
+
+def test_the_kit_routes_save_in_the_service_and_refuse_with_code_message_field(station, env, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(config, "load", lambda: _cfg())
+    c = _kit_client()
+    r = c.patch("/api/voice", json={"speed": 90, "volume": 20})
+    assert r.status_code == 200 and r.json()["speed"] == 90 and voice_state.stored(_cfg()) == {"speed": 90, "volume": 20}
+    assert c.get("/api/voice").json()["volume"] == 20
+    bad = c.patch("/api/voice", json={"speed": 55})
+    assert bad.status_code == 400 and bad.json()["error"] == "bad_value" and bad.json()["field"] == "speed"
+    assert c.patch("/api/voice", content=b"[").status_code == 400
+    assert c.post("/api/voice/test", json={}).status_code == 200
+
+
+def test_the_kit_routes_go_through_the_callers_auth(env, monkeypatch):  # noqa: F811
+    from starlette.responses import JSONResponse
+    monkeypatch.setattr(config, "load", lambda: _cfg())
+    c = _kit_client(lambda fn: (lambda request: _no(request)))
+    assert c.patch("/api/voice", json={"speed": 90}).status_code == 401 and not _file().exists()
+
+
+async def _no(request):
+    from starlette.responses import JSONResponse
+    return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+
+def test_the_root_side_never_touches_voice_xml_it_asks_the_service():
+    server = Path(voice_state.__file__).parent
+    for p in (server / "cli.py", server / "setup_helper.py", server / "apply.py", server / "updates.py",
+              server.parent.parent / "install" / "install.sh"):
+        text = p.read_text(encoding="utf-8")
+        for word in ("voice.xml", "voice_state", "voice_tab", "save_voice", "patch_voice"):
+            assert word not in text, (p.name, word)
