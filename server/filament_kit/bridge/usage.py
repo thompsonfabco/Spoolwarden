@@ -452,7 +452,10 @@ def _write_line(serial: str, rec: dict) -> None:
             drained = _drain(serial)            # lines an earlier write could not append go first, in their order
             _store(serial, rec)
             if not (drained and _old_form(serial, rec)):
-                _pend(serial, rec)              # a line must not pass the ones before it
+                try:
+                    _pend(serial, rec)          # a line must not pass the ones before it
+                except OSError as e:            # the XML has it: only the rollback copy is lost, and that stays noted
+                    _report(_copy_key(serial), f"cannot be kept current for a rollback: {e}")
     except LockTimeout as e:            # another process holds usage/.lock: the record waits in the pending file
         _report(_copy_key(serial), f"not kept current for a rollback yet: {e}")
         _pend(serial, rec)
