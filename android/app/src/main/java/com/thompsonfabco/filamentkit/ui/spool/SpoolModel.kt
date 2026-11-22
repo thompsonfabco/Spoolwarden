@@ -82,6 +82,8 @@ data class SpoolSummary(
     val checkedOutSince: String? = null,
     /** "<printer> – <slot>" when the Hub says which slot holds the spool. */
     val inSlot: String? = null,
+    /** The answer carried `checked_out` at all: the Hub applies the filter, so the checked-out controls are offered. */
+    val checkedOutKnown: Boolean = false,
 ) {
     /** "Brand Name", else "spool 214" has no name to show. */
     val title: String get() = listOf(brand, name).filter { it.isNotBlank() }.joinToString(" ")
@@ -127,6 +129,7 @@ fun JsonObject.toSpoolSummary(): SpoolSummary {
         filamentId = (filament?.get("id") as? JsonPrimitive)?.intOrNull,
         emptyWeight = (this["spool_weight"].number() ?: filament?.get("spool_weight").number())?.takeIf { it > 0 },
         lot = this["lot_nr"].text()?.ifBlank { null },
+        checkedOutKnown = checked != null,
         checkedOut = checked?.checkedOut == true,
         home = checked?.home,
         checkedOutSince = checked?.since,

@@ -1320,6 +1320,7 @@ internal fun FilamentKitApp(
                             online = online,
                             onScanLabel = if (labelRoutes) ({ nav.navigate(SpoolsScanRoute) { launchSingleTop = true } }) else null,
                             lowCount = alertsUi.lowCount,
+                            hubKey = a,
                             spoolDetail = { spool, embedded, _ ->
                                 val spoolVm: SpoolViewModel = viewModel(
                                     key = "spool-${spool.id}",

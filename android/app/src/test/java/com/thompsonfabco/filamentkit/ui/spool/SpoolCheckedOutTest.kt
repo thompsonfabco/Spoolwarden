@@ -69,6 +69,42 @@ class SpoolCheckedOutTest {
     private fun event(id: Long, kind: String = "spool.returned") =
         ActivityEvent(id, "", 900L, kind, "Pixel", "", "spool:214", UndoState(true, null, null), false, null)
 
+    @Test fun theControlsAreOfferedOnlyWhenTheSpoolsOwnAnswerCarriesTheFields() = runTest(dispatcher) {
+        // a spool opened first (a tag, a link, an alert) on a Hub that has the feature: the read of the spool says so
+        val first = spoolJson(214).toSpoolSummary()
+        assertFalse(CheckedOutRules.offered(first))
+        base.spools = listOf(withFields(spoolJson(214), out = true, home = "Shelf B"))
+        val vm = SpoolViewModel(214, base, first, now = { 1_000L })
+        vm.refresh()
+        advanceUntilIdle()
+        assertTrue(CheckedOutRules.offered(vm.state.value.spool!!))
+        assertEquals("Home: Shelf B", CheckedOutRules.homeLine(vm.state.value.spool!!))
+    }
+
+    @Test fun aHubWithoutTheFeatureOffersNothingEvenForAnOpenSpool() = runTest(dispatcher) {
+        base.spools = listOf(spoolJson(214))
+        val vm = SpoolViewModel(214, base, null, now = { 1_000L })
+        advanceUntilIdle()
+        assertFalse(CheckedOutRules.offered(vm.state.value.spool!!))
+        assertNull(CheckedOutRules.homeLine(vm.state.value.spool!!))
+    }
+
+    @Test fun aNotCheckedOutAnswerStillMeansTheHubHasTheFeature() {
+        assertTrue(CheckedOutRules.offered(withFields(spoolJson(214), out = false, home = null).toSpoolSummary()))
+    }
+
+    @Test fun anotherHubsAnswerReplacesWhatTheScreenKnew() = runTest(dispatcher) {
+        // the screen of one spool follows the answer it last read, so a Hub change (a new read) cannot leave the old controls
+        base.spools = listOf(withFields(spoolJson(214), out = true, home = "Shelf B"))
+        val vm = SpoolViewModel(214, base, null, now = { 1_000L })
+        advanceUntilIdle()
+        assertTrue(CheckedOutRules.offered(vm.state.value.spool!!))
+        base.spools = listOf(spoolJson(214))
+        vm.refresh()
+        advanceUntilIdle()
+        assertFalse(CheckedOutRules.offered(vm.state.value.spool!!))
+    }
+
     @Test fun returnSendsTheSpoolHomeAndOffersUndo() = runTest(dispatcher) {
         events = listOf(event(8))
         val vm = vm()

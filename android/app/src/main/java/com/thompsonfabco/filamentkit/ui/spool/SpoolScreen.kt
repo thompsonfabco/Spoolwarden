@@ -87,8 +87,6 @@ fun SpoolScreen(
     modifier: Modifier = Modifier,
     online: Boolean = true,
     printersOn: Boolean = true,
-    /** The Hub applies the `checked_out` filter (R88): the Home line, Return and Change home show only then. */
-    checkedOutSupported: Boolean = CheckedOutSupport.supported,
     embedded: Boolean = false,
     /** Where the label drawing comes from (Print a label, 7.10); null: the overflow has no such item. */
     label: LabelSource? = null,
@@ -155,7 +153,7 @@ fun SpoolScreen(
                 if (spool != null) {
                     Header(spool, ui.openedByTag)
                     Remaining(spool)
-                    if (checkedOutSupported) CheckedOutRules.homeLine(spool)?.let { line ->
+                    if (CheckedOutRules.offered(spool)) CheckedOutRules.homeLine(spool)?.let { line ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically) {
                             Text(line, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                             if (CheckedOutRules.canChangeHome(spool)) {
@@ -164,7 +162,7 @@ fun SpoolScreen(
                         }
                     }
                     ui.result?.let { ResultLine(it) }
-                    Actions(vm, ui, online, printersOn, checkedOutSupported, onLoad, onPrint = if (label != null) ({ printing = true }) else null)
+                    Actions(vm, ui, online, printersOn, onLoad, onPrint = if (label != null) ({ printing = true }) else null)
                     Details(spool)
                     ActivityList(
                         ui.activity, ui.undoing, enabled = online && !ui.writing,
@@ -284,7 +282,7 @@ private const val PERCENT_FULL = 100f
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Actions(
-    vm: SpoolViewModel, ui: SpoolUi, online: Boolean, printersOn: Boolean, checkedOutSupported: Boolean, onLoad: () -> Unit, onPrint: (() -> Unit)? = null,
+    vm: SpoolViewModel, ui: SpoolUi, online: Boolean, printersOn: Boolean, onLoad: () -> Unit, onPrint: (() -> Unit)? = null,
 ) {
     val space = SpoolwardenTheme.space
     val enabled = online && !ui.writing
@@ -299,7 +297,7 @@ private fun Actions(
             if (printersOn) SwButton(stringResource(R.string.spool_load), onLoad, enabled = enabled)
             SwButton(stringResource(R.string.spool_move), vm::openMove, enabled = enabled)
             // checked out (R88 1.6): back to its home, asking nothing; Home can be changed
-            ui.spool?.takeIf { checkedOutSupported && CheckedOutRules.canReturn(it) }?.let {
+            ui.spool?.takeIf { CheckedOutRules.offered(it) && CheckedOutRules.canReturn(it) }?.let {
                 SwButton(CheckedOutTexts.returnTo(it.home), vm::returnToHome, enabled = enabled, busy = ui.returning)
             }
             Box {
