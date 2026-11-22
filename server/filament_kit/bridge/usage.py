@@ -355,7 +355,8 @@ def _read(serial: str, since: str | None = None) -> tuple[list[dict], dict[str, 
         out, undone = old[0][:], dict(old[1])
     for path in _month_files(serial, since):
         data = _load(path)
-        out += [e for e in data['entries'] if isinstance(e.get('id'), str)]
+        have = {e['id'] for e in out}          # a failed move may have written some months already
+        out += [e for e in data['entries'] if isinstance(e.get('id'), str) and e['id'] not in have]
         for u in data['undone']:
             undone.setdefault(str(u.get('entry')), u.get('at'))
     return out, undone

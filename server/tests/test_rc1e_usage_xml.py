@@ -57,7 +57,7 @@ def test_append_writes_one_xml_file_per_month_and_reads_back():
     assert f.is_file() and not (_dir() / "usage.jsonl").exists()
     assert stat.S_IMODE(f.stat().st_mode) == 0o600 or os.name == "nt"
     assert b"<usage " in f.read_bytes()
-    [e] = usage.entries(SERIAL)
+    [e] = usage.entries(SERIAL, days=30)
     assert e["id"] == r["id"] and e["job"] == "123" and e["grams"] == 3.0 and e["color_hex"] == "123456"
     assert e["observe"] is True and e["outcome"] == "finished" and e["spool_id"] is None and e["undone"] is False
 
@@ -74,7 +74,7 @@ def test_months_are_separate_files_and_all_are_read(monkeypatch):
 
 def test_ids_that_look_like_numbers_survive():
     usage._write_line(SERIAL, _entry(E2, "2026-11-02T00:00:00Z", job="007"))
-    [e] = usage.entries(SERIAL)
+    [e] = usage.entries(SERIAL, days=30)
     assert e["id"] == E2 and e["job"] == "007"
 
 
@@ -116,11 +116,11 @@ def test_damaged_month_file_is_read_as_empty_kept_and_reported():
     usage._write_line(SERIAL, _entry(E1, "2026-11-02T00:00:00Z"))
     f = _dir() / "usage" / "2026-11.xml"
     f.write_bytes(b"<usage version='1'><entries as='list'><item id=")
-    assert usage.entries(SERIAL) == []                                      # no crash
+    assert usage.entries(SERIAL, days=30) == []                                      # no crash
     assert any("2026-11.xml" in p for p in statexml.problems())
     usage._write_line(SERIAL, _entry(E3, "2026-11-03T00:00:00Z"))            # the next write keeps the damaged file
     assert (f.with_name("2026-11.xml.unreadable")).read_bytes().startswith(b"<usage version='1'>")
-    assert [e["id"] for e in usage.entries(SERIAL)] == [E3]
+    assert [e["id"] for e in usage.entries(SERIAL, days=30)] == [E3]
 
 
 def test_undo_goes_to_the_entry_month_and_emits_the_event(monkeypatch):
