@@ -498,7 +498,9 @@ def test_the_voice_refusal_sentences_come_from_the_catalogue_with_the_english_as
                "bad_speed": "speed must be a whole number from 50 to 200, in steps of 10.",
                "bad_volume": "volume must be a whole number from 0 to 100.",
                "busy": "The Weigh Station is in use. Try again when it is idle.",
-               "off": "Speaking is switched off."}
+               "off": "Speaking is switched off.",
+               "set_on_hub_note": "Speaking and volume are set on the Hub: Settings > Weigh Station voice.",
+               "set_on_hub": "Speaking and volume are set on the Hub."}
     monkeypatch.setattr(page, "_CATALOGUE", {})                       # no catalogue key yet: the English
     assert _state_copy().VOICE_TEXTS == english
     monkeypatch.setattr(page, "_CATALOGUE", {f"station_voice_{k}": f"[{k}]" for k in english})
