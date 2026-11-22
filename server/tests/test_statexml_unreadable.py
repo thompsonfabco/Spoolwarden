@@ -3,6 +3,8 @@ tests run on the Hub copy and the Slicer Sync copy (the Hub's file also holds th
 import errno
 from pathlib import Path
 
+import os
+
 import pytest
 
 from filament_kit.profiles import statexml
@@ -173,6 +175,49 @@ def test_a_save_over_a_stale_xml_that_cannot_be_removed_replaces_it(tmp_path, mo
     monkeypatch.undo()
     assert statexml.read(p) == {"token": "NEW"}
     assert b"OLD" not in (tmp_path / "pair-aside.xml").read_bytes()
+
+
+needs_nofollow = pytest.mark.skipif(not hasattr(os, "O_NOFOLLOW"), reason="POSIX only: needs O_NOFOLLOW")
+
+
+@needs_nofollow
+def test_a_link_in_place_of_the_xml_is_not_followed(tmp_path):
+    other = tmp_path / "elsewhere.xml"
+    statexml.write(tmp_path / "elsewhere.json", {"secret": 1}, keep_old_form=False)
+    p = tmp_path / "linked.json"
+    (tmp_path / "linked.xml").symlink_to(other)
+    assert statexml.read(p) is None
+    assert statexml.read_list(p) is None
+    assert statexml.problems()
+    assert not p.exists()                                                  # nothing was written from the link target
+
+
+@needs_nofollow
+def test_a_link_in_place_of_the_json_is_not_followed_or_moved_to_xml(tmp_path):
+    target = tmp_path / "target.txt"
+    target.write_text('{"secret": 1}', encoding="utf-8")
+    p = tmp_path / "linked2.json"
+    p.symlink_to(target)
+    assert statexml.read(p) is None
+    assert not (tmp_path / "linked2.xml").exists()
+    lp = tmp_path / "linkedlist.json"
+    target.write_text("[1, 2]", encoding="utf-8")
+    lp.symlink_to(target)
+    assert statexml.read_list(lp) is None
+    assert not (tmp_path / "linkedlist.xml").exists()
+    assert any("linked2" in x and "link" in x for x in statexml.problems())
+
+
+@needs_nofollow
+def test_a_pipe_is_not_read_and_a_regular_file_still_is(tmp_path):
+    p = tmp_path / "pipe.json"
+    os.mkfifo(p)
+    assert statexml.read(p) is None                                        # refused, does not hang
+    q = tmp_path / "plain.json"
+    statexml.write(q, {"n": 2})
+    assert statexml.read(q) == {"n": 2}
+    statexml.write_list(tmp_path / "l.json", [1, 2])
+    assert statexml.read_list(tmp_path / "l.json") == [1, 2]
 
 
 def test_the_set_aside_code_is_the_same_in_both_copies():

@@ -19,6 +19,7 @@ import logging
 import math
 import os
 import re
+import stat
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
@@ -293,7 +294,7 @@ def _mkdir(path: Path) -> None:
 
 def _plain(path: Path):
     try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        data = json.loads(_read_regular(Path(path)).decode("utf-8"))
     except (OSError, UnicodeDecodeError, ValueError):
         return None
     return data if isinstance(data, dict) else None
@@ -301,7 +302,7 @@ def _plain(path: Path):
 
 def _plain_list(path: Path):
     try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        data = json.loads(_read_regular(Path(path)).decode("utf-8"))
     except (OSError, UnicodeDecodeError, ValueError):
         return None
     return data if isinstance(data, list) else None
@@ -364,10 +365,36 @@ def _sha_path(jp: Path) -> Path:
     return jp.with_name(jp.name + ".sha256")
 
 
+def _read_regular(path: Path) -> bytes:
+    """The bytes of a regular file, read through ONE descriptor opened without following a link (O_NOFOLLOW), so a link
+    swapped in during the call is never followed; a link, or anything that is not a regular file (a pipe, a folder), is
+    refused with OSError and noted as a problem. A missing file raises FileNotFoundError as `read_bytes` does. Windows
+    has no O_NOFOLLOW: there it falls back to the plain open (the regular-file check still applies)."""
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError as e:
+        if e.errno in (errno.ELOOP, getattr(errno, "EMLINK", errno.ELOOP)):      # O_NOFOLLOW met a link
+            note_problem(path, "is a link, not a regular file: not read")
+        raise
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            note_problem(path, "is not a regular file: not read")
+            raise OSError(errno.EINVAL, "not a regular file", str(path))
+        chunks = []
+        while True:
+            b = os.read(fd, 1 << 20)
+            if not b:
+                return b"".join(chunks)
+            chunks.append(b)
+    finally:
+        os.close(fd)
+
+
 def _recorded(jp: Path) -> str | None:
     """The hash of the JSON form as this code last wrote it, or None (nothing recorded yet)."""
     try:
-        return _sha_path(jp).read_text(encoding="ascii").strip() or None
+        return _read_regular(_sha_path(jp)).decode("ascii").strip() or None
     except (OSError, UnicodeDecodeError):
         return None
 
@@ -406,7 +433,7 @@ def _newer_json(path: Path, xml_data, t: str, is_list: bool, keep_version: bool,
     if want is None:
         return None
     try:
-        raw = jp.read_bytes()
+        raw = _read_regular(jp)
     except FileNotFoundError:
         try:                                    # a deletion is a deletion: no copy is kept (it may hold a secret)
             xml_path(path).unlink(missing_ok=True)
@@ -450,7 +477,7 @@ def _read(path: Path, tag: str | None, keep_version: bool, is_list: bool, mode: 
     jp = _json_path(path, old_name)
     t = tag or tag_of(path)
     try:
-        raw = xp.read_bytes()
+        raw = _read_regular(xp)
     except FileNotFoundError:
         raw = None
     except OSError as e:
@@ -508,7 +535,7 @@ def _move(path: Path, data, tag: str, mode: int | None, state_owned: bool, keep_
         if keep_old_form:                       # the JSON form stays as it is when there is one; else it is written
             jp = _json_path(path, old_name)
             try:
-                have = jp.read_bytes()
+                have = _read_regular(jp)
             except FileNotFoundError:
                 _keep_old(path, data, m, state_owned, old_name, old_format)
             else:
@@ -543,7 +570,7 @@ def _write_xml(path: Path, data, t: str, mode: int, state_owned: bool, is_list: 
     xp = xml_path(path)
     if xp.exists():                                 # never overwrite what could not be read
         try:
-            raw = xp.read_bytes()
+            raw = _read_regular(xp)
             loads_list(raw, t) if is_list else loads(raw, t, keep_version=True)
         except StateXmlError:                       # only a file that is really broken is set aside
             quarantine(path)
