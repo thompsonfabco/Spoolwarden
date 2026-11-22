@@ -83,7 +83,9 @@ def test_the_wifi_notice_only_after_a_from_scratch_flash_on_wifi(fw, monkeypatch
     monkeypatch.setitem(st.settings, "panel_link", "wifi")
     assert pf.flash("/dev/ttyACM1", None, "13").notice == pf.WIFI_LOST_NOTICE   # link read from the settings
     assert pf.WIFI_LOST_NOTICE == ("The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
-                                   "Run: sudo spoolwarden weigh-station panel-wifi")
+                                   "Run: sudo {command} weigh-station panel-wifi")
+    assert pf.flash("/dev/ttyACM1", None, "13").notice == ("The panel was flashed from scratch, so its Wi-Fi set-up "
+                                                          "is gone. Run: sudo spoolwarden weigh-station panel-wifi")
 
 
 def test_the_notice_test_leaves_a_real_panel_link_setting_alone(fw, monkeypatch):
@@ -91,6 +93,14 @@ def test_the_notice_test_leaves_a_real_panel_link_setting_alone(fw, monkeypatch)
     test_the_wifi_notice_only_after_a_from_scratch_flash_on_wifi(fw, monkeypatch)
     assert st.settings["panel_link"] == "wifi"                  # the inner monkeypatch is this test's own
     monkeypatch.undo()
+
+
+def test_the_notice_comes_through_the_catalogue(fw, monkeypatch):
+    seen = []
+    monkeypatch.setattr(pf._station_page, "catalogue_text",
+                        lambda key, fallback, **v: seen.append((key, fallback)) or "from the catalogue")
+    assert pf.flash("/dev/ttyACM1", "12", "13", link="wifi").notice == "from the catalogue"
+    assert seen == [(pf.WIFI_LOST_KEY, pf.WIFI_LOST_NOTICE)]
 
 
 def test_no_notice_when_the_flash_failed(fw, monkeypatch):

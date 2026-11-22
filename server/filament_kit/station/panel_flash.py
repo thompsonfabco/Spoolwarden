@@ -15,6 +15,7 @@ import sys
 import time
 from typing import NamedTuple
 
+from . import page as _station_page
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -28,14 +29,15 @@ WIFI_FIRST_VERSION = 13                     # the first firmware that stores Wi-
 LAYOUT_BREAKS: tuple[int, ...] = ()         # firmware versions that CHANGED the flash layout (partition table, offsets,
 #                                             NVS place); a panel older than one of them needs the whole image
 
+WIFI_LOST_KEY = "station_panel_wifi_lost"   # the catalogue key; the English below is its fallback ({command} is filled in)
 WIFI_LOST_NOTICE = ("The panel was flashed from scratch, so its Wi-Fi set-up is gone. "
-                    "Run: sudo spoolwarden weigh-station panel-wifi")
+                    "Run: sudo {command} weigh-station panel-wifi")
 
 
 class Flash(NamedTuple):
     ok: bool          # esptool exited 0
     whole: bool       # the whole image was written
-    notice: str | None  # WIFI_LOST_NOTICE when a from-scratch flash wiped a wireless panel's set-up
+    notice: str | None  # the wifi-lost sentence when a from-scratch flash wiped a wireless panel's set-up
 
 
 def _number(v):
@@ -71,7 +73,7 @@ def choice(have, want) -> tuple[bool, str, str]:
 def wifi_lost(whole: bool, link=None) -> str | None:
     """The sentence to say after a from-scratch flash, only while the panel's link is Wi-Fi."""
     link = st.settings.get("panel_link") if link is None else link
-    return WIFI_LOST_NOTICE if whole and link == "wifi" else None
+    return _station_page.catalogue_text(WIFI_LOST_KEY, WIFI_LOST_NOTICE) if whole and link == "wifi" else None
 
 
 def flash(dev, have, version, link=None) -> Flash:
