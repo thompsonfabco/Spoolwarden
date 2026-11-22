@@ -755,7 +755,7 @@ def test_the_pointer_and_check_state_are_written_as_xml_and_read_back():
     lib = config.paths().state / "library"
     library._write_state("current.json", {"dir": "7-20261102T000000Z", "version": 7, "at": 1.5})
     library._write_state("last_check.json", {"at": 2.5, "ok": False, "error": "x <&> y", "last_ok_at": None})
-    assert (lib / "current.xml").is_file() and not (lib / "current.json").exists()
+    assert (lib / "current.xml").is_file() and (lib / "current.json").is_file()       # both forms for one release
     assert library._read_state("current.json") == {"dir": "7-20261102T000000Z", "version": 7, "at": 1.5}
     assert library.last_check() == {"at": 2.5, "ok": False, "error": "x <&> y"}
     library._write_state("rolled_back.json", {"from": 9, "at": 3.0})
@@ -802,6 +802,36 @@ def test_a_damaged_local_entry_xml_is_skipped_and_the_json_form_is_used():
     (d / "pla-max.xml").write_text("<entry", encoding="utf-8")
     assert library.load().lookup("Acme", "PLA Max").local is not None
     assert (d / "pla-max.xml").read_text(encoding="utf-8") == "<entry"       # never overwritten by a read
+
+
+def test_the_pointer_and_check_state_keep_their_json_form_for_one_release():
+    lib = config.paths().state / "library"
+    cur = {"dir": "7-20261102T000000Z", "version": 7, "at": 1.5}
+    library._write_state("current.json", cur)
+    library._write_state("previous.json", {"dir": "6-20261101T000000Z", "version": 6, "at": 1.0})
+    library._write_state("rolled_back.json", {"from": 9, "at": 3.0})
+    library._write_state("last_check.json", {"at": 2.5, "ok": True, "error": None, "last_ok_at": 2.5})
+    assert json.loads((lib / "current.json").read_text(encoding="utf-8")) == cur       # what v0.6.2 reads
+    assert json.loads((lib / "previous.json").read_text(encoding="utf-8"))["version"] == 6
+    assert json.loads((lib / "rolled_back.json").read_text(encoding="utf-8")) == {"from": 9, "at": 3.0}
+    assert json.loads((lib / "last_check.json").read_text(encoding="utf-8"))["ok"] is True
+    library._write_state("current.json", {**cur, "version": 8})                         # a rewrite keeps both in step
+    assert json.loads((lib / "current.json").read_text(encoding="utf-8"))["version"] == 8
+    for name in ("current", "previous", "rolled_back", "last_check"):
+        library._drop_state(f"{name}.json")
+    assert not list(lib.glob("*.*"))
+
+
+def test_an_added_local_entry_keeps_its_json_form_for_one_release():
+    d = config.paths().state / "library-local" / "acme"
+    library.add_local(dumps(_local_entry()).encode())
+    assert (d / "pla-max.xml").is_file()
+    assert json.loads((d / "pla-max.json").read_text(encoding="utf-8"))["product"] == "PLA Max"   # v0.6.2 reads this
+    library.add_local(dumps({**_local_entry(), "material": "PETG"}).encode())
+    assert json.loads((d / "pla-max.json").read_text(encoding="utf-8"))["material"] == "PETG"
+    assert statexml.loads((d / "pla-max.xml").read_bytes(), "entry")["material"] == "PETG"
+    assert library.remove_local("acme--pla-max") is True
+    assert not list(d.parent.rglob("*.*"))
 
 
 def test_adding_over_a_damaged_local_entry_xml_keeps_it_aside_and_notes_it():

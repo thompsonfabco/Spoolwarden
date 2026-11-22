@@ -447,7 +447,7 @@ def test_a_record_and_a_pending_read_are_xml_files(sm):
     assert (pend / "read.xml").is_file() and not (pend / "read.json").exists()
     r, hid = add(sm, read_id=out["read_id"])
     d = intake_history._dir(hid)
-    assert (d / "record.xml").is_file() and not (d / "record.json").exists()
+    assert (d / "record.xml").is_file() and (d / "record.json").is_file()        # both forms for one release
     rec = intake_history.get(hid)
     assert rec["read"]["items"][0]["vendor"] == "SUNLU" and rec["photos"] == 2
     assert intake_history.list_records(True)["count"] == 1
@@ -468,6 +468,7 @@ def test_a_record_json_is_read_moved_once_and_keeps_its_version_count(sm):
 
 def test_a_damaged_record_xml_is_no_such_record_not_a_crash(sm):
     r, hid = add(sm)
+    (intake_history._dir(hid) / "record.json").unlink()          # the JSON form kept for one release would be read
     (intake_history._dir(hid) / "record.xml").write_text("<record", encoding="utf-8")
     with pytest.raises(intake_history.HistoryError):
         intake_history._load(hid)
@@ -500,3 +501,17 @@ def test_a_pending_read_json_moved_to_xml_keeps_its_private_mode(sm):
     os.chmod(pend / "read.json", 0o600)
     r, hid = add(sm, read_id=out["read_id"])                    # record_save reads the pending read
     assert intake_history.get(hid)["read"]["items"][0]["vendor"] == "SUNLU"
+
+
+@pytest.mark.skipif(not hasattr(os, "geteuid"), reason="file modes are the Hub's on Linux")
+def test_a_record_keeps_record_json_beside_record_xml_for_one_release(sm):
+    r, hid = add(sm)
+    d = intake_history._dir(hid)
+    assert stat.S_IMODE(os.stat(d / "record.json").st_mode) == 0o600
+    old = json.loads((d / "record.json").read_text(encoding="utf-8"))      # what v0.6.2 reads after a rollback
+    assert old == intake_history._load(hid) and old["id"] == hid and old["saved"]
+    rec = intake_history._load(hid)
+    rec["device"] = "changed"
+    intake_history._save(rec)
+    assert json.loads((d / "record.json").read_text(encoding="utf-8"))["device"] == "changed"
+    assert intake_history.list_records(True)["count"] == 1

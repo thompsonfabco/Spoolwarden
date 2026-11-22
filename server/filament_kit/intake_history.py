@@ -122,7 +122,10 @@ def _version(rec: dict) -> int:
 def _save(rec: dict) -> None:
     d = _dir(rec["id"])
     make_state_dir(d)
-    statexml.write(d / "record.json", {**rec, "version": _version(rec)}, mode=0o600)
+    out = {**rec, "version": _version(rec)}
+    statexml.write(d / "record.json", out, mode=0o600)
+    # one release: v0.6.2 lists and reads the records by record.json after a rollback
+    _write_atomic(d / "record.json", json.dumps(out, indent=1).encode("utf-8"), 0o600, state_owned=True)
 
 
 def _photos(d: Path) -> list[Path]:

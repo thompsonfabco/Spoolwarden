@@ -276,7 +276,7 @@ def _state_dir(hid):
 def test_the_state_is_kept_as_share_xml_and_round_trips(sm, reader):
     hid = saved(sm, {"nozzle": 225})
     d = intake_history._dir(hid)
-    assert (d / "share.xml").is_file() and not (d / "share.json").exists()
+    assert (d / "share.xml").is_file() and (d / "share.json").is_file()          # both forms for one release
     assert (d / "share.xml").read_bytes().startswith(b'<?xml version="1.0" encoding="UTF-8"?>\n<share ')
     before = share_queue._read(hid)
     assert len(before["entries"]) == 1 and before["failed"] is None
@@ -337,3 +337,12 @@ def test_an_old_share_json_moved_to_xml_keeps_its_private_mode(sm):
     os.chmod(d / "share.json", 0o600)
     assert share_queue.state(hid)["entries"] == 1
     assert (os.stat(d / "share.xml").st_mode & 0o777) == 0o600
+
+
+def test_the_queue_keeps_share_json_beside_share_xml_for_one_release(sm, reader):
+    hid = saved(sm, {"nozzle": 225})
+    d = intake_history._dir(hid)
+    st = share_queue._read(hid)
+    assert json.loads((d / "share.json").read_text(encoding="utf-8")) == st      # what v0.6.2 reads after a rollback
+    share_queue._write(hid, {"entries": {hid: "fb-9"}, "failed": None})
+    assert json.loads((d / "share.json").read_text(encoding="utf-8"))["entries"] == {hid: "fb-9"}

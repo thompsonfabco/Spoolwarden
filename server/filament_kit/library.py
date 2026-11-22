@@ -328,6 +328,11 @@ def _read_json(path: Path):
         return None
 
 
+def _write_json(path: Path, obj) -> None:
+    make_state_dir(path.parent)
+    _write_atomic(path, (json.dumps(obj, indent=2) + "\n").encode("utf-8"), 0o644, state_owned=True)
+
+
 def _read_state(name: str):
     """library/<name> (current.json, previous.json, last_check.json, rolled_back.json) as its XML form; a file that
     only exists as JSON is read and moved to XML (R85 section 1)."""
@@ -338,6 +343,7 @@ def _read_state(name: str):
 def _write_state(name: str, obj: dict) -> None:
     from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
     statexml.write(_dir() / name, obj)
+    _write_json(_dir() / name, obj)      # one release: v0.6.2 reads these after `update --rollback` (the pointer, the hold)
 
 
 def _drop_state(name: str) -> None:
@@ -628,6 +634,7 @@ def add_local(data: bytes) -> tuple[dict, str]:
     path = _local_dir() / rel_path(entry).removeprefix("library/")
     with _locked():
         statexml.write(path, entry, tag="entry")        # a damaged XML is kept aside as <name>.xml.unreadable
+        _write_json(path, entry)                        # one release: v0.6.2 reads the owner's entries as JSON
     lid = line_id(entry["vendor"], entry["product"])
     event_sink.emit("catalog.changed", {"type": "hub"}, {"what": "entry_added", "entry": lid})
     return entry, lid

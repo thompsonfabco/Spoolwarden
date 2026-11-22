@@ -22,10 +22,12 @@ are "none", never an error. `retry(rid)` runs `sync` again at once and returns t
 No address is ever in a request body (local_reader._check_body)."""
 from __future__ import annotations
 
+import json
 import logging
 import threading
 
 from . import config, local_reader
+from .pairing import _write_atomic
 from .profiles import statexml
 
 log = logging.getLogger(__name__)
@@ -62,6 +64,8 @@ def _write(rid: str, st: dict) -> None:
         statexml.unlink(p)                  # both forms: a left-over share.json would be read back
         return
     statexml.write(p, st, mode=0o600, state_owned=True)
+    # one release: v0.6.2 reads share.json after a rollback
+    _write_atomic(p, json.dumps(st, indent=1).encode("utf-8"), 0o600, state_owned=True)
 
 
 def state(rid: str) -> dict:
