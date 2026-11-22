@@ -112,3 +112,13 @@ def test_catalog_add_of_a_readable_file_is_run_by_the_user_on_standard_input(tmp
     entry.write_text("{}", encoding="utf-8")
     got = _route(tmp_path, [old, "add", str(entry)])
     assert got.startswith("AS-USER ") and got.endswith(f" {old} add -")
+
+
+@pytest.mark.parametrize("old", ["catalog", "library"])
+@pytest.mark.parametrize("rest", [["--ask"], ["--ask", "-y"], ["-y", "--ask"], ["-y"], ["-"]], ids=" ".join)
+def test_catalog_add_with_a_third_word_that_starts_with_a_dash_is_not_a_file(tmp_path, old, rest):
+    """`catalog add --ask` and `catalog add -y ...` reach the program as they are, not "no readable file at --ask"."""
+    r = _route(tmp_path, [old, "add", *rest], result=True)
+    assert r.returncode == 0 and r.stderr == ""
+    assert r.stdout.startswith("AS-USER ")
+    assert r.stdout.strip().endswith(" ".join([old, "add", *rest]))

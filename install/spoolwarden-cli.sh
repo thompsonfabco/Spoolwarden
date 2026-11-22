@@ -127,8 +127,9 @@ fi
 
 if [ "$(id -u)" -eq 0 ]; then
     # `catalog add <file>` (and the old `library add`): the service user may not be able to read a file in the
-    # caller's home folder, so root opens it and the CLI reads it on stdin.
-    if { [ "${1:-}" = catalog ] || [ "${1:-}" = library ]; } && [ "${2:-}" = add ] && [ -n "${3:-}" ] && [ "$3" != - ]; then
+    # caller's home folder, so root opens it and the CLI reads it on stdin. A third word that starts with `-` (`-`, `--ask`,
+    # `-y`) is not a file: it goes on to the program as it is.
+    if { [ "${1:-}" = catalog ] || [ "${1:-}" = library ]; } && [ "${2:-}" = add ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; then
         if [ ! -f "$3" ] || [ ! -r "$3" ]; then
             printf 'Error: there is no readable file at %s.\nFix: give the path of one catalog entry as a JSON file.\n' "$3" >&2
             exit 2
