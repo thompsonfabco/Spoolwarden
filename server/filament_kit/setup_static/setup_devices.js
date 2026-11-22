@@ -35,6 +35,7 @@ const DEV_EN = {
   devices_detail_kind: "Kind", devices_detail_version: "Version", devices_detail_paired: "Paired", devices_detail_last_seen: "Last seen",
   devices_detail_build: "Build", devices_detail_error: "Could not read the device. {reason}",
   devices_reader_settings: "Its settings are changed in {link}.",
+  devices_panel_usb: "Panel: on USB", devices_panel_wifi: "Panel: on Wi-Fi",
   devices_status_title: "Status", devices_settings_title: "Settings", devices_down: "The Weigh Station is not answering. Its status and settings are shown when it answers.",
   devices_settings_save: "Save", devices_settings_reset: "Back to the installed values",
   devices_settings_reset_title: "Go back to the installed values?", devices_settings_reset_body: "The Weigh Station's own settings are removed. It uses the values the installer wrote.",
@@ -462,8 +463,12 @@ function devDetail(d) {
         img.addEventListener("error", () => img.remove());
         kids.push(img);
       }
+      // the Weigh Station's panel (R88 4): "Panel: on USB" or "Panel: on Wi-Fi" above the status list; no `panel`, nothing
+      const { panel: link, ...rest } = r.status || {}, how = link === "usb" || link === "wifi" ? link : null;     // an older station's `panel` is its port: it stays in the list
+      const status = how ? rest : r.status;
+      if (how) kids.push(h("p", { class: "devdetail__panel", textContent: devT("devices_panel_" + how) }));
       if (r.status) kids.push(h("h3", { class: "detail__heading", textContent: devT("devices_status_title") }),
-        h("dl", { class: "kv" }, Object.entries(r.status).map(([k, v]) => devFact(devLabel(k), devSay(v)))));
+        h("dl", { class: "kv" }, Object.entries(status).map(([k, v]) => devFact(devLabel(k), devSay(v)))));
       if (r.settings) {
         const slot = h("div");
         const draw = (list) => slot.replaceChildren(devSettingsForm(row, list, draw));

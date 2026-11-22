@@ -13,6 +13,18 @@
 .coll--spools .coll__cell[data-col="state"] > .coll__sub { flex: 1 1 100%; }
 /* Panes lists the rows in a narrow pane: the state keeps a block of its own and wraps to the next line instead of squeezing */
 :root[data-look="panes"] .coll--spools .coll__cell[data-col="state"] { min-width: calc(var(--s7) * 3); }
+/* a checked-out row (R88): the place, the home, since when and Return under the spool's name; each wraps, none squeezes (Panes keeps the block's own width) */
+.coll--spools .coll__cell[data-col="title"] { min-width: 0; overflow-wrap: anywhere; }
+.spools-co { display: block; }
+.spools-co:empty { display: none; }
+.spools-co > .coll__sub { display: block; }
+.spools-co .spools-return { display: inline-flex; max-width: 100%; margin-top: var(--s1); white-space: normal; text-align: left; }
+:root[data-look="panes"] .coll--spools .coll__cell[data-col="title"] { min-width: calc(var(--s7) * 3); }
+/* the detail's Home line and the Home sheet */
+.spools-homeline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); margin: var(--s2) 0 0; overflow-wrap: anywhere; }
+.spools-homeline[hidden] { display: none; }
+.spools-homeline .btn { white-space: normal; text-align: left; }
+.spools-homesheet { display: grid; gap: var(--s3); }
 .spools-expand__label { display: none; }
 /* the selection (02 6.1): the checkbox is the first cell and never shrinks; the header checkbox and its label show in every look (the
    others hide a head without a sort button), the label as text where there are no column headers (Workbench, Palette, Panes, phones) */
