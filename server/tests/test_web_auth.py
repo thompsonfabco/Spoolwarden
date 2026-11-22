@@ -608,11 +608,11 @@ def test_store_loads_ops_oauth_json_unchanged(tmp_path):
     assert run(p.load_access_token("ops-access-token")).client_id == cid
     assert run(p.load_refresh_token(client, "ops-refresh-token")).scopes == ["filament"]
     assert json.loads(path.read_text(encoding="utf-8")) == original  # the old form stays as it was (a rollback)
-    st.save()  # and writes it back in the same shape, as XML
+    st.save()  # and writes it back in the same shape, as XML (and the JSON form, kept current)
     again = _disk(st)
     assert set(again) == {"clients", "codes", "access", "refresh", "used"}
     assert again["clients"] == original["clients"] and again["refresh"] == original["refresh"]
-    assert json.loads(path.read_text(encoding="utf-8")) == original
+    assert json.loads(path.read_text(encoding="utf-8")) == st.d
 
 
 def test_store_round_trips_through_xml(store, provider):
@@ -625,7 +625,8 @@ def test_store_round_trips_through_xml(store, provider):
     again = auth.Store(store.path)
     assert again.d == store.d and again.pending == {}
     xml = statexml.xml_path(store.path).read_text(encoding="utf-8")
-    assert xml.startswith("<?xml") and "<oauth " in xml and not store.path.exists()
+    assert xml.startswith("<?xml") and "<oauth " in xml
+    assert json.loads(store.path.read_text(encoding="utf-8")) == store.d   # the old form is kept current
 
 
 def test_store_moves_an_old_json_file_once_as_0600_and_leaves_it(tmp_path):
@@ -639,6 +640,38 @@ def test_store_moves_an_old_json_file_once_as_0600_and_leaves_it(tmp_path):
         assert (xp.stat().st_mode & 0o777) == 0o600
     path.write_text("{}", encoding="utf-8")                      # from now on only the XML form is used
     assert auth.Store(path).d == st.d
+
+
+def test_oauth_json_is_kept_current_in_the_old_shape_with_0600(store, provider):
+    """v0.6.2's Store.save wrote json.dump(d) (compact, no newline, 0600) and its __init__ read it with json.loads:
+    a rollback after a revoke or a refresh-token rotation must find the current tokens there."""
+    client = _client_info()
+    run(provider.register_client(client))
+    store.d["refresh"]["r1"] = {"client_id": client.client_id, "scopes": ["filament"], "expires_at": time.time() + 99}
+    store.save()
+    raw = store.path.read_bytes()
+    assert raw == json.dumps(store.d).encode("utf-8") and not raw.endswith(b"\n")
+    if os.name != "nt":
+        assert (store.path.stat().st_mode & 0o777) == 0o600
+    assert "r1" in json.loads(raw)["refresh"]                    # what the old Store.__init__ reads
+    del store.d["refresh"]["r1"]                                 # a revoke
+    store.d["used"]["r1"] = {"client_id": client.client_id, "at": 1.0, "expires_at": time.time() + 99}
+    store.save()
+    old = json.loads(store.path.read_text(encoding="utf-8"))
+    assert "r1" not in old["refresh"] and "r1" in old["used"]
+    if os.name != "nt":
+        assert (store.path.stat().st_mode & 0o777) == 0o600
+
+
+def test_a_change_made_by_an_older_release_to_oauth_json_wins_once(store):
+    store.d["clients"]["c1"] = {"client_id": "c1"}
+    store.save()
+    older = json.loads(store.path.read_text(encoding="utf-8"))
+    older["clients"]["c2"] = {"client_id": "c2"}                 # the older release registered a client
+    store.path.write_text(json.dumps(older), encoding="utf-8")
+    again = auth.Store(store.path)
+    assert set(again.d["clients"]) == {"c1", "c2"}
+    assert set(auth.Store(store.path).d["clients"]) == {"c1", "c2"}   # now in the XML form too
 
 
 def test_store_with_an_unreadable_xml_starts_empty_and_keeps_the_file(tmp_path, capsys):

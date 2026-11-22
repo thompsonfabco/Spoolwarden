@@ -71,6 +71,8 @@ REFUSAL_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; frame-an
 
 # ---------- store ----------
 
+OLD_FORMAT = {}   # v0.6.2 wrote oauth.json with json.dump(d, f): compact, no newline
+
 class Store:
     """Clients, codes and hashed tokens in one XML file (single user, tiny volume; statexml, tag `oauth`). Same data as
     ops oauth.json: clients, codes, access, refresh, used (rotated-out refresh token hashes). `path` is the JSON name
@@ -92,7 +94,7 @@ class Store:
         `oauth.xml.unreadable` by the next save."""
         xp = statexml.xml_path(self.path)
         if xp.exists():
-            d = statexml.read(self.path)
+            d = statexml.read(self.path, mode=0o600, state_owned=False)
             if any(p.startswith(f"{xp} (") for p in statexml.problems()):
                 print(f"{xp.name} cannot be read; starting without sign-ins (reconnect in Claude)",
                       file=sys.stderr, flush=True)
@@ -109,7 +111,8 @@ class Store:
                   "(reconnect in Claude)", file=sys.stderr, flush=True)
             return {}
         try:
-            statexml.write(self.path, d, mode=0o600, state_owned=False)   # statexml.migrate writes 0644
+            # the old file stays byte for byte (a rollback reads it); 0600: the helper's default mode is 0644
+            statexml.migrate(self.path, d, mode=0o600, state_owned=False, old_format=OLD_FORMAT)
         except (OSError, statexml.StateXmlError, TypeError, ValueError) as e:
             print(f"{self.path.name} could not be converted ({type(e).__name__}); the next save writes the XML form",
                   file=sys.stderr, flush=True)
@@ -120,7 +123,7 @@ class Store:
         now = time.time()
         for k in _EXPIRING:
             self.d[k] = {t: v for t, v in self.d[k].items() if (v.get("expires_at") or now + 1) > now}
-        statexml.write(self.path, self.d, mode=0o600, state_owned=False)
+        statexml.write(self.path, self.d, mode=0o600, state_owned=False, old_format=OLD_FORMAT)
 
 
 # ---------- OAuth provider ----------
