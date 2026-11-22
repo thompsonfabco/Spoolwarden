@@ -49,7 +49,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import __version__, config, event_sink, release
-from .pairing import _write_atomic, give_to_state_owner, make_state_dir, open_lock
+from .pairing import give_to_state_owner, make_state_dir, open_lock
 
 try:
     import fcntl
@@ -342,8 +342,8 @@ def _read_state(name: str):
 
 def _write_state(name: str, obj: dict) -> None:
     from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
-    statexml.write(_dir() / name, obj)
-    _write_json(_dir() / name, obj)      # one release: v0.6.2 reads these after `update --rollback` (the pointer, the hold)
+    # one release: v0.6.2 reads these as JSON after `update --rollback` (the pointer, the hold), as it wrote them
+    statexml.write(_dir() / name, obj, old_format={"indent": 2})
 
 
 def _drop_state(name: str) -> None:
@@ -633,8 +633,8 @@ def add_local(data: bytes) -> tuple[dict, str]:
     from .profiles import statexml   # lazily, see _read_state
     path = _local_dir() / rel_path(entry).removeprefix("library/")
     with _locked():
-        statexml.write(path, entry, tag="entry")        # a damaged XML is kept aside as <name>.xml.unreadable
-        _write_json(path, entry)                        # one release: v0.6.2 reads the owner's entries as JSON
+        # a damaged XML is kept aside as <name>.xml.unreadable; v0.6.2 reads the owner's entries as JSON (the helper's shape)
+        statexml.write(path, entry, tag="entry")
     lid = line_id(entry["vendor"], entry["product"])
     event_sink.emit("catalog.changed", {"type": "hub"}, {"what": "entry_added", "entry": lid})
     return entry, lid

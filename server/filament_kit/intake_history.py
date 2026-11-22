@@ -92,6 +92,11 @@ def _dir(rid: str) -> Path:
     return _root() / rid
 
 
+def _old_form(data) -> bytes:
+    """record.json as v0.6.2 wrote it: json.dumps(rec, indent=1), no newline."""
+    return json.dumps(data, indent=1).encode("utf-8")
+
+
 def _read_record(path: Path):
     """The record at `path` (given by its JSON name): record.xml, else record.json, moved to XML once. The record's
     own `version` counter is the root's `version`, so a record from before it keeps counting from 0."""
@@ -101,7 +106,7 @@ def _read_record(path: Path):
         except (OSError, ValueError):
             old = None
         if isinstance(old, dict):
-            statexml.migrate(path, {**old, "version": _version(old)}, mode=0o600)
+            statexml.migrate(path, {**old, "version": _version(old)}, mode=0o600, old_format=_old_form)
     return statexml.read(path, keep_version=True, mode=0o600)
 
 
@@ -123,9 +128,8 @@ def _save(rec: dict) -> None:
     d = _dir(rec["id"])
     make_state_dir(d)
     out = {**rec, "version": _version(rec)}
-    statexml.write(d / "record.json", out, mode=0o600)
     # one release: v0.6.2 lists and reads the records by record.json after a rollback
-    _write_atomic(d / "record.json", json.dumps(out, indent=1).encode("utf-8"), 0o600, state_owned=True)
+    statexml.write(d / "record.json", out, mode=0o600, old_format=_old_form)
 
 
 def _photos(d: Path) -> list[Path]:
@@ -192,7 +196,7 @@ def stash_read(read_id: str, images: list[bytes], result: dict, hint: str = "", 
                               for it in (result.get("items") or []) if isinstance(it, dict)],
                     "hint": hint or "", "tag": tag, "engine": result.get("engine"),
                     "confidence_rated": result.get("confidence_rated")}
-            statexml.write(d / "read.json", body, mode=0o600)
+            statexml.write(d / "read.json", body, mode=0o600, keep_old_form=False)   # deleted right after use
     except Exception:  # noqa: BLE001 - history is a convenience; the read itself succeeded
         log.exception("intake history: cannot keep read %s", read_id)
 
@@ -216,7 +220,7 @@ def record_save(saved: list[dict], *, source: str, device: str | None = None, re
                 p = _pending(read_id)
                 for i, ph in enumerate(_photos(p), 1):
                     shutil.move(str(ph), str(d / f"photo{i}.jpg"))
-                read = statexml.read(p / "read.json", mode=0o600)
+                read = statexml.read(p / "read.json", mode=0o600, keep_old_form=False)
                 shutil.rmtree(p, ignore_errors=True)
             rec = {"id": rid, "at": _now(), "source": source if source in SOURCES else "phone",
                    "device": (device or "")[:80], "state": "detected", "read_id": read_id if read else None,

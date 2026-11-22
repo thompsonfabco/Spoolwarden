@@ -27,7 +27,6 @@ import logging
 import threading
 
 from . import config, local_reader
-from .pairing import _write_atomic
 from .profiles import statexml
 
 log = logging.getLogger(__name__)
@@ -63,9 +62,8 @@ def _write(rid: str, st: dict) -> None:
     if not st["entries"] and not st["failed"]:
         statexml.unlink(p)                  # both forms: a left-over share.json would be read back
         return
-    statexml.write(p, st, mode=0o600, state_owned=True)
-    # one release: v0.6.2 reads share.json after a rollback
-    _write_atomic(p, json.dumps(st, indent=1).encode("utf-8"), 0o600, state_owned=True)
+    # one release: v0.6.2 reads share.json after a rollback, as it wrote it: json.dumps(st, indent=1), no newline
+    statexml.write(p, st, mode=0o600, state_owned=True, old_format=lambda d: json.dumps(d, indent=1).encode("utf-8"))
 
 
 def state(rid: str) -> dict:
