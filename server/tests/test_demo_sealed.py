@@ -172,14 +172,17 @@ class Outside:
         monkeypatch.setattr(os, "replace", f_replace)
         monkeypatch.setattr(os, "mkdir", f_mkdir)
 
-        def note(what):
+        def note(what, real=None):
             def wrapper(*a, **k):
-                self.seen.append(kind_of(what, a))
+                kind = kind_of(what, a)
+                if real is not None and INSIDE.match(kind):      # the machine's own loopback (Windows' event loop uses it)
+                    return real(*a, **k)
+                self.seen.append(kind)
                 raise OSError(f"the demo reached outside: {what}")
             return wrapper
-        monkeypatch.setattr(socket.socket, "connect", note("connect"))
-        monkeypatch.setattr(socket.socket, "connect_ex", note("connect"))
-        monkeypatch.setattr(socket, "create_connection", note("connect"))
+        monkeypatch.setattr(socket.socket, "connect", note("connect", socket.socket.connect))
+        monkeypatch.setattr(socket.socket, "connect_ex", note("connect", socket.socket.connect_ex))
+        monkeypatch.setattr(socket, "create_connection", note("connect", socket.create_connection))
         monkeypatch.setattr(socket, "getaddrinfo", note("lookup"))
         monkeypatch.setattr(urllib.request, "urlopen", note("urlopen"))
         monkeypatch.setattr(subprocess, "Popen", note("process"))
