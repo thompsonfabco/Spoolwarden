@@ -23,19 +23,31 @@ from typing import Callable, Iterator
 from .. import config
 from . import state as st
 
-# The two set-up lines the panel's firmware accepts over USB (firmware 12, WL2: not built yet, so this is the contract it
-# is built against). Each is one line ending in a newline; the panel answers with `OK` or `ERR <reason>`.
+# The two set-up lines the panel's firmware accepts over USB (firmware 13 and later, WL2: the contract it is
+# built against). Each is one line ending in a newline; the panel answers with `OK` or `ERR <reason>`.
 # The name and password go as the hex of their UTF-8 bytes, so a space or any other character cannot break the line.
 LINE_WIFI = "CFG WIFI {ssid_hex} {password_hex}"
 LINE_LINK = "CFG LINK {address} {port} {fingerprint} {token}"
 LINE_CLEAR = "CFG CLEAR"                  # `--off`: the panel forgets all of it (best effort; the token is gone anyway)
 REPLY_OK = "OK"
+REPLY_ERR = "ERR"
+MIN_FIRMWARE = 13                         # the first panel firmware with Wi-Fi (12 is the shipped USB-only one)
+MAX_ADDRESS = 64                          # characters; the panel's line holds 256 and answers `ERR long`, never truncates
+MAX_UNASKED = 50                          # unasked lines (AIR, P, ...) skipped while waiting for OK or ERR
+# the panel's own lines that may arrive between a set-up line and its answer
+UNASKED = re.compile(r"(AIR|P|L|TAG|NFC|HELLO)(?![A-Za-z0-9])")
 
 TOKEN_FILE = "panel_link.xml"             # in the station's state folder: {token, created}; 0600, the station user's
 
 # Plain constants (key, English text): RG1 puts them in the string catalogue
 TEXT_DEVICES_USB = "Panel: on USB"                                          # key: check_panel_on_usb
 TEXT_DEVICES_WIFI = "Panel: on Wi-Fi"                                       # key: check_panel_on_wifi
+TEXT_KEY_PASSWORD = "A 64-digit key cannot be used. Type the Wi-Fi password instead."      # key: panel_setup_key_password
+TEXT_ADDRESS_LONG = f"The address is too long ({MAX_ADDRESS} characters at most)."          # key: panel_setup_address_long
+TEXT_FIRMWARE_OLD = ("This panel's firmware is too old for Wi-Fi. "
+                     "Flash it first: sudo spoolwarden weigh-station flash-display")       # key: panel_setup_firmware_old
+TEXT_NOT_ACCEPTED = "The panel did not accept the Wi-Fi settings."                        # key: panel_setup_not_accepted
+TEXT_TIMEOUT = "The panel did not answer in time."                                         # key: panel_setup_timeout
 TEXT_NOT_CONNECTED = "The Weigh Station's panel is not connected."          # key: check_panel_not_connected
 TEXT_NOT_CONNECTED_FIX = ("check the panel has power and is in Wi-Fi range; to go back to the USB cable: "
                           "sudo spoolwarden weigh-station panel-wifi --off")      # key: check_panel_not_connected_fix
@@ -60,8 +72,12 @@ def check_values(*, ssid: str, password: str, address: str, port: int, fingerpri
     name is 1 to 32 bytes, the password empty (an open network) or 8 to 63 bytes (WPA)."""
     if not ssid or len(ssid.encode("utf-8")) > 32:
         raise PanelSetupError("The Wi-Fi name must be 1 to 32 characters.")
+    if len(password.encode("utf-8")) == 64:
+        raise PanelSetupError(TEXT_KEY_PASSWORD)
     if password and not 8 <= len(password.encode("utf-8")) <= 63:
         raise PanelSetupError("The Wi-Fi password must be 8 to 63 characters, or empty for an open network.")
+    if len(address) > MAX_ADDRESS:
+        raise PanelSetupError(TEXT_ADDRESS_LONG)
     if not address or re.search(r"\s", address):
         raise PanelSetupError("The Weigh Station's address must be one name or number with no spaces.")
     if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
@@ -78,15 +94,34 @@ def setup_lines(*, ssid: str, password: str, address: str, port: int, fingerprin
             LINE_LINK.format(address=address, port=port, fingerprint=fingerprint, token=token)]
 
 
-def _send_all(send: Callable[[str], str], lines: list[str]) -> None:
-    """Send each line; the panel must answer OK to every one. The refusal sentence never repeats a line."""
-    for n, line in enumerate(lines, 1):
+def check_version(version: str | None) -> None:
+    """PanelSetupError unless the panel's firmware version (its HELLO's, as the caller read it) is 13 or later."""
+    m = re.match(r"\d+", str(version or "").strip())
+    if not m or int(m.group()) < MIN_FIRMWARE:
+        raise PanelSetupError(TEXT_FIRMWARE_OLD)
+
+
+def _answer(send: Callable[[str | None], str], line: str | None) -> None:
+    """Send `line` (None sends nothing, it only reads) and read until the panel says OK or ERR, skipping its unasked
+    lines. `send` returns the next line, "" when none came in 5 s. No sentence repeats a line or a reply."""
+    for _ in range(MAX_UNASKED):
         try:
             reply = (send(line) or "").strip()
         except OSError:
             raise PanelSetupError("The panel did not answer over USB. Check the cable and try again.") from None
-        if reply != REPLY_OK:
-            raise PanelSetupError(f"The panel refused set-up line {n} of {len(lines)}.")   # its reply is not repeated
+        line = None
+        if not reply:
+            raise PanelSetupError(TEXT_TIMEOUT)
+        if reply.split(None, 1)[0] == REPLY_OK:
+            return
+        if not UNASKED.match(reply):
+            raise PanelSetupError(TEXT_NOT_ACCEPTED)        # ERR <reason>, or a line that is not the panel's
+    raise PanelSetupError(TEXT_TIMEOUT)
+
+
+def _send_all(send: Callable[[str | None], str], lines: list[str]) -> None:
+    for line in lines:
+        _answer(send, line)
 
 
 def token_path(folder: Path | None = None) -> Path:
@@ -146,13 +181,15 @@ def _set_link(link: str, port: int | None = None) -> None:
     config.save({**cfg, "station": station})
 
 
-def enable(send: Callable[[str], str], *, ssid: str, password: str, address: str, port: int, fingerprint: str,
+def enable(send: Callable[[str | None], str], *, version: str | None, ssid: str, password: str, address: str, port: int, fingerprint: str,
            folder: Path | None = None) -> dict:
-    """Set the panel up for Wi-Fi. `send` writes one line to the panel over USB and returns its answer line. With a new
+    """Set the panel up for Wi-Fi. `version` is the panel's firmware version (13 or later). `send(line)` writes one line to
+    the panel over USB (None: writes nothing) and returns the next line the panel sends, "" after 5 s. With a new
     token the two set-up lines go to the panel; when it answers OK to both, the token is kept in the station's state and
     `station.panel_link` becomes `wifi` (with `station.panel_port`). Any refusal leaves the config and the token as they
     were. The caller then applies the config (`spoolwarden modules apply`), which writes the drop-in and restarts the
     station: the listener comes up. Returns `{"panel_link": "wifi", "panel_port": <port>}`: never the password."""
+    check_version(version)
     fp = check_values(ssid=ssid, password=password, address=address, port=port, fingerprint=fingerprint)
     token = new_token()
     _send_all(send, setup_lines(ssid=ssid, password=password, address=address, port=port, fingerprint=fp, token=token))
@@ -161,15 +198,16 @@ def enable(send: Callable[[str], str], *, ssid: str, password: str, address: str
     return {"panel_link": "wifi", "panel_port": port}
 
 
-def disable(send: Callable[[str], str] | None = None, *, folder: Path | None = None) -> dict:
+def disable(send: Callable[[str | None], str] | None = None, *, folder: Path | None = None) -> dict:
     """`--off`: `station.panel_link` back to `usb` and the token removed. With a panel on USB (`send`) it is told to forget
     its settings first; a panel that is not there or does not answer does not stop this (the token is gone, so it can no
     longer connect). The caller then applies the config."""
     forgot = False
     if send is not None:
         try:
-            forgot = (send(LINE_CLEAR) or "").strip() == REPLY_OK
-        except OSError:
+            _answer(send, LINE_CLEAR)
+            forgot = True
+        except (OSError, PanelSetupError):
             forgot = False
     forget_token(folder)
     _set_link("usb")

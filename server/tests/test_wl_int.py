@@ -29,7 +29,7 @@ def set_up():
         lines.append(line)
         return ps.REPLY_OK
 
-    ps.enable(send, fingerprint=net.fp, **SETUP)
+    ps.enable(send, version="13", fingerprint=net.fp, **SETUP)
     return re.fullmatch(r"CFG LINK \S+ \d+ [0-9a-f]{64} ([0-9a-f]{32})", lines[1]).group(1)
 
 
@@ -113,3 +113,19 @@ def test_a_malformed_w_line_leaves_panel_scale_alone(line):
     panel.on_line(b"W 20.0 1")
     panel.on_line(line)
     assert st.state["panel_scale"] == {"grams": 20.0, "status": "settled", "unit": "g"}
+
+
+def test_the_write_is_not_held_up_while_a_read_waits_and_no_delay_is_set():
+    import socket as _socket
+    import time as _time
+    import threading as _threading
+    connect()
+    ln = link()
+    assert ln.sock.getsockopt(_socket.IPPROTO_TCP, _socket.TCP_NODELAY) != 0
+    reader = _threading.Thread(target=lambda: ln.read_line(2.0), daemon=True)
+    reader.start()
+    _time.sleep(0.2)
+    t0 = _time.time()
+    ln.write(b"L 0 0"+bytes([10]))
+    assert _time.time() - t0 < 0.5
+    reader.join(5)

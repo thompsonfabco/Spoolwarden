@@ -65,6 +65,10 @@ class Link:
         self.buffer = b""
         self.io = threading.Lock()  # one read or write on the TLS object at a time
         sock.settimeout(WRITE_SECONDS)
+        try:
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)   # small lines go at once, not after Nagle's wait
+        except OSError:
+            pass
 
     def write(self, data: bytes):
         with self.io:
@@ -77,8 +81,12 @@ class Link:
             if len(self.buffer) > MAX_LINE:
                 raise ValueError("line too long")
             with self.io:
-                if not (self.sock.pending() or select.select([self.sock], [], [], wait)[0]):
-                    return None
+                ready = self.sock.pending() > 0
+            if not ready:   # waiting holds no lock: a write (the speech frames) is never held up by a read that waits
+                ready = bool(select.select([self.sock], [], [], wait)[0])
+            if not ready:
+                return None
+            with self.io:
                 data = self.sock.recv(1024)
             if not data:
                 raise ConnectionError("closed")
