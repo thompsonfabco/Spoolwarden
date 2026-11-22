@@ -152,11 +152,14 @@ def load_config(dirs: AppDirs) -> dict:
     """config.xml; an older Sync's config.json is read when there is no XML form, and moved to it (RC1c)."""
     xp = statexml.xml_path(dirs.config)
     if xp.exists():
-        statexml.read(dirs.config)      # a config.json that an older Sync changed after our last write wins once
+        newer = statexml.read(dirs.config)      # a config.json that an older Sync changed after our last write wins once
         try:
-            return statexml.loads(xp.read_bytes(), statexml.tag_of(dirs.config))
+            cfg = statexml.loads(xp.read_bytes(), statexml.tag_of(dirs.config))
+        except FileNotFoundError:
+            return {}               # an older Sync deleted config.json (unpair): read() set the XML aside, no pairing
         except (OSError, statexml.StateXmlError) as e:
             raise ValueError(f"sync config {xp} is not valid XML: {e}") from None
+        return cfg if newer is None else newer      # the newer JSON also when the store could not be rewritten
     try:
         text = dirs.config.read_text(encoding="utf-8")
     except FileNotFoundError:

@@ -2,6 +2,7 @@
 Slicer Sync reads is there, current, and in the shape its writer made (store.py:164, sync.py:165/486/812, installer.py:242).
 Each test reads the file with v0.6.2's own reading code (copied here, with its line)."""
 import base64
+import errno
 import io
 import json
 import stat
@@ -74,6 +75,17 @@ def test_a_config_changed_by_an_older_sync_wins_once(tmp_path):
     assert store.load_config(d) == {"server": "https://newer:3"}
 
 
+def test_a_newer_config_json_is_used_when_the_xml_cannot_be_rewritten(tmp_path, monkeypatch):
+    d = _dirs(tmp_path)
+    store.save_config(d, {"server": "https://new:1"})
+    d.config.write_text(json.dumps({"server": "https://old-edit:2"}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    def refuse(path, data, mode, state_owned):              # a Sync run that may not write its folder
+        raise PermissionError(errno.EACCES, "denied")
+    monkeypatch.setattr(statexml, "_put", refuse)
+    assert store.load_config(d) == {"server": "https://old-edit:2"}      # not the stale config.xml
+
+
 # ---------- state.json (and each secondary folder's) ----------
 
 def test_state_json_is_current_in_the_old_shape(tmp_path):
@@ -135,7 +147,61 @@ def test_the_pair_aside_is_compact_json_like_v062_and_follows_the_waiting_mark(t
         assert _mode(d.pair_aside) == 0o600
 
 
+# ---------- deleted by an older Sync: the file is gone (R605 M1) ----------
+
+def test_a_marker_that_an_older_sync_deleted_is_gone(tmp_path):
+    d = _dirs(tmp_path)
+    me = types.SimpleNamespace(d=d, now=1700000000)
+    sync._Run._write_marker(me, "20260101-000000", d.backups / "b", True, {})
+    assert sync._read_marker(d)["stamp"] == "20260101-000000"
+    sync.marker_path(d).unlink()                            # v0.6.2 sync.py:669 clears a settled install this way
+    assert sync._read_marker(d) is None
+    assert not statexml.exists(sync.marker_path(d))
+    assert sync._read_marker(d) is None
+
+
+def test_a_pair_aside_that_an_older_sync_deleted_is_gone(tmp_path):
+    d = _dirs(tmp_path)
+    d.token.write_bytes(b"TOKEN")
+    store.save_config(d, {"server": "https://h"})
+    store.set_pair_aside(d)
+    d.pair_aside.unlink()                                   # v0.6.2 store.py:241 drops it once the pairing is proven
+    assert not store.pair_waiting(d)
+    assert not statexml.exists(d.pair_aside)
+    store.recover_interrupted_pair(d)                       # nothing to restore: the pairing on disk stays
+    assert d.token.read_bytes() == b"TOKEN" and store.load_config(d) == {"server": "https://h"}
+
+
+def test_a_config_that_an_older_sync_deleted_is_not_resurrected(tmp_path):
+    d = _dirs(tmp_path)
+    store.save_config(d, {"server": "https://h:8443"})
+    d.config.unlink()                                       # v0.6.2 __main__.py:496 unpair
+    assert store.load_config(d) == {}
+    assert not statexml.exists(d.config)
+    assert store.load_config(d) == {}
+    store.save_config(d, {"server": "https://again:1"})     # a new pairing writes it again
+    assert store.load_config(d) == {"server": "https://again:1"}
+
+
 # ---------- KEPT.json ----------
+
+def _targets(tmp_path):
+    live = tmp_path / "live"
+    live.mkdir()
+    (live / "A.json").write_text("{}", encoding="utf-8")
+    return [installer._Target(app="bambu", tree="base", stage=tmp_path, live=live, snap=tmp_path, half=tmp_path,
+                              kept={"A": "A.json"})]
+
+
+def test_a_kept_json_an_older_sync_rewrites_wins_once(tmp_path):
+    build = tmp_path / "build"
+    (build / "base").mkdir(parents=True)
+    d = _dirs(tmp_path)
+    installer._replace_installed(build, d, targets=_targets(tmp_path))
+    assert installer._read_kept(d.installed) == {"A"}
+    (d.installed / installer.KEPT).write_text(json.dumps({"base": ["B"]}), encoding="utf-8")   # v0.6.2 sync.py:1113
+    assert installer._read_kept(d.installed) == {"B"}
+    assert (d.installed / installer.KEPT).read_bytes() == json.dumps({"base": ["B"]}).encode("utf-8")
 
 def test_kept_json_is_compact_like_v062(tmp_path):
     statexml.write_plain(tmp_path / "KEPT.json", {"base": ["é", "a"]}, also_json=True)      # installer.py:239, sync.py:1111
