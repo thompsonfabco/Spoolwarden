@@ -26,7 +26,7 @@ from filament_kit.web.intake_app import IntakeApp
 
 ROW_FIELDS = ["id", "name", "type", "limit", "count", "used", "free", "fill", "materials", "overflow",
               "default_overflow", "sealed", "position", "containers", "prefix"]
-TOP_FIELDS = ["locations", "order_by_material", "everything_else", "notices"]
+TOP_FIELDS = ["locations", "order_by_material", "everything_else", "notices", "counts_unavailable"]
 
 
 class FakeSm:
@@ -155,6 +155,59 @@ def test_the_app_route_answers_the_same_data_and_needs_the_token(fk_env, tmp_pat
     r = c.get("/api/storage", headers={"Authorization": f"Bearer {tok}"})
     assert r.status_code == 200 and r.json() == storage_api.current_view(sm)
     assert list(r.json()) == TOP_FIELDS
+
+
+class DownSm:
+    """A Spoolman that does not answer (the Hub restarting it): every call raises as the real client does."""
+    def get(self, path):
+        raise SpoolmanError("spoolman_unreachable", status=None)
+
+    patch = post = get
+
+
+def _assert_counts_unknown(out: dict):
+    assert list(out) == TOP_FIELDS and out["counts_unavailable"] is True
+    assert [x["name"] for x in out["locations"]] == ["Sealed stock", "Rack 1", "Rack 2", "Storage box", "Overflow"]
+    for row in out["locations"]:
+        assert list(row) == ROW_FIELDS and row["used"] is None and row["free"] is None
+    box = out["locations"][3]
+    assert [c["name"] for c in box["containers"]] == ["Storage box 01", "Storage box 02", "Storage box 03"]
+    assert [c["taken"] for c in box["containers"]] == [None, None, None]
+
+
+def test_the_list_is_answered_from_the_settings_when_spoolman_does_not_answer(fk_env, tmp_path):
+    pairing.make_cert("fkhost", [], tmp_path / "etc")
+    storage.save(listing())
+    tok = pairing.redeem_code(pairing.issue().code)
+    r = _app_client(DownSm()).get("/api/storage", headers={"Authorization": f"Bearer {tok}"})
+    assert r.status_code == 200, r.text
+    _assert_counts_unknown(r.json())
+    up = storage_api.current_view(FakeSm(spools("Rack 1")))          # a working Spoolman: numbers, and the flag is false
+    assert up["counts_unavailable"] is False and up["locations"][1]["used"] == 1 and up["locations"][0]["used"] == 0
+
+
+def test_the_hub_page_and_the_web_twin_answer_the_list_without_spoolman(fk_env, monkeypatch, hub):
+    storage.save(listing())
+    monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: DownSm())
+    r = hub.get("/setup/api/settings/storage")
+    assert r.status_code == 200, r.text
+    _assert_counts_unknown(r.json())
+    routes = IntakeApp(mcp_tools.Tools(DownSm()), public_url=None, lan_cidrs=["192.168.1.0/24"], push=False,
+                       host_ok=lambda r: True).routes()
+    c = TestClient(Starlette(routes=routes), base_url="https://hub.local:8710", client=("192.168.1.20", 50000))
+    twin = c.get("/intake/api/storage")
+    assert twin.status_code == 200, twin.text
+    _assert_counts_unknown(twin.json())
+
+
+def test_a_save_that_needs_spoolman_still_refuses_when_it_does_not_answer(fk_env, monkeypatch, hub):
+    storage.save(listing())
+    monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: DownSm())
+    body = current_body(hub)
+    for call in ("settings/storage", "settings/storage/preview"):
+        r = post(hub, call, body) if call == "settings/storage" else hub.post(f"/setup/api/{call}", json=body, headers=H)
+        assert r.status_code == 502 and r.json()["error"] == storage_api.say("storage_error_spoolman_unreachable"), (call, r.text)
+    assert storage.current().describe({}) == listing().describe({})              # nothing was written
 
 
 def test_api_locations_keeps_todays_answer_a_list_of_names(fk_env, tmp_path):

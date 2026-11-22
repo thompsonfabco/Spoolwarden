@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from filament_kit import storage
+from filament_kit.spoolman import SpoolmanError
 from filament_kit.storage import ANY, CONTAINERS, MATERIALS, Location, Storage
 from test_hub_page_audit import hub_app  # noqa: F401
 from test_hub_presets_ui import _drive, T, hub  # noqa: F401
@@ -129,6 +130,21 @@ out.dirty = dirty();
     # two overflow places and no limit on the default: the notice says the other one is never reached
     assert page["notice"] == {"shown": True, "text": T("storage_notice_default_overflow_no_limit")} and page["converted"] is True
     assert page["save"] == T("settings_storage_save") and page["dirty"] == {"form": None, "link": False, "foot": False}
+
+
+def test_the_group_lists_the_locations_with_the_counts_unknown_when_spoolman_does_not_answer(hub, monkeypatch, tmp_path):
+    class Down:
+        def get(self, path):
+            raise SpoolmanError("spoolman_unreachable", status=None)
+    monkeypatch.setattr("filament_kit.setup_console.storage_tab.Spoolman", lambda url: Down())
+    page = _drive_storage(hub, tmp_path, r"""
+out.names = names();
+out.cells = Object.fromEntries(names().map((n) => [n, cells(n).full]));
+out.title = text($('[data-col="full"] .storage__text', rowOf("Rack 1"))) && $('[data-col="full"] .storage__text', rowOf("Rack 1")).title;
+""")
+    assert page["names"] == START
+    assert page["cells"] == {n: T("common_unknown") for n in START}
+    assert page["title"] == T("common_spoolman_unreachable")
 
 
 def test_add_and_edit_open_the_detail_region_and_check_each_field_with_the_texts_of_the_catalogue(hub, tmp_path):
