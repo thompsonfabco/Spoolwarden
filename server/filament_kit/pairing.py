@@ -236,12 +236,15 @@ def make_cert(hostname: str, ips: list[str], dest: Path, extra_dns: list[str] = 
     return fingerprint(cert_pem)
 
 
-BOTH_FORMS = "devices.json"     # kept in both forms for one release (a rollback needs the pairings)
+def _old_json(obj: list) -> bytes:
+    """The JSON file as v0.6.2 wrote it: indent 2, no newline after."""
+    return json.dumps(obj, indent=2).encode("utf-8")
 
 
 def _read(name: str) -> list:
     """A state list file (`devices.json`, `pending.json`, `spent.json`, `station-requests.json`), given by its JSON name:
-    its XML form when there is one, else the JSON form (moved to XML on the way, R85 s1)."""
+    its XML form when there is one, else the JSON form (moved to XML on the way, R85 s1); a JSON that an older release
+    changed after this code wrote it wins once."""
     from .profiles import statexml
     f = config.paths().state / name
     for p in (f, statexml.xml_path(f)):
@@ -252,15 +255,13 @@ def _read(name: str) -> list:
 
 
 def _write(name: str, obj: list) -> None:
-    """Save the list as its XML form (0600, the state's owner). `devices.json`, the list of paired devices, is also
-    written as JSON, XML first, for one release: `update --rollback` keeps the pairings (R85 s1.5). The other files
-    are XML only after the move; their JSON file stays as it was at the move."""
+    """Save the list as its XML form (0600, the state's owner), then as the JSON file an older release reads (the same
+    shape as v0.6.2, a hash beside it): `update --rollback` keeps the pairings and the open codes (R85 s1.5). An older
+    release's change to the JSON wins once on the next read."""
     from .profiles import statexml
     state = config.paths().state
     state.mkdir(parents=True, exist_ok=True)
-    statexml.write_list(state / name, obj, 0o600, state_owned=True)
-    if name == BOTH_FORMS:
-        _write_atomic(state / name, json.dumps(obj, indent=2).encode("utf-8"), 0o600, state_owned=True)
+    statexml.write_list(state / name, obj, 0o600, state_owned=True, old_format=_old_json)
 
 
 def _hash(token: str) -> str:
