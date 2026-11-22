@@ -407,9 +407,8 @@ def test_the_kit_routes_save_in_the_service_and_refuse_with_code_message_field(s
 
 
 def test_the_kit_routes_go_through_the_callers_auth(env, monkeypatch):  # noqa: F811
-    from starlette.responses import JSONResponse
     monkeypatch.setattr(config, "load", lambda: _cfg())
-    c = _kit_client(lambda fn: (lambda request: _no(request)))
+    c = _kit_client(lambda fn: _no)
     assert c.patch("/api/voice", json={"speed": 90}).status_code == 401 and not _file().exists()
 
 
@@ -478,3 +477,24 @@ def test_a_proof_made_for_other_values_or_another_key_is_not_good(wire):
     assert not page.Access(lambda: key).proof_ok("settings", headers[page.PROOF_HEADER], b'{"speed": 200}')
     assert not page.Access(lambda: page.token_key("another token 0123456789")).proof_ok(
         "settings", headers[page.PROOF_HEADER], body)
+
+
+# ---- the read answer the Hub page's group and the apps use ----
+
+def test_the_read_answer_has_the_four_values_remote_and_voice_file(monkeypatch):
+    monkeypatch.setattr(socket, "gethostname", lambda: "hubhost")
+    monkeypatch.setattr(socket, "getfqdn", lambda: "hubhost.lan")
+    monkeypatch.setattr(socket, "gethostbyname_ex", lambda n: (n, [], ["192.168.1.20"]))
+    local = voice_tab.get_voice(_cfg("http://127.0.0.1:5003"))
+    assert local["remote"] is False and local["voice_file"] == voice_tab.VOICE_MANY
+    assert {"speech", "speaker", "speed", "volume"} <= set(local)
+    far = voice_tab.get_voice(_cfg("http://192.168.1.99:5003", tts="espeak"))
+    assert far["remote"] is True and far["voice_file"] == voice_tab.VOICE_ESPEAK
+    assert voice_tab.get_voice(_cfg(""))  == {"station": False}
+
+
+def test_the_page_route_with_no_values_reads_the_answer(env, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(config, "load", lambda: _cfg())
+    got = anyio.run(_save_route(), None, {})
+    assert got["remote"] is False and got["voice_file"] == voice_tab.VOICE_MANY and got["speed"] == 100
+    assert not _file().exists()

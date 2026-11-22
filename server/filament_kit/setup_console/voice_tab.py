@@ -112,11 +112,13 @@ def hand_over(cfg: dict, only: tuple | list | None = None) -> bool:
 
 def get_voice(cfg: dict) -> dict:
     """`GET /api/voice`; `station: false` when the Hub has no Weigh Station (the rest is then left out). The values are
-    voice.xml's, `voice` and `speaker_range` come from the settings, read-only."""
+    voice.xml's; `voice_file` (also `voice`: the voice and engine shown), `remote` (the Weigh Station runs on another
+    computer) and `speaker_range` come from the settings, read-only. The Hub page's group reads only this answer."""
     if not station_url(cfg):
         return {"station": False}
-    return {"station": True, **voice_state.values(cfg), "voice": voice_name(cfg),
-            "speaker_range": voice_state.speaker_range(cfg)}
+    name = voice_name(cfg)
+    return {"station": True, **voice_state.values(cfg), "voice": name, "voice_file": name,
+            "remote": station_remote(cfg), "speaker_range": voice_state.speaker_range(cfg)}
 
 
 def check_values(body, cfg: dict) -> dict:
