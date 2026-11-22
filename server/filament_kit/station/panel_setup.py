@@ -1,4 +1,4 @@
-"""Setting up the wireless panel (R88 section 4.4): the plain functions under `spoolwarden station panel-wifi`.
+"""Setting up the wireless panel (R88 section 4.4): the plain functions under `spoolwarden weigh-station panel-wifi`.
 
 Over USB, once, the caller hands in the Wi-Fi name and password and the station's address, port and certificate
 fingerprint; `enable` makes a new token, writes the two set-up lines to the panel, keeps the token in the station's state
@@ -38,7 +38,7 @@ TEXT_DEVICES_USB = "Panel: on USB"                                          # ke
 TEXT_DEVICES_WIFI = "Panel: on Wi-Fi"                                       # key: check_panel_on_wifi
 TEXT_NOT_CONNECTED = "The Weigh Station's panel is not connected."          # key: check_panel_not_connected
 TEXT_NOT_CONNECTED_FIX = ("check the panel has power and is in Wi-Fi range; to go back to the USB cable: "
-                          "sudo spoolwarden station panel-wifi --off")      # key: check_panel_not_connected_fix
+                          "sudo spoolwarden weigh-station panel-wifi --off")      # key: check_panel_not_connected_fix
 
 
 class PanelSetupError(ValueError):
@@ -86,8 +86,7 @@ def _send_all(send: Callable[[str], str], lines: list[str]) -> None:
         except OSError:
             raise PanelSetupError("The panel did not answer over USB. Check the cable and try again.") from None
         if reply != REPLY_OK:
-            raise PanelSetupError(f"The panel refused set-up line {n} of {len(lines)}"
-                                  f"{': ' + reply[4:].strip() if reply.startswith('ERR ') and reply[4:].strip() else ''}.")
+            raise PanelSetupError(f"The panel refused set-up line {n} of {len(lines)}.")   # its reply is not repeated
 
 
 def token_path(folder: Path | None = None) -> Path:
