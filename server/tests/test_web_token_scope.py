@@ -118,7 +118,7 @@ def test_every_listed_route_is_one_the_web_unit_writes():
     for method, template in api.WEB_ROUTES:
         if (method, template) in LISTED_BEFORE_THE_WEB_UNIT_CALLS_THEM:
             continue
-        rx = re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", template)).replace("[^/]+.csv", "[^/]+"))
+        rx = re.compile(re.sub(r"\{\w+(?::int)?\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", template)).replace("[^/]+.csv", "[^/]+"))
         assert any(rx.fullmatch(c) for c in calls), (method, template)
 
 
@@ -145,7 +145,6 @@ UNDO_CALL = "/api/events/{quote(event, safe="
 CALLED_BEFORE_THE_HUB_MOUNTS_THEM = {
     ("GET", "/api/languages"),                              # RC2 builds it, RC9 mounts it
     ("GET", "/api/strings/{code}"),                         # the texts of a language, `<code>.js`
-    ("GET", "/api/spools/{id}/label.svg"),                  # RC8
     ("POST", "/api/demo/leave"),                            # RC6
 }
 _CALLED_BEFORE_THE_HUB_MOUNTS_THEM_RX = [

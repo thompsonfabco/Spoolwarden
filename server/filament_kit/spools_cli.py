@@ -400,6 +400,54 @@ def cmd_spool_home(api, number, location: str, yes: bool = False) -> int:
         done=lambda n, a, same: (CLI_SPOOL_HOME_SAME if same else CLI_SPOOL_HOME_DONE).format(place=a.get("home")))
 
 
+def cmd_spool_label(api, numbers: list, size: str | None = None, out: str | None = None) -> int:
+    """`spool label <number>... [--size ...] --out <file.svg>`: write the labels as one SVG file."""
+    from pathlib import Path
+    from . import config, labels
+    from .web.slots import SlotError
+    if not out:
+        output.error(labels.TEXT_CLI_NEED_OUT, labels.TEXT_CLI_NEED_OUT_FIX)
+        return output.USAGE
+    try:
+        chosen = labels.parse_size(size)
+    except labels.LabelError as e:
+        output.error(e.message)
+        return output.USAGE
+    parsed: list[int] = []
+    for raw in numbers:
+        n = _number(raw)
+        if n is None:
+            output.error(CLI_SPOOL_NUMBER_BAD.format(value=raw), output.fill(CLI_SPOOL_NOT_FOUND_FIX, command=COMMAND))
+            return output.USAGE
+        parsed.append(n)
+    if api is None:
+        return down()
+    items: list[dict] = []
+    for n in parsed:
+        try:
+            r = api.get(f"/api/spools/{n}")
+        except SlotError as e:
+            return _spool_error(e, n)
+        items.append(labels.label_data(r["spool"]))
+    cfg = config.load()
+    try:
+        svg = labels.file_svg(items, chosen, labels.home_address(cfg))
+    except labels.LabelError as e:
+        output.error(e.message)
+        return output.FAILED
+    try:
+        Path(out).write_text(svg, encoding="utf-8")
+    except OSError as e:
+        output.error(f"cannot write {out}: {e.strerror or e}")
+        return output.FAILED
+    output.emit({"ok": True, "file": str(out), "size": chosen, "labels": len(items)})
+    noun = "label" if len(items) == 1 else "labels"
+    output.out(labels.TEXT_CLI_WROTE.format(count=len(items), noun=noun,
+                                            size=labels.TEXT_LABELS_SIZE_NAMES[chosen], file=out))
+    output.out(labels.TEXT_CLI_NOTE.format(example=labels.short_address(parsed[0], cfg)))
+    return 0
+
+
 # ---------- the catalog's own entries ----------
 
 def cmd_catalog_local(api) -> int:
@@ -662,6 +710,11 @@ def add_parser(sub) -> None:
     h = ones.add_parser("home", help="change the home of a checked-out spool")
     h.add_argument("number")
     h.add_argument("location")
+    lb = ones.add_parser("label", help="write the labels of one or more spools as one SVG file")
+    lb.add_argument("numbers", nargs="+", help="one or more spool numbers")
+    lb.add_argument("--size", default="62x29",
+                    help="label size: 62x29 (default), 50x30, a4-63x34, a4-70x37 or letter-66x25")
+    lb.add_argument("--out", default=None, metavar="FILE", help="write the SVG to this file")
     for p in (w, m, ones.choices["empty"], h):
         p.add_argument("-y", "--yes", action="store_true", help="do not ask")
 
@@ -682,4 +735,6 @@ def run(args, api) -> int:
         return cmd_spool_return(api, args.number)
     if c == "home":
         return cmd_spool_home(api, args.number, args.location, args.yes)
+    if c == "label":
+        return cmd_spool_label(api, args.numbers, args.size, args.out)
     return cmd_spool_empty(api, args.number, args.yes)

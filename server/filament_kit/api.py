@@ -25,7 +25,7 @@ from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
 from . import (API_VERSION, __version__, address_texts, alerts_api, analytics, config, csv_io, demo, event_sink, events,
-               health, hostaddr, hub_view, intake, intake_history, inventory, modules, pairing, profiles_api,
+               health, hostaddr, hub_view, intake, intake_history, inventory, labels, modules, pairing, profiles_api,
                reader_corrections, reader_tokens, setup_page, station_flow, station_requests, storage, storage_api, tags, undo)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
 from .bridge import auto_slot, camera, family, hardware, loading, mapping, pending, registry, usage
@@ -226,9 +226,10 @@ WEB_ROUTES = (
     ("GET", "/api/export/{set}.csv"),
     ("GET", "/api/hub"),
     ("GET", "/api/voice"),
+    ("GET", "/api/spools/{id:int}/label.svg"),
     ("POST", "/api/spools/{id}/return"),    # the web app's Return (the spool-change rule: no printer switch)
 )
-_WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
+_WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+(?::int)?\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
 HOME_WEB_ROUTES = (("PATCH", "/api/voice"), ("POST", "/api/voice/test"))
 WEB_ONLY_PREFIX = "/api/profiles/web/"  # the web unit's preset writes: no phone or PC calls them
 WEB_ONLY_PATHS = ("/api/events/web", "/api/readers/web/seen")   # the web unit's hand-over of its spool events and seen readers
@@ -1911,6 +1912,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/station/save", _flow(station_save), methods=["POST"]),
             Route("/api/station/return", _flow(station_return), methods=["POST"]),
             *voice_tab.kit_routes(_authed),
+            *[Route(r.path, _authed(r.handler) if r.auth == "token" else r.handler, methods=[r.method])
+              for r in labels.kit_routes(lambda: sm, config.load)],
             *_gated([*_printer_routes(printers), *_bridge_routes(printers, mapper, sm),
                      *camera.routes(camera_hub, _authed)],
                     "klipper" if "klipper" in on and "printers" not in on else "printers", on),

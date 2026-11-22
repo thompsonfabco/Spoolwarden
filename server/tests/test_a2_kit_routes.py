@@ -23,7 +23,6 @@ SERVER_FK = ROOT / "server" / "filament_kit"
 
 # Routes intentionally not mounted yet (A4 labels / Wave H demo & languages).
 DEFERRED_CLIENT_ROUTES = {
-    ("GET", "/api/spools/{id}/label.svg"),
     ("POST", "/api/demo/leave"),
     ("GET", "/api/languages"),
     ("GET", "/api/strings/{code}"),
