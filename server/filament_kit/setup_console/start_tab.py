@@ -10,8 +10,8 @@ import anyio
 from .. import firstrun, getting_started
 
 
-def _view() -> dict:
-    v = getting_started.view()
+def _view(page) -> dict:
+    v = getting_started.view(backup_done=bool(page._last_backup()))
     if v.get("show") and v.get("total", 0) > 0 and v.get("done", 0) >= v["total"]:
         firstrun.finish()
     return v
@@ -21,7 +21,7 @@ def routes(page) -> list[tuple]:
     from ..setup_page import Refused
 
     async def read(request, body):
-        return await anyio.to_thread.run_sync(_view)
+        return await anyio.to_thread.run_sync(_view, page)
 
     async def write(request, body):
         has_hide = "hide" in body
@@ -37,7 +37,7 @@ def routes(page) -> list[tuple]:
             def run() -> dict:
                 if not firstrun.set_hidden(hide):
                     raise Refused(500, "could not save the checklist state")
-                return _view()
+                return _view(page)
 
             view = await anyio.to_thread.run_sync(run)
             page.audit(request, "getting started list hidden" if hide else "getting started list shown")
@@ -50,7 +50,7 @@ def routes(page) -> list[tuple]:
         def run() -> dict:
             if not firstrun.mark(keep):
                 raise Refused(500, "could not save the checklist state")
-            return _view()
+            return _view(page)
 
         view = await anyio.to_thread.run_sync(run)
         page.audit(request, f"getting started step kept ({keep})")

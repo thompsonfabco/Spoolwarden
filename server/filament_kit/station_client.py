@@ -25,6 +25,7 @@ import time
 import urllib.error
 import urllib.parse
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from .pairing import AmbiguousStation
 
@@ -410,8 +411,14 @@ MAX_TEXT = 200
 SETTING_ID = re.compile(r"[a-z0-9_.-]{1,40}")
 SETTING_KINDS = ("switch", "choice", "number", "text")
 TICKET = re.compile(r"[A-Za-z0-9_-]{16,128}")
-TEXT_STATION_NO_PIN = ("The Weigh Station has not told the Hub its certificate yet. Update it, then restart it "
-                       "(sudo systemctl restart filament-kit-station).")
+def _catalogue_text(key: str) -> str:
+    text = (Path(__file__).resolve().parent / "shared_static" / "strings.js").read_text(encoding="utf-8")
+    cat = json.loads(re.sub(r",\s*}$", "}", text[text.index("{"):text.rindex("}") + 1]))
+    vals = {"product": cat.get("app_name", ""), "command": cat.get("command_name", "")}
+    return re.sub(r"\{(\w+)\}", lambda m: vals.get(m.group(1), m.group(0)), cat[key])
+
+
+TEXT_STATION_NO_PIN = _catalogue_text("station_not_pinned")
 
 
 class StationCallError(Exception):

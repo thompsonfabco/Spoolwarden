@@ -1,2 +1,0 @@
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | color | 3 | identifier, not shown
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | module | 1 | identifier, not shown

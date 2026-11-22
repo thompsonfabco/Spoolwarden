@@ -219,6 +219,7 @@ def routes(page) -> list[tuple]:
             try:
                 settings_list, dropped = station_client.read_settings(url)
             except station_client.StationCallError:
+                out["device"] = {**row, "reachable": False}
                 return out
             out["settings"] = settings_list
             if dropped:

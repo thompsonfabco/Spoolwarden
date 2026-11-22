@@ -8,12 +8,16 @@ qualifies before a load applies, the assignment enters `state="choose"` and wait
 """
 from __future__ import annotations
 
+import functools
+import json
 import logging
+import re
 import threading
 import time
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 from .. import event_sink, storage
 from . import family, layout, loading, mapping, pending, registry, status
@@ -30,7 +34,21 @@ KLIPPER_WATCHABLE_ADAPTERS = frozenset({"afc", "happyhare"})
 MAX_VERIFIED_HT_ID = layout.HT_BASE + 1     # HT-A (128) and HT-B (129); >= 130 are unverified in bambu_hardware.xml
 ONLINE = ("connected", "needs_developer_mode", "unknown_model")
 FINAL = (loading.NoPreset, loading.NotFound, loading.SlotWriteFailed, UnknownPrinter, family.ModuleOff)
-AUTO_NOT_POSSIBLE = "This printer has no slots the Hub can watch. Choose a slot."
+
+
+@functools.lru_cache(maxsize=1)
+def _catalogue() -> dict[str, str]:
+    path = Path(__file__).resolve().parent.parent / "shared_static" / "strings.js"
+    text = path.read_text(encoding="utf-8")
+    return json.loads(re.sub(r",\s*}$", "}", text[text.index("{"):text.rindex("}") + 1]))
+
+
+def _say(key: str, **fill: str) -> str:
+    text = _catalogue()[key]
+    return re.sub(r"\{(\w+)\}", lambda m: str(fill.get(m.group(1), m.group(0))), text) if fill else text
+
+
+AUTO_NOT_POSSIBLE = _say("auto_not_possible")
 
 
 class AutoError(Exception):
@@ -182,7 +200,7 @@ def _load_into_slot(manager, sm, serial: str, label: str, spool_id: int, *,
         if (serial, pending_label) in pending_store.jobs() or not any(
             sl["label"] == label and _eligible(st, sl) for sl in _watchable_slots(st, adapter=adapter)
         ):
-            raise AutoError("nothing_to_choose", "That slot is no longer available for Auto.")
+            raise AutoError("nothing_to_choose", _say("auto_slot_gone"))
         sealed = _sealed(sealed_location)
         if kf is not None:
             r = kf.load(sm, serial, label, spool_id, False, sealed_location=sealed)
@@ -326,7 +344,7 @@ class Store:
             "pending": True,
             "confirmed": None,
             "expires_in": int(TTL),
-            "message": f"Waiting for {spool_name} to be loaded into any slot of {printer_name}.",
+            "message": _say("auto_waiting", spool=spool_name, printer=printer_name),
             **({"replaces": {"spool_id": old.spool_id, "name": old.spool_name}} if old is not None else {}),
         }
 
@@ -336,12 +354,12 @@ class Store:
         with self._lock:
             job = self._active_unlocked(serial, self.clock())
         if job is None:
-            raise AutoError("nothing_to_choose", "There is no slot choice waiting on this printer.")
+            raise AutoError("nothing_to_choose", _say("auto_nothing_to_choose"))
         with self.spool_lock(job.spool_id), self._send_lock(serial):
             with self._lock:
                 if (self._active_unlocked(serial, self.clock()) is not job or job.state != "choose"
                         or chosen not in job.slots or is_reserved_label(chosen)):
-                    raise AutoError("nothing_to_choose", "There is no slot choice waiting on this printer.")
+                    raise AutoError("nothing_to_choose", _say("auto_nothing_to_choose"))
                 spool_id = job.spool_id
                 load_kw = dict(job.load_kw)
             res = _load_into_slot(manager, sm, serial, chosen, spool_id, **load_kw)
@@ -354,7 +372,7 @@ class Store:
         with self._send_lock(serial), self._lock:
             job = self._active_unlocked(serial, self.clock())
             if job is None:
-                raise AutoError("not_waiting", "No Auto assignment is waiting on this printer.")
+                raise AutoError("not_waiting", _say("auto_not_waiting"))
             self._jobs.pop(serial, None)
         log.info("auto dropped %s spool %s: cancelled", serial, job.spool_id)
         return {"cancelled": True}
@@ -373,7 +391,7 @@ class Store:
 
     def drop_printer(self, serial: str) -> bool:
         """Drop any active Auto assignment when a printer is removed."""
-        with self._lock:
+        with self._send_lock(serial), self._lock:
             job = self._jobs.pop(serial, None)
         if job is not None:
             log.info("auto dropped %s spool %s: printer removed", serial, job.spool_id)
@@ -400,8 +418,8 @@ class Store:
             "spool_id": sid,
             "spool": spool,
             "state": state,
-            "text": (f"Two slots were loaded. Which one got {spool_name}?" if state == "choose"
-                     else f"Waiting for {spool_name} to be loaded into any slot of {pname}."),
+            "text": (_say("auto_choose", spool=spool_name) if state == "choose"
+                     else _say("auto_waiting", spool=spool_name, printer=pname)),
             "expires_at": expires_at,
         }
         if state == "choose":

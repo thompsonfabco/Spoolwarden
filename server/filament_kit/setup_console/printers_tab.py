@@ -139,7 +139,7 @@ def printers_csv(page) -> str:
         # Klipper defaults its name to the host, which may be a single DNS label and may have changed since.
         label = re.sub(r" \d+$", "", name)
         label = hostaddr.clean(re.sub(r"^(\[[^]]+\]|[^:]+):\d+$", r"\1", label))
-        address_name = ("." in label or hostaddr.is_literal(label)) and hostaddr.form_error(label) is None
+        address_name = ("." in label or "-" in label or hostaddr.is_literal(label)) and hostaddr.form_error(label) is None
         if (address_name or label.casefold() in {row["ip"].casefold(), row.get("host", "").casefold()}
                 or (kind == "bambu" and name == row["serial"])):
             name = ""

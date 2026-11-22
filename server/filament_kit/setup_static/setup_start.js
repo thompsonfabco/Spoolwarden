@@ -85,7 +85,7 @@
     if (opts && opts.webUrl) return opts.webUrl;
     const frag = String(target || "").slice(4);
     const base = location.pathname.replace(/\/(setup)?\/?$/, "");
-    return base + "/" + ["in", "take"].join("") + (frag ? "#" + frag : "");
+    return base + "/intake" + (frag ? "#" + frag : "");
   }
 
   async function askApi(opts, body) {

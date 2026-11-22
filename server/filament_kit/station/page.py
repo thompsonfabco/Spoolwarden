@@ -38,36 +38,65 @@ _PROOF = re.compile(r"^(\d{1,12})\.([0-9a-f]{16,64})\.([0-9a-f]{64})$")
 _TICKET = re.compile(r"^[A-Za-z0-9_-]{20,100}$")
 INFO = b"spoolwarden-station-proof-v1"
 
-# What the page says (the string catalogue is EV2's: these keys and texts go to it in the hand-off). Every one is put on
-# the page as text, never as markup.
-TEXTS = {
-    "station.page.title": "Weigh Station",
-    "station.page.open_from_hub": "Open this page from the Hub: Devices, this Weigh Station, Open this device's page.",
-    "station.page.session_over": "This session is over. Open this page from the Hub: Devices, this Weigh Station, "
+_CATALOGUE: dict[str, str] | None = None
+
+
+def _catalogue() -> dict[str, str]:
+    """Load the generated string catalogue once, or {} when absent (standalone station)."""
+    global _CATALOGUE
+    if _CATALOGUE is None:
+        p = Path(__file__).resolve().parent.parent / "shared_static" / "strings.js"
+        try:
+            raw = p.read_text(encoding="utf-8")
+            start, end = raw.find("{"), raw.rfind("}")
+            body = re.sub(r",\s*}$", "}", raw[start:end + 1]) if 0 <= start < end else "{}"
+            data = json.loads(body)
+            _CATALOGUE = data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            _CATALOGUE = {}
+    return _CATALOGUE
+
+
+def catalogue_text(key: str, fallback: str, **values: str) -> str:
+    """Resolve `key` from the string catalogue with {product}, {command}, and `values` substituted."""
+    cat = _catalogue()
+    raw = cat.get(key, fallback)
+    if not isinstance(raw, str):
+        raw = fallback
+    subs = {"product": cat.get("app_name", "Spoolwarden"), "command": cat.get("command_name", "spoolwarden"), **values}
+    return re.sub(r"\{(\w+)\}", lambda m: subs.get(m.group(1), m.group(0)), raw)
+
+
+# What the page says (all keys live in strings/en.json). Every one is put on the page as text, never as markup.
+_PAGE_DEFAULTS = {
+    "station_page_title": "Weigh Station",
+    "station_page_open_from_hub": "Open this page from the Hub: Devices, this Weigh Station, Open this device's page.",
+    "station_page_session_over": "This session is over. Open this page from the Hub: Devices, this Weigh Station, "
                                  "Open this device's page.",
-    "station.page.status": "Status",
-    "station.page.settings": "Settings",
-    "station.page.page_from": "Page access: {mode}",
-    "station.page.page_from_subnets_note": "If the network changes, run sudo spoolwarden modules apply on this Weigh Station.",
-    "station.page.save": "Save",
-    "station.page.reset": "Back to the installed values",
-    "station.page.saved": "Saved.",
-    "station.page.reset_done": "Back to the installed values.",
-    "station.page.not_saved": "Not saved: {reason}",
-    "station.page.tag": "Tag",
-    "station.page.scale": "Scale",
-    "station.page.last_weight": "Last weight",
-    "station.page.panel": "Panel",
-    "station.page.air": "Air",
-    "station.page.step": "Intake step",
-    "station.page.version": "Software version",
-    "station.page.none": "none",
-    "station.page.no_photo": "No photo.",
-    "station.page.own_values": "These settings differ from the installed values.",
-    "station.page.on": "On",
-    "station.page.off": "Off",
-    "station.page.unreachable": "The station did not answer.",
+    "station_page_status": "Status",
+    "station_page_settings": "Settings",
+    "station_page_page_from": "Page access: {mode}",
+    "station_page_page_from_subnets_note": "If the network changes, run sudo {command} modules apply on this Weigh Station.",
+    "station_page_save": "Save",
+    "station_page_reset": "Back to the installed values",
+    "station_page_saved": "Saved.",
+    "station_page_reset_done": "Back to the installed values.",
+    "station_page_not_saved": "Not saved: {reason}",
+    "station_page_tag": "Tag",
+    "station_page_scale": "Scale",
+    "station_page_last_weight": "Last weight",
+    "station_page_panel": "Panel",
+    "station_page_air": "Air",
+    "station_page_step": "Intake step",
+    "station_page_version": "Software version",
+    "station_page_none": "none",
+    "station_page_no_photo": "No photo.",
+    "station_page_own_values": "These settings differ from the installed values.",
+    "station_page_on": "On",
+    "station_page_off": "Off",
+    "station_page_unreachable": "The station did not answer.",
 }
+TEXTS = {k: catalogue_text(k, v) for k, v in _PAGE_DEFAULTS.items()}
 
 
 # ---- the proof the Hub gives ------------------------------------------------------------------------------------------
@@ -182,7 +211,7 @@ def render_index(raw: str) -> str:
     """index.html with the page's texts in a data block its script reads (type application/json: it is not run, so the
     page's content security policy, which allows only its own files, holds)."""
     block = json.dumps(TEXTS, ensure_ascii=True).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
-    return raw.replace("{{texts}}", block).replace("{{title}}", TEXTS["station.page.title"])
+    return raw.replace("{{texts}}", block).replace("{{title}}", TEXTS["station_page_title"])
 
 
 def read_file(path: str) -> tuple[bytes, str] | None:

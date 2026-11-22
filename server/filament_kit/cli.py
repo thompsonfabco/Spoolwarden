@@ -515,7 +515,7 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
                 return input(prompt)
         with waiting:
             kw = {"yes": yes, "ask": ask, "out": say, "step": steps.Steps(backup.restore_steps()).next,
-                  "password_file": Path(password_file) if password_file else None, "actor": "cli"}
+                  "password_file": Path(password_file) if password_file else None, "actor": _cli_actor()}
             rc = backup.restore(path, **kw)
         if rc == 0:                     # R82 s4 p6: a restored Hub starts with Getting started hidden
             firstrun.hide_after_restore()
@@ -7142,11 +7142,17 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     if _is_root() or _no_systemd():          # as root the command line writes the Hub's events itself (R80 E1)
         event_sink.set_sink(event_sink.StoreSink())
     try:
-        with event_sink.acting("cli"), output.muted() if _reports_results(args) else contextlib.nullcontext():
+        with event_sink.acting(_cli_actor()), output.muted() if _reports_results(args) else contextlib.nullcontext():
             return _dispatch(args, client_factory=client_factory, manager_factory=manager_factory,
                              sm_factory=sm_factory)         # what the command line changes is done by `cli` (R84 1.2)
     finally:
         event_sink.set_sink(before)
+
+
+def _cli_actor() -> str:
+    """Honor FILAMENT_KIT_ACTOR when a Hub-page job runs a CLI command as a subprocess (D8, 04.4)."""
+    actor = os.environ.get("FILAMENT_KIT_ACTOR", "")
+    return actor if actor in ("page", "cli") else "cli"
 
 
 def _old_spelling(args) -> None:

@@ -27,7 +27,8 @@ const BK_TEXT = {
   settings_restore_password_hint: "This backup is encrypted, and the Hub's backup password does not open it.",
   settings_restore_password_need: "Enter the password of this backup.",
   settings_restore_wrong_password: "Wrong password, or the file is damaged. Nothing was changed.",
-  settings_restore_summary_encrypted: "This backup is encrypted. Its contents are checked when the password is entered."
+  settings_restore_summary_encrypted: "This backup is encrypted. Its contents are checked when the password is entered.",
+  reader_setup_again: "Tag Readers set up for this Hub must be set up again."
 };
 const bkT = (key, vars) => { const v = SW.t(key, vars); return v !== key ? v : BK_TEXT[key]; };
 

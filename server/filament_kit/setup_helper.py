@@ -918,8 +918,11 @@ def _backup_open(req: dict) -> dict:
     name = req.get("name")
     if not isinstance(name, str):
         raise Refused(404, "no such backup")
+    password = req.get("password")
+    if password is not None and not isinstance(password, str):
+        raise Refused(400, "password must be text")
     try:
-        fd, download = backup.open_for_download(name)
+        fd, download = backup.open_for_download(name, password)
     except backup.BackupError as e:
         raise Refused(404, str(e)) from None
     except (OSError, tarfile.TarError, zlib.error, EOFError) as e:
@@ -1237,8 +1240,11 @@ def run_job(name: str, cmd: list[str] | None = None) -> int:
         except ValueError:              # not the main thread
             pass
         try:
+            job_env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+            if name in ("backup", "restore", "update", "rollback"):
+                job_env["FILAMENT_KIT_ACTOR"] = "page"
             r = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT, check=False,
-                               env={**os.environ, "PYTHONUNBUFFERED": "1"})
+                               env=job_env)
             code = r.returncode
         except OSError as e:
             fh.write(f"error: {e}\n")

@@ -19,6 +19,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from . import flow
+from . import page as _station_page
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -27,11 +28,25 @@ FILE = "settings.xml"
 MAX_BYTES = 64 * 1024
 VERSION = "1"
 VOICES = ("auto", "espeak")           # the speech engine: Piper when its voice is installed, or always espeak-ng
-STEP_LABELS = {"pairing": "Asking the Hub to pair", "idle": "Ready", "lookup": "Looking up a tag",
-               "camera": "Show the spool to the camera", "recognising": "Recognising the spool",
-               "weigh": "Put it on the scale", "ready": "Weight taken", "saving": "Saving", "done": "Saved",
-               "phone": "Use the phone"}
-LAMP_LABELS = {"off": "No lamp", "yellow": "Yellow lamp", "red": "Red lamp", "both": "Both lamps"}
+_t = _station_page.catalogue_text
+STEP_LABELS = {
+    "pairing": _t("station_step_pairing", "Asking the Hub to pair"),
+    "idle": _t("station_step_idle", "Ready"),
+    "lookup": _t("station_step_lookup", "Looking up a tag"),
+    "camera": _t("station_step_camera", "Show the spool to the camera"),
+    "recognising": _t("station_step_recognising", "Recognising the spool"),
+    "weigh": _t("station_step_weigh", "Put it on the scale"),
+    "ready": _t("station_step_ready", "Weight taken"),
+    "saving": _t("station_step_saving", "Saving"),
+    "done": _t("station_step_done", "Saved"),
+    "phone": _t("station_step_phone", "Use the phone"),
+}
+LAMP_LABELS = {
+    "off": _t("station_lamp_off", "No lamp"),
+    "yellow": _t("station_lamp_yellow", "Yellow lamp"),
+    "red": _t("station_lamp_red", "Red lamp"),
+    "both": _t("station_lamp_both", "Both lamps"),
+}
 
 
 class SettingsError(ValueError):
@@ -44,13 +59,14 @@ def _spec(id_, label, kind, **more) -> dict:
 
 def specs() -> list[dict]:
     """The settings and what each accepts, in the order the page shows them: id, label, kind and (choices | min, max)."""
-    out = [_spec("beep", "Beep when a tag is scanned", "switch"),
-           _spec("speech", "Speak the steps aloud", "switch"),
-           _spec("voice", "Voice", "choice", choices=list(VOICES), choice_labels={"auto": "Automatic", "espeak": "eSpeak"}),
-           _spec("volume", "Speaker volume (percent)", "number", min=0, max=100),
-           _spec("panel_swap", "Swap the yellow and red buttons and lamps", "switch")]
-    out += [_spec(f"lamp.{step}", f"Lamp for: {STEP_LABELS.get(step, step)}", "choice", choices=list(flow.LAMP_CHOICES),
-                  choice_labels=LAMP_LABELS)
+    out = [_spec("beep", _t("station_setting_beep", "Beep when a tag is scanned"), "switch"),
+           _spec("speech", _t("station_setting_speech", "Speak the steps aloud"), "switch"),
+           _spec("voice", _t("station_setting_voice", "Voice"), "choice", choices=list(VOICES),
+                 choice_labels={"auto": _t("station_voice_auto", "Automatic"), "espeak": _t("station_voice_espeak", "eSpeak")}),
+           _spec("volume", _t("station_setting_volume", "Speaker volume (percent)"), "number", min=0, max=100),
+           _spec("panel_swap", _t("station_setting_panel_swap", "Swap the yellow and red buttons and lamps"), "switch")]
+    out += [_spec(f"lamp.{step}", _t("station_setting_lamp", "Lamp for: {step}", step=STEP_LABELS.get(step, step)),
+                  "choice", choices=list(flow.LAMP_CHOICES), choice_labels=LAMP_LABELS)
             for step in flow.STEP_LAMPS]
     return out
 
@@ -80,7 +96,7 @@ def clean(spec: dict, value):
     elif kind == "choice":
         if isinstance(value, str) and value in spec["choices"]:
             return value
-    raise SettingsError(f"{spec['id']}: not a value this setting takes")
+    raise SettingsError(_t("station_settings_bad_value", "{id}: not a value this setting takes", id=spec["id"]))
 
 
 def _text(value) -> str:
@@ -155,7 +171,8 @@ class Store:
         except OSError as e:
             if tmp and os.path.exists(tmp):
                 os.unlink(tmp)
-            raise SettingsError(f"the settings could not be saved ({e.strerror or e})") from e
+            raise SettingsError(_t("station_settings_save_failed", "the settings could not be saved ({reason})",
+                                   reason=str(e.strerror or e))) from e
 
     def _remove(self) -> None:
         try:
@@ -163,7 +180,9 @@ class Store:
         except FileNotFoundError:
             pass
         except OSError as e:
-            raise SettingsError(f"the station's own values could not be removed ({e.strerror or e})") from e
+            raise SettingsError(_t("station_settings_remove_failed",
+                                   "the station's own values could not be removed ({reason})",
+                                   reason=str(e.strerror or e))) from e
 
     # ---- values
     def _installed(self, id_):
@@ -200,12 +219,12 @@ class Store:
     def change(self, body: dict) -> list[dict]:
         """Take `{id: value}` (all of it or none: one bad value refuses the whole), keep it, apply it, answer the list."""
         if not isinstance(body, dict) or not body:
-            raise SettingsError("nothing to change")
+            raise SettingsError(_t("station_settings_none", "nothing to change"))
         wanted = {s["id"]: s for s in specs()}
         new = {}
         for k, v in body.items():
             if k not in wanted:
-                raise SettingsError(f"{str(k)[:40]}: no such setting")
+                raise SettingsError(_t("station_settings_no_such", "{id}: no such setting", id=str(k)[:40]))
             new[k] = clean(wanted[k], v)
         with self._lock:
             values = dict(self.values)

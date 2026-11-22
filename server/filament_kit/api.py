@@ -23,7 +23,7 @@ from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
 from . import (API_VERSION, __version__, address_texts, alerts_api, analytics, config, csv_io, event_sink, events,
-               health, hostaddr, intake, intake_history, inventory, modules, pairing, profiles_api,
+               health, hostaddr, hub_view, intake, intake_history, inventory, modules, pairing, profiles_api,
                reader_corrections, setup_page, station_flow, station_requests, storage, storage_api, tags, undo)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
 from .bridge import auto_slot, camera, family, hardware, loading, mapping, pending, registry, usage
@@ -210,6 +210,7 @@ WEB_ROUTES = (
     ("GET", "/api/health"),
     ("GET", "/api/analytics"),
     ("GET", "/api/export/{set}.csv"),
+    ("GET", "/api/hub"),
 )
 _WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
 WEB_ONLY_PREFIX = "/api/profiles/web/"  # the web unit's preset writes: no phone or PC calls them
@@ -1575,6 +1576,13 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return JSONResponse(res)
 
     @_authed
+    async def hub_get(request: Request):
+        raw = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip()
+        host = raw.rsplit(":", 1)[0] if ":" in raw and not raw.endswith("]") else raw
+        return JSONResponse(await run_in_threadpool(
+            hub_view.build, host=host or None, this_device=request.state.device))
+
+    @_authed
     async def health_get(request: Request):
         days = _number(request.query_params, "days")
         if days is None:
@@ -1670,6 +1678,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     return Starlette(
         routes=[
             Route("/api/info", info),
+            Route("/api/hub", hub_get),
             Route("/api/pair", pair, methods=["POST"]),
             Route("/api/pair", unpair, methods=["DELETE"]),
             *_gated([

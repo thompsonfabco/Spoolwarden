@@ -1591,7 +1591,7 @@
     <string name="settings_catalog_token_hint">Lets the Filament Catalog download from a private repository, for example a GitHub token.</string>
     <string name="settings_catalog_token_remove">Remove token</string>
     <string name="settings_catalog_update">Update now</string>
-    <string name="settings_certificate_body">Port 80 on your router must reach this Hub while it runs. Spoolwarden never changes your firewall or router.</string>
+    <string name="settings_certificate_body">Port 80 on your router must reach this Hub while it runs. Spoolwarden never changes your firewall or router. Tag Readers set up for this Hub must be set up again.</string>
     <string name="settings_certificate_title">Get the certificate now?</string>
     <string name="settings_general_desc">The Hub\'s name and its Spoolman database.</string>
     <string name="settings_general_name">Display name</string>
@@ -1768,7 +1768,7 @@
         <item quantity="other">Contains %1$d files, and the Spoolman database</item>
     </plurals>
     <string name="common_value_none">none</string>
-    <string name="settings_restore_summary_other_host">The backup is from another computer name: the Hub gets a new certificate, so phones and Slicer Sync pair again.</string>
+    <string name="settings_restore_summary_other_host">The backup is from another computer name: the Hub gets a new certificate, so phones and Slicer Sync pair again. Tag Readers set up for this Hub must be set up again.</string>
     <string name="settings_restore_summary_other_hub">another Hub</string>
     <string name="settings_restore_summary_replaces">This replaces the spools, settings, printers and pairings on this Hub. What is here now is saved as a backup first.</string>
     <!-- 1=hash -->
@@ -2367,6 +2367,72 @@
     <string name="spools_tag_linked">Linked to spool %1$s, %2$s</string>
     <!-- 1=grams -->
     <string name="spools_tag_scale">scale %1$s g</string>
+    <!-- 1=count -->
+    <plurals name="spools_count">
+        <item quantity="one">%1$d spool</item>
+        <item quantity="other">%1$d spools</item>
+    </plurals>
+    <string name="spools_open_spoolman">Open Spoolman</string>
+    <string name="spools_search">Find a spool</string>
+    <string name="spools_search_hint">Brand, name, material, place, number or tag.</string>
+    <string name="spools_filters">Show only</string>
+    <string name="spools_chip_loaded">In a printer</string>
+    <string name="spools_chip_low">Running low</string>
+    <string name="spools_empty_title">No spools yet.</string>
+    <string name="spools_empty_text">Add your first one from your phone.</string>
+    <string name="spools_clear">Clear the search and filter</string>
+    <string name="spools_col_number">Number</string>
+    <string name="spools_col_colour">Colour</string>
+    <string name="spools_col_spool">Spool</string>
+    <string name="spools_col_left">Left</string>
+    <string name="spools_col_where">Where</string>
+    <string name="spools_no_place">Not placed</string>
+    <string name="spools_not_weighed">Not weighed</string>
+    <string name="spools_tagged">Tagged</string>
+    <string name="spools_untagged">No tag</string>
+    <string name="spools_low">Running low</string>
+    <string name="spools_unnamed">Unnamed spool</string>
+    <string name="spools_show_more">Show more</string>
+    <!-- 1=shown 2=total -->
+    <string name="spools_shown">Showing %1$s of %2$s</string>
+    <!-- 1=reason -->
+    <string name="spools_more_failed">Could not read more spools: %1$s</string>
+    <string name="spools_error">Could not read the spools</string>
+    <string name="spools_pane_empty">Choose a spool to see its details.</string>
+    <string name="spools_fact_left">Left</string>
+    <string name="spools_fact_state">State</string>
+    <string name="spools_fact_last_use">Last taken off</string>
+    <!-- 1=grams 2=printer 3=at -->
+    <string name="spools_last_use">%1$s g on %2$s, %3$s</string>
+    <string name="spools_last_use_none">Nothing yet</string>
+    <string name="spools_group_change">Change this spool</string>
+    <string name="spools_group_empty">When it is used up</string>
+    <string name="spools_weight_hint">What the scale shows with the empty spool on it, in grams.</string>
+    <string name="spools_weight_error">Enter the weight in grams, a number above 0.</string>
+    <string name="spools_link_last">Link the last tapped tag</string>
+    <string name="spools_previewing">Checking what would change…</string>
+    <string name="spools_apply">Apply</string>
+    <!-- 1=what -->
+    <string name="spools_apply_name">Apply: %1$s</string>
+    <string name="spools_nothing">Nothing would change.</string>
+    <!-- 1=left 2=after -->
+    <string name="spools_preview_weight">Preview: %1$s g left becomes %2$s g.</string>
+    <!-- 1=before 2=after -->
+    <string name="spools_preview_move">Preview: it moves from %1$s to %2$s.</string>
+    <!-- 1=before 2=after 3=why -->
+    <string name="spools_preview_move_why">Preview: it moves from %1$s to %2$s: %3$s.</string>
+    <!-- 1=tag -->
+    <string name="spools_preview_link">Preview: tag %1$s is linked to this spool.</string>
+    <string name="spools_preview_link_opens">It then counts as opened.</string>
+    <!-- 1=left -->
+    <string name="spools_preview_empty">Preview: %1$s g left becomes 0 g and the spool is marked empty.</string>
+    <!-- 1=grams -->
+    <string name="spools_done_weight">Updated: %1$s g left.</string>
+    <string name="spools_done_empty">Marked empty.</string>
+    <!-- 1=id -->
+    <string name="spools_ask_empty_title">Mark spool %1$s empty?</string>
+    <!-- 1=name -->
+    <string name="spools_ask_empty_text">%1$s is recorded as used up: 0 g left, and it leaves this list.</string>
     <!-- 1=name 2=id 3=grams -->
     <string name="spools_toast_weight">Updated %1$s (%2$s): %3$s g left.</string>
     <!-- 1=name 2=id 3=location -->
@@ -4450,7 +4516,7 @@
     <!-- 1=port -->
     <string name="port_dialog_title">Move the Hub to port %1$s?</string>
     <string name="port_dialog_field">Port</string>
-    <string name="port_dialog_body">Pair your phones and the Slicer Sync PC again. A Weigh Station on another machine must be paired again.</string>
+    <string name="port_dialog_body">Pair your phones and the Slicer Sync PC again. A Weigh Station on another machine must be paired again. Tag Readers set up for this Hub must be set up again.</string>
     <!-- 1=port -->
     <string name="port_moving">Moving the Hub to port %1$s…</string>
     <!-- 1=port 2=address -->
@@ -4474,7 +4540,8 @@
     <string name="port_changed">The Hub now uses port %1$s.</string>
     <string name="port_paired_found">Phones and the Slicer Sync PC find the Hub again on your network.</string>
     <string name="port_paired_again">Pair your phones and the Slicer Sync PC again.</string>
-    <string name="port_paired_station">A Weigh Station on another machine must be paired again.</string>
+    <string name="port_paired_station">A Weigh Station on another machine must be paired again. Tag Readers set up for this Hub must be set up again.</string>
+    <string name="reader_setup_again">Tag Readers set up for this Hub must be set up again.</string>
     <string name="port_remote_refusal">Remote access needs port 443, and the Hub is using it. Move the Hub to another port first: Settings > Network and addresses, Hub port.</string>
     <string name="port_remote_refusal_short">Remote access needs port 443, and the Hub is using it</string>
     <string name="port_remote_on_443">Remote access is on and uses port 443, so the Hub cannot take it.</string>

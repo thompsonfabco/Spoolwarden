@@ -54,7 +54,7 @@ TEXT_REMOTE_FIX = "sudo spoolwarden port 8710"
 # After AF7 and AF8 land and a phone is seen finding a moved Hub, TEXT_PAIRED_FOUND replaces its first sentence.
 TEXT_PAIRED_FOUND = "Phones and the Slicer Sync PC find the Hub again on your network."
 TEXT_PAIRED_AGAIN = "Pair your phones and the Slicer Sync PC again."
-TEXT_PAIRED_STATION = "A Weigh Station on another machine must be paired again."
+TEXT_PAIRED_STATION = "A Weigh Station on another machine must be paired again. Tag Readers set up for this Hub must be set up again."
 TEXT_PAIRED_DEVICES = f"{TEXT_PAIRED_AGAIN} {TEXT_PAIRED_STATION}"
 TEXT_CHANGED = "The Hub now uses port {port}."
 

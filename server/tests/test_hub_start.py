@@ -76,7 +76,7 @@ def test_start_calls_finish_once_when_all_steps_done(env, helper, monkeypatch):
     assert firstrun.set_hidden(False)
     c = _start_client(helper)
 
-    def fake_view():
+    def fake_view(*, backup_done=None):
         fr = firstrun.load()
         return {
             "show": fr.shows,

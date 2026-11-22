@@ -377,11 +377,11 @@ def test_the_script_puts_station_text_on_the_page_as_text():
 
 
 def test_the_page_says_to_open_it_from_the_hub_and_every_text_is_a_constant():
-    assert page.TEXTS["station.page.open_from_hub"] == OPEN_FROM_HUB
-    assert "station.page.open_from_hub" in static_texts()["station.js"]
-    used = set(re.findall(r'T\["(station\.page\.[a-z_]+)"\]', static_texts()["station.js"]))
-    assert used <= set(page.TEXTS) and "station.page.open_from_hub" in used
-    assert all(k.startswith("station.page.") and v for k, v in page.TEXTS.items())
+    assert page.TEXTS["station_page_open_from_hub"] == OPEN_FROM_HUB
+    assert "station_page_open_from_hub" in static_texts()["station.js"]
+    used = set(re.findall(r'T\["(station_page_[a-z_]+)"\]', static_texts()["station.js"]))
+    assert used <= set(page.TEXTS) and "station_page_open_from_hub" in used
+    assert all(k.startswith("station_page_") and v for k, v in page.TEXTS.items())
 
 
 def test_without_a_session_the_page_shows_that_sentence_and_none_of_the_data(hub_ok, elsewhere):
@@ -394,6 +394,6 @@ def test_without_a_session_the_page_shows_that_sentence_and_none_of_the_data(hub
     for path in ("/state", "/settings", "/photo", "/last-tag"):     # an address off the list with no (or a wrong) session
         assert elsewhere.call("GET", path, None, {"Cookie": f"{page.COOKIE}=none"})[0] == 403
     js = static_texts()["station.js"]
-    assert js.count('T["station.page.open_from_hub"]') >= 2    # a browser with no session (403 on state), and a refused ticket
+    assert js.count('T["station_page_open_from_hub"]') >= 2    # a browser with no session (403 on state), and a refused ticket
     assert "bare" not in js
     assert not [k for k, v in page.TEXTS.items() if re.search(r"stations?", v, re.I) and "Weigh Station" not in v]

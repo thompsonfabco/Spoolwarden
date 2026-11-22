@@ -1035,7 +1035,7 @@ def test_helper_ops_are_the_closed_list():
     assert set(setup_helper.OPS) == {"check", "key_set", "key_remove", "passphrase_set",
                                      "local_intake_token_set", "local_intake_token_remove", "module", "setting", "general", "general_group", "spoolman_url", "apply", "mode", "job", "journal", "backup_keep", "backup_list", "backup_last", "backup_open", "backup_password_set", "backup_password_remove", "restore_pin", "restore_password", "restore_forget", "station_pairing",
                                      "trust_status", "trust_add", "trust_list", "trust_rename", "trust_revoke",
-                                     "trust_revoke_all", "trust_enabled", "reader_usb", "port_change"}
+                                     "trust_revoke_all", "trust_enabled", "reader_usb", "port_change", "report_open"}
     assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair", "library_update",
                                       "library_rollback", "remote_issue",
                                       "backup", "restore", "report", "local_intake_plan", "local_intake_install", "local_intake_remove", "local_intake_share", "corrections_send", "reader_setup", "port_change"}

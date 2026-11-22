@@ -21,7 +21,7 @@ MESSAGES: dict[str, str | dict] = {
     "port_dialog_title": "Move the Hub to port {port}?",
     "port_dialog_field": "Port",
     "port_dialog_body": "Pair your phones and the Slicer Sync PC again. A Weigh Station on another machine must be "
-                        "paired again.",
+                        "paired again. Tag Readers set up for this Hub must be set up again.",
     "port_moving": "Moving the Hub to port {port}…",
     "port_done": "The Hub is on port {port}: {address}",
     "port_show": "Hub port: {port}",
@@ -35,7 +35,7 @@ MESSAGES: dict[str, str | dict] = {
     "port_changed": "The Hub now uses port {port}.",
     "port_paired_found": "Phones and the Slicer Sync PC find the Hub again on your network.",
     "port_paired_again": "Pair your phones and the Slicer Sync PC again.",
-    "port_paired_station": "A Weigh Station on another machine must be paired again.",
+    "port_paired_station": "A Weigh Station on another machine must be paired again. Tag Readers set up for this Hub must be set up again.",
     "port_remote_refusal": "Remote access needs port 443, and the Hub is using it. Move the Hub to another port first: "
                            "Settings > Network and addresses, Hub port.",
     "port_remote_refusal_short": "Remote access needs port 443, and the Hub is using it",

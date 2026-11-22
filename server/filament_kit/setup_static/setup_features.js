@@ -25,10 +25,10 @@ const applyRunning = () => S.apply.running;
 // text with `code` parts: the code goes in a code element
 const codeParts = (text) => text.split("`").map((part, i) => (i % 2 ? h("code", { class: "mono", textContent: part }) : part));
 
-// AF4: Label Reader lead-in and Remote access port-443 conflict helpers (avoid literal banned-word fragments in identifiers)
-const READER_FEATURE = "local_in" + "take";
-const READER_INSTALLED_KEY = READER_FEATURE + "_installed";
-const READER_URL_KEY = READER_FEATURE + ".url";
+// AF4: Label Reader lead-in and Remote access port-443 conflict helpers
+const READER_FEATURE = "local_intake";
+const READER_INSTALLED_KEY = "local_intake_installed";
+const READER_URL_KEY = "local_intake.url";
 function isLoopbackReader(url) {
   if (!url) return true;
   try {

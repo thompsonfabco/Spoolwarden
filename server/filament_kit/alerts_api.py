@@ -178,7 +178,7 @@ MESSAGES = {
     "csv_days_number": "days must be a number.",
     "csv_days_above_zero": "days must be above 0.",
     "csv_unknown_set": "Unknown export set {name}.",
-    "csv_not_readable": "This file is not a CSV file that Spoolwarden can read.",
+    "csv_not_readable": "This file is not a CSV file that {product} can read.",
     "csv_enter_yes_no": "{column}: Enter yes or no.",
     "csv_enter_whole": "{column}: Enter a whole number.",
     "csv_enter_whole_min": "{column}: Enter a whole number of at least {min}.",

@@ -25,7 +25,7 @@
   function row(dl, name, value) {
     var dt = document.createElement("dt"), dd = document.createElement("dd");
     say(dt, name);
-    say(dd, value === null || value === undefined || value === "" ? T["station.page.none"] : String(value));
+    say(dd, value === null || value === undefined || value === "" ? T["station_page_none"] : String(value));
     dl.appendChild(dt);
     dl.appendChild(dd);
   }
@@ -35,16 +35,16 @@
   function showStatus(s) {
     var dl = $("status");
     dl.textContent = "";
-    row(dl, T["station.page.tag"], s.tag && s.tag.nfc_id ? s.tag.nfc_id + age(s.tag) : null);
-    row(dl, T["station.page.scale"], s.scale ? s.scale.grams + " g, " + s.scale.status : null);
-    row(dl, T["station.page.last_weight"], s.last_weight ? s.last_weight.grams + " g" + age(s.last_weight) : null);
-    row(dl, T["station.page.panel"], s.panel ? s.panel + (s.panel_version ? " (firmware " + s.panel_version + ")" : "") : null);
-    row(dl, T["station.page.air"], s.air ? s.air.temp_c + " C, " + s.air.rh + " %" : null);
-    row(dl, T["station.page.step"], s.flow ? s.flow.step + (s.flow.message ? ": " + s.flow.message : "") : null);
-    row(dl, T["station.page.version"], s.version);
+    row(dl, T["station_page_tag"], s.tag && s.tag.nfc_id ? s.tag.nfc_id + age(s.tag) : null);
+    row(dl, T["station_page_scale"], s.scale ? s.scale.grams + " g, " + s.scale.status : null);
+    row(dl, T["station_page_last_weight"], s.last_weight ? s.last_weight.grams + " g" + age(s.last_weight) : null);
+    row(dl, T["station_page_panel"], s.panel ? s.panel + (s.panel_version ? " (firmware " + s.panel_version + ")" : "") : null);
+    row(dl, T["station_page_air"], s.air ? s.air.temp_c + " C, " + s.air.rh + " %" : null);
+    row(dl, T["station_page_step"], s.flow ? s.flow.step + (s.flow.message ? ": " + s.flow.message : "") : null);
+    row(dl, T["station_page_version"], s.version);
     var img = $("photo");
     if (s.photo) { img.src = "photo?page=1&t=" + encodeURIComponent(s.photo.taken_at || ""); img.hidden = false; } else { img.hidden = true; }
-    say($("own-values"), T["station.page.own_values"]);
+    say($("own-values"), T["station_page_own_values"]);
     $("own-values").hidden = !s.settings_changed;
   }
 
@@ -96,7 +96,7 @@
   function load(first) {
     return fetch("state?page=1", {credentials: "same-origin"}).then(function (r) {
       if (r.status === 401 || r.status === 403) {
-        openFromHub(first ? T["station.page.open_from_hub"] : T["station.page.session_over"]);
+        openFromHub(first ? T["station_page_open_from_hub"] : T["station_page_session_over"]);
         return null;
       }
       return r.json();
@@ -112,37 +112,37 @@
         const mode = d.page_from;
         policy.hidden = !["home", "subnets", "allowed"].includes(mode);
         if (!policy.hidden) {
-          const label = T["station.page.page_from"];
-          const note = mode === "subnets" ? " " + T["station.page.page_from_subnets_note"] : "";
+          const label = T["station_page_page_from"];
+          const note = mode === "subnets" ? " " + T["station_page_page_from_subnets_note"] : "";
           policy.textContent = label.replace("{mode}", mode) + note;
         }
         showSettings(d.settings || []);
         timer = setInterval(function () { load(false); }, 5000);
       });
-    }).catch(function () { say($("note"), T["station.page.unreachable"]); });
+    }).catch(function () { say($("note"), T["station_page_unreachable"]); });
   }
 
   function save(body, done) {
     send("settings", body).then(function (r) { return r.json().then(function (d) { return [r.ok, d]; }); }).then(function (x) {
       if (x[0]) { showSettings(x[1].settings || []); say($("result"), done); load(false); }
-      else { say($("result"), T["station.page.not_saved"].replace("{reason}", x[1].message || "")); }
-    }).catch(function () { say($("result"), T["station.page.unreachable"]); });
+      else { say($("result"), T["station_page_not_saved"].replace("{reason}", x[1].message || "")); }
+    }).catch(function () { say($("result"), T["station_page_unreachable"]); });
   }
 
   function start() {
-    say($("title"), T["station.page.title"]);
-    say($("status-heading"), T["station.page.status"]);
-    say($("settings-heading"), T["station.page.settings"]);
-    say($("save"), T["station.page.save"]);
-    say($("reset"), T["station.page.reset"]);
-    $("save").addEventListener("click", function () { save(values(), T["station.page.saved"]); });
-    $("reset").addEventListener("click", function () { save({reset: true}, T["station.page.reset_done"]); });
+    say($("title"), T["station_page_title"]);
+    say($("status-heading"), T["station_page_status"]);
+    say($("settings-heading"), T["station_page_settings"]);
+    say($("save"), T["station_page_save"]);
+    say($("reset"), T["station_page_reset"]);
+    $("save").addEventListener("click", function () { save(values(), T["station_page_saved"]); });
+    $("reset").addEventListener("click", function () { save({reset: true}, T["station_page_reset_done"]); });
     var m = /(?:^#|&)ticket=([A-Za-z0-9_-]+)/.exec(location.hash);
     if (!m) { load(true); return; }      // no ticket: a browser with no session is refused by the station, and the page says so
     history.replaceState(null, "", location.pathname + location.search);       // the ticket leaves the address bar at once
     send("session", {ticket: m[1]}).then(function (r) {
-      if (r.ok) { load(true); } else { openFromHub(T["station.page.open_from_hub"]); }
-    }).catch(function () { say($("note"), T["station.page.unreachable"]); });
+      if (r.ok) { load(true); } else { openFromHub(T["station_page_open_from_hub"]); }
+    }).catch(function () { say($("note"), T["station_page_unreachable"]); });
   }
   start();
 }());

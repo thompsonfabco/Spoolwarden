@@ -16,6 +16,8 @@ import ipaddress
 import threading
 import time
 
+from . import page as _station_page
+
 HOME_NETWORKS = tuple(ipaddress.ip_network(n) for n in (
     "127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "fc00::/7", "fe80::/10"))
 WRONG_PER_MINUTE = 10
@@ -25,11 +27,12 @@ MAX_ADDRESSES = 256          # the table of callers: it cannot grow without limi
 LISTED, HOME, OUTSIDE = "listed", "home", "outside"
 SESSION_GET = ("/state", "/settings", "/photo")           # what a session may read
 TEXTS = {
-    "forbidden": "This address may not ask for that.",
-    "not_found": "There is nothing here.",
-    "too_many_wrong_tickets": "Too many wrong tickets from this address. Try again in a minute.",
-    "bad_request": "The request is not valid.",
-    "too_big": "The request is too big.",
+    "forbidden": _station_page.catalogue_text("station_refusal_forbidden", "This address may not ask for that."),
+    "not_found": _station_page.catalogue_text("station_refusal_not_found", "There is nothing here."),
+    "too_many_wrong_tickets": _station_page.catalogue_text(
+        "station_refusal_too_many_wrong_tickets", "Too many wrong tickets from this address. Try again in a minute."),
+    "bad_request": _station_page.catalogue_text("station_refusal_bad_request", "The request is not valid."),
+    "too_big": _station_page.catalogue_text("station_refusal_too_big", "The request is too big."),
 }
 
 

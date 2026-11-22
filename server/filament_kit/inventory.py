@@ -448,7 +448,10 @@ def link_tag(sm: Spoolman, spool_id: int, uid: str, force: bool, dry: bool, keep
                                           before_grams=target.get("remaining_weight"),
                                           after_grams=target.get("remaining_weight"),
                                           before_tag=tags.stored(target) or "",
-                                          after_tag=uid)
+                                          after_tag=uid,
+                                          before_first_used=target.get("first_used") or "",
+                                          before_comment=target.get("comment") or "",
+                                          took_tag_from=",".join(str(i) for i in result.cleared))
     if cap:
         result.event_id = cap[-1]["id"]
         result.event = cap[-1]
@@ -591,7 +594,10 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
                 event_sink.emit_spool("spool.opened", final, spool_id, before_location=spool.get("location"),
                                       after_location=final.get("location"), before_grams=spool.get("remaining_weight"),
                                       after_grams=final.get("remaining_weight"),
-                                      before_tag=tags.stored(spool) or "", after_tag=uid)
+                                      before_tag=tags.stored(spool) or "", after_tag=uid,
+                                      before_first_used=spool.get("first_used") or "",
+                                      before_comment=spool.get("comment") or "",
+                                      took_tag_from=",".join(str(i) for i in link.cleared))
             if "remaining_weight" in patch:
                 event_sink.weight_changed(sm)
     if cap:

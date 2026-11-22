@@ -63,7 +63,7 @@ from starlette.routing import Route
 
 from .. import config, inventory, tags
 from ..spoolman import SpoolmanError
-from . import auth, slots
+from . import auth, pages, slots
 from ..reader_tokens import (MAX_FILE, MAX_TOKENS, SHA256, TOKEN_ID, SeenBuffer, TokenFileError,  # noqa: F401
                              TokenStore, _clean_name, _hash, flush, parse_build, parse_tokens, render_tokens, token_file)
 from .errors import Problem
@@ -88,6 +88,16 @@ STATUSES = ("set", "queued", "unknown_tag", "unknown_spool", "archived_spool", "
 
 def fw_dir() -> Path:
     return config.paths().state / "reader-fw"
+
+
+@functools.lru_cache(maxsize=1)
+def _catalogue() -> dict[str, str]:
+    path = Path(__file__).resolve().parent.parent / "shared_static" / "strings.js"
+    return pages.catalogue({"strings.js": path.read_bytes()})
+
+
+def _say(key: str, **values: str) -> str:
+    return pages.text(_catalogue(), key, **values)
 
 
 # ---------- queue-on-empty ----------
@@ -116,7 +126,7 @@ class LoadQueue:
         self._start_thread = start_thread
         self._jobs: dict[tuple[str, str], Job] = {}
         self._lock = threading.Lock()
-        self._sends: dict[tuple[str, str], threading.Lock] = {}   # held around a queued send, per slot
+        self._sends: dict[str, threading.Lock] = {}   # held around a queued send, per printer
         self._thread: threading.Thread | None = None
 
     def add(self, printer: str, label: str, spool_id: int, preset: dict | None = None,
@@ -125,18 +135,28 @@ class LoadQueue:
             self._jobs[(printer, label)] = Job(int(spool_id), self.clock(), preset=preset, pend=pend)
         self._ensure_thread()
 
-    def _send_lock(self, key: tuple[str, str]) -> threading.Lock:
+    def _send_lock(self, printer: str) -> threading.Lock:
         with self._lock:
-            return self._sends.setdefault(key, threading.Lock())
+            return self._sends.setdefault(printer, threading.Lock())
 
     def drop(self, printer: str, label: str) -> None:
         """Forget the queued tap for that slot. A send of it already in progress finishes first (at most the kit
         API's timeout), so a direct set made after drop() always lands after the older tap, never before it; a
         tap not yet sent is never sent (final review M5)."""
         key = (printer, label)
-        with self._send_lock(key):
+        with self._send_lock(printer):
             with self._lock:
                 self._jobs.pop(key, None)
+
+    def drop_printer(self, printer: str) -> int:
+        """Forget every queued tap for `printer` (e.g. when Auto takes ownership of the printer queue).
+        Waits for any in-flight queued send on `printer` to finish first."""
+        with self._send_lock(printer):
+            with self._lock:
+                keys = [k for k in self._jobs if k[0] == printer]
+                for k in keys:
+                    self._jobs.pop(k, None)
+                return len(keys)
 
     def clear(self) -> None:
         with self._lock:
@@ -243,7 +263,7 @@ class LoadQueue:
         if job.tries >= MAX_TRIES:
             return self._done(key, job, f"the printer did not keep the setting after {MAX_TRIES} tries (slot shows "
                                         f"{st.get('type')!r} {st.get('preset_id')!r})")
-        with self._send_lock(key):
+        with self._send_lock(printer):
             with self._lock:
                 if self._jobs.get(key) is not job:
                     return                     # dropped (a direct set replaced it) or re-queued: stale, not sent
@@ -356,10 +376,16 @@ class Reader:
         self.tokens = tokens if tokens is not None else TokenStore()
         self.seen = seen if seen is not None else SeenBuffer()
         self._handing = threading.Lock()
+        self._printer_locks: dict[str, threading.Lock] = {}
+        self._printer_locks_guard = threading.Lock()
         self.queue = queue if queue is not None else LoadQueue(tools.kit_bridge)
         if self.queue.kit_fn is None:
             self.queue.kit_fn = tools.kit_bridge
         self._pool = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="reader-load")
+
+    def _printer_lock(self, printer: str) -> threading.Lock:
+        with self._printer_locks_guard:
+            return self._printer_locks.setdefault(printer, threading.Lock())
 
     # --- plumbing ---
 
@@ -454,7 +480,8 @@ class Reader:
                      "type": clip(s.get("type") or ""), "spool": _short_spool(s.get("spool"))}
                     for s in reader_slots(slots.status_slots(st), pid)]
             if pv.get("auto_possible") or st.get("auto_possible"):
-                rows = [{"label": "auto", "say": ["Auto"], "kind": "auto", "present": None, "type": "", "spool": None},
+                rows = [{"label": "auto", "say": say_tokens(_say("reader_auto_say")), "kind": "auto",
+                         "present": None, "type": "", "spool": None},
                         *(r for r in rows if slots.label_key(r["label"]) != "AUTO")]
             return cap_slots(rows, pid)
         return JSONResponse(await run_in_threadpool(build))
@@ -500,15 +527,23 @@ class Reader:
         if pv.get("state") in OFFLINE_STATES:
             return reply(200, "offline", f"{pname} is {pv.get('state').replace('_', ' ')}", filament=name)
         if slot.strip().lower() == "auto":
-            r = kit.post(f"{slots.printer_path(printer)}/slots/auto/load",
-                         {"spool_id": int(sp["id"]), "dry_run": dry})
+            if dry:
+                r = kit.post(f"{slots.printer_path(printer)}/slots/auto/load",
+                             {"spool_id": int(sp["id"]), "dry_run": True})
+            else:
+                with self._printer_lock(printer):
+                    dropped = self.queue.drop_printer(printer)
+                    if dropped:
+                        log.info("auto %s: cancelled %d earlier queued tap(s)", _safe(printer), dropped)
+                    r = kit.post(f"{slots.printer_path(printer)}/slots/auto/load",
+                                 {"spool_id": int(sp["id"]), "dry_run": False})
             extra = {"filament": name, "slot": "auto"}
             if dry:
                 extra["dry_run"] = True
             rep = (r or {}).get("replaces") if isinstance(r, dict) else None
             if isinstance(rep, dict):
                 extra["replaces"] = {"spool_id": rep.get("spool_id"), "name": clip(rep.get("name") or "")}
-            return reply(200, "queued", "Auto: load any slot (waits 15 min)", **extra)
+            return reply(200, "queued", _say("reader_auto_queued"), **extra)
         found = slots.status_slots(view.get("status") or {})
         try:
             label = slots.kit_label(slot, [s["label"] for s in found])
@@ -525,7 +560,8 @@ class Reader:
             msg = f"{label} empty: load it now (waits {QUEUE_TTL // 60} min)"
             if dry:
                 return reply(200, "queued", msg, dry_run=True, **extra)
-            self.queue.add(printer, label, int(sp["id"]), preset or None, (cur.get("pending") or {}).get("spool_id"))
+            with self._printer_lock(printer):
+                self.queue.add(printer, label, int(sp["id"]), preset or None, (cur.get("pending") or {}).get("spool_id"))
             log.info("pending %s %s spool %s: waiting for the filament to load", _safe(printer), label, sp["id"])
             return reply(200, "queued", msg, **extra)
         if dry:
@@ -533,13 +569,14 @@ class Reader:
             preset = (r or {}).get("preset") or {}
             return reply(200, "set", f"{label}: {preset.get('name')}", filament=name, preset=preset.get("name"),
                          slot=label, dry_run=True)
-        self.queue.drop(printer, label)                   # a direct set replaces an older queued tap
-        fut = self._pool.submit(kit.post, path, {**load, "dry_run": False})
-        try:
-            r = fut.result(timeout=max(MIN_WAIT, deadline - time.monotonic()))
-        except concurrent.futures.TimeoutError:
-            fut.add_done_callback(functools.partial(_late, printer, label))
-            return reply(200, "set", f"{label}: sent", filament=name, slot=label)
+        with self._printer_lock(printer):
+            self.queue.drop(printer, label)                   # a direct set replaces an older queued tap
+            fut = self._pool.submit(kit.post, path, {**load, "dry_run": False})
+            try:
+                r = fut.result(timeout=max(MIN_WAIT, deadline - time.monotonic()))
+            except concurrent.futures.TimeoutError:
+                fut.add_done_callback(functools.partial(_late, printer, label))
+                return reply(200, "set", f"{label}: sent", filament=name, slot=label)
         preset = (r or {}).get("preset") or {}
         msg = f"{label}: {preset.get('name') or 'set'}"
         if r and r.get("confirmed") is False:

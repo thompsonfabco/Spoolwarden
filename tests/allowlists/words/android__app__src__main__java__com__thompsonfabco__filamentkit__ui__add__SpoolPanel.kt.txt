@@ -1,1 +1,0 @@
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/SpoolPanel.kt | color | 6 | identifier, not shown

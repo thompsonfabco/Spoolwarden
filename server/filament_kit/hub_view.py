@@ -16,6 +16,7 @@ from __future__ import annotations
 import datetime
 import logging
 import re
+import subprocess
 
 from . import __version__, config, modules, redact
 
@@ -184,6 +185,22 @@ def records_kept(cfg: dict) -> int:
     return intake_history.keep(cfg)
 
 
+def nightly_enabled(cfg: dict) -> bool:
+    """Whether nightly backups are on, from the backup timer's state (never the root-only backups folder)."""
+    from . import cli
+    if cli._no_systemd():
+        return "backup" in modules.enabled(cfg)
+    try:
+        r = subprocess.run(["systemctl", "is-enabled", "filament-kit-backup.timer"],
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5, check=False)
+        msg = ((r.stdout or "") + (r.stderr or "")).lower()
+        if r.returncode != 0 and ("not-found" in msg or "no such file" in msg):
+            return "backup" in modules.enabled(cfg)
+        return r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return "backup" in modules.enabled(cfg)
+
+
 def build(cfg: dict | None = None, *, host: str | None = None, this_device: str | None = None,
           getting_started: dict | None = None, client_factory=None, paired: list | None = None,
           readers: list | None = None) -> dict:
@@ -205,7 +222,8 @@ def build(cfg: dict | None = None, *, host: str | None = None, this_device: str 
     out["features"] = _safe("the features", lambda: features(cfg), [])
     out["catalog"] = _safe("the catalog", catalog, {})
     last = _safe("the last backup", last_backup, None)
-    out["backup"] = {**({"last_at": last} if last else {}), "nightly": "backup" in modules.enabled(cfg)}
+    out["backup"] = {**({"last_at": last} if last else {}),
+                     "nightly": _safe("the backup timer", lambda: nightly_enabled(cfg), False)}
     out["reader"] = _safe("the label reader", lambda: reader(cfg), {"engine": "off", "key_set": False})
     out["devices"] = _safe("the devices", lambda: devices(cfg, this_device, out["version"], paired, readers), [])
     out["records_kept"] = records_kept(cfg)

@@ -580,7 +580,17 @@ WHOLE_TEXTS = {"here", "click here", "server", "station"}
 WHOLE_EDGE = " \t\r\n.,;:!?'\"\u2026\u2019()[]-"
 
 
+def _is_identifier(content):
+    """Single-token paths, URLs, and snake_case / dotted identifiers (no whitespace) are internal keys, not UI text."""
+    s = content.strip()
+    if not s or any(c.isspace() for c in s):
+        return False
+    return s.startswith(("/", "#")) or "://" in s or "_" in s or "." in s
+
+
 def word_findings_in(content):
+    if _is_identifier(content):
+        return []
     out = [name for name, rx in BANNED_RX if rx.search(content)]
     if HMS.search(content):
         out.append("HMS")
@@ -693,6 +703,8 @@ def test_plants_are_found():
     assert word_findings_in("Presets") == ["presets"] and word_findings_in("Slicer presets") == []
     assert word_findings_in("Okay, Hub address, here and there") == []
     assert word_findings_in("Features, Colour, okay, hereby, Retrying") == []
+    assert word_findings_in("local_intake") == [] and word_findings_in("/intake") == []
+    assert word_findings_in("local_intake.url") == [] and word_findings_in("the local_intake failed") == ["intake"]
     assert [w for w, _ in word_findings('h("button", { textContent: "Modules" })', True)] == ["module"]
     assert [w for w, _ in word_findings('Text("OK")', False)] == ['"OK"']
 

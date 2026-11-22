@@ -284,6 +284,7 @@ def issue(cfg: dict, *, run: Callable[[list[str]], None] | None = None) -> int:
             f"check that {s['hostname']} points at this Hub and port 80 reaches it, then run this again."))
         return output.FAILED
     output.out_lines(output.status_row("done", f"Certificate issued for {s['hostname']}."))
+    output.note("Tag Readers set up for this Hub must be set up again.")
     return 0
 
 
