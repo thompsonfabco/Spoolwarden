@@ -119,7 +119,7 @@ def test_an_older_syncs_aside_is_restored(tmp_path):
     d.pair_aside.write_text(json.dumps(body), encoding="utf-8")        # as an older Sync wrote it
     assert store.pair_waiting(d) is True
     assert store.restore_pair_aside(d) is True
-    assert store.load_token(d) == "tok-old" and store.load_config(d) == {"server": "old:1"}
+    assert d.token.read_bytes() == b"tok-old" and store.load_config(d) == {"server": "old:1"}   # the bytes as kept
 
 
 def test_unpair_removes_both_forms(tmp_path):
