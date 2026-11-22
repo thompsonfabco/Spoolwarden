@@ -31,7 +31,7 @@ SKIP_SUFFIXES = {".lock", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".bm
 SLUGS = ("0[1-9]-(?:foundations|components|hub-page|web-app|android-app|command-line|accessibility|platform-mapping"
          "|implementation-order)|10-feature-ideas")
 CLOCK = r"\d{1,2}:\d{2}(?:\.\d+)?"
-LOC1 = r"(?:\d+(?:\.\d+)*[a-z]?|[A-Z]{1,4}-?\d+[a-z]?)"
+LOC1 = r"(?:\d+(?:\.\d+)*[a-z]?|[A-Z]{1,4}-?\d+(?:\.\d+)*[a-z]?)"
 LOC1B = rf"(?:{CLOCK}|{LOC1})"
 GUARD = r"(?!(?:0[1-9]|10) (?:section|§|\d|[A-Z]{1,4}-?\d))(?!(?:0[1-9]|10)-[a-z])"
 SUFFIX = r"(?: (?:rule|test|point|item) \d+)?"
