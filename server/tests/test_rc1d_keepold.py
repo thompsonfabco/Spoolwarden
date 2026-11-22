@@ -89,6 +89,13 @@ def test_an_owner_entry_keeps_its_json_in_v062s_shape_and_an_older_change_wins_o
     assert json.loads(jp.read_text(encoding="utf-8"))["colors"] == ["Green"]
 
 
+def test_an_owner_entry_json_keeps_non_ascii_letters_as_v062_wrote_it():
+    e, _ = library.add_local(json.dumps({**v062_entry(), "product": "M\u00fcller PLA"}).encode("utf-8"))
+    jp = library._local_dir() / "sunlu" / (library.slug(e["product"]) + ".json")
+    want = json.dumps(library.canonical(e), indent=2, ensure_ascii=False) + "\n"       # v0.6.2: library.dumps(entry)
+    assert "M\u00fcller" in want and jp.read_bytes() == want.encode("utf-8")
+
+
 # ---------- the Recently added records ----------
 
 def test_a_record_keeps_record_json_as_v062_wrote_it_and_an_older_change_wins_once():
