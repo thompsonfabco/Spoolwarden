@@ -371,3 +371,16 @@ def test_a_broken_file_is_kept_aside_and_never_overwritten():
     assert (f.parent / "voice.xml.unreadable").read_bytes() == b"<voice speed=1"
     assert voice_state.stored(_cfg()) == {"speed": 80}
     assert any("voice.xml" in p for p in statexml.problems())
+
+
+def test_the_real_router_mounts_the_voice_routes_and_writes_voice_xml(app, station):  # noqa: F811
+    cfg = config.load()
+    cfg["station"]["url"] = "http://127.0.0.1:5003"
+    config.save(cfg)
+    r = post(client(app), "station/voice", {"speed": 120, "volume": 30})
+    assert r.status_code == 200 and r.json()["speed"] == 120
+    assert _file().exists() and voice_state.stored(config.load()) == {"speed": 120, "volume": 30}
+    assert [(c[1], c[2]) for c in station.calls] == [("POST", "/voice")]
+    assert post(client(app), "station/voice", {"speed": 55}).status_code == 400
+    assert post(client(app), "station/voice/test", {}).status_code == 200
+    assert post(client(app), "station/voice", {"speed": 120}, code="wrong").status_code in (401, 403)
