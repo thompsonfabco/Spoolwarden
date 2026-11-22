@@ -19,7 +19,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .. import config
-from ..bridge import xmlfile
 
 FOLDER = "demo"
 MARKER = "demo.xml"
@@ -189,6 +188,7 @@ def leave() -> dict:
 
 
 def started() -> str | None:
+    from ..bridge import xmlfile          # not at the top: events.py imports this module and must not need defusedxml
     try:
         root = xmlfile.fromstring((folder() / MARKER).read_bytes())
         return root.get("started")

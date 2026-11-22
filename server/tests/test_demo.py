@@ -153,7 +153,8 @@ def test_an_unreachable_spoolman_is_not_an_empty_hub(env, monkeypatch, capsys):
     assert not demo.is_on() and not (env / "state" / "demo").exists()
     monkeypatch.setattr(demo, "real_data", lambda *a: (_ for _ in ()).throw(demo.CannotTell()))
     assert routes.post_demo({"on": True}) == (409, {"error": demo.CANNOT_TELL, "code": "cannot_tell_if_empty"})
-    assert demo_cli.run_demo(Args("on")) == 1 and f"Error: {demo.CANNOT_TELL}" in capsys.readouterr().err
+    assert demo_cli.run_demo(Args("on")) == 1
+    assert demo.CANNOT_TELL in " ".join(capsys.readouterr().err.split())      # the command line wraps the sentence
 
 
 def test_the_real_registry_is_read_when_none_is_given(env):

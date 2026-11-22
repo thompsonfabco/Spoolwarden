@@ -16,7 +16,9 @@ import re
 
 import anyio
 
-from .. import config, modules, profiles_api, redact
+import functools
+
+from .. import config, demo, modules, profiles_api, redact
 from ..profiles import builds
 from ..profiles import lines as lines_mod
 from ..profiles.errors import ProfileError
@@ -63,7 +65,16 @@ def routes(page) -> list[tuple]:
     from ..setup_page import Refused
     from .. import cli
 
-    w = lambda fn: page.guard(fn, write=True)  # noqa: E731
+    def not_in_demo(fn):
+        """The presets are the slicers' (a PC fetches them): no write of this tab answers in the demo (R85 4.3)."""
+        @functools.wraps(fn)
+        async def stopped(request, body):
+            if demo.is_on():
+                raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
+            return await fn(request, body)
+        return stopped
+
+    w = lambda fn: page.guard(not_in_demo(fn), write=True)  # noqa: E731
 
     def need_on() -> None:
         if "presets" not in modules.enabled(config.load()):

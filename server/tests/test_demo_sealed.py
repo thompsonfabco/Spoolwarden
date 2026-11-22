@@ -83,13 +83,19 @@ class Helper:
     def __init__(self, seen):
         self.seen = seen
 
+    def note(self, req, reply) -> None:
+        """An op the helper answered "Not in the demo." (the stop) did nothing: only an op it carried out is outside."""
+        if reply.get("code") != demo.NOT_IN_DEMO_CODE:
+            self.seen.append(f"root helper {req['op']}")
+
     def __call__(self, req):
-        self.seen.append(f"root helper {req['op']}")
-        return json.loads(json.dumps(setup_helper.handle(json.loads(json.dumps(req)))))
+        reply = json.loads(json.dumps(setup_helper.handle(json.loads(json.dumps(req)))))
+        self.note(req, reply)
+        return reply
 
     def open_file(self, req):
-        self.seen.append(f"root helper {req['op']}")
         r = setup_helper.handle(json.loads(json.dumps(req)))
+        self.note(req, r)
         fd = r.pop("fd", None)
         return json.loads(json.dumps(r)), (os.fdopen(fd, "rb") if fd is not None else None)
 

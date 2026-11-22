@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from filament_kit import __main__ as main_mod
+from filament_kit import setup_code
 from filament_kit import alerts, backup, demo, event_sink, events, reader_tokens, release, setup_helper, storage
 from filament_kit.bridge import printer_report, registry
 from filament_kit.bridge.connection import Manager
@@ -107,6 +108,7 @@ def test_no_backup_is_made_or_restored_in_the_demo(env):
 
 
 def test_the_root_helper_changes_nothing_in_the_demo(env):
+    setup_code.write("12345678")
     on()
     for op in ("apply", "backup_keep", "module", "setting", "trust_status", "backup_last", "journal"):
         r = setup_helper.handle({"op": op, "code": "12345678"})
