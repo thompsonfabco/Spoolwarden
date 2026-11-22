@@ -107,6 +107,8 @@ fun PrintersScreen(
     modifier: Modifier = Modifier,
     /** A row whose Access Code was refused opens its printer with the Replace Access Code dialog open (05 9.1). */
     onReplaceCode: (id: String) -> Unit = onOpen,
+    /** The map offer's Map slots opens that printer's slot map flow (05 step 4). */
+    onMapSlots: (id: String) -> Unit = onOpen,
     printerDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
     onSummary: (String) -> Unit = {},
 ) {
@@ -230,7 +232,9 @@ fun PrintersScreen(
         }
     }
     state.guide?.let { GuideSheet(it, state.found, onPairAgain, viewModel) }
-    state.mapOffer?.let { MapOfferDialog(it, viewModel) { id -> viewModel.dismissMapOffer(); onOpen(id) } }
+    state.mapOffer?.let {
+        MapOfferDialog(it, viewModel) { id, mapNow -> viewModel.dismissMapOffer(); openFromMapOffer(id, mapNow, onMapSlots, onOpen) }
+    }
     state.dialog?.let { AddBambuDialog(it, onPairAgain, viewModel) }
     state.klipper?.let { AddKlipperDialog(it, onPairAgain, viewModel) }
     state.find?.let { FindSheetContent(it, onPairAgain, viewModel) }
@@ -707,14 +711,19 @@ private fun GuideRowView(row: GuideRow, viewModel: PrintersViewModel) {
     }
 }
 
-/** The last step: "Map its slots now?" Map slots opens the new printer, where the existing slot mapping is. */
+/** Where a button of the map offer goes (05 step 4): Map slots to the map flow, Later to the printer. */
+internal fun openFromMapOffer(id: String, mapNow: Boolean, onMap: (String) -> Unit, onOpen: (String) -> Unit) {
+    if (mapNow) onMap(id) else onOpen(id)
+}
+
+/** The last step: "Map its slots now?" Map slots opens the printer's map flow; Later opens the printer. */
 @Composable
-private fun MapOfferDialog(offer: MapOffer, viewModel: PrintersViewModel, onMap: (String) -> Unit) {
+private fun MapOfferDialog(offer: MapOffer, viewModel: PrintersViewModel, onChoose: (id: String, mapNow: Boolean) -> Unit) {
     SwDialog(
         title = PrinterTexts.MAP_TITLE,
         onClose = viewModel::dismissMapOffer,
-        confirm = SwDialogButton(PrinterTexts.MAP_NOW, { onMap(offer.id) }, kind = SwButtonKind.Main),
-        cancel = SwAction(PrinterTexts.MAP_LATER, viewModel::dismissMapOffer),
+        confirm = SwDialogButton(PrinterTexts.MAP_NOW, { onChoose(offer.id, true) }, kind = SwButtonKind.Main),
+        cancel = SwAction(PrinterTexts.MAP_LATER) { onChoose(offer.id, false) },
     ) {
         Text(offer.name, style = MaterialTheme.typography.titleSmall)
         Text(PrinterTexts.MAP_BODY, style = MaterialTheme.typography.bodyMedium)

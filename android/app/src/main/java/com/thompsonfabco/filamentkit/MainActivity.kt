@@ -1256,6 +1256,7 @@ internal fun FilamentKitApp(
                                 nav.navigate(PrinterSettingsRoute(id, replaceCode = true))
                             },
                             onPairAgain = app.router::pairAgain,
+                            onMapSlots = { nav.navigate(PrinterMapRoute(it)) },
                             printerDetail = { id, embedded, _ ->
                                 PrinterEntry(
                                     a, ::currentApi, id,
