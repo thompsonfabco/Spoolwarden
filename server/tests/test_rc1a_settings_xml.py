@@ -74,6 +74,17 @@ def test_the_xml_form_wins_when_both_are_there(etc):
     assert web_access._settings() == {"port": 2}
 
 
+def test_a_json_changed_by_an_older_release_wins_over_the_xml_and_the_hash_key_is_not_returned(etc):
+    """R600 LOW: the web unit's reader follows the same rule as config.load_raw (json_sha256), and stays read only."""
+    config.save({"slot_service": {"token_file": "/old"}})
+    (etc / "config.json").write_text(json.dumps({"slot_service": {"token_file": "/new"}}), encoding="utf-8")
+    xml = (etc / "config.xml").read_bytes()
+    assert web_access._settings() == {"slot_service": {"token_file": "/new"}}
+    assert (etc / "config.xml").read_bytes() == xml                # reading never writes
+    config.save({"port": 3})
+    assert web_access._settings() == {"port": 3}                   # unchanged JSON: the XML, without its hash key
+
+
 def test_a_damaged_xml_falls_back_to_the_json_form_and_says_so_once(etc, caplog):
     (etc / "config.json").write_text(json.dumps({"port": 1}), encoding="utf-8")
     (etc / "config.xml").write_text("<config version=", encoding="utf-8")

@@ -1,4 +1,4 @@
-"""Storage locations: the ordered list a new spool is put away by (ruling R79, docs/design 03 section 10.4).
+"""Storage locations: the ordered list a new spool is put away by (ruling R79, the design, Hub page section 10.4).
 
 The list lives in `storage.xml` in the Hub's STATE folder (/var/lib/filament-kit: the one folder the Hub may write;
 owner of the folder, mode 0644, so the web unit reads it with its pass on the folder; atomic write under the Hub's
@@ -22,7 +22,7 @@ from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from . import config, locks
+from . import config, demo, locks
 
 log = logging.getLogger("filament_kit.storage")
 
@@ -272,10 +272,10 @@ def check(locations: list[Location], before: list[Location] | None = None) -> No
 # ---------------------------------------------------------------- XML
 
 def _file() -> Path:
-    return config.paths().state / "storage.xml"
+    return demo.where(config.paths().state / "storage.xml", "storage.xml")
 
 
-_LOCK = locks.ProcessLock(lambda: config.paths().state / "storage.lock")
+_LOCK = locks.ProcessLock(lambda: demo.where(config.paths().state / "storage.lock", "storage.lock"))
 
 
 def to_xml(st: Storage) -> str:

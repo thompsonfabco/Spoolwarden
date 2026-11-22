@@ -53,6 +53,31 @@ const SET_STUB = {
   settings_catalog_remove_body: "Slicer presets are rebuilt.",
   settings_catalog_removed: "Removed.",
   settings_catalog_entries_error: "Could not load custom entries.",
+  settings_language_title: "Language",
+  settings_language_hub_hint: "The language of the Hub's own texts and of devices set to Automatic.",
+  settings_language_done: "Language: {name}.",
+  settings_language_machine: "{name} (machine-translated)",
+  settings_language_complete: "{percent} % translated",
+  settings_language_more: "Get more languages",
+  settings_language_install: "Install",
+  settings_language_installed: "Installed",
+  settings_language_remove: "Remove",
+  settings_language_installed_done: "{name} installed.",
+  settings_language_removed_done: "{name} removed.",
+  settings_language_not_installed: "{name} was not installed: {reason}",
+  settings_language_is_hub: "{name} is the Hub's language. Choose another one for the Hub first.",
+  settings_language_none_more: "This release has no other languages.",
+  settings_language_error: "Could not read the list of languages. {text}",
+  settings_language_demo: "Not in the demo.",
+  settings_language_device: "Language",
+  settings_language_auto: "Automatic",
+  settings_language_device_hint: "Automatic uses this browser's language if the Hub has it, otherwise the Hub's language.",
+  settings_demo_title: "Demo",
+  settings_demo_hint: "Look around the whole product on made-up data. Only on a Hub with no spools and no printers.",
+  settings_demo_try: "Try the demo",
+  settings_demo_leave: "Leave demo",
+  settings_demo_on: "The demo is on.",
+  settings_demo_off: "The demo is off.",
 };
 const setT = (key, vars) => {
   const got = SW.t(key, vars);
@@ -398,7 +423,7 @@ function groupAppearance() {
   const look = SW.themePicker({ legend: true });    // built from the root's data-look each time, so a redraw keeps the choice
   look.addEventListener("change", () => setTimeout(paintList, 0));
   return setGroup("appearance", { desc: SW.t("settings_appearance_desc"), body: [h("div", { class: "settings__choice" }, choice, hint, res),
-    h("div", { class: "settings__choice" }, look, sbox()), newDevices()] });
+    h("div", { class: "settings__choice" }, look, sbox()), setLangChoice(), newDevices()] });
 }
 // Theme for new devices (03 10.2): the Hub's own default, saved with its own button, which needs the setup code
 const NEW_LOOKS = ["console", "workbench", "palette", "panes"];
@@ -430,6 +455,7 @@ function groupGeneral({ g }) {
     check: (x) => (x.trim() ? null : SW.t("settings_general_name_required")) })];
   if (g.spoolman_external) fields.push(plainField({ name: "spoolman", label: SW.t("settings_general_spoolman"), mono: true, value: g.spoolman_url || "",
     placeholder: SW.t("settings_general_spoolman_placeholder"), hint: SW.t("settings_general_spoolman_hint"), effect: "applies" }));
+  fields.push(setLangBlock(), setDemoRow());
   const el = setGroup("general", { desc: SW.t("settings_general_desc"), save: SW.t("settings_general_save"), body: fields });
   const own = {
     spoolman: async (value) => {
@@ -443,6 +469,140 @@ function groupGeneral({ g }) {
   o.send = sender(() => el, () => o.group, own);
   wireGroup(el, "general", o);
   return el;
+}
+
+// ----- Language (R85 3): the Hub's languages in General, this browser's choice in Appearance, the page's `lang` -----
+// Reads `languages` ({hub, languages: [{code, name, reviewed, installed, complete}], available: [...], problem?}); English is
+// always there, listed here when the Hub's list leaves it out.
+const SET_LANG_KEY = "spoolwarden.language";
+let setLangSeen = null;
+const setLangStored = () => { try { return localStorage.getItem(SET_LANG_KEY) || ""; } catch { return ""; } };
+const setLangKeep = (code) => { try { if (code) localStorage.setItem(SET_LANG_KEY, code); else localStorage.removeItem(SET_LANG_KEY); } catch { /* storage refused: the choice lasts until the page closes */ } };
+const setLangName = (l) => (l.reviewed === false ? setT("settings_language_machine", { name: l.name }) : l.name);
+const setLangHave = (d) => [{ code: "en", name: "English", reviewed: true, installed: true, complete: 100 }, ...d.languages.filter((l) => l.installed && l.code !== "en")];
+// the code the page speaks: this browser's choice if installed, else (Automatic) the browser's language if installed, else the Hub's
+function setLangPick(d) {
+  const have = new Set(setLangHave(d).map((l) => l.code)), own = setLangStored(), dev = String(navigator.language || "").toLowerCase().split("-")[0];
+  return have.has(own) ? own : have.has(dev) ? dev : have.has(d.hub) ? d.hub : "en";
+}
+// reads the languages (again when `fresh`) and sets the page's `lang`; a Hub without the route leaves it as it is
+async function setLangApply(fresh) {
+  if (!setLangSeen || fresh) {
+    try { setLangSeen = await api("languages"); } catch { return null; }
+  }
+  document.documentElement.lang = setLangPick(setLangSeen);
+  return setLangSeen;
+}
+// a request with the code that says `ok` (or `bad(e)` for a refusal) in `box`; true when the Hub took it, false when it refused or the unlock dialog was cancelled
+async function setLangSend(box, path, body, ok, bad) {
+  let sent = false;
+  await needCode(async () => {
+    working(box, SW.t("common_working"));
+    try { await api(path, { ...body, code: theCode() }); } catch (e) {
+      if (e.locked) { SW.result(box, null); throw e; }
+      say(box, bad ? bad(e) : hubText(e.message), false);
+      return;
+    }
+    sent = true;
+    say(box, ok, true);
+  });
+  return sent;
+}
+const setLangSentence = (m) => { const s = hubText(m), i = s.search(/[.!?](\s|$)/); return i < 0 ? s : s.slice(0, i + 1); };
+// Settings > General: the Hub's language (a select, sent at once, with its own result); Get more languages opens the dialog below
+function setLangBlock() {
+  const holder = h("div", { class: "settings__choice" }), box = sbox();
+  const paint = (d) => {
+    const have = setLangHave(d);
+    let now = have.some((l) => l.code === d.hub) ? d.hub : "en";
+    const pick = SW.field({ type: "select", name: "general.language", label: setT("settings_language_title"), hint: setT("settings_language_hub_hint"),
+      value: now, optional: false, options: have.map((l) => ({ value: l.code, label: setLangName(l) })) });
+    pick._control.addEventListener("change", async () => {
+      const code = pick._control.value, name = have.find((l) => l.code === code).name;
+      if (await setLangSend(box, "settings/language", { hub: code }, setT("settings_language_done", { name }))) { now = code; d.hub = code; document.documentElement.lang = setLangPick(d); } else pick._control.value = now;
+    });
+    const more = SW.btn(setT("settings_language_more"), { cls: "btn--ghost", action: "language-more", run: (ev) => setLangMore(ev.currentTarget) });
+    holder.replaceChildren(pick, h("div", { class: "actions" }, more), box);
+  };
+  paint({ hub: "en", languages: [] });
+  later(setLangApply(true).then((d) => { if (d && holder.isConnected) paint(d); }));
+  return holder;
+}
+// the dialog (a sheet on a phone) of Get more languages: the packs of this release, Install, and Remove for an installed one
+function setLangMore(opener) {
+  const region = h("div", { class: "settings__lang" }), box = sbox(), title = setT("settings_language_more");
+  const paint = async (fresh) => {
+    if (S && S.demo) { region.replaceChildren(h("p", { class: "muted", textContent: setT("settings_language_demo") })); return; }
+    const L = SW.loading(region, { thing: title, items: 3, onTry: () => paint(true), title });
+    let d = null, text = "";
+    try { d = await setLangApply(fresh); } catch (e) { text = hubText(e.message); }
+    if (d && d.problem) { text = hubText(d.problem); d = null; }
+    if (!d) {
+      const again = SW.btn(SW.t("common_try_again"), { cls: "btn--ghost", action: "language-again", run: () => paint(true) });
+      return L.done(h("p", { class: "muted", textContent: setT("settings_language_error", { text }).trim() }), h("div", { class: "actions" }, again));
+    }
+    const rows = (d.available || []).filter((l) => l.code !== "en").map((l) => {
+      const have = (d.languages || []).some((x) => x.code === l.code && x.installed), name = l.name, route = "languages/" + encodeURIComponent(l.code) + "/";
+      const act = have ? [SW.status("ok", { small: true, text: setT("settings_language_installed") }),
+        SW.btn(setT("settings_language_remove"), { cls: "btn--ghost btn--small", action: "language-remove-" + l.code, run: async () => {
+          if (l.code === d.hub) return say(box, setT("settings_language_is_hub", { name }), false);
+          if (await setLangSend(box, route + "remove", {}, setT("settings_language_removed_done", { name }))) await paint(true);
+        } })]
+        : [SW.btn(setT("settings_language_install"), { cls: "btn--primary btn--small", action: "language-install-" + l.code, run: async () => {
+          const ok = await setLangSend(box, route + "install", {}, setT("settings_language_installed_done", { name }),
+            (e) => setT("settings_language_not_installed", { name, reason: setLangSentence(e.message) }));
+          if (ok) { followApply(true); await paint(true); }
+        } })];
+      return h("li", { class: "settings__lang-row", "data-code": l.code }, h("span", { class: "settings__name", textContent: setLangName(l) }),
+        h("span", { class: "muted" }, l.complete != null ? setT("settings_language_complete", { percent: l.complete }) : null), h("span", { class: "actions" }, ...act));
+    });
+    L.done(rows.length ? h("ul", { class: "settings__lang-list" }, rows) : h("p", { class: "muted", textContent: setT("settings_language_none_more") }));
+  };
+  const body = h("div", {}, region, box);
+  if (SW.phone()) SW.openModal(SW.sheet({ title, body }), opener);
+  else SW.ask({ kind: "info", wide: true, title, body, opener });
+  paint(true);
+}
+// Settings > General: Demo. Try the demo while off (a Hub with data refuses by its code, as Getting started reads it), Leave demo while on
+function setDemoRow() {
+  const holder = h("div", { class: "settings__choice" }), box = boxFor("settings:demo");
+  const paint = () => {
+    const on = !!(S && S.demo);
+    const act = on ? SW.btn(setT("settings_demo_leave"), { cls: "btn--ghost", action: "settings-leave-demo", run: () => window.startDemoLeave(() => { if (holder.isConnected) paint(); say(box, setT("settings_demo_off"), true); }) })
+      : SW.btn(setT("settings_demo_try"), { cls: "btn--primary", action: "settings-try-demo", run: async () => {
+        working(box, SW.t("common_working"));
+        try {
+          if (!(await window.startDemoSend(true))) return SW.result(box, null);
+          say(box, setT("settings_demo_on"), true);
+          await refresh();
+          if (holder.isConnected) paint();
+        } catch (e) { if (e.locked) SW.result(box, null); else say(box, window.startDemoRefusal(e), false); }
+      } });
+    holder.replaceChildren(h("span", { class: "field__label", textContent: setT("settings_demo_title") }),
+      h("p", { class: "field__hint", textContent: on ? setT("settings_demo_on") : setT("settings_demo_hint") }), h("div", { class: "actions" }, act), box);
+  };
+  paint();
+  return holder;
+}
+// Settings > Appearance: this browser's language, "Automatic" by default, kept in this browser (localStorage) and applied at once
+function setLangChoice() {
+  const holder = h("div", { class: "settings__choice" }), res = sbox();
+  const paint = (d) => {
+    const have = d ? setLangHave(d) : [{ code: "en", name: "English", reviewed: true }];
+    const pick = SW.field({ type: "select", name: "appearance.language", label: setT("settings_language_device"), hint: setT("settings_language_device_hint"),
+      value: have.some((l) => l.code === setLangStored()) ? setLangStored() : "", optional: false,
+      options: [{ value: "", label: setT("settings_language_auto") }, ...have.map((l) => ({ value: l.code, label: setLangName(l) }))] });
+    pick._control.addEventListener("change", () => {
+      setLangKeep(pick._control.value);
+      if (setLangSeen) document.documentElement.lang = setLangPick(setLangSeen);
+      const one = have.find((l) => l.code === pick._control.value);
+      SW.announce(setT("settings_language_done", { name: one ? one.name : setT("settings_language_auto") }));       // no visible result: the change is the feedback (03 10.2)
+    });
+    holder.replaceChildren(pick, res);
+  };
+  paint(setLangSeen);
+  if (!setLangSeen) later(setLangApply().then((d) => { if (d && holder.isConnected && !holder.contains(document.activeElement)) paint(d); }));
+  return holder;
 }
 
 // ----- Label Reader (03 10.5) -----
@@ -729,9 +889,9 @@ function openPortDialog(curPort, remoteOn, opener, portBox) {
 }
 
 function groupNetwork({ g }) {
-  const v = g.values, web = !!g.web_on, setPublic = S.web.public_set, curPort = Number(g.port) || 8710, portBox = sbox();
+  const v = g.values, web = !!g.web_on, curPort = Number(g.port) || 8710, portBox = sbox();
   const fields = [
-    plainField({ name: "web.public_url", mono: true, label: SW.t("settings_network_public"), placeholder: setPublic ? SW.t("settings_network_public_hidden") : SW.t("settings_network_public_placeholder"),
+    plainField({ name: "web.public_url", mono: true, label: SW.t("settings_network_public"), value: S.web.public_url || "", placeholder: SW.t("settings_network_public_placeholder"),
       hint: SW.t(web ? "settings_network_public_hint" : "settings_network_public_hint_off"), effect: "applies" }),
     plainField({ name: "station.url", mono: true, label: SW.t("settings_network_station"), value: S.station.url || "", placeholder: SW.t("settings_network_station_placeholder"),
       hint: SW.t("settings_network_station_hint"), effect: "applies" }),

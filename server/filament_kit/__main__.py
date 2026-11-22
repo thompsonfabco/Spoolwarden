@@ -8,12 +8,13 @@ import anyio.to_thread
 import uvicorn
 from uvicorn.main import STARTUP_FAILURE
 
-from . import config, event_sink, modules, watch
+from . import config, demo, event_sink, modules, watch
 from .api import create_app
 from .bridge import camera, discovery, family, mapping, registry, usage
 from .bridge.connection import Manager
 from .bridge.klipper import discovery as klipper_discovery
 from .bridge.klipper.manager import KlipperFamily
+from .demo import printers as demo_printers
 from .spoolman import Spoolman
 
 log = logging.getLogger(__name__)
@@ -30,6 +31,8 @@ def discovery_callback(manager):
     last_error = [float("-inf")]
 
     def found(info: dict) -> None:
+        if demo.is_on():          # the demo's registry is the demo's: an announcement is not recorded
+            return
         serial = info["serial"]
         if not registry.SERIAL.fullmatch(serial):   # an entry the owner could not remove again
             return
@@ -58,10 +61,11 @@ def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=No
         listener = None
         try:
             if manager is not None:
-                try:
-                    listener = listener_factory(discovery_callback(manager)).start()
-                except OSError as e:
-                    log.warning("printer discovery is off: %s", e)
+                if not demo.is_on():          # no listening on the network in the demo
+                    try:
+                        listener = listener_factory(discovery_callback(manager)).start()
+                    except OSError as e:
+                        log.warning("printer discovery is off: %s", e)
                 manager.start()
             if klipper is not None:
                 klipper.start()
@@ -148,6 +152,21 @@ def _log_to_journal() -> None:
     app_log.setLevel(logging.INFO)
 
 
+def _browser(on_found):
+    """The Klipper mDNS browser; in the demo (it is decided when the family starts) nothing listens on the network."""
+    if demo.is_on():
+        return _NoBrowser()
+    return klipper_discovery.Browser(on_found)
+
+
+class _NoBrowser:
+    def start(self):
+        return self
+
+    def stop(self) -> None:
+        pass
+
+
 def event_parts(sm, manager=None, klipper=None, mapper=None):
     """The event store as the sink in force, the printer watcher (listening to both families) and the 5-minute loop.
     A spool's weight changed by the Hub is checked for running low at once (R80 section 7)."""
@@ -168,12 +187,14 @@ def main() -> None:
     etc = config.paths().etc
     on = modules.enabled(cfg)
     sm = Spoolman(cfg["spoolman_url"])
-    klipper = KlipperFamily(sm, browser_factory=klipper_discovery.Browser) if "klipper" in on else None
+    klipper = KlipperFamily(sm, browser_factory=_browser) if "klipper" in on else None
+    if klipper is not None:           # the real family while the demo is off, the pretend one while it is on
+        klipper = demo_printers.Switch(klipper, demo_printers.Family("klipper", sm))
     if "printers" in on:
-        manager = Manager(spoolman=sm)
+        manager = demo_printers.Switch(Manager(spoolman=sm), demo_printers.Family("bambu", sm))
         tracker = usage.Tracker(manager, sm)   # listens before the manager connects: sees every first report
-        hub = camera.Hub(printer_state=manager.state,  # ip / Access Code / model / pin from the registry
-                         klipper_url=klipper.camera_url if klipper else None)
+        hub = camera.Hub(printer_state=lambda serial: manager.state(serial),  # ip / Access Code / model / pin from the registry
+                         klipper_url=(lambda pid: klipper.camera_url(pid)) if klipper else None)
         mapper = mapping.Mapper(manager)               # one per process: the app's routes and the lifespan share it
         manager.add_listener(mapping.LayoutWatch(manager, mapper))   # stale map on a layout change, idle re-map
         app = create_app(sm, printers=family.Printers(bambu=manager, klipper=klipper), camera_hub=hub, mapper=mapper,
@@ -184,7 +205,7 @@ def main() -> None:
     elif klipper is not None:
         # Klipper printers only: no Bambu Manager, SSDP listener, usage tracker or slot mapper
         printers = family.Printers(bambu=None, klipper=klipper)
-        hub = camera.Hub(printer_state=printers.state, klipper_url=klipper.camera_url)
+        hub = camera.Hub(printer_state=printers.state, klipper_url=lambda pid: klipper.camera_url(pid))
         app = create_app(sm, printers=printers, camera_hub=hub, mapper=object(), enabled_modules=on)
         watcher, loop = event_parts(sm, None, klipper)
         app.router.lifespan_context = printer_lifespan(None, camera_hub=hub, klipper=klipper, watcher=watcher,

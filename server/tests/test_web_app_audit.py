@@ -1,6 +1,6 @@
 """AUT-5 on the web app (design 09 S3.4, 07 section 15): the page audit (tests/page_audit.js) in every view, Console
 light and dark, at 1280 px and 320 px, through tests/aut5_run.mjs in a headless Chrome, Edge or Chromium already on
-the machine. Example data only (mockups/CONTENT-SPEC.md: "Workshop hub", invented filaments).
+the machine. Example data only (the example-data rules: "Workshop hub", invented filaments).
 
 Findings of today's markup that a later step rebuilds are listed in tests/allowlists/aut5/; a line nothing matches
 fails the run. Skipped when Node 22+ or a Chromium-family browser is missing (the runner exits 2 for "no browser")."""
@@ -123,7 +123,7 @@ class GuidedKit(ChangingKit):
         if path == "/api/printers/scan":
             return {"found": [{"id": "shelf-voron", "host": "192.0.2.90", "port": 7125, "name": "Shelf Voron", "configured": False}]}
         if path == "/api/printers/test":
-            return {"ok": False, "text": "no answer"}
+            return {"reachable": False}                 # the kit route's answer (R87 1)
         if path.endswith("/clear"):
             return {"slot": path.split("/")[-2], "spool": {"id": 7, "vendor": "Polymaker", "name": "PolyTerra PLA Charcoal Black"}, "moved_back": "Rack 1",
                     "waiting_ended": True, "printer_cleared": False, "dry_run": body["dry_run"],

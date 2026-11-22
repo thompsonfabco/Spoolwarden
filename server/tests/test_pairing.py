@@ -273,7 +273,7 @@ def test_root_state_write_gives_file_to_state_dir_owner(tmp_path, monkeypatch):
     fchowns = []
     monkeypatch.setattr(_os, "fchown", lambda fd, u, g: fchowns.append((u, g)), raising=False)
     pairing._write("devices.json", [])
-    assert fchowns == [(st.st_uid, st.st_gid)]          # on the open temp file, never by name
+    assert fchowns == [(st.st_uid, st.st_gid)] * 3     # XML, JSON and its hash; on the open temp file, never by name
     if _os.name != "nt":
         calls.clear()
         pairing.devices()
@@ -341,7 +341,7 @@ def test_spent_entry_is_pruned_after_the_window(monkeypatch):
     with pytest.raises(pairing.PairingError) as e:
         pairing.redeem_code(p.code)
     assert not isinstance(e.value, pairing.CodeSpent)
-    assert json.loads((config.paths().state / "spent.json").read_text()) == []
+    assert pairing._read("spent.json") == []
 
 
 def test_spent_file_holds_no_plain_code():
@@ -351,7 +351,7 @@ def test_spent_file_holds_no_plain_code():
         with pytest.raises(pairing.PairingError):
             pairing.redeem_code("abc")
     pairing.check(c.token)
-    text = (config.paths().state / "spent.json").read_text()
-    assert len(json.loads(text)) == 3
+    text = (config.paths().state / "spent.xml").read_text()
+    assert len(pairing._read("spent.json")) == 3
     for code in (a.code, b.code, c.code):
-        assert f'"{code}"' not in text
+        assert f'"{code}"' not in text and f">{code}<" not in text

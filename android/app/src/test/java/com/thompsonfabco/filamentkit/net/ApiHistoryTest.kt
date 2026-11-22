@@ -72,12 +72,12 @@ class ApiHistoryTest {
         assertEquals("The printer still shows what it was set to.", r.note)
     }
 
-    @Test fun anUndoRefusalIsAnApiErrorWithTheWhyNotAndTheHubsText() = runBlocking {
-        hub.handler = { _ -> 409 to """{"error": "changed_since", "text": "This changed again since, so it cannot be undone."}""" }
+    @Test fun anUndoRefusalIsAnApiErrorWithTheWhyNotAndTheHubsMessage() = runBlocking {
+        hub.handler = { _ -> 409 to """{"error": "changed_since", "message": "This changed again since, so it cannot be undone."}""" }
         val e = assertThrows(ApiError::class.java) { runBlocking { api.undoEvent(40) } }
         assertEquals(409, e.status)
         assertEquals("changed_since", e.code)
-        assertEquals("This changed again since, so it cannot be undone.", e.extra["text"]?.let { (it as kotlinx.serialization.json.JsonPrimitive).content })
+        assertEquals("This changed again since, so it cannot be undone.", e.message)
     }
 
     @Test fun healthReadsTheTableAndSince() = runBlocking {

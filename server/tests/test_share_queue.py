@@ -176,7 +176,7 @@ def test_a_reader_that_cannot_replace_by_record_gets_the_old_entry_deleted(sm, r
 def test_undo_finds_an_entry_without_the_hubs_map_through_the_readers_list(sm, reader):
     hid = saved(sm)
     intake_history.apply(sm, hid, item=0, values={"nozzle": 230})
-    (intake_history._dir(hid) / "share.json").unlink()
+    (intake_history._dir(hid) / "share.xml").unlink()
     intake_history.undo(sm, hid, None)
     assert queue(reader) == []
 
@@ -209,7 +209,7 @@ def test_a_reader_with_the_queue_switched_off_says_so(sm, reader):
 
 def test_the_state_goes_with_the_record(sm, reader):
     hid = saved(sm, {"nozzle": 225})
-    assert (intake_history._dir(hid) / "share.json").is_file()
+    assert (intake_history._dir(hid) / "share.xml").is_file()
     assert intake_history.list_records(True)["records"][0]["share"]["state"] == "waiting"
 
 
@@ -235,3 +235,114 @@ def test_no_body_carries_an_address(sm, reader):
         assert not {str(k).lower() for k in b} & set(local_reader.FORBIDDEN_FIELDS)
         text = json.dumps({k: v for k, v in b.items() if k != "images_b64"}).lower()
         assert "http" not in text and "drive.google" not in text
+
+
+def test_a_waiting_entry_names_its_record_and_that_records_photo_count(sm, reader):
+    from filament_kit import reader_corrections
+    hid = saved(sm, photos=(JPEG, JPEG))
+    intake_history.apply(sm, hid, item=0, values={"nozzle": 230})
+    (e,) = reader_corrections.waiting(config.load())["entries"]
+    assert e["record"] == hid and e["photos"] == 2
+
+
+def test_an_entry_whose_record_is_gone_has_no_record_and_zero_photos(sm, reader):
+    import shutil
+
+    from filament_kit import reader_corrections
+    hid = saved(sm)
+    intake_history.apply(sm, hid, item=0, values={"nozzle": 230})
+    shutil.rmtree(intake_history._dir(hid))
+    (e,) = reader_corrections.waiting(config.load())["entries"]
+    assert "record" not in e and e["photos"] == 0 and "thumbnail_b64" in e
+
+
+def test_a_reader_entry_not_in_the_hubs_map_is_found_by_the_readers_own_key(sm, reader):
+    from filament_kit import reader_corrections
+    hid = saved(sm)
+    intake_history.apply(sm, hid, item=0, values={"nozzle": 230})
+    (_p := intake_history._dir(hid) / "share.xml").unlink()
+    (e,) = reader_corrections.waiting(config.load())["entries"]
+    assert e["record"] == hid and e["photos"] == 1
+
+
+# ---------------------------------------------------------------- RC1d: the state as XML (R85 section 1)
+
+def _state_dir(hid):
+    d = intake_history._dir(hid)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def test_the_state_is_kept_as_share_xml_and_round_trips(sm, reader):
+    hid = saved(sm, {"nozzle": 225})
+    d = intake_history._dir(hid)
+    assert (d / "share.xml").is_file() and (d / "share.json").is_file()          # both forms for one release
+    assert (d / "share.xml").read_bytes().startswith(b'<?xml version="1.0" encoding="UTF-8"?>\n<share ')
+    before = share_queue._read(hid)
+    assert len(before["entries"]) == 1 and before["failed"] is None
+    share_queue._write(hid, {"entries": {hid: None, f"{hid}.1": "fb-7"},
+                             "failed": {"reason": "it did not answer: 12 & <3", "at": "2026-11-15T12:00:00+00:00"}})
+    assert share_queue._read(hid) == {"entries": {hid: None, f"{hid}.1": "fb-7"},
+                                      "failed": {"reason": "it did not answer: 12 & <3",
+                                                 "at": "2026-11-15T12:00:00+00:00"}}
+    assert share_queue.state(hid) == {"state": "not_queued", "reason": "it did not answer: 12 & <3", "entries": 2}
+
+
+def test_an_old_share_json_is_read_and_moved_once_and_left_as_it_was(sm):
+    hid = saved(sm)
+    d = _state_dir(hid)
+    old = json.dumps({"entries": {hid: "fb-3"}, "failed": None})
+    (d / "share.json").write_text(old, encoding="utf-8")
+    assert share_queue.state(hid) == {"state": "waiting", "reason": None, "entries": 1}
+    assert (d / "share.xml").is_file() and (d / "share.json").read_text(encoding="utf-8") == old
+    assert share_queue.entry_records() == {"fb-3": hid}
+    (d / "share.json").write_text(json.dumps({"entries": {}, "failed": None}), encoding="utf-8")
+    assert share_queue.state(hid)["entries"] == 0                 # an older release emptied it: its change wins once
+
+
+def test_a_damaged_share_xml_never_raises_is_not_overwritten_and_is_reported(sm, reader):
+    from filament_kit.profiles import statexml
+    hid = saved(sm)
+    d = _state_dir(hid)
+    (d / "share.xml").write_bytes(b"<share version='1'><entries")
+    assert share_queue.state(hid) == {"state": "none", "reason": None, "entries": 0}
+    assert any("share.xml" in p for p in statexml.problems())
+    share_queue._write(hid, {"entries": {hid: "fb-3"}, "failed": None})        # the next save keeps it aside
+    assert (d / "share.xml.unreadable").read_bytes() == b"<share version='1'><entries"
+    assert share_queue.state(hid) == {"state": "waiting", "reason": None, "entries": 1}
+
+
+def test_an_empty_state_removes_both_forms(sm):
+    hid = saved(sm)
+    d = _state_dir(hid)
+    (d / "share.json").write_text(json.dumps({"entries": {hid: "fb-3"}, "failed": None}), encoding="utf-8")
+    share_queue.state(hid)
+    assert (d / "share.xml").is_file()
+    share_queue._write(hid, {"entries": {}, "failed": None})
+    assert not (d / "share.xml").exists() and not (d / "share.json").exists()
+
+
+@pytest.mark.skipif(not hasattr(__import__("os"), "geteuid"), reason="file modes are the Hub's on Linux")
+def test_the_state_file_is_private_to_the_hub(sm, reader):
+    hid = saved(sm, {"nozzle": 225})
+    assert ((intake_history._dir(hid) / "share.xml").stat().st_mode & 0o777) == 0o600
+
+
+@pytest.mark.skipif(not hasattr(__import__("os"), "geteuid"), reason="file modes are the Hub's on Linux")
+def test_an_old_share_json_moved_to_xml_keeps_its_private_mode(sm):
+    import os
+    hid = saved(sm)
+    d = _state_dir(hid)
+    (d / "share.json").write_text(json.dumps({"entries": {hid: "fb-3"}, "failed": None}), encoding="utf-8")
+    os.chmod(d / "share.json", 0o600)
+    assert share_queue.state(hid)["entries"] == 1
+    assert (os.stat(d / "share.xml").st_mode & 0o777) == 0o600
+
+
+def test_the_queue_keeps_share_json_beside_share_xml_for_one_release(sm, reader):
+    hid = saved(sm, {"nozzle": 225})
+    d = intake_history._dir(hid)
+    st = share_queue._read(hid)
+    assert json.loads((d / "share.json").read_text(encoding="utf-8")) == st      # what v0.6.2 reads after a rollback
+    share_queue._write(hid, {"entries": {hid: "fb-9"}, "failed": None})
+    assert json.loads((d / "share.json").read_text(encoding="utf-8"))["entries"] == {hid: "fb-9"}

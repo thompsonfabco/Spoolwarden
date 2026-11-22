@@ -35,6 +35,12 @@ class ColorSwatchTest {
         assertEquals(SwatchLook.Empty, swatchLook("", empty = true))
     }
 
+    @Test fun aWaitingSlotKeepsItsColourWithTheDashedRing() {
+        assertEquals(SwatchLook.Waiting(Color(0xFFFF0000)), swatchLook("FF0000", waiting = true))
+        assertEquals(SwatchLook.NoColour, swatchLook("", waiting = true))
+        assertEquals(SwatchLook.Empty, swatchLook("FF0000", empty = true, waiting = true))
+    }
+
     @Test fun whiteAndBlackFilamentAreLoadedNotEmpty() {
         assertFalse(PrinterHelp.slotEmpty(slot(type = "PLA", hex = "FFFFFF")))
         assertFalse(PrinterHelp.slotEmpty(slot(type = "PLA", hex = "000000", present = true)))

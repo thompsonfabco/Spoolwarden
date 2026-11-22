@@ -1,4 +1,4 @@
-"""The token folder's two checks (docs/design/08-platform-mapping.md 3.3) in the project's normal test run.
+"""The token folder's two checks (the design, platform mapping 3.3) in the project's normal test run.
 
 tokens.css must equal what tokens.json generates, and every required contrast pair must pass.
 """

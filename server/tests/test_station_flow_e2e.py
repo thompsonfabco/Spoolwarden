@@ -14,6 +14,7 @@ from filament_kit import config, inventory, pairing, tags
 from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
 from filament_kit.station import camera, flow, nfc, panel, server_api, speech
+from filament_kit.station import scale as station_scale
 from filament_kit.station import state as st
 
 UID = "a:b:c:d:e:f:1"
@@ -73,6 +74,7 @@ def station(monkeypatch):
     monkeypatch.setitem(st.settings, "recognise_timeout", 20)
     monkeypatch.setattr(flow, "_api", {"key": None, "api": None})
     monkeypatch.setattr(camera, "grab_photo", lambda: (JPEG, None))
+    monkeypatch.setattr(station_scale, "find_scale", lambda: "/dev/hidraw0")  # the computer has a scale
     monkeypatch.setattr(speech, "say", lambda text: None)
     yield ser
     with st.lock:

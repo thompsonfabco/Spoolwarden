@@ -661,6 +661,7 @@ def test_a_station_that_trickles_its_answer_is_cut_off_at_one_deadline(mode, tmp
 def test_the_photo_and_the_ticket_calls_have_the_same_deadline(env_hub, monkeypatch, tmp_path):
     c, st = env_hub
     monkeypatch.setattr(device_tab.station_client, "station_reach", lambda devs, url: {})      # that probe is station_client's own
+    monkeypatch.setattr(device_tab.station_client, "station_panel", lambda url: None)          # so is the panel-link probe
     srv, url, fp, port = _trickle("body", tmp_path / "trickle-tls")
     try:
         _pair_station(st, fp=fp, port=port)
@@ -776,3 +777,27 @@ def test_a_station_without_a_certificate_has_its_settings_changed_with_the_proof
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+@browser
+@pytest.mark.parametrize("look,width", [("console", 1280), ("panes", 390)])
+@pytest.mark.parametrize("panel,line", [("usb", "Panel: on USB"), ("wifi", "Panel: on Wi-Fi"), (None, None), ("ttyACM0", None)])
+def test_the_weigh_stations_detail_says_how_its_panel_is_connected(stub, hub_change, tmp_path, monkeypatch, look, width, panel, line):
+    """R88 4: the station's /state `panel` ("usb" | "wifi" | null) shows as "Panel: on USB" / "Panel: on Wi-Fi", null nothing. A value that is
+    neither (an older station's port) stays in the status list as it was."""
+    monkeypatch.setitem(STATE, "panel", panel)
+    _station_url(stub)
+    pairing._write("devices.json", [{"id": "d3", "name": "Bench station", "hash": stub.hash, "paired": 1.0,
+                                     "last_seen": 1.0, "expires": 0, "claimed": 1.0, "scope": "station",
+                                     "fp": stub.fp, "port": stub.port}])
+    page = _drive(hub_change + "#devices", tmp_path, DEVICES_PRELUDE + """
+unlock();
+await until(() => $$(".coll--paired .coll__item").length, "the rows");
+$('[data-action="open"]', $(".coll--paired .coll__item")).click();
+await until(() => dlg() && $("form.group", dlg()), "the detail");
+await sleep(300);
+const b = $("dialog[open] .dialog__body");
+return { line: $(".devdetail__panel", dlg()) ? text($(".devdetail__panel", dlg())) : null, status: $$(".kv__row", dlg()).map(text).filter((t) => /^Panel/.test(t)), overflow: b.scrollWidth - b.clientWidth };
+""", width, look)
+    assert page["line"] == line and page["overflow"] <= 0
+    assert [x.replace(" ", "") for x in page["status"]] == ([] if line else (["PanelttyACM0"] if panel else ["Panel" + _T("common_unknown").replace(" ", "")]))

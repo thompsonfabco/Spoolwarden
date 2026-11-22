@@ -336,12 +336,13 @@ def grant(web_uid: int, kit_uid: int) -> list[str]:
 
 def _settings() -> dict:
     """The settings file as it stands: config.xml when it reads, else config.json (the form a release before the
-    XML one wrote, kept for one release). Read only, never moved: this runs as root in /etc, where statexml.read's
+    XML one wrote, kept for one release); a config.json that an older release changed after config.xml was saved wins,
+    as in config.load_raw. Read only, never moved: this runs as root in /etc, where statexml.read's
     move would make a state-owned 0644 file. OSError / ValueError when neither form holds an object."""
     f = config.paths().etc / "config.json"
     xp = statexml.xml_path(f)
     try:
-        return statexml.loads(xp.read_bytes(), statexml.tag_of(f))
+        return config._newer_json(statexml.loads(xp.read_bytes(), statexml.tag_of(f)), f)
     except FileNotFoundError:
         pass
     except (OSError, statexml.StateXmlError) as e:

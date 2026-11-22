@@ -27,6 +27,7 @@ from starlette.responses import PlainTextResponse  # noqa: E402
 from starlette.routing import Route  # noqa: E402
 from starlette.testclient import TestClient  # noqa: E402
 
+from filament_kit.profiles import statexml  # noqa: E402
 from filament_kit.web import auth  # noqa: E402
 
 PUBLIC = "https://mcp.example.test/filament"
@@ -38,6 +39,11 @@ HOME = ("192.168.1.20", 50000)
 AWAY = ("203.0.113.9", 50000)
 PASS = "correct horse battery"
 DATA = Path(__file__).parent / "data"
+
+
+def _disk(store) -> dict:
+    """What the store saved: the XML form (oauth.xml) beside the store's JSON name."""
+    return statexml.loads(statexml.xml_path(store.path).read_bytes(), "oauth")
 
 
 def run(coro):
@@ -204,7 +210,7 @@ def test_full_flow_issues_tokens_with_ttls(store, passfile):
     r = store.d["refresh"][auth._h(tok["refresh_token"])]
     assert a["client_id"] == cid and abs(a["expires_at"] - time.time() - 3600) < 5
     assert abs(r["expires_at"] - time.time() - 60 * 86400) < 5 and r["access"] == auth._h(tok["access_token"])
-    raw = store.path.read_text(encoding="utf-8")
+    raw = statexml.xml_path(store.path).read_text(encoding="utf-8")
     assert tok["access_token"] not in raw and tok["refresh_token"] not in raw  # stored hashed only
 
 
@@ -218,7 +224,7 @@ def test_login_redirect_carries_state_and_code_is_hashed(store, passfile):
     assert q["state"] == ["xyz"]
     entry = store.d["codes"][auth._h(q["code"][0])]
     assert entry["client_id"] == cid and abs(entry["expires_at"] - time.time() - 300) < 5
-    assert q["code"][0] not in store.path.read_text(encoding="utf-8")
+    assert q["code"][0] not in statexml.xml_path(store.path).read_text(encoding="utf-8")
 
 
 def test_code_is_single_use_and_needs_pkce(store, passfile):
@@ -316,7 +322,7 @@ def test_refresh_replay_after_30s_revokes_all_client_tokens(store, provider, clo
         assert run(provider.load_access_token(t.access_token)) is None
         assert run(provider.load_refresh_token(info, t.refresh_token)) is None
     assert run(provider.load_access_token(bystander.access_token)) is not None
-    on_disk = json.loads(store.path.read_text(encoding="utf-8"))
+    on_disk = _disk(store)
     assert all(v["client_id"] != info.client_id for k in ("access", "refresh") for v in on_disk[k].values())
 
 
@@ -362,7 +368,7 @@ def test_authorize_returns_login_url_and_caps_pending(store, provider, clock):
     clock.now += 601  # pending requests expire after 10 minutes
     run(provider.authorize(info, params))
     assert len(store.pending) == 1
-    assert not store.path.exists() or "pending" not in json.loads(store.path.read_text())  # memory only
+    assert not statexml.xml_path(store.path).exists() or "pending" not in _disk(store)  # memory only
 
 
 def test_auth_settings():
@@ -553,28 +559,29 @@ def test_store_creates_parent_and_writes_0600_atomically(store, monkeypatch):
         opened.append((str(path), mode))
         return real_open(path, flags, mode, *a, **kw)
 
-    monkeypatch.setattr(auth.os, "open", spy)
+    monkeypatch.setattr(os, "open", spy)
     store.d["clients"]["c"] = {"client_id": "c"}
     store.save()
-    assert store.path.exists() and not store.path.with_name(store.path.name + ".tmp").exists()
+    xp = statexml.xml_path(store.path)
+    assert xp.exists() and store.path.exists() and not list(xp.parent.glob("*.tmp"))
     assert opened and opened[0][1] == 0o600 and opened[0][0].endswith(".tmp")
     if os.name != "nt":
-        assert (store.path.stat().st_mode & 0o777) == 0o600
+        assert (xp.stat().st_mode & 0o777) == 0o600
 
 
 def test_store_save_failure_leaves_old_file(store, monkeypatch):
     store.d["clients"]["a"] = {"client_id": "a"}
     store.save()
-    before = store.path.read_bytes()
+    before = statexml.xml_path(store.path).read_bytes()
 
     def boom(*a, **kw):
         raise OSError("disk full")
 
-    monkeypatch.setattr(auth.os, "replace", boom)
+    monkeypatch.setattr(os, "replace", boom)
     store.d["clients"]["b"] = {"client_id": "b"}
     with pytest.raises(OSError):
         store.save()
-    assert store.path.read_bytes() == before
+    assert statexml.xml_path(store.path).read_bytes() == before
 
 
 def test_store_prunes_expired_on_save(store, clock):
@@ -582,7 +589,7 @@ def test_store_prunes_expired_on_save(store, clock):
         store.d[k] = {"old": {"client_id": "c", "expires_at": clock.now - 1},
                       "new": {"client_id": "c", "expires_at": clock.now + 60}}
     store.save()
-    d = json.loads(store.path.read_text(encoding="utf-8"))
+    d = _disk(store)
     for k in ("codes", "access", "refresh", "used"):
         assert list(d[k]) == ["new"]
 
@@ -600,10 +607,93 @@ def test_store_loads_ops_oauth_json_unchanged(tmp_path):
     assert client is not None and [str(u) for u in client.redirect_uris] == [CB]
     assert run(p.load_access_token("ops-access-token")).client_id == cid
     assert run(p.load_refresh_token(client, "ops-refresh-token")).scopes == ["filament"]
-    st.save()  # and writes it back in the same shape
-    again = json.loads(path.read_text(encoding="utf-8"))
+    assert json.loads(path.read_text(encoding="utf-8")) == original  # the old form stays as it was (a rollback)
+    st.save()  # and writes it back in the same shape, as XML (and the JSON form, kept current)
+    again = _disk(st)
     assert set(again) == {"clients", "codes", "access", "refresh", "used"}
     assert again["clients"] == original["clients"] and again["refresh"] == original["refresh"]
+    assert json.loads(path.read_text(encoding="utf-8")) == st.d
+
+
+def test_store_round_trips_through_xml(store, provider):
+    client = _client_info()
+    run(provider.register_client(client))
+    store.d["access"]["0abc"] = {"client_id": client.client_id, "scopes": ["filament"], "resource": None,
+                                 "expires_at": time.time() + 99}
+    store.d["used"]["f00d"] = {"client_id": client.client_id, "at": 12.5, "expires_at": time.time() + 99}
+    store.save()
+    again = auth.Store(store.path)
+    assert again.d == store.d and again.pending == {}
+    xml = statexml.xml_path(store.path).read_text(encoding="utf-8")
+    assert xml.startswith("<?xml") and "<oauth " in xml
+    assert json.loads(store.path.read_text(encoding="utf-8")) == store.d   # the old form is kept current
+
+
+def test_store_moves_an_old_json_file_once_as_0600_and_leaves_it(tmp_path):
+    path = tmp_path / "oauth.json"
+    shutil.copy(DATA / "ops_oauth.json", path)
+    before = path.read_bytes()
+    st = auth.Store(path)
+    xp = statexml.xml_path(path)
+    assert xp.exists() and path.read_bytes() == before
+    if os.name != "nt":
+        assert (xp.stat().st_mode & 0o777) == 0o600
+    assert auth.Store(path).d == st.d                            # unchanged JSON: the XML form answers, nothing moves
+    assert path.read_bytes() == before
+
+
+def test_oauth_json_is_kept_current_in_the_old_shape_with_0600(store, provider):
+    """v0.6.2's Store.save wrote json.dump(d) (compact, no newline, 0600) and its __init__ read it with json.loads:
+    a rollback after a revoke or a refresh-token rotation must find the current tokens there."""
+    client = _client_info()
+    run(provider.register_client(client))
+    store.d["refresh"]["r1"] = {"client_id": client.client_id, "scopes": ["filament"], "expires_at": time.time() + 99}
+    store.save()
+    raw = store.path.read_bytes()
+    assert raw == json.dumps(store.d).encode("utf-8") and not raw.endswith(b"\n")
+    if os.name != "nt":
+        assert (store.path.stat().st_mode & 0o777) == 0o600
+    assert "r1" in json.loads(raw)["refresh"]                    # what the old Store.__init__ reads
+    del store.d["refresh"]["r1"]                                 # a revoke
+    store.d["used"]["r1"] = {"client_id": client.client_id, "at": 1.0, "expires_at": time.time() + 99}
+    store.save()
+    old = json.loads(store.path.read_text(encoding="utf-8"))
+    assert "r1" not in old["refresh"] and "r1" in old["used"]
+    if os.name != "nt":
+        assert (store.path.stat().st_mode & 0o777) == 0o600
+
+
+def test_a_change_made_by_an_older_release_to_oauth_json_wins_once(store):
+    store.d["clients"]["c1"] = {"client_id": "c1"}
+    store.save()
+    older = json.loads(store.path.read_text(encoding="utf-8"))
+    older["clients"]["c2"] = {"client_id": "c2"}                 # the older release registered a client
+    store.path.write_text(json.dumps(older), encoding="utf-8")
+    again = auth.Store(store.path)
+    assert set(again.d["clients"]) == {"c1", "c2"}
+    assert set(auth.Store(store.path).d["clients"]) == {"c1", "c2"}   # now in the XML form too
+
+
+def test_store_with_an_unreadable_xml_starts_empty_and_keeps_the_file(tmp_path, capsys):
+    path = tmp_path / "oauth.json"
+    shutil.copy(DATA / "ops_oauth.json", path)                   # an older token must not come back
+    xp = statexml.xml_path(path)
+    xp.write_text("<oauth version='1'><clients", encoding="utf-8")
+    st = auth.Store(path)
+    assert all(v == {} for v in st.d.values()) and "oauth.xml cannot be read" in capsys.readouterr().err
+    assert any(p.startswith(str(xp)) for p in statexml.problems())
+    st.d["clients"]["c"] = {"client_id": "c"}
+    st.save()
+    assert xp.with_name("oauth.xml.unreadable").read_text(encoding="utf-8").startswith("<oauth version='1'>")
+    assert auth.Store(path).d["clients"] == {"c": {"client_id": "c"}}
+
+
+def test_store_with_a_damaged_json_file_starts_empty(tmp_path, capsys):
+    path = tmp_path / "oauth.json"
+    path.write_text("{not json", encoding="utf-8")
+    st = auth.Store(path)
+    assert all(v == {} for v in st.d.values()) and "cannot be read" in capsys.readouterr().err
+    assert not statexml.xml_path(path).exists() and path.read_text(encoding="utf-8") == "{not json"
 
 
 def test_store_starts_empty(store):

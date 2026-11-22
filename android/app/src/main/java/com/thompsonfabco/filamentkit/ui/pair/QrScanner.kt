@@ -40,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -56,6 +57,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
@@ -66,6 +69,7 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.delay
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -74,6 +78,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * viewfinder, the system bars on a `scrim` band. Reports the first QR code it sees through [onResult] with a short
  * haptic tick. Asks for the camera permission itself. Decodes with zxing-cpp ([QrDecoder]), so no Google Play services
  * are needed. [onClose] is the same as Back; [onEnterAddress] leaves for the address step.
+ *
+ * [label] puts the scanner in label mode (4.4, "Label mode"): the label texts, no address step, and only a spool label's
+ * code ends the scan; any other code shows [LabelScan.NOT_LABEL_TEXT] over the preview and scanning goes on.
  */
 @Composable
 fun QrScanner(
@@ -81,6 +88,7 @@ fun QrScanner(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onEnterAddress: () -> Unit = onClose,
+    label: LabelScan? = null,
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -89,6 +97,16 @@ fun QrScanner(
     }
     var denied by remember { mutableStateOf(false) }
     var cameraFailed by remember { mutableStateOf(false) }
+    // label mode: a code that is not a label shows its notice for a while
+    var notLabel by remember { mutableIntStateOf(0) }
+    var notLabelShown by remember { mutableStateOf(false) }
+    LaunchedEffect(notLabel) {
+        if (notLabel > 0) {
+            notLabelShown = true
+            delay(LabelScan.NOTICE_MS)
+            notLabelShown = false
+        }
+    }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         granted = it
         denied = !it
@@ -123,6 +141,8 @@ fun QrScanner(
             onTryAgain = tryAgain,
             onEnterAddress = onEnterAddress,
             modifier = modifier,
+            labelMode = label != null,
+            notice = if (notLabelShown) LabelScan.NOT_LABEL_TEXT else label?.notice,
         ) {
             CameraPreview(
                 onResult = { text ->
@@ -130,6 +150,9 @@ fun QrScanner(
                     onResult(text)
                 },
                 onFailed = { cameraFailed = true },
+                accept = if (label != null) ({ text -> labelSpoolNumber(text) != null }) else null,
+                onRejected = { notLabel++ },
+                rescan = label?.rescan ?: 0,
             )
         }
     }
@@ -149,6 +172,10 @@ internal fun ScannerFrame(
     onTryAgain: () -> Unit,
     onEnterAddress: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Label mode (4.4): the label's texts, no address step. */
+    labelMode: Boolean = false,
+    /** A notice line over the preview (label mode). */
+    notice: String? = null,
     preview: @Composable () -> Unit,
 ) {
     val colors = SpoolwardenTheme.colors
@@ -163,8 +190,8 @@ internal fun ScannerFrame(
             )
         }
         when (state) {
-            ScannerState.CameraFailed -> ScanProblem(false, onEnterAddress, onEnterAddress, Modifier.align(Alignment.Center))
-            ScannerState.Denied -> ScanProblem(true, onTryAgain, onEnterAddress, Modifier.align(Alignment.Center))
+            ScannerState.CameraFailed -> ScanProblem(false, onEnterAddress, onEnterAddress, Modifier.align(Alignment.Center), labelMode)
+            ScannerState.Denied -> ScanProblem(true, onTryAgain, onEnterAddress, Modifier.align(Alignment.Center), labelMode)
             else -> Unit
         }
         // the system bars stay visible over a scrim band
@@ -184,10 +211,12 @@ internal fun ScannerFrame(
             if (state == ScannerState.Scanning) {
                 Surface(shape = SpoolwardenTheme.shapes.r, color = colors.surface, contentColor = colors.text) {
                     Text(
-                        stringResource(R.string.pair_scan_hint), Modifier.padding(horizontal = space.s3, vertical = space.s2),
+                        if (labelMode) LabelScan.HINT else stringResource(R.string.pair_scan_hint),
+                        Modifier.padding(horizontal = space.s3, vertical = space.s2),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
+                notice?.let { NoticeCard(NoticeKind.Warn, it) }
             }
         }
     }
@@ -195,7 +224,9 @@ internal fun ScannerFrame(
 
 /** What stands in place of the preview: the camera is refused ([denied]) or could not start (4.4). */
 @Composable
-internal fun ScanProblem(denied: Boolean, onPrimary: () -> Unit, onEnterAddress: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ScanProblem(
+    denied: Boolean, onPrimary: () -> Unit, onEnterAddress: () -> Unit, modifier: Modifier = Modifier, labelMode: Boolean = false,
+) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     OutlinedCard(
@@ -206,13 +237,17 @@ internal fun ScanProblem(denied: Boolean, onPrimary: () -> Unit, onEnterAddress:
     ) {
         Column(Modifier.padding(space.s4), verticalArrangement = Arrangement.spacedBy(space.s3)) {
             Text(
-                stringResource(if (denied) R.string.pair_scan_denied else R.string.pair_scan_failed),
+                when {
+                    labelMode -> if (denied) LabelScan.DENIED else LabelScan.FAILED
+                    denied -> stringResource(R.string.pair_scan_denied)
+                    else -> stringResource(R.string.pair_scan_failed)
+                },
                 style = MaterialTheme.typography.bodyMedium,
             )
             if (denied) {
                 SwButton(stringResource(R.string.common_try_again), onPrimary, Modifier.fillMaxWidth(), kind = SwButtonKind.Main)
-                SwButton(stringResource(R.string.pair_start_enter_address), onEnterAddress, Modifier.fillMaxWidth())
-            } else {
+                if (!labelMode) SwButton(stringResource(R.string.pair_start_enter_address), onEnterAddress, Modifier.fillMaxWidth())
+            } else if (!labelMode) {
                 SwButton(stringResource(R.string.pair_start_enter_address), onEnterAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Main)
             }
         }
@@ -231,14 +266,33 @@ private fun Context.activity(): Activity? {
 }
 
 @Composable
-private fun CameraPreview(onResult: (String) -> Unit, onFailed: () -> Unit) {
+private fun CameraPreview(
+    onResult: (String) -> Unit,
+    onFailed: () -> Unit,
+    /** Label mode: only a code this accepts ends the scan; [onRejected] hears of the others. */
+    accept: ((String) -> Boolean)? = null,
+    onRejected: () -> Unit = {},
+    /** Counts up to start scanning again after a result that did not end it. */
+    rescan: Int = 0,
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val executor = remember { Executors.newSingleThreadExecutor() }
-    val gate = remember {
-        val decoder = QrDecoder()
-        QrFrameGate<ImageProxy>(decoder::decode)
-    }
+    val decoder = remember { QrDecoder() }
+    val currentOnRejected by rememberUpdatedState(onRejected)
+    val currentAccept by rememberUpdatedState(accept)
+    val gate by rememberUpdatedState(
+        remember(rescan) {
+            QrFrameGate<ImageProxy> { frame ->
+                decoder.decode(frame)?.let { text ->
+                    if (currentAccept?.invoke(text) != false) text else {
+                        ContextCompat.getMainExecutor(context).execute { currentOnRejected() }
+                        null
+                    }
+                }
+            }
+        },
+    )
     val currentOnResult by rememberUpdatedState(onResult)
     val currentOnFailed by rememberUpdatedState(onFailed)
     val preview = remember { Preview.Builder().build() }

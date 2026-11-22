@@ -1,4 +1,4 @@
-"""The event store (ruling R80 section 1, docs/design 03): one place where the Hub writes what happens.
+"""The event store (ruling R80 section 1, the design, Hub page): one place where the Hub writes what happens.
 
 Layout under `<state>/events/`:
   <yyyy-mm>.xml    one file per month, one <event> per event, APPENDED without rewriting the file. The root element
@@ -33,7 +33,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import config, event_kinds
+from . import config, demo, event_kinds
 
 log = logging.getLogger("filament_kit.events")
 
@@ -326,7 +326,7 @@ class EventStore:
 
     @property
     def root(self) -> Path:
-        return self._root if self._root is not None else config.paths().state / "events"
+        return self._root if self._root is not None else demo.where(config.paths().state / "events", "events")
 
     # ---- files
     def _months(self) -> list[Path]:
@@ -372,6 +372,8 @@ class EventStore:
         except (OSError, ValueError, EventError):
             n = 0
         top = max(n, self._high_water(), *(e["id"] for e in self._load_conditions().values()), 0)
+        if self._root is None and demo.is_on():           # the demo's ids start above the real log's: no cursor skips
+            top = max(top, EventStore(config.paths().state / "events")._counter() - 1)
         for p in self._months():                          # by id, not by name: the clock may have stepped back
             top = max([top] + [e["id"] for e in _read_file(p)])
         return top + 1

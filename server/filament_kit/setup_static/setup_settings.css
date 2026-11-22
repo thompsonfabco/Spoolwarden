@@ -10,6 +10,9 @@
 .settings__heading { margin: var(--s2) 0 0; padding-top: var(--s3); border-top: var(--hairline) solid var(--border); font-size: var(--fs-s); font-weight: var(--fw-label);
                      color: var(--muted); }
 .settings__choice, .settings__reader, .settings__remote, .settings__summary { display: grid; gap: var(--s2); min-width: 0; }
+.settings__lang-list { display: grid; gap: var(--s2); margin: 0; padding: 0; list-style: none; }
+.settings__lang-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s3); padding: var(--s2) var(--s3); border: var(--hairline) solid var(--border); border-radius: var(--r); }
+.settings__lang-row .settings__name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .settings__keyrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); }
 .settings__keyrow > .field__label { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin: 0; }
 .settings__entry { display: grid; gap: var(--s2); }
@@ -163,3 +166,10 @@
 @media (max-width: 600px) {
   .settings__cat-grid { grid-template-columns: 1fr; }
 }
+/* Settings > Weigh Station voice (R88 2.1): the sliders show their value beside the track, the Test button sits with its result */
+.voice__slider .field__box { display: flex; align-items: center; gap: var(--s3); }
+.voice__slider .field__control { flex: 1 1 auto; min-width: 0; padding: 0; }
+.voice__slider .field__unit { position: static; flex: none; min-width: calc(var(--s7) - var(--s1)); text-align: right; }
+.voice__remote { margin: 0; padding: var(--s3) 0; border-top: var(--hairline) solid var(--border); color: var(--muted); }
+.voice__test { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding-top: var(--s3); border-top: var(--hairline) solid var(--border); }
+.voice__test .result { margin: 0; min-width: 0; }

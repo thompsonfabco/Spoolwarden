@@ -7,7 +7,7 @@ import pytest
 
 import test_generate as tg
 from filament_kit import config, library, profiles_api
-from filament_kit.profiles import builds
+from filament_kit.profiles import builds, statexml
 from filament_kit.profiles.errors import ProfileError
 
 
@@ -132,7 +132,7 @@ def test_add_list_and_remove_an_entry():
     assert [r["id"] for r in library.local_list()["entries"]] == ["acme--abs-max", "zed--first"]
     assert library.remove_local("zed--first") is True
     assert not (config.paths().state / "library-local" / "zed").exists()         # an empty brand folder goes
-    assert (config.paths().state / "library-local" / "acme" / "abs-max.json").is_file()
+    assert (config.paths().state / "library-local" / "acme" / "abs-max.xml").is_file()
 
 
 @pytest.mark.parametrize("bad", ["", "../x", "acme", "acme--", "--x", "ACME--PLA", "a/b--c", "acme--pla--max", None, 5])
@@ -159,7 +159,7 @@ def test_the_same_brand_and_name_again_replaces_the_entry():
 
 def test_the_stored_entry_is_the_one_add_local_takes(tmp_path):
     library.add_local_form(form())
-    stored = json.loads((tmp_path / "state" / "library-local" / "acme" / "pla-max.json").read_text(encoding="utf-8"))
+    stored = statexml.loads((tmp_path / "state" / "library-local" / "acme" / "pla-max.xml").read_bytes(), "entry")
     assert library.validate(stored, local=True) == [] and library.canonical(stored) == stored
 
 

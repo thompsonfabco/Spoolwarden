@@ -162,9 +162,9 @@ def test_task_runs_every_ten_minutes():
 
 
 def test_server_and_pc_sync_versions_match():
-    assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.6.2"
+    assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.6.3"
     # the wheel takes its version from pyproject; make_release.sh looks for the __version__ wheel
-    assert re.search(r'^version = "0\.6\.2"\s*$', _read("pc-sync/pyproject.toml"), re.M)
+    assert re.search(r'^version = "0\.6\.3"\s*$', _read("pc-sync/pyproject.toml"), re.M)
     server = _read("server/pyproject.toml")        # the server's wheel reads __version__: one number, typed once
     assert not re.search(r'^version = ', server.split("[project.optional-dependencies]")[0], re.M)
     assert 'dynamic = ["version"]' in server and 'version = {attr = "filament_kit.__version__"}' in server
@@ -646,6 +646,76 @@ def test_station_upgrade_without_server_reuses_the_saved_address(tmp_path):
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_station_upgrade_with_a_damaged_config_xml_uses_config_json(tmp_path):
+    """R582 M3: an unreadable config.xml does not hide a good config.json from the station re-run."""
+    etc = _saved_station_etc(tmp_path)
+    (etc / "config.xml").write_bytes(b"<config")
+    r = _install_no_tty(tmp_path, etc, "--mode", "station")
+    assert SAVED_NOTE in r.stderr and "needs the kit server's address" not in r.stderr, r.stderr
+
+
+def _hub_python(path):
+    """A stand-in for the Hub's venv python that keeps -I (isolated mode ignores PYTHONPATH, so the kit's folder is put on
+    sys.path from inside the -c code, as the venv's site-packages would): the program's own import path is tested."""
+    import filament_kit
+    src = Path(filament_kit.__file__).resolve().parent.parent.as_posix()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = ('#!/bin/sh\n[ "$1" = -I ] && [ "$2" = -c ] || exit 97\ncode="$3"; shift 3\n'
+            f'exec "{Path(sys.executable).as_posix()}" -I -c "import sys; sys.path.insert(0, \'{src}\')\n$code" "$@"\n')
+    path.write_text(body, encoding="utf-8", newline="\n")
+    path.chmod(0o755)
+
+
+def _run_station_install(tmp_path, etc):
+    """install.sh --mode station with $VENV pointing at a stand-in Hub python (-I kept); stderr."""
+    import os
+    import subprocess
+    venv = tmp_path / "venv"
+    _hub_python(venv / "bin" / "python")
+    text = _read("install/install.sh")
+    assert 'VENV="$OPT/venv"' in text
+    vpath = subprocess.run([_bash(), "-c", "cygpath -u \"$1\" 2>/dev/null || printf %s \"$1\"", "_", str(venv)],
+                           capture_output=True, text=True).stdout.strip()
+    (tmp_path / "i.sh").write_text(text.replace('VENV="$OPT/venv"', f'VENV="{vpath}"', 1), encoding="utf-8", newline="\n")
+    r = subprocess.run([_bash(), "i.sh", "--mode", "station"], cwd=tmp_path, stdin=subprocess.DEVNULL,
+                       capture_output=True, text=True, timeout=60, env={**os.environ, "FK_ETC": str(etc)})
+    return r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_station_upgrade_reads_config_xml_with_the_hubs_python(tmp_path, monkeypatch):
+    """R582 M3 / R600 LOW: the address comes from the Hub's own Python run with -I ($VENV/bin/python), which reads the
+    settings as the program does. config.xml holds kit.example.lan, and the config.json beside it (same hash) another
+    one: only the Hub-Python path gives kit.example.lan; the plain-JSON fallback would say json.example.lan."""
+    import hashlib
+    import json
+    from filament_kit.profiles import statexml
+    etc = tmp_path / "etc"
+    etc.mkdir()
+    monkeypatch.setenv("FK_ETC", str(etc))
+    js = json.dumps({"station": {"allow": ["127.0.0.1", "json.example.lan"]}}).encode("utf-8")
+    (etc / "config.json").write_bytes(js)
+    (etc / "config.xml").write_bytes(statexml.dumps("config", {"station": {"allow": ["127.0.0.1", "kit.example.lan"]},
+                                                              "json_sha256": hashlib.sha256(js).hexdigest()}))
+    err = _run_station_install(tmp_path, etc)
+    assert "saved server address kit.example.lan" in err, err
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_station_upgrade_takes_a_json_changed_after_a_rollback_with_the_hubs_python(tmp_path, monkeypatch):
+    """R582 M3: config.json was changed after config.xml was saved (an older release after a rollback): it wins."""
+    import json
+    from filament_kit import config
+    etc = tmp_path / "etc"
+    etc.mkdir()
+    monkeypatch.setenv("FK_ETC", str(etc))
+    config.save({"station": {"allow": ["127.0.0.1", "old.example.lan"]}})
+    (etc / "config.json").write_text(json.dumps({"station": {"allow": ["127.0.0.1", "kit.example.lan"]}}), encoding="utf-8")
+    err = _run_station_install(tmp_path, etc)
+    assert "saved server address kit.example.lan" in err, err
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
 def test_custom_run_without_terminal_uses_the_saved_address_unless_one_is_given(tmp_path):
     etc = _saved_station_etc(tmp_path)
     r = _install_no_tty(tmp_path, etc, "--modules", "station")
@@ -746,7 +816,7 @@ def test_wrapper_reader_revoke_as_root_and_list_as_user(tmp_path):
     assert _wrapper_run(tmp_path / "b", "reader", "tokens") == "as-user ./stubs/prog reader tokens"
 
 
-def _wrapper_half(tmp_path, *, marker=False, state=None, program=True, installing=False):
+def _wrapper_half(tmp_path, *, marker=False, state=None, program=True, installing=False, state_xml=None, after=None):
     """Run the wrapper over a kit folder with stand-ins; (exit code, stdout, stderr)."""
     import os
     import subprocess
@@ -765,6 +835,15 @@ def _wrapper_half(tmp_path, *, marker=False, state=None, program=True, installin
         (kit / ".fk-installed").write_text("x\n")
     if state:
         (kit / "releases" / "state.json").write_text(state, encoding="utf-8")
+    if state_xml or after:       # read by the kit's own Python (a stand-in that is this test's interpreter)
+        if state_xml:
+            (kit / "releases" / "state.xml").write_bytes(state_xml)
+        (kit / "venv" / "bin").mkdir(parents=True)
+        (kit / "venv" / "bin" / "python").write_text(f'#!/bin/sh\n[ "$1" = -I ] && shift\nexec "{Path(sys.executable).as_posix()}" "$@"\n',
+                                                     encoding="utf-8", newline="\n")
+        (kit / "venv" / "bin" / "python").chmod(0o755)
+    if after:           # changes the files once the others are in place
+        after(kit / "releases")
     text = _read("install/spoolwarden-cli.sh")
     for old, new in (("BIN=/opt/filament-kit/venv/bin/filament-kit", "BIN=./stubs/prog"),
                      ("KIT_OPT=/opt/filament-kit", "KIT_OPT=./kit")):
@@ -794,6 +873,38 @@ def test_wrapper_prints_the_repair_and_still_runs_the_program(tmp_path):
     rc, out, err = _wrapper_half(tmp_path, state='{"previous": "1.2.3", "held": null}')
     assert rc == 0 and out == "ran status\n"
     assert "stopped halfway" in err and f"  {config.GET_COMMAND} --version 1.2.3\n" in err
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_reads_the_repair_version_from_state_xml_with_the_kits_python(tmp_path):
+    from filament_kit.profiles import statexml
+    xml = statexml.dumps("state", {"previous": "1.2.3", "held": None})
+    rc, out, err = _wrapper_half(tmp_path, state_xml=xml)
+    assert "--version 1.2.3\n" in err, err
+    (tmp_path / "again").mkdir()
+    # the XML says there is no previous: the stale JSON's "1.0.0" is not used
+    rc, out, err = _wrapper_half(tmp_path / "again", state='{"previous": "1.0.0"}',
+                                 state_xml=statexml.dumps("state", {"previous": None, "held": None}))
+    assert "stopped halfway" in err and "--version" not in err, err
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_repair_line_takes_a_state_json_changed_after_a_rollback(tmp_path, monkeypatch):
+    """R600 MEDIUM: a rollback writes previous=None, held=N; v0.6.2 then updates and writes only state.json
+    (previous=0.6.2, failed=N) and stops halfway. The wrapper reads the state as updates.half_install does, so its repair
+    line carries --version 0.6.2, and the two agree."""
+    import json
+    from filament_kit import config, updates
+
+    def v062_changes_the_state(releases):
+        updates.statexml.write(releases / "state.json", {"previous": None, "held": "2.0.0"}, 0o644, state_owned=False,
+                               old_format=updates._old_state)
+        (releases / "state.json").write_text(json.dumps({"previous": "0.6.2", "held": None, "failed": "2.0.0"}, indent=2),
+                                             encoding="utf-8")
+    rc, out, err = _wrapper_half(tmp_path, after=v062_changes_the_state)
+    assert f"  {config.GET_COMMAND} --version 0.6.2\n" in err, err
+    monkeypatch.setenv("FK_OPT", str(tmp_path / "kit"))
+    assert updates.half_install() == f"{config.GET_COMMAND} --version 0.6.2"
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
@@ -860,7 +971,7 @@ def test_wrapper_status_without_sudo_passes_nothing(tmp_path):
 
 # The shell scripts with multi-line `python -c '...'` blocks (test_no_other_script_has_python_c_blocks keeps the list
 # complete): each must keep at least one block, so the check below never passes on nothing.
-PYTHON_C_SCRIPTS = ["get.sh", "install/install.sh"]
+PYTHON_C_SCRIPTS = ["get.sh", "install/install.sh", "install/spoolwarden-cli.sh"]
 
 
 def test_no_other_script_has_python_c_blocks():

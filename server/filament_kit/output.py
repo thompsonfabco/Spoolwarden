@@ -1,6 +1,6 @@
 """How the command line writes: one status vocabulary, glyphs and colour, tables that fit the width, results on
 standard output, errors on standard error as `Error:` with a `Fix:` line, a progress line for every wait, the exit
-codes (docs/design/06-command-line.md 6.1 to 6.7; 07-accessibility.md CLI-1 to CLI-10).
+codes (the design, command line 6.1 to 6.7; accessibility CLI-1 to CLI-10).
 
 Every command writes through here. The choices (colour, plain, glyph set, width) are read when they are needed, from
 the environment and from what `configure` was given, so a test that sets `NO_COLOR` or `COLUMNS` sees it at once.

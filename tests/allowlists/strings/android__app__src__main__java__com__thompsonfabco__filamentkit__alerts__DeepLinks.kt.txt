@@ -1,0 +1,6 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/DeepLinks.kt | %2B | not text: URI scheme, path word or charset name of the spoolwarden:// deep links, not shown to a person
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/DeepLinks.kt | UTF-8 | not text: URI scheme, path word or charset name of the spoolwarden:// deep links, not shown to a person
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/DeepLinks.kt | printers | not text: URI scheme, path word or charset name of the spoolwarden:// deep links, not shown to a person
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/DeepLinks.kt | recent | not text: URI scheme, path word or charset name of the spoolwarden:// deep links, not shown to a person
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/DeepLinks.kt | spools | not text: URI scheme, path word or charset name of the spoolwarden:// deep links, not shown to a person
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/DeepLinks.kt | spoolwarden:// | not text: URI scheme, path word or charset name of the spoolwarden:// deep links, not shown to a person

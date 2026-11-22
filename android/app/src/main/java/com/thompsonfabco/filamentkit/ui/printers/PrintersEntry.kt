@@ -35,11 +35,12 @@ fun PrintersListEntry(
     onOpen: (String) -> Unit,
     onReplaceCode: (String) -> Unit,
     onPairAgain: () -> Unit,
+    onMapOffer: (String, Boolean) -> Unit = { id, _ -> onOpen(id) },
     printerDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
     onSummary: (String) -> Unit = {},
 ) {
     val vm = viewModel { PrintersViewModel(ApiPrinterBackend(currentApi)) }
-    PrintersScreen(vm, onOpen = onOpen, onPairAgain = onPairAgain, onReplaceCode = onReplaceCode, printerDetail = printerDetail, onSummary = onSummary)
+    PrintersScreen(vm, onOpen = onOpen, onPairAgain = onPairAgain, onReplaceCode = onReplaceCode, onMapOffer = onMapOffer, printerDetail = printerDetail, onSummary = onSummary)
 }
 
 /** One printer's screen. [api] gives the camera its client and stream addresses. */
@@ -54,6 +55,7 @@ fun PrinterEntry(
     onPickSlot: (String) -> Unit,
     onOpenSpool: (SlotSpool) -> Unit,
     embedded: Boolean = false,
+    askMap: Boolean = false,
 ) {
     val backend = remember(currentApi) { ApiPrinterBackend(currentApi) }
     val vm = viewModel(key = "printer-$id") { PrinterViewModel(backend, id) }
@@ -77,6 +79,7 @@ fun PrinterEntry(
             prefs.edit().putBoolean(id, it).apply()
         },
         embedded = embedded,
+        askMap = askMap,
     )
 }
 

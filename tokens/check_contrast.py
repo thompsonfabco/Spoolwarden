@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """WCAG contrast check for tokens.json and the generated Kotlin colours (standard library only).
 
-Implements AUT-1 (docs/design/07-accessibility.md section 15) and test 3 of 08-platform-mapping.md 3.4.
+Implements AUT-1 (the design, accessibility section 15) and test 3 of the design, platform mapping 3.4.
 Every pair below is required, for every theme in light and dark (eight token sets), on the unrounded ratio:
   4.5:1  text, muted, accent-text, ok, warn, bad, info   on bg, surface, surface-2   (07 3.1)
   4.5:1  ok/ok-soft, warn/warn-soft, bad/bad-soft, info/info-soft; on-accent on accent; on-bad on bad   (07 3.1)

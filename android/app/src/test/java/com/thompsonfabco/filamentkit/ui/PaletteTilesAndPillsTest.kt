@@ -173,6 +173,17 @@ class PaletteTilesAndPillsTest {
         assertEquals("and runs to the tile's padding at the other side", rule.onRoot().fetchSemanticsNode().boundsInRoot.right - pad * density, open.right, 1f)
     }
 
+    @Test fun aWaitingSlotIsARingWithNoClockBesideIt() {
+        val waiting = listOf(SlotLook("#2B2B2E", false), SlotLook("#E0A030", true, waiting = true), SlotLook("#2B2B2E", false))
+        themed {
+            SwCollection(listOf(printer), tile = { _, p -> PrinterTile(p, waiting, onClick = {}) }) { _, _ -> Box(Modifier) {} }
+        }
+        rule.waitForIdle()
+        val rings = rule.onAllNodesWithTag(SLOT_RING_TAG, useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+        assertEquals("one ring per slot", 3, rings.size)
+        assertEquals("nothing sits between the waiting ring and the next", rings[1].left - rings[0].right, rings[2].left - rings[1].right, 0.5f)
+    }
+
     @Test fun theLazyGridDrawsTheTileToo() {
         themed { SwLazyCollection(listOf(spool), key = { it.id }, tile = { s -> SpoolTile(s, onClick = {}) }) { Box(Modifier) {} } }
         rule.waitForIdle()

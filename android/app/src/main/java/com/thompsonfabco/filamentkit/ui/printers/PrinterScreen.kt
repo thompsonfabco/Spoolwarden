@@ -102,6 +102,13 @@ class CameraSource(
 )
 
 /**
+ * Whether the mapping question opens by itself now: asked for, not yet asked, and the printer can use the Hub's mapping.
+ * A printer that cannot keeps the panel's disabled reason (9.7) and no question.
+ */
+internal fun mapQuestionDue(askMap: Boolean, asked: Boolean, klipper: Boolean, mapEnabled: Boolean) =
+    askMap && !asked && !klipper && mapEnabled
+
+/**
  * One printer (05-android-app 9.4 to 9.10): the status and its controls, the camera, the slots, the slot mapping and
  * the filament used, in one scrolling column. Status is polled every 2 s only while this screen is visible, and the
  * camera is shown only while it is started, so the stream is closed when the app goes to the background. The
@@ -123,9 +130,22 @@ fun PrinterScreen(
     cameraShown: Boolean = true,
     onCameraShown: (Boolean) -> Unit = {},
     embedded: Boolean = false,
+    /** Opens with the Hub's mapping question open (the add-printer map offer), once, if the printer can map now. */
+    askMap: Boolean = false,
 ) {
     val state by viewModel.state.collectAsState()
     val toolsState by tools.state.collectAsState()
+    var mapAsked by rememberSaveable { mutableStateOf(false) }
+    val loadedPrinter = state.printer
+    val canMap = loadedPrinter != null && mapQuestionDue(
+        askMap, mapAsked, loadedPrinter.family == "klipper", toolsState.mapEnabled(SlotMapHelp.canStart(loadedPrinter.state, state.printing)),
+    )
+    LaunchedEffect(canMap) {
+        if (canMap) {
+            mapAsked = true
+            tools.askMap()
+        }
+    }
     LifecycleStartEffect(viewModel, tools) {
         viewModel.onHubOk = tools::clearHubNotice
         tools.onHubOk = viewModel::clearHubNotice
@@ -248,6 +268,7 @@ fun PrinterScreen(
             offline = false,
         ) {
             if (printer == null) return@ScreenState
+            AutoNotice(printer, state, viewModel)
             StatusPanel(printer, state, viewModel)
             CameraPanel(printer, camera, visible, cameraShown, onCameraShown, onPairAgain)
             SlotsPanel(printer, state, onSlot = { sheetSlot = it.label })
@@ -296,6 +317,21 @@ private fun Overflow(onSettings: () -> Unit, onReport: () -> Unit, onRefresh: ()
 }
 
 // --- status ---
+
+/**
+ * The one notice of an Auto assignment on this printer (A4): what it waits for with Stop waiting, or, when two slots were
+ * loaded, the question with the slots to choose from. Nothing when no Auto is waiting.
+ */
+@Composable
+private fun AutoNotice(printer: Printer, state: PrinterUiState, viewModel: PrinterViewModel) {
+    val auto = state.auto ?: return
+    val notice = PrinterTexts.autoNotice(auto, printer.name)
+    val stop = SwAction(PrinterTexts.STOP_WAITING) { if (!state.autoBusy) viewModel.stopWaiting() }
+    NoticeCard(
+        NoticeKind.Info, notice.text,
+        actions = notice.choices.map { label -> SwAction(label) { if (!state.autoBusy) viewModel.chooseAutoSlot(label) } } + stop,
+    )
+}
 
 /** The panel under the top bar: the state, the progress of a print, temperatures, alerts and the controls. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -595,7 +631,7 @@ private fun SlotRow(slot: AmsSlot, onClick: () -> Unit) {
             slot.label, Modifier.width(SpoolwardenTheme.sizes.slotLabel),
             style = SpoolwardenTheme.type.data,
         )
-        ColorSwatch(slot.colorHex.ifBlank { spool?.colorHex }, empty = empty)
+        ColorSwatch(slot.colorHex.ifBlank { spool?.colorHex }, empty = empty && !waiting, waiting = waiting)
         Column(Modifier.weight(1f)) {
             Text(headline, style = MaterialTheme.typography.bodyLarge)
             if (left != null) Text(left, color = colors.muted, style = SpoolwardenTheme.type.dataSmall)
@@ -638,7 +674,7 @@ private fun SlotSheet(
                     Row(horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically) {
                         ColorSwatch(slot.colorHex.ifBlank { spool.colorHex }, empty = false)
                         Column {
-                            Text(PrinterHelp.spoolName(spool), style = MaterialTheme.typography.bodyLarge)
+                            Text(spoolHeadline(PrinterHelp.spoolName(spool)), style = MaterialTheme.typography.bodyLarge)
                             spool.remainingWeight?.let {
                                 Text(
                                     stringResource(R.string.printer_slot_left, it.roundToInt()),

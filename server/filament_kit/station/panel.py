@@ -11,7 +11,8 @@ Protocol (firmware 11), 115200 baud, one line each: PC -> panel `?`, `L <yellow>
 second), `D <row> [text]` (OLED row 0 the title, 1-4 the body; sent when it changes), `B <hz> <ms> [count]`, `V <percent>` (speech volume, 0-100);
 `A <n>` + n raw bytes (speech, see `speech`);
 panel -> PC `HELLO intake-panel <version> [<chip>]` (firmware 10: `esp32c3`; no chip token: an ESP8266), `P H` / `P D` (the yellow / red button, a short press, on release),
-`L H` / `L D` (the yellow / red button held 0.8 s), `AIR <C> <RH|-> <hPa>` (see `air`);
+`L H` / `L D` (the yellow / red button held 0.8 s), `AIR <C> <RH|-> <hPa>` (see `air`),
+`W <grams> <0|1 settled>` (a scale on the panel: used as the scale when the computer has none);
 firmware 11 adds `TAG <uid hex>` (a tag read by the PN532 on the panel's I2C bus, handled like the USB reader's, and
 the same tag from either reader within 2 s is one tap: `nfc.on_identifier`) and `NFC ok` / `NFC none` (whether that
 PN532 answers, after each HELLO and when it changes).
@@ -20,17 +21,20 @@ PN532 answers, after each HELLO and when it changes).
 lamp on red's pins) sets station.panel_swap (STATION_PANEL_SWAP=1): the buttons' roles and the `L` lamp modes are swapped
 here, so the wiring never needs a reflash. Firmware 9 reports both buttons alike for that; a long press on red
 cancels like a short one.
+
+The same lines also run over Wi-Fi (R88 4.3; `panel_net`): the panel dials the station's TLS port and says `HELLO
+intake-panel <version> <chip> <token>`. A panel on USB wins over one on Wi-Fi.
 """
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 import subprocess
-import sys
 import time
 
-from . import air, flow, nfc, wire
+from . import air, flow, nfc, panel_flash, panel_net, scale, wire
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -46,6 +50,8 @@ def on_line(line: bytes):
             flow.on_red()
     elif line.startswith(b"AIR "):
         air.on_air(line)
+    elif line.startswith(b"W "):  # a scale on the panel
+        on_scale(line)
     elif line.startswith(b"TAG "):  # the panel's own PN532 (firmware 11): same path as the USB reader
         hexid = line[4:].strip()
         if not re.fullmatch(rb"(?:[0-9a-fA-F]{2}){4}|(?:[0-9a-fA-F]{2}){7}|(?:[0-9a-fA-F]{2}){10}", hexid):
@@ -60,6 +66,42 @@ def on_line(line: bytes):
             send_volume()  # it forgot the volume
         st.panel_resend.set()
         st.panel_dirty.set()
+
+
+def on_scale(line: bytes):
+    """`W <grams> <0|1 settled>` from the panel: the scale reading, in the shape the computer's own scale gives, when
+    the computer has none (the flow's own use of it is flow.py's). A malformed line is ignored."""
+    parts = line.split()
+    try:
+        grams = float(parts[1])
+        settled = {b"0": False, b"1": True}[parts[2]]
+        if len(parts) != 3 or not math.isfinite(grams) or abs(grams) > 100000:
+            raise ValueError
+    except (IndexError, KeyError, ValueError):
+        log.warning("button panel: ignoring W line %r", line[:40])
+        return
+    with st.lock:   # what the panel itself says, whichever scale the station uses (WL3 reads it)
+        st.state["panel_scale"] = {"grams": round(grams, 1), "status": "settled" if settled else "unsettled", "unit": "g"}
+    if scale.find_scale():  # the computer's own scale wins
+        st.panel_scale["on"] = False
+        return
+    now = time.time()
+    with st.lock:
+        st.state.update(scale={"grams": round(grams, 1), "status": "stable" if settled else "moving", "unit": 2,
+                               "stable": settled}, scale_at=now)
+        if settled and grams >= st.MIN_GRAMS:
+            st.state.update(last=round(grams, 1), last_at=now)
+        st.panel_scale["on"] = True
+    st.panel_dirty.set()
+
+
+def forget_panel_scale():
+    """The panel went away: a scale reading it sent is no longer a reading."""
+    with st.lock:
+        st.state["panel_scale"] = None
+        if st.panel_scale["on"]:
+            st.state.update(scale=None, scale_at=None)
+            st.panel_scale["on"] = False
 
 
 class Shown:
@@ -96,26 +138,22 @@ def fw_version():
         return None
 
 
-def flash_panel(dev, version):
-    """Write the bundled (merged, address 0) firmware to the ESP32-C3 panel on dev with esptool (its native USB
-    resets into the ROM bootloader, so a failed write can always be retried). Never touches the reader's port; keeps the panel's port
-    claimed (ports["panel"]) so nfcpy never opens it meanwhile. True only when esptool exits 0."""
-    if dev == st.ports["nfc"]:
-        log.warning("not flashing %s: it is the NFC reader's port", dev)
-        return False
-    log.info("flashing button panel on %s with firmware %s", dev, version)
-    cmd = [sys.executable, "-m", "esptool", "--chip", "esp32c3", "--port", dev, "--baud", "460800",
-           "--before", "default-reset", "--after", "hard-reset", "write-flash", "0x0", st.settings["panel_fw"]]
-    ok = False
-    try:
-        p = subprocess.run(cmd, capture_output=True, timeout=180)
-        ok = p.returncode == 0
-        tail = (p.stdout + p.stderr).decode(errors="replace").strip().splitlines()[-3:]
-        (log.info if p.returncode == 0 else log.warning)("esptool exit %d: %s", p.returncode, " | ".join(tail))
-    except (OSError, subprocess.TimeoutExpired) as e:
-        log.warning("esptool: %s", e)
-    time.sleep(2)  # let it boot
-    return ok
+def flash_panel_result(dev, version, have=None):
+    """Write the bundled firmware to the ESP32-C3 panel on dev with esptool (panel_flash picks the image: program only
+    for a wireless panel, else the whole one; have is the panel's HELLO version, None for a blank board). Never touches
+    the reader's port; the panel's port stays claimed (ports["panel"]) so nfcpy never opens it meanwhile. Returns
+    panel_flash.Flash(ok, whole, notice); notice is also left in st.state["flash_notice"] for the station's answer
+    (GET /state); a new flash clears the old one first, and a panel that connects over Wi-Fi afterwards clears it."""
+    st.clear_flash_notice()
+    result = panel_flash.flash(dev, have, version)
+    if result.notice:
+        st.set_flash_notice(result.notice)
+    return result
+
+
+def flash_panel(dev, version, have=None):
+    """flash_panel_result, as a bool: True only when esptool exits 0."""
+    return flash_panel_result(dev, version, have).ok
 
 
 def _older(have, want) -> bool:
@@ -150,7 +188,7 @@ def update_firmware(ser):
     if st.settings["panel_flash"] and want not in st.flashed:
         st.flashed.add(want)
         ser.close()
-        flash_panel(ser.port, want)
+        flash_panel(ser.port, want, ser.panel_version)
         return True
     log.warning("button panel runs firmware %s, not the bundled %s; using it as it is (%s)",
                 ser.panel_version, want,
@@ -206,10 +244,13 @@ def find_panel():
     for dev in st.panel_ttys():
         if dev != st.ports["nfc"] and (ser := open_panel(dev)):
             break
-    st.ports["panel"] = ser.port if ser else None
-    st.ports["panel_version"] = ser.panel_version if ser else None
-    st.ports["panel_chip"] = ser.panel_chip if ser else None
-    st.ports["panel_nfc"] = None  # until the panel says
+    if ser or not getattr(st.panel["ser"], "wifi", False):
+        st.ports["panel"] = ser.port if ser else None
+        st.ports["panel_version"] = ser.panel_version if ser else None
+        st.ports["panel_chip"] = ser.panel_chip if ser else None
+        st.ports["panel_nfc"] = None  # until the panel says
+    # else a panel on Wi-Fi is connected and the USB search found none: its HELLO set the version, chip and nfc, and the
+    # speech format and volume read them; only a panel found on USB replaces them
     st.probed.set()  # after ports["panel"], so a waiting reader never sees the panel's port as free
     return ser
 
@@ -255,6 +296,7 @@ def wait_for_panel(misses):
 def panel_loop():
     """Find the button panel among the USB serial ports, then relay its presses and keep its lamps current."""
     misses = 0
+    panel_net.start()  # the Wi-Fi listener, when station.panel_link is wifi
     while True:
         ser = find_panel()
         if not ser:
@@ -281,6 +323,7 @@ def panel_loop():
         with st.panel_lock:
             st.panel["ser"] = None
         ser.close()
+        forget_panel_scale()
         st.ports["panel"] = st.ports["panel_version"] = st.ports["panel_chip"] = st.ports["panel_nfc"] = None
         log.info("button panel gone")
         time.sleep(2)

@@ -47,7 +47,7 @@ import json
 import re
 import secrets
 import threading
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
@@ -56,7 +56,7 @@ try:
 except ImportError:  # Windows dev PC
     fcntl = None
 
-from .. import config
+from .. import config, demo
 from .. import library as library_mod
 from ..library import Library
 from ..pairing import _write_atomic, make_state_dir, open_lock
@@ -492,14 +492,17 @@ _held = threading.local()
 
 
 def _path() -> Path:
-    return config.paths().state / "profiles" / "lines.json"
+    return demo.where(config.paths().state / "profiles" / "lines.json", "profiles/lines.json")
 
 
 @contextmanager
-def locked():
+def locked(wait: bool = True):
     """Serialize lines.json changes between threads and with the CLI/builder in another process (flock on
-    `state/profiles/lines.lock`; thread lock only where fcntl is missing). Re-entrant within a thread."""
-    with _lock:
+    `state/profiles/lines.lock`; thread lock only where fcntl is missing). Re-entrant within a thread. With
+    `wait=False` a lock another thread or process holds raises BlockingIOError at once instead of waiting."""
+    if not _lock.acquire(blocking=wait):
+        raise BlockingIOError("lines.lock is held")
+    try:
         depth = getattr(_held, "depth", 0)
         if fcntl is None or depth:
             _held.depth = depth + 1
@@ -511,13 +514,15 @@ def locked():
         folder = _path().parent
         make_state_dir(folder)
         with open_lock(folder / "lines.lock") as fh:
-            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
             _held.depth = 1
             try:
                 yield
             finally:
                 _held.depth = 0
                 fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    finally:
+        _lock.release()
 
 
 def _row(r) -> Line | None:
@@ -564,6 +569,18 @@ def load() -> LineSet:
     path = _path()
     xp = statexml.xml_path(path)
     data = None
+    newer = None
+    if xp.exists():
+        with ExitStack() as stack:                  # the read can rewrite lines.xml: under the lock, as a save is
+            busy = False
+            try:
+                stack.enter_context(locked(wait=False))
+            except BlockingIOError:                 # a build or save holds the lock: a read never waits for it; it reads
+                busy = True                         # lines.xml as last saved (atomic) and leaves the rewrite to a later read
+            except OSError:                         # a process that may not take the lock cannot rewrite either
+                pass
+            if not busy:
+                newer = statexml.read(path, keep_version=True)  # a lines.json an older Hub changed after our last write wins once
     try:
         raw = xp.read_bytes()
     except FileNotFoundError:
@@ -576,6 +593,8 @@ def load() -> LineSet:
             data = statexml.loads(raw, "lines", keep_version=True)
         except statexml.StateXmlError as e:
             _corrupt(xp, f"not lines XML: {e}")
+        if newer is not None:                       # the newer JSON, when the store could not be rewritten too
+            data = newer
     else:
         try:
             raw = path.read_bytes()

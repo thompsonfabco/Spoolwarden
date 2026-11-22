@@ -360,7 +360,7 @@ def test_library_local(c):
     body = r.json()
     assert body["line_id"] == "acme-plastics--pla-max" and body["entry"]["product"] == "PLA Max"
     assert builds._pending_request() is not None
-    assert (config.paths().state / "library-local" / "acme-plastics" / "pla-max.json").is_file()
+    assert (config.paths().state / "library-local" / "acme-plastics" / "pla-max.xml").is_file()
 
 
 def test_library_local_invalid_entry(c):
@@ -380,7 +380,7 @@ def test_library_local_invalid_entry(c):
     assert r.status_code == 400 and r.json()["error"] == "invalid_entry"
     assert builds._request() is None
     loc = config.paths().state / "library-local"
-    assert not loc.exists() or not list(loc.rglob("*.json"))
+    assert not loc.exists() or not list(loc.rglob("*.*"))
 
 
 def test_audit_lines_and_no_token_in_logs(c, sm, caplog):

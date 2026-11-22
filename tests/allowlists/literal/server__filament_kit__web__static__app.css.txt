@@ -1,0 +1,21 @@
+server/filament_kit/web/static/app.css | 0.5mm | 1 | the top margin of the A4 sheet of 70 x 37 mm labels (02 7.13; R85 00:50): the print page lays labels at their real size
+server/filament_kit/web/static/app.css | 12.7mm | 1 | the top margin of the Letter sheet of 2-5/8 x 1 in labels (02 7.13; R85 00:50): the print page lays labels at their real size
+server/filament_kit/web/static/app.css | 12.9mm | 1 | the top margin of the A4 sheet of 63.5 x 33.9 mm labels (02 7.13; R85 00:50): the print page lays labels at their real size
+server/filament_kit/web/static/app.css | 2.5mm | 1 | the gap across (pitch 66.0 less the label) of the A4 sheet of 63.5 x 33.9 mm labels (02 7.13; R85 00:50): the print page lays labels at their real size
+server/filament_kit/web/static/app.css | 210mm | 2 | the width of an A4 sheet (02 7.13; R85 00:50): the print page lays a sheet's labels at their real places
+server/filament_kit/web/static/app.css | 215.9mm | 1 | the width of a US Letter sheet (02 7.13; R85 00:50): the print page lays a sheet's labels at their real places
+server/filament_kit/web/static/app.css | 25.4mm | 1 | the label height and pitch down of the Letter sheet of 2-5/8 x 1 in labels (02 7.13; R85 00:50): the print page lays labels at their real size
+server/filament_kit/web/static/app.css | 279.4mm | 1 | the height of a US Letter sheet (02 7.13; R85 00:50): the print page lays a sheet's labels at their real places
+server/filament_kit/web/static/app.css | 297mm | 2 | the height of an A4 sheet (02 7.13; R85 00:50): the print page lays a sheet's labels at their real places
+server/filament_kit/web/static/app.css | 29mm | 1 | the printed height of a 62 x 29 mm label: the print page shows it at its real size (R85 5.2)
+server/filament_kit/web/static/app.css | 3.175mm | 1 | the gap across (pitch 69.85 less the label) of the Letter sheet of 2-5/8 x 1 in labels (02 7.13; R85 00:50): the print page lays labels at their real size
+server/filament_kit/web/static/app.css | 30mm | 1 | the printed height of a 50 x 30 mm label: the print page shows it at its real size (R85 5.2)
+server/filament_kit/web/static/app.css | 33.9mm | 1 | the label height and pitch down of the A4 sheet of 63.5 x 33.9 mm labels (02 7.13; R85 00:50): the print page lays labels at their real size
+server/filament_kit/web/static/app.css | 37mm | 1 | the label height and pitch down of the A4 sheet of 70 x 37 mm labels (02 7.13; R85 00:50): the print page lays labels at their real size
+server/filament_kit/web/static/app.css | 4.7625mm | 1 | the left margin of the Letter sheet of 2-5/8 x 1 in labels (02 7.13; R85 00:50): the print page lays labels at their real size
+server/filament_kit/web/static/app.css | 50mm | 1 | the printed width of a 50 x 30 mm label: the print page shows it at its real size (R85 5.2)
+server/filament_kit/web/static/app.css | 62mm | 1 | the printed width of a 62 x 29 mm label: the print page shows it at its real size (R85 5.2)
+server/filament_kit/web/static/app.css | 63.5mm | 1 | the label width of the A4 sheet of 63.5 x 33.9 mm labels (02 7.13; R85 00:50): the print page lays labels at their real size
+server/filament_kit/web/static/app.css | 66.675mm | 1 | the label width of the Letter sheet of 2-5/8 x 1 in labels (02 7.13; R85 00:50): the print page lays labels at their real size
+server/filament_kit/web/static/app.css | 7.25mm | 1 | the left margin of the A4 sheet of 63.5 x 33.9 mm labels (02 7.13; R85 00:50): the print page lays labels at their real size
+server/filament_kit/web/static/app.css | 70mm | 1 | the label width and pitch across of the A4 sheet of 70 x 37 mm labels (02 7.13; R85 00:50): the print page lays labels at their real size

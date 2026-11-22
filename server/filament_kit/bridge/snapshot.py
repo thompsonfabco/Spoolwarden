@@ -1,7 +1,7 @@
 """The slot snapshot on disk: what the slot test / calibration job must put back, kept until the restore is confirmed.
 
-`state/printers/<serial>/slottest-snapshot.json` (state-owned, written atomically) is saved BEFORE the first
-write to the printer and deleted only after a confirmed restore. If it is still there, a job was cut short (the
+`state/printers/<serial>/slottest-snapshot.xml` (state-owned, written atomically; a slottest-snapshot.json from before
+is read and moved) is saved BEFORE the first write to the printer and deleted only after a confirmed restore. If it is still there, a job was cut short (the
 process was killed, or its restore was not confirmed): the next mapping job (service or CLI) restores from it
 first and refuses to go on unless that restore is confirmed; the service also restores from it at start when the
 printer is connected and idle.
@@ -19,14 +19,14 @@ import logging
 import time
 from typing import Callable
 
-from .. import config
-from ..pairing import _write_atomic, make_state_dir
+from .. import config, demo
+from ..profiles import statexml
 from . import layout, registry, status
 from .connection import PrinterOffline, UnknownPrinter
 
 log = logging.getLogger(__name__)
 
-FILE = "slottest-snapshot.json"
+FILE = "slottest-snapshot.json"      # the JSON name: `statexml` keeps the data in the .xml beside it
 CONFIRM_TIMEOUT = 20.0
 ONLINE = ('connected', 'needs_developer_mode')
 
@@ -34,29 +34,42 @@ ONLINE = ('connected', 'needs_developer_mode')
 def path(serial: str):
     if not isinstance(serial, str) or not registry.SERIAL.fullmatch(serial):
         raise ValueError(f"bad serial {serial!r}")
-    return config.paths().state / "printers" / serial / FILE
+    return demo.where(config.paths().state / "printers" / serial, f"printers/{serial}") / FILE      # the demo keeps its own
+
+
+def _old_form(data) -> bytes:
+    """slottest-snapshot.json as the release before wrote it (json.dumps indent 2, no newline), kept current for a rollback."""
+    return json.dumps(data, indent=2).encode("utf-8")
+
+
+def _cleared_by_older_release(serial: str) -> bool:
+    """The XML form and the recorded hash of the JSON form are there but the JSON is gone: the release before restored the
+    printer and cleared the snapshot (it deletes only the JSON). That settles it: the XML form goes too."""
+    f = path(serial)
+    if f.exists() or not statexml.xml_path(f).is_file() or not f.with_name(f.name + ".sha256").is_file():
+        return False
+    statexml.unlink(f)
+    return True
 
 
 def save(serial: str, kind: str, slots: list[dict], test_colours=()) -> None:
     """Write the snapshot (raises OSError: the caller must then not touch the printer)."""
-    f = path(serial)
-    make_state_dir(f.parent)
     data = {"kind": kind, "at": time.time(),
             "slots": [{"label": s["label"], "ams_id": int(s["ams_id"]), "tray_id": int(s["tray_id"]),
                        "setting": dict(s["setting"])} for s in slots],
             "test_colours": [str(c).upper() for c in test_colours]}
-    _write_atomic(f, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
+    statexml.write(path(serial), data, mode=0o600, old_format=_old_form)      # the release before reads the JSON form
 
 
 def load(serial: str) -> dict | None:
-    try:
-        d = json.loads(path(serial).read_text(encoding="utf-8"))
-    except FileNotFoundError:
+    f = path(serial)
+    if not statexml.exists(f) or _cleared_by_older_release(serial):
         return None
-    except (OSError, ValueError):
+    d = statexml.read(f, mode=0o600)          # a rewrite from the older release's JSON keeps the save's mode
+    if d is None:
         # unreadable but present: still a pending restore, with nothing we can trust in it
         return {"kind": "unknown", "slots": [], "test_colours": [], "corrupt": True}
-    if not isinstance(d, dict) or not isinstance(d.get("slots"), list):
+    if not isinstance(d.get("slots"), list):
         return {"kind": "unknown", "slots": [], "test_colours": [], "corrupt": True}
     slots = []
     for s in d["slots"]:
@@ -71,23 +84,21 @@ def load(serial: str) -> dict | None:
 
 def pending(serial: str) -> bool:
     try:
-        return path(serial).exists()
+        return statexml.exists(path(serial)) and not _cleared_by_older_release(serial)
     except ValueError:
         return False
 
 
 def pending_serials() -> list[str]:
-    root = config.paths().state / "printers"
+    root = demo.where(config.paths().state / "printers", "printers")
     if not root.is_dir():
         return []
-    return sorted(d.name for d in root.iterdir() if registry.SERIAL.fullmatch(d.name) and (d / FILE).exists())
+    return sorted(d.name for d in root.iterdir() if registry.SERIAL.fullmatch(d.name) and statexml.exists(d / FILE)
+                  and not _cleared_by_older_release(d.name))
 
 
 def clear(serial: str) -> None:
-    try:
-        path(serial).unlink()
-    except FileNotFoundError:
-        pass
+    statexml.unlink(path(serial))       # both forms: a left-over slottest-snapshot.json would be a pending restore again
 
 
 def forget(serial: str, ams_id: int, tray_id: int) -> None:
@@ -148,7 +159,7 @@ def restore(manager, serial: str, on_step: Callable[[str], None] | None = None,
         return [f"the saved slot snapshot cannot be read, so the slots an interrupted mapping changed are unknown. "
                 f"Test colours look like near-pure red FAnn00FF (the first two digits F7 to FE): set the filament "
                 f"of any slot showing such a colour again, on the printer or in Bambu Studio, then delete "
-                f"{path(serial)} and map again"]
+                f"{statexml.xml_path(path(serial))} and map again"]
     if manager.state(serial) not in ONLINE:
         return ["The printer is offline, so the slots an interrupted mapping changed cannot be put back yet."]
     report = manager.wait_report(serial, lambda r: True, 0)

@@ -791,7 +791,8 @@ def test_service_worker_caches_the_shell_and_never_the_api():
     src = (Path(web_app.__file__).parent / "static" / "sw.js").read_text(encoding="utf-8")
     listed = re.search(r"const SHELL = \[(.*?)\];", src, re.S).group(1)
     assert "api" not in listed.replace("app.", "") and '"app.js"' in listed and "BASE" in listed
-    assert "/api" not in re.sub(r"//[^\n]*", "", src)      # no API path anywhere in the code (comments aside)
+    # no API path in the code (comments aside) but the texts of a language, kept for offline (R85 3.5; R574 HIGH 4)
+    assert re.findall(r'"[^"\n]*/api[^"\n]*"', re.sub(r"//[^\n]*", "", src)) == ['"/api/strings/"']
 
 
 # ---------- load / unload (queue item 4: the Android app's slot actions, through the kit API) ----------

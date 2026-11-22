@@ -100,25 +100,30 @@ fi
 # A station re-run without --server and without a terminal (the updater, get.sh piped to bash) keeps the server
 # address the station already has: the first non-local station.allow entry of its config. At a terminal the
 # custom menu or the "Server address" prompt below decide. FK_ETC: tests only, as in the program.
-SAVED_CFG="${FK_ETC:-$ETC}/config.xml"
-[ -f "$SAVED_CFG" ] || SAVED_CFG="${FK_ETC:-$ETC}/config.json"
+SAVED_DIR="${FK_ETC:-$ETC}"
+# The first lines of the address pick, for both readers below: the first non-local station.allow entry.
+PICK='print(next((str(a).strip() for a in allow if str(a).strip() not in ("127.0.0.1", "localhost", "::1")), ""))'
 if [ -z "$SERVER_ADDR" ] && ! [ -t 0 ] && { [ "$MODE" = station ] || [ "$MODE" = custom ]; } \
-        && [ -f "$SAVED_CFG" ] && command -v python3 >/dev/null 2>&1; then
-    SAVED_ADDR=$(python3 -I - "$SAVED_CFG" <<'PYEOF' 2>/dev/null || true
+        && { [ -f "$SAVED_DIR/config.xml" ] || [ -f "$SAVED_DIR/config.json" ]; }; then
+    SAVED_ADDR=""
+    # The settings are read by the Hub's own Python (config.xml or config.json, whichever the program reads: R85 1.6).
+    if [ -x "$VENV/bin/python" ]; then
+        SAVED_ADDR=$(FK_ETC="$SAVED_DIR" "$VENV/bin/python" -I -c "
+from filament_kit import config
+allow = (config.load_raw().get('station') or {}).get('allow') or []
+$PICK" 2>/dev/null) || SAVED_ADDR=""
+    fi
+    # No Hub Python yet, or it cannot read the settings (damaged config.xml): the config.json form, with plain JSON.
+    if [ -z "$SAVED_ADDR" ] && [ -f "$SAVED_DIR/config.json" ] && command -v python3 >/dev/null 2>&1; then
+        SAVED_ADDR=$(python3 -I -c "
 import json, sys
-import xml.etree.ElementTree as ET
 try:
-    if sys.argv[1].endswith(".xml"):
-        # config.xml (a root-owned file): <station><allow as="list"><item>name</item>...
-        allow = [i.text or "" for i in ET.parse(sys.argv[1]).getroot().findall("./station/allow/item")]
-    else:
-        with open(sys.argv[1], encoding="utf-8") as fh:
-            allow = (json.load(fh).get("station") or {}).get("allow") or []
-except (OSError, ValueError, AttributeError, ET.ParseError):
+    with open(sys.argv[1], encoding='utf-8') as fh:
+        allow = (json.load(fh).get('station') or {}).get('allow') or []
+except (OSError, ValueError, AttributeError):
     allow = []
-print(next((str(a).strip() for a in allow if str(a).strip() not in ("127.0.0.1", "localhost", "::1")), ""))
-PYEOF
-)
+$PICK" "$SAVED_DIR/config.json" 2>/dev/null) || SAVED_ADDR=""
+    fi
     SAVED_ADDR=$(printf '%s' "$SAVED_ADDR" | tr -d '\r')
     if [ -n "$SAVED_ADDR" ] && ! bad_addr "$SAVED_ADDR"; then
         SERVER_ADDR="$SAVED_ADDR"
@@ -215,7 +220,7 @@ mkdir -p "$OPT"
 # Earlier versions bundled the spec library inside the program. Keep a copy of it before the venv is replaced and
 # hand it to the new program below, so an upgrade keeps its library (and its profiles do not change).
 LEGACY_LIB=""
-if [ ! -f "$STATE/library/current.json" ]; then
+if [ ! -f "$STATE/library/current.xml" ] && [ ! -f "$STATE/library/current.json" ]; then
     for d in "$VENV"/lib/python*/site-packages/filament_kit/library_data; do
         if [ -f "$d/index.json" ] && [ -d "$d/library" ]; then
             LEGACY_LIB=$(mktemp -d)
@@ -258,11 +263,11 @@ if [ -e "$OLD_APPLY_UNIT" ]; then
     rm -f "$OLD_APPLY_UNIT"
     if [ "${FK_NO_SYSTEMD:-}" != 1 ]; then systemctl daemon-reload || true; fi
 fi
-# The button panel's firmware (a binary and its VERSION): the station reflashes a panel on another version.
+# The button panel's firmware (the whole image, the program image alone and its VERSION): the station reflashes a panel on another version.
 # In a release tarball it is install/panel/, in a source checkout station/panel/firmware/.
 if [ -d "$RES/panel" ]; then PANEL_FW_SRC="$RES/panel"; else PANEL_FW_SRC="$HERE/../station/panel/firmware"; fi
 install -d -m 755 "$OPT/resources/panel"
-install -m 644 "$PANEL_FW_SRC/intake-panel.bin" "$PANEL_FW_SRC/VERSION" "$OPT/resources/panel/"
+install -m 644 "$PANEL_FW_SRC/intake-panel.bin" "$PANEL_FW_SRC/intake-panel-program.bin" "$PANEL_FW_SRC/VERSION" "$OPT/resources/panel/"
 # The Printer Station's firmware (no settings in it: `spoolwarden reader setup` writes them over USB).
 # In a release tarball it is install/reader/, in a source checkout reader/firmware/.
 if [ -d "$RES/reader" ]; then READER_FW_SRC="$RES/reader"; else READER_FW_SRC="$HERE/../reader/firmware"; fi

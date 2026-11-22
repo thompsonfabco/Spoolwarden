@@ -1,4 +1,4 @@
-// Spoolwarden shared components, the lock addition (02-components.md 3.1, 3.2): loaded after components.js, only by the
+// Spoolwarden shared components, the lock addition (the design, components 3.1, 3.2): loaded after components.js, only by the
 // Hub page (the web app has no lock). It adds window.SW_LOCK: the lock chip and the unlock dialog; the lock's state,
 // setLock() and guard() stay in components.js.
 (() => {

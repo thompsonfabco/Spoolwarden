@@ -21,7 +21,7 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from .. import __version__, config
+from .. import __version__, config, demo
 from ..pairing import _write_atomic, make_state_dir
 from . import hardware, layout, status
 
@@ -253,7 +253,7 @@ def build(report: dict | None, model, *, trail=None, wanted: str | None = None, 
 
 
 def _folder(serial: str) -> Path:
-    return config.paths().state / "printers" / serial
+    return demo.where(config.paths().state / "printers" / serial, f"printers/{serial}")
 
 
 def file_name(model, when: float | None = None) -> str:

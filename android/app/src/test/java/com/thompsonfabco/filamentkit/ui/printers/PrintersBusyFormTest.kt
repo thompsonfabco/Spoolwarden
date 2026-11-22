@@ -46,6 +46,10 @@ class PrintersBusyFormTest {
             gate.await()
             return unset
         }
+        override suspend fun addPrinterByAddress(serial: String?, accessCode: String, name: String?, address: String): Printer {
+            gate.await()
+            return unset
+        }
         override suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer {
             gate.await()
             return unset
@@ -96,6 +100,33 @@ class PrintersBusyFormTest {
         gate.completeExceptionally(ApiError(400, "bad_request", "Refused by the Hub"))
         rule.waitForIdle()
         assertTrue("the later refusal is shown", rule.onNodeWithText("Refused by the Hub").isDisplayed())
+    }
+
+    @Test fun aBusyAddByAddressShowsTheReasonOnAPhone() {
+        val vm = PrintersViewModel(Backend())
+        shown(vm)
+        rule.waitForIdle()
+        vm.openAddByAddress()
+        rule.waitForIdle()
+        vm.submitAdd("12345678", "", "192.0.2.77")
+        rule.waitForIdle()
+        rule.onNodeWithText("Cancel").assertIsNotEnabled()
+        assertTrue("shown without scrolling", rule.onNodeWithText("Still working. Wait for it to finish.").isDisplayed())
+        gate.complete(Unit)
+        rule.waitForIdle()
+    }
+
+    @Test fun aBusyAddBySerialStillShowsTheReasonWithoutScrolling() {
+        val vm = PrintersViewModel(Backend())
+        shown(vm)
+        rule.waitForIdle()
+        vm.openAdd(unset)
+        rule.waitForIdle()
+        vm.submitAdd("12345678", "")
+        rule.waitForIdle()
+        assertTrue(rule.onNodeWithText("Still working. Wait for it to finish.").isDisplayed())
+        gate.complete(Unit)
+        rule.waitForIdle()
     }
 
     @Test fun aBusyKlipperAddSaysWhyCancelIsOff() {

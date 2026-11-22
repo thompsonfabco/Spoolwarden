@@ -1,0 +1,5 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/demo/DemoNotice.kt | Demo data. Nothing here is real. | text of the demo notice (RC5, 05-android-app 3.7); moves to the string catalogue with the texts owner, its proposed key is in the RC5 report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/demo/DemoNotice.kt | Everything in it is deleted. | text of the demo notice (RC5, 05-android-app 3.7); moves to the string catalogue with the texts owner, its proposed key is in the RC5 report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/demo/DemoNotice.kt | Leave demo | text of the demo notice (RC5, 05-android-app 3.7); moves to the string catalogue with the texts owner, its proposed key is in the RC5 report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/demo/DemoNotice.kt | Leave the demo? | text of the demo notice (RC5, 05-android-app 3.7); moves to the string catalogue with the texts owner, its proposed key is in the RC5 report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/demo/DemoNotice.kt | not_in_demo | not text: the Hub's refusal code of POST api/demo/leave (RC5)

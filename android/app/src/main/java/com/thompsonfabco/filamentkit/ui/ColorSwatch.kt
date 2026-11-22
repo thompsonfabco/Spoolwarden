@@ -29,20 +29,25 @@ internal sealed interface SwatchLook {
 
     /** Nothing there: a dashed ring around nothing. */
     data object Empty : SwatchLook
+
+    /** A slot that waits for its spool to load: the spool's colour with a dashed ring (R83 3.5) instead of the solid outline. */
+    data class Waiting(val color: Color) : SwatchLook
 }
 
-internal fun swatchLook(hex: String?, empty: Boolean = false): SwatchLook =
-    if (empty) SwatchLook.Empty else swatchColor(hex)?.let { SwatchLook.Filled(it) } ?: SwatchLook.NoColour
+internal fun swatchLook(hex: String?, empty: Boolean = false, waiting: Boolean = false): SwatchLook =
+    if (empty) SwatchLook.Empty
+    else swatchColor(hex)?.let { if (waiting) SwatchLook.Waiting(it) else SwatchLook.Filled(it) } ?: SwatchLook.NoColour
 
 /**
  * Every filament colour in the app (05-android-app 3.1, "Swatch"): a rectangle of `swatchRowW` by `swatchRowH` in
  * rows, or the `swatchHead` square of a spool's header when [head], with `rS` corners and a 1 dp `borderStrong`
  * outline that keeps white and light filament from looking like an empty slot. When there is no fill to draw (no
- * [empty] slot or no colour known) it is a dashed `borderStrong` outline with no fill.
+ * [empty] slot or no colour known) it is a dashed `borderStrong` outline with no fill. A [waiting] slot with a colour
+ * keeps the fill and has the dashed outline in place of the solid one.
  */
 @Composable
-internal fun ColorSwatch(hex: String?, modifier: Modifier = Modifier, head: Boolean = false, empty: Boolean = false) {
-    val look = swatchLook(hex, empty)
+internal fun ColorSwatch(hex: String?, modifier: Modifier = Modifier, head: Boolean = false, empty: Boolean = false, waiting: Boolean = false) {
+    val look = swatchLook(hex, empty, waiting)
     val outline = SpoolwardenTheme.colors.borderStrong
     val sizes = SpoolwardenTheme.sizes
     val shape = SpoolwardenTheme.shapes.rS
@@ -60,6 +65,7 @@ internal fun ColorSwatch(hex: String?, modifier: Modifier = Modifier, head: Bool
             drawPath(path, look.color)
             drawPath(path, outline, style = Stroke(ring))
         } else {
+            if (look is SwatchLook.Waiting) drawPath(path, look.color)
             val dash = dashLength.toPx()
             drawPath(path, outline, style = Stroke(ring, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, dash))))
         }

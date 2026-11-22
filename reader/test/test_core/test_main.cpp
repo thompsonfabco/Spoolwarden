@@ -9,6 +9,7 @@
 #include "reader_api.h"
 #include "menu.h"
 #include "settings.h"
+#include "hub_address.h"
 #include "ota_digest.h"
 
 using namespace reader;
@@ -669,6 +670,210 @@ void test_settings_refused_leave_the_old_ones() {
   }
 }
 
+// ---- hub_ip, printer, the Hub's address, the start report ----------------------------
+
+void test_settings_hub_ip_and_printer() {
+  Settings s; std::string why;
+  TEST_ASSERT_TRUE(parseSettings(R"({"ssid":"H","pass":"","base":"https://hub.local:8443/reader","token":"abcdefghijklmnop",)"
+                                 R"("hub_ip":"192.168.1.20","printer":"h2d-1"})", s, why));
+  TEST_ASSERT_EQUAL_STRING("192.168.1.20", s.hubIp.c_str());
+  TEST_ASSERT_EQUAL_STRING("h2d-1", s.printer.c_str());
+  // an old line (no hub_ip, no printer) still parses, both empty
+  Settings old; std::string w2;
+  TEST_ASSERT_TRUE(parseSettings(GOOD, old, w2));
+  TEST_ASSERT_TRUE(old.hubIp.empty() && old.printer.empty());
+  // "Choose on the reader" is an empty printer
+  Settings none;
+  TEST_ASSERT_TRUE(parseSettings(R"({"ssid":"H","base":"https://k/r","token":"abcdefghijklmnop","hub_ip":"","printer":""})", none, w2));
+  TEST_ASSERT_TRUE(none.hubIp.empty() && none.printer.empty());
+}
+
+void test_settings_bad_hub_ip_and_printer_refused() {
+  Settings s; s.ssid = "keep"; std::string why;
+  const char* bad[] = {
+    R"({"ssid":"H","base":"https://k/r","token":"abcdefghijklmnop","hub_ip":"hub.local"})",
+    R"({"ssid":"H","base":"https://k/r","token":"abcdefghijklmnop","hub_ip":"192.168.1"})",
+    R"({"ssid":"H","base":"https://k/r","token":"abcdefghijklmnop","hub_ip":"192.168.1.256"})",
+    R"({"ssid":"H","base":"https://k/r","token":"abcdefghijklmnop","hub_ip":"1.2.3.4.5"})",
+    R"({"ssid":"H","base":"https://k/r","token":"abcdefghijklmnop","printer":"0123456789012345678901234567890123456789012345678901234567890123456789"})",
+  };
+  for (const char* j : bad) {
+    why.clear();
+    TEST_ASSERT_FALSE_MESSAGE(parseSettings(j, s, why), j);
+    TEST_ASSERT_FALSE(why.empty());
+    TEST_ASSERT_EQUAL_STRING("keep", s.ssid.c_str());
+  }
+}
+
+void test_parse_base() {
+  BaseParts a = parseBase("https://hub.local:8443/reader");
+  TEST_ASSERT_TRUE(a.ok);
+  TEST_ASSERT_EQUAL_STRING("hub.local", a.host.c_str());
+  TEST_ASSERT_EQUAL_UINT16(8443, a.port);
+  BaseParts b = parseBase("https://filament.example.net/filament/reader");
+  TEST_ASSERT_TRUE(b.ok);
+  TEST_ASSERT_EQUAL_STRING("filament.example.net", b.host.c_str());
+  TEST_ASSERT_EQUAL_UINT16(443, b.port);
+  TEST_ASSERT_FALSE(parseBase("http://hub.local/reader").ok);
+  TEST_ASSERT_FALSE(parseBase("https:///reader").ok);
+  TEST_ASSERT_FALSE(parseBase("https://hub.local:99999/reader").ok);
+  TEST_ASSERT_FALSE(parseBase("https://hub.local:/reader").ok);
+  TEST_ASSERT_FALSE(parseBase("https://hub.local:80a/reader").ok);
+  TEST_ASSERT_FALSE(parseBase("https://user@hub.local/reader").ok);
+}
+
+void test_local_name_and_ipv4() {
+  TEST_ASSERT_TRUE(isLocalName("hub.local"));
+  TEST_ASSERT_TRUE(isLocalName("Hub.LOCAL"));
+  TEST_ASSERT_TRUE(isLocalName("hub.local."));
+  TEST_ASSERT_FALSE(isLocalName("local"));
+  TEST_ASSERT_FALSE(isLocalName(".local"));
+  TEST_ASSERT_FALSE(isLocalName("hub.localhost"));
+  TEST_ASSERT_FALSE(isLocalName("filament.example.net"));
+  TEST_ASSERT_TRUE(isIpv4("192.168.1.20"));
+  TEST_ASSERT_FALSE(isIpv4(""));
+  TEST_ASSERT_FALSE(isIpv4("192.168.1."));
+  TEST_ASSERT_FALSE(isIpv4("192.168.1.2x"));
+  TEST_ASSERT_FALSE(isIpv4("1234.1.1.1"));
+}
+
+void test_hub_address_mdns_first() {
+  uint32_t askedMs = 0; std::string askedHost;
+  MdnsLookup found = [&](const std::string& h, uint32_t ms, std::string& ip) { askedHost = h; askedMs = ms; ip = "10.0.0.7"; return true; };
+  HubAddress a = chooseHubAddress("https://hub.local:8443/reader", "192.168.1.20", found);
+  TEST_ASSERT_EQUAL(ADDR_MDNS, a.source);
+  TEST_ASSERT_EQUAL_STRING("10.0.0.7", a.ip.c_str());
+  TEST_ASSERT_EQUAL_STRING("hub.local", a.host.c_str());     // the certificate is checked against the name, not the address
+  TEST_ASSERT_EQUAL_UINT16(8443, a.port);
+  TEST_ASSERT_EQUAL_STRING("hub.local", askedHost.c_str());
+  TEST_ASSERT_EQUAL_UINT32(2000, askedMs);                    // bounded
+}
+
+void test_hub_address_falls_back_to_hub_ip() {
+  MdnsLookup none = [](const std::string&, uint32_t, std::string&) { return false; };
+  HubAddress a = chooseHubAddress("https://hub.local:8443/reader", "192.168.1.20", none);
+  TEST_ASSERT_EQUAL(ADDR_HUB_IP, a.source);
+  TEST_ASSERT_EQUAL_STRING("192.168.1.20", a.ip.c_str());
+  TEST_ASSERT_EQUAL_STRING("hub.local", a.host.c_str());
+  // a lookup that answers with junk counts as no answer
+  MdnsLookup junk = [](const std::string&, uint32_t, std::string& ip) { ip = "not-an-ip"; return true; };
+  TEST_ASSERT_EQUAL(ADDR_HUB_IP, chooseHubAddress("https://hub.local/reader", "192.168.1.20", junk).source);
+  // nothing answers and no hub_ip: nothing to connect to
+  TEST_ASSERT_EQUAL(ADDR_NONE, chooseHubAddress("https://hub.local/reader", "", none).source);
+}
+
+void test_hub_address_old_behaviour_for_other_hosts() {
+  bool asked = false;
+  MdnsLookup spy = [&](const std::string&, uint32_t, std::string&) { asked = true; return false; };
+  // a reader flashed earlier: the public address, no hub_ip
+  HubAddress a = chooseHubAddress("https://filament.example.net/filament/reader", "", spy);
+  TEST_ASSERT_EQUAL(ADDR_BY_NAME, a.source);
+  TEST_ASSERT_EQUAL_STRING("filament.example.net", a.host.c_str());
+  TEST_ASSERT_EQUAL_UINT16(443, a.port);
+  TEST_ASSERT_FALSE(asked);
+  TEST_ASSERT_EQUAL(ADDR_NONE, chooseHubAddress("not a base", "192.168.1.20", spy).source);
+}
+
+void test_hub_addresses_fall_back_to_hub_ip_after_mdns() {
+  MdnsLookup found = [](const std::string&, uint32_t, std::string& ip) { ip = "10.0.0.7"; return true; };
+  auto l = hubAddresses("https://hub.local:8443/reader", "192.168.1.20", "", 1000, found);
+  TEST_ASSERT_EQUAL_UINT(2, l.size());                       // the mDNS address first, hub_ip when it does not connect
+  TEST_ASSERT_EQUAL(ADDR_MDNS, l[0].source);
+  TEST_ASSERT_EQUAL_STRING("10.0.0.7", l[0].ip.c_str());
+  TEST_ASSERT_EQUAL(ADDR_HUB_IP, l[1].source);
+  TEST_ASSERT_EQUAL_STRING("192.168.1.20", l[1].ip.c_str());
+  TEST_ASSERT_EQUAL_STRING("hub.local", l[1].host.c_str());  // the name checked is the same for both
+  // the same address twice is tried once
+  MdnsLookup same = [](const std::string&, uint32_t, std::string& ip) { ip = "192.168.1.20"; return true; };
+  TEST_ASSERT_EQUAL_UINT(1, hubAddresses("https://hub.local/reader", "192.168.1.20", "", 1000, same).size());
+  // mDNS silent: hub_ip alone; no hub_ip: nothing
+  MdnsLookup none = [](const std::string&, uint32_t, std::string&) { return false; };
+  TEST_ASSERT_EQUAL_UINT(1, hubAddresses("https://hub.local/reader", "192.168.1.20", "", 1000, none).size());
+  TEST_ASSERT_EQUAL_UINT(0, hubAddresses("https://hub.local/reader", "", "", 1000, none).size());
+}
+
+void test_hub_addresses_cached_skips_the_lookup() {
+  int asked = 0;
+  MdnsLookup spy = [&](const std::string&, uint32_t, std::string& ip) { asked++; ip = "10.0.0.9"; return true; };
+  auto l = hubAddresses("https://hub.local/reader", "192.168.1.20", "10.0.0.7", 1000, spy);
+  TEST_ASSERT_EQUAL_INT(0, asked);
+  TEST_ASSERT_EQUAL_UINT(2, l.size());
+  TEST_ASSERT_EQUAL(ADDR_CACHED, l[0].source);
+  TEST_ASSERT_EQUAL(ADDR_HUB_IP, l[1].source);               // the cached address failing still leaves hub_ip
+  // a reader flashed earlier: one entry by name, no lookup, no hub_ip
+  auto o = hubAddresses("https://filament.example.net/filament/reader", "", "", 1000, spy);
+  TEST_ASSERT_EQUAL_UINT(1, o.size());
+  TEST_ASSERT_EQUAL(ADDR_BY_NAME, o[0].source);
+  TEST_ASSERT_EQUAL_INT(0, asked);
+  TEST_ASSERT_EQUAL_UINT(0, hubAddresses("not a base", "192.168.1.20", "", 1000, spy).size());
+}
+
+void test_hub_connect_budget_is_shared() {
+  TEST_ASSERT_EQUAL_UINT32(5000, HUB_CONNECT_BUDGET_MS);
+  TEST_ASSERT_EQUAL_UINT(5, HANDSHAKE_S);
+  TEST_ASSERT_EQUAL_UINT32(2000, mdnsSliceMs(5000));         // about 2 s for mDNS
+  TEST_ASSERT_EQUAL_UINT32(1000, mdnsSliceMs(2000));         // a short budget leaves half for the connect
+  // an address that does not answer: the slices of all the addresses together stay inside the budget
+  uint32_t elapsed = mdnsSliceMs(5000);                      // mDNS found nothing and used its whole slice
+  uint32_t first = connectSliceMs(5000, elapsed, 1);         // only hub_ip left
+  TEST_ASSERT_EQUAL_UINT32(3000, first);
+  TEST_ASSERT_TRUE(elapsed + first <= 5000);
+  // two addresses (cached or mDNS, then hub_ip) split what is left, the first cannot eat the second's time
+  uint32_t a = connectSliceMs(5000, 0, 2);
+  TEST_ASSERT_EQUAL_UINT32(2500, a);
+  uint32_t b = connectSliceMs(5000, a, 1);
+  TEST_ASSERT_TRUE(a + b <= 5000);
+  TEST_ASSERT_EQUAL_UINT32(0, connectSliceMs(5000, 5000, 1)); // used up: no further try
+  TEST_ASSERT_EQUAL_UINT32(0, connectSliceMs(5000, 4950, 1)); // too little to be a connect
+  TEST_ASSERT_EQUAL_UINT32(0, connectSliceMs(5000, 0, 0));
+}
+
+void test_mdns_starts_whenever_wifi_is_up() {
+  TEST_ASSERT_TRUE(mdnsNeedsStart(true, false, false));      // Wi-Fi came up after boot (a late router): start
+  TEST_ASSERT_FALSE(mdnsNeedsStart(false, false, false));    // no Wi-Fi: nothing to start on
+  TEST_ASSERT_FALSE(mdnsNeedsStart(true, true, false));      // running
+  TEST_ASSERT_TRUE(mdnsNeedsStart(true, true, true));        // reconnected with a new address: restart
+  TEST_ASSERT_FALSE(mdnsNeedsStart(false, true, true));      // address event but Wi-Fi gone again: wait
+}
+
+void test_start_printer() {
+  TEST_ASSERT_EQUAL_STRING("h2d", startPrinter("x1c", "h2d", true).c_str());   // just set up with a printer
+  TEST_ASSERT_EQUAL_STRING("x1c", startPrinter("x1c", "h2d", false).c_str());  // later: the knob's choice stays
+  TEST_ASSERT_EQUAL_STRING("x1c", startPrinter("x1c", "", true).c_str());      // "Choose on the reader"
+  TEST_ASSERT_EQUAL_STRING("", startPrinter("", "", true).c_str());
+}
+
+void test_boot_report_wifi_before_the_hub() {
+  BootReport r;
+  TEST_ASSERT_EQUAL_STRING("FK-READER 7 configured=1 wifi=- server=-", helloLine(7, true, r.wifiText(), r.serverText()).c_str());
+  r.wifi(true);       // associated: reported now, no Hub call made yet
+  TEST_ASSERT_EQUAL_STRING("FK-READER 7 configured=1 wifi=ok server=-", helloLine(7, true, r.wifiText(), r.serverText()).c_str());
+  r.server(200);
+  TEST_ASSERT_EQUAL_STRING("ok", r.serverText());
+  TEST_ASSERT_EQUAL_STRING("ok", r.wifiText());
+}
+
+void test_boot_report_server_states() {
+  BootReport r;
+  r.wifi(true);
+  r.server(401); TEST_ASSERT_EQUAL_STRING("unauth", r.serverText());
+  r.server(403); TEST_ASSERT_EQUAL_STRING("unauth", r.serverText());
+  r.server(-1);  TEST_ASSERT_EQUAL_STRING("fail", r.serverText());      // no reply (also the 5 s bound running out)
+  r.server(0);   TEST_ASSERT_EQUAL_STRING("fail", r.serverText());
+  r.server(200); TEST_ASSERT_EQUAL_STRING("ok", r.serverText());
+  // any other HTTP status is an answer: the Hub was reached (409 = the printers feature is off, 502 = its own hop)
+  r.server(409); TEST_ASSERT_EQUAL_STRING("ok", r.serverText());
+  r.server(500); TEST_ASSERT_EQUAL_STRING("ok", r.serverText());
+  r.server(502); TEST_ASSERT_EQUAL_STRING("ok", r.serverText());
+  r.server(HTTP_TOO_BIG); TEST_ASSERT_EQUAL_STRING("ok", r.serverText());   // the reply came, only too big
+  r.server(-1);  TEST_ASSERT_EQUAL_STRING("fail", r.serverText());
+  BootReport down;
+  down.wifi(false);
+  TEST_ASSERT_EQUAL_STRING("fail", down.wifiText());
+  TEST_ASSERT_EQUAL_STRING("-", down.serverText());                      // Wi-Fi down: the Hub was not asked
+  TEST_ASSERT_EQUAL_UINT(5000, HUB_CHECK_MS);
+}
+
 void test_compiled_settings_copied_again_when_they_change() {
   Settings built; built.ssid = "Home"; built.pass = "pw"; built.base = "https://k/reader"; built.token = "abcdefghijklmnop";
   std::string stamp = settingsStamp(built);
@@ -773,6 +978,20 @@ int main(int, char**) {
   RUN_TEST(test_settings_optional_ones);
   RUN_TEST(test_settings_refused_leave_the_old_ones);
   RUN_TEST(test_compiled_settings_copied_again_when_they_change);
+  RUN_TEST(test_settings_hub_ip_and_printer);
+  RUN_TEST(test_settings_bad_hub_ip_and_printer_refused);
+  RUN_TEST(test_parse_base);
+  RUN_TEST(test_local_name_and_ipv4);
+  RUN_TEST(test_hub_address_mdns_first);
+  RUN_TEST(test_hub_address_falls_back_to_hub_ip);
+  RUN_TEST(test_hub_address_old_behaviour_for_other_hosts);
+  RUN_TEST(test_hub_addresses_fall_back_to_hub_ip_after_mdns);
+  RUN_TEST(test_hub_addresses_cached_skips_the_lookup);
+  RUN_TEST(test_hub_connect_budget_is_shared);
+  RUN_TEST(test_mdns_starts_whenever_wifi_is_up);
+  RUN_TEST(test_start_printer);
+  RUN_TEST(test_boot_report_wifi_before_the_hub);
+  RUN_TEST(test_boot_report_server_states);
   RUN_TEST(test_commands);
   RUN_TEST(test_line_reader_drops_cr_and_overlong_lines);
   RUN_TEST(test_hello_line);

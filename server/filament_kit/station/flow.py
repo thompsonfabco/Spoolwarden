@@ -21,7 +21,7 @@ import threading
 import time
 import unicodedata
 
-from . import beep, camera, server_api, speech
+from . import beep, camera, scale, server_api, speech
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -78,9 +78,28 @@ def go(step, seq=None, **kw):
     return True
 
 
-def weight_now():
+def computer_scale() -> bool:
+    """The computer has a scale: it has sent a reading, or its USB device is there (a DYMO asleep sends nothing)."""
+    with st.lock:
+        seen = st.state["scale"] is not None
+    return seen or scale.find_scale() is not None
+
+
+def has_scale(computer) -> bool:
+    """Is there a scale at all: the computer's (`computer`, from computer_scale), else the panel's, which the panel
+    service keeps in st.state["panel_scale"] ({"grams", "status", "unit"} as "scale", or None) while a panel sends `W`
+    lines (R88 4.2). The computer's scale wins when both exist."""
+    return computer or st.state.get("panel_scale") is not None
+
+
+def scale_reading(computer):
+    """The reading of the scale in use (see has_scale), or None (callers hold the lock)."""
+    return st.state["scale"] if computer else st.state.get("panel_scale")
+
+
+def weight_now(computer):
     """The scale's reading if it is a settled spool (stable, over MIN_GRAMS), else None (callers hold the lock)."""
-    sc = st.state["scale"]
+    sc = scale_reading(computer)
     return sc["grams"] if sc and sc["status"] == "stable" and sc["grams"] >= st.MIN_GRAMS else None
 
 
@@ -90,7 +109,7 @@ def on_tag(nfc_id):
         flow["seq"] += 1
         seq = flow["seq"]
         st.state.update(tag=nfc_id, tag_at=time.time(), held=None, held_at=None, photo=None, photo_at=None)
-        flow.update(spool=None, filament=None, display=[])
+        flow.update(spool=None, filament=None, display=[], returning=False)
     log.info("tag %s", nfc_id)
     beep.beep("scan")
     go("lookup")
@@ -102,8 +121,16 @@ def lookup(seq, nfc_id):
     status, r = api().tag_lookup(nfc_id)
     d = r.get("display") or []
     if status == 200 and r.get("known"):
-        if go("weigh", seq, spool=r.get("spool"), display=d):
-            speech.say("Known spool. Put it on the scale.")
+        sp = r.get("spool") or {}
+        back = sp.get("checked_out") is True  # an older Hub sends no `checked_out`: the plain flow (R88 1.8)
+        if back:  # the Hub's display is [name, "Home: <home>"]; built from the spool when it is missing
+            d = d[:2] if len(d) >= 2 else [sp.get("name") or "", "Home: " + (sp.get("home") or "not recorded")]
+        if go("weigh", seq, spool=sp, display=d, returning=back):
+            speech.say("Checked out spool. Press yellow to weigh it, or hold yellow to skip weighing." if back
+                       else "Known spool. Put it on the scale.")
+    elif status == 200 and not has_scale(computer_scale()):  # nothing could weigh a new spool: the phone can (R88 4.2)
+        if go("phone", seq, display=["No scale here"]):
+            speech.say("No scale here. Use the phone.")
     elif status == 200:
         if go("camera", seq, display=[]):
             speech.say("New tag. Show the spool to the camera.")
@@ -153,9 +180,16 @@ def save(seq):
         body = {"uid": st.state["tag"], "gross_g": st.state["held"]}
         # the filament exactly as recognize gave it (its `item`); the server takes "filament" or "item"
         body.update({"spool_id": sp["id"]} if sp.get("id") else {"filament": flow["filament"]})
+        back = bool(flow.get("returning"))
+        if back:  # weigh it, then send it back (R88 1.5)
+            body["return"] = True
     status, r = api().save(body)
     d = r.get("display") or []
-    if status == 200:
+    if status == 200 and back:
+        if go("done", seq, display=d or returned_display(sp, r)):
+            beep.beep("hold")
+            speech.say(returned_said(r, d))
+    elif status == 200:
         if go("done", seq, display=d or ["Saved"]):
             beep.beep("hold")
             speech.say("Saved.")
@@ -167,9 +201,48 @@ def save(seq):
         if go("ready", seq, message=d[0] if d else "Saved, not linked"):
             beep.beep("nothing")
             speech.say("Saved, but the tag is not linked. Hold yellow to try again.")
-    elif go("ready", seq, message=d[0] if d else "Save failed"):
+    elif go("ready", seq, message=why(r, "Save failed")):
         beep.beep("nothing")
         speech.say("Save failed.")
+
+
+def why(r, default):
+    """The Hub's sentence for a refusal: its first display line, else its message."""
+    d = r.get("display") or []
+    return d[0] if d else r.get("message") or default
+
+
+def returned_display(sp, r):
+    """The done screen when the Hub's answer carries no display: title, name, and the place when it names one."""
+    where = r.get("location")
+    return ["Returned", sp.get("name") or ""] + (["to " + where] if where else [])
+
+
+def returned_said(r, d):
+    """What the voice says after a return: the Hub's `speak`, else "Returned to <place>." from the answer's location (or
+    its "to <place>" row); plain "Returned." when the answer names no place (R88 02:05)."""
+    if r.get("speak"):
+        return r["speak"]
+    where = r.get("location") or next((x[3:] for x in d[1:3] if x.startswith("to ")), "")
+    return f"Returned to {where}." if where else "Returned."
+
+
+def send_back(seq):
+    """The long press on a checked-out spool: return it without weighing."""
+    with st.lock:
+        if seq != flow["seq"]:
+            return
+        sp = flow["spool"] or {}
+        uid = st.state["tag"]
+    status, r = api().return_spool(uid, sp.get("id"))
+    d = r.get("display") or []
+    if status == 200:
+        if go("done", seq, display=d or returned_display(sp, r)):
+            beep.beep("hold")
+            speech.say(returned_said(r, d))
+    elif go("weigh", seq, message=why(r, "Return failed")):  # 409 not_checked_out: the Hub's sentence
+        beep.beep("nothing")
+        speech.say(r.get("message") or "Return failed.")
 
 
 def on_yellow(long_press):
@@ -180,19 +253,30 @@ def on_yellow(long_press):
     if long_press and step == "idle" and not api().paired:
         ask_to_pair()
         return
+    with st.lock:
+        back = bool(flow.get("returning"))
     if long_press and step == "ready":
         if go("saving", seq):  # only for the attempt the press was on
             spawn(save, seq)
+    elif long_press and step == "weigh" and back:  # a checked-out spool: skip weighing, return it
+        if go("saving", seq):
+            spawn(send_back, seq)
     elif not long_press and step == "camera":
         if go("recognising", seq):
             spawn(recognise, seq, nfc_id)
+    elif not long_press and step in ("weigh", "ready") and not has_scale(computer_scale()):
+        go(step, seq, message="No scale here")  # also in returning mode: the long press still returns it
+        beep.beep("nothing")
+        speech.say("No scale here.")
     elif not long_press and step in ("weigh", "ready"):
+        computer = computer_scale()
         with st.lock:
-            grams = weight_now()
+            grams = weight_now(computer)
             if grams is not None:
                 st.state.update(held=grams, held_at=time.time())
         if grams is None:
-            sc = st.state["scale"]
+            with st.lock:
+                sc = scale_reading(computer)
             go(step, seq, message="Scale unit?" if sc and sc["status"].startswith("unit ") else "Scale not settled")
             beep.beep("nothing")
             speech.say("Put the spool on the scale and wait for it to settle.")
@@ -210,7 +294,7 @@ def reset():
     """Forget the scan, weight, picture and flow (callers hold the lock)."""
     flow["seq"] += 1
     st.state.update(tag=None, tag_at=None, held=None, held_at=None, photo=None, photo_at=None)
-    flow.update(spool=None, filament=None, display=[])
+    flow.update(spool=None, filament=None, display=[], returning=False)
 
 
 def on_red():
@@ -301,8 +385,9 @@ def screen():
     d = [x for x in f["display"] if x] or [
         "Spool #%s" % what["id"] if f["spool"] and what.get("id") else "Recognised",
         " ".join(x for x in (what.get("vendor"), what.get("name")) if x), what.get("material") or ""]
-    d += ["", "", ""]
+    d += ["", "", "", ""]
     step, msg = f["step"], f["message"]
+    back = bool(f.get("returning"))
     from . import pair_request
     code = pair_request.status["code"]
     rows = {
@@ -313,10 +398,11 @@ def screen():
         "lookup": ["Tag scanned", "Looking it up...", "", "", ""],
         "camera": ["New Tag Scanned", "Show the spool to", "the camera, then", "press yellow", msg],
         "recognising": ["Recognising...", "Please wait", "", "", "Red cancels"],
-        "weigh": [d[0], d[1], d[2], "Scale, then yellow", msg],
+        "weigh": ["Returning", d[0], d[1], "Yellow: weigh it", msg or "Hold: skip weighing"] if back else
+                 [d[0], d[1], d[2], "Scale, then yellow", msg],
         "ready": ["%.0f g" % held if held is not None else "-", d[0], d[1], "Hold yellow: save", msg],
         "saving": ["Saving...", d[0], d[1], "", ""],
-        "done": [d[0], d[1], d[2], "", ""],
+        "done": [d[0], d[1], d[2], d[3] if back else "", ""],
         "phone": ["Use phone"] + [x for x in d if x.lower() != "use phone"][:2] + ["Red: start over", ""],
     }[step]
     return [ascii_text(rows[0], TITLE_WIDTH)] + [ascii_text(r) for r in rows[1:]]

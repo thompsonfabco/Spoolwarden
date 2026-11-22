@@ -13,6 +13,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from filament_kit import api, config, intake, modules, pairing, web_access
+from filament_kit.profiles import statexml
 from filament_kit.spoolman import Spoolman
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -360,7 +361,7 @@ def test_keep_does_not_follow_a_planted_link(kit, monkeypatch, tmp_path):
     target.write_text("{}", encoding="utf-8")
     d = tmp_path / "failed" / "r1"
     d.mkdir(parents=True)
-    (d / "meta.json").symlink_to(target)
+    (d / "meta.xml").symlink_to(target)
     with pytest.raises(OSError):
         intake._keep("r1", [b"jpeg"], "hint", None)
     assert target.read_text(encoding="utf-8") == "{}"
@@ -386,10 +387,11 @@ def test_read_cap_is_replaced_atomically_again(kit):
     f = kit / "state" / "reads.json"
     cap = intake.ReadCap(f, 5)
     cap.take()
-    before = f.stat().st_ino
+    x = f.with_suffix(".xml")
+    before = x.stat().st_ino
     cap.take()
-    assert json.loads(f.read_text(encoding="utf-8")) and (sys.platform == "win32" or f.stat().st_ino != before)
-    assert not list(f.parent.glob("reads.json.*tmp*"))
+    assert statexml.read_list(f) and (sys.platform == "win32" or x.stat().st_ino != before)
+    assert not list(f.parent.glob("reads.xml.*tmp*"))
 
 
 def test_backup_keeps_the_acls():

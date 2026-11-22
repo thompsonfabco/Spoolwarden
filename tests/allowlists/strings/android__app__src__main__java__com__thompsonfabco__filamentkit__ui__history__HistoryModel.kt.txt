@@ -23,6 +23,8 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | name | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | net | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | no_photo | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | none | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | not_queued | wire name or value of the Hub's reply, matched as given; not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | nozzle | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | nozzle_range | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | offline | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
@@ -41,3 +43,4 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | unknown | wire name or value of the Hub's reply, matched as given; not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | unreachable | wire name or value of the Hub's reply, matched as given; not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | vendor | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/HistoryModel.kt | waiting | wire name or value of the Hub's reply, matched as given; not a text

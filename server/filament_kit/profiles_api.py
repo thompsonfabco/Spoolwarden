@@ -28,6 +28,7 @@ one audit line: what, `device_id`, a few plain fields and the result; never a bo
 from __future__ import annotations
 
 import datetime
+import functools
 import json
 import logging
 import re
@@ -38,7 +39,7 @@ from starlette.requests import ClientDisconnect, Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from . import library as library_mod
+from . import demo, library as library_mod
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
 from .web.errors import Problem as PresetProblem
@@ -245,7 +246,22 @@ def _parents(material: str) -> dict:
 
 # ---------- routes ----------
 
+def _no_writes_in_demo(fn):
+    """The presets are the slicers' (a PC fetches them): in the demo no route that changes them answers (R85 4.3)."""
+    @functools.wraps(fn)
+    async def wrapper(request: Request):
+        if request.method not in ("GET", "HEAD") and demo.is_on():
+            raise ProfileError(409, demo.NOT_IN_DEMO_CODE, demo.NOT_IN_DEMO)
+        return await fn(request)
+    return wrapper
+
+
 def routes(authed, sm) -> list[Route]:
+    authed_by_the_hub = authed
+
+    def authed(fn):                             # noqa: F811 - the Hub's check first, then the demo's stop
+        return authed_by_the_hub(_no_writes_in_demo(fn))
+
     async def upload(request: Request, kind: str, user_id: str | None, partial: str | None = None,
                      fresh: bool = False):
         device = request.state.device

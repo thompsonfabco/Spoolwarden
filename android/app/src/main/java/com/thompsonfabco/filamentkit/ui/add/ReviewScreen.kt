@@ -41,6 +41,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwProgress
+import com.thompsonfabco.filamentkit.ui.history.ShareCheckLine
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 
@@ -93,6 +94,9 @@ fun ReviewScreen(
         // the Hub refused a Bambu Studio parent: its words at the top as well as at the field
         state.parentError?.let { NoticeCard(NoticeKind.Bad, it) }
         if (state.items.isNotEmpty()) Summary(state, missing)
+        // spools read from photos: what is changed here is a correction of the reading (05-android-app 10.6)
+        LaunchedEffect(state.manual) { if (!state.manual) vm.loadShare() }
+        if (!state.manual && state.shareOn && state.items.isNotEmpty()) ShareCheckLine()
         if (state.questions.isNotEmpty()) {
             NoticeCard(
                 NoticeKind.Info, state.questions.joinToString(System.lineSeparator()) { BULLET + it },

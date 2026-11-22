@@ -1,0 +1,1 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/VoiceSettingsPage.kt | $value % | a value and its unit, no word to translate; the catalogue's percent form comes with RG1 (VO5)

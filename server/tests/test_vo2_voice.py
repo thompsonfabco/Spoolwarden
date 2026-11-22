@@ -463,7 +463,7 @@ def wire(monkeypatch):
     seen = []
     key = page.token_key("a station token 0123456789")
     monkeypatch.setattr(station_client, "station_endpoint", lambda url: ("127.0.0.1", 5003, "ab" * 32))
-    monkeypatch.setattr(station_client, "proof_key", lambda: key)
+    monkeypatch.setattr(station_client, "proof_key", lambda *, pinned=True: key)       # the real signature (D11)
 
     def bounded(host, port, fp, method, path, body=None, headers=None, cap=0, timeout=0, **kw):
         seen.append((path, dict(headers or {}), body))
@@ -485,16 +485,21 @@ def test_the_voice_calls_carry_a_proof_the_station_accepts(wire, send):
 
 @pytest.mark.parametrize("send", [lambda: station_client.send_voice("http://h", {"speed": 90}),
                                   lambda: station_client.voice_test("http://h", {"speed": 90})])
-def test_the_voice_calls_are_not_sent_without_a_key_or_a_certificate(wire, send):
+def test_the_voice_calls_need_the_proof_and_go_plain_only_to_a_station_with_no_certificate(wire, send):
+    """R88 01:50 point 2: a voice call needs the pairing proof, as the station's /settings does. Integration (R663): with the wave's
+    rule (R82 00:28 point 1, R559 01 #4) a station that told the Hub no certificate is called over plain HTTP for a change, carrying
+    the proof; so without a key nothing is sent at all, and without a certificate it is sent plain WITH the proof."""
+    from filament_kit.station import page
     seen, key, mp = wire
-    mp.setattr(station_client, "proof_key", lambda: None)
+    mp.setattr(station_client, "proof_key", lambda *, pinned=True: None)
     with pytest.raises(StationCallError):
         send()
-    mp.setattr(station_client, "proof_key", lambda: key)
+    assert seen == []                                                  # no proof key: nothing leaves
+    mp.setattr(station_client, "proof_key", lambda *, pinned=True: key)
     mp.setattr(station_client, "station_endpoint", lambda url: ("127.0.0.1", 5003, None))
-    with pytest.raises(StationCallError):
-        send()
-    assert seen == []
+    send()
+    path, headers, body = seen[0]
+    assert page.PROOF_HEADER in headers and page.Access(lambda: key).proof_ok("voice", headers[page.PROOF_HEADER], body)
 
 
 def test_a_proof_made_for_other_values_or_another_key_is_not_good(wire):

@@ -61,9 +61,10 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
 from starlette.routing import Route
 
-from .. import config, inventory, tags
+from .. import config, demo, inventory, tags
 from ..spoolman import SpoolmanError
-from . import auth, pages, slots
+from .. import lan
+from . import pages, slots
 from ..reader_tokens import (MAX_FILE, MAX_TOKENS, SHA256, TOKEN_ID, SeenBuffer, TokenFileError,  # noqa: F401
                              TokenStore, _clean_name, _hash, flush, parse_build, parse_tokens, render_tokens, token_file)
 from .errors import Problem
@@ -372,7 +373,7 @@ class Reader:
     def __init__(self, tools, sm, *, lan_cidrs=(), tokens: TokenStore | None = None, queue: LoadQueue | None = None,
                  seen: SeenBuffer | None = None):
         self.tools, self.sm = tools, sm
-        self.nets = auth.parse_lan(lan_cidrs)
+        self.nets = lan.parse_lan(lan_cidrs)
         self.tokens = tokens if tokens is not None else TokenStore()
         self.seen = seen if seen is not None else SeenBuffer()
         self._handing = threading.Lock()
@@ -390,7 +391,7 @@ class Reader:
     # --- plumbing ---
 
     def _lan(self, request: Request) -> bool:
-        return auth.is_lan(request.client.host if request.client else "", self.nets)
+        return lan.is_lan(request.client.host if request.client else "", self.nets)
 
     def _gated(self, fn):
         @functools.wraps(fn)
@@ -422,6 +423,9 @@ class Reader:
             log.exception("reader: cannot note a reader's call")
 
     def _hand_over(self) -> None:
+        if demo.is_on():                  # a reader's call is not recorded in the demo (it is the Hub's state)
+            self._handing.release()
+            return
         try:
             flush(self.seen, self.tools.kit_bridge())
         except Exception:  # noqa: BLE001
@@ -442,6 +446,8 @@ class Reader:
         return PlainTextResponse("ok")
 
     async def fw(self, request: Request):
+        if demo.is_on():                  # no firmware goes to a device in the demo (R85 4.3: flash a device)
+            return reply(409, "error", demo.NOT_IN_DEMO)
         name = request.path_params["name"]
         path = fw_dir() / name
         if name not in FW_FILES or not path.is_file():
@@ -487,6 +493,8 @@ class Reader:
         return JSONResponse(await run_in_threadpool(build))
 
     async def scan(self, request: Request):
+        if demo.is_on():                  # a tap of a real tag loads nothing in the demo
+            return reply(409, "error", demo.NOT_IN_DEMO)
         try:
             body = json.loads(await request.body() or b"{}")
         except ValueError:

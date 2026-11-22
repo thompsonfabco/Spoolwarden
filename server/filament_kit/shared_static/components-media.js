@@ -1,4 +1,4 @@
-// Spoolwarden shared components, the media addition (02-components.md 1.5, 7.8): loaded after components.js, only by the
+// Spoolwarden shared components, the media addition (the design, components 1.5, 7.8): loaded after components.js, only by the
 // pages that show photos or a pairing code. It adds window.SW_MEDIA.
 (() => {
 "use strict";

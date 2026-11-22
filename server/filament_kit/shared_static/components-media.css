@@ -1,4 +1,4 @@
-/* Spoolwarden shared components, the media addition (02-components.md 1.5, 7.6, 7.8): photo thumbnails and the QR block,
+/* Spoolwarden shared components, the media addition (the design, components 1.5, 7.6, 7.8): photo thumbnails and the QR block,
 loaded after components.css, only by the pages that show them. */
 .thumb{position:relative;display:inline-grid;flex:none;place-items:center;width:calc(var(--s7) - var(--s1));height:calc(var(--s7) - var(--s1));padding:0;border:var(--hairline) solid var(--border);border-radius:var(--r);background:var(--surface-2);color:var(--muted);cursor:zoom-in}
 .thumb--m{width:calc(var(--s7) * 2);height:calc(var(--s7) * 2)}

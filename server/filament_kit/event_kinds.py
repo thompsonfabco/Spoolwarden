@@ -1,4 +1,4 @@
-"""The catalogue of event kinds (ruling R80 section 2, docs/design 03).
+"""The catalogue of event kinds (ruling R80 section 2, the design, Hub page).
 
 A published contract from the first release that has it: kinds and value names are added, never renamed or removed
 (the Home Assistant integration and `--json` readers rely on it; test_event_kinds.py pins every name). The catalogue

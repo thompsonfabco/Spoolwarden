@@ -56,6 +56,43 @@ def brand(files: dict[str, bytes], cat: dict[str, str]) -> str:
             f"<span>{html.escape(cat.get('app_name', ''))}</span></p>")
 
 
+def strings_scripts(prefix: str, strings_src: str | None) -> str:
+    """The catalogue's scripts: English always first (it is inside the product), then the language in use, whose texts replace it
+    when they load. A language script that does not load (the Hub down, the phone offline) leaves the page in English, never
+    with bare keys (R85 3.5; 04 10.2)."""
+    p = html.escape(prefix, quote=True)
+    return f"<script src='{p}/shared/strings.js'></script>" + (
+        f"<script src='{html.escape(strings_src, quote=True)}'></script>" if strings_src else "")
+
+
+def labels_body(prefix: str, ids: str, size: str, strings_src: str | None, files: dict[str, bytes], *, address: str = "",
+                demo: bool = False) -> str:
+    """The print page's body (R85 5.3): its own script (`labels.js`) draws the size choice and the labels from the Hub's
+    `spools/<id>/label.svg`; the print rules in app.css hide everything but the labels, and `labels/page.css` states the paper.
+    `address` is the Hub's home address the codes hold; `demo` shows the demo banner. `ids` and `size` are checked by the
+    caller."""
+    p = html.escape(prefix, quote=True)
+    return (f"<body><link rel=stylesheet class=labels__paper href='{p}/labels/page.css?size={html.escape(size, quote=True)}'>"
+            f"<main class=labels data-ids='{html.escape(ids, quote=True)}' data-size='{html.escape(size, quote=True)}'"
+            + (f" data-address='{html.escape(address, quote=True)}'" if address else "") + (" data-demo='1'" if demo else "") + ">"
+            "<header class=labels__chrome><h1 class=labels__title></h1>"
+            "<div class=labels__sizes></div><div class=labels__missing></div></header>"
+            "<div class=labels__sheet></div>"
+            "<footer class=labels__chrome><p class=labels__note></p><p class=labels__error role=alert hidden></p>"
+            "<button class='btn btn--primary labels__print' type=button></button></footer></main>"
+            + strings_scripts(prefix, strings_src) + f"<script src='{p}/shared/components.js'></script>"
+            f"<script src='{p}/labels.js'></script></body>")
+
+
+# the paper of each label size (R85 00:50 point 5; 02 7.13): a roll prints each label on a page of its own size, a sheet on its paper
+LABEL_PAPER = {"62x29": "62mm 29mm", "50x30": "50mm 30mm", "a4-63x34": "A4", "a4-70x37": "A4", "letter-66x25": "letter"}
+
+
+def labels_page_css(size: str) -> str:
+    """The print page's paper, stated for the browser's print dialog, margin 0 (the sheet's own margins place the labels)."""
+    return f"@page {{ size: {LABEL_PAPER[size]}; margin: 0; }}\n"
+
+
 def refusal(files: dict[str, bytes], prefix: str, client: str, *, reason: str | None = None) -> str:
     """The refusal page (04 11.1). Without `reason`: outside the home network, with the IPv6 hint when the request came
     over IPv6. With `reason` (the Hub's refusal of the address the page was opened at): "Not at this address"."""

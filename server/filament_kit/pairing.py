@@ -11,6 +11,7 @@ import os
 import re
 import secrets
 import socket
+import stat
 import subprocess
 import tempfile
 import threading
@@ -157,7 +158,7 @@ def _write_atomic(path: Path, data: bytes, mode: int, state_owned: bool = False)
                 os.fchmod(fh.fileno(), mode)
             else:
                 os.chmod(tmp, mode)
-            if state_owned and getattr(os, "geteuid", lambda: -1)() == 0:
+            if state_owned and hasattr(os, "fchown") and getattr(os, "geteuid", lambda: -1)() == 0:
                 st = os.stat(config.paths().state)
                 os.fchown(fh.fileno(), st.st_uid, st.st_gid)
         os.replace(tmp, path)
@@ -236,20 +237,50 @@ def make_cert(hostname: str, ips: list[str], dest: Path, extra_dns: list[str] = 
     return fingerprint(cert_pem)
 
 
+def _old_json(obj: list) -> bytes:
+    """The JSON file as v0.6.2 wrote it: indent 2, no newline after."""
+    return json.dumps(obj, indent=2).encode("utf-8")
+
+
 def _read(name: str) -> list:
+    """A state list file (`devices.json`, `pending.json`, `spent.json`, `station-requests.json`), given by its JSON name:
+    its XML form when there is one, else the JSON form (moved to XML on the way, R85 s1); a JSON that an older release
+    changed after this code wrote it wins once."""
+    from .profiles import statexml
     f = config.paths().state / name
-    try:   # never through a link: root (modules apply) reads these too, in a folder the service user owns
-        fd = os.open(f, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    except FileNotFoundError:
-        return []
-    with os.fdopen(fd, encoding="utf-8") as fh:
-        return json.loads(fh.read())
+    # never through a link: root (modules apply) reads these too, in a folder the service user owns
+    names = (f, statexml.xml_path(f), f.with_name(f.name + ".sha256"))
+    _refuse_links(names)
+    out = statexml.read_list(f, mode=0o600, state_owned=True)
+    _refuse_links(names)        # a link swapped in while the helper read: its answer is not used
+    return [] if out is None else out
+
+
+def _refuse_links(paths) -> None:
+    """OSError(ELOOP) when any of `paths` is a link. Opened with O_NOFOLLOW where the system has it (the open itself
+    refuses a link: no check, then a read); the lstat is the fallback."""
+    for p in paths:
+        try:
+            if getattr(os, "O_NOFOLLOW", 0):
+                os.close(os.open(p, os.O_RDONLY | os.O_NOFOLLOW))
+            elif stat.S_ISLNK(os.lstat(p).st_mode):
+                raise OSError(errno.ELOOP, "a state file is a link", str(p))
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            if e.errno == errno.ELOOP:
+                raise OSError(errno.ELOOP, "a state file is a link", str(p)) from None
+            raise
 
 
 def _write(name: str, obj: list) -> None:
+    """Save the list as its XML form (0600, the state's owner), then as the JSON file an older release reads (the same
+    shape as v0.6.2, a hash beside it): `update --rollback` keeps the pairings and the open codes (R85 s1.5). An older
+    release's change to the JSON wins once on the next read."""
+    from .profiles import statexml
     state = config.paths().state
     state.mkdir(parents=True, exist_ok=True)
-    _write_atomic(state / name, json.dumps(obj, indent=2).encode("utf-8"), 0o600, state_owned=True)
+    statexml.write_list(state / name, obj, 0o600, state_owned=True, old_format=_old_json)
 
 
 def _hash(token: str) -> str:

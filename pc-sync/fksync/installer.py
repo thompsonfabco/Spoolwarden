@@ -236,7 +236,7 @@ def _replace_installed(build_dir: Path, dirs: AppDirs, skip: tuple[str, ...] = (
         for t in targets:                                   # whose each snapshot copy is (an accepted update may
             if t.tree == "base":                            # only replace one the kit wrote, in a secondary)
                 own = sorted(n for n in t.kept if n not in t.proven)
-                statexml.write_plain(new / KEPT, {"base": own}, also_json=True)
+                statexml.write(new / KEPT, {"base": own}, 0o644, old_format={})    # v0.6.2: compact json.dumps; hash recorded
         old = work / "old"
         if dirs.installed.exists():
             dirs.installed.rename(old)

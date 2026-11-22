@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import socket
@@ -93,7 +94,8 @@ DEFAULTS: dict = {
                 "speech": True, "tts": "auto", "voice": None, "camera": "auto", "panel_flash": True,
                 "panel_swap": False,  # the panel's yellow and red are wired to each other's pins
                 "page_from": "home",  # who the unit admits for the page: home, subnets or allowed (apply.page_ranges)
-                "speaker_volume": 50},  # the C3 panel's speaker, percent
+                "speaker_volume": 50,   # the C3 panel's speaker, percent
+                "panel_link": "usb", "panel_port": 5004},   # how the panel reaches the station, and its Wi-Fi listener (R88 4.4)
     # merge-ops: web unit, remote access, orders file, tag readers, slot service, slicer/presets/intake extras
     "web": {"port": 8101, "public_url": None, "push": False,   # push: Web Push alerts (needs internet egress)
             "lan": ["192.168.0.0/16", "10.0.0.0/8"]},   # not 172.16/12: Docker's bridges live there (A-M6)
@@ -124,6 +126,26 @@ def keep_days(cfg: dict) -> int:
     if isinstance(v, bool) or not isinstance(v, int) or not KEEP_DAYS_MIN <= v <= KEEP_DAYS_MAX:
         return DEFAULTS["events"]["keep_days"]
     return v
+
+def _whole_in(v, low: int, high: int, default: int) -> int:
+    return v if isinstance(v, int) and not isinstance(v, bool) and low <= v <= high else default
+
+
+PANEL_LINKS = ("usb", "wifi")
+
+
+def panel_link(cfg: dict) -> str:
+    """`station.panel_link` (R88 4.4): `usb` or `wifi`; `usb` when it is missing or anything else."""
+    st = cfg.get("station")
+    v = st.get("panel_link") if isinstance(st, dict) else None
+    return v if v in PANEL_LINKS else DEFAULTS["station"]["panel_link"]
+
+
+def panel_port(cfg: dict) -> int:
+    """`station.panel_port`: the port the Wi-Fi listener takes, 1 to 65535; 5004 when it is missing or out of range."""
+    st = cfg.get("station")
+    return _whole_in(st.get("panel_port") if isinstance(st, dict) else None, 1, 65535, DEFAULTS["station"]["panel_port"])
+
 
 LOOKS = ("console", "workbench", "palette", "panes")    # the four themes, Console first (design 01 section 6)
 
@@ -178,6 +200,22 @@ def _read_xml(xf: Path) -> dict | None:
     raise ValueError(f"{xf} cannot be read ({reason})")
 
 
+def _newer_json(stored: dict, f: Path) -> dict:
+    """config.xml's settings, unless config.json was changed after it was written (an older release after a rollback):
+    config.xml records the hash of the config.json it was saved with, as printers.xml does (registry.py `_read`)."""
+    sha = stored.pop("json_sha256", None)
+    if sha is None:
+        return stored                   # saved before the hash was recorded
+    try:
+        raw = f.read_bytes()
+        if hashlib.sha256(raw).hexdigest() == sha:
+            return stored
+        other = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError):
+        return stored
+    return other if isinstance(other, dict) and other != stored else stored
+
+
 def load_raw() -> dict:
     """What the settings files hold, with no defaults merged in ({} when there is none): config.xml when it reads, else
     config.json; an error (ValueError) only when no form reads."""
@@ -186,9 +224,9 @@ def load_raw() -> dict:
         stored = _read_xml(_xml_file())
     except ValueError as e:
         stored, damaged = None, e       # damaged: config.json is read, and an error only when it fails too
-    if stored is not None:
-        return stored
     f = _file()
+    if stored is not None:
+        return _newer_json(stored, f)
     if not f.exists():
         if damaged:
             raise damaged
@@ -221,12 +259,45 @@ def _write(f: Path, write) -> None:
         raise
 
 
+KEEP_UNREADABLE = 5       # copies of a set-aside file kept: `.unreadable` (newest), `.unreadable.1` ... `.unreadable.4`
+
+
+def _parses_broken(xf: Path) -> bool:
+    """True only when config.xml was read and really is broken; a read that fails with an OSError (EACCES, EIO) says
+    nothing about the file, so it stays where it is (the statexml helper's rule)."""
+    from .profiles import statexml
+    try:
+        data = xf.read_bytes()
+    except OSError:
+        return False
+    try:
+        statexml.loads(data, "config")
+    except statexml.StateXmlError:
+        return True
+    return False
+
+
+def _set_aside(xf: Path) -> None:
+    """Keep config.xml as config.xml.unreadable; an earlier copy is renamed .1, .2, ... (five at most, the oldest
+    beyond that is replaced), never deleted unseen by a plain overwrite of the newest."""
+    names = [xf.with_name(xf.name + ".unreadable" + (f".{i}" if i else "")) for i in range(KEEP_UNREADABLE)]
+    if names[-1].exists():
+        names[-1].unlink()
+    for i in range(KEEP_UNREADABLE - 1, 0, -1):
+        if names[i - 1].exists():
+            os.replace(names[i - 1], names[i])
+    os.replace(xf, names[0])
+
+
 def save(cfg: dict) -> None:
-    """Both forms, config.xml first (R85 section 1.5: the JSON form stays for one release, for `update --rollback`)."""
+    """Both forms (R85 section 1.5: the JSON form stays for one release, for `update --rollback`)."""
     from .profiles import statexml
     xf = _xml_file()
-    if any(x.startswith(f"{xf} (") for x in statexml.problems()) and xf.exists():     # never write over what could not be read
-        os.replace(xf, xf.with_name(xf.name + ".unreadable"))
+    if any(x.startswith(f"{xf} (") for x in statexml.problems()) and xf.exists() and _parses_broken(xf):
+        _set_aside(xf)                  # never write over what could not be read (a passing read error keeps the file)
         statexml.clear_problem(xf)
-    _write(xf, lambda fh: fh.write(statexml.dumps("config", cfg)))
-    _write(_file(), lambda fh: fh.write(json.dumps(cfg, indent=2).encode("utf-8")))
+    js = json.dumps(cfg, indent=2).encode("utf-8")
+    # config.json first, then config.xml with its hash: a stop in between leaves a hash that does not match, and the
+    # next read takes the newer JSON
+    _write(_file(), lambda fh: fh.write(js))
+    _write(xf, lambda fh: fh.write(statexml.dumps("config", {**cfg, "json_sha256": hashlib.sha256(js).hexdigest()})))

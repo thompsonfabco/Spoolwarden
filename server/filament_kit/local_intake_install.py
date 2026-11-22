@@ -26,6 +26,7 @@ plan.json; the install job installs exactly the version that plan showed (`--pla
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -36,6 +37,7 @@ from pathlib import Path, PurePosixPath
 from typing import Callable
 
 from . import local_reader, output, release
+from .profiles import statexml
 
 # The module's release key: ed25519, the raw 32 bytes in base64, as release.PUBKEY: the module's own key pair (never
 # the kit's), published by its builder in KIT-INTEGRATION-STATUS.md on 2026-11-12 with the repository name. Empty
@@ -95,14 +97,100 @@ def _valid_version(v) -> bool:
         return False
 
 
+def _to_xml(d: dict) -> dict:
+    """The record as the XML codec takes it: its `version` is a release number (X.Y.Z), and the root's `version` is the
+    file format, so the record's is kept as `release`."""
+    return {("release" if k == "version" else k): v for k, v in d.items()}
+
+
+def _from_xml(d: dict) -> dict:
+    return {("version" if k == "release" else k): v for k, v in d.items()}
+
+
+def _old_json(d: dict) -> bytes:
+    """The record as v0.6.2 wrote it (installed.json, plan.json): indent 2, no newline, its own `version` key."""
+    return json.dumps(_from_xml(d), indent=2).encode("utf-8")
+
+
+def _sha_file(f: Path) -> Path:
+    return f.with_name(f.name + ".sha256")
+
+
+def _note_hash(f: Path, raw: bytes) -> None:
+    """The hash of the JSON form as this code left it (what statexml.write records for its own writes)."""
+    from .pairing import _write_atomic
+    _write_atomic(_sha_file(f), (hashlib.sha256(raw).hexdigest() + "\n").encode("ascii"), 0o644, state_owned=False)
+
+
+def _newer_json(f: Path, have: dict) -> dict | None:
+    """The record an older release wrote to the JSON form after this code did (a rollback), or None. It wins once: the
+    XML form is written from it (root's store; a reader with no write permission just returns it). The statexml rule,
+    done here because the record's own `version` is the XML codec's `release`."""
+    try:
+        want = _sha_file(f).read_text(encoding="ascii").strip()
+        raw = f.read_bytes()
+    except (OSError, UnicodeDecodeError):
+        return None
+    if not want or hashlib.sha256(raw).hexdigest() == want:
+        return None
+    try:
+        d = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return None
+    try:
+        if not isinstance(d, dict):
+            return None
+        if d == have:
+            _note_hash(f, raw)
+            return None
+        statexml.write(f, _to_xml(d), 0o644, state_owned=False, old_format=_old_json)      # XML, JSON again, its hash
+    except (OSError, statexml.StateXmlError, TypeError, ValueError):
+        pass                                # no write permission (the page's user) or an odd value: the data still wins
+    return d if isinstance(d, dict) and d != have else None
+
+
+def _load(name: str) -> dict | None:
+    """The record `name` (given by its JSON name): its XML form when there is one (a JSON form that an older release
+    changed after the last write wins once), else the JSON form, moved to XML on the way when this process may write the
+    store (root); a reader with no write permission (the setup page runs as the service user) reads the old form,
+    records nothing and raises nothing. None when neither form holds an object."""
+    f = store() / name
+    xp = statexml.xml_path(f)
+    try:
+        raw = xp.read_bytes()
+    except OSError:
+        raw = None
+    else:
+        try:
+            d = _from_xml(statexml.loads(raw, statexml.tag_of(f)))
+            statexml.clear_problem(xp)
+            newer = _newer_json(f, d)
+            return d if newer is None else newer
+        except statexml.StateXmlError as e:
+            statexml.note_problem(xp, str(e))
+    try:
+        have = f.read_bytes()
+        d = json.loads(have.decode("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(d, dict):
+        return None
+    if raw is None:
+        # root's store: not handed to the service user. The JSON form stays as it is; its hash is recorded
+        statexml.migrate(f, _to_xml(d), 0o644, state_owned=False, old_format=_old_json)
+        if xp.is_file() and not _sha_file(f).exists():
+            try:
+                _note_hash(f, have)
+            except OSError:
+                pass
+    return d
+
+
 def installed() -> dict | None:
     """{version, tier, port, at, previous} of the installed reader, or None (also for a record that is not one: a
     version that is not X.Y.Z, a tier that is not one of TIERS)."""
-    try:
-        d = json.loads((store() / RECORD).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if not isinstance(d, dict) or not _valid_version(d.get("version")) or d.get("tier") not in local_reader.TIERS:
+    d = _load(RECORD)
+    if d is None or not _valid_version(d.get("version")) or d.get("tier") not in local_reader.TIERS:
         return None
     if d.get("previous") is not None and not _valid_version(d["previous"]):
         d["previous"] = None
@@ -125,13 +213,11 @@ def installed_identity(have: dict | None = None) -> tuple[str, str, str, str]:
 def _write_json(name: str, d: dict | None) -> None:
     f = store() / name
     if d is None:
-        f.unlink(missing_ok=True)
+        statexml.unlink(f)          # both forms
         return
-    f.parent.mkdir(parents=True, exist_ok=True)
-    tmp = f.with_suffix(".tmp")
-    tmp.write_text(json.dumps(d, indent=2), encoding="utf-8")
-    os.chmod(tmp, 0o644)        # the page reads it as the service user; only root writes the store
-    os.replace(tmp, f)
+    # XML, then the JSON form (indent 2 as v0.6.2 wrote it: the uninstaller script and `update --rollback` read it) and
+    # its hash. The page reads it as the service user; only root writes the store.
+    statexml.write(f, _to_xml(d), 0o644, state_owned=False, old_format=_old_json)
 
 
 def _write_state(d: dict | None) -> None:
@@ -148,10 +234,7 @@ def save_plan(p: dict) -> None:
 
 def saved_plan(now: float | None = None) -> dict | None:
     """{at, plan, text, fresh} the last plan job saved, or None."""
-    try:
-        d = json.loads((store() / PLAN).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
+    d = _load(PLAN)
     p = d.get("plan") if isinstance(d, dict) else None
     if not isinstance(p, dict) or not _valid_version(p.get("version")) or not isinstance(d.get("at"), (int, float)):
         return None

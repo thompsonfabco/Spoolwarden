@@ -12,6 +12,7 @@ the serial port: never printed, logged or kept here.
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 import sys
 import time
@@ -19,6 +20,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import config
+from .bridge import xmlfile
+from .profiles import statexml
+
+log = logging.getLogger(__name__)
 
 BAUD = 115200
 IMAGE = "printer-station.bin"
@@ -41,7 +46,10 @@ def parse_hello(line: str) -> Hello | None:
     if len(parts) < 2 or parts[0] != "FK-READER" or not parts[1].isdigit():
         return None
     kv = dict(p.split("=", 1) for p in parts[2:] if "=" in p)
-    return Hello(int(parts[1]), kv.get("configured") == "1", kv.get("wifi", "-"), kv.get("server", "-"))
+    wifi, server = kv.get("wifi", "-"), kv.get("server", "-")
+    if wifi not in ("ok", "fail", "-") or server not in ("ok", "fail", "unauth", "-"):
+        return None             # a line cut short ("server=o"), never read as an answer
+    return Hello(int(parts[1]), kv.get("configured") == "1", wifi, server)
 
 
 def bundled_image() -> tuple[Path, int] | None:
@@ -85,7 +93,8 @@ def device_image(device: str) -> tuple[Path, str] | None:
 # The setup page's "plugged into the server" way: the root helper (op reader_usb) leaves the answers here, root only,
 # and starts the job `reader_setup` (`reader setup --pending`), which takes them and deletes the file at once. Job
 # arguments are never secret (they show in systemctl), so the Wi-Fi password travels this way.
-PENDING = "reader-setup.json"
+PENDING = "reader-setup.xml"
+OLD_PENDING = "reader-setup.json"      # the old form, written beside the XML one for one release; read when there is no XML
 PENDING_MAX_AGE = 15 * 60
 
 
@@ -93,26 +102,75 @@ def pending_path() -> Path:
     return config.paths().etc / PENDING
 
 
+def drop_pending() -> None:
+    """Delete the answers the page left, in every form: the one place that does. Both forms, the hash beside the JSON,
+    and any temp, moving or set-aside file of them (the Wi-Fi password is in each). No file is not an error."""
+    etc = pending_path().parent
+    for name in (PENDING, OLD_PENDING, OLD_PENDING + ".sha256"):
+        (etc / name).unlink(missing_ok=True)
+    for p in etc.glob(Path(PENDING).stem + ".*"):
+        p.unlink(missing_ok=True)
+
+
 def write_pending(answers: dict) -> None:
     import os
     path = pending_path()
-    path.unlink(missing_ok=True)
+    drop_pending()
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(statexml.dumps(statexml.tag_of(path), answers))
+    # the old form beside it, as v0.6.2 wrote it (compact, 0600): a job run by an older release reads that. Both go
+    # together in take_pending, which deletes them at once.
+    fd = os.open(path.with_name(OLD_PENDING), os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w") as fh:
         json.dump(answers, fh)
+
+
+def _why(raw: bytes) -> str:
+    """Why an answers file is damaged, with no value in it (the answers hold the Wi-Fi password): for a typed value that is
+    not what its type says, the name of the field; else only the kind of damage."""
+    try:
+        statexml.loads(raw, statexml.tag_of(pending_path()))
+        return "damaged"
+    except statexml.StateXmlError as e:
+        text = str(e)
+    if text.startswith("a value is not"):
+        try:
+            for el in xmlfile.fromstring(raw):
+                try:
+                    statexml._slot(el)
+                except (ValueError, TypeError):
+                    return f"a value of the field {el.tag} is not what its type says"
+        except Exception:  # noqa: BLE001
+            pass
+        return "a value is not what its type says"
+    return next((k for k in ("not readable XML", "root element", "larger than") if text.startswith(k)), "damaged")
 
 
 def take_pending() -> dict | None:
     """The answers the page left, once: the file is deleted whatever it holds. None when there are none, or they are
-    older than PENDING_MAX_AGE (a job that never ran)."""
+    older than PENDING_MAX_AGE (a job that never ran). The XML form wins; a file left in the old JSON form is read
+    when there is no XML one. A damaged file is logged (its reason only: the answers hold the Wi-Fi password)."""
     path = pending_path()
+    old = path.with_name(OLD_PENDING)
+    data, age = None, 0
     try:
-        age = time.time() - path.stat().st_mtime
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        for p in (path, old):
+            try:
+                age = time.time() - p.stat().st_mtime
+                raw = p.read_bytes()
+            except FileNotFoundError:
+                continue
+            try:
+                data = statexml.loads(raw, statexml.tag_of(path)) if p == path else json.loads(raw.decode("utf-8"))
+            except (statexml.StateXmlError, ValueError) as e:
+                log.warning("%s could not be read (%s)", p.name, _why(raw) if p == path else "not JSON")
+                data = None
+            break
+    except OSError:
         data, age = None, 0
     finally:
-        path.unlink(missing_ok=True)
+        drop_pending()
     return data if isinstance(data, dict) and age <= PENDING_MAX_AGE else None
 
 
@@ -157,7 +215,7 @@ class Device:
                 while self._clock() < end:
                     s.write(b"FK?\n")
                     line = s.readline().decode("utf-8", "replace")
-                    h = parse_hello(line) if line else None
+                    h = parse_hello(line) if line.endswith("\n") else None     # a half line is not an answer
                     if h is not None:
                         last = h
                         if done(h):
@@ -274,8 +332,8 @@ def setup(port: str, settings: dict, *, reflash: bool = False, device: Device | 
     h = dev.hello(wait=60.0, done=tried)
     ssid = settings.get("ssid", "")
     if h is None:
-        return Result(False, "the reader took its settings but did not report back within a minute. Watch its "
-                             "screen: it says whether it reached the Wi-Fi and the kit.", flashed)
+        return Result(False, "The reader did not answer in time. It took its settings but sent no report within a "
+                             "minute. Watch its screen: it says whether it reached the Wi-Fi and the Hub.", flashed)
     if h.wifi != "ok":
         return Result(False, f"the reader could not join the Wi-Fi network {ssid!r}: check the name and the "
                              "password (and that it is a 2.4 GHz network), then run this again.", flashed)
@@ -283,6 +341,7 @@ def setup(port: str, settings: dict, *, reflash: bool = False, device: Device | 
         return Result(False, "the reader reached the kit, but the kit did not accept its token. Run this again to "
                              "give it a new one.", flashed)
     if h.server != "ok":
-        return Result(False, f"the reader joined {ssid!r} but could not reach the kit at {settings.get('base')}: "
-                             "check web.public_url and that the reader's network can reach it.", flashed)
+        return Result(False, f"the reader joined {ssid!r} but could not reach the Hub at {settings.get('base')}"
+                             f"{' or at ' + settings['hub_ip'] if settings.get('hub_ip') else ''}: check that the reader's Wi-Fi is the "
+                             "Hub's home network.", flashed)
     return Result(True, f"Done. The Printer Station joined {ssid!r} and reached the kit.", flashed)

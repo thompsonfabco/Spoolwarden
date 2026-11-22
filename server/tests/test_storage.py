@@ -259,7 +259,7 @@ def test_the_file_is_in_the_state_folder_mode_644_and_no_temp_left(etc, state):
     storage.save(full_list())
     assert stat.S_IMODE((state / "storage.xml").stat().st_mode) == 0o644
     assert not (etc / "storage.xml").exists()                     # nothing of storage in the settings folder
-    assert [p.name for p in etc.iterdir()] == ["config.json"]
+    assert sorted(p.name for p in etc.iterdir()) == ["config.json", "config.xml"]   # config is kept in both forms
     assert not [p for p in state.iterdir() if p.name.endswith(".tmp")]
 
 

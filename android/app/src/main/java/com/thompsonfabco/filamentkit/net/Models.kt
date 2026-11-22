@@ -20,6 +20,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlin.math.roundToInt
@@ -38,6 +39,10 @@ data class ServerInfo(
     val modules: List<String>? = null,
     /** The Hub's default theme for devices that have not chosen (`console`, `workbench`, `palette`, `panes`); null from an older Hub. */
     val look: String? = null,
+    /** The Hub runs in demo (R85 section 3): the app shows the demo notice (05-android-app 3.7); false from an older Hub. */
+    @Serializable(with = LenientBool::class) val demo: Boolean = false,
+    /** The Hub's own language code (`en`), or null from an older Hub. */
+    val language: String? = null,
 ) {
     /** The label-photo add flow is offered: `ai_intake` is on (or the server is too old to say). */
     val labelReading: Boolean get() = modules == null || AI_INTAKE in modules
@@ -215,6 +220,72 @@ data class HistoryRecord(
     @Serializable(with = LenientDouble::class) val weight: Double? = null,
     val tag: String? = null,
     val revisions: List<HistoryRevision> = emptyList(),
+    /** Where the record's correction stands for Share corrections (null: an older Hub that has none). */
+    val share: RecordShare? = null,
+)
+
+/**
+ * A record's correction for Share corrections (`share` of a history record): [state] `waiting` (kept on the reader),
+ * `not_queued` (the reader did not take it; [reason] says why) or `none`; [entries]: how many items wait.
+ */
+@Serializable
+data class RecordShare(
+    val state: String = "none",
+    val reason: String? = null,
+    @Serializable(with = LenientInt::class) val entries: Int = 0,
+)
+
+/**
+ * `GET /api/intake/share-corrections` (Hub stage V1.2): the Hub's setting ([saved]), the reader's own ([actual], null when
+ * it does not say), whether they differ and how many corrections wait ([count], null when unknown). [reason] is why the
+ * setting cannot work now: `off`, `not_installed`, `too_old` or `no_answer`.
+ */
+@Serializable
+data class ShareState(
+    val saved: Boolean = false,
+    val actual: Boolean? = null,
+    val differs: Boolean = false,
+    @Serializable(with = LenientNullableInt::class) val count: Int? = null,
+    val reason: String? = null,
+) {
+    /**
+     * Corrections are being kept: the reader's own answer ([actual]) when it gave one; otherwise the Hub's setting with
+     * nothing but a silent reader stopping it (a silent one shows as "not queued").
+     */
+    val on: Boolean get() = actual ?: (saved && (reason == null || reason == "no_answer"))
+}
+
+/** One correction waiting on the reader (`entries` of `GET /api/label-reader/corrections`; the reader's own summary). */
+@Serializable
+data class CorrectionEntry(
+    @Serializable(with = TextId::class) val id: String,
+    @SerialName("created_at") val createdAt: String = "",
+    val predicted: JsonObject = JsonObject(emptyMap()),
+    val corrected: JsonObject = JsonObject(emptyMap()),
+    @Serializable(with = LenientText::class) val note: String? = null,
+    @Serializable(with = LenientInt::class) val photos: Int = 0,
+    /** The Hub's record (or `<record>.<n>` for a later item of it). */
+    @Serializable(with = LenientText::class) val record: String? = null,
+    /** Which reader's reading was corrected: `local` or `cloud` (null: the reader did not say). */
+    @Serializable(with = LenientText::class) val source: String? = null,
+    @Serializable(with = LenientText::class) @SerialName("thumbnail_b64") val thumbnail: String? = null,
+)
+
+/** A record whose correction the reader did not take (not counted, not sent): [name], [at], and why. */
+@Serializable
+data class NotQueuedCorrection(
+    val record: String = "",
+    @Serializable(with = LenientText::class) val at: String? = null,
+    @Serializable(with = LenientText::class) val name: String? = null,
+    val reason: String = "",
+)
+
+/** `GET /api/label-reader/corrections`: what waits on the reader, its size in [bytes] and the records it did not take. */
+data class CorrectionsWaiting(
+    val count: Int,
+    val bytes: Long,
+    val entries: List<CorrectionEntry>,
+    val notQueued: List<NotQueuedCorrection>,
 )
 
 /** `POST .../revise`: the AI's proposal for [item], nothing written yet. [changes] are the fields that differ. */
@@ -309,6 +380,8 @@ data class Printer(
     val pinned: Boolean = false,
     /** A Klipper printer's Moonraker host name or address; none for a Bambu printer. */
     val host: String? = null,
+    /** Auto can be chosen for a load here (two or more slots the Hub can watch); servers before it send none, so false. */
+    @Serializable(with = LenientBool::class) @SerialName("auto_possible") val autoPossible: Boolean = false,
 ) {
     /** What to show for the model: its name, else the code an older server sent, else null. */
     val shownModel: String? get() = modelName?.takeIf { it.isNotBlank() } ?: model?.takeIf { it.isNotBlank() }
@@ -387,6 +460,8 @@ data class AmsSlot(
     @Serializable(with = LenientNullableBool::class) val present: Boolean? = null,
     @Serializable(with = LenientNullableBool::class) val reading: Boolean? = null,
     @Serializable(with = LenientPending::class) val pending: SlotPending? = null,
+    /** The Hub can see a spool go into this slot, so Auto may choose it; older servers send none (false). */
+    @Serializable(with = LenientBool::class) val watchable: Boolean = false,
 )
 
 /**
@@ -457,9 +532,105 @@ data class PrinterStatus(
     @Serializable(with = LenientNullableLong::class) val updated: Long? = null,
 )
 
-/** [status] is null while the server has no connection to the printer. */
+/** [status] is null while the server has no connection to the printer. [auto] is the Auto assignment waiting here, if any. */
 @Serializable
-data class PrinterDetail(val printer: Printer, val status: PrinterStatus? = null)
+data class PrinterDetail(
+    val printer: Printer,
+    val status: PrinterStatus? = null,
+    @Serializable(with = LenientAuto::class) val auto: AutoWait? = null,
+)
+
+/** The spool an Auto assignment waits for. */
+data class AutoSpool(val id: Int?, val name: String, val material: String, val colorHex: String)
+
+/**
+ * An Auto assignment on a printer (`auto` of `GET api/printers/{id}`): [state] `waiting`, or `choose` when two slots
+ * were loaded and [slots] (labels) are to be chosen from. [text] is the Hub's own sentence for it; [expiresAt] is as sent.
+ */
+data class AutoWait(
+    val spoolId: Int?,
+    val spool: AutoSpool?,
+    val state: String,
+    val slots: List<String>,
+    val text: String,
+    val expiresAt: String?,
+) {
+    val choosing: Boolean get() = state == STATE_CHOOSE
+
+    companion object {
+        const val STATE_WAITING = "waiting"
+        const val STATE_CHOOSE = "choose"
+    }
+}
+
+private fun JsonElement?.primitiveText(): String? = (this as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
+private fun JsonElement?.primitiveInt(): Int? = primitiveText()?.toDoubleOrNull()?.roundToInt()
+
+/** A list of labels: the strings and numbers in an array; anything else is none. */
+private fun JsonElement?.labels(): List<String> =
+    (this as? JsonArray).orEmpty().mapNotNull { it.primitiveText()?.takeIf { s -> s.isNotBlank() } }
+
+/** `auto`: an object is an assignment; absent, null or any other shape is none (a Hub without Auto sends none). */
+@OptIn(ExperimentalSerializationApi::class)
+internal object LenientAuto : KSerializer<AutoWait?> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("LenientAuto", PrimitiveKind.STRING).nullable
+    override fun deserialize(decoder: Decoder): AutoWait? {
+        val obj = (decoder as? JsonDecoder ?: throw SerializationException("JSON only")).decodeJsonElement() as? JsonObject
+            ?: return null
+        val spool = (obj["spool"] as? JsonObject)?.let {
+            AutoSpool(
+                it["id"].primitiveInt(), it["name"].primitiveText().orEmpty(), it["material"].primitiveText().orEmpty(),
+                it["color_hex"].primitiveText().orEmpty(),
+            )
+        }
+        return AutoWait(
+            spoolId = obj["spool_id"].primitiveInt() ?: spool?.id,
+            spool = spool,
+            // anything but "choose" is a plain wait
+            state = if (obj["state"].primitiveText() == AutoWait.STATE_CHOOSE) AutoWait.STATE_CHOOSE else AutoWait.STATE_WAITING,
+            slots = obj["slots"].labels(),
+            text = obj["text"].primitiveText().orEmpty(),
+            expiresAt = obj["expires_at"].primitiveText(),
+        )
+    }
+    override fun serialize(encoder: Encoder, value: AutoWait?) = (encoder as JsonEncoder).encodeJsonElement(JsonNull)
+}
+
+/** The Hub's own sentence of a refusal (`message`, as on every kit route). Null when the reply was not the Hub speaking. */
+val ApiError.autoText: String? get() = message.takeUnless { notFromHub }
+
+/** The spool an Auto load replaces: the one that was waiting. */
+data class AutoReplaces(val spoolId: Int?, val name: String)
+
+/**
+ * `POST api/printers/{id}/slots/auto/load`. A dry run answers [watching] (the slot labels the Hub will watch) and, when
+ * another spool was waiting, [replaces]; the real call answers [pending] true and [message]. Read leniently by [parse].
+ */
+data class AutoLoadResult(
+    val watching: List<String> = emptyList(),
+    val replaces: AutoReplaces? = null,
+    val dryRun: Boolean = false,
+    val pending: Boolean = false,
+    val expiresIn: Int? = null,
+    val message: String = "",
+) {
+    companion object {
+        fun parse(body: JsonElement): AutoLoadResult {
+            val obj = body as? JsonObject ?: return AutoLoadResult()
+            val replaces = (obj["replaces"] as? JsonObject)?.let {
+                AutoReplaces(it["spool_id"].primitiveInt(), it["name"].primitiveText().orEmpty())
+            }
+            return AutoLoadResult(
+                watching = obj["watching"].labels(),
+                replaces = replaces,
+                dryRun = obj["dry_run"].primitiveText() == "true",
+                pending = obj["pending"].primitiveText() == "true",
+                expiresIn = obj["expires_in"].primitiveInt(),
+                message = obj["message"].primitiveText().orEmpty(),
+            )
+        }
+    }
+}
 
 /** `POST /api/printers/{id}/command`; [reply] is the server's `{ok, reply}` result for the printer's answer. */
 @Serializable
@@ -948,6 +1119,10 @@ data class HubAnswer(
     val recordsKept: Long?,
     val spoolmanUrl: String?,
     val hubPage: String?,
+    /** The Hub runs in demo (05-android-app 3.7). */
+    val demo: Boolean = false,
+    /** The Hub's own language code, or null when it sent none. */
+    val language: String? = null,
 )
 
 /**
@@ -963,7 +1138,8 @@ data class LocalLibrary(val entries: List<LocalEntry>, val materials: List<Strin
 data class EntryProblem(val field: String, val text: String)
 
 /** `GET /api/spools` with its `spoolman_url` (absent when Spoolman cannot be reached from where the phone is). */
-data class SpoolsAnswer(val spools: List<JsonObject>, val spoolmanUrl: String?)
+/** [filters] is the top-level `filters` list (R88: the filter names this Hub applies); null when absent, which is an older Hub. */
+data class SpoolsAnswer(val spools: List<JsonObject>, val spoolmanUrl: String?, val filters: List<String>? = null, val total: Int? = null)
 
 /** Where a spool is loaded: the `loaded` field of the spool view. */
 data class SpoolLoaded(val printerId: String, val printer: String, val slot: String)
@@ -974,6 +1150,7 @@ object SpoolFilter {
     const val OPENED = "opened"
     const val LOADED = "loaded"
     const val LOW = "low"
+    const val CHECKED_OUT = "checked_out"
 }
 
 object KitWire {
@@ -1027,6 +1204,8 @@ object KitWire {
             recordsKept = o.long("records_kept"),
             spoolmanUrl = o.str("spoolman_url")?.takeIf { it.isNotBlank() },
             hubPage = o.str("hub_page")?.takeIf { it.isNotBlank() },
+            demo = o.bool("demo") ?: false,
+            language = o.str("language")?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -1061,6 +1240,8 @@ object KitWire {
         return SpoolsAnswer(
             spools = (o["spools"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject },
             spoolmanUrl = o.str("spoolman_url")?.takeIf { it.isNotBlank() },
+            filters = (o["filters"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+            total = (o["total"] as? JsonPrimitive)?.intOrNull,
         )
     }
 

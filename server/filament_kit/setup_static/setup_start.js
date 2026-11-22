@@ -1,6 +1,18 @@
-// The Getting started checklist card shown on Overview until every step is done or hidden.
+// The Getting started checklist card shown on Overview until every step is done or hidden. Also the demo's two parts of the
+// page (R85 4): "Just looking? Try the demo" in the card, and the demo banner with Leave demo that setup.js keeps on every section.
 (() => {
   "use strict";
+
+  // the texts of the demo, a stub table (key -> English) until the string catalogue has them (RC9 adds them)
+  const STUB = {
+    start_demo_lead: "Just looking?",
+    start_demo_try: "Try the demo",
+    demo_not_empty: "The demo is for an empty Hub. This Hub has real data.",
+    demo_banner: "Demo data. Nothing here is real.",
+    demo_leave: "Leave demo",
+    demo_leave_title: "Leave the demo?",
+    demo_leave_text: "Everything in it is deleted.",
+  };
 
   const ACTION_KEYS = {
     features: "start_go_features",
@@ -45,7 +57,10 @@
 
   function t(key, vars) {
     const s = sw();
-    return typeof s.t === "function" ? s.t(key, vars) : key;
+    if (typeof s.t !== "function") return key;
+    const got = s.t(key, vars);
+    if (got !== key || !Object.hasOwn(STUB, key)) return got;
+    return STUB[key].replace(/\{(\w+)\}/g, (_, k) => (vars && vars[k] !== undefined ? vars[k] : `{${k}}`));
   }
 
   function button(label, opts) {
@@ -74,6 +89,37 @@
     box.dataset.state = kind || "";
     box.textContent = msg || "";
   }
+
+  // switches the demo on or off (the page's api(), behind the unlock dialog); resolves with the reply, null when the dialog was cancelled
+  async function demoSend(on) {
+    let r = null;
+    await needCode(async () => { r = await api("demo", { on, code: theCode() }); });
+    return r;
+  }
+
+  // the banner on every section (R85 4.5): kept in `main` while the Hub's state says `demo: true`, gone when it does not
+  let demoHost = null;
+  function demoBar(on, main) {
+    if (!on || !main) {
+      if (demoHost) demoHost.remove();
+      demoHost = null;
+      return;
+    }
+    if (demoHost && demoHost.isConnected) return;
+    const leave = button(t("demo_leave"), { cls: "btn--ghost", action: "leave-demo", run: () => demoLeave() });
+    demoHost = el("div", { class: "demo-bar" }, sw().banner({ kind: "info", text: t("demo_banner"), actions: [leave] }));
+    main.prepend(demoHost);
+  }
+
+  // Leave demo asks once, then the Hub deletes the demo's folder; the page reads its state again (the banner goes with `demo`)
+  // (`after`: Settings > General's Leave demo says its result there once the page has read its state)
+  function demoLeave(after) {
+    return confirmed({ kind: "destructive", title: t("demo_leave_title"), text: t("demo_leave_text"), confirm: t("demo_leave") },
+      "demo", { on: false }, async () => { await refresh(); if (after) after(); });
+  }
+
+  // the sentence of a refused switch-on: a Hub with data answers by its code `not_empty` (Getting started and Settings read it alike)
+  const demoRefusal = (e) => (e.data && e.data.code === "not_empty" ? t("demo_not_empty") : e.message);
 
   function hubName(step, opts) {
     if (opts && opts.hubName) return opts.hubName;
@@ -209,6 +255,33 @@
       });
     }
 
+    // "Just looking? Try the demo": refused on a Hub with data (409 `not_empty`), said here; otherwise the page reads its state again
+    function demoRow() {
+      if (typeof S !== "undefined" && S && S.demo) return null;
+      const box = el("div", { class: "result result--block", role: "status" });
+      const go = button(t("start_demo_try"), {
+        cls: "btn--ghost btn--small start__demo-go",
+        action: "start-demo",
+        run: async (ev) => {
+          const trigger = ev.currentTarget;
+          if (busy) return;
+          busy = true;
+          trigger.disabled = true;
+          showResult(box, null, "");
+          try {
+            const r = await (options.demo || demoSend)(true);
+            if (r && typeof refresh === "function") await refresh();
+          } catch (e) {
+            showResult(box, "bad", demoRefusal(e));
+          } finally {
+            busy = false;
+            if (trigger.isConnected) trigger.disabled = false;
+          }
+        },
+      });
+      return el("div", { class: "start__demo" }, el("span", { class: "muted", textContent: t("start_demo_lead") }), go, box);
+    }
+
     function stepRow(step, phoneOpen, errBox) {
       const classes = ["start__step"];
       if (step.state === "next") classes.push("start__step--next");
@@ -306,7 +379,8 @@
         restore,
         doneBanner,
         errBox,
-        list
+        list,
+        allSet ? null : demoRow()
       );
       mount.replaceChildren(card);
     }
@@ -330,4 +404,8 @@
   }
 
   window.gettingStartedCard = gettingStartedCard;
+  window.startDemoBar = demoBar;
+  window.startDemoSend = demoSend;
+  window.startDemoLeave = demoLeave;
+  window.startDemoRefusal = demoRefusal;
 })();

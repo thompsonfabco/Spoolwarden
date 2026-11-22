@@ -15,6 +15,7 @@ from filament_kit import cli, config
 from filament_kit.bridge import ams, calib3mf, connection, mapping, printer_report, registry
 from filament_kit.bridge.connection import Manager, PrinterOffline
 from filament_kit.bridge.registry import Printer
+from filament_kit.profiles import statexml
 from test_slottest import REPORT
 
 SERIAL = "0948ZZ0A0000001"
@@ -254,8 +255,8 @@ def test_report_wanted_survives_the_status_file(tmp_path, monkeypatch):
     (d / mapping.STATUS_FILE).write_text(json.dumps({"job_id": "a", "state": "done", "step": "", "problems": [],
                                                      "report_wanted": "no_mapping"}), encoding="utf-8")
     assert mapping.Mapper(Nothing()).view(SERIAL)["report_wanted"] == "no_mapping"
-    (d / mapping.STATUS_FILE).write_text(json.dumps({"job_id": "a", "state": "done", "step": "", "problems": [],
-                                                     "report_wanted": "<b>made up</b>"}), encoding="utf-8")
+    statexml.write(d / mapping.STATUS_FILE, {"job_id": "a", "state": "done", "step": "", "problems": [],
+                                             "report_wanted": "<b>made up</b>"}, mode=0o600)
     assert mapping.Mapper(Nothing()).view(SERIAL)["report_wanted"] is None
 
 

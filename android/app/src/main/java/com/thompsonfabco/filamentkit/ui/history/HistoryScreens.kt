@@ -74,12 +74,13 @@ fun HistoryListEntry(
     current: () -> Api,
     client: Any?,
     onOpen: (String) -> Unit,
+    onOpenCorrections: () -> Unit,
     onPairAgain: () -> Unit,
     recordDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
     onSummary: (String) -> Unit = {},
 ) {
     val list = viewModel { HistoryListViewModel(HistoryBackend.of(current)) }
-    HistoryListScreen(list, client, onOpen = onOpen, onPairAgain = onPairAgain, recordDetail = recordDetail, onSummary = onSummary)
+    HistoryListScreen(list, client, onOpen = onOpen, onPairAgain = onPairAgain, onOpenCorrections = onOpenCorrections, recordDetail = recordDetail, onSummary = onSummary)
 }
 
 /**
@@ -98,6 +99,7 @@ fun HistoryRecordEntry(
     onEdit: (Int) -> Unit,
     onOpenPhoto: (Int) -> Unit,
     onOpenSpool: (JsonObject) -> Unit,
+    onOpenCorrections: () -> Unit,
     onPairAgain: () -> Unit,
     embedded: Boolean = false,
 ) {
@@ -105,7 +107,7 @@ fun HistoryRecordEntry(
     val vm = viewModel(key = recordKey(id)) { RecordViewModel(HistoryBackend.of(current), id) }
     RecordScreen(
         vm, list, client, online = online, onBack = { list.refresh(); onBack() }, onOpenRecord = onOpenRecord, onEdit = onEdit,
-        onOpenPhoto = onOpenPhoto, onOpenSpool = onOpenSpool, onPairAgain = onPairAgain, embedded = embedded,
+        onOpenPhoto = onOpenPhoto, onOpenSpool = onOpenSpool, onPairAgain = onPairAgain, embedded = embedded, onOpenCorrections = onOpenCorrections,
     )
 }
 
@@ -118,6 +120,7 @@ internal fun HistoryListScreen(
     onPairAgain: () -> Unit,
     recordDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
     onSummary: (String) -> Unit = {},
+    onOpenCorrections: () -> Unit = {},
 ) {
     val s by vm.state.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -224,6 +227,7 @@ internal fun HistoryListScreen(
                             )
                         }
                         if (!h.ai) ReaderOffLine()
+                        s.share?.takeIf { it.on }?.let { ShareOnButton(it.count, onOpenCorrections) }
                         if (h.records.isEmpty()) {
                             SwEmptyState(
                                 icon = R.drawable.sw_ic_clock,
