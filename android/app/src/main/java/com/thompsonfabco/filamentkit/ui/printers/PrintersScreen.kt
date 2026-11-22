@@ -107,8 +107,8 @@ fun PrintersScreen(
     modifier: Modifier = Modifier,
     /** A row whose Access Code was refused opens its printer with the Replace Access Code dialog open (05 9.1). */
     onReplaceCode: (id: String) -> Unit = onOpen,
-    /** The map offer's Map slots opens that printer's slot map flow (05 step 4). */
-    onMapSlots: (id: String) -> Unit = onOpen,
+    /** A button of the map offer (05 step 4): Map slots opens the printer with the mapping question open, Later opens it. */
+    onMapOffer: (id: String, mapNow: Boolean) -> Unit = { id, _ -> onOpen(id) },
     printerDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
     onSummary: (String) -> Unit = {},
 ) {
@@ -233,7 +233,7 @@ fun PrintersScreen(
     }
     state.guide?.let { GuideSheet(it, state.found, onPairAgain, viewModel) }
     state.mapOffer?.let {
-        MapOfferDialog(it, viewModel) { id, mapNow -> viewModel.dismissMapOffer(); openFromMapOffer(id, mapNow, onMapSlots, onOpen) }
+        MapOfferDialog(it, viewModel) { id, mapNow -> viewModel.dismissMapOffer(); onMapOffer(id, mapNow) }
     }
     state.dialog?.let { AddBambuDialog(it, onPairAgain, viewModel) }
     state.klipper?.let { AddKlipperDialog(it, onPairAgain, viewModel) }
@@ -711,12 +711,7 @@ private fun GuideRowView(row: GuideRow, viewModel: PrintersViewModel) {
     }
 }
 
-/** Where a button of the map offer goes (05 step 4): Map slots to the map flow, Later to the printer. */
-internal fun openFromMapOffer(id: String, mapNow: Boolean, onMap: (String) -> Unit, onOpen: (String) -> Unit) {
-    if (mapNow) onMap(id) else onOpen(id)
-}
-
-/** The last step: "Map its slots now?" Map slots opens the printer's map flow; Later opens the printer. */
+/** The last step: "Map its slots now?" Map slots opens the printer with the mapping question open; Later opens the printer. */
 @Composable
 private fun MapOfferDialog(offer: MapOffer, viewModel: PrintersViewModel, onChoose: (id: String, mapNow: Boolean) -> Unit) {
     SwDialog(
