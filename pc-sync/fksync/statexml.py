@@ -15,6 +15,7 @@ import contextlib
 import errno
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -202,7 +203,7 @@ def _parse_root(data: bytes, tag: str):
     if root.tag != tag:
         raise StateXmlError(f"root element is <{root.tag}>, not <{tag}>")
     v = root.get("version", "")
-    if not re.fullmatch(r"\d{1,6}", v or "1"):
+    if not re.fullmatch(r"[0-9]{1,18}", v or "1"):
         raise StateXmlError(f"version {v!r} is not a number")
     return root, v
 
@@ -329,7 +330,8 @@ def _json_path(path: Path, old_name) -> Path:
 def _old_bytes(data, old_format) -> bytes:
     """`data` as the older release wrote it. `old_format` is the keyword arguments of json.dumps (the default OLD_FORMAT of
     this copy), or a function that returns the bytes (a file that was not one JSON document). A newline follows when an
-    indent was used, as the older writers did."""
+    indent was used, as the older writers did. A file written by a function is not read back: a change an older release
+    makes to it (lines appended to usage.jsonl) is not noticed, and the next save writes it again."""
     if callable(old_format):
         return old_format(data)
     kw = OLD_FORMAT if old_format is None else old_format
@@ -372,17 +374,29 @@ def _same(a, b) -> bool:
     return a == b
 
 
+_GONE = object()      # `_newer_json`: the older release deleted the JSON form, so the file is none
+
+
 def _newer_json(path: Path, xml_data, t: str, is_list: bool, keep_version: bool, mode: int | None, state_owned: bool,
                 old_name):
     """The data of a JSON form that changed after this code last wrote it (an older release after a rollback), or None.
     It wins once: the XML form is written from it and its hash recorded. Nothing recorded, an unreadable JSON, or one
-    that holds what the XML form holds: the XML form wins. A store that cannot be rewritten still returns the data."""
+    that holds what the XML form holds: the XML form wins. A recorded hash with the JSON gone means an older release
+    deleted the file (the way it says "none"): the XML form is set aside (`quarantine`), the hash cleared and `_GONE`
+    returned. A store that cannot be rewritten still returns the data."""
     jp = _json_path(path, old_name)
     want = _recorded(jp)
     if want is None:
         return None
     try:
         raw = jp.read_bytes()
+    except FileNotFoundError:
+        quarantine(path)
+        try:
+            _sha_path(jp).unlink()
+        except OSError:
+            pass
+        return _GONE
     except OSError:
         return None
     if _sha(raw) == want:
@@ -426,6 +440,8 @@ def _read(path: Path, tag: str | None, keep_version: bool, is_list: bool, mode: 
             clear_problem(xp)
             if keep_old_form:
                 newer = _newer_json(path, out, t, is_list, keep_version, mode, state_owned, old_name)
+                if newer is _GONE:
+                    return None
                 if newer is not None:
                     return newer
             return out
@@ -524,6 +540,7 @@ def _save(path: Path, data, tag: str | None, mode: int | None, state_owned: bool
         try:
             _keep_old(path, data, m, state_owned, old_name, old_format)
         except (OSError, TypeError, ValueError) as e:      # the XML form is saved; the old form is a rollback aid
+            logging.getLogger(__name__).warning("%s: old form could not be written: %s", jp, e)
             note_problem(jp, f"old form could not be written: {e}")
         else:
             clear_problem(jp)

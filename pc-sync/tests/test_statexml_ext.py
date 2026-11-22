@@ -163,3 +163,12 @@ def test_write_still_takes_the_old_calls(tmp_path):
     statexml.write(tmp_path / "s.json", {"a": 1})
     statexml.write(tmp_path / "t.json", {"a": 1}, 0o600)
     assert statexml.read(tmp_path / "s.json") == {"a": 1} == statexml.read(tmp_path / "t.json")
+
+
+def test_a_catalog_version_of_a_million_or_more_is_read():
+    for v in ("1000000", "20261122", "999999999999999999"):
+        raw = f'<a version="{v}"><x>1</x></a>'.encode()
+        assert statexml.loads(raw, "a", keep_version=True)["version"] == int(v)
+    for bad in ("-1", "1" * 19, "x"):
+        with pytest.raises(statexml.StateXmlError):
+            statexml.loads(f'<a version="{bad}"/>'.encode(), "a")
