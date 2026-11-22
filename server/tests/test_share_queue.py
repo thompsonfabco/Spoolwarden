@@ -235,3 +235,31 @@ def test_no_body_carries_an_address(sm, reader):
         assert not {str(k).lower() for k in b} & set(local_reader.FORBIDDEN_FIELDS)
         text = json.dumps({k: v for k, v in b.items() if k != "images_b64"}).lower()
         assert "http" not in text and "drive.google" not in text
+
+
+def test_a_waiting_entry_names_its_record_and_that_records_photo_count(sm, reader):
+    from filament_kit import reader_corrections
+    hid = saved(sm, photos=(JPEG, JPEG))
+    intake_history.apply(sm, hid, item=0, values={"nozzle": 230})
+    (e,) = reader_corrections.waiting(config.load())["entries"]
+    assert e["record"] == hid and e["photos"] == 2
+
+
+def test_an_entry_whose_record_is_gone_has_no_record_and_zero_photos(sm, reader):
+    import shutil
+
+    from filament_kit import reader_corrections
+    hid = saved(sm)
+    intake_history.apply(sm, hid, item=0, values={"nozzle": 230})
+    shutil.rmtree(intake_history._dir(hid))
+    (e,) = reader_corrections.waiting(config.load())["entries"]
+    assert "record" not in e and e["photos"] == 0 and "thumbnail_b64" in e
+
+
+def test_a_reader_entry_not_in_the_hubs_map_is_found_by_the_readers_own_key(sm, reader):
+    from filament_kit import reader_corrections
+    hid = saved(sm)
+    intake_history.apply(sm, hid, item=0, values={"nozzle": 230})
+    (_p := intake_history._dir(hid) / "share.json").unlink()
+    (e,) = reader_corrections.waiting(config.load())["entries"]
+    assert e["record"] == hid and e["photos"] == 1

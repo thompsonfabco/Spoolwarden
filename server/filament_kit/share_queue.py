@@ -75,6 +75,20 @@ def state(rid: str) -> dict:
     return {"state": "none", "reason": None, "entries": 0}
 
 
+def entry_records() -> dict[str, str]:
+    """{reader entry id: the record's id} for every kept record that has queued entries (what share.json holds)."""
+    from . import intake_history
+    out: dict[str, str] = {}
+    try:
+        for rid in intake_history._ids_newest_first():
+            for eid in _read(rid)["entries"].values():
+                if eid:
+                    out[str(eid)] = rid
+    except OSError:
+        pass
+    return out
+
+
 def want(cfg: dict) -> bool:
     """Queueing applies: the setting is on, and the reader is the one the kit installed on this Hub."""
     from . import share_corrections
