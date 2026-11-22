@@ -496,10 +496,13 @@ def _path() -> Path:
 
 
 @contextmanager
-def locked():
+def locked(wait: bool = True):
     """Serialize lines.json changes between threads and with the CLI/builder in another process (flock on
-    `state/profiles/lines.lock`; thread lock only where fcntl is missing). Re-entrant within a thread."""
-    with _lock:
+    `state/profiles/lines.lock`; thread lock only where fcntl is missing). Re-entrant within a thread. With
+    `wait=False` a lock another thread or process holds raises BlockingIOError at once instead of waiting."""
+    if not _lock.acquire(blocking=wait):
+        raise BlockingIOError("lines.lock is held")
+    try:
         depth = getattr(_held, "depth", 0)
         if fcntl is None or depth:
             _held.depth = depth + 1
@@ -511,13 +514,15 @@ def locked():
         folder = _path().parent
         make_state_dir(folder)
         with open_lock(folder / "lines.lock") as fh:
-            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
             _held.depth = 1
             try:
                 yield
             finally:
                 _held.depth = 0
                 fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+    finally:
+        _lock.release()
 
 
 def _row(r) -> Line | None:
@@ -567,11 +572,15 @@ def load() -> LineSet:
     newer = None
     if xp.exists():
         with ExitStack() as stack:                  # the read can rewrite lines.xml: under the lock, as a save is
+            busy = False
             try:
-                stack.enter_context(locked())
+                stack.enter_context(locked(wait=False))
+            except BlockingIOError:                 # a build or save holds the lock: a read never waits for it; it reads
+                busy = True                         # lines.xml as last saved (atomic) and leaves the rewrite to a later read
             except OSError:                         # a process that may not take the lock cannot rewrite either
                 pass
-            newer = statexml.read(path, keep_version=True)  # a lines.json an older Hub changed after our last write wins once
+            if not busy:
+                newer = statexml.read(path, keep_version=True)  # a lines.json an older Hub changed after our last write wins once
     try:
         raw = xp.read_bytes()
     except FileNotFoundError:

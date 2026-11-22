@@ -326,3 +326,47 @@ def test_pair_with_a_bare_host_finds_the_hub_on_the_second_port(paths, srv, monk
     assert f"The Hub at 127.0.0.1:{srv.port} shows this certificate fingerprint" in out
     cfg = store.load_config(_dirs(paths))
     assert cfg["host"] == "127.0.0.1" and cfg["port"] == srv.port
+
+
+def _paired_dirs(paths):
+    dirs = _dirs(paths)
+    dirs.ensure()
+    store.save_config(dirs, {"host": "127.0.0.1", "port": 1, "fp": "ab", "device": "dev7"})
+    return dirs
+
+
+def test_status_and_unpair_read_the_config_under_the_lock(paths, monkeypatch, capsys):
+    dirs = _paired_dirs(paths)
+    real, held = store.load_config, []
+
+    def spy(d):
+        try:
+            with store.single_instance(d):
+                held.append(False)                  # the lock was free: nobody held it while the config was read
+        except store.AlreadyRunning:
+            held.append(True)
+        return real(d)
+    monkeypatch.setattr(store, "load_config", spy)
+    assert _main(paths, "status") == 0
+    assert held == [True]
+    held.clear()
+    assert _main(paths, "unpair") == 0
+    assert held == [True] and not dirs.config.exists()
+    assert "dev7" in capsys.readouterr().out
+
+
+def test_unpair_waits_out_a_run_and_changes_nothing(paths, capsys):
+    dirs = _paired_dirs(paths)
+    with store.single_instance(dirs):               # a run holds the lock
+        assert _main(paths, "unpair") == 1
+    assert "in progress" in capsys.readouterr().out
+    assert dirs.config.exists() and store.load_config(dirs)["device"] == "dev7"
+    assert _main(paths, "unpair") == 0              # unlocked: as before
+    assert not dirs.config.exists()
+
+
+def test_status_while_a_run_holds_the_lock_still_answers(paths, capsys):
+    dirs = _paired_dirs(paths)
+    with store.single_instance(dirs):
+        assert _main(paths, "status") == 0
+    assert "127.0.0.1" in capsys.readouterr().out
