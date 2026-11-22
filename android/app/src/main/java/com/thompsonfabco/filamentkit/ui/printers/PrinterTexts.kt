@@ -85,7 +85,7 @@ object PrinterTexts {
      */
     fun clearBody(spool: String?, place: String?, note: String? = null): String {
         val forgets = "The Hub forgets the spool recorded here."
-        val first = if (spool == null) forgets else "$forgets $spool goes back to ${place?.ifBlank { null } ?: PREVIOUS_PLACE}."
+        val first = if (spool == null) forgets else "$forgets ${spool.replaceFirstChar { it.uppercase() }} goes back to ${place?.ifBlank { null } ?: PREVIOUS_PLACE}."
         return listOfNotNull(first, note).joinToString(" ")
     }
 
@@ -99,18 +99,18 @@ object PrinterTexts {
     ): String =
         listOfNotNull(
             "Cleared slot $label.",
-            spool?.let { "$it is back on ${place?.ifBlank { null } ?: PREVIOUS_PLACE}." },
+            spool?.let { "${it.replaceFirstChar { c -> c.uppercase() }} is back on ${place?.ifBlank { null } ?: PREVIOUS_PLACE}." },
             CLEAR_WAITING_ENDED.takeIf { waitingEnded },
             CLEAR_PRINTER_CLEARED.takeIf { printerCleared },
             note,
         ).joinToString(" ")
 
-    /** A spool view (`inventory.spool_view`) as a person names it: brand and name, else "Spool id". */
+    /** A spool view (`inventory.spool_view`) as a person names it: brand and name, else "Spool id", else "the spool" (a sentence that starts with it capitalises it). */
     fun spoolName(view: JsonObject): String {
         fun text(key: String) = (view[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()?.ifBlank { null }
         val named = listOfNotNull(text("vendor"), text("name")).joinToString(" ")
         if (named.isNotBlank()) return named
         val id = (view["id"] as? JsonPrimitive)?.let { it.intOrNull?.toString() ?: it.contentOrNull }
-        return if (id.isNullOrBlank()) "The spool" else "Spool $id"
+        return if (id.isNullOrBlank()) "the spool" else "Spool $id"
     }
 }

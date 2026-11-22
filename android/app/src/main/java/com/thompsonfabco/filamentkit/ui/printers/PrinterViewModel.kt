@@ -256,12 +256,12 @@ object PrinterHelp {
         return if (external) "${s.label} (${holder(s.label, s.say.ifEmpty { unit?.say.orEmpty() })})" else s.label
     }
 
-    /** A slot's spool as the user knows it: its name, else "Spool id". */
-    fun spoolName(s: SlotSpool): String = s.name.ifBlank { "Spool ${s.id ?: "?"}" }
+    /** A slot's spool as the user knows it: its name, else "Spool id", else "the spool". */
+    fun spoolName(s: SlotSpool): String = s.name.ifBlank { s.id?.let { "Spool $it" } ?: "the spool" }
 
-    /** "Moved back: Acme Basic Black → Shelf 2" ([name] null: "Spool 3"). */
+    /** "Moved back: Acme Basic Black → Shelf 2" ([name] null: "Spool 3", no id: "the spool"). */
     fun movedBackLine(name: String?, id: Int?, location: String): String =
-        "Moved back: ${name?.ifBlank { null } ?: "Spool ${id ?: "?"}"} → ${location.ifBlank { "its previous place" }}"
+        "Moved back: ${name?.ifBlank { null } ?: id?.let { "Spool $it" } ?: "the spool"} → ${location.ifBlank { "its previous place" }}"
 }
 
 /**

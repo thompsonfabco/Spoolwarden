@@ -732,6 +732,17 @@ class PrinterViewModelTest {
         assertEquals("slot B3", PrinterHelp.slotName("B3"))
         assertEquals("Moved back: Spool 3 → Shelf 1", PrinterHelp.movedBackLine(null, 3, "Shelf 1"))
         assertEquals("Spool 9", PrinterHelp.spoolName(SlotSpool(9)))
+        assertEquals("the spool", PrinterHelp.spoolName(SlotSpool()))
+        assertEquals("Moved back: the spool → Shelf 1", PrinterHelp.movedBackLine(null, null, "Shelf 1"))
+        assertEquals("the spool", PrinterTexts.spoolName(buildJsonObject { }))
+        assertEquals(
+            "Clear slot A1? The Hub forgets the spool recorded here. The spool goes back to Shelf 1.",
+            PrinterTexts.clearQuestion("A1", "the spool", "Shelf 1"),
+        )
+        assertEquals(
+            "Cleared slot A1. The spool is back on Shelf 1.",
+            PrinterTexts.clearDone("A1", "the spool", "Shelf 1", waitingEnded = false, printerCleared = false),
+        )
     }
 
     @Test fun externalHoldersAreNamedFromSay() {
