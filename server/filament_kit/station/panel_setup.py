@@ -54,7 +54,7 @@ TEXT_PORT = _t("panel_setup_port", "The port must be a number from 1 to 65535.")
 TEXT_PORT_SAME = _t("panel_setup_port_same", "The panel's port must differ from the Weigh Station's own port ({port}).")
 TEXT_FINGERPRINT = _t("panel_setup_fingerprint", "The certificate fingerprint must be 64 hex digits (SHA-256).")
 TEXT_FIRMWARE_OLD = _t("panel_setup_firmware_old", "This panel's firmware is too old for Wi-Fi. "
-                       "Flash it first: sudo spoolwarden weigh-station flash-display")
+                       "Flash it first: sudo {command} weigh-station flash-display")
 TEXT_NO_ANSWER_USB = _t("panel_setup_no_answer_usb", "The panel did not answer over USB. Check the cable and try again.")
 TEXT_NOT_ACCEPTED = _t("panel_setup_not_accepted", "The panel did not accept the Wi-Fi settings.")
 TEXT_TIMEOUT = _t("panel_setup_timeout", "The panel did not answer in time.")
@@ -64,7 +64,7 @@ TEXT_WIFI_LOST = _t("station_panel_wifi_lost", "The panel was flashed from scrat
                     "On the Weigh Station's computer, run: sudo {command} weigh-station panel-wifi")
 TEXT_NOT_CONNECTED = _t("check_panel_not_connected", "The Weigh Station's panel is not connected.")
 TEXT_NOT_CONNECTED_FIX = _t("check_panel_not_connected_fix", "check the panel has power and is in Wi-Fi range; to go back to "
-                            "the USB cable: sudo spoolwarden weigh-station panel-wifi --off")
+                            "the USB cable: sudo {command} weigh-station panel-wifi --off")
 
 
 
