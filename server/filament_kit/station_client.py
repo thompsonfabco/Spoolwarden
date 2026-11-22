@@ -566,6 +566,27 @@ def change_settings(url: str | None, values: dict) -> tuple[list[dict], bool]:
     return clean_settings(call_json(url, "POST", "/settings", values).get("settings"))
 
 
+def send_voice(url: str | None, values: dict) -> None:
+    """`POST /voice` with `{speech, speaker, speed, volume}` (any subset; R88 2.5): the station keeps them in memory, with
+    no restart. Raises StationCallError when it does not answer or refuses them."""
+    call_json(url, "POST", "/voice", values)
+
+
+def voice_test(url: str | None, values: dict) -> tuple[int, str]:
+    """`POST /voice/test` with `{speaker?, speed?, volume?}`: (status, the station's `error` code or ""). 200 played, 409
+    `busy` or `off`. Raises StationCallError when it does not answer."""
+    status, kind, data = call(url, "POST", "/voice/test", json.dumps(values).encode())
+    code = ""
+    if kind.split(";")[0].strip().lower() == "application/json":
+        try:
+            got = json.loads(data or b"{}")
+        except ValueError:
+            got = None
+        if isinstance(got, dict) and isinstance(got.get("error"), str):
+            code = got["error"]
+    return status, code
+
+
 def read_photo(url: str | None) -> bytes:
     """The station's photo: only `image/jpeg`, at most 4 MiB, and it must begin as a JPEG does."""
     status, kind, data = call(url, "GET", "/photo", cap=MAX_PHOTO)

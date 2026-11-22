@@ -38,7 +38,7 @@ import shutil
 import unicodedata
 from pathlib import Path
 
-from . import generate, inapp as inapp_mod
+from . import generate, inapp as inapp_mod, statexml
 
 log = logging.getLogger(__name__)
 _told: set = set()                      # round-0 updates.json files already logged (path, content)
@@ -49,6 +49,11 @@ TREES = ("base", generate.ORCA)
 TARGET = {"base": generate.BAMBU_STUDIO, generate.ORCA: generate.ORCA}
 # what the apps write on their own; never a difference
 STATUS_IGNORE = {"updated_time", "setting_id", "user_id", "base_id", "is_custom_defined", "instantiation"}
+
+
+def _read_state(path: Path):
+    """A state file of this module (SLICER, updates), by its JSON name: its XML form when there is one (RC1c)."""
+    return statexml.read(path)
 
 
 def _read_json(path: Path):
@@ -155,13 +160,13 @@ def record(build_dir: Path, live: Path | None, orca_live: Path | None, orca: boo
                             build_dir / HELD / "base", root=live)}
     if orca:
         rec[generate.ORCA] = classify(build_dir / generate.ORCA, orca_live, build_dir / HELD / generate.ORCA)
-    (build_dir / SLICER).write_text(json.dumps(rec, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    statexml.write_plain(build_dir / SLICER, rec, also_json=True)       # both forms stay for one release
     return rec
 
 
 def slicer(build_dir: Path) -> dict[str, dict]:
     """A build's SLICER.json ({} for a build made before it)."""
-    d = _read_json(build_dir / SLICER)
+    d = _read_state(build_dir / SLICER)
     if not isinstance(d, dict):
         return {}
     return {t: v for t, v in d.items() if t in TREES and isinstance(v, dict)}
@@ -201,7 +206,7 @@ def _accepted_path(profiles_dir: Path) -> Path:
 
 def accepted(profiles_dir: Path) -> dict[str, dict[str, str]]:
     """{tree: {preset name: hash of the generated preset the owner accepted}}."""
-    d = _read_json(_accepted_path(profiles_dir))
+    d = _read_state(_accepted_path(profiles_dir))
     acc = d.get("accepted") if isinstance(d, dict) else None
     acc = acc if isinstance(acc, dict) else {}
     old = {t: [n for n in acc[t] if isinstance(n, str)] for t in TREES if isinstance(acc.get(t), list)}

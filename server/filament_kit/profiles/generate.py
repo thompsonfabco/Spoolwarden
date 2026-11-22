@@ -48,7 +48,7 @@ from pathlib import Path
 
 from ..bridge import models as models_mod
 from ..library import Library
-from . import inapp, lines as lines_mod, values
+from . import inapp, lines as lines_mod, statexml, values
 from .bbl import Store, _first
 from .lines import BS_VALID, Line, LineSet
 from .orca import SYSTEM
@@ -78,6 +78,11 @@ def _read_info(path: Path) -> dict:
             k, v = line.split("=", 1)
             out[k.strip()] = v.strip()
     return out
+
+
+def _read_build_file(path: Path) -> dict | None:
+    """A build's BUILD file by its JSON name: the XML form when there is one (RC1c)."""
+    return statexml.read(path)
 
 
 def _read_json(path: Path) -> dict | None:
@@ -115,7 +120,7 @@ def _recorded(build_dir: Path | None, key: str = "inapp") -> dict[str, dict]:
     the Orca tree), {} when none."""
     if build_dir is None:
         return {}
-    m = _read_json(Path(build_dir) / "BUILD.json")
+    m = _read_build_file(Path(build_dir) / "BUILD.json")
     rec = (m or {}).get(key)
     if not isinstance(rec, dict):
         return {}
@@ -789,7 +794,7 @@ def _build_orca(t: OrcaTarget, *, groups: dict[str, list[dict]], ls: LineSet, li
                 generated.add(row["name"].casefold())
             rows.extend(built)
     if t.live is not None and not t.live_fresh and t.snapshot is not None:
-        prev = (_read_json(Path(t.snapshot) / "BUILD.json") or {}).get("orca_restored")
+        prev = (_read_build_file(Path(t.snapshot) / "BUILD.json") or {}).get("orca_restored")
         restored = sorted(set(restored) | {n for n in prev if isinstance(n, str)}) if isinstance(prev, list) \
             else restored
     prefixes = tuple(f"{ls[lid].vendor} {ls[lid].product} @".casefold() for lid in groups if lid in ls)

@@ -5,6 +5,7 @@ import os
 
 import pytest
 
+from filament_kit.profiles import statexml
 from filament_kit import config, profiles
 from filament_kit.profiles import builds, index
 
@@ -19,8 +20,7 @@ def built(env):
     synced(env)
     r = builds.run_build(env, now=TG.NOW)
     assert r["ok"]
-    m = json.loads((config.paths().state / "profiles" / "builds" / r["stamp"] / "BUILD.json")
-                   .read_text(encoding="utf-8"))
+    m = statexml.read(config.paths().state / "profiles" / "builds" / r["stamp"] / "BUILD.json")
     return m["lines"]["sunlu--pla-plus-2-0"]["filament_id"], r["stamp"]
 
 
@@ -57,14 +57,14 @@ def test_none_cases(env, tmp_path):
 
 def _tamper(stamp, change):
     path = config.paths().state / "profiles" / "builds" / stamp / "BUILD.json"
-    m = json.loads(path.read_text(encoding="utf-8"))
+    m = statexml.read(path)
     for p in m["presets"]:
         if p["name"] == NAME:
             change(p)
-    path.write_text(json.dumps(m), encoding="utf-8")
+    statexml.write_plain(path, m)
     cur = config.paths().state / "profiles" / "current.json"
-    st = cur.stat()
-    os.utime(cur, ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))   # the cache keys on current.json
+    st = builds._state_stat(cur).stat()
+    os.utime(builds._state_stat(cur), ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))   # the cache keys on current.json
 
 
 def test_tampered_system_id_refused(built):
@@ -129,14 +129,14 @@ def test_recorded_line_wins_over_a_longer_library_prefix(built, monkeypatch):
     from filament_kit.profiles import lines as lines_mod
     _, stamp = built
     path = config.paths().state / "profiles" / "builds" / stamp / "BUILD.json"
-    m = json.loads(path.read_text(encoding="utf-8"))
+    m = statexml.read(path)
     grey = "SUNLU PLA+ 2.0 Grey @Bambu Lab H2D 0.4 nozzle"
     m["lines"]["sunlu--pla-plus-2-0-grey"] = {"filament_id": "P0000abc", "spoolman_ids": [], "vendor": "SUNLU",
                                               "product": "PLA+ 2.0 Grey"}
     row = dict(next(p for p in m["presets"] if p["name"] == NAME), name=grey, line_id="sunlu--pla-plus-2-0-grey",
                filament_id="P0000abc", spoolman_ids=[])
     m["presets"].append(row)
-    path.write_text(json.dumps(m), encoding="utf-8")
+    statexml.write_plain(path, m)
     monkeypatch.setattr(lines_mod, "product_of", lambda f, lib: "PLA+ 2.0 Grey")   # the library's longer product
     in_map = dict(SUNLU[0], extra={})                                # filament 17, recorded in the plain line
     assert profiles.preset_for(in_map, "O1D", 0.4).name == NAME
@@ -154,11 +154,11 @@ def test_orca_rows_never_serve_the_ams(built):
     without `target` (a build made before the Orca target) still counts as Bambu Studio."""
     fid, stamp = built
     path = config.paths().state / "profiles" / "builds" / stamp / "BUILD.json"
-    m = json.loads(path.read_text(encoding="utf-8"))
+    m = statexml.read(path)
     row = next(p for p in m["presets"] if p["name"] == NAME)
     orca_row = dict(row, name="SUNLU PLA+ 2.0 @H2D 0.4", target="orca", filament_id="Pdeadbe1")
     m["presets"].insert(0, orca_row)
-    path.write_text(json.dumps(m), encoding="utf-8")
+    statexml.write_plain(path, m)
     _tamper(stamp, lambda p: None)
     got = profiles.preset_for(SUNLU[0], "O1D", 0.4)
     assert got is not None and got.name == NAME and got.filament_id == fid

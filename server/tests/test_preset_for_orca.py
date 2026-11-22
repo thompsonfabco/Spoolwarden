@@ -4,6 +4,7 @@ import os
 
 import pytest
 
+from filament_kit.profiles import statexml
 from filament_kit import config, profiles
 from filament_kit.profiles import builds
 
@@ -15,12 +16,12 @@ ORCA_NAME = "SUNLU PLA+ 2.0 @SV08 MAX 0.4 nozzle"
 
 def _add_rows(stamp, rows):
     path = config.paths().state / "profiles" / "builds" / stamp / "BUILD.json"
-    m = json.loads(path.read_text(encoding="utf-8"))
+    m = statexml.read(path)
     m["presets"].extend(rows)
-    path.write_text(json.dumps(m), encoding="utf-8")
+    statexml.write_plain(path, m)
     cur = config.paths().state / "profiles" / "current.json"
-    st = cur.stat()
-    os.utime(cur, ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
+    st = builds._state_stat(cur).stat()
+    os.utime(builds._state_stat(cur), ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
 
 
 def _row(printer="Sovol SV08 MAX", nozzle="0.4", name=ORCA_NAME, **kw):
