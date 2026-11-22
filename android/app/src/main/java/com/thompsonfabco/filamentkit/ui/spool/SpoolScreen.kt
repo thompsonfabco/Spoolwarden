@@ -87,7 +87,7 @@ fun SpoolScreen(
     online: Boolean = true,
     printersOn: Boolean = true,
     /** The Hub applies the `checked_out` filter (R88): the Home line, Return and Change home show only then. */
-    checkedOutSupported: Boolean = false,
+    checkedOutSupported: Boolean = CheckedOutSupport.supported,
     embedded: Boolean = false,
 ) {
     val ui by vm.state.collectAsStateWithLifecycle()

@@ -63,26 +63,6 @@ class AlertsFeedTest {
         assertNull(feed.state.value.lowCount)
     }
 
-    @Test fun theCheckedOutCountComesWithTheRunningLowCountOnlyFromAHubThatNamesTheFilter() = runBlocking {
-        val row = """{"id":1,"view":{"checked_out":true,"home":"Shelf B"}},{"id":2,"view":{"checked_out":true}}"""
-        hub.handler = { r ->
-            if (r.url.encodedPath.endsWith("/low")) 200 to """{"spools":[]}"""
-            else 200 to """{"spools":[$row],"filters":["sealed","opened","loaded","low","checked_out"]}"""
-        }
-        feed.refreshLow()
-        assertEquals(2, feed.state.value.checkedOutCount)
-        hub.handler = { r ->
-            if (r.url.encodedPath.endsWith("/low")) 200 to """{"spools":[]}""" else 200 to """{"spools":[$row]}"""
-        }
-        feed.refreshLow()
-        assertNull("no filters field: an older Hub", feed.state.value.checkedOutCount)
-        hub.handler = { r ->
-            if (r.url.encodedPath.endsWith("/low")) 200 to """{"spools":[]}""" else 200 to """{"spools":[],"filters":["low"]}"""
-        }
-        feed.refreshLow()
-        assertNull("filters without checked_out", feed.state.value.checkedOutCount)
-    }
-
     @Test fun dismissingHidesTheBannerUntilItIsRaisedAgain() = runBlocking {
         hub.handler = { 200 to """{"events":[],"conditions":[{"id":5,"at":"2026-11-17T11:50:00Z","severity":"warn","alert":true,""" +
             """"condition":{"key":"storage-low","state":"raised"},"title":"Storage","text":"Almost full."}]}""" }

@@ -657,7 +657,6 @@ internal fun FilamentKitApp(
                 onPairAgain = app.router::pairAgain,
                 online = online,
                 printersOn = info?.printersOn != false,
-                checkedOutSupported = alertsUi.checkedOutCount != null,
             )
         }
 
@@ -1223,7 +1222,6 @@ internal fun FilamentKitApp(
                             onPairAgain = app.router::pairAgain,
                             online = online,
                             lowCount = alertsUi.lowCount,
-                            checkedOutCount = alertsUi.checkedOutCount,
                             spoolDetail = { spool, embedded, _ ->
                                 val spoolVm: SpoolViewModel = viewModel(
                                     key = "spool-${spool.id}",
@@ -1241,7 +1239,6 @@ internal fun FilamentKitApp(
                                     onPairAgain = app.router::pairAgain,
                                     online = online,
                                     printersOn = info?.printersOn != false,
-                                    checkedOutSupported = alertsUi.checkedOutCount != null,
                                     embedded = embedded,
                                 )
                             },

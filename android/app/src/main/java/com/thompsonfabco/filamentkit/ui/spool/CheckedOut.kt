@@ -3,6 +3,8 @@ package com.thompsonfabco.filamentkit.ui.spool
 import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.SpoolsAnswer
 import com.thompsonfabco.filamentkit.ui.history.RecentValues
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -28,6 +30,14 @@ object CheckedOutTexts {
     fun returnTo(home: String?) = if (home.isNullOrBlank()) RETURN else "Return to $home"
     fun homeNow(location: String) = "Home is now $location."
     fun returned(location: String?) = if (location.isNullOrBlank()) "Returned." else "Returned to $location."
+}
+
+/**
+ * Whether the paired Hub applies the `checked_out` filter, as the last list answer said; the spool screen shows the Home
+ * line, Return and Change home only while it is true. Memory only.
+ */
+object CheckedOutSupport {
+    var supported by androidx.compose.runtime.mutableStateOf(false)
 }
 
 /** What the Hub says of a spool's remembered place (`checked_out`, `home`, `checked_out_since`). */
@@ -59,8 +69,11 @@ object CheckedOutRules {
     /** Whether the Hub applies the filter: its list answer names `checked_out` in `filters`; no `filters` is an older Hub (R88 01:55). */
     fun supported(filters: List<String>?): Boolean = filters?.contains(FILTER) == true
 
-    /** The checked-out count from a list answer for `filter=checked_out`; null for a Hub that does not apply the filter. */
-    fun count(answer: SpoolsAnswer): Int? = if (supported(answer.filters)) rows(answer.spools).size else null
+    /**
+     * The count of "Checked out (<n>)": the `total` of the list answer for `filter=checked_out` (R88 02:30), with the
+     * rows of the answer when it carries no `total`; null for a Hub that does not apply the filter.
+     */
+    fun count(answer: SpoolsAnswer): Int? = if (supported(answer.filters)) answer.total ?: rows(answer.spools).size else null
 
     /** The rows that are checked out, as the list shows them (a Hub that ignored the filter is not trusted to have cut it). */
     fun rows(rows: List<JsonObject>): List<SpoolSummary> =

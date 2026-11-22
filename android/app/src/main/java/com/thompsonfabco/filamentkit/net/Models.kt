@@ -20,6 +20,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlin.math.roundToInt
@@ -964,7 +965,7 @@ data class EntryProblem(val field: String, val text: String)
 
 /** `GET /api/spools` with its `spoolman_url` (absent when Spoolman cannot be reached from where the phone is). */
 /** [filters] is the top-level `filters` list (R88: the filter names this Hub applies); null when absent, which is an older Hub. */
-data class SpoolsAnswer(val spools: List<JsonObject>, val spoolmanUrl: String?, val filters: List<String>? = null)
+data class SpoolsAnswer(val spools: List<JsonObject>, val spoolmanUrl: String?, val filters: List<String>? = null, val total: Int? = null)
 
 /** Where a spool is loaded: the `loaded` field of the spool view. */
 data class SpoolLoaded(val printerId: String, val printer: String, val slot: String)
@@ -1064,6 +1065,7 @@ object KitWire {
             spools = (o["spools"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject },
             spoolmanUrl = o.str("spoolman_url")?.takeIf { it.isNotBlank() },
             filters = (o["filters"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+            total = (o["total"] as? JsonPrimitive)?.intOrNull,
         )
     }
 

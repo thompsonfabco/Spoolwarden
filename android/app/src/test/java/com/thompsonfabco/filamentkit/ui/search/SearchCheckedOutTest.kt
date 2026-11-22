@@ -45,6 +45,7 @@ class SearchCheckedOutTest {
 
     private var rows: List<JsonObject> = listOf(spool(1, true), spool(2, true, "Dry box 1"))
     private var filters: List<String>? = listOf("sealed", "checked_out")
+    private var total: Int? = null
     private var loadError: Exception? = null
     private var returnedAt: String? = "Shelf B"
     private var returnError: Exception? = null
@@ -58,13 +59,33 @@ class SearchCheckedOutTest {
     }
 
     private fun vm() = SearchViewModel(
-        loadChecked = { loadError?.let { throw it }; SpoolsAnswer(rows, null, filters) },
+        loadChecked = { loadError?.let { throw it }; SpoolsAnswer(rows, null, filters, total) },
         returnSpool = { id -> returnError?.let { throw it }; returned += id; buildJsonObject { put("id", id); returnedAt?.let { put("location", it) } } },
         undoFlow = UndoFlow(backend, now = { 1_000L }),
     ) { _, _ -> emptyList() }
 
     private fun event(id: Long, kind: String = "spool.returned") =
         ActivityEvent(id, "", 900L, kind, "Pixel", "", "spool:1", UndoState(true, null, null), false, null)
+
+    @Test fun theChipCountIsTheTotalOfTheAnswerAndHiddenWithoutTheFilter() {
+        total = 12
+        val vm = vm()
+        vm.loadCheckedOut()
+        assertEquals(12, vm.state.value.checkedCount)
+        assertTrue(com.thompsonfabco.filamentkit.ui.spool.CheckedOutSupport.supported)
+        filters = null
+        vm.loadCheckedOut()
+        assertNull(vm.state.value.checkedCount)
+        assertFalse(com.thompsonfabco.filamentkit.ui.spool.CheckedOutSupport.supported)
+    }
+
+    @Test fun theChipCountFallsBackToTheRowsWithoutATotalAndDropsAfterAReturn() {
+        val vm = vm()
+        vm.setCheckedOnly(true)
+        assertEquals(2, vm.state.value.checkedCount)
+        vm.returnToHome(vm.state.value.checked.first())
+        assertEquals(1, vm.state.value.checkedCount)
+    }
 
     @Test fun theFilterListsTheCheckedOutSpools() {
         val vm = vm()
