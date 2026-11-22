@@ -1,7 +1,7 @@
 """The slot snapshot on disk: what the slot test / calibration job must put back, kept until the restore is confirmed.
 
-`state/printers/<serial>/slottest-snapshot.json` (state-owned, written atomically) is saved BEFORE the first
-write to the printer and deleted only after a confirmed restore. If it is still there, a job was cut short (the
+`state/printers/<serial>/slottest-snapshot.xml` (state-owned, written atomically; a slottest-snapshot.json from before
+is read and moved) is saved BEFORE the first write to the printer and deleted only after a confirmed restore. If it is still there, a job was cut short (the
 process was killed, or its restore was not confirmed): the next mapping job (service or CLI) restores from it
 first and refuses to go on unless that restore is confirmed; the service also restores from it at start when the
 printer is connected and idle.
@@ -14,19 +14,18 @@ Loading a spool into a slot drops that slot from the file (`forget`): the owner 
 undo the load."""
 from __future__ import annotations
 
-import json
 import logging
 import time
 from typing import Callable
 
 from .. import config
-from ..pairing import _write_atomic, make_state_dir
+from ..profiles import statexml
 from . import layout, registry, status
 from .connection import PrinterOffline, UnknownPrinter
 
 log = logging.getLogger(__name__)
 
-FILE = "slottest-snapshot.json"
+FILE = "slottest-snapshot.json"      # the JSON name: `statexml` keeps the data in the .xml beside it
 CONFIRM_TIMEOUT = 20.0
 ONLINE = ('connected', 'needs_developer_mode')
 
@@ -39,24 +38,22 @@ def path(serial: str):
 
 def save(serial: str, kind: str, slots: list[dict], test_colours=()) -> None:
     """Write the snapshot (raises OSError: the caller must then not touch the printer)."""
-    f = path(serial)
-    make_state_dir(f.parent)
     data = {"kind": kind, "at": time.time(),
             "slots": [{"label": s["label"], "ams_id": int(s["ams_id"]), "tray_id": int(s["tray_id"]),
                        "setting": dict(s["setting"])} for s in slots],
             "test_colours": [str(c).upper() for c in test_colours]}
-    _write_atomic(f, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
+    statexml.write(path(serial), data, mode=0o600)
 
 
 def load(serial: str) -> dict | None:
-    try:
-        d = json.loads(path(serial).read_text(encoding="utf-8"))
-    except FileNotFoundError:
+    f = path(serial)
+    if not statexml.exists(f):
         return None
-    except (OSError, ValueError):
+    d = statexml.read(f)
+    if d is None:
         # unreadable but present: still a pending restore, with nothing we can trust in it
         return {"kind": "unknown", "slots": [], "test_colours": [], "corrupt": True}
-    if not isinstance(d, dict) or not isinstance(d.get("slots"), list):
+    if not isinstance(d.get("slots"), list):
         return {"kind": "unknown", "slots": [], "test_colours": [], "corrupt": True}
     slots = []
     for s in d["slots"]:
@@ -71,7 +68,7 @@ def load(serial: str) -> dict | None:
 
 def pending(serial: str) -> bool:
     try:
-        return path(serial).exists()
+        return statexml.exists(path(serial))
     except ValueError:
         return False
 
@@ -80,14 +77,11 @@ def pending_serials() -> list[str]:
     root = config.paths().state / "printers"
     if not root.is_dir():
         return []
-    return sorted(d.name for d in root.iterdir() if registry.SERIAL.fullmatch(d.name) and (d / FILE).exists())
+    return sorted(d.name for d in root.iterdir() if registry.SERIAL.fullmatch(d.name) and statexml.exists(d / FILE))
 
 
 def clear(serial: str) -> None:
-    try:
-        path(serial).unlink()
-    except FileNotFoundError:
-        pass
+    statexml.unlink(path(serial))       # both forms: a left-over slottest-snapshot.json would be a pending restore again
 
 
 def forget(serial: str, ams_id: int, tray_id: int) -> None:
@@ -148,7 +142,7 @@ def restore(manager, serial: str, on_step: Callable[[str], None] | None = None,
         return [f"the saved slot snapshot cannot be read, so the slots an interrupted mapping changed are unknown. "
                 f"Test colours look like near-pure red FAnn00FF (the first two digits F7 to FE): set the filament "
                 f"of any slot showing such a colour again, on the printer or in Bambu Studio, then delete "
-                f"{path(serial)} and map again"]
+                f"{statexml.xml_path(path(serial))} and map again"]
     if manager.state(serial) not in ONLINE:
         return ["The printer is offline, so the slots an interrupted mapping changed cannot be put back yet."]
     report = manager.wait_report(serial, lambda r: True, 0)

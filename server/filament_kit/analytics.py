@@ -101,7 +101,7 @@ def _collect_entries(days: float, printer_filter: str | None) -> list[tuple[str,
         for d in sorted(printers_dir.iterdir()):
             if not d.is_dir() or d.name in seen:
                 continue
-            has_jsonl = (d / busage.FILE).is_file()
+            has_jsonl = (d / busage.FILE).is_file() or (d / busage.DIR).is_dir()
             has_xml = (d / kusage.FILE).is_file()
             if not (has_jsonl or has_xml):
                 continue

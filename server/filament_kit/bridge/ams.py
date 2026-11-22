@@ -12,18 +12,17 @@ proven), and `learned` (numbers a print taught: `usage`, exactly one loaded slot
 (observe until re-mapped; `mapping.LayoutWatch` re-maps when the printer is idle)."""
 from __future__ import annotations
 
-import json
 import threading
 import time
 from dataclasses import dataclass, field
 
 from .. import config
-from ..pairing import _write_atomic, make_state_dir
+from ..profiles import statexml
 from . import hardware, layout, registry
 from .status import EXT, EXT_ID, HT_BASE, _s  # noqa: F401 - EXT/EXT_ID re-exported
 from .status import _int as status_int
 
-FILE = "slotmap.json"
+FILE = "slotmap.json"      # the JSON name: `statexml` keeps the data in slotmap.xml and moves this file on first read
 
 
 @dataclass
@@ -142,12 +141,8 @@ def _current_labels(slots: dict, model) -> dict:
 
 
 def load_map(serial: str) -> SlotMap:
-    f = _file(serial)
-    try:
-        d = json.loads(f.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return SlotMap()
-    if not isinstance(d, dict):
+    d = statexml.read(_file(serial))        # slotmap.xml; a slotmap.json from before is moved on the way
+    if d is None:
         return SlotMap()
     slots = d.get('slots')
     fp = d.get('fingerprint')
@@ -181,14 +176,12 @@ _last_updated = 0.0
 def save_map(serial: str, m: SlotMap) -> None:
     global _last_updated
     with _SAVE_LOCK:
-        f = _file(serial)
-        make_state_dir(f.parent)
         m.updated = _last_updated = max(time.time(), _last_updated + 0.001)
         data = {'slots': m.slots, 'calibrated': m.calibrated, 'observe': m.observe, 'updated': m.updated,
                 'fingerprint': m.fingerprint, 'stale': m.stale, 'scheme': m.scheme, 'learned': m.learned,
                 'mismatch_streak': m.mismatch_streak, 'suspect': m.suspect, 'by_user': m.by_user,
                 'job_file': m.job_file}
-        _write_atomic(f, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
+        statexml.write(_file(serial), data, mode=0o600)
 
 
 def save_map_if(serial: str, m: SlotMap, stamp) -> bool:

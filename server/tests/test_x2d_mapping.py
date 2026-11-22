@@ -17,6 +17,7 @@ from fakes.fake_paho import FakeClient, FakePrinter
 from filament_kit import cli, config
 from filament_kit.bridge import ams, calib3mf, connection, hardware, mapping, printer_report, registry, slottest
 from filament_kit.bridge.connection import Manager
+from filament_kit.profiles import statexml
 from filament_kit.bridge.registry import Printer
 from test_calib3mf import (CODE, FORBIDDEN, SERIAL, FakeManager, base_report, fake_ftp, jobs, leaf,  # noqa: F401
                            slotmap_for, tray)
@@ -451,9 +452,9 @@ def test_a_new_connection_clears_it(refused):
 def _status(serial, **extra):
     d = config.paths().state / "printers" / serial
     d.mkdir(parents=True, exist_ok=True)
-    (d / mapping.STATUS_FILE).write_text(json.dumps({"job_id": "old", "state": "done", "step": "Mapping finished",
-                                                     "problems": ["Ext-L: the printer reported no slot"],
-                                                     "started": 1.0, "finished": 2.0, **extra}), encoding="utf-8")
+    statexml.write(d / mapping.STATUS_FILE, {"job_id": "old", "state": "done", "step": "Mapping finished",
+                                             "problems": ["Ext-L: the printer reported no slot"],
+                                             "started": 1.0, "finished": 2.0, **extra}, mode=0o600)
 
 
 class _NoManager:
