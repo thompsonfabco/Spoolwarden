@@ -425,3 +425,56 @@ def test_the_root_side_never_touches_voice_xml_it_asks_the_service():
         text = p.read_text(encoding="utf-8")
         for word in ("voice.xml", "voice_state", "voice_tab", "save_voice", "patch_voice"):
             assert word not in text, (p.name, word)
+
+
+# ---- the sender attaches the pairing proof (R594 ruling) ----
+
+@pytest.fixture
+def wire(monkeypatch):
+    """The real `call` path with the network replaced: records the headers and the body of each call."""
+    from filament_kit.station import page
+    seen = []
+    key = page.token_key("a station token 0123456789")
+    monkeypatch.setattr(station_client, "station_endpoint", lambda url: ("127.0.0.1", 5003, "ab" * 32))
+    monkeypatch.setattr(station_client, "proof_key", lambda: key)
+
+    def bounded(host, port, fp, method, path, body=None, headers=None, cap=0, timeout=0, **kw):
+        seen.append((path, dict(headers or {}), body))
+        return 200, "application/json", b"{}"
+    monkeypatch.setattr(station_client, "bounded_call", bounded)
+    return seen, key, monkeypatch
+
+
+@pytest.mark.parametrize("send", [lambda: station_client.send_voice("http://h", {"speed": 90}),
+                                  lambda: station_client.voice_test("http://h", {"speed": 90})])
+def test_the_voice_calls_carry_a_proof_the_station_accepts(wire, send):
+    from filament_kit.station import page
+    seen, key, _ = wire
+    send()
+    path, headers, body = seen[0]
+    access = page.Access(lambda: key)
+    assert access.proof_ok("settings", headers.get(page.PROOF_HEADER), body)
+
+
+@pytest.mark.parametrize("send", [lambda: station_client.send_voice("http://h", {"speed": 90}),
+                                  lambda: station_client.voice_test("http://h", {"speed": 90})])
+def test_the_voice_calls_are_not_sent_without_a_key_or_a_certificate(wire, send):
+    seen, key, mp = wire
+    mp.setattr(station_client, "proof_key", lambda: None)
+    with pytest.raises(StationCallError):
+        send()
+    mp.setattr(station_client, "proof_key", lambda: key)
+    mp.setattr(station_client, "station_endpoint", lambda url: ("127.0.0.1", 5003, None))
+    with pytest.raises(StationCallError):
+        send()
+    assert seen == []
+
+
+def test_a_proof_made_for_other_values_or_another_key_is_not_good(wire):
+    from filament_kit.station import page
+    seen, key, _ = wire
+    station_client.send_voice("http://h", {"speed": 90})
+    _, headers, body = seen[0]
+    assert not page.Access(lambda: key).proof_ok("settings", headers[page.PROOF_HEADER], b'{"speed": 200}')
+    assert not page.Access(lambda: page.token_key("another token 0123456789")).proof_ok(
+        "settings", headers[page.PROOF_HEADER], body)
