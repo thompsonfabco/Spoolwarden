@@ -482,8 +482,14 @@ def _write_line(serial: str, rec: dict) -> None:
                     _lost.add(str(_copy_key(serial)))
                     _report(_copy_key(serial), f"cannot be kept current for a rollback: {e}")
     except LockTimeout as e:            # another process holds usage/.lock: the record waits in the pending file
-        _report(_copy_key(serial), f"not kept current for a rollback yet: {e}")
+        _note_pending(serial, str(e))
         _pend(serial, rec)
+
+
+def _note_pending(serial: str, why: str) -> None:
+    """The weaker note (kept pending, will be appended): a record lost from the rollback copy has the stronger one, which stays."""
+    if str(_copy_key(serial)) not in _lost:
+        _report(_copy_key(serial), f"not kept current for a rollback yet: {why}")
 
 
 def _copy_key(serial: str) -> Path:

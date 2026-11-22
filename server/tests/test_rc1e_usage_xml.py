@@ -682,3 +682,24 @@ def test_a_month_file_that_parses_as_broken_is_set_aside_and_older_copies_are_ke
     assert names == ["2026-11.xml.unreadable", "2026-11.xml.unreadable.1", "2026-11.xml.unreadable.2"]
     assert [(month.parent / n).read_bytes() for n in names] == [b"<usage version='1'>broken %d" % i for i in range(3)]
     assert month.is_file() and len(usage.entries(SERIAL, days=30)) == 1
+
+
+@needs_flock
+def test_a_lock_timeout_after_a_permanent_loss_does_not_weaken_the_note(monkeypatch):
+    def full(serial, rec):
+        raise OSError(errno.ENOSPC, "No space left on device")
+    with monkeypatch.context() as m:
+        m.setattr(usage, "_old_form", lambda serial, rec: False)
+        m.setattr(usage, "_pend", full)
+        usage.append(SERIAL, {"job": "lost"})
+    assert any("cannot be kept current" in p for p in statexml.problems())
+    monkeypatch.setattr(usage, "LOCK_WAIT", 0.3, raising=False)
+    holder = _holder(_dir())
+    try:
+        t, out = _in_thread(usage.append, SERIAL, {"job": "later"})
+        t.join(5)
+        assert "r" in out
+    finally:
+        _release(holder)
+    notes = [p for p in statexml.problems() if "rollback" in p]
+    assert notes and all("cannot be kept current" in p for p in notes)          # was: rewritten as "not kept current ... yet"
