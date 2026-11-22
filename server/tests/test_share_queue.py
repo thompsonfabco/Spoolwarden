@@ -307,9 +307,9 @@ def test_a_damaged_share_xml_never_raises_is_not_overwritten_and_is_reported(sm,
     (d / "share.xml").write_bytes(b"<share version='1'><entries")
     assert share_queue.state(hid) == {"state": "none", "reason": None, "entries": 0}
     assert any("share.xml" in p for p in statexml.problems())
-    share_queue.sync(hid)                                         # queues again: the damaged file is kept aside
+    share_queue._write(hid, {"entries": {hid: "fb-3"}, "failed": None})        # the next save keeps it aside
     assert (d / "share.xml.unreadable").read_bytes() == b"<share version='1'><entries"
-    assert share_queue.state(hid)["state"] in ("waiting", "none")
+    assert share_queue.state(hid) == {"state": "waiting", "reason": None, "entries": 1}
 
 
 def test_an_empty_state_removes_both_forms(sm):
