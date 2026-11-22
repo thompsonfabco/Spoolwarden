@@ -3,14 +3,16 @@ routes, and the page route for Test. The station is a stub: `station_client.call
 from __future__ import annotations
 
 import json
+import os
 import socket
+from pathlib import Path
 
 import anyio
 import pytest
 from test_console_general import app  # noqa: F401
 from test_setup_page import client, env, post  # noqa: F401
 
-from filament_kit import config, setup_helper, station_client
+from filament_kit import config, setup_helper, station_client, voice_state
 from filament_kit.setup_console import voice_tab
 from filament_kit.setup_page import Refused
 from filament_kit.station_client import StationCallError
@@ -44,114 +46,136 @@ def _cfg(url="http://127.0.0.1:5003", **st):
     return cfg
 
 
-# ---- the keys ----
+# ---- voice.xml (voice_state) ----
 
-def test_the_keys_have_their_defaults():
-    st = config.DEFAULTS["station"]
-    assert st["speech"] is True and st["voice_speaker"] == 0 and st["voice_speed"] == 100 and st["speaker_volume"] == 50
-    assert config.voice_values({}) == {"speech": True, "speaker": 0, "speed": 100, "volume": 50}
+def _file():
+    return config.paths().state / "voice.xml"
 
 
-@pytest.mark.parametrize("st,expected", [
-    ({"voice_speaker": 903}, {"speaker": 903}),
-    ({"voice_speaker": 904}, {"speaker": 0}),
-    ({"voice_speaker": -1}, {"speaker": 0}),
-    ({"voice_speaker": True}, {"speaker": 0}),
-    ({"voice_speed": 50}, {"speed": 50}),
-    ({"voice_speed": 200}, {"speed": 200}),
-    ({"voice_speed": 45}, {"speed": 100}),
-    ({"voice_speed": 205}, {"speed": 100}),
-    ({"voice_speed": 105}, {"speed": 100}),
-    ({"speaker_volume": 0}, {"volume": 0}),
-    ({"speaker_volume": 101}, {"volume": 50}),
-    ({"speech": "yes"}, {"speech": True}),
-    ({"speech": False}, {"speech": False}),
+def test_the_withdrawn_keys_are_not_settings():
+    assert "voice_speaker" not in config.DEFAULTS["station"] and "voice_speed" not in config.DEFAULTS["station"]
+    for k in ("station.voice_speaker", "station.voice_speed", "station.speech", "station.speaker_volume"):
+        assert k not in setup_helper.GENERAL
+    assert not hasattr(setup_helper, "_hand_voice") and not hasattr(config, "voice_values")
+
+
+def test_without_a_file_the_values_are_the_fallbacks():
+    assert voice_state.values({}) == {"speech": True, "speaker": 0, "speed": 100, "volume": 50}
+    assert voice_state.values(_cfg(speech=False, speaker_volume=20)) ==         {"speech": False, "speaker": 0, "speed": 100, "volume": 20}
+    assert voice_state.values(_cfg(speech="yes", speaker_volume=101)) ==         {"speech": True, "speaker": 0, "speed": 100, "volume": 50}
+
+
+def test_the_file_overrides_the_settings_value_by_value():
+    cfg = _cfg(speech=False, speaker_volume=20)
+    assert voice_state.save({"speed": 130, "volume": 70}, cfg) is True
+    assert voice_state.values(cfg) == {"speech": False, "speaker": 0, "speed": 130, "volume": 70}
+    assert voice_state.save({"speech": True, "speaker": 9}, cfg) is True        # the other values are kept
+    assert voice_state.values(cfg) == {"speech": True, "speaker": 9, "speed": 130, "volume": 70}
+
+
+@pytest.mark.parametrize("raw", [b"", b"not xml at all", b"<other/>", b"<voice speed='1", b"\xff\xfe",
+                                 b'<!DOCTYPE v [<!ENTITY a "b">]><voice speed="&a;"/>', b"<voice " + b"x" * 70000])
+def test_a_broken_file_reads_as_the_defaults(raw):
+    _file().parent.mkdir(parents=True, exist_ok=True)
+    _file().write_bytes(raw)
+    assert voice_state.values(_cfg()) == voice_state.fallbacks(_cfg())
+
+
+@pytest.mark.parametrize("attrs,expected", [
+    ('speed="45"', {"speed": 100}), ('speed="105"', {"speed": 100}), ('speed="210"', {"speed": 100}),
+    ('speed="50"', {"speed": 50}), ('speed="200"', {"speed": 200}), ('speed="fast"', {"speed": 100}),
+    ('speaker="904"', {"speaker": 0}), ('speaker="903"', {"speaker": 903}), ('speaker="-1"', {"speaker": 0}),
+    ('volume="101"', {"volume": 50}), ('volume="0"', {"volume": 0}), ('volume="1.5"', {"volume": 50}),
+    ('speech="yes"', {"speech": True}), ('speech="false"', {"speech": False}),
+    ('speed="45" volume="30"', {"speed": 100, "volume": 30}),        # one bad value does not spoil the others
 ])
-def test_stored_values_are_read_within_their_ranges(st, expected):
-    assert {**config.voice_values({"station": st})} == {**config.voice_values({}), **expected}
+def test_a_value_out_of_range_in_the_file_reads_as_the_default(attrs, expected):
+    _file().parent.mkdir(parents=True, exist_ok=True)
+    _file().write_text(f'<voice version="1" {attrs}/>')
+    assert voice_state.values(_cfg()) == {**voice_state.fallbacks(_cfg()), **expected}
 
 
-@pytest.mark.parametrize("key,value", [
-    ("station.voice_speaker", 904), ("station.voice_speaker", -1), ("station.voice_speaker", "3"),
-    ("station.voice_speed", 49), ("station.voice_speed", 55), ("station.voice_speed", 210),
-    ("station.speaker_volume", 101), ("station.speaker_volume", -1), ("station.speech", "on"),
-])
-def test_the_page_refuses_values_out_of_range(app, station, key, value):  # noqa: F811
-    r = post(client(app), "settings/general", {"key": key, "value": value})
-    assert r.status_code == 400 and station.calls == []
+def test_a_speaker_beyond_the_chosen_voice_reads_as_zero():
+    voice_state.save({"speaker": 500}, _cfg())
+    assert voice_state.values(_cfg())["speaker"] == 500
+    assert voice_state.values(_cfg(voice="en_US-ljspeech-medium"))["speaker"] == 0
+    assert voice_state.values(_cfg(tts="espeak"))["speaker"] == 0
 
 
-@pytest.mark.parametrize("key,value,read", [
-    ("station.speech", False, lambda c: c["station"]["speech"] is False),
-    ("station.voice_speaker", 903, lambda c: c["station"]["voice_speaker"] == 903),
-    ("station.voice_speed", 150, lambda c: c["station"]["voice_speed"] == 150),
-    ("station.speaker_volume", 0, lambda c: c["station"]["speaker_volume"] == 0),
-])
-def test_a_saved_value_goes_to_the_station_without_restart_or_apply(app, station, monkeypatch, key, value, read):  # noqa: F811
-    monkeypatch.setattr(setup_helper, "_restart_kit", lambda: pytest.fail("restarted"))
-    monkeypatch.setattr(setup_helper, "_start_apply", lambda checked=False: pytest.fail("applied"))
-    cfg = config.load()
-    cfg["station"]["url"] = "http://127.0.0.1:5003"
-    config.save(cfg)
-    r = post(client(app), "settings/general", {"key": key, "value": value})
-    assert r.status_code == 200 and r.json()["restarts"] is False and r.json()["applies"] is False
-    assert read(config.load())
-    (url, method, path, body), = station.calls
-    assert (method, path) == ("POST", "/voice") and set(body) == {"speech", "speaker", "speed", "volume"}
+@pytest.mark.parametrize("body,field", [({"speaker": 904}, "speaker"), ({"speed": 55}, "speed"), ({"speed": 210}, "speed"),
+                                        ({"volume": 101}, "volume"), ({"volume": True}, "volume"),
+                                        ({"speech": 1}, "speech"), ({"speaker": "3"}, "speaker")])
+def test_check_refuses_what_is_out_of_range(body, field):
+    with pytest.raises(voice_state.BadValue) as e:
+        voice_state.check(body, _cfg())
+    assert e.value.field == field
 
 
-def test_a_group_save_hands_over_once(app, station):  # noqa: F811
-    cfg = config.load()
-    cfg["station"]["url"] = "http://127.0.0.1:5003"
-    config.save(cfg)
-    r = post(client(app), "settings/general", {"values": {"station.voice_speed": 80, "station.speaker_volume": 20}})
-    assert r.status_code == 200
-    assert len(station.calls) == 1 and station.calls[0][3]["speed"] == 80 and station.calls[0][3]["volume"] == 20
+def test_check_refuses_a_speaker_the_voice_does_not_have():
+    with pytest.raises(voice_state.BadValue):
+        voice_state.check({"speaker": 1}, _cfg(voice="en_US-ljspeech-medium"))
+    assert voice_state.check({"speaker": 0}, _cfg(tts="espeak")) == {"speaker": 0}
 
 
-def test_the_voice_row_alone_hands_nothing_over(app, station, monkeypatch):  # noqa: F811
-    monkeypatch.setattr(setup_helper, "_start_apply", lambda checked=False: None)
-    assert post(client(app), "settings/general", {"key": "station.tts", "value": "espeak"}).status_code == 200
-    assert station.calls == []
+def test_the_write_is_atomic_state_owned_and_leaves_no_temporary_file(monkeypatch):
+    calls = []
+    real = voice_state.pairing._write_atomic
+    monkeypatch.setattr(voice_state.pairing, "_write_atomic", lambda *a, **k: (calls.append((a, k)), real(*a, **k))[1])
+    assert voice_state.save({"speed": 80}, _cfg()) is True
+    (args, kw), = calls
+    assert args[0] == _file() and args[2] == 0o644 and kw == {"state_owned": True}
+    assert [p.name for p in _file().parent.iterdir() if p.name.endswith(".tmp")] == []
+    assert 'speed="80"' in _file().read_text() and _file().read_text().startswith("<?xml")
 
 
-def test_a_silent_station_never_stops_a_save(app, monkeypatch):  # noqa: F811
-    def dead(*a, **k):
-        raise StationCallError(502, "the Weigh Station does not answer (ConnectionRefusedError)")
-    monkeypatch.setattr(station_client, "call", dead)
-    cfg = config.load()
-    cfg["station"]["url"] = "http://127.0.0.1:5003"
-    config.save(cfg)
-    r = post(client(app), "settings/general", {"key": "station.voice_speed", "value": 70})
-    assert r.status_code == 200 and config.load()["station"]["voice_speed"] == 70
+def test_a_failed_write_changes_nothing_and_never_raises(monkeypatch):
+    voice_state.save({"speed": 80}, _cfg())
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(voice_state.pairing, "_write_atomic", boom)
+    assert voice_state.save({"speed": 90}, _cfg()) is False
+    assert voice_state.values(_cfg())["speed"] == 80
 
 
-def test_a_real_closed_port_is_a_quiet_false():
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    assert voice_tab.hand_over(_cfg(f"http://127.0.0.1:{port}")) is False
+@pytest.mark.skipif(not hasattr(os, "symlink") or os.name == "nt", reason="symbolic links")
+def test_a_symbolic_link_is_never_followed(tmp_path):
+    target = tmp_path / "elsewhere.xml"
+    target.write_text('<voice speed="150"/>')
+    _file().parent.mkdir(parents=True, exist_ok=True)
+    _file().symlink_to(target)
+    assert voice_state.values(_cfg())["speed"] == 100
+    assert voice_state.save({"speed": 80}, _cfg()) is False and target.read_text() == '<voice speed="150"/>'
 
 
-def test_no_station_hands_nothing_over(station):
-    assert voice_tab.hand_over(_cfg(url=None)) is False and station.calls == []
+def test_apply_the_helper_the_installer_and_the_updater_never_read_it():
+    root = Path(voice_state.__file__).parent
+    for name in ("apply.py", "setup_helper.py", "updater.py", "update.py", "backup.py"):
+        if (root / name).exists():
+            text = (root / name).read_text(encoding="utf-8")
+            assert "voice.xml" not in text and "voice_state" not in text, name
 
 
-def test_a_refusal_of_the_station_is_a_false(station):
-    station.answers["/voice"] = (400, {"error": "bad_value"})
-    assert voice_tab.hand_over(_cfg()) is False
+def test_the_state_backup_takes_the_file_with_the_state_folder():
+    from filament_kit import backup
+    state = dict(backup.roots())["var/lib/filament-kit"]
+    assert state == config.paths().state and _file().parent == state
 
 
 # ---- hello, local and remote ----
 
 def test_the_hello_voice_holds_the_four_values():
-    assert voice_tab.hello_voice(_cfg(voice_speaker=7, voice_speed=120, speaker_volume=30, speech=False)) == \
+    voice_state.save({"speaker": 7, "speed": 120}, _cfg())
+    assert voice_tab.hello_voice(_cfg(speaker_volume=30, speech=False)) == \
         {"speech": False, "speaker": 7, "speed": 120, "volume": 30}
 
 
+def test_the_settings_alone_never_carry_speaker_or_speed():
+    assert voice_tab.hello_voice(_cfg(voice_speaker=7, voice_speed=120)) == {"speech": True, "speaker": 0, "speed": 100, "volume": 50}
+
+
 def test_a_remote_station_gets_the_values_and_the_voice_row_says_where_it_is_chosen(station):
-    remote = _cfg("http://station.example:5003", voice_speed=80)
+    remote = _cfg("http://station.example:5003")
+    voice_state.save({"speed": 80}, remote)
     assert voice_tab.hand_over(remote) is True and station.calls[0][0] == "http://station.example:5003"
     assert station.calls[0][3]["speed"] == 80
     row = voice_tab.voice_row(remote)
@@ -180,7 +204,8 @@ def test_get_voice_without_a_station():
 
 
 def test_get_voice_with_a_station():
-    got = voice_tab.get_voice(_cfg(voice_speaker=5))
+    voice_state.save({"speaker": 5}, _cfg())
+    got = voice_tab.get_voice(_cfg())
     assert got == {"station": True, "speech": True, "speaker": 5, "speed": 100, "volume": 50,
                    "voice": "Piper, many speakers", "speaker_range": [0, 903]}
     assert voice_tab.get_voice(_cfg(voice="en_US-ljspeech-medium"))["speaker_range"] is None
@@ -188,9 +213,9 @@ def test_get_voice_with_a_station():
 
 
 def test_patch_saves_hands_over_and_answers_as_get(station):
-    cfg, saved = _cfg(), []
-    got = voice_tab.patch_voice({"speed": 130, "speaker": 9}, load=lambda: cfg, save=saved.append)
-    assert saved == [cfg] and cfg["station"]["voice_speed"] == 130 and cfg["station"]["voice_speaker"] == 9
+    cfg = _cfg()
+    got = voice_tab.patch_voice({"speed": 130, "speaker": 9}, load=lambda: cfg)
+    assert voice_state.stored(cfg) == {"speed": 130, "speaker": 9} and "voice_speed" not in cfg["station"]
     assert got["speed"] == 130 and got["speaker"] == 9 and got["station"] is True
     assert station.calls[0][2] == "/voice" and station.calls[0][3] == {"speaker": 9, "speed": 130}
 
@@ -199,23 +224,33 @@ def test_patch_saves_hands_over_and_answers_as_get(station):
                                         ({"volume": 101}, "volume"), ({"speech": 1}, "speech"),
                                         ({"speed": 100, "volume": -1}, "volume")])
 def test_patch_refuses_a_bad_value_with_its_field_and_saves_nothing(station, body, field):
-    saved = []
     with pytest.raises(voice_tab.VoiceError) as e:
-        voice_tab.patch_voice(body, load=lambda: _cfg(), save=saved.append)
+        voice_tab.patch_voice(body, load=lambda: _cfg())
     assert e.value.status == 400 and e.value.field == field and e.value.code and e.value.message
-    assert saved == [] and station.calls == []
+    assert not _file().exists() and station.calls == []
 
 
 def test_patch_with_a_silent_station_still_saves(monkeypatch):
     monkeypatch.setattr(station_client, "call", lambda *a, **k: (_ for _ in ()).throw(StationCallError(502, "x")))
-    cfg, saved = _cfg(), []
-    got = voice_tab.patch_voice({"volume": 10}, load=lambda: cfg, save=saved.append)
-    assert saved == [cfg] and got["volume"] == 10
+    got = voice_tab.patch_voice({"volume": 10}, load=lambda: _cfg())
+    assert voice_state.stored(_cfg()) == {"volume": 10} and got["volume"] == 10
+
+
+def test_patch_when_the_file_cannot_be_written_is_a_500_and_tells_the_station_nothing(station, monkeypatch):
+    monkeypatch.setattr(voice_state, "save", lambda *a, **k: False)
+    with pytest.raises(voice_tab.VoiceError) as e:
+        voice_tab.patch_voice({"volume": 10}, load=lambda: _cfg())
+    assert (e.value.status, e.value.code) == (500, "not_saved") and station.calls == []
+
+
+def test_patch_needs_no_write_access_to_the_settings(station, monkeypatch):
+    monkeypatch.setattr(config, "save", lambda *a, **k: pytest.fail("the settings were written"))
+    voice_tab.patch_voice({"volume": 10}, load=lambda: _cfg())
 
 
 def test_patch_without_a_station_is_refused():
     with pytest.raises(voice_tab.VoiceError) as e:
-        voice_tab.patch_voice({"volume": 10}, load=lambda: _cfg(url=None), save=lambda c: None)
+        voice_tab.patch_voice({"volume": 10}, load=lambda: _cfg(url=None))
     assert e.value.status == 409
 
 
@@ -256,8 +291,8 @@ class _Page:
 
 
 def _route():
-    (path, fn, method), = voice_tab.routes(_Page())
-    assert (path, method) == ("/station/voice/test", "POST")
+    (fn, method), = [(f, m) for p, f, m in voice_tab.routes(_Page()) if p == "/station/voice/test"]
+    assert method == "POST"
     return fn
 
 
@@ -278,3 +313,48 @@ def test_the_page_route_refuses_with_the_sentence(station, env, monkeypatch, ans
     with pytest.raises(Refused) as e:
         anyio.run(_route(), None, {})
     assert (e.value.status, e.value.message, e.value.extra) == (status, text, {"code": code})
+
+
+# ---- the page route that saves ----
+
+def _save_route():
+    fn, = [f for p, f, m in voice_tab.routes(_Page()) if p == "/station/voice"]
+    return fn
+
+
+def test_the_page_route_saves_to_the_file_and_hands_over(station, env, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(config, "load", lambda: _cfg())
+    got = anyio.run(_save_route(), None, {"speed": 120, "volume": 30})
+    assert got["speed"] == 120 and got["volume"] == 30 and voice_state.stored(_cfg()) == {"speed": 120, "volume": 30}
+    assert [(c[1], c[2], c[3]) for c in station.calls] == [("POST", "/voice", {"speed": 120, "volume": 30})]
+
+
+def test_the_page_route_refuses_a_bad_value_with_sentence_code_and_field(station, env, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(config, "load", lambda: _cfg())
+    with pytest.raises(Refused) as e:
+        anyio.run(_save_route(), None, {"speed": 55})
+    assert e.value.status == 400 and e.value.extra == {"code": "bad_value", "field": "speed"} and "speed" in e.value.message
+    assert not _file().exists() and station.calls == []
+
+
+def test_the_group_no_longer_writes_the_voice_settings_through_the_helper(app):  # noqa: F811
+    for key, value in (("station.speech", False), ("station.speaker_volume", 10), ("station.voice_speed", 80),
+                       ("station.voice_speaker", 3)):
+        assert post(client(app), "settings/general", {"key": key, "value": value}).status_code == 400
+    assert "voice_speed" not in config.load()["station"]
+
+
+def test_the_page_route_works_with_a_silent_station(env, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(config, "load", lambda: _cfg())
+    monkeypatch.setattr(station_client, "call", lambda *a, **k: (_ for _ in ()).throw(StationCallError(502, "x")))
+    assert anyio.run(_save_route(), None, {"speed": 70})["speed"] == 70
+
+
+@pytest.mark.parametrize("host", ["Hubhost.local", "hubhost"])
+def test_a_station_named_by_the_hubs_lan_name_or_address_is_not_remote(host, monkeypatch):
+    monkeypatch.setattr(socket, "gethostname", lambda: "hubhost")
+    monkeypatch.setattr(socket, "getfqdn", lambda: "hubhost.lan")
+    assert voice_tab.station_remote(_cfg(f"http://{host}:5003")) is False
+    monkeypatch.setattr(socket, "gethostbyname_ex", lambda n: (n, [], ["192.168.1.20"]))
+    assert voice_tab.station_remote(_cfg("http://192.168.1.20:5003")) is False
+    assert voice_tab.station_remote(_cfg("http://192.168.1.21:5003")) is True

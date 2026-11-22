@@ -13,7 +13,7 @@
   "station": {"url": "http://127.0.0.1:5003", "allow": ["127.0.0.1", "192.0.2.10"], "port": 5003, "nfc_device": "auto",
               "beep": true, "beep_device": "", "speech": true, "tts": "auto", "voice": null, "camera": "auto",
               "panel_flash": true, "panel_swap": false, "page_from": "home", "speaker_volume": 50,
-              "voice_speaker": 0, "voice_speed": 100, "panel_link": "usb", "panel_port": 5004},
+              "panel_link": "usb", "panel_port": 5004},
   "web": {"port": 8101, "public_url": "https://hub.example.net", "push": false,
           "lan": ["192.168.0.0/16", "10.0.0.0/8"], "printer_changes": true},
   "remote": {"hostname": null, "acme_window": null, "email": null},

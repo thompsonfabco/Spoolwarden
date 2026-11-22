@@ -93,8 +93,7 @@ DEFAULTS: dict = {
                 "speech": True, "tts": "auto", "voice": None, "camera": "auto", "panel_flash": True,
                 "panel_swap": False,  # the panel's yellow and red are wired to each other's pins
                 "page_from": "home",  # who the unit admits for the page: home, subnets or allowed (apply.page_ranges)
-                "speaker_volume": 50,   # the panel's speaker, percent
-                "voice_speaker": 0, "voice_speed": 100,   # Piper speaker (0 to 903) and speed in percent (R88 2.1)
+                "speaker_volume": 50,   # the C3 panel's speaker, percent
                 "panel_link": "usb", "panel_port": 5004},   # how the panel reaches the station, and its Wi-Fi listener (R88 4.4)
     # merge-ops: web unit, remote access, orders file, tag readers, slot service, slicer/presets/intake extras
     "web": {"port": 8101, "public_url": None, "push": False,   # push: Web Push alerts (needs internet egress)
@@ -127,25 +126,8 @@ def keep_days(cfg: dict) -> int:
         return DEFAULTS["events"]["keep_days"]
     return v
 
-VOICE_SPEAKER_MAX = 903
-VOICE_SPEED_MIN, VOICE_SPEED_MAX, VOICE_SPEED_STEP = 50, 200, 10
-
-
 def _whole_in(v, low: int, high: int, default: int) -> int:
     return v if isinstance(v, int) and not isinstance(v, bool) and low <= v <= high else default
-
-
-def voice_values(cfg: dict) -> dict:
-    """What the Hub hands the Weigh Station (R88 2.3): `{speech, speaker, speed, volume}` from `station.*`, each one
-    the default when it is missing or out of range (speed also when it is not a step of 10)."""
-    st = cfg.get("station")
-    st = st if isinstance(st, dict) else {}
-    d = DEFAULTS["station"]
-    speed = _whole_in(st.get("voice_speed"), VOICE_SPEED_MIN, VOICE_SPEED_MAX, d["voice_speed"])
-    return {"speech": st.get("speech") if isinstance(st.get("speech"), bool) else d["speech"],
-            "speaker": _whole_in(st.get("voice_speaker"), 0, VOICE_SPEAKER_MAX, d["voice_speaker"]),
-            "speed": speed if speed % VOICE_SPEED_STEP == 0 else d["voice_speed"],
-            "volume": _whole_in(st.get("speaker_volume"), 0, 100, d["speaker_volume"])}
 
 
 PANEL_LINKS = ("usb", "wifi")
