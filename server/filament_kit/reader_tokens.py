@@ -23,7 +23,7 @@ from xml.sax.saxutils import quoteattr
 import defusedxml.ElementTree as DET
 from defusedxml import DefusedXmlException
 
-from . import config, pairing
+from . import config, demo, pairing
 
 log = logging.getLogger(__name__)
 
@@ -180,7 +180,10 @@ class TokenStore:
         pairing._write_atomic(self.path, render_tokens(tokens, next_id), 0o644, state_owned=True)
 
     def issue(self, name: str | None = None) -> tuple[str, str]:
-        """A new token: (id, token). The token is returned once and only its sha256 is written."""
+        """A new token: (id, token). The token is returned once and only its sha256 is written. Not in the demo (a Tag
+        Reader is a device to flash and its token would outlive the demo): `TokenFileError` with the demo's sentence."""
+        if demo.is_on():
+            raise TokenFileError([demo.NOT_IN_DEMO])
         with self._lock:
             tokens, n = self._read()
             if len(tokens) >= MAX_TOKENS:
@@ -193,7 +196,9 @@ class TokenStore:
             return tid, tok
 
     def revoke(self, ref: str) -> bool:
-        """Remove the token with that id (or the only one with that name)."""
+        """Remove the token with that id (or the only one with that name). Not in the demo, as `issue`."""
+        if demo.is_on():
+            raise TokenFileError([demo.NOT_IN_DEMO])
         with self._lock:
             tokens, n = self._read()
             hit = [t for t in tokens if t["id"] == ref] or [t for t in tokens if t["name"] == ref]

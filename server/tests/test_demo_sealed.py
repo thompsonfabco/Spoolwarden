@@ -44,34 +44,17 @@ STREAMS = ("/intake/api/printers/{id}/events",)           # a server-sent stream
 # what still leaves the demo or lands outside its folder in this tree, with the step that adds the stop. Filled from
 # the first runs on the test boxes.
 LEAKS: dict[str, str] = {
-    # reaching a printer or the network: RC9's page route / the Klipper code
-    "connect 192.0.2.1": "POST /setup/api/printers/scan looks at the local network (a UDP scan of the page's own subnet): "
-                         "bridge/klipper/discovery.py or the page route must use the pretend family's scan()",
-    "connect api.github.com": "POST /setup/api/printers/pack downloads the Klipper add-on pack from GitHub "
-                              "(klipper_cli.py): stop with demo.stop()",
-    # the root helper (RC7: setup_helper.py answers demo.NOT_IN_DEMO to every op but `check`, the page's own unlock)
-    **{f"root helper {op}": "setup_helper.py (RC7)" for op in (
-        "apply", "backup_keep", "backup_last", "backup_list", "general", "journal", "key_remove", "key_set",
-        "library_token_remove", "library_token_set", "local_intake_token_remove", "local_intake_token_set", "mode",
-        "module", "passphrase_set", "reader_usb", "restore_forget", "setting", "station_pairing", "trust_add",
-        "trust_list", "trust_revoke_all", "trust_status")},
     # what the Hub records, in the real state folder (each must use demo.where(...))
-    "write state/alerts.xml": "alerts.py:137 (the alert switches)",
     **{f"write state/library{rest}": "library.py (RC1d): the Filament Catalog's copy" for rest in (
         "", "/current.json", "/versions", "/versions/2-20261101T000000Z")},
-    "write state/printers": "bridge/mapping.py, bridge/manual.py, bridge/printer_report.py: the per-printer folder",
+    "write state/printers": "bridge/mapping.py (RC1e): the per-printer folder",
     "write state/printers/<id>": "same",
-    "write state/printers/<id>/...": "same: map, manual-map offer, printer report",
-    "write state/profiles": "profiles_api.py / profiles/: the presets' folder",
-    "write state/profiles/rebuild-request": "same",
-    "write state/profiles/restore-deleted": "same",
-    "write state/web": "reader_tokens.py: the Tag Reader tokens (a device pairing: decide whether it counts as pairing)",
+    "write state/printers/<id>/...": "same: the map",
 }
 
 # what the calls with a real body leave outside the demo's folder (the walk's empty bodies stop before they get there)
-LEAKS_WITH_BODY: dict[str, str] = {
-    "write state/storage.xml": "storage.py: the storage locations (R85 4.3 names them): slot loads and unloads write them",
-}
+LEAKS_WITH_BODY: dict[str, str] = {}
+
 
 # Files a paired device legitimately changes: "Pairing a phone or a PC works" (R85 4.3), so the demo can be seen on them.
 PAIRING = re.compile(r"(^|/)[^/]*(devices|pairing|token|trusted|lockout|audit|pending|spent)[^/]*$|\.lock$|\.tmp$|(^|/)logs?(/|$)", re.I)

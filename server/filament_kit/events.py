@@ -33,7 +33,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import config, event_kinds
+from . import config, demo, event_kinds
 
 log = logging.getLogger("filament_kit.events")
 
@@ -326,7 +326,7 @@ class EventStore:
 
     @property
     def root(self) -> Path:
-        return self._root if self._root is not None else config.paths().state / "events"
+        return self._root if self._root is not None else demo.where(config.paths().state / "events", "events")
 
     # ---- files
     def _months(self) -> list[Path]:

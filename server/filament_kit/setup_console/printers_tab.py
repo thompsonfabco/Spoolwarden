@@ -30,7 +30,7 @@ import time
 
 import anyio
 
-from .. import config, hostaddr, release, updates
+from .. import config, demo, hostaddr, release, updates
 from ..bridge import ams, camera, mapping, registry
 from ..bridge.connection import PrinterOffline, UnknownPrinter
 from ..bridge.klipper import discovery
@@ -159,6 +159,11 @@ def routes(page) -> list[tuple]:
 
     w = lambda fn: page.guard(fn, write=True)  # noqa: E731
     g = page.guard
+
+    def not_in_demo() -> None:
+        """The demo reaches no printer, no network and no download: add, probe, scan and the add-on pack stop here."""
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
     scan_lock = threading.Lock()
     last_scan = [-SCAN_GAP]
 
@@ -190,6 +195,7 @@ def routes(page) -> list[tuple]:
         return p
 
     async def klipper_add(request, body):
+        not_in_demo()
         page._manager("klipper")
         name, key, port = page._opt_text(body, "name"), api_key(body), port_of(body)
 
@@ -214,6 +220,7 @@ def routes(page) -> list[tuple]:
         return {"ok": True, "serial": pid, **({"note": note} if note else {})}
 
     async def klipper_probe(request, body):
+        not_in_demo()
         page._manager("klipper")
         key, port = api_key(body), port_of(body)
         host, _, _ = await anyio.to_thread.run_sync(checked_address, body, "host")
@@ -231,6 +238,7 @@ def routes(page) -> list[tuple]:
         return {"reachable": await anyio.to_thread.run_sync(run)}
 
     async def scan(request, body):
+        not_in_demo()
         page._manager("klipper")
         subnet = body.get("subnet")
 
@@ -256,6 +264,7 @@ def routes(page) -> list[tuple]:
         return r
 
     async def pack(request, body):
+        not_in_demo()
         page._manager("klipper")
         page._gap()
 
