@@ -162,6 +162,32 @@ class ApiPrintersTest {
         assertEquals("exists", e.code)
     }
 
+    @Test fun addPrinterByAddressPostsAddressCodeAndOptionalSerial() = runBlocking {
+        json("""{"printer":$printerJson}""")
+        api.addPrinter(null, "12345678", "Garage", "192.0.2.77")
+        val b = take().bodyJson()
+        assertEquals("192.0.2.77", b["address"]!!.jsonPrimitive.content)
+        assertEquals("12345678", b["access_code"]!!.jsonPrimitive.content)
+        assertEquals("Garage", b["name"]!!.jsonPrimitive.content)
+        assertFalse("a typed printer has no serial", b.containsKey("serial"))
+        json("""{"printer":$printerJson}""")
+        api.addPrinter("0948AB", "12345678", null, "192.0.2.77")
+        val c = take().bodyJson()
+        assertEquals("0948AB", c["serial"]!!.jsonPrimitive.content)
+        assertEquals("192.0.2.77", c["address"]!!.jsonPrimitive.content)
+        json("""{"printer":$printerJson}""")
+        api.addPrinter("0948AB", "12345678", null)
+        assertFalse("a found printer sends no address", take().bodyJson().containsKey("address"))
+    }
+
+    @Test fun addPrinterByAddressMapsARefusalWithItsField() {
+        json("""{"error":"bad_request","message":"That address is not valid","field":"address"}""", 400)
+        val e = failure { api.addPrinter(null, "1", null, "x y") }
+        assertEquals(400, e.status)
+        assertEquals("That address is not valid", e.message)
+        assertEquals("address", e.extra["field"]!!.jsonPrimitive.content)
+    }
+
     @Test fun addKlipperPrinterPostsFamilyHostPortAndName() = runBlocking {
         json("""{"printer":$printerJson}""")
         api.addKlipperPrinter("printer.example.com", 7125, "Shed")
@@ -185,6 +211,38 @@ class ApiPrintersTest {
         assertEquals(400, e.status)
         assertEquals("bad_request", e.code)
         assertEquals("port must be between 1 and 65535", e.message)
+    }
+
+    @Test fun addKlipperPrinterSendsTheApiKeyWhenGiven() = runBlocking {
+        json("""{"printer":$printerJson}""")
+        api.addKlipperPrinter("printer.example.com", 7125, null, "s3cret")
+        assertEquals("s3cret", take().bodyJson()["api_key"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun testKlipperPrinterPostsToTheTestRouteAndReadsReachable() = runBlocking {
+        json("""{"reachable":true}""")
+        assertTrue(api.testKlipperPrinter("printer.example.com", 7126, "s3cret"))
+        val r = take()
+        assertEquals("POST", r.method)
+        assertEquals("/api/printers/test", r.url.encodedPath)
+        val b = r.bodyJson()
+        assertEquals("klipper", b["family"]!!.jsonPrimitive.content)
+        assertEquals("printer.example.com", b["host"]!!.jsonPrimitive.content)
+        assertEquals(7126, b["port"]!!.jsonPrimitive.int)
+        assertEquals("s3cret", b["api_key"]!!.jsonPrimitive.content)
+        json("""{"reachable":false}""")
+        assertFalse(api.testKlipperPrinter("192.0.2.10", 7125, " "))
+        assertFalse(take().bodyJson().containsKey("api_key"))
+    }
+
+    @Test fun testKlipperPrinterMapsARefusalAndAnUnreadableAnswer() {
+        json("""{"error":"bad_request","message":"That address is not valid","field":"host"}""", 400)
+        val e = failure { api.testKlipperPrinter("bad host", 7125, null) }
+        assertEquals(400, e.status)
+        assertEquals("That address is not valid", e.message)
+        assertEquals("host", e.extra["field"]!!.jsonPrimitive.content)
+        json("""{"ok":true}""")
+        assertEquals(ApiError.BAD_RESPONSE, failure { api.testKlipperPrinter("192.0.2.10", 7125, null) }.code)
     }
 
     @Test fun printerDetailDecodesFullStatus()= runBlocking {

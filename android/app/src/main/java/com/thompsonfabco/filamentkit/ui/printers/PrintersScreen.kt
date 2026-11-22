@@ -107,6 +107,8 @@ fun PrintersScreen(
     modifier: Modifier = Modifier,
     /** A row whose Access Code was refused opens its printer with the Replace Access Code dialog open (05 9.1). */
     onReplaceCode: (id: String) -> Unit = onOpen,
+    /** A button of the map offer (05 step 4): Map slots opens the printer with the mapping question open, Later opens it. */
+    onMapOffer: (id: String, mapNow: Boolean) -> Unit = { id, _ -> onOpen(id) },
     printerDetail: (@Composable (id: String, embedded: Boolean, onClose: () -> Unit) -> Unit)? = null,
     onSummary: (String) -> Unit = {},
 ) {
@@ -230,7 +232,9 @@ fun PrintersScreen(
         }
     }
     state.guide?.let { GuideSheet(it, state.found, onPairAgain, viewModel) }
-    state.mapOffer?.let { MapOfferDialog(it, viewModel) { id -> viewModel.dismissMapOffer(); onOpen(id) } }
+    state.mapOffer?.let {
+        MapOfferDialog(it, viewModel) { id, mapNow -> viewModel.dismissMapOffer(); onMapOffer(id, mapNow) }
+    }
     state.dialog?.let { AddBambuDialog(it, onPairAgain, viewModel) }
     state.klipper?.let { AddKlipperDialog(it, onPairAgain, viewModel) }
     state.find?.let { FindSheetContent(it, onPairAgain, viewModel) }
@@ -568,6 +572,10 @@ private fun FoundRow(p: Printer, enabled: Boolean, reason: Boolean, onAdd: () ->
 private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: PrintersViewModel) {
     var code by remember(d.serial) { mutableStateOf("") }
     var name by remember(d.serial) { mutableStateOf(d.name) }
+    var address by remember(d.serial) { mutableStateOf(d.address) }
+    // a refusal that names a field is shown under that field, not as a notice
+    val field = (d.problem as? Problem.HubSaid)?.field?.takeIf { it in setOf("address", "access_code") }
+    val fieldText = d.problem?.takeIf { field != null }?.let { problemText(it) }
     val model = if (d.model == null) {
         stringResource(R.string.common_bambu_lab)
     } else {
@@ -578,7 +586,7 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
         onClose = { if (!d.busy) viewModel.cancelAdd() },
         confirm = SwDialogButton(
             label = stringResource(if (d.busy) R.string.printer_add_connecting else R.string.common_add_printer),
-            onClick = { viewModel.submitAdd(code, name) },
+            onClick = { viewModel.submitAdd(code, name, address) },
             kind = SwButtonKind.Main,
             enabled = code.isNotBlank(),
             busy = d.busy,
@@ -586,19 +594,27 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
         cancel = SwAction(stringResource(if (d.guided) R.string.common_back else R.string.common_cancel), viewModel::cancelAdd),
         cancelEnabled = !d.busy,
     ) {
-        val facts = stringResource(R.string.printer_add_facts, model, d.serial)
-        Text(withMono(facts, d.serial), style = MaterialTheme.typography.bodyMedium)
+        // the busy reason and the Hub's refusal come first: below the fields they would be off a phone's screen
+        if (d.busy) BusyReason(R.string.common_busy_wait)
+        if (field == null) d.problem?.let { ProblemNotice(it, onPairAgain) }
+        if (d.serial.isNotBlank()) {
+            val facts = stringResource(R.string.printer_add_facts, model, d.serial)
+            Text(withMono(facts, d.serial), style = MaterialTheme.typography.bodyMedium)
+        }
+        FormField(
+            address, { address = it }, stringResource(R.string.printers_field_address), enabled = !d.busy, mono = true,
+            placeholder = stringResource(R.string.printers_add_address_placeholder), keyboard = KeyboardType.Uri,
+            error = if (d.addressMissing) stringResource(R.string.common_error_address) else if (field == "address") fieldText else null,
+        )
         FormField(
             code, { code = it }, stringResource(R.string.common_field_access_code), secret = true, enabled = !d.busy,
             hint = stringResource(R.string.common_hint_access_code),
-            error = if (d.codeMissing) stringResource(R.string.common_error_access_code) else null,
+            error = if (d.codeMissing) stringResource(R.string.common_error_access_code) else if (field == "access_code") fieldText else null,
         )
         FormField(
             name, { name = it }, stringResource(R.string.common_field_name_optional), enabled = !d.busy,
             placeholder = stringResource(R.string.printer_add_name_placeholder),
         )
-        d.problem?.let { ProblemNotice(it, onPairAgain) }
-        if (d.busy) BusyReason(R.string.common_busy_wait)
     }
 }
 
@@ -611,6 +627,9 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
     var key by remember(d.host, d.port) { mutableStateOf("") }
     // once the printer is added only the key is left to set
     val fixed = d.busy || d.createdId != null
+    // a refusal that names a field is shown under that field, not as a notice
+    val field = (d.problem as? Problem.HubSaid)?.field?.takeIf { it in setOf("host", "address", "port", "api_key") }
+    val fieldText = d.problem?.takeIf { field != null }?.let { problemText(it) }
     SwDialog(
         title = stringResource(R.string.common_add_klipper_printer),
         onClose = { if (!d.busy) viewModel.cancelAddKlipper() },
@@ -626,24 +645,33 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
         ),
         cancelEnabled = !d.busy,
     ) {
+        if (d.busy) BusyReason(R.string.common_busy_wait)
         FormField(
             host, { host = it }, stringResource(R.string.common_address), enabled = !fixed, mono = true,
             placeholder = stringResource(R.string.printer_klipper_address_placeholder), keyboard = KeyboardType.Uri,
-            error = if (d.addressMissing) stringResource(R.string.common_error_address) else null,
+            error = if (d.addressMissing) stringResource(R.string.common_error_address) else if (field == "host" || field == "address") fieldText else null,
         )
         FormField(
             port, { port = it }, stringResource(R.string.printer_field_port), enabled = !fixed, mono = true,
             keyboard = KeyboardType.Number,
-            error = if (d.portInvalid) stringResource(R.string.common_error_port) else null,
+            error = if (d.portInvalid) stringResource(R.string.common_error_port) else if (field == "port") fieldText else null,
         )
         FormField(name, { name = it }, stringResource(R.string.common_field_name_optional), enabled = !fixed)
         FormField(
             key, { key = it }, stringResource(R.string.printers_key_optional), secret = true,
             enabled = !d.busy, hint = stringResource(R.string.printer_moonraker_key_hint),
-            error = d.keyProblem?.let { problemText(it) },
+            error = d.keyProblem?.let { problemText(it) } ?: if (field == "api_key") fieldText else null,
         )
-        d.problem?.let { ProblemNotice(it, onPairAgain) }
-        if (d.busy) BusyReason(R.string.common_busy_wait)
+        d.notReached?.let {
+            NoticeCard(
+                NoticeKind.Bad, PrinterTexts.klipperNotReached(it),
+                actions = listOf(
+                    SwAction(PrinterTexts.TRY_AGAIN) { viewModel.submitAddKlipper(host, port, name, key) },
+                    SwAction(PrinterTexts.ADD_ANYWAY) { viewModel.addKlipperAnyway(host, port, name, key) },
+                ),
+            )
+        }
+        if (field == null) d.problem?.let { ProblemNotice(it, onPairAgain) }
     }
 }
 
@@ -678,6 +706,7 @@ private fun GuideSheet(g: AddGuide, found: List<Printer>, onPairAgain: () -> Uni
                 g.searching -> BusyReason(R.string.add_picker_looking)
                 rows.isEmpty() -> Text(PrinterTexts.GUIDE_NONE, style = MaterialTheme.typography.bodyMedium, color = SpoolwardenTheme.colors.muted)
             }
+            SwButton(PrinterTexts.GUIDE_BAMBU_BY_ADDRESS, viewModel::addBambuByAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Plain)
             SwButton(PrinterTexts.GUIDE_BY_ADDRESS, viewModel::addByAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Plain)
         }
     }
@@ -707,14 +736,14 @@ private fun GuideRowView(row: GuideRow, viewModel: PrintersViewModel) {
     }
 }
 
-/** The last step: "Map its slots now?" Map slots opens the new printer, where the existing slot mapping is. */
+/** The last step: "Map its slots now?" Map slots opens the printer with the mapping question open; Later opens the printer. */
 @Composable
-private fun MapOfferDialog(offer: MapOffer, viewModel: PrintersViewModel, onMap: (String) -> Unit) {
+private fun MapOfferDialog(offer: MapOffer, viewModel: PrintersViewModel, onChoose: (id: String, mapNow: Boolean) -> Unit) {
     SwDialog(
         title = PrinterTexts.MAP_TITLE,
         onClose = viewModel::dismissMapOffer,
-        confirm = SwDialogButton(PrinterTexts.MAP_NOW, { onMap(offer.id) }, kind = SwButtonKind.Main),
-        cancel = SwAction(PrinterTexts.MAP_LATER, viewModel::dismissMapOffer),
+        confirm = SwDialogButton(PrinterTexts.MAP_NOW, { onChoose(offer.id, true) }, kind = SwButtonKind.Main),
+        cancel = SwAction(PrinterTexts.MAP_LATER) { onChoose(offer.id, false) },
     ) {
         Text(offer.name, style = MaterialTheme.typography.titleSmall)
         Text(PrinterTexts.MAP_BODY, style = MaterialTheme.typography.bodyMedium)

@@ -62,7 +62,10 @@ internal val AddProfileTitle: Int get() = R.string.catalog_title
 
 @Serializable data object PrintersGraph
 @Serializable data object PrintersRoute
-@Serializable data class PrinterRoute(val id: String)
+/** [askMap]: the printer opens with the Hub's "Map the slots of ...?" question open (the add-printer map offer). */
+@Serializable data class PrinterRoute(val id: String, val askMap: Boolean = false)
+/** Where a button of the add-printer map offer goes (05 9.12 step 4): Map slots asks first as 9.7, Later just opens. */
+fun mapOfferRoute(id: String, mapNow: Boolean) = PrinterRoute(id, askMap = mapNow)
 @Serializable data class PrinterMapRoute(val id: String)
 @Serializable data class PrinterSettingsRoute(val id: String, val replaceCode: Boolean = false)
 @Serializable data class PrinterPickRoute(val id: String, val slot: String)

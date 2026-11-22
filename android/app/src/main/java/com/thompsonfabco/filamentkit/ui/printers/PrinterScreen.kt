@@ -102,6 +102,13 @@ class CameraSource(
 )
 
 /**
+ * Whether the mapping question opens by itself now: asked for, not yet asked, and the printer can use the Hub's mapping.
+ * A printer that cannot keeps the panel's disabled reason (9.7) and no question.
+ */
+internal fun mapQuestionDue(askMap: Boolean, asked: Boolean, klipper: Boolean, mapEnabled: Boolean) =
+    askMap && !asked && !klipper && mapEnabled
+
+/**
  * One printer (05-android-app 9.4 to 9.10): the status and its controls, the camera, the slots, the slot mapping and
  * the filament used, in one scrolling column. Status is polled every 2 s only while this screen is visible, and the
  * camera is shown only while it is started, so the stream is closed when the app goes to the background. The
@@ -123,9 +130,22 @@ fun PrinterScreen(
     cameraShown: Boolean = true,
     onCameraShown: (Boolean) -> Unit = {},
     embedded: Boolean = false,
+    /** Opens with the Hub's mapping question open (the add-printer map offer), once, if the printer can map now. */
+    askMap: Boolean = false,
 ) {
     val state by viewModel.state.collectAsState()
     val toolsState by tools.state.collectAsState()
+    var mapAsked by rememberSaveable { mutableStateOf(false) }
+    val loadedPrinter = state.printer
+    val canMap = loadedPrinter != null && mapQuestionDue(
+        askMap, mapAsked, loadedPrinter.family == "klipper", toolsState.mapEnabled(SlotMapHelp.canStart(loadedPrinter.state, state.printing)),
+    )
+    LaunchedEffect(canMap) {
+        if (canMap) {
+            mapAsked = true
+            tools.askMap()
+        }
+    }
     LifecycleStartEffect(viewModel, tools) {
         viewModel.onHubOk = tools::clearHubNotice
         tools.onHubOk = viewModel::clearHubNotice

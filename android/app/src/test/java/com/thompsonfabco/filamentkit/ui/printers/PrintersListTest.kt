@@ -24,6 +24,8 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.After
@@ -69,11 +71,32 @@ class PrintersListTest {
             addError?.let { throw it }
             return addResult!!
         }
+        /** serial, address, name of each add by address */
+        val addedByAddress = mutableListOf<Triple<String?, String, String?>>()
+        override suspend fun addPrinterByAddress(serial: String?, accessCode: String, name: String?, address: String): Printer {
+            addedByAddress += Triple(serial, address, name)
+            addGate?.await()
+            addError?.let { throw it }
+            return addResult!!
+        }
         override suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer {
             added += Triple(host, port, name)
             addGate?.await()
             addError?.let { throw it }
             return addResult!!
+        }
+        val addKeys = mutableListOf<String?>()
+        override suspend fun addKlipperPrinter(host: String, port: Int, name: String?, apiKey: String?): Printer {
+            addKeys += apiKey
+            return addKlipperPrinter(host, port, name)
+        }
+        val tests = mutableListOf<Triple<String, Int, String?>>()
+        var testResult: Boolean = true
+        var testError: Exception? = null
+        override suspend fun testKlipperPrinter(host: String, port: Int, apiKey: String?): Boolean {
+            tests += Triple(host, port, apiKey)
+            testError?.let { throw it }
+            return testResult
         }
         override suspend fun scanKlipper(subnet: String?): List<KlipperFound> {
             scans += subnet
@@ -236,6 +259,78 @@ class PrintersListTest {
         assertEquals("B", vm.state.value.dialog!!.serial)
     }
 
+    // --- Add a Bambu Lab printer by its address ---
+
+    @Test fun aFoundPrintersAddressFillsTheFormAndAnUntouchedOneAddsBySerial() = runTest(dispatcher) {
+        backend.addResult = printer("B")
+        val vm = PrintersViewModel(backend)
+        vm.openAdd(printer("B", state = "not_configured", configured = false))
+        assertEquals("192.0.2.40", vm.state.value.dialog!!.address)
+        vm.submitAdd("12345678", "", "192.0.2.40")
+        runCurrent()
+        assertEquals(listOf("B"), backend.addedBambu)
+        assertTrue(backend.addedByAddress.isEmpty())
+    }
+
+    @Test fun anEditedAddressAddsByAddressWithTheSerialAlong() = runTest(dispatcher) {
+        backend.addResult = printer("B")
+        val vm = PrintersViewModel(backend)
+        vm.openAdd(printer("B", state = "not_configured", configured = false))
+        vm.submitAdd("12345678", "Garage", " 192.0.2.99 ")
+        runCurrent()
+        assertTrue(backend.addedBambu.isEmpty())
+        assertEquals(Triple("B" as String?, "192.0.2.99", "Garage" as String?), backend.addedByAddress.single())
+        assertNull(vm.state.value.dialog)
+    }
+
+    @Test fun aPrinterThatWasNotFoundIsAddedByTheAddressTyped() = runTest(dispatcher) {
+        backend.addResult = printer("B")
+        val vm = PrintersViewModel(backend)
+        vm.openGuide(); runCurrent()
+        vm.addBambuByAddress()
+        val d = vm.state.value.dialog!!
+        assertEquals("", d.serial)
+        assertTrue(d.guided)
+        assertNull(vm.state.value.guide)
+        vm.submitAdd("12345678", "", "192.0.2.77")
+        runCurrent()
+        assertEquals(Triple(null as String?, "192.0.2.77", null as String?), backend.addedByAddress.single())
+        assertEquals("Workshop X1", vm.state.value.added)
+        assertNull(vm.state.value.dialog)
+    }
+
+    @Test fun noAddressOrNoCodeAsksBeforeAnyRequest() = runTest(dispatcher) {
+        val vm = PrintersViewModel(backend)
+        vm.openAddByAddress()
+        vm.submitAdd("", "", "  ")
+        runCurrent()
+        val d = vm.state.value.dialog!!
+        assertTrue(d.addressMissing)
+        assertTrue(d.codeMissing)
+        assertFalse(d.busy)
+        assertTrue(backend.addedByAddress.isEmpty())
+    }
+
+    @Test fun aRefusalByAddressShowsTheHubsMessageAndField() = runTest(dispatcher) {
+        backend.addError = ApiError(400, "bad_request", "That address is not valid", JsonObject(mapOf("field" to JsonPrimitive("address"))))
+        val vm = PrintersViewModel(backend)
+        vm.openAddByAddress()
+        vm.submitAdd("12345678", "", "not an address")
+        runCurrent()
+        val d = vm.state.value.dialog!!
+        assertEquals(Problem.HubSaid("That address is not valid", "address"), d.problem)
+        assertFalse(d.busy)
+    }
+
+    @Test fun anExistingPrinterIsTheHubsOwnMessage() = runTest(dispatcher) {
+        backend.addError = ApiError(409, "exists", "This printer is already set up")
+        val vm = PrintersViewModel(backend)
+        vm.openAddByAddress()
+        vm.submitAdd("12345678", "", "192.0.2.77")
+        runCurrent()
+        assertEquals(Problem.HubSaid("This printer is already set up"), vm.state.value.dialog!!.problem)
+    }
+
     // --- Add a Klipper printer ---
 
     @Test fun theFormOpensWithAFoundAddressAndPort() {
@@ -246,30 +341,118 @@ class PrintersListTest {
         assertEquals(KlipperDialog(host = "", port = 7125), vm.state.value.klipper)
     }
 
-    @Test fun theApiKeyIsSetOnTheNewPrinterBecauseTheHubsAddRouteTakesNone() = runTest(dispatcher) {
+    @Test fun theApiKeyGoesOnTheTestAndOnTheAddAndIsNeverKept() = runTest(dispatcher) {
         backend.addResult = printer("K1", family = "klipper")
         val vm = PrintersViewModel(backend)
         vm.openAddKlipper()
         vm.submitAddKlipper("voron.example", "7125", "Voron", " s3cret ")
         runCurrent()
-        assertEquals(listOf("K1" to "s3cret"), backend.keys)
+        assertEquals(listOf(Triple("voron.example", 7125, "s3cret" as String?)), backend.tests)
+        assertEquals(listOf("s3cret" as String?), backend.addKeys)
+        assertTrue("the key is no longer a separate request", backend.keys.isEmpty())
         assertNull(vm.state.value.klipper)
         assertEquals("Workshop X1", vm.state.value.added)
         assertFalse("the key is never kept in state", vm.state.value.toString().contains("s3cret"))
     }
 
-    @Test fun noKeyTypedMeansNoKeyRequest() = runTest(dispatcher) {
+    @Test fun noKeyTypedMeansNoKeyOnTheTestOrTheAdd() = runTest(dispatcher) {
         backend.addResult = printer("K1", family = "klipper")
         val vm = PrintersViewModel(backend)
         vm.openAddKlipper()
         vm.submitAddKlipper("voron.example", "", "", "  ")
         runCurrent()
-        assertTrue(backend.keys.isEmpty())
+        assertEquals(listOf(Triple("voron.example", 7125, null as String?)), backend.tests)
+        assertEquals(listOf(null as String?), backend.addKeys)
         assertEquals(Triple("voron.example", 7125, null as String?), backend.added.single())
     }
 
-    @Test fun aRefusedKeyKeepsTheFormOpenWithTheReasonUnderTheKey() = runTest(dispatcher) {
+    @Test fun aTestThatFindsNothingSavesNothingAndOffersTryAgainAndAddAnyway() = runTest(dispatcher) {
         backend.addResult = printer("K1", family = "klipper")
+        backend.testResult = false
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.submitAddKlipper("voron.example", "7126", "", "")
+        runCurrent()
+        val d = vm.state.value.klipper!!
+        assertEquals("voron.example:7126", d.notReached)
+        assertFalse(d.busy)
+        assertTrue("nothing is added after a failed test", backend.added.isEmpty())
+        // Try again tests again; this time a printer answers and is added
+        backend.testResult = true
+        vm.submitAddKlipper("voron.example", "7126", "", "")
+        runCurrent()
+        assertEquals(2, backend.tests.size)
+        assertEquals(1, backend.added.size)
+        assertNull(vm.state.value.klipper)
+    }
+
+    @Test fun addAnywayIsTheAddWithoutTheTest() = runTest(dispatcher) {
+        backend.addResult = printer("K1", family = "klipper")
+        backend.testResult = false
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.submitAddKlipper("voron.example", "7125", "", "k")
+        runCurrent()
+        assertNotNull(vm.state.value.klipper!!.notReached)
+        vm.addKlipperAnyway("voron.example", "7125", "Shed", "k")
+        runCurrent()
+        assertEquals(1, backend.tests.size)
+        assertEquals(Triple("voron.example", 7125, "Shed" as String?), backend.added.single())
+        assertEquals(listOf("k" as String?), backend.addKeys)
+        assertNull(vm.state.value.klipper)
+        assertEquals("Workshop X1", vm.state.value.added)
+    }
+
+    @Test fun aRefusedTestStaysInTheFormWithTheHubsMessageAndField() = runTest(dispatcher) {
+        backend.testError = ApiError(
+            400, "bad_request", "That address is not valid", JsonObject(mapOf("field" to JsonPrimitive("host"))),
+        )
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.submitAddKlipper("bad host", "7125", "", "")
+        runCurrent()
+        val d = vm.state.value.klipper!!
+        assertEquals(Problem.HubSaid("That address is not valid", "host"), d.problem)
+        assertNull(d.notReached)
+        assertFalse(d.busy)
+        assertTrue(backend.added.isEmpty())
+    }
+
+    @Test fun aHubWithoutTheTestRouteAddsAsBefore() = runTest(dispatcher) {
+        backend.addResult = printer("K1", family = "klipper")
+        backend.testError = ApiError(404, "not_found", "no such route")
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.submitAddKlipper("voron.example", "7125", "", "")
+        runCurrent()
+        assertEquals(1, backend.added.size)
+        assertNull(vm.state.value.klipper)
+    }
+
+    @Test fun aHubWithoutTheTestRouteGetsTheKeyAfterTheAdd() = runTest(dispatcher) {
+        backend.addResult = printer("K1", family = "klipper")
+        backend.testError = ApiError(404, "not_found", "no such route")
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.submitAddKlipper("voron.example", "7125", "", "s3cret")
+        runCurrent()
+        assertEquals(listOf("K1" to "s3cret"), backend.keys)
+        assertNull(vm.state.value.klipper)
+    }
+
+    @Test fun addAnywayAlsoSetsTheKeyAfterTheAdd() = runTest(dispatcher) {
+        backend.addResult = printer("K1", family = "klipper")
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.addKlipperAnyway("voron.example", "7125", "", "s3cret")
+        runCurrent()
+        assertEquals(listOf("K1" to "s3cret"), backend.keys)
+        assertEquals(listOf("s3cret" as String?), backend.addKeys)
+    }
+
+    @Test fun aKeyTheHubRefusesAfterTheAddKeepsTheFormForTheKeyOnly() = runTest(dispatcher) {
+        backend.addResult = printer("K1", family = "klipper")
+        backend.testError = ApiError(404, "not_found", "no such route")
         backend.keyError = ApiError(400, "bad_request", "That API key is not valid")
         val vm = PrintersViewModel(backend)
         vm.openAddKlipper()
@@ -278,28 +461,23 @@ class PrintersListTest {
         val d = vm.state.value.klipper!!
         assertEquals("K1", d.createdId)
         assertEquals(Problem.HubSaid("That API key is not valid"), d.keyProblem)
-        assertFalse(d.busy)
-        // the retry sets the key only: the printer is not added twice
         backend.keyError = null
         vm.submitAddKlipper("voron.example", "7125", "", "good key")
         runCurrent()
         assertEquals(1, backend.added.size)
         assertEquals(listOf("K1" to "bad key", "K1" to "good key"), backend.keys)
         assertNull(vm.state.value.klipper)
-        assertEquals("Workshop X1", vm.state.value.added)
     }
 
-    @Test fun cancellingAfterTheAddReloadsTheList() = runTest(dispatcher) {
+    @Test fun aRefusedAddKeepsTheFormWithTheHubsMessage() = runTest(dispatcher) {
         backend.addResult = printer("K1", family = "klipper")
-        backend.keyError = ApiError(400, "bad_request", "no")
+        backend.addError = ApiError(400, "bad_request", "That API key is not valid", JsonObject(mapOf("field" to JsonPrimitive("api_key"))))
         val vm = PrintersViewModel(backend)
         vm.openAddKlipper()
-        vm.submitAddKlipper("voron.example", "7125", "", "k")
+        vm.submitAddKlipper("voron.example", "7125", "", "bad key")
         runCurrent()
-        backend.list = listOf(printer("K1", family = "klipper"))
-        vm.cancelAddKlipper(); runCurrent()
-        assertNull(vm.state.value.klipper)
-        assertEquals(listOf("K1"), vm.state.value.printers.map { it.id })
+        assertEquals(Problem.HubSaid("That API key is not valid", "api_key"), vm.state.value.klipper!!.problem)
+        assertFalse(vm.state.value.klipper!!.busy)
     }
 
     // --- the Hub problems (05-android-app 2.7, 3.4) ---
@@ -369,7 +547,7 @@ class PrintersListTest {
         assertNull("the notice goes with the good load", vm.state.value.klipper!!.problem)
     }
 
-    @Test fun cancelWhileTheKlipperAddRunsDoesNothingAndTheKeyStepStillRuns() = runTest(dispatcher) {
+    @Test fun cancelWhileTheKlipperAddRunsDoesNothingAndTheAddStillFinishes() = runTest(dispatcher) {
         backend.addResult = printer("K1", family = "klipper")
         backend.addGate = CompletableDeferred()
         val vm = PrintersViewModel(backend)
@@ -382,7 +560,7 @@ class PrintersListTest {
         backend.addGate!!.complete(Unit)
         runCurrent()
         assertNull(vm.state.value.klipper)
-        assertEquals(listOf("K1" to "k"), backend.keys)
+        assertEquals(listOf("k" as String?), backend.addKeys)
         assertEquals("Workshop X1", vm.state.value.added)
     }
 
@@ -503,7 +681,7 @@ class PrintersListTest {
         vm.submitAddKlipper("voron.example", "7125", "Voron", "key")
         runCurrent()
         assertEquals(MapOffer("K1", "Workshop X1"), vm.state.value.mapOffer)
-        assertEquals(listOf("K1" to "key"), backend.keys)
+        assertEquals(listOf("key" as String?), backend.addKeys)
         vm.dismissMapOffer()
         assertNull(vm.state.value.mapOffer)
     }

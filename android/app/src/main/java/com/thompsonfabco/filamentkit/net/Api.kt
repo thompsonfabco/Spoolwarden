@@ -351,10 +351,14 @@ class Api(
     suspend fun printers(): List<Printer> =
         call(request("api", "printers").get()).jsonObject["printers"]?.jsonArray.orEmpty().map { decode(it) }
 
-    /** Sets up (or re-keys) a printer. [accessCode] goes only into this request body; it is never kept or logged. */
-    suspend fun addPrinter(serial: String, accessCode: String, name: String?): Printer {
+    /**
+     * Sets up (or re-keys) a printer: a found one by its [serial], or one typed by its [address] (then [serial] is
+     * optional). [accessCode] goes only into this request body; it is never kept or logged.
+     */
+    suspend fun addPrinter(serial: String?, accessCode: String, name: String?, address: String? = null): Printer {
         val body = buildJsonObject {
-            put("serial", serial)
+            serial?.takeIf { it.isNotBlank() }?.let { put("serial", it) }
+            address?.takeIf { it.isNotBlank() }?.let { put("address", it) }
             put("access_code", accessCode)
             name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
         }
@@ -364,16 +368,34 @@ class Api(
     }
 
     /** Adds a Klipper printer by the address of its Moonraker; the API key is set afterwards, from the printer's own screen. */
-    suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer {
+    suspend fun addKlipperPrinter(host: String, port: Int, name: String?, apiKey: String? = null): Printer {
         val body = buildJsonObject {
             put("family", "klipper")
             put("host", host)
             put("port", port)
             name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
+            apiKey?.takeIf { it.isNotBlank() }?.let { put("api_key", it) }
         }
         val printer = call(request("api", "printers").post(body.toBody())).jsonObject["printer"]
             ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return the printer")
         return decode(printer)
+    }
+
+    /**
+     * Asks the Hub whether a Klipper printer answers at [host]:[port]; nothing is saved. A refusal (a bad address or
+     * port, an API key wanted or refused, the Klipper module off) is an [ApiError] with the Hub's own message. The
+     * [apiKey] goes only into this request body.
+     */
+    suspend fun testKlipperPrinter(host: String, port: Int, apiKey: String?): Boolean {
+        val body = buildJsonObject {
+            put("family", "klipper")
+            put("host", host)
+            put("port", port)
+            apiKey?.takeIf { it.isNotBlank() }?.let { put("api_key", it) }
+        }
+        val reachable = call(request("api", "printers", "test").post(body.toBody()), SLOW_READ_S).jsonObject["reachable"]
+        return (reachable as? JsonPrimitive)?.booleanOrNull
+            ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not say whether the printer answered")
     }
 
     /**

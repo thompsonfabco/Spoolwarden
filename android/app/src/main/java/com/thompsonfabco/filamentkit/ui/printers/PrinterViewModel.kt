@@ -55,6 +55,17 @@ interface PrinterBackend : ActivityBackend {
     suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer
     suspend fun scanKlipper(subnet: String?): List<KlipperFound>
 
+    /** Adds a Bambu Lab printer by its typed [address] ([serial] optional); a backend without it answers like an older Hub. */
+    suspend fun addPrinterByAddress(serial: String?, accessCode: String, name: String?, address: String): Printer =
+        throw ApiError(404, "not_found", PrinterTexts.CLEAR_UPDATE_HUB)
+
+    /** Adds a Klipper printer with its Moonraker [apiKey] in the same request; a backend without it adds without the key. */
+    suspend fun addKlipperPrinter(host: String, port: Int, name: String?, apiKey: String?): Printer =
+        addKlipperPrinter(host, port, name)
+
+    /** The Hub's test of a Klipper address, nothing saved: true when a printer answered. A backend without it says yes. */
+    suspend fun testKlipperPrinter(host: String, port: Int, apiKey: String?): Boolean = true
+
     /** Sets a Klipper printer's Moonraker API key (the Hub's add route takes none). */
     suspend fun setApiKey(id: String, key: String)
     suspend fun printer(id: String): PrinterDetail
@@ -81,6 +92,11 @@ class ApiPrinterBackend(private val current: () -> Api) : PrinterBackend, Printe
     override suspend fun printers() = api.printers()
     override suspend fun addPrinter(serial: String, accessCode: String, name: String?) = api.addPrinter(serial, accessCode, name)
     override suspend fun addKlipperPrinter(host: String, port: Int, name: String?) = api.addKlipperPrinter(host, port, name)
+    override suspend fun addPrinterByAddress(serial: String?, accessCode: String, name: String?, address: String) =
+        api.addPrinter(serial, accessCode, name, address)
+    override suspend fun addKlipperPrinter(host: String, port: Int, name: String?, apiKey: String?) =
+        api.addKlipperPrinter(host, port, name, apiKey)
+    override suspend fun testKlipperPrinter(host: String, port: Int, apiKey: String?) = api.testKlipperPrinter(host, port, apiKey)
     override suspend fun scanKlipper(subnet: String?) = api.scanKlipper(subnet)
     override suspend fun setApiKey(id: String, key: String) {
         api.editPrinter(id, buildJsonObject { put("api_key", key) })

@@ -111,6 +111,7 @@ import com.thompsonfabco.filamentkit.nav.PairNetworkAccessRoute
 import com.thompsonfabco.filamentkit.nav.PairRoute
 import com.thompsonfabco.filamentkit.nav.PairScanRoute
 import com.thompsonfabco.filamentkit.nav.PrinterMapRoute
+import com.thompsonfabco.filamentkit.nav.mapOfferRoute
 import com.thompsonfabco.filamentkit.nav.PrinterPickRoute
 import com.thompsonfabco.filamentkit.nav.PrinterRoute
 import com.thompsonfabco.filamentkit.nav.PrinterSettingsRoute
@@ -1256,6 +1257,7 @@ internal fun FilamentKitApp(
                                 nav.navigate(PrinterSettingsRoute(id, replaceCode = true))
                             },
                             onPairAgain = app.router::pairAgain,
+                            onMapOffer = { id, mapNow -> nav.navigate(mapOfferRoute(id, mapNow)) },
                             printerDetail = { id, embedded, _ ->
                                 PrinterEntry(
                                     a, ::currentApi, id,
@@ -1284,6 +1286,7 @@ internal fun FilamentKitApp(
                             onMapByLoading = { nav.navigate(PrinterMapRoute(id)) },
                             onPickSlot = { nav.navigate(PrinterPickRoute(id, it)) },
                             onOpenSpool = { sp -> sp.id?.let { nav.navigate(SpoolRoute(it)) } },
+                            askMap = e.toRoute<PrinterRoute>().askMap,
                         )
                     }
 
