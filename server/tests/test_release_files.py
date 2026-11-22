@@ -654,25 +654,24 @@ def test_station_upgrade_with_a_damaged_config_xml_uses_config_json(tmp_path):
     assert SAVED_NOTE in r.stderr and "needs the kit server's address" not in r.stderr, r.stderr
 
 
-@pytest.mark.skipif(not _bash(), reason="needs bash")
-def test_station_upgrade_reads_config_xml_with_the_hubs_python(tmp_path, monkeypatch):
-    """R582 M3: the address comes from the Hub's own Python ($VENV/bin/python), which reads the settings as the program
-    does: here config.json was changed after config.xml was saved (an older release after a rollback), so it wins."""
+def _hub_python(path):
+    """A stand-in for the Hub's venv python that keeps -I (isolated mode ignores PYTHONPATH, so the kit's folder is put on
+    sys.path from inside the -c code, as the venv's site-packages would): the program's own import path is tested."""
+    import filament_kit
+    src = Path(filament_kit.__file__).resolve().parent.parent.as_posix()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = ('#!/bin/sh\n[ "$1" = -I ] && [ "$2" = -c ] || exit 97\ncode="$3"; shift 3\n'
+            f'exec "{Path(sys.executable).as_posix()}" -I -c "import sys; sys.path.insert(0, \'{src}\')\n$code" "$@"\n')
+    path.write_text(body, encoding="utf-8", newline="\n")
+    path.chmod(0o755)
+
+
+def _run_station_install(tmp_path, etc):
+    """install.sh --mode station with $VENV pointing at a stand-in Hub python (-I kept); stderr."""
     import os
     import subprocess
-    import sys
-    import json
-    from filament_kit import config
-    etc = tmp_path / "etc"
-    etc.mkdir()
-    monkeypatch.setenv("FK_ETC", str(etc))
-    config.save({"station": {"allow": ["127.0.0.1", "old.example.lan"]}})
-    (etc / "config.json").write_text(json.dumps({"station": {"allow": ["127.0.0.1", "kit.example.lan"]}}), encoding="utf-8")
     venv = tmp_path / "venv"
-    (venv / "bin").mkdir(parents=True)
-    (venv / "bin" / "python").write_text(f'#!/bin/sh\n[ "$1" = -I ] && shift\nexec "{Path(sys.executable).as_posix()}" "$@"\n',
-                                         encoding="utf-8", newline="\n")
-    (venv / "bin" / "python").chmod(0o755)
+    _hub_python(venv / "bin" / "python")
     text = _read("install/install.sh")
     assert 'VENV="$OPT/venv"' in text
     vpath = subprocess.run([_bash(), "-c", "cygpath -u \"$1\" 2>/dev/null || printf %s \"$1\"", "_", str(venv)],
@@ -680,7 +679,40 @@ def test_station_upgrade_reads_config_xml_with_the_hubs_python(tmp_path, monkeyp
     (tmp_path / "i.sh").write_text(text.replace('VENV="$OPT/venv"', f'VENV="{vpath}"', 1), encoding="utf-8", newline="\n")
     r = subprocess.run([_bash(), "i.sh", "--mode", "station"], cwd=tmp_path, stdin=subprocess.DEVNULL,
                        capture_output=True, text=True, timeout=60, env={**os.environ, "FK_ETC": str(etc)})
-    assert SAVED_NOTE in r.stderr, r.stderr
+    return r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_station_upgrade_reads_config_xml_with_the_hubs_python(tmp_path, monkeypatch):
+    """R582 M3 / R600 LOW: the address comes from the Hub's own Python run with -I ($VENV/bin/python), which reads the
+    settings as the program does. config.xml holds kit.example.lan, and the config.json beside it (same hash) another
+    one: only the Hub-Python path gives kit.example.lan; the plain-JSON fallback would say json.example.lan."""
+    import hashlib
+    import json
+    from filament_kit.profiles import statexml
+    etc = tmp_path / "etc"
+    etc.mkdir()
+    monkeypatch.setenv("FK_ETC", str(etc))
+    js = json.dumps({"station": {"allow": ["127.0.0.1", "json.example.lan"]}}).encode("utf-8")
+    (etc / "config.json").write_bytes(js)
+    (etc / "config.xml").write_bytes(statexml.dumps("config", {"station": {"allow": ["127.0.0.1", "kit.example.lan"]},
+                                                              "json_sha256": hashlib.sha256(js).hexdigest()}))
+    err = _run_station_install(tmp_path, etc)
+    assert "saved server address kit.example.lan" in err, err
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_station_upgrade_takes_a_json_changed_after_a_rollback_with_the_hubs_python(tmp_path, monkeypatch):
+    """R582 M3: config.json was changed after config.xml was saved (an older release after a rollback): it wins."""
+    import json
+    from filament_kit import config
+    etc = tmp_path / "etc"
+    etc.mkdir()
+    monkeypatch.setenv("FK_ETC", str(etc))
+    config.save({"station": {"allow": ["127.0.0.1", "old.example.lan"]}})
+    (etc / "config.json").write_text(json.dumps({"station": {"allow": ["127.0.0.1", "kit.example.lan"]}}), encoding="utf-8")
+    err = _run_station_install(tmp_path, etc)
+    assert "saved server address kit.example.lan" in err, err
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
@@ -782,18 +814,6 @@ def test_wrapper_reader_revoke_as_root_and_list_as_user(tmp_path):
     (tmp_path / "b").mkdir()
     assert _wrapper_run(tmp_path / "a", "reader", "revoke", "r1") == "as-root reader revoke r1"
     assert _wrapper_run(tmp_path / "b", "reader", "tokens") == "as-user ./stubs/prog reader tokens"
-
-
-def _hub_python(path):
-    """A stand-in for the Hub's venv python that keeps -I (isolated mode ignores PYTHONPATH, so the kit's folder is put on
-    sys.path from inside the -c code, as the venv's site-packages would): the program's own import path is tested."""
-    import filament_kit
-    src = Path(filament_kit.__file__).resolve().parent.parent.as_posix()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    body = ('#!/bin/sh\n[ "$1" = -I ] && [ "$2" = -c ] || exit 97\ncode="$3"; shift 3\n'
-            f'exec "{Path(sys.executable).as_posix()}" -I -c "import sys; sys.path.insert(0, \'{src}\')\n$code" "$@"\n')
-    path.write_text(body, encoding="utf-8", newline="\n")
-    path.chmod(0o755)
 
 
 def _wrapper_half(tmp_path, *, marker=False, state=None, program=True, installing=False, state_xml=None, after=None):
