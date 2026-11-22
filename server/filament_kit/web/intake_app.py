@@ -473,10 +473,7 @@ class IntakeApp:
     STUB_TEXTS = {"labels_bad_size": "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25.",
                   "labels_bad_ids": "Give the spool numbers as ids=<n,n,...>, whole numbers of 1 or more.",
                   "web_answer_too_large": "The Hub's answer is too large to pass on.",
-                  "language_not_found": "There is no such language.",
-                  "activity_newest_number": "newest must be a whole number of 1 or more.",
-                  "activity_since_or_newest": "Give since or newest, not both.",
-                  "activity_limit_number": "limit must be a whole number."}
+                  "language_not_found": "There is no such language."}
 
     def _say(self, key: str, **values: str) -> str:
         """A text of the catalogue the pages load (pages.text), or its stub until the catalogue has the key."""

@@ -5140,6 +5140,9 @@
     <string name="kit_newest_minimum">newest must be 1 or more</string>
     <string name="kit_no_such_event">no such event</string>
     <string name="devices_station_allow_list_only">This Weigh Station answers only the addresses on its allow-list.</string>
+    <string name="activity_newest_number">newest must be a whole number of 1 or more.</string>
+    <string name="activity_since_or_newest">Give since or newest, not both.</string>
+    <string name="activity_limit_number">limit must be a whole number.</string>
     <string name="station_call_address_unknown">the Hub does not know the Weigh Station\'s address</string>
     <string name="station_call_cannot_prove">the Hub cannot prove itself to the Weigh Station: pair it again</string>
     <string name="station_call_too_slow">the Weigh Station answers too slowly</string>
