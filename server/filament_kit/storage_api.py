@@ -96,7 +96,8 @@ def notices(st: Storage) -> list[dict]:
 def view(st: Storage, taken) -> dict:
     """The answer of `GET api/storage`: the locations in fill order (`Storage.describe`), `order_by_material` (one entry
     for each material a location names, in the order the list first names them: the places it is tried at, as
-    `placement.order`), `everything_else` (the same for a material no location names) and `notices`."""
+    `placement.order`), `everything_else` (the same for a material no location names), `notices` and
+    `counts_unavailable` (false; true with `taken` None: Spoolman did not answer, so every count is null, not 0)."""
     seen: dict[str, str] = {}
     for x in st.locations:
         if x.fill == MATERIALS:
@@ -105,7 +106,7 @@ def view(st: Storage, taken) -> dict:
                     seen.setdefault(m.strip().casefold(), m.strip())
     return {"locations": st.describe(taken),
             "order_by_material": [{"material": m, "locations": placement.order(st, m)} for m in seen.values()],
-            "everything_else": placement.order(st), "notices": notices(st)}
+            "everything_else": placement.order(st), "notices": notices(st), "counts_unavailable": taken is None}
 
 
 def _apply_plan(st: Storage, plan: dict) -> Storage:
@@ -136,8 +137,17 @@ def _base() -> Storage:
     return _apply_plan(st, plan) if plan is not None else st
 
 
+def taken_or_unknown(sm):
+    """The spools per location, or None when Spoolman does not answer: the list is the Hub's own data and is still
+    shown, the counts are unknown (a Spoolman that is down is not an empty one)."""
+    try:
+        return inventory._used_locations(sm)
+    except SpoolmanError:
+        return None
+
+
 def current_view(sm, st: Storage | None = None) -> dict:
-    return view(st or _base(), inventory._used_locations(sm))
+    return view(st or _base(), taken_or_unknown(sm))
 
 
 # ---------------------------------------------------------------- reading a submitted list

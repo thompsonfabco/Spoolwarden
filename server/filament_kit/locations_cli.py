@@ -40,6 +40,8 @@ def text(key: str, **kw) -> str:
 
 def how_full(row: dict, short: bool = False) -> str:
     """`18 of 20` (a limit), `4 spools`, `9 of 12 containers used`; the table shortens the last to `9 of 12`."""
+    if row["used"] is None:                  # Spoolman did not answer: unknown, not 0
+        return text("common_unknown")
     if row["type"] == CONTAINERS:
         return f"{row['used']} of {row['count']}" if short else text("storage_used_containers", used=row["used"],
                                                                       count=row["count"])
@@ -90,6 +92,8 @@ def notes(view: dict) -> None:
     """The `Note:` lines of a list (the default overflow without a limit; the converted notice)."""
     for n in view.get("notices", []):
         output.note(n["text"])
+    if view.get("counts_unavailable"):
+        output.note(text("common_spoolman_unreachable"))
 
 
 def error_text(message: str) -> tuple[str, str | None]:
