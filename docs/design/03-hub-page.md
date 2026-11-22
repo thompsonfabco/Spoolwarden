@@ -1611,7 +1611,6 @@ half.
 | Did not come back | error | "The board did not come back on USB after its restart. Unplug it, plug it in again, and run this again." |
 | No answer before the settings | error | "The board did not answer before the settings. Run this again." |
 | Settings refused | error | "The board refused the settings: <reason>. Run this again." |
-| No report | error | "The board did not report back. Run this again." |
 | Wi-Fi failed | error | "The Tag Reader could not join '<Wi-Fi name>'. Check the Wi-Fi name and password (2.4 GHz networks only)." |
 | Hub refused it | error | "The Tag Reader reached the Hub, but the Hub refused it. Run this again." |
 | Hub unreachable | error | "The Tag Reader joined the Wi-Fi but could not reach the Hub at <address>. Check that the Tag Reader's Wi-Fi is the Hub's home network." |

@@ -902,7 +902,6 @@
     <!-- 1=reason -->
     <string name="flash_error_refused">The board refused the settings: %1$s. Run this again.</string>
     <string name="flash_error_late">The reader did not answer in time. Run this again.</string>
-    <string name="flash_error_report">The board did not report back. Run this again.</string>
     <!-- 1=wifi -->
     <string name="flash_error_wifi">The Tag Reader could not join \'%1$s\'. Check the Wi-Fi name and password (2.4 GHz networks only).</string>
     <!-- 1=reason -->
@@ -1628,7 +1627,6 @@
     <string name="settings_network_hosts_hint">Separate them with spaces. The Hub\'s own names and addresses always work, and so does a local name from your network (one word, .local, .lan, .home.arpa or your network\'s own domain) that points at this Hub. Add any other name here.</string>
     <string name="settings_network_hosts_placeholder">hub.example</string>
     <string name="settings_network_public">Public address</string>
-    <string name="settings_network_public_hidden">Set (hidden). Type a new address to replace it.</string>
     <string name="settings_network_public_hint">The https address of the web app and Claude\'s connector.</string>
     <string name="settings_network_public_hint_off">Used when Web access is on.</string>
     <string name="settings_network_public_placeholder">https://hub.example/filament</string>

@@ -121,7 +121,7 @@ async function askHello(s, ms, done = () => true) {
 
 // The settings to the freshly written Tag Reader, then its own report of its first start. Mirrors reader_flash.setup on the
 // server: the same steps. `step(name)` says which of the page's steps starts (restarting, sending, report). Resolves with
-// { ok: true } or { ok: false, code, reason }: `code` is the page's text (back, answer, refused, late, report, wifi, hub_refused,
+// { ok: true } or { ok: false, code, reason }: `code` is the page's text (back, answer, refused, late, wifi, hub_refused,
 // hub_unreachable); the words are the catalogue's, said by the caller.
 async function provisionOverSerial(info, settings, step) {
   step("restarting");
@@ -163,7 +163,6 @@ async function provisionOverSerial(info, settings, step) {
   if (h.wifi !== "ok") return { ok: false, code: "wifi" };
   if (h.server === "unauth") return { ok: false, code: "hub_refused" };
   if (h.server === "fail") return { ok: false, code: "hub_unreachable" };
-  if (h.server !== "ok") return { ok: false, code: "report" };
   return { ok: true };
 }
 
@@ -208,7 +207,7 @@ const stopCheck = () => { if (flashRun && flashRun.stop) throw new FlashStopped(
 
 // the words of a failure of provisionOverSerial
 function provisionText(r, ssid, base) {
-  const key = { back: "flash_error_back", answer: "flash_error_answer", refused: "flash_error_refused", report: "flash_error_report", late: "flash_error_late",
+  const key = { back: "flash_error_back", answer: "flash_error_answer", refused: "flash_error_refused", late: "flash_error_late",
     wifi: "flash_error_wifi", hub_refused: "flash_error_hub_refused", hub_unreachable: "flash_error_hub_unreachable" }[r.code];
   return SW.t(key, { reason: r.reason, wifi: ssid, address: base });
 }
