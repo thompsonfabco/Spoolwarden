@@ -81,6 +81,12 @@ const spSTUB = {
   spools_print_label: "Print a label",
   spools_print_labels: "Print labels",
   spools_print_label_name: "Print a label: {name}",
+  spools_select_name: "Select {name}",
+  spools_select_all: "Select all shown",
+  spools_selection: "Selected spools",
+  spools_selected: "{count} selected",
+  spools_clear_selection: "Clear selection",
+  spools_selection_cleared: "Selection cleared.",
 };
 const tx = (key, vars) => {
   if (window.SW_TEXT && window.SW_TEXT[key] != null) return SW.t(key, vars);
@@ -159,16 +165,19 @@ const spPrintAt = (ids) => window.open(`/setup/api/labels?${new URLSearchParams(
 // ----- what the section knows -----
 const st = { q: "", filter: "", rows: [], total: 0, more: false, url: null, ready: false };
 const wanted = new Set();            // the rows that are open: kept across a new read
+const chosen = new Set();            // the spools selected for Print labels (02 6.1): kept by Show more, dropped by a new read
+let lastPick = null;                 // the spool whose checkbox was pressed last: Shift+click selects from it
 const views = new Map();             // spool number -> {v, update(v), ...}: the parts of a drawn row that a change patches
 let box = null;                      // the section's region
-let parts = null;                    // {head, list, foot}
+let parts = null;                    // {head, sel, list, foot}
 let seq = 0;                         // the newest read: an older answer that comes later is dropped
 let storage = null;                  // the storage list for Move, read once per section drawing
 
 const queryOf = (offset) => `spools?${new URLSearchParams({ ...(st.q ? { q: st.q } : {}), ...(st.filter ? { filter: st.filter } : {}), offset, limit: PAGE })}`;
 
 // ----- the list -----
-const spCOLUMNS = [["expand", "common_details", 1, true], ["visual", "spools_col_colour", 1, true], ["number", "spools_col_number", 1], ["title", "spools_col_spool", 1],
+const spPICK = "select";             // the column of the checkboxes (its name is the collection's reserved one, 02 6.1)
+const spCOLUMNS = [[spPICK, "spools_select_all", 1], ["expand", "common_details", 1, true], ["visual", "spools_col_colour", 1, true], ["number", "spools_col_number", 1], ["title", "spools_col_spool", 1],
   ["material", "common_field_material", 2], ["left", "spools_col_left", 1], ["where", "spools_col_where", 3], ["state", "common_field_state", 1]];
 const spCell = (col, prio, ...kids) => spX("div", { class: "coll__cell", role: "cell", "data-col": col, "data-prio": prio }, ...kids);
 const key = (k) => spE("span", "coll__key", { "aria-hidden": "true" }, tx(k));
@@ -196,6 +205,9 @@ function item(v) {
   const id = `spool-detail-${v.id}`, open = wanted.has(v.id) && SW.profile().detail !== "sheet";
   const view = { v };
   views.set(v.id, view);
+  const pick = SW.check({ label: tx("spools_select_name", { name: spName(v) }), sr: true, checked: chosen.has(v.id) });
+  pick._control.classList.add("spools-pick");
+  pick._control.dataset.id = String(v.id);
   const expand = spX("button", { class: "btn btn--ghost btn--icon coll__expand", type: "button", "aria-expanded": String(open), "aria-controls": id, "aria-label": tx("detail_for", { name: spName(v) }) },
     SW.icon("chevron"), spE("span", "spools-expand__label", tx("common_details")));
   const title = spX("div", { class: "coll__cell", role: "cell", "data-col": "title", "data-prio": 1 }, spX("a", { class: "coll__title", href: spaddressOf(v.id) }));
@@ -205,6 +217,7 @@ function item(v) {
     view.v = v = nv;
     const k = cellsOf(nv);
     title.querySelector("a").textContent = k.title[0];
+    pick.querySelector(".check__label").textContent = tx("spools_select_name", { name: spName(nv) });
     for (const col of ["visual", "number", "material", "left", "where", "state"]) spsetCell(c[col], k[col]);
     it.dataset.state = nv.state === "empty" ? "off" : "";
     if (!it.dataset.state) delete it.dataset.state;
@@ -212,22 +225,38 @@ function item(v) {
   };
   if (open) view.events();
   const it = spX("div", { class: "coll__item", role: "rowgroup", "data-id": String(v.id) },
-    spE("div", "coll__row", { role: "row" }, spCell("expand", 1, expand), c.visual, c.number, title, c.material, c.left, c.where, c.state),
-    spE("div", "coll__row coll__row--detail", { role: "row", hidden: !open }, spX("div", { class: "coll__cell", role: "cell", "aria-colspan": 8 }, region)));
+    spE("div", "coll__row", { role: "row" }, spCell(spPICK, 1, pick), spCell("expand", 1, expand), c.visual, c.number, title, c.material, c.left, c.where, c.state),
+    spE("div", "coll__row coll__row--detail", { role: "row", hidden: !open }, spX("div", { class: "coll__cell", role: "cell", "aria-colspan": spCOLUMNS.length }, region)));
   const k = cellsOf(v);
   title.querySelector("a").textContent = k.title[0];
   for (const col of ["visual", "number", "material", "left", "where", "state"]) spsetCell(c[col], k[col]);
   if (v.state === "empty") it.dataset.state = "off";
+  if (chosen.has(v.id)) it.dataset.selected = "true";
   return it;
 }
 
 function table(rows) {
+  const all = SW.check({ label: tx("spools_select_all"), sr: true });
+  all._control.classList.add("spools-pickall");
   const head = spE("div", "coll__head", { role: "rowgroup" }, spE("div", "coll__row", { role: "row" }, spCOLUMNS.map(([col, k, prio, hidden]) => spX("div",
-    { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": prio }, hidden ? spE("span", "sr", tx(k)) : tx(k)))));
+    { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": prio }, col === spPICK ? all : hidden ? spE("span", "sr", tx(k)) : tx(k)))));
   views.clear();
   const el = spX("div", { class: "coll coll--spools", role: "table", "aria-label": tx("nav_spools") }, head, rows.map((v) => item(v)));
   SW.collection(el, { name: SECTION, total: st.total, first: 0, emptyPane: tx("spools_pane_empty") });
   el.addEventListener("click", (e) => {
+    const box = e.target.closest(".spools-pick"), allBox = e.target.closest(".spools-pickall");
+    if (box || allBox) {
+      const ids = st.rows.map((v) => v.id);
+      if (allBox) for (const id of ids) (allBox.checked ? chosen.add(id) : chosen.delete(id));
+      else {
+        const id = Number(box.dataset.id), a = ids.indexOf(lastPick), b = ids.indexOf(id);
+        const span = e.shiftKey && a >= 0 ? ids.slice(Math.min(a, b), Math.max(a, b) + 1) : [id];
+        for (const x of span) (box.checked ? chosen.add(x) : chosen.delete(x));
+        lastPick = id;
+      }
+      spSync(true);
+      return;
+    }
     const link = e.target.closest("a.coll__title"), btn = e.target.closest(".coll__expand") || (link && link.closest(".coll__item").querySelector(".coll__expand"));
     if (!btn) return;
     if (link) { e.preventDefault(); btn.click(); return; }
@@ -253,8 +282,39 @@ function spHeader() {
     SW.menu(more, [{ heading: tx("spools_download_csv") }, ...csv], { label: tx("spools_more_actions") });
     meta.append(more);
   }
-  if (st.rows.length) meta.append(spX("button", { class: "btn btn--ghost spools-print", type: "button", on: { click: () => spPrintAt(st.rows.map((v) => v.id)) } }, tx("spools_print_labels")));
   return meta;
+}
+// ----- the selection (02 6.1): the checkboxes, the bar with "<n> selected", Print labels and Clear selection; Shift+click selects a range, Escape clears -----
+function spSync(say) {
+  const el = parts.list.querySelector(".coll--spools");
+  if (el) {
+    for (const b of el.querySelectorAll(".spools-pick")) {
+      const on = chosen.has(Number(b.dataset.id));
+      b.checked = on;
+      const it = b.closest(".coll__item");
+      if (on) it.dataset.selected = "true"; else delete it.dataset.selected;
+    }
+    const some = st.rows.some((v) => chosen.has(v.id)), every = st.rows.length > 0 && st.rows.every((v) => chosen.has(v.id)), all = el.querySelector(".spools-pickall");
+    all.checked = every;
+    all.indeterminate = some && !every;
+  }
+  parts.sel.hidden = !chosen.size;
+  parts.sel.querySelector(".spools-selcount").textContent = tx("spools_selected", { count: chosen.size });
+  if (say && chosen.size) SW.announce(tx("spools_selected", { count: chosen.size }));
+}
+function spClear(focus) {
+  chosen.clear();
+  lastPick = null;
+  spSync();
+  SW.announce(tx("spools_selection_cleared"));
+  const all = focus && parts.list.querySelector(".spools-pickall");
+  if (all) all.focus();
+}
+function spSelectionBar() {
+  const bar = spE("div", "spools-selbar", { role: "group", "aria-label": tx("spools_selection"), hidden: true }, spE("span", "spools-selcount"),
+    spX("button", { class: "btn spools-print", type: "button", on: { click: () => { const ids = st.rows.filter((v) => chosen.has(v.id) && Number.isFinite(v.id)).map((v) => v.id); if (ids.length) spPrintAt(ids); } } }, tx("spools_print_labels")),
+    spX("button", { class: "btn btn--ghost spools-clearsel", type: "button", on: { click: () => spClear(true) } }, tx("spools_clear_selection")));
+  return bar;
 }
 const CHIPS = [["sealed", "common_sealed"], ["opened", "spool_state_opened"], ["loaded", "spools_chip_loaded"], ["low", "spools_chip_low"]];
 function spToolbar() {
@@ -274,9 +334,12 @@ function paint() {
       ? SW.empty({ icon: "spool", title: tx("spools_empty_filtered"), actions: [SW.btn(tx("spools_clear"), { run: () => { st.q = ""; st.filter = ""; box.replaceWith(region()); } })] })
       : SW.empty({ icon: "spool", title: tx("spools_empty_title"), text: tx("spools_empty_text") }));
     parts.foot.replaceChildren();
+    chosen.clear();
+    spSync();
     return;
   }
   parts.list.replaceChildren(table(st.rows));
+  spSync();
   paintFoot();
 }
 function paintFoot() {
@@ -293,6 +356,8 @@ async function reload() {
     if (mine !== seq) return;
     Object.assign(st, { rows: r.spools, total: r.total, more: r.has_more, url: r.spoolman_url || null, ready: true });
     parts.list.removeAttribute("aria-busy");
+    chosen.clear();
+    lastPick = null;
     paint();
     SW.announce(tx("spools_count", { count: st.total }));
   } catch (e) {
@@ -313,6 +378,7 @@ async function more(button) {
     const tableEl = parts.list.querySelector(".coll--spools");
     if (tableEl) for (const v of r.spools) if (!known.has(v.id)) tableEl.append(item(v));
     tableEl && SW.collection(tableEl, { name: SECTION, total: st.total, first: 0 });
+    spSync();
     parts.head.replaceChildren(spHeader());
     paintFoot();
     const first = tableEl && tableEl.querySelector(`.coll__item[data-id="${r.spools[0] && r.spools[0].id}"] .coll__title`);
@@ -450,10 +516,10 @@ function detail(v0, view, id) {
     spE("div", "detail__body",
       spE("div", "detail__section", spE("h3", "detail__heading", tx("spools_fact_state")), facts),
       hubHasHistory("activity") ? spE("div", "detail__section", spE("h3", "detail__heading", tx("spools_events_title")), eventsBox) : null,
-      spE("div", "detail__section", spE("div", "spools-labelrow", printGo)),
       spE("div", "detail__section",
         spE("h3", "detail__heading", tx("spools_group_change")),
         actions(weight, weightGo, weightBox), actions(move, moveGo, moveBox), spE("div", "spools-act", spE("div", "spools-act__row", linkGo), linkBox),
+        spE("div", "spools-act", spE("div", "spools-act__row", printGo)),
         spE("div", "detail__remove", spE("h3", "detail__heading", tx("spools_group_empty")), spE("div", "spools-act", spE("div", "spools-act__row", emptyGo), emptyBox)))));
   region.addEventListener("sw:detail-close", () => {
     wanted.delete(view.v.id);
@@ -465,8 +531,14 @@ function detail(v0, view, id) {
 // ----- the section -----
 function region() {
   box = spE("div", "spools");
-  parts = { head: spE("div", "spools-headbox"), list: spE("div", "spools-listbox"), foot: spE("div", "spools-foot") };
-  box.append(parts.head, spToolbar(), parts.list, parts.foot);
+  chosen.clear();
+  lastPick = null;
+  parts = { head: spE("div", "spools-headbox"), sel: spSelectionBar(), list: spE("div", "spools-listbox"), foot: spE("div", "spools-foot") };
+  box.append(parts.head, spToolbar(), parts.sel, parts.list, parts.foot);
+  box.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || e.defaultPrevented || !chosen.size || document.querySelector("dialog[open]") || e.target.closest("input:not([type=checkbox]), select, textarea")) return;
+    spClear(false);
+  });
   const L = SW.loading(parts.list, { thing: tx("nav_spools"), items: 3, onTry: () => { start(); }, title: tx("spools_error") });
   const mine = ++seq;
   start();
