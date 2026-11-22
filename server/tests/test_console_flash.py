@@ -15,6 +15,7 @@ import pytest
 from test_setup_page import AWAY, BASE, CODE, H, HOME, Helper, client, env, make, post  # noqa: F401
 
 from filament_kit import cli, config, reader_flash as rf, reader_setup as rs, reader_tokens, setup_helper
+from filament_kit.profiles import statexml
 
 STATIC = Path(cli.__file__).parent / "setup_static"
 ROOT = Path(cli.__file__).resolve().parents[2]
@@ -116,7 +117,7 @@ def test_the_server_way_leaves_the_answers_root_only_and_starts_the_job(app, mon
     assert r.status_code == 200, r.text
     assert r.json()["name"] == "reader_setup" and started == ["reader_setup"]
     p = rf.pending_path()
-    assert json.loads(p.read_text()) == {**ANSWERS, "port": "/dev/ttyACM0", "name": "printer-station"}
+    assert statexml.loads(p.read_bytes(), "reader-setup") == {**ANSWERS, "port": "/dev/ttyACM0", "name": "printer-station"}
     if os.name == "posix":
         assert p.stat().st_mode & 0o777 == 0o600
     assert "wifi-secret-1" not in r.text
@@ -152,7 +153,7 @@ def test_no_board_or_several_without_a_pick_are_refused(app, monkeypatch):
     monkeypatch.setattr(rs, "find_readers", lambda: [BOARD, rs.Reader("/dev/ttyACM1", None, "x")])
     assert "several" in post(client(app), "flash/server", ANSWERS).json()["error"]
     assert post(client(app), "flash/server", {**ANSWERS, "port": "/dev/ttyACM1"}).status_code == 200
-    assert json.loads(rf.pending_path().read_text())["port"] == "/dev/ttyACM1"
+    assert statexml.loads(rf.pending_path().read_bytes(), "reader-setup")["port"] == "/dev/ttyACM1"
 
 
 def test_the_job_is_not_started_by_name_alone(app):
