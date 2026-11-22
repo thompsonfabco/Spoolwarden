@@ -2045,7 +2045,10 @@ return { title: text($("dialog[open] .sheet__title")), steps: [...dlg.querySelec
 OFFLINE = """
 const real = window.fetch;
 let down = false;
-window.fetch = (u, o) => (down && String(u).includes("/api/") ? Promise.reject(new TypeError("Failed to fetch")) : real(u, o));
+// a Hub that stopped answering also drops the answers still on their way (the page's own polls were sent before): one of
+// them arriving now would be "the Hub answered" and take the banner away again
+const gone = () => Promise.reject(new TypeError("Failed to fetch"));
+window.fetch = (u, o) => (String(u).includes("/api/") ? (down ? gone() : real(u, o).then((r) => (down ? gone() : r))) : real(u, o));
 const chip = () => $(".topbar__offline"), banner = () => $(".offline-banner");
 const seen = { before: !!banner() && !chip().hidden };
 const search = () => api("vendors").catch(() => {});   // any request of the page: the app's own helper
