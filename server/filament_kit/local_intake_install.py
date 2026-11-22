@@ -143,8 +143,7 @@ def _newer_json(f: Path, have: dict) -> dict | None:
         if d == have:
             _note_hash(f, raw)
             return None
-        statexml.write(f, _to_xml(d), 0o644, state_owned=False, old_format=_old_json)
-        _note_hash(f, raw)
+        statexml.write(f, _to_xml(d), 0o644, state_owned=False, old_format=_old_json)      # XML, JSON again, its hash
     except (OSError, statexml.StateXmlError, TypeError, ValueError):
         pass                                # no write permission (the page's user) or an odd value: the data still wins
     return d if isinstance(d, dict) and d != have else None
