@@ -4,6 +4,7 @@ for the shared helper to take a top-level list and a root-only store (see the st
 import json
 import logging
 import os
+import pathlib
 import stat
 import sys
 import time
@@ -73,6 +74,46 @@ def test_damaged_answers_never_crash_log_the_reason_not_the_password_and_are_del
         assert rf.take_pending() is None
     assert "reader-setup.xml could not be read" in caplog.text and "12345678" not in caplog.text
     assert not rf.pending_path().exists()
+
+
+def _left_over():
+    return sorted(x.name for x in rf.pending_path().parent.glob("reader-setup*"))
+
+
+def _litter():
+    etc = rf.pending_path().parent
+    for n in ("reader-setup.json.sha256", "reader-setup.xml.ab12.tmp", "reader-setup.json.cd34.tmp", "reader-setup.xml.moving"):
+        (etc / n).write_text("wifi", encoding="utf-8")
+
+
+def test_dropping_removes_every_form_the_hash_and_the_temp_files():
+    rf.write_pending(ANSWERS)
+    _litter()
+    assert len(_left_over()) == 6
+    rf.drop_pending()
+    assert _left_over() == []
+    rf.drop_pending()                                                  # nothing left is not an error
+
+
+def test_a_normal_take_leaves_no_json_hash_or_temp_file():
+    rf.write_pending(ANSWERS)
+    _litter()
+    assert rf.take_pending() == ANSWERS
+    assert _left_over() == []
+
+
+def test_the_answers_are_deleted_in_one_place_only():
+    """No direct unlink of reader-setup.xml / .json in the server's sources: reader_flash.drop_pending is the one."""
+    import re
+    src = pathlib.Path(rf.__file__).resolve().parent
+    bad = []
+    for f in src.rglob("*.py"):
+        text = f.read_text(encoding="utf-8")
+        for m in re.finditer(r"(pending_path\(\)|OLD_PENDING|reader-setup\.(?:xml|json))[^\n]*\.unlink\(|\.unlink\([^\n]*(?:OLD_PENDING|reader-setup)", text):
+            bad.append(f.name + ": " + m.group(0))
+    assert bad == []
+    text = pathlib.Path(rf.__file__).read_text(encoding="utf-8")
+    assert "path.unlink(" not in text and "old.unlink(" not in text
 
 
 def test_answers_of_another_root_element_are_not_taken():

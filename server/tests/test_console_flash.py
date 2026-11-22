@@ -129,6 +129,8 @@ def test_a_job_that_does_not_start_leaves_no_answers(app, monkeypatch):
     monkeypatch.setattr(setup_helper, "_start_job", refuse)
     assert post(client(app), "flash/server", ANSWERS).status_code == 500
     assert not rf.pending_path().exists()
+    assert sorted(x.name for x in rf.pending_path().parent.glob("reader-setup*")) == []       # no JSON, hash or temp either
+    assert "wifi-secret-1" not in "".join(x.read_text(errors="replace") for x in rf.pending_path().parent.iterdir() if x.is_file())
 
 
 @pytest.mark.parametrize("body, status, words", [

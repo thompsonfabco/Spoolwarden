@@ -98,11 +98,20 @@ def pending_path() -> Path:
     return config.paths().etc / PENDING
 
 
+def drop_pending() -> None:
+    """Delete the answers the page left, in every form: the one place that does. Both forms, the hash beside the JSON,
+    and any temp, moving or set-aside file of them (the Wi-Fi password is in each). No file is not an error."""
+    etc = pending_path().parent
+    for name in (PENDING, OLD_PENDING, OLD_PENDING + ".sha256"):
+        (etc / name).unlink(missing_ok=True)
+    for p in etc.glob(Path(PENDING).stem + ".*"):
+        p.unlink(missing_ok=True)
+
+
 def write_pending(answers: dict) -> None:
     import os
     path = pending_path()
-    path.unlink(missing_ok=True)
-    (path.parent / OLD_PENDING).unlink(missing_ok=True)
+    drop_pending()
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
     with os.fdopen(fd, "wb") as fh:
         fh.write(statexml.dumps(statexml.tag_of(path), answers))
@@ -136,8 +145,7 @@ def take_pending() -> dict | None:
     except OSError:
         data, age = None, 0
     finally:
-        path.unlink(missing_ok=True)
-        old.unlink(missing_ok=True)
+        drop_pending()
     return data if isinstance(data, dict) and age <= PENDING_MAX_AGE else None
 
 
