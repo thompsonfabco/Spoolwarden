@@ -234,6 +234,61 @@ def test_station_panel_reads_the_state_and_says_nothing_when_it_is_silent(monkey
     assert sc.station_panel("http://h") is None and sc.station_panel(None) is None
 
 
+# ---- the answers, the version, the caps (R88 03:10) ----
+
+def test_unasked_lines_before_the_answer_are_skipped(env):
+    panel = Panel()
+    panel.reply = ["AIR: 1", "P H", "L 0 0", "TAG 04aa", "NFC ok", "HELLO intake-panel 13 esp32c3", "OK", "AIR: 2", "OK"]
+    ps.enable(panel, **GOOD)
+    assert len(panel.lines) == 2 and panel.reply == []
+
+
+def test_an_err_answer_has_its_own_sentence_that_repeats_nothing(env):
+    with pytest.raises(ps.PanelSetupError) as e:
+        ps.enable(Panel("ERR bad password " + PASSWORD), **GOOD)
+    assert str(e.value) == "The panel did not accept the Wi-Fi settings."
+    assert ps.stored_token() is None
+
+
+def test_a_silent_panel_times_out_with_its_own_sentence(env):
+    with pytest.raises(ps.PanelSetupError) as e:
+        ps.enable(Panel(""), **GOOD)
+    assert str(e.value) == "The panel did not answer in time."
+    with pytest.raises(ps.PanelSetupError) as e:       # only unasked lines, never an answer
+        ps.enable(Panel(["AIR: 1"]), **GOOD)
+    assert str(e.value) == "The panel did not answer in time."
+    assert ps.stored_token() is None and config.load()["station"]["panel_link"] == "usb"
+
+
+def test_an_old_firmware_is_refused_before_anything_is_sent(env):
+    panel = Panel()
+    for old in ("12", "13", "9", "?"):        # 13 is the shipped USB-only panel: not wireless-ready
+        with pytest.raises(ps.PanelSetupError) as e:
+            ps.enable(panel, **{**GOOD, "version": old})
+        assert str(e.value) == ("This panel's firmware is too old for Wi-Fi. "
+                                "Flash it first: sudo spoolwarden weigh-station flash-display")
+    assert panel.lines == []
+    ps.enable(panel, **{**GOOD, "version": "14"})
+    ps.enable(Panel(), **{**GOOD, "version": "15"})
+
+
+def test_the_cap_sentences(env):
+    with pytest.raises(ps.PanelSetupError) as e:
+        ps.enable(Panel(), **{**GOOD, "password": "p" * 64})
+    assert str(e.value) == "A 64-digit key cannot be used. Type the Wi-Fi password instead."
+    with pytest.raises(ps.PanelSetupError) as e:
+        ps.enable(Panel(), **{**GOOD, "address": "h" * 65})
+    assert str(e.value) == "The address is too long (64 characters at most)."
+    ps.enable(Panel(), **{**GOOD, "address": "h" * 64})
+    assert len(ps.setup_lines(**{k: v for k, v in GOOD.items() if k != "version"}, token="t" * 32)[1]) <= 256
+
+
+def test_off_also_skips_unasked_lines(env):
+    panel = Panel()
+    panel.reply = ["AIR: 1", "OK"]
+    assert ps.disable(panel)["panel_forgotten"] is True
+
+
 # ---- R614: the panel's port, a damaged token file, CRLF lines, the unit's allow lines ----
 
 def test_the_panel_port_must_differ_from_the_stations_own(env):
