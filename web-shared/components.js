@@ -10,7 +10,8 @@ const conf = { base: "api/", fetch: (u, i) => window.fetch(u, i), lock: true, hu
 const configure = (o) => Object.assign(conf, o), setting = (k) => conf[k];
 
 // ----- texts, elements, small helpers -----
-const plural = new Intl.PluralRules("en");
+const plurals = {};
+const plural = { select: (n) => { const l = root.lang || "en"; try { return (plurals[l] = plurals[l] || new Intl.PluralRules(l)).select(n); } catch (e) { return (plurals.en = plurals.en || new Intl.PluralRules("en")).select(n); } } };
 function t(key, vars) {
   let v = (window.SW_TEXT || {})[key];
   if (v == null) return key;

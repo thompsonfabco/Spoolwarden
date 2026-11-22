@@ -2,7 +2,7 @@
 wrapper that answers the routes the server steps RC2 (languages) and RC6 (demo) will add, and adds `demo` to the Hub's state answer.
 What it assumes of those steps is the contract of R85 section 6.2 and nothing more:
   GET  languages               -> {hub, languages: [{code, name, reviewed, installed, complete}], available: [{code, name, reviewed, complete}], problem?}
-  POST languages/{code}/install  (unlocked) -> {"ok": true}; the language is then installed
+  POST languages/{code}/install  (unlocked) -> {"ok": true}; the language is then installed (or 422 {"error"} when `install_error` is set: the pack failed its check)
   POST languages/{code}/remove   (unlocked) -> {"removed": true}
   POST settings/language {hub}   (unlocked) -> {"hub": code}
   POST demo {on}                 (unlocked) -> {"demo": bool}, or 409 {"error": <sentence>, "code": "not_empty"}
@@ -27,7 +27,7 @@ def lang_state(**over):
                           {"code": "de", "name": "Deutsch", "reviewed": False, "installed": True, "complete": 62}],
             "available": [{"code": "de", "name": "Deutsch", "reviewed": False, "complete": 62},
                           {"code": "ru", "name": "Русский", "reviewed": False, "complete": 8}],
-            "problem": None, "demo": False, "not_empty": False, **over}
+            "problem": None, "demo": False, "not_empty": False, "install_error": None, **over}
 
 
 class LangStub(StubHub):
@@ -52,6 +52,8 @@ class LangStub(StubHub):
             return await super().__call__(scope, receive, send)
         name, method = scope["path"][len("/setup/api/"):], scope["method"]
         if name == "state" and method == "GET":
+            if "state" in self.state["fail"]:
+                return await self.reply(send, self.state["fail"]["state"], {"error": "the stub says no"})
             return await self.state_answer(scope, receive, send)
         if (name == "languages" and method == "GET") or (method == "POST" and (name in ("settings/language", "demo") or name.startswith("languages/"))):
             return await self.route2(name, method, scope, receive, send)
@@ -89,6 +91,8 @@ class LangStub(StubHub):
         code, action = name.split("/")[1:3] if name.count("/") == 2 else (None, None)
         lang = next((x for x in st["languages"] + st["available"] if x["code"] == code), None) if code else None
         if action == "install" and lang:
+            if st["install_error"]:
+                return await self.reply(send, 422, {"error": st["install_error"]})
             if not any(x["code"] == code for x in st["languages"]):
                 st["languages"].append({**lang, "installed": True})
             return await self.reply(send, 200, {"ok": True})

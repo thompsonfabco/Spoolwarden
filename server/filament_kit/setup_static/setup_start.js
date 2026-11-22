@@ -106,16 +106,20 @@
       return;
     }
     if (demoHost && demoHost.isConnected) return;
-    const leave = button(t("demo_leave"), { cls: "btn--ghost", action: "leave-demo", run: demoLeave });
+    const leave = button(t("demo_leave"), { cls: "btn--ghost", action: "leave-demo", run: () => demoLeave() });
     demoHost = el("div", { class: "demo-bar" }, sw().banner({ kind: "info", text: t("demo_banner"), actions: [leave] }));
     main.prepend(demoHost);
   }
 
   // Leave demo asks once, then the Hub deletes the demo's folder; the page reads its state again (the banner goes with `demo`)
-  function demoLeave() {
+  // (`after`: Settings > General's Leave demo says its result there once the page has read its state)
+  function demoLeave(after) {
     return confirmed({ kind: "destructive", title: t("demo_leave_title"), text: t("demo_leave_text"), confirm: t("demo_leave") },
-      "demo", { on: false }, () => refresh());
+      "demo", { on: false }, async () => { await refresh(); if (after) after(); });
   }
+
+  // the sentence of a refused switch-on: a Hub with data answers by its code `not_empty` (Getting started and Settings read it alike)
+  const demoRefusal = (e) => (e.data && e.data.code === "not_empty" ? t("demo_not_empty") : e.message);
 
   function hubName(step, opts) {
     if (opts && opts.hubName) return opts.hubName;
@@ -252,7 +256,7 @@
             const r = await (options.demo || demoSend)(true);
             if (r && typeof refresh === "function") await refresh();
           } catch (e) {
-            showResult(box, "bad", e.data && e.data.code === "not_empty" ? t("demo_not_empty") : e.message);
+            showResult(box, "bad", demoRefusal(e));
           } finally {
             busy = false;
             if (trigger.isConnected) trigger.disabled = false;
@@ -385,4 +389,7 @@
 
   window.gettingStartedCard = gettingStartedCard;
   window.startDemoBar = demoBar;
+  window.startDemoSend = demoSend;
+  window.startDemoLeave = demoLeave;
+  window.startDemoRefusal = demoRefusal;
 })();
