@@ -102,7 +102,7 @@ def started_lines(view: dict | None = None) -> list[str]:
     for s in view["steps"]:
         lines += _row(s["state"], say(f"start_step_{s['id']}"))
         if s["state"] == "next":
-            lines += output.status_row("", getting_started.COMMANDS[s["id"]].format(command=COMMAND, printer=printer))
+            lines += output.status_row("", output.fill(getting_started.COMMANDS[s["id"]], command=COMMAND, printer=printer))
     return lines
 
 
@@ -121,7 +121,7 @@ def reader_next(before, after) -> str | None:
         return None
     if not getting_started.reader_install_pending(config.load()):
         return None
-    return getting_started.COMMANDS["reader"].format(command=COMMAND)
+    return output.fill(getting_started.COMMANDS["reader"], command=COMMAND)
 
 
 def after_features(before, after, changed: bool) -> None:

@@ -264,7 +264,7 @@ def _spool_error(e, n: int) -> int:
         output.error(CLI_SPOOL_NOT_CHECKED_OUT)
         return output.USAGE
     if getattr(e, "http", None) == 404 or getattr(e, "code", None) == "not_found":
-        output.error(CLI_SPOOL_NOT_FOUND.format(n=n), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
+        output.error(CLI_SPOOL_NOT_FOUND.format(n=n), output.fill(CLI_SPOOL_NOT_FOUND_FIX, command=COMMAND))
         return output.USAGE
     return fail(e)
 
@@ -272,7 +272,7 @@ def _spool_error(e, n: int) -> int:
 def cmd_spool_show(api, number) -> int:
     n = _number(number)
     if n is None:
-        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
+        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), output.fill(CLI_SPOOL_NOT_FOUND_FIX, command=COMMAND))
         return output.USAGE
     if api is None:
         return down()
@@ -297,7 +297,7 @@ def _change(api, number, body: dict, *, command: str, preview, ask, done, yes: b
     (`ask(after)`), the real change, its result line (`done(after)`; None: nothing changes, a line says so)."""
     n = _number(number)
     if n is None:
-        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
+        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), output.fill(CLI_SPOOL_NOT_FOUND_FIX, command=COMMAND))
         return output.USAGE
     if api is None:
         return down()
@@ -370,7 +370,7 @@ def cmd_spool_return(api, number) -> int:
     place the answer's spool is in, then how to undo it."""
     n = _number(number)
     if n is None:
-        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), CLI_SPOOL_NOT_FOUND_FIX.format(command=COMMAND))
+        output.error(CLI_SPOOL_NUMBER_BAD.format(value=number), output.fill(CLI_SPOOL_NOT_FOUND_FIX, command=COMMAND))
         return output.USAGE
     if api is None:
         return down()
@@ -414,7 +414,7 @@ def cmd_catalog_local(api) -> int:
     entries = r.get("entries") or []
     if not entries:
         output.out(CLI_CATALOG_LOCAL_EMPTY)
-        output.out(CLI_CATALOG_LOCAL_EMPTY_FIX.format(command=COMMAND))
+        output.out(output.fill(CLI_CATALOG_LOCAL_EMPTY_FIX, command=COMMAND))
         return 0
     output.out_lines(output.table(["Id", "Brand", "Name", "Material", "Added"],
                                   [[e.get("id"), e.get("brand"), e.get("name"), e.get("material"), e.get("added") or ""]
@@ -432,7 +432,7 @@ def cmd_catalog_local_remove(api, entry_id: str, yes: bool = False) -> int:
         return fail(e)
     entry = next((e for e in entries if str(e.get("id")) == entry_id), None)
     if entry is None:
-        output.error(CLI_CATALOG_NOT_FOUND.format(id=entry_id), CLI_CATALOG_NOT_FOUND_FIX.format(command=COMMAND))
+        output.error(CLI_CATALOG_NOT_FOUND.format(id=entry_id), output.fill(CLI_CATALOG_NOT_FOUND_FIX, command=COMMAND))
         return output.USAGE
     rc = confirmed(CLI_CATALOG_REMOVE_ASK.format(**{k: entry.get(k) for k in ("brand", "name")}),
                    f"removing {entry.get('brand')} {entry.get('name')}", f"spoolwarden catalog local remove {entry_id}", yes)
@@ -448,7 +448,7 @@ def cmd_catalog_local_remove(api, entry_id: str, yes: bool = False) -> int:
 
 
 def _missing_entry(entry_id: str) -> int:
-    output.error(CLI_CATALOG_NOT_FOUND.format(id=entry_id), CLI_CATALOG_NOT_FOUND_FIX.format(command=COMMAND))
+    output.error(CLI_CATALOG_NOT_FOUND.format(id=entry_id), output.fill(CLI_CATALOG_NOT_FOUND_FIX, command=COMMAND))
     return output.USAGE
 
 
@@ -463,7 +463,7 @@ def cmd_catalog_add_ask(api, *, ask=input, yes: bool = False) -> int:
     the form's order. The Hub builds the entry from the values (`POST /api/library/local/form`). `ask(prompt)`: the
     terminal's input (a test's own)."""
     if not output.terminal() and ask is input:
-        output.error(CLI_CATALOG_ADD_NO_TERMINAL, CLI_CATALOG_ADD_NO_TERMINAL_FIX.format(command=COMMAND))
+        output.error(CLI_CATALOG_ADD_NO_TERMINAL, output.fill(CLI_CATALOG_ADD_NO_TERMINAL_FIX, command=COMMAND))
         return output.USAGE
     if api is None:
         return down()
@@ -528,7 +528,7 @@ def _find_device(page, ident: str):
         output.error(CLI_DEVICE_AMBIGUOUS.format(name=ident, names=", ".join(f"{r['name']} ({r['id']})" for r in found)),
                      CLI_DEVICE_AMBIGUOUS_FIX)
     else:
-        output.error(CLI_DEVICE_NOT_FOUND.format(name=ident), CLI_DEVICE_NOT_FOUND_FIX.format(command=COMMAND))
+        output.error(CLI_DEVICE_NOT_FOUND.format(name=ident), output.fill(CLI_DEVICE_NOT_FOUND_FIX, command=COMMAND))
     return None, output.USAGE
 
 

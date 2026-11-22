@@ -551,8 +551,8 @@ def _local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
     h = local_reader.health(cfg)
     if not h["ok"] and getting_started.reader_install_pending(cfg):     # R82 s6 p5: switched on, nothing installed here
         _addr_say = address_texts.say
-        yield Row(FAIL, _addr_say("reader_not_installed"), getting_started.COMMANDS["reader"].format(
-            command=address_texts.COMMAND), key="label-reader.not-installed")
+        yield Row(FAIL, _addr_say("reader_not_installed"), output.fill(
+            getting_started.COMMANDS["reader"], command=address_texts.COMMAND), key="label-reader.not-installed")
     elif h["ok"]:
         tiers = ", ".join(f"{k} {'usable' if t['usable'] else 'not usable'}" for k, t in h["tiers"].items())
         yield Row(OK, f"local label reader answering at {h['url']} (version {h['version'] or '?'}, API "

@@ -23,7 +23,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from . import alerts, config, events
+from . import alerts, config, events, output
 
 log = logging.getLogger("filament_kit.alerts_api")
 
@@ -285,7 +285,7 @@ def say(key: str, /, **fill) -> str:
     text = MESSAGES[key]
     if isinstance(text, dict):
         text = text["one" if fill.get("count") == 1 else "other"]
-    return text.format(product=PRODUCT, command=COMMAND, **fill)
+    return output.fill(text, product=PRODUCT, command=COMMAND, **fill)
 
 
 # ---------------------------------------------------------------- refusals
