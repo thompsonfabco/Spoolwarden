@@ -111,7 +111,7 @@ out.rowcount = $(".coll--spools").getAttribute("aria-rowcount");
     assert page["nav"][0][:3] == ["#overview", "#printers", "#spools"] and "#spools" not in page["nav"][1]
     assert page["rows"] == 50 and page["more"] and page["shownLine"] == f"Showing 50 of {TOTAL}"
     assert page["ids"] == [str(n) for n in (*range(1, EMPTY), *range(EMPTY + 1, EMPTY + 4))]       # the empty spool is not listed
-    assert page["headers"] == ["Details", "Colour", "Number", "Spool", T("common_field_material"), "Left", "Where", T("common_field_state")]
+    assert page["headers"] == ["Select all shown", "Details", "Colour", "Number", "Spool", T("common_field_material"), "Left", "Where", T("common_field_state")]
     assert page["first"]["number"] == "#1" and page["first"]["title"] == "Polymaker PolyTerra PLA Charcoal Black" and page["first"]["material"].endswith("PLA")
     assert page["first"]["left"].endswith("620 g") and page["first"]["where"].endswith("Rack 1") and page["first"]["state"].startswith(T("spool_state_opened"))
     assert T("common_sealed") in page["sealed"]["state"] and page["sealed"]["where"].endswith("Sealed stock")
@@ -325,7 +325,7 @@ out.afterEmpty = { hub: (await hubSays(3)).state, row: rowOf(3).dataset.state, c
     assert page["facts"] == {"Number": "#1", "Brand": "Polymaker", "Name": "PolyTerra PLA Charcoal Black", "Material": "PLA", "Colour": "#2B2B2E", "Left": "620 g / 1000 g",
                              "State": "Opened", "Location": "Rack 1", "Tag": T("common_empty"), "Lot": T("common_empty"), "Last taken off": page["facts"]["Last taken off"]}
     assert page["facts"]["Last taken off"].startswith("41.5 g on ")
-    assert page["actions"] == ["Update weight", "Move", "Link the last tapped tag", "Mark empty"]
+    assert page["actions"] == ["Update weight", "Move", "Link the last tapped tag", "Print a label", "Mark empty"]
     assert page["moveOptions"][0] == T("storage_automatic") and len(page["moveOptions"]) > 2
     assert page["noWeight"] == page["badWeight"] == "Enter the weight in grams, a number above 0."
     assert page["unlockAsked"] and page["afterCancel"] == {"result": None, "left": 620}
@@ -379,7 +379,7 @@ out.detail = { overflow: document.documentElement.scrollWidth > vw, wide: wide(d
     assert page["list"]["rows"] == 50 and page["list"]["title"] and page["list"]["search"] and page["list"]["chips"] and page["list"]["link"]
     assert page["nav"]["item"] and not page["nav"]["inBar"]                     # Spools is in the More sheet on a phone, never in the bar
     assert page["detail"]["overflow"] is False and page["detail"]["wide"] == [], page["detail"]
-    assert page["detail"]["buttons"] == [True] * 4 and page["detail"]["field"] and page["detail"]["facts"] == 11
+    assert page["detail"]["buttons"] == [True] * 5 and page["detail"]["field"] and page["detail"]["facts"] == 11
     assert page["detail"]["inDialog"] is (look == "palette")                    # Palette's detail is a sheet; the others open it in the row
     assert {"title", "state", "number"} <= set(page["cols"])
 

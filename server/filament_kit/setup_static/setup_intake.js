@@ -124,7 +124,7 @@ function intakeTab() {
 
 // ----- Download as CSV (R84 6): the file the Hub gives for GET export/recent.csv, unlocked as a file leaves the Hub -----
 // Texts the catalogue does not have yet (only HD2 opens it): the catalogue's own wins once the key is there.
-const REC_STUB = { recent_download_csv: "Download as CSV", recent_csv_failed: "Could not download the file: {reason}" };
+const REC_STUB = { recent_download_csv: "Download as CSV", recent_csv_failed: "Could not download the file: {reason}", recent_print_labels: "Print labels" };
 const recT = (key, vars) => {
   const v = SW.t(key, vars);
   return v !== key || !(key in REC_STUB) ? v : REC_STUB[key].replace(/\{([a-z]+)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m));
@@ -140,6 +140,8 @@ async function recDownloadCsv(set, fallback) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
+// ----- Print labels (R85 5.3): the Hub's print page for the record's spools opens in a new tab; open, so no code -----
+const recPrintAt = (ids) => window.open(`/setup/api/labels?${new URLSearchParams({ ids: ids.join(","), size: "62x29" })}`, "_blank", "noopener");
 function recListMore() {
   if (!hubCanExport("recent")) return null;
   const more = SW.iconBtn("more", SW.t("common_more_actions_for", { name: SW.t("nav_recently_added") }), { cls: "recent-listmore" });
@@ -262,6 +264,7 @@ function recDraw(host, view, rec, first) {
   const redraw = (r) => recDraw(host, view, r, false);
   view.rec = rec;
   const names = recNames(rec.spools), ids = rec.spools.map((x) => x.spool_id);
+  const printIds = ids.filter((n) => Number.isInteger(n));      // a spool that has no number yet has no label
   const at = view.d.records.findIndex((r) => r.id === view.id);
   const go = (to) => { location.hash = "#recent/" + encodeURIComponent(to.id); };
   const newer = at > 0 ? view.d.records[at - 1] : null, older = at >= 0 && at < view.d.records.length - 1 ? view.d.records[at + 1] : null;
@@ -272,6 +275,7 @@ function recDraw(host, view, rec, first) {
     h("p", { class: "page-head__crumbs" }, h("a", { href: "#recent" }, SW.t("nav_recently_added")), " / ", ids.length ? recSpools(ids) : SW.t("recent_no_spools")),
     h("div", { class: "recent__bar" }, title, h("div", { class: "actions" },
       h("a", { class: "btn btn--ghost", href: "#recent" }, SW.t("common_back")),
+      printIds.length ? h("button", { class: "btn btn--ghost recent__print", type: "button", on: { click: () => recPrintAt(printIds) } }, recT("recent_print_labels")) : null,
       step("detail_newer", "chevron", newer, "recent__newer"), step("detail_older", "chevron", older, "recent__older"))),
     h("p", { class: "page-head__meta" }, h("span", { class: "mono" }, recTime(rec.at)), h("span", {}, recSource(rec)),
       SW.status(REC_STATE[rec.state] || "as_detected", { small: true, text: REC_STATE[rec.state] ? null : rec.state }),
