@@ -22,14 +22,6 @@ def volume_from_env() -> int:
         return 50
 
 
-def int_from_env(name: str, default: int, low: int, high: int) -> int:
-    """The environment variable `name` clamped to low-high; `default` when unset or not a number."""
-    try:
-        return max(low, min(high, int(os.environ.get(name, str(default)))))
-    except ValueError:
-        return default
-
-
 # the live voice values (R88 2.5): the ranges the station takes, and where each one sits in `settings`
 VOICE_RANGES = {"speaker": (0, 903), "speed": (50, 200), "volume": (0, 100)}
 VOICE_KEYS = {"speech": "speech", "speaker": "voice_speaker", "speed": "voice_speed", "volume": "speaker_volume"}
@@ -64,9 +56,10 @@ def settings_from_env() -> dict:
         # the panel is wired the other way round (yellow on D2/D6, red on D1/D5): swap the buttons and lamps
         "panel_swap": os.environ.get("STATION_PANEL_SWAP", "0") == "1",
         "speaker_volume": volume_from_env(),  # the C3 panel's speaker, percent
-        # the voice: Piper's speaker number (the many-speaker voice only) and the speaking speed in percent
-        "voice_speaker": int_from_env("STATION_VOICE_SPEAKER", 0, *VOICE_RANGES["speaker"]),
-        "voice_speed": int_from_env("STATION_VOICE_SPEED", 100, *VOICE_RANGES["speed"]),
+        # the voice's speaker number (Piper's many-speaker voice only) and speaking speed in percent: only the Hub sets
+        # these (`live`, R88 2.5), so no drop-in key reads them
+        "voice_speaker": 0,
+        "voice_speed": 100,
         # the intake flow: no progress this long and it goes back to idle; a recognition (local AI, then Claude)
         # may take this long. The server's address and token come from the pairing files (server_api).
         "flow_timeout": int(os.environ.get("STATION_FLOW_TIMEOUT", "600")),

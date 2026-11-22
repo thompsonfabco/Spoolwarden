@@ -167,15 +167,13 @@ def test_the_drop_in_values_speak_until_a_live_one_comes(espeak, monkeypatch):
     assert espeak[1][espeak[1].index("-s") + 1] == "165"
 
 
-def test_the_environment_gives_the_drop_in_values_clamped(monkeypatch):
-    monkeypatch.setenv("STATION_VOICE_SPEAKER", "5000")
-    monkeypatch.setenv("STATION_VOICE_SPEED", "10")
-    s = st.settings_from_env()
-    assert (s["voice_speaker"], s["voice_speed"]) == (903, 50)
-    monkeypatch.setenv("STATION_VOICE_SPEAKER", "x")
-    monkeypatch.delenv("STATION_VOICE_SPEED")
+def test_the_environment_does_not_set_the_speaker_or_the_speed(monkeypatch):
+    """R88 2.5 (01:50): the speaker and the speed are never drop-in settings; only the Hub's live values move them."""
+    monkeypatch.setenv("STATION_VOICE_SPEAKER", "5")
+    monkeypatch.setenv("STATION_VOICE_SPEED", "150")
     s = st.settings_from_env()
     assert (s["voice_speaker"], s["voice_speed"]) == (0, 100)
+    assert not hasattr(st, "int_from_env")
 
 
 def test_a_phrase_with_its_own_values_leaves_the_live_ones(piper):
