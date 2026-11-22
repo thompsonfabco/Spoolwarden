@@ -2,6 +2,7 @@
 (WL1) reads it, and the Devices and Checks rows read what the station's /state says. The fake panel is WL1's."""
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
