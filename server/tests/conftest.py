@@ -303,6 +303,25 @@ def _no_real_kit_paths(tmp_path_factory, monkeypatch):
         monkeypatch.setenv(f"FK_{name.upper()}", str(base / name))
 
 
+def wait_for_reader_seen_threads(timeout: float = 15.0) -> None:
+    """web.reader.Reader hands a reader's call to the Hub on a daemon thread named `reader-seen`, off the request.
+    Every test that calls a /reader route leaves one running; it must end inside its test, or it runs on later, with
+    the test's folders gone and FK_STATE unset, and writes to the default state folder (on Windows the drive's
+    var/lib/filament-kit folder, which the system_writes guard then reports against whichever test is running: seen in test_reader_hub_nomcp)."""
+    import threading
+    for t in threading.enumerate():
+        if t.name == "reader-seen" and t is not threading.current_thread():
+            t.join(timeout)
+            assert not t.is_alive(), f"the reader-seen thread did not end within {timeout} s"
+
+
+@pytest.fixture(autouse=True)
+def _reader_seen_threads_end(monkeypatch, system_writes, _state_dir, _no_real_kit_paths):
+    """Asks for the fixtures it must end before (the guard's check, the temp folders and environment), so it tears down first."""
+    yield
+    wait_for_reader_seen_threads()
+
+
 @pytest.fixture
 def moonraker():
     """A running FakeMoonraker (tests/fakes/fake_moonraker.py); `.host`, `.port` set; stopped after the test."""
