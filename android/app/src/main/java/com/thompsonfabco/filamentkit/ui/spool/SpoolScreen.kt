@@ -114,6 +114,14 @@ fun SpoolScreen(
         }
     }
 
+    // a Return (R88 1.6): the toast says where the spool went, with Undo through the activity
+    val returned = ui.returnToast
+    LaunchedEffect(returned) {
+        if (returned == null) return@LaunchedEffect
+        vm.returnToastShown()
+        toast?.showUndoable(returned.text, undo, returned.event, undoHoldMs(context), vm::undoOnHub)
+    }
+
     val scrollModifier = if (embedded) {
         modifier.fillMaxWidth().padding(space.s4)
     } else {
@@ -141,6 +149,7 @@ fun SpoolScreen(
                 if (spool != null) {
                     Header(spool, ui.openedByTag)
                     Remaining(spool)
+                    CheckedOutRules.homeLine(spool)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                     ui.result?.let { ResultLine(it) }
                     Actions(vm, ui, online, printersOn, onLoad)
                     Details(spool)
@@ -158,6 +167,7 @@ fun SpoolScreen(
 
     ui.weight?.let { WeightSheet(vm, it, ui.spool?.remaining, onPairAgain) }
     ui.move?.let { MoveSheet(vm, it, ui.spool?.location, onPairAgain) }
+    ui.home?.let { HomeSheet(vm, it, ui.spool?.home, onPairAgain) }
     if (ui.confirmEmpty) {
         val spool = ui.spool
         SwDialog(
@@ -271,6 +281,11 @@ private fun Actions(vm: SpoolViewModel, ui: SpoolUi, online: Boolean, printersOn
         FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalArrangement = Arrangement.spacedBy(space.s2)) {
             if (printersOn) SwButton(stringResource(R.string.spool_load), onLoad, enabled = enabled)
             SwButton(stringResource(R.string.spool_move), vm::openMove, enabled = enabled)
+            // checked out (R88 1.6): back to its home, asking nothing; Home can be changed
+            ui.spool?.takeIf { CheckedOutRules.canReturn(it) }?.let {
+                SwButton(CheckedOutTexts.returnTo(it.home), vm::returnToHome, enabled = enabled, busy = ui.returning)
+                if (CheckedOutRules.canChangeHome(it)) SwButton(CheckedOutTexts.CHANGE_HOME, vm::openHome, enabled = enabled)
+            }
             Box {
                 SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { menu = true })
                 SwMenu(menu, { menu = false }) {
@@ -435,6 +450,39 @@ private fun MoveSheet(vm: SpoolViewModel, m: MoveUi, current: String?, onPairAga
                                     Text(lines.joinToString(" · ") { it.resolve(context) }, style = MaterialTheme.typography.bodySmall, color = colors.muted)
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Home (R88 1.6): the storage locations as radio rows; a tap saves at once, and a refusal shows in its own words. */
+@Composable
+private fun HomeSheet(vm: SpoolViewModel, h: HomeUi, current: String?, onPairAgain: () -> Unit) {
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
+    SwSheet(onDismiss = vm::closeHome, gesturesEnabled = h.savingTo == null) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = space.s4).padding(bottom = space.s4), verticalArrangement = Arrangement.spacedBy(space.s2)) {
+            Text(CheckedOutTexts.HOME, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+            h.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = vm::retryHome) }
+            val locations = h.locations
+            when {
+                locations == null -> if (h.failure == null) SwSkeletonRows(SKELETON_ROWS)
+                locations.isEmpty() -> Text(stringResource(R.string.spool_move_none), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+                else -> Column(Modifier.verticalScroll(rememberScrollState())) {
+                    locations.forEach { name ->
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row)
+                                .selectable(selected = name == current, enabled = h.savingTo == null, role = Role.RadioButton) { vm.setHome(name) },
+                            horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = name == current, onClick = null,
+                                colors = RadioButtonDefaults.colors(selectedColor = colors.accentText, unselectedColor = colors.borderStrong),
+                            )
+                            Text(name, Modifier.weight(1f).padding(vertical = space.s2), style = MaterialTheme.typography.bodyLarge)
                         }
                     }
                 }
