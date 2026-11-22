@@ -4,6 +4,7 @@ length scale 100 / speed and speaker id; espeak-ng words per minute 165 x speed 
 from __future__ import annotations
 
 import io
+import json
 import sys
 import threading
 import types
@@ -232,8 +233,10 @@ def test_a_test_phrase_sets_its_volume_on_the_panel_and_puts_the_live_one_back(m
 
 # ---- POST /voice
 
-def post(station, path, body):
-    status, d, _ = station.json("POST", path, body)
+def post(station, path, body, proof=True):
+    """The Hub's call: the body signed with the pairing proof for `voice` (`proof=False`: no header at all)."""
+    raw = json.dumps(body).encode()
+    status, d, _ = station.json("POST", path, body, station.proof("voice", raw) if proof else None)
     return status, d
 
 
@@ -273,7 +276,7 @@ def test_one_bad_value_refuses_the_whole_request(hub):
 
 
 def test_a_body_that_is_not_an_object_is_refused(hub):
-    status, d, _ = hub.json("POST", "/voice", [1, 2])
+    status, d, _ = hub.json("POST", "/voice", [1, 2], hub.proof("voice", json.dumps([1, 2]).encode()))
     assert status == 400 and d["error"] == "bad_request"
 
 
@@ -485,3 +488,44 @@ def test_a_phrase_is_never_read_with_another_phrases_values(monkeypatch):
     pair = speech.next_phrase()
     assert pair == ("Cancelled.", None)
     assert speech.next_phrase() == ("test sentence", {"volume": 90})
+
+
+# ---- R594 / R88 2.5 ruling: the routes need the pairing proof as /settings does
+
+@pytest.mark.parametrize("path", ["/voice", "/voice/test"])
+def test_the_voice_routes_refuse_a_listed_address_with_no_proof(hub, path):
+    status, d = post(hub, path, {"volume": 10, "speed": 100}, proof=False)
+    assert status == 403 and d["error"] == "forbidden" and d["message"]
+    assert st.live == {} and speech.speech["text"] is None
+
+
+@pytest.mark.parametrize("path", ["/voice", "/voice/test"])
+def test_the_voice_routes_refuse_a_proof_for_another_purpose_body_or_key(hub, path):
+    from filament_kit.station import page
+    body = {"speed": 100}
+    raw = json.dumps(body).encode()
+    other_body = json.dumps({"speed": 90}).encode()
+    wrong_key = {page.PROOF_HEADER: page.make_proof(page.token_key("another token 0123456789"), "voice", raw, now=hub.clock())}
+    for h in (hub.proof("settings", raw), hub.proof("ticket", raw), hub.proof("voice", other_body), wrong_key,
+              {page.PROOF_HEADER: "garbage"}):
+        status, d, _ = hub.json("POST", path, body, h)
+        assert status == 403 and d["error"] == "forbidden"
+    assert st.live == {} and speech.speech["text"] is None
+
+
+@pytest.mark.parametrize("path", ["/voice", "/voice/test"])
+def test_the_voice_routes_refuse_a_replayed_or_stale_proof(hub, path):
+    from filament_kit.station import page
+    raw = json.dumps({"speed": 100}).encode()
+    h = hub.proof("voice", raw)
+    assert hub.json("POST", path, {"speed": 100}, h)[0] == 200
+    assert hub.json("POST", path, {"speed": 100}, h)[0] == 403            # the same proof again: a replay
+    old = {page.PROOF_HEADER: page.make_proof(hub.key, "voice", raw, now=hub.clock() - 120)}
+    assert hub.json("POST", path, {"speed": 100}, old)[0] == 403
+
+
+def test_the_voice_routes_refuse_a_right_proof_from_an_address_off_the_list(elsewhere):
+    for path in ("/voice", "/voice/test"):
+        status, d = post(elsewhere, path, {"speed": 100})
+        assert status == 403 and d["error"] == "forbidden"
+    assert st.live == {} and speech.speech["text"] is None
