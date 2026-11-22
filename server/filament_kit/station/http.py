@@ -46,7 +46,8 @@ def tls_context(cert, key) -> ssl.SSLContext:
 
 
 def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, store=None,
-                 wrong_tickets=None, *, page_ranges: str | None = None) -> type[BaseHTTPRequestHandler]:
+                 wrong_tickets=None, *, page_ranges: str | None = None,
+                 page_from: str = "home") -> type[BaseHTTPRequestHandler]:
     """A handler class over `state_view()`: a snapshot of the station state plus "panel" (the panel's port); "photo" is the JPEG bytes.
 
     Every request is guarded by the caller's address and cookie (guard.py, R83 01:10): an address on `allow` (the Hub) asks
@@ -60,6 +61,8 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
     wrong_tickets = wrong_tickets or guard.WrongTickets()
     listed = {guard.peer_address(address) for address in allow}
     networks = guard.page_networks(page_ranges)
+    if page_from not in ("home", "subnets", "allowed"):
+        page_from = "home"
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "intake-station"
@@ -112,7 +115,7 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
             if path == "/last-tag":
                 return self._send(200, tag)
             if path == "/settings" and store is not None:
-                return self._send(200, {"settings": store.listing()})
+                return self._send(200, {"settings": store.listing(), "page_from": page_from})
             if path == "/state":
                 sc = s["scale"]
                 air = s["air"] if s["air"] and time.time() - s["air_at"] < 60 else None  # panel gone: no stale reading
@@ -180,7 +183,7 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
                     return self._error(403, "forbidden")
                 ticket = access.new_ticket()
                 if ticket is None:
-                    return self._error(429, "too_many_wrong_tickets", "Too many tickets are waiting. Try again in a minute.")
+                    return self._error(429, "too_many_waiting_tickets", "Too many tickets are waiting. Try again in a minute.")
                 return self._send(200, {"ticket": ticket, "expires_in": page.TICKET_SECONDS})
             if path == "/session":      # the page call: the ticket is the credential
                 address = guard.peer_address(self.client_address[0])

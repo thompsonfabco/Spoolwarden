@@ -13,9 +13,10 @@
 from __future__ import annotations
 
 import anyio
-from starlette.responses import Response
+from starlette.responses import Response, StreamingResponse
 
-from .. import alerts_api, events, report, trusted
+from .. import alerts_api, csv_io, event_sink, events, health, trusted, undo
+from ..spoolman import SpoolmanError
 
 EXPORT_SETS = (
     "usage",
@@ -30,17 +31,17 @@ EXPORT_SETS = (
 MAX_IMPORT_BYTES = 5 * 1024 * 1024
 
 
-def page_actor(request) -> dict:
+async def page_actor(page, request) -> dict:
     """Actor identity for Hub page actions: the trusted computer's name when available, else 'Hub page'."""
     token = request.cookies.get(trusted.COOKIE)
     if token and trusted.TOKEN.fullmatch(token):
         try:
-            st = trusted.status(token)
+            st = await page._helper({"op": "trust_status", "token": token})
             if st.get("trusted") and st.get("name"):
-                return {"type": "hub_page", "id": st.get("id"), "name": st["name"]}
+                return {"type": "page", "id": st.get("id"), "name": st["name"]}
         except Exception:  # noqa: BLE001
             pass
-    return {"type": "hub_page", "name": "Hub page"}
+    return {"type": "page", "name": "Hub page"}
 
 
 async def _require_get_code(page, request) -> str | None:
@@ -66,13 +67,8 @@ def _parse_int(raw: str | None, name: str, *, minimum: int | None = None) -> int
 
 def _call_events_answer(*, since: int | None, kinds: str | None, limit: int,
                         subject: str | None, actor: str | None) -> dict:
-    try:
-        return alerts_api.events_answer(
-            since=since, kinds=kinds, limit=limit,
-            activity=True, subject=subject, actor=actor,
-        )
-    except TypeError:
-        return alerts_api.events_answer(since=since, kinds=kinds, limit=limit)
+    window = {"since": since, "limit": limit} if since is not None else {"newest": limit}
+    return alerts_api.events_answer(**window, kinds=kinds, activity=True, subject=subject, actor=actor)
 
 
 def _spoolman(page):
@@ -83,56 +79,24 @@ def _spoolman(page):
 
 
 def _call_undo(page, event_id: int, actor: dict) -> dict:
-    from .. import undo
-    fn = getattr(undo, "undo_event", None) or getattr(undo, "undo", None)
-    if fn is None:
-        raise RuntimeError("undo has no undo_event/undo function")
-    sm = _spoolman(page)
-    try:
-        return fn(event_id, sm, actor=actor)
-    except TypeError:
-        try:
-            return fn(event_id, actor=actor)
-        except TypeError:
-            return fn(event_id)
-
-
-def _call_health(days: int) -> dict:
-    from .. import health
-    fn = getattr(health, "health_view", None) or getattr(health, "view", None) or getattr(health, "history", None)
-    if fn is None:
-        raise RuntimeError("health has no view/history function")
-    return fn(days=days)
+    return undo.undo_event(event_id, _spoolman(page), actor=actor)
 
 
 def _call_export(page, set_name: str, params: dict) -> str | bytes:
-    from .. import csv_io
-    fn = getattr(csv_io, "export_csv", None) or getattr(csv_io, "export", None)
-    if fn is None:
-        raise RuntimeError("csv_io has no export_csv/export function")
     if set_name.startswith("spoolman-") and "sm" not in params:
         params = {**params, "sm": _spoolman(page)}
-    return fn(set_name, **params)
+    return csv_io.export_csv(set_name, **params)
 
 
 def _call_import(page, kind: str, raw_text: str, dry_run: bool, actor: dict) -> dict:
-    from .. import csv_io
-    fn_name = "import_spools" if kind == "spools" else "import_locations"
-    fn = getattr(csv_io, fn_name)
-    if kind == "spools":
-        sm = _spoolman(page)
-        try:
-            return fn(sm, raw_text, dry_run=dry_run)
-        except TypeError:
-            pass
-    try:
-        return fn(raw_text, dry_run=dry_run, actor=actor)
-    except TypeError:
-        return fn(raw_text, dry_run=dry_run)
+    with event_sink.acting(actor):
+        if kind == "spools":
+            return csv_io.import_spools(_spoolman(page), raw_text, dry_run=dry_run)
+        return csv_io.import_locations(raw_text, dry_run=dry_run)
 
 
 def routes(page) -> list[tuple]:
-    from ..setup_page import Refused
+    from ..setup_page import NEED_CODE, Refused
 
     g = page.guard
     w = lambda fn: page.guard(fn, write=True)  # noqa: E731
@@ -156,11 +120,13 @@ def routes(page) -> list[tuple]:
             event_id = int(raw_id)
         except (TypeError, ValueError):
             raise Refused(404, "no such event") from None
-        actor = page_actor(request)
+        actor = await page_actor(page, request)
         try:
             res = await anyio.to_thread.run_sync(_call_undo, page, event_id, actor)
         except LookupError as e:
             raise Refused(404, str(e) or "no such event") from None
+        except SpoolmanError:
+            raise Refused(502, "Spoolman cannot be reached for this undo") from None
         except Exception as e:
             status = getattr(e, "status", None)
             code = getattr(e, "code", None) or getattr(e, "error", None)
@@ -177,7 +143,7 @@ def routes(page) -> list[tuple]:
             days = 7
         if days not in (7, 30):
             raise Refused(400, "days must be 7 or 30", field="days")
-        res = await anyio.to_thread.run_sync(_call_health, days)
+        res = await anyio.to_thread.run_sync(health.health_view, days)
         return {"days": days, **res}
 
     async def export_csv(request, body):
@@ -193,8 +159,8 @@ def routes(page) -> list[tuple]:
             params["printer"] = q["printer"].strip()
         try:
             data = await anyio.to_thread.run_sync(_call_export, page, set_name, params)
-        except ValueError as e:
-            raise Refused(400, str(e)) from None
+        except csv_io.CsvError as e:
+            raise Refused(e.status, e.message, code=e.code) from None
         page.audit(request, f"{set_name} CSV downloaded")
         if token:
             request.state.set_trust = token
@@ -205,15 +171,17 @@ def routes(page) -> list[tuple]:
         )
 
     async def _import_csv(request, kind: str):
-        raw_bytes = await request.body()
-        if len(raw_bytes) > MAX_IMPORT_BYTES:
-            raise Refused(413, "the CSV file is larger than the page takes")
+        raw_bytes = bytearray()
+        async for chunk in request.stream():
+            if len(raw_bytes) + len(chunk) > MAX_IMPORT_BYTES:
+                raise Refused(413, "the CSV file is larger than the page takes")
+            raw_bytes.extend(chunk)
         try:
             raw_text = raw_bytes.decode("utf-8-sig")
         except UnicodeDecodeError:
             raise Refused(400, "the CSV file must be UTF-8 text") from None
         dry_run = request.query_params.get("dry_run", "1").lower() not in ("0", "false", "no")
-        actor = page_actor(request)
+        actor = await page_actor(page, request)
         try:
             res = await anyio.to_thread.run_sync(_call_import, page, kind, raw_text, dry_run, actor)
         except ValueError as e:
@@ -233,30 +201,32 @@ def routes(page) -> list[tuple]:
         page.audit(request, "Hub report started")
         return {"ok": True, "name": "report"}
 
-    async def _serve_report(request):
-        path = await anyio.to_thread.run_sync(report.latest)
-        if path is None:
-            raise Refused(404, "no Hub report has been collected yet")
-        try:
-            content = await anyio.to_thread.run_sync(lambda: path.read_text("utf-8", errors="replace"))
-        except OSError:
-            raise Refused(500, "could not read the Hub report") from None
-        page.audit(request, f"Hub report {path.name} downloaded")
-        return Response(
-            content,
-            media_type="text/plain; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{path.name}"'},
-        )
+    async def _serve_report(request, code):
+        reply, fh = await page._helper_file({"op": "report_open", "code": code})
+        name = reply["download"]
+        page.audit(request, f"Hub report {name} downloaded")
+
+        def chunks():
+            with fh:
+                while data := fh.read(64 * 1024):
+                    yield data
+
+        return StreamingResponse(chunks(), media_type="text/plain; charset=utf-8",
+                                 headers={"Content-Disposition": f'attachment; filename="{name}"',
+                                          "Content-Length": str(reply["size"])})
 
     async def report_download_get(request, body):
-        token = await _require_get_code(page, request)
-        resp = await _serve_report(request)
+        credentials = {"code": request.headers.get("x-setup-code", "")}
+        token = page._trusted_token(request, credentials)
+        if not credentials["code"].strip():
+            raise Refused(403, NEED_CODE, field="code")
+        resp = await _serve_report(request, credentials["code"])
         if token:
             request.state.set_trust = token
         return resp
 
     async def report_download_post(request, body):
-        return await _serve_report(request)
+        return await _serve_report(request, body["code"])
 
     return [
         ("/activity", g(activity), "GET"),
@@ -267,5 +237,5 @@ def routes(page) -> list[tuple]:
         ("/import/locations", rw(import_locations), "POST"),
         ("/report", hw(report_start), "POST"),
         ("/report/download", g(report_download_get), "GET"),
-        ("/report/download", w(report_download_post), "POST"),
+        ("/report/download", hw(report_download_post), "POST"),
     ]

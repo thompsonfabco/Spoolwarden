@@ -4,6 +4,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from . import events
+from .alerts_api import say
+
+# the conditions the history follows (R84 4.1): a check row, a printer offline, a device down, storage low; each
+# kind's condition key starts with its base, and the group names what the row is about
+GROUPS = {"check": "checks", "printer-offline": "printers", "device-down": "devices", "storage-low": "storage"}
 
 
 def _utc(now: datetime | None = None) -> datetime:
@@ -15,24 +20,43 @@ def _parse_iso(ts: str) -> datetime:
     return datetime.fromisoformat(ts.strip().replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
+def _base(key: str) -> str:
+    return key.split(":", 1)[0]
+
+
+def _condition_key(ev: dict) -> str:
+    """The key of the condition an event raised or cleared, "" for an event that has none."""
+    if ev.get("kind") == "condition.cleared":
+        return (ev.get("data") or {}).get("key", "")
+    return (ev.get("condition") or {}).get("key", "")
+
+
 def _state_from_event(ev: dict) -> str:
-    kind = ev.get("kind", "")
-    if kind in ("check.ok", "condition.cleared"):
+    if (ev.get("condition") or {}).get("state") == "cleared" or ev.get("kind") == "condition.cleared":
         return "ok"
     sev = ev.get("severity", "warn")
     return "bad" if sev == "bad" else "look"
 
 
 def _check_key_of(ev: dict) -> str:
-    kind = ev.get("kind", "")
-    if kind == "condition.cleared":
-        k = (ev.get("data") or {}).get("key", "")
-        return k[len("check:"):] if k.startswith("check:") else ""
-    cond = ev.get("condition") or {}
-    ckey = cond.get("key", "")
-    if ckey.startswith("check:"):
-        return ckey[len("check:"):]
-    return (ev.get("subject") or {}).get("id", "")
+    """The row an event belongs to: a check's key without its "check:", another condition's whole key, "" for none."""
+    ckey = _condition_key(ev)
+    if _base(ckey) not in GROUPS:
+        return ""
+    return ckey[len("check:"):] if ckey.startswith("check:") else ckey
+
+
+def _row_text(ev: dict, fallback: str) -> str:
+    """What a row is called: a check's own text, else the name of the printer or device it is about."""
+    base = _base(_condition_key(ev))
+    if ev.get("kind") == "condition.cleared":
+        return fallback
+    if base == "storage-low":
+        return say("health_row_storage")
+    if base == "check":
+        return (ev.get("data") or {}).get("text") or (ev.get("subject") or {}).get("name") or fallback
+    sub = ev.get("subject") or {}
+    return sub.get("name") or sub.get("id") or fallback
 
 
 def health_view(days: int = 7, *, store=None, now: datetime | None = None,
@@ -49,14 +73,13 @@ def health_view(days: int = 7, *, store=None, now: datetime | None = None,
     since = all_evs[0]["at"] if all_evs else None
 
     by_key: dict[str, list[dict]] = {}
+    group_of: dict[str, str] = {}
     for ev in all_evs:
-        kind = ev.get("kind", "")
-        if kind not in ("check.failed", "check.ok", "condition.cleared"):
-            continue
         key = _check_key_of(ev)
         if not key:
             continue
         by_key.setdefault(key, []).append(ev)
+        group_of[key] = GROUPS[_base(_condition_key(ev))]
 
     current_by_key: dict[str, dict] = {}
     for row in (current_checks or ()):
@@ -71,7 +94,7 @@ def health_view(days: int = 7, *, store=None, now: datetime | None = None,
         evs = sorted(by_key.get(key, ()), key=lambda e: (_parse_iso(e["at"]), e["id"]))
         state = "ok"
         text = (current_by_key.get(key) or {}).get("text") or key
-        group = (current_by_key.get(key) or {}).get("group") or ""
+        group = (current_by_key.get(key) or {}).get("group") or group_of.get(key, "")
         spans: list[dict] = []
         open_span: dict | None = None
 
@@ -79,9 +102,7 @@ def health_view(days: int = 7, *, store=None, now: datetime | None = None,
             ev_dt = _parse_iso(ev["at"])
             if ev_dt > to_dt:
                 break
-            ev_text = (ev.get("data") or {}).get("text") or (ev.get("subject") or {}).get("name") or text
-            if ev_text:
-                text = ev_text
+            text = _row_text(ev, text) or text
             new_state = _state_from_event(ev)
             if ev_dt < from_dt:
                 state = new_state

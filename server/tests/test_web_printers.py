@@ -1356,6 +1356,17 @@ def test_the_auto_routes_pass_to_the_kit_with_only_their_keys(env, autokit):
                      ("POST", f"/api/printers/{SERIAL}/auto/choose", {"slot": "A2"}), ("POST", f"/api/printers/{SERIAL}/auto/cancel", {})]
 
 
+def test_auto_refusal_uses_the_kit_twin_shape(env, autokit, monkeypatch):
+    def refuse(path, body):
+        raise SlotError("This slot no longer waits.", http=409, code="nothing_to_choose")
+
+    monkeypatch.setattr(autokit, "post", refuse)
+    c = signed(make_app(env, autokit))
+    response = c.post(P + f"/{SERIAL}/auto/choose", json={"slot": "A2"}, headers=H)
+    assert response.status_code == 409
+    assert response.json() == {"error": "nothing_to_choose", "message": "This slot no longer waits."}
+
+
 def test_the_auto_routes_check_their_input_before_the_kit_and_need_the_pages_origin(env, autokit):
     c = signed(make_app(env, autokit))
     assert c.post(P + f"/{SERIAL}/slots/auto/load", json={}, headers=H).status_code == 400

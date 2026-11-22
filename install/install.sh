@@ -71,6 +71,7 @@ if [ -n "$RESTORE" ]; then
     RESTORE="$(cd "$(dirname "$RESTORE")" && pwd)/$(basename "$RESTORE")"
 fi
 if [ -n "$PASSWORD_FILE" ]; then
+    [ -n "$RESTORE" ] || die "--password-file requires --restore"
     [ -f "$PASSWORD_FILE" ] || die "$PASSWORD_FILE: no such password file"
     PASSWORD_FILE="$(cd "$(dirname "$PASSWORD_FILE")" && pwd)/$(basename "$PASSWORD_FILE")"
 fi

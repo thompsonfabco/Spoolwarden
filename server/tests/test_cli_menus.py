@@ -68,6 +68,7 @@ def test_a_group_screen_is_headed_by_its_place_and_ends_with_the_actions_that_ar
     assert "Restore: sudo spoolwarden restore <zip>" in out
     assert "Settings > Network and addresses" in out and "Firewall rules: spoolwarden remote firewall" in out
     assert "Settings > Filament Catalog" in out and "Update now: sudo spoolwarden catalog update" in out
+    assert "Catalog token: sudo spoolwarden catalog token" in out        # the token is a command, not a menu item (06 8.3)
 
 
 def test_a_staged_change_is_saved_with_s_and_the_group_shows_what_is_stored(capsys, monkeypatch):
@@ -198,9 +199,9 @@ def test_switched_off_features_say_so_and_stay_on_the_main_list(capsys, monkeypa
     config.save(cfg)
     assert run(monkeypatch, "9\nq\nq\n") == 0
     out = say(capsys.readouterr().out)
-    assert "off: only Catalog token" in out
+    assert "off: switch it on in Features (12)" in out
     assert "The Filament Catalog is switched off. Switch it on in Features (12)." in out
-    assert "Catalog token not set" in out.split("Settings > Filament Catalog")[1]
+    assert "Settings > Filament Catalog" not in out
 
 
 # ---------- saving ----------
@@ -414,10 +415,9 @@ def test_the_passphrase_is_asked_twice_a_mismatch_asks_both_again_and_a_short_on
     assert asked[-1] == "saved 25"
 
 
-def test_the_anthropic_key_and_the_catalog_token_are_removed_after_a_question_and_only_on_save(secrets, monkeypatch, capsys):
+def test_the_anthropic_key_is_removed_after_a_question_and_only_on_save(secrets, monkeypatch, capsys):
     all_features()
     (config.paths().etc / "anthropic_key").write_text("sk-ant-x\n")
-    (config.paths().etc / "github_token").write_text("ghp_x\n")
     assert run(monkeypatch, "5\nx\nn\nq\nq\n") == 0                           # a no: nothing staged
     assert (config.paths().etc / "anthropic_key").exists()
     assert run(monkeypatch, "5\nx\ny\nq\n5\nq\nq\nn\ns\nq\n") == 0
@@ -425,10 +425,6 @@ def test_the_anthropic_key_and_the_catalog_token_are_removed_after_a_question_an
     assert ("Remove the Anthropic API key? Label Reader: Cloud (Claude) stops reading labels until a new key is set. "
             "[y/N]") in out and "(will be removed)" in out
     assert not (config.paths().etc / "anthropic_key").exists()
-    assert run(monkeypatch, "9\nx\ny\nq\ns\nq\n") == 0
-    assert "Remove the Catalog token? The Filament Catalog can then download only from public sources." in say(
-        capsys.readouterr().out)
-    assert not (config.paths().etc / "github_token").exists()
 
 
 # ---------- the variants and exits ----------
@@ -777,16 +773,14 @@ def test_a_secret_prompt_reads_the_next_piped_line_and_never_calls_getpass(monke
 
 def test_a_save_that_fails_leaves_every_secret_unchanged(monkeypatch, capsys):
     all_features()
-    (config.paths().etc / "github_token").write_text("ghp_old\n")
 
     def boom(cfg):
         raise ValueError("the disk is full")
     monkeypatch.setattr(config, "save", boom)
-    assert run(monkeypatch, "5\n2\nsk-ant-NEW\nq\n9\n1\nghp_new\nq\ns\nq\ny\n") == 5
+    assert run(monkeypatch, "5\n2\nsk-ant-NEW\nq\ns\nq\ny\n") == 5
     err = say(capsys.readouterr().err)
     assert "Error: nothing was saved: the disk is full. Your changes are still here." in err
     assert not (config.paths().etc / "anthropic_key").exists()
-    assert (config.paths().etc / "github_token").read_text().strip() == "ghp_old"
 
 
 def test_a_secret_that_cannot_be_written_puts_the_settings_back(monkeypatch, capsys):
@@ -802,11 +796,13 @@ def test_a_secret_that_cannot_be_written_puts_the_settings_back(monkeypatch, cap
         capsys.readouterr().err)
 
 
-def test_a_bad_catalog_token_asks_again(monkeypatch, capsys):
+def test_the_catalog_group_has_no_token_item_to_open(monkeypatch, capsys):
     all_features()
-    assert run(monkeypatch, "9\n1\nnot a token\nghp_good\nq\ns\nq\n") == 0
-    assert "Error: a GitHub token is one word of printable characters." in capsys.readouterr().err
-    assert (config.paths().etc / "github_token").read_text().strip() == "ghp_good"
+    assert run(monkeypatch, "9\n1\nq\nq\n") == 0                  # the old item 1 is gone: the screen numbers none
+    cap = capsys.readouterr()
+    assert '"1" is not a number or letter on this screen.' in cap.err
+    assert "Catalog token not set" not in say(cap.out) and "Catalog token set" not in say(cap.out)
+    assert not (config.paths().etc / "github_token").exists()
 
 
 def test_features_opened_inside_config_apply_on_settings_read_when_s_is_pressed(monkeypatch):

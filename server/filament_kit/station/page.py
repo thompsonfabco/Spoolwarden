@@ -47,6 +47,8 @@ TEXTS = {
                                  "Open this device's page.",
     "station.page.status": "Status",
     "station.page.settings": "Settings",
+    "station.page.page_from": "Page access: {mode}",
+    "station.page.page_from_subnets_note": "If the network changes, run sudo spoolwarden modules apply on this Weigh Station.",
     "station.page.save": "Save",
     "station.page.reset": "Back to the installed values",
     "station.page.saved": "Saved.",

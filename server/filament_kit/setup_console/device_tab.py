@@ -162,9 +162,9 @@ def _origin(url) -> str | None:
         return None
 
 
-def own_page(endpoint: tuple[str, int, str], hub_host: str) -> str:
+def own_page(endpoint: tuple[str, int, str | None], hub_host: str) -> str:
     """Use the pinned Station port. A co-hosted Station uses the browser's already validated Hub hostname."""
-    host, port, _fp = endpoint
+    host, port, fingerprint = endpoint
     try:
         loopback = ipaddress.ip_address(host).is_loopback
     except ValueError:
@@ -172,9 +172,10 @@ def own_page(endpoint: tuple[str, int, str], hub_host: str) -> str:
     if loopback and hub_host:
         host = hub_host
     authority = f"[{host}]" if ":" in host else host
-    if port != 443:
+    scheme = "https" if fingerprint else "http"
+    if port != (443 if fingerprint else 80):
         authority += f":{port}"
-    return f"https://{authority}/"
+    return f"{scheme}://{authority}/"
 
 
 def clean_status(v, depth: int = 0):
@@ -208,14 +209,17 @@ def routes(page) -> list[tuple]:
         if row["page"]:
             url = _station_for(device_id)
             try:
-                out["own_page"] = own_page(station_client.pinned_endpoint(url), hub_host)
+                out["own_page"] = own_page(station_client.station_endpoint(url), hub_host)
                 status = station_client.read_state(url)
-                settings_list, dropped = station_client.read_settings(url)
             except station_client.StationCallError:
                 out["device"] = {**row, "reachable": False}
                 return out
             out["status"] = clean_status(status)
             out["photo"] = status.get("photo") is True
+            try:
+                settings_list, dropped = station_client.read_settings(url)
+            except station_client.StationCallError:
+                return out
             out["settings"] = settings_list
             if dropped:
                 out["settings_dropped"] = True
@@ -272,8 +276,10 @@ def routes(page) -> list[tuple]:
             raise Refused(404, "this device has no page of its own")
         url = _station_for(device_id)
         try:
-            endpoint = station_client.pinned_endpoint(url)
+            endpoint = station_client.station_endpoint(url)
             base = own_page(endpoint, hub_host)
+            if endpoint[2] is None:
+                return {"address": base}
             got = station_client.ticket(url, endpoint=endpoint)
         except station_client.StationCallError as e:
             raise Refused(e.status or 502, e.message) from None

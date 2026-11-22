@@ -128,7 +128,7 @@ def _eligible(st: dict, sl: dict) -> bool:
     gs = st.get("gcode_state")
     printing = gs is None or gs in status.ACTIVE
     return (sl.get("present") is True and sl.get("reading") is not True
-            and not sl.get("rfid") and not (printing and sl.get("active")))
+            and not sl.get("pending") and not sl.get("rfid") and not (printing and sl.get("active")))
 
 
 def is_auto_possible(st: dict | None, *, adapter: str | None = None) -> bool:
@@ -179,7 +179,9 @@ def _load_into_slot(manager, sm, serial: str, label: str, spool_id: int, *,
     with slot_lock, event_sink.spool_data("spool.loaded", auto="yes"):
         st = manager.status(serial)
         adapter = _adapter_for(manager, serial, p)
-        if not any(sl["label"] == label and _eligible(st, sl) for sl in _watchable_slots(st, adapter=adapter)):
+        if (serial, pending_label) in pending_store.jobs() or not any(
+            sl["label"] == label and _eligible(st, sl) for sl in _watchable_slots(st, adapter=adapter)
+        ):
             raise AutoError("nothing_to_choose", "That slot is no longer available for Auto.")
         sealed = _sealed(sealed_location)
         if kf is not None:
@@ -325,6 +327,7 @@ class Store:
             "confirmed": None,
             "expires_in": int(TTL),
             "message": f"Waiting for {spool_name} to be loaded into any slot of {printer_name}.",
+            **({"replaces": {"spool_id": old.spool_id, "name": old.spool_name}} if old is not None else {}),
         }
 
     def choose(self, manager, sm, serial: str, slot: str) -> dict:
@@ -342,9 +345,7 @@ class Store:
                 spool_id = job.spool_id
                 load_kw = dict(job.load_kw)
             res = _load_into_slot(manager, sm, serial, chosen, spool_id, **load_kw)
-            with self._lock:
-                if self._jobs.get(serial) is job:
-                    self._jobs.pop(serial, None)
+            self.cancel_for_spool(spool_id)
             log.info("auto chose %s %s spool %s", serial, chosen, spool_id)
             return res
 
@@ -463,8 +464,13 @@ class Store:
         p = registry.load().get(serial)
         adapter = _adapter_for(job.manager, serial, p)
         candidates = []
+        named = {label for (printer, label) in pending.STORE.jobs() if printer == serial}
         for sl in _watchable_slots(st, adapter=adapter):
             lab = sl["label"]
+            if lab in named or sl.get("pending"):
+                # Do not reuse an insertion the owner designated for a named spool.
+                job.seen_empty[lab] = False
+                continue
             if sl.get("present") is False:
                 job.seen_empty[lab] = True
             if job.seen_empty.get(lab) and _eligible(st, sl):
@@ -503,9 +509,7 @@ class Store:
                 return self._end(serial, job, f"refused: {e}")
             except Exception as e:  # noqa: BLE001 - SlotInUse while printing, offline, mapping running: retry
                 return self._wait(serial, job, type(e).__name__, f"{type(e).__name__}: {e}")
-            with self._lock:
-                if self._jobs.get(serial) is job:
-                    self._jobs.pop(serial, None)
+            self.cancel_for_spool(job.spool_id)
             p = (r or {}).get("preset") or {}
             log.info("auto applied %s %s spool %s: %s%s", serial, label, job.spool_id, p.get("name"),
                      "" if (r or {}).get("confirmed") else " (not confirmed yet)")

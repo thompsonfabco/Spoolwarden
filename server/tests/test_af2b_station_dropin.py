@@ -36,7 +36,7 @@ def test_home_admits_loopback_the_private_ranges_and_the_allow_list(monkeypatch)
     _nobody(monkeypatch)
     text = apply.station_dropin(_cfg("home"), ["127.0.0.1", "100.64.0.9"])
     assert _line(text) == f"IPAddressAllow=localhost {HOME} 127.0.0.1 100.64.0.9"
-    assert HOME == "10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 fc00::/7 fe80::/10"
+    assert HOME == "10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 fc00::/7 fe80::/10 127.0.0.0/8 ::1/128"
     assert "# page_from=home\n" in text
 
 
@@ -51,9 +51,10 @@ def test_subnets_admits_the_machines_own_subnets_and_the_allow_list(monkeypatch)
     _nobody(monkeypatch)
     text = apply.station_dropin(_cfg("subnets"), ["127.0.0.1", "100.64.0.9"],
                                 subnets=lambda: ["192.0.2.0/24", "2001:db8::/64"])
-    assert _line(text) == "IPAddressAllow=localhost 192.0.2.0/24 2001:db8::/64 127.0.0.1 100.64.0.9"
+    assert _line(text) == "IPAddressAllow=localhost 192.0.2.0/24 2001:db8::/64 127.0.0.0/8 ::1/128 127.0.0.1 100.64.0.9"
     assert "# page_from=subnets\n" in text
-    assert '"STATION_PAGE_RANGES=192.0.2.0/24 2001:db8::/64"' in text
+    assert '"STATION_PAGE_RANGES=192.0.2.0/24 2001:db8::/64 127.0.0.0/8 ::1/128"' in text
+    assert "STATION_PAGE_FROM=subnets" in text
 
 
 @pytest.mark.parametrize("unread", [None, []])
@@ -93,7 +94,7 @@ def test_plan_passes_the_subnets_reader_through(monkeypatch):
     _nobody(monkeypatch)
     acts = apply.plan(_cfg("subnets"), resolve=lambda h: [h], subnets=lambda: ["203.0.113.0/24"])
     (_, content, _, _), = [a.arg for a in acts if a.kind == "install_file" and a.arg[0] == apply.DROPIN]
-    assert _line(content) == "IPAddressAllow=localhost 203.0.113.0/24 127.0.0.1"
+    assert _line(content) == "IPAddressAllow=localhost 203.0.113.0/24 127.0.0.0/8 ::1/128 127.0.0.1"
 
 
 def _ip_json(*ifaces):

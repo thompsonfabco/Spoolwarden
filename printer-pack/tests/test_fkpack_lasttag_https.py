@@ -85,7 +85,7 @@ def test_the_rewrite_happens_once(env, moon):
 
 
 def test_an_existing_port_in_the_old_unit_is_kept(env, moon):
-    old = OLD_UNIT.replace("Restart=always\n", "Restart=always\nEnvironment=LASTTAG_PORT=5010\n")
+    old = OLD_UNIT.replace("Restart=always\n", 'Restart=always\nEnvironment=A=1 "LASTTAG_PORT=5010"\n')
     data, home, units, sd = _old_install(env, moon, old)
     mk(data, moon, home, units, sd).install(["lasttag"])
     assert "Environment=LASTTAG_PORT=5010\n" in _unit(units)

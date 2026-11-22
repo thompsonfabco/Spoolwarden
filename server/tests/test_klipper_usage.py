@@ -149,6 +149,21 @@ def test_job_end_records_entry(printer):
     assert sm.calls == []                                    # never writes usage to Spoolman (no PUT, PATCH or POST)
 
 
+def test_job_end_uses_the_history_spools_public_metadata(printer):
+    fam, pid, fake, recorder = printer
+    vendor = recorder.sm.post("vendor", {"name": "Test Filament"})
+    filament = recorder.sm.post("filament", {"name": "Blue PETG", "vendor_id": vendor["id"],
+                                            "material": "PETG", "color_hex": "AABBCC"})
+    spool = recorder.sm.post("spool", {"filament_id": filament["id"]})
+    fake.history = [history_job(job_id="000299", status="interrupted",
+                                auxiliary_data=[{"name": "spool_ids", "value": [spool["id"]]}])]
+    fam._record_job(pid)
+    entry, = fam.usage(pid, 36500)
+    assert (entry["spool_id"], entry["vendor"], entry["name"], entry["color_hex"], entry["outcome"]) == (
+        spool["id"], "Test Filament", "Blue PETG", "AABBCC", "unknown"
+    )
+
+
 def test_shutdown_mid_job_records_history_only(printer):
     """Review Focus 4: Klipper shuts down mid-print → one entry from Moonraker's history, no Spoolman write."""
     fam, pid, fake, sm = printer

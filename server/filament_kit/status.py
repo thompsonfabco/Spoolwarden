@@ -190,7 +190,7 @@ def _satellite_rows(cfg: dict) -> Iterator[Row]:
         reason = _plain_reason()
         if reason:
             text = addr_say("check_station_not_https_why", address=address, reason=reason)
-            fix = "Put right what the reason names on that machine, then restart the Weigh Station."
+            fix = addr_say("check_station_not_https_why_fix")
         else:
             text = addr_say("check_station_not_https_at", address=address)
             fix = addr_say("check_station_not_https_fix")
@@ -452,8 +452,8 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
         yield Row(INFO, f"paired devices: {len(pairing.devices())}", group="Devices", key="devices.paired")
         outdated = _outdated_devices()
         if outdated:
-            msg = "1 device is out of date." if outdated == 1 else f"{outdated} devices are out of date."
-            yield Row(FAIL, msg, "see Devices on the Hub page", group="Devices", key="devices.out-of-date")
+            yield Row(FAIL, address_texts.say("check_devices_out_of_date", count=outdated),
+                      address_texts.say("check_devices_out_of_date_fix"), group="Devices", key="devices.out-of-date")
         yield Row(INFO, f"reads used today: {cli._reads_today()} of {cfg['reads_per_day']}", group="Label Reader",
                   key="label-reader.reads-today")
     if "printers" in on:

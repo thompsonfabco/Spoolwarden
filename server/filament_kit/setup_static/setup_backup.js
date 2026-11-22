@@ -153,35 +153,42 @@ function keepForm(r) {
   return form;
 }
 
-// The restore dialog (typed word); a backup the Hub's stored password does not open also asks for its password, checked first
-// (restore/password) so a wrong one leaves everything as it was
+function unlockRestore(opener) {
+  const pw = SW.field({ type: "secret", name: "restore_password", label: bkT("settings_restore_password"), hint: bkT("settings_restore_password_hint"),
+    attrs: { autocomplete: "off" }, check: (x) => (x ? null : bkT("settings_restore_password_need")) });
+  return SW.ask({ kind: "entry", opener, fields: [pw], title: bkT("settings_restore_password"), confirm: SW.t("common_check"),
+    run: async ([password], { result }) => {
+      let summary = null;
+      await needCode(async () => {
+        try {
+          summary = await api("restore/password", { password, code: theCode() });
+        } catch (x) {
+          if (x.locked) throw x;
+          SW.result(result, "bad", hubText(x.data?.error || x.message));
+          if (x.data?.code === "wrong_password") pw._control.focus();
+        }
+      });
+      return summary || false;
+    } });
+}
+
 function restoreAsk(s, opener) {
-  const pw = s.needs_password ? SW.field({ type: "secret", name: "restore_password", label: bkT("settings_restore_password"), hint: bkT("settings_restore_password_hint"),
-    attrs: { autocomplete: "off" }, check: (x) => (x ? null : bkT("settings_restore_password_need")) }) : null;
-  const out = SW.ask({ kind: "typed", word: "restore", opener, fields: pw ? [pw] : [],
+  return SW.ask({ kind: "typed", word: "restore", opener,
     title: SW.t("settings_restore_title"), text: SW.t("settings_restore_short", { host: s.host || SW.t("settings_restore_summary_other_hub"), created: s.created }),
     body: h("p", { class: "dialog__text", textContent: SW.t("settings_restore_body") }), confirm: SW.t("settings_restore_confirm"),
     run: async (values, { result }) => {
       let r = null;
       await needCode(async () => {
         try {
-          if (pw) await api("restore/password", { password: values[0], code: theCode() });
-          r = await api("job", { name: "restore", confirm: values[values.length - 1].trim(), sha256: s.sha256, code: theCode() });
+          r = await api("job", { name: "restore", confirm: values[0].trim(), sha256: s.sha256, code: theCode() });
         } catch (x) {
           if (x.locked) throw x;
-          const code = x.data && x.data.code;
           const err = x.data && x.data.error;
-          const wrong = code === "wrong_password" || err === "wrong_password";
-          const msg = wrong
-            ? (err && err !== "wrong_password" && err !== "bad origin" ? hubText(err) : bkT("settings_restore_wrong_password"))
-            : hubText((err && err !== "bad origin" ? err : "") || x.message);
-          SW.result(result, "bad", msg);
-          if (wrong && pw) pw._control.focus();
+          SW.result(result, "bad", hubText((err && err !== "bad origin" ? err : "") || x.message));
         }
       });
       return r || false;
     } });
-  return out;
 }
 
 // Restore: three steps the person goes through (02 8.2)
@@ -244,7 +251,14 @@ function restoreSteps() {
       line("settings_restore_summary_code"),
       h("p", { class: "mono", textContent: SW.t("settings_restore_summary_sha", { hash: s.sha256 }) })].filter(Boolean));
     actions.replaceChildren(
-      SW.btn(SW.t("settings_restore_button"), { cls: "btn--danger", action: "restore", run: async (e) => { if (await restoreAsk(s, e.currentTarget)) { reset(); followApply(true); } } }),
+      s.needs_password
+        ? SW.btn(SW.t("common_check"), { cls: "btn--primary", action: "unlock-backup", run: async (e) => {
+          const unlocked = await unlockRestore(e.currentTarget);
+          if (unlocked) checked(unlocked);
+        } })
+        : SW.btn(SW.t("settings_restore_button"), { cls: "btn--danger", action: "restore", run: async (e) => {
+          if (await restoreAsk(s, e.currentTarget)) { reset(); followApply(true); }
+        } }),
       SW.btn(SW.t("settings_restore_discard"), { cls: "btn--ghost", action: "discard-upload", run: () => settingAct(rbox, "restore/forget", {}, () => reset()) }));
     paint();
     actions.querySelector("button").focus();

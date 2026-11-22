@@ -585,7 +585,7 @@ def test_restore_asks_before_its_wait_starts_and_its_lines_start_clean(quick, te
         terminal.write("restore\n")
         return "restore"
 
-    def fake_restore(path, *, yes, ask, step, out=print):
+    def fake_restore(path, *, yes, ask, step, out=print, password_file=None, actor=None):    # the real signature
         print("Backup of Workshop made today.")
         assert ask("Type restore to go on: ") == "restore"
         time.sleep(0.4)

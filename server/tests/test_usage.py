@@ -201,6 +201,16 @@ def test_cancelled_at_40_percent_deducts_40_percent(rig, sd, spoolman_fake_store
     assert used(spoolman_fake_store, HTA) == round(9.6 * 0.4, 2)
 
 
+def test_a_stop_without_a_reported_print_error_is_unknown(rig, sd):
+    calibrate()
+    put(sd, "/bracket_v3.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig()
+    r.push(JOB)
+    r.push({"gcode_state": "FAILED", "mc_percent": 40, "fail_reason": "0"})
+    r.settled()
+    assert {row["outcome"] for row in usage.entries(SERIAL, 7)} == {"unknown"}
+
+
 def test_finish_in_first_report_after_connect_is_not_settled(rig, sd, spoolman_fake_store):
     calibrate()
     put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))

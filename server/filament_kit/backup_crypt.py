@@ -48,6 +48,8 @@ MIN_N_LOG2, MAX_N_LOG2 = 10, 20
 MIN_R, MAX_R = 1, 32
 MIN_P, MAX_P = 1, 16
 MIN_CHUNK_SIZE, MAX_CHUNK_SIZE = 4096, 16 * 1024 * 1024
+MAX_SCRYPT_MEMORY = 256 * 1024 * 1024   # what a file's own cost setting may ask of the machine (128 * N * r bytes);
+                                        # the defaults need 32 MiB. A crafted file must not make the helper derive with 4 GiB
 
 WRONG_MESSAGE = "Wrong password, or the file is damaged. Nothing was changed."
 
@@ -149,6 +151,8 @@ def decrypt_stream(src: BinaryIO, dst: BinaryIO, password: str) -> int:
     if magic != MAGIC:
         raise WrongPasswordOrDamaged()
     if not (MIN_N_LOG2 <= n_log2 <= MAX_N_LOG2 and MIN_R <= r <= MAX_R and MIN_P <= p <= MAX_P):
+        raise WrongPasswordOrDamaged()
+    if 128 * (1 << n_log2) * r > MAX_SCRYPT_MEMORY:
         raise WrongPasswordOrDamaged()
     if not (MIN_CHUNK_SIZE <= chunk_size <= MAX_CHUNK_SIZE):
         raise WrongPasswordOrDamaged()

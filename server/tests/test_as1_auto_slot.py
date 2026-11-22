@@ -500,7 +500,7 @@ def test_deferred_named_load_cancels_a_newer_auto_for_the_same_spool(rig, sm, as
     assert astore.active_view(SERIAL) is None
 
 
-def test_auto_waits_for_pending_same_slot_write_then_cancels_the_watcher(rig, sm, astore, clock, monkeypatch):
+def test_auto_skips_a_slot_reserved_for_a_named_spool(rig, sm, astore, clock, monkeypatch):
     m, _, _ = rig
     waiting = pending.Store(clock, start_thread=False)
     monkeypatch.setattr(pending, "STORE", waiting)
@@ -510,15 +510,8 @@ def test_auto_waits_for_pending_same_slot_write_then_cancels_the_watcher(rig, sm
     waiting.tick()
     astore.tick()
     clock.t += pending.SETTLE + 1
-    named_sending, auto_at_slot, finish_named = threading.Event(), threading.Event(), threading.Event()
+    named_sending, finish_named = threading.Event(), threading.Event()
     sends = []
-    slot_lock = waiting.slot_lock
-
-    def observe_slot_lock(serial, label):
-        if threading.current_thread() is automatic:
-            auto_at_slot.set()
-        return slot_lock(serial, label)
-
     def load(_manager, _sm, serial, label, spool_id, dry, **kw):
         sends.append(spool_id)
         if spool_id == sm.sp2["id"]:
@@ -528,13 +521,13 @@ def test_auto_waits_for_pending_same_slot_write_then_cancels_the_watcher(rig, sm
 
     automatic = threading.Thread(target=astore.tick, daemon=True)
     named = threading.Thread(target=waiting.tick, daemon=True)
-    monkeypatch.setattr(waiting, "slot_lock", observe_slot_lock)
     monkeypatch.setattr(loading, "load", load)
     named.start()
     try:
         assert named_sending.wait(5)
         automatic.start()
-        assert auto_at_slot.wait(5)
+        automatic.join(5)
+        assert not automatic.is_alive()
         assert sends == [sm.sp2["id"]]
     finally:
         finish_named.set()
@@ -542,8 +535,28 @@ def test_auto_waits_for_pending_same_slot_write_then_cancels_the_watcher(rig, sm
         if automatic.ident is not None:
             automatic.join(5)
     assert not named.is_alive() and not automatic.is_alive()
-    assert sends == [sm.sp2["id"], sm.sp["id"]]
-    assert waiting.jobs() == {} and astore.jobs() == {}
+    astore.tick()
+    assert sends == [sm.sp2["id"]]
+    assert waiting.jobs()[SERIAL, "A3"].applied
+    assert astore.active_view(SERIAL)["state"] == "waiting"
+
+
+def test_an_applied_auto_ends_other_printers_waiting_for_the_same_spool(rig, sm, astore, clock, monkeypatch):
+    m, _, _ = rig
+    registry.upsert(Printer(SERIAL2, "Garage P1S", "C12", "10.0.0.6", "11112222", True))
+    monkeypatch.setattr(m, "state", lambda serial: "connected")
+    report = m.status(SERIAL)
+    actual_status = m.status
+    monkeypatch.setattr(m, "status", lambda serial: report if serial == SERIAL2 else actual_status(serial))
+    monkeypatch.setattr(loading, "load", lambda *args, **kw: {"confirmed": True})
+    sid = sm.sp["id"]
+    astore.start(m, sm, SERIAL, sid, dry=False)
+    astore.start(m, sm, SERIAL2, sid, dry=False)
+    _push(rig, _report(a2=FULL, bits="30007"))
+    astore.tick()
+    clock.t += auto_slot.SETTLE + 1
+    astore.tick()
+    assert astore.jobs() == {}
 
 
 # --- Klipper live watch + SlotInUse retry -----------------------------------------------------------------------------

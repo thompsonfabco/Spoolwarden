@@ -502,7 +502,7 @@ def record_station_hello(device_id: str, fp, port, version, plain=None) -> bool:
     with _locked():
         devs = _load_devices()
         for d in devs:
-            if d.get("id") == device_id and device_type(d):
+            if d.get("id") == device_id and device_type(d) == "station":
                 if (d.get("fp"), d.get("port"), d.get("version")) != (fp, port, version):
                     d.update(fp=fp, port=port, version=version)
                 d.pop("plain_reason", None)
@@ -522,7 +522,7 @@ def _record_plain(device_id: str, port, version: str, reason: str) -> bool:
     with _locked():
         devs = _load_devices()
         for d in devs:
-            if d.get("id") == device_id and device_type(d):
+            if d.get("id") == device_id and device_type(d) == "station":
                 d.update(version=version, plain_reason=reason, hello_at=time.time())
                 if not d.get("fp"):
                     d["port"] = port        # the plain port; a pinned station keeps its pinned HTTPS port
@@ -534,7 +534,7 @@ def _record_plain(device_id: str, port, version: str, reason: str) -> bool:
 def station_plain_reason() -> str | None:
     """Why the Weigh Station that said hello last has no certificate (`plain` of its hello), else None."""
     with _locked():
-        found = [d for d in _load_devices() if d.get("claimed") is not None and device_type(d) and d.get("plain_reason")]
+        found = [d for d in _load_devices() if d.get("claimed") is not None and device_type(d) == "station" and d.get("plain_reason")]
     return max(found, key=lambda x: x.get("hello_at") or 0)["plain_reason"] if found else None
 
 
@@ -543,7 +543,7 @@ def station_info() -> dict | None:
     None (no station paired, or only an older one that sends no fingerprint: plain HTTP). Raises AmbiguousStation when
     two pairings have one: the Hub has a single station address (unpair the one that is gone)."""
     with _locked():
-        found = [d for d in _load_devices() if d.get("claimed") is not None and device_type(d) and d.get("fp")]
+        found = [d for d in _load_devices() if d.get("claimed") is not None and device_type(d) == "station" and d.get("fp")]
     if not found:
         return None
     if len(found) > 1:

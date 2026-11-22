@@ -186,7 +186,7 @@ def routes(page) -> list[tuple]:
             raise Refused(400, err, field="url")
         if tier not in local_reader.TIERS:
             raise Refused(400, "the tier is auto, cpu or gpu", field="tier")
-        trust = bool(body.get("trust", True))
+        trust = body.get("trust") is True
 
         def check() -> dict:
             cfg = config.load()

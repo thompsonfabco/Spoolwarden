@@ -28,7 +28,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from . import config, event_kinds, events, hostaddr, intake_history, inventory, storage
+from . import alerts_api, config, events, hostaddr, intake_history, inventory, storage
+from .alerts_api import say
 from .bridge import registry, usage as bambu_usage
 from .bridge.klipper import usage as klipper_usage
 from .profiles import lines as lines_mod
@@ -86,8 +87,8 @@ class CsvError(ValueError):
 class SpoolmanExportUnavailable(CsvError):
     """Raised when Spoolman does not support its own CSV export endpoint."""
 
-    def __init__(self, message: str = "Spoolman's own export is not available in this Spoolman version."):
-        super().__init__(message, status=501, code="spoolman_export_unavailable")
+    def __init__(self, message: str | None = None):
+        super().__init__(message or say("csv_export_unavailable"), status=501, code="spoolman_export_unavailable")
 
 
 def safe_cell(value: Any) -> str:
@@ -130,17 +131,17 @@ def _resolve_printers(printers_map: dict[str, registry.Printer], selector: str |
     if len(prefix) == 1:
         return prefix
     if len(prefix) > 1:
-        raise CsvError(f"More than one printer starts with {selector!r}.", status=400, code="ambiguous_printer")
-    raise CsvError(f"No printer named {selector!r}.", status=404, code="printer_not_found")
+        raise CsvError(say("csv_ambiguous_printer", selector=repr(selector)), status=400, code="ambiguous_printer")
+    raise CsvError(say("csv_no_printer", selector=repr(selector)), status=404, code="printer_not_found")
 
 
 def _export_usage(*, days: float = 30, printer: str | None = None, printers_mgr: Any = None) -> str:
     try:
         days_val = float(days)
     except (TypeError, ValueError):
-        raise CsvError("days must be a number.", status=400, code="bad_request") from None
+        raise CsvError(say("csv_days_number"), status=400, code="bad_request") from None
     if days_val <= 0:
-        raise CsvError("days must be above 0.", status=400, code="bad_request")
+        raise CsvError(say("csv_days_above_zero"), status=400, code="bad_request")
 
     printers_map = registry.load()
     selected = _resolve_printers(printers_map, printer)
@@ -292,33 +293,24 @@ def _subject_label(subject: Any) -> str:
 
 
 def _event_text(ev: dict) -> str:
-    describe = getattr(event_kinds, "describe", None)
-    if callable(describe):
-        try:
-            text = describe(ev)
-            if text:
-                return str(text)
-        except Exception:
-            pass
-    data = ev.get("data")
-    if isinstance(data, dict) and data:
-        return ", ".join(f"{k}={v}" for k, v in data.items() if v is not None and v != "")
-    return str(ev.get("kind") or "")
+    """The sentence the Hub page and the command line show for the event."""
+    title, text = alerts_api.words(ev)
+    return text or title
 
 
 def _export_activity(*, days: float = 30) -> str:
     try:
         days_val = float(days)
     except (TypeError, ValueError):
-        raise CsvError("days must be a number.", status=400, code="bad_request") from None
+        raise CsvError(say("csv_days_number"), status=400, code="bad_request") from None
     if days_val <= 0:
-        raise CsvError("days must be above 0.", status=400, code="bad_request")
+        raise CsvError(say("csv_days_above_zero"), status=400, code="bad_request")
 
     since_dt = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days_val)
     all_events: list[dict] = []
     since_id = 0
     while True:
-        page = events.read(since=since_id, limit=1000, since_at=since_dt)
+        page = events.read(since=since_id, limit=1000, since_at=since_dt, activity=True)
         batch = page.get("events") or []
         if not batch:
             break
@@ -406,7 +398,7 @@ def _export_spoolman(kind: str, sm: Spoolman | None) -> str:
     if sm is None:
         cfg = config.load()
         sm = Spoolman(cfg["spoolman_url"])
-    url = f"{sm.base_url}/api/v1/export/{kind}?format=csv"
+    url = f"{sm.base_url}/api/v1/export/{kind}?fmt=csv"
     req = urllib.request.Request(url, method="GET", headers={"Accept": "text/csv, */*"})
     try:
         with urllib.request.urlopen(req, timeout=sm.timeout) as resp:
@@ -434,7 +426,7 @@ def export_csv(
 ) -> str:
     """Generate a UTF-8 CSV string for one of the 8 supported export sets."""
     if export_set not in EXPORT_SETS:
-        raise CsvError(f"Unknown export set {export_set!r}.", status=404, code="not_found")
+        raise CsvError(say("csv_unknown_set", name=repr(export_set)), status=404, code="not_found")
     if export_set == "usage":
         return _export_usage(days=days, printer=printer, printers_mgr=printers_mgr)
     if export_set == "locations":
@@ -461,26 +453,26 @@ def _decode_csv(data: bytes | str) -> list[dict[str, str]]:
         try:
             text = data.decode("utf-8-sig")
         except UnicodeDecodeError:
-            raise CsvError("This file is not a CSV file that Spoolwarden can read.") from None
+            raise CsvError(say("csv_not_readable")) from None
     elif isinstance(data, str):
         text = data.lstrip("\ufeff")
     else:
-        raise CsvError("This file is not a CSV file that Spoolwarden can read.")
+        raise CsvError(say("csv_not_readable"))
 
     if not text.strip():
-        raise CsvError("This file is not a CSV file that Spoolwarden can read.")
+        raise CsvError(say("csv_not_readable"))
     try:
         reader = csv.DictReader(io.StringIO(text))
         if not reader.fieldnames:
-            raise CsvError("This file is not a CSV file that Spoolwarden can read.")
+            raise CsvError(say("csv_not_readable"))
         # Normalize header names
         fieldnames = [h.strip() if isinstance(h, str) else "" for h in reader.fieldnames]
         if any(not h for h in fieldnames):
-            raise CsvError("This file is not a CSV file that Spoolwarden can read.")
+            raise CsvError(say("csv_not_readable"))
         rows: list[dict[str, str]] = []
         for raw_row in reader:
             if None in raw_row:
-                raise CsvError("This file is not a CSV file that Spoolwarden can read.")
+                raise CsvError(say("csv_not_readable"))
             cleaned = {
                 (k.strip() if isinstance(k, str) else k): (v.strip() if isinstance(v, str) else "")
                 for k, v in raw_row.items()
@@ -489,7 +481,7 @@ def _decode_csv(data: bytes | str) -> list[dict[str, str]]:
                 rows.append(cleaned)
         return rows
     except csv.Error:
-        raise CsvError("This file is not a CSV file that Spoolwarden can read.") from None
+        raise CsvError(say("csv_not_readable")) from None
 
 
 def _parse_bool(raw: str, column: str, problems: list[dict[str, str]], default: bool = False) -> bool:
@@ -500,7 +492,7 @@ def _parse_bool(raw: str, column: str, problems: list[dict[str, str]], default: 
         return True
     if low in _BOOL_FALSE:
         return False
-    problems.append({"column": column, "text": f"{column}: Enter yes or no."})
+    problems.append({"column": column, "text": say("csv_enter_yes_no", column=column)})
     return default
 
 
@@ -512,10 +504,10 @@ def _parse_int(raw: str, column: str, problems: list[dict[str, str]], *, default
     try:
         val = int(s)
     except ValueError:
-        problems.append({"column": column, "text": f"{column}: Enter a whole number."})
+        problems.append({"column": column, "text": say("csv_enter_whole", column=column)})
         return default
     if min_val is not None and val < min_val:
-        problems.append({"column": column, "text": f"{column}: Enter a whole number of at least {min_val}."})
+        problems.append({"column": column, "text": say("csv_enter_whole_min", column=column, min=min_val)})
         return default
     return val
 
@@ -528,10 +520,10 @@ def _parse_float(raw: str, column: str, problems: list[dict[str, str]], *, defau
     try:
         val = float(s)
     except ValueError:
-        problems.append({"column": column, "text": f"{column}: Enter a number."})
+        problems.append({"column": column, "text": say("csv_enter_number", column=column)})
         return default
     if above_zero and val <= 0:
-        problems.append({"column": column, "text": f"{column}: Enter a number above 0."})
+        problems.append({"column": column, "text": say("csv_enter_number_above_zero", column=column)})
         return default
     return val
 
@@ -542,20 +534,20 @@ def _spool_row_to_item(row: dict[str, str]) -> tuple[dict[str, Any] | None, list
     name = row.get("name", "").strip()
     material = row.get("material", "").strip()
     if not vendor:
-        problems.append({"column": "vendor", "text": "vendor: Enter a vendor."})
+        problems.append({"column": "vendor", "text": say("csv_need_vendor")})
     if not name:
-        problems.append({"column": "name", "text": "name: Enter a filament name."})
+        problems.append({"column": "name", "text": say("csv_need_name")})
     if not material:
-        problems.append({"column": "material", "text": "material: Enter a material."})
+        problems.append({"column": "material", "text": say("csv_need_material")})
 
     net_raw = row.get("net", "").strip()
     if not net_raw:
-        problems.append({"column": "net", "text": "net: Enter grams above 0."})
+        problems.append({"column": "net", "text": say("csv_need_net")})
         net = None
     else:
         net = _parse_float(net_raw, "net", problems, above_zero=True)
         if net is not None and net <= 0:
-            problems.append({"column": "net", "text": "net: Enter grams above 0."})
+            problems.append({"column": "net", "text": say("csv_need_net")})
 
     count = _parse_int(row.get("count", ""), "count", problems, default=1, min_val=1)
     tare = _parse_float(row.get("tare", ""), "tare", problems, default=200.0, above_zero=True)
@@ -571,14 +563,14 @@ def _spool_row_to_item(row: dict[str, str]) -> tuple[dict[str, Any] | None, list
     if color_raw:
         m = _HEX_RE.fullmatch(color_raw)
         if not m:
-            problems.append({"column": "color_hex", "text": "color_hex: Enter 6 or 8 hex digits, like #2B2B2E."})
+            problems.append({"column": "color_hex", "text": say("csv_bad_color")})
         else:
             color_hex = m.group(1)
 
     if gross is not None and count != 1:
-        problems.append({"column": "gross", "text": "gross: Gross weight requires count 1."})
+        problems.append({"column": "gross", "text": say("csv_gross_count")})
     if gross is not None and tare is not None and gross <= tare:
-        problems.append({"column": "gross", "text": "gross: Gross weight must be above tare."})
+        problems.append({"column": "gross", "text": say("csv_gross_tare")})
 
     if problems:
         return None, problems
@@ -626,22 +618,23 @@ def import_spools(
     required = {"vendor", "name", "material", "net"}
     header_keys = set(rows_raw[0].keys())
     if not required.issubset(header_keys):
-        raise CsvError("This file is not a CSV file that Spoolwarden can read.")
+        raise CsvError(say("csv_not_readable"))
 
-    rules_eff = rules if rules is not None else config.load()
+    rules_eff = rules if rules is not None else storage.current()
     results: list[dict[str, Any]] = []
     valid_entries: list[tuple[int, dict[str, Any]]] = []
 
     for idx, raw_row in enumerate(rows_raw, start=1):
         item, problems = _spool_row_to_item(raw_row)
         if problems:
-            results.append({"n": idx, "ok": False, "problems": problems, "line": "left out"})
+            results.append({"n": idx, "ok": False, "problems": problems, "line": say("csv_left_out")})
             continue
         assert item is not None
         valid_entries.append((idx - 1, item))
-        loc_part = f", {item['location']}" if item.get("location") else ""
         net_str = f"{int(item['net']) if float(item['net']).is_integer() else item['net']} g"
-        desc = f"Add {item['count']} × {item['vendor']} {item['name']} ({item['material']}, {net_str}{loc_part})"
+        desc = say("csv_line_add_spools_at" if item.get("location") else "csv_line_add_spools", count=item["count"],
+                   vendor=item["vendor"], name=item["name"], material=item["material"], net=net_str,
+                   location=item.get("location") or "")
         results.append({"n": idx, "ok": True, "problems": [], "line": desc})
 
     total_add = sum(item["count"] for _, item in valid_entries)
@@ -662,7 +655,7 @@ def import_spools(
                 if isinstance(item_pos, int) and 0 <= item_pos < len(valid_entries):
                     res_idx = valid_entries[item_pos][0]
                     results[res_idx]["ok"] = False
-                    results[res_idx]["line"] = "left out"
+                    results[res_idx]["line"] = say("csv_left_out")
                     results[res_idx]["problems"].append({
                         "column": prob.get("field") or "row",
                         "text": prob.get("message") or str(e),
@@ -690,7 +683,7 @@ def import_locations(
         return {"rows": [], "add": 0, "change": 0, "dry": bool(dry_run)}
 
     if "name" not in rows_raw[0]:
-        raise CsvError("This file is not a CSV file that Spoolwarden can read.")
+        raise CsvError(say("csv_not_readable"))
 
     before_st = before if before is not None else storage.current()
     merged = storage.copy_of(before_st)
@@ -698,6 +691,7 @@ def import_locations(
     results: list[dict[str, Any]] = []
     # Map index in merged.locations -> CSV row index (0-based in results)
     loc_to_csv: dict[int, int] = {}
+    row_kind: dict[int, str] = {}                 # results index -> "add" or "change" (not read back from the text)
     add_count = 0
     change_count = 0
 
@@ -705,18 +699,18 @@ def import_locations(
         problems: list[dict[str, str]] = []
         name = raw_row.get("name", "").strip()
         if not name:
-            problems.append({"column": "name", "text": "name: Enter a name for the location."})
+            problems.append({"column": "name", "text": say("csv_need_location_name")})
 
         loc_type = raw_row.get("type", "").strip().lower() or storage.BULK
         if loc_type not in (storage.BULK, storage.CONTAINERS):
-            problems.append({"column": "type", "text": "type: Use bulk or containers."})
+            problems.append({"column": "type", "text": say("csv_bad_type")})
 
         limit = _parse_int(raw_row.get("limit", ""), "limit", problems, default=None, min_val=1)
         count = _parse_int(raw_row.get("count", ""), "count", problems, default=None, min_val=1)
         prefix = raw_row.get("prefix", "").strip() or None
         fill = raw_row.get("fill", "").strip().lower() or storage.NONE
         if fill not in (storage.NONE, storage.ANY, storage.MATERIALS):
-            problems.append({"column": "fill", "text": "fill: Use none, any, or materials."})
+            problems.append({"column": "fill", "text": say("csv_bad_fill")})
 
         mats_raw = raw_row.get("materials", "").strip()
         materials = [m.strip() for m in re.split(r"[;,]", mats_raw) if m.strip()] if mats_raw else []
@@ -725,7 +719,7 @@ def import_locations(
         sealed = _parse_bool(raw_row.get("sealed", ""), "sealed", problems, default=False)
 
         if problems:
-            results.append({"n": idx, "ok": False, "problems": problems, "line": "left out"})
+            results.append({"n": idx, "ok": False, "problems": problems, "line": say("csv_left_out")})
             continue
 
         existing = merged.by_name(name)
@@ -747,13 +741,15 @@ def import_locations(
             merged.locations[pos] = new_loc
             loc_to_csv[pos] = idx - 1
             change_count += 1
-            desc = f"Change {name} ({loc_type})"
+            desc = say("csv_line_change_location", name=name, type=loc_type)
+            row_kind[idx - 1] = "change"
         else:
             pos = len(merged.locations)
             merged.locations.append(new_loc)
             loc_to_csv[pos] = idx - 1
             add_count += 1
-            desc = f"Add {name} ({loc_type})"
+            desc = say("csv_line_add_location", name=name, type=loc_type)
+            row_kind[idx - 1] = "add"
         results.append({"n": idx, "ok": True, "problems": [], "line": desc})
 
     val_problems = storage.validate(merged.locations, before_st.locations)
@@ -761,22 +757,22 @@ def import_locations(
         if vp.row is not None and vp.row in loc_to_csv:
             r_idx = loc_to_csv[vp.row]
             results[r_idx]["ok"] = False
-            results[r_idx]["line"] = "left out"
-            results[r_idx]["problems"].append({"column": vp.field, "text": f"{vp.field}: {vp.error}"})
+            results[r_idx]["line"] = say("csv_left_out")
+            results[r_idx]["problems"].append({"column": vp.field, "text": say("csv_problem_line", field=vp.field, error=vp.error)})
         elif vp.row is None and results:
             results[0]["ok"] = False
-            results[0]["problems"].append({"column": vp.field, "text": f"{vp.field}: {vp.error}"})
+            results[0]["problems"].append({"column": vp.field, "text": say("csv_problem_line", field=vp.field, error=vp.error)})
 
     has_errors = any(not r["ok"] for r in results)
     if has_errors:
-        add_count = sum(1 for r in results if r["ok"] and r["line"].startswith("Add "))
-        change_count = sum(1 for r in results if r["ok"] and r["line"].startswith("Change "))
+        add_count = sum(1 for i, r in enumerate(results) if r["ok"] and row_kind.get(i) == "add")
+        change_count = sum(1 for i, r in enumerate(results) if r["ok"] and row_kind.get(i) == "change")
 
     if not dry_run:
         if has_errors:
             first_msg = next(
                 (p["text"] for r in results for p in r["problems"]),
-                "Locations CSV has validation errors.",
+                say("csv_locations_invalid"),
             )
             raise CsvError(first_msg, status=400, code="invalid_locations")
         storage.save(merged, before=before_st)

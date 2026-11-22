@@ -334,9 +334,14 @@ class SetupPage:
             ("/pair", w(self.pair), "POST"), ("/devices/{id}/revoke", w(self.device_revoke), "POST"),
             ("/modules", hw(self.module), "POST"), ("/settings", hw(self.setting), "POST"),
             ("/apply", hw(self.apply_start), "POST")] + setup_console.routes(self)
+        from .setup_console.history_tab import EXPORT_SETS
+        exports = {p.removeprefix("/export/").removesuffix(".csv") for p, _, method in table
+                   if method == "GET" and p.startswith("/export/") and p.endswith(".csv")}
+        if "{set}" in exports:
+            exports.remove("{set}")
+            exports.update(EXPORT_SETS)
         self.history = {
-            "exports": sorted(p.removeprefix("/export/").removesuffix(".csv") for p, _, method in table
-                              if method == "GET" and p.startswith("/export/") and p.endswith(".csv")),
+            "exports": sorted(exports),
             "event_undo": any(p.startswith("/events/{") and p.endswith("/undo") and m == "POST" for p, _, m in table),
             "activity": any(p == "/activity" and m == "GET" for p, _, m in table),
             "report": {"/report", "/report/download"} <= {p for p, _, m in table if m == "POST"},
@@ -491,7 +496,7 @@ class SetupPage:
         req.setdefault("client", _CLIENT.get())       # the address the helper's lockout counts against
         r = await anyio.to_thread.run_sync(self.helper, req)
         if not r.get("ok"):
-            extra = {k: r[k] for k in ("needs", "trust_gone", "tries_left", "retry_at", "field", "errors") if k in r}
+            extra = {k: r[k] for k in ("needs", "trust_gone", "tries_left", "retry_at", "field", "errors", "code") if k in r}
             raise Refused(int(r.get("status") or 500), str(r.get("error") or "the setup helper refused"), **extra)
         return r
 
@@ -834,6 +839,9 @@ class SetupPage:
         def run() -> bool:
             self._entry(serial)
             gone = registry.remove(serial)
+            if gone:
+                from .bridge import auto_slot
+                auto_slot.default_store().drop_printer(serial)
             self.printers.sync()
             return gone
         if not await anyio.to_thread.run_sync(run):

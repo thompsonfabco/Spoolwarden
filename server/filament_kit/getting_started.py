@@ -89,8 +89,8 @@ def _has_spools(cfg: dict) -> bool | None:
         return None
 
 
-def _step(sid: str, cfg: dict, fr: firstrun.FirstRun) -> tuple[bool, str] | None:
-    """(done, the line) for step `sid`, or None when the step is not shown on this Hub."""
+def _step(sid: str, cfg: dict, fr: firstrun.FirstRun, backup_done: bool | None = None) -> tuple[bool, str] | None:
+    """(done, the line) for step `sid`, or None when the step is not shown on this Hub. `backup_done`: see `view`."""
     from . import backup, storage
     on = modules.enabled(cfg)
     if sid == "name":
@@ -155,19 +155,21 @@ def _step(sid: str, cfg: dict, fr: firstrun.FirstRun) -> tuple[bool, str] | None
             return False, say("start_line_spool_unknown")
         return has, say("start_line_spool_done" if has else "start_line_spool_open")
     if sid == "backup":
-        has = any(e.kind != "pre-restore" for e in backup.listing())
+        has = backup_done if backup_done is not None else any(e.kind != "pre-restore" for e in backup.listing())
         return has, say("start_line_backup_done" if has else "start_line_backup_open")
     raise ValueError(sid)
 
 
-def view(cfg: dict | None = None) -> dict:
-    """The object of `GET start`. Never raises."""
+def view(cfg: dict | None = None, *, backup_done: bool | None = None) -> dict:
+    """The object of `GET start`. Never raises. `backup_done`: whether a backup (other than one made before a restore)
+    exists, as the root helper says; the Hub page's service gives it, since it cannot list the root-only backups folder.
+    None (root, the command line): the folder is listed here."""
     cfg = cfg if cfg is not None else config.load()
     fr = firstrun.load()
     steps = []
     for sid in STEP_IDS:
         try:
-            got = _step(sid, cfg, fr)
+            got = _step(sid, cfg, fr, backup_done)
         except Exception as e:      # noqa: BLE001 - a step that cannot be read is open, the rest still shows
             log.warning("getting started step %s not read: %s", sid, e)
             got = (False, "")

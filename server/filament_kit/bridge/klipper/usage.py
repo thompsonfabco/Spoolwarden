@@ -40,7 +40,7 @@ def _outcome(status: str) -> str:
         return "finished"
     if s == "cancelled":
         return "cancelled"
-    if s:
+    if s in {"error", "shutdown", "klippy_shutdown"}:
         return "failed"
     return "unknown"
 
@@ -116,14 +116,18 @@ def _write(pid: str, entries: list[dict]) -> None:
     tmp.replace(f)
 
 
+def job_spool_id(job: dict, fallback: int | None) -> int | None:
+    """Prefer Moonraker's recorded spool to the printer's current spool."""
+    aux = next((a.get("value") for a in (job.get("auxiliary_data") or [])
+                if isinstance(a, dict) and a.get("name") == "spool_ids"), None)
+    return aux[0] if isinstance(aux, list) and aux and type(aux[0]) is int else fallback
+
+
 def record(pid: str, job: dict, spool_id, *, spool: dict | None = None) -> dict:
     """Append Moonraker's history `job` (once per job id) and return the entry."""
     meta = job.get("metadata") or {}
     jid = str(job.get("job_id") or "")
-    aux = next((a.get("value") for a in (job.get("auxiliary_data") or [])
-                if isinstance(a, dict) and a.get("name") == "spool_ids"), None)
-    if isinstance(aux, list) and aux and isinstance(aux[0], int):
-        spool_id = aux[0]
+    spool_id = job_spool_id(job, spool_id)
     status = str(job.get("status") or "")
     used_mm, total_mm = _num(job.get("filament_used")), _num(meta.get("filament_total"))
     grams = _num(meta.get("filament_weight_total"))      # the whole file's weight: right for a job that finished
@@ -141,7 +145,7 @@ def record(pid: str, job: dict, spool_id, *, spool: dict | None = None) -> dict:
          "source": "moonraker",
          "material": meta.get("filament_type") or fil.get("material") or None,
          "vendor": meta.get("filament_vendor") or (fil.get("vendor") or {}).get("name") or None,
-         "name": meta.get("filament_name") or fil.get("name") or None,
+         "name": fil.get("name") or meta.get("filament_name") or None,
          "color_hex": color_hex,
          "printer_name": pname,
          "outcome": _outcome(status)}

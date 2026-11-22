@@ -60,7 +60,7 @@
       (s.choices || []).forEach(function (c) {
         var o = document.createElement("option");
         o.value = c;
-        say(o, c);
+        say(o, (s.choice_labels || {})[c] || c);
         o.selected = c === s.value;
         input.appendChild(o);
       });
@@ -108,6 +108,14 @@
       if (!first) { return null; }
       return fetch("settings?page=1", {credentials: "same-origin"}).then(function (r) { return r.json(); }).then(function (d) {
         $("settings-section").hidden = false;
+        const policy = $("page-from");
+        const mode = d.page_from;
+        policy.hidden = !["home", "subnets", "allowed"].includes(mode);
+        if (!policy.hidden) {
+          const label = T["station.page.page_from"];
+          const note = mode === "subnets" ? " " + T["station.page.page_from_subnets_note"] : "";
+          policy.textContent = label.replace("{mode}", mode) + note;
+        }
         showSettings(d.settings || []);
         timer = setInterval(function () { load(false); }, 5000);
       });

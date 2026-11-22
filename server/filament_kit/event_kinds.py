@@ -38,7 +38,9 @@ class Kind:
 # What a person or the Hub changes about a spool: the spool, and the before and after of what changed.
 _SPOOL_CHANGE = ("spool", "before_location", "after_location", "before_grams", "after_grams",
                  "before_slot", "after_slot", "before_tag", "after_tag", "before_archived",
-                 "batch")      # batch: all spool events of one request (R80 E5)
+                 "batch",      # batch: all spool events of one request (R80 E5)
+                 # what opening a spool by linking its tag changed, so an undo can put it back
+                 "before_first_used", "before_comment", "took_tag_from")
 # Every print.* event of one print run and its usage.recorded carry `run`; Klipper ones also `printer_job` (R80 E5).
 _RUN = ("run", "printer_job")
 

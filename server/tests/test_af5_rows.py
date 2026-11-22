@@ -27,7 +27,7 @@ def test_a_station_without_a_certificate_reason_falls_back_to_its_address(monkey
     (r,) = rows()
     assert (r.state, r.group, r.key) == ("fail", "Devices", "devices.station-https")
     assert r.text == "The Weigh Station at station.local:5003 is not using HTTPS."
-    assert r.fix == "run this on the Weigh Station's machine: sudo spoolwarden update"
+    assert r.fix == "Update it: on that machine run sudo spoolwarden update."
 
 
 def test_a_station_that_could_not_make_its_certificate_says_why_as_one_clean_line(monkeypatch):

@@ -627,7 +627,10 @@ class KlipperFamily(LoadsMixin):
         if not job:
             log.warning("klipper %s: a job ended but Moonraker's history has no job (is [history] on?)", pid)
             return
-        kusage.record(pid, job, c.spool_id)
+        with c.lock:
+            spool_id = kusage.job_spool_id(job, c.spool_id)
+        spool = next((row for row in self._spool_list() if row.get("id") == spool_id), None) if spool_id else None
+        kusage.record(pid, job, spool_id, spool=spool)
 
     # --- camera --------------------------------------------------------------------------------------------------
     def camera_url(self, pid: str) -> str | None:

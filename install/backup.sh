@@ -52,7 +52,8 @@ for p in etc/filament-kit var/lib/filament-kit var/lib/filament-kit-web; do
 done
 
 base="$DEST/$(date +%F).tar.gz"
-tmp="$base.tmp"
+tmp=$(mktemp "$DEST/.nightly-XXXXXXXX.tar.gz.tmp")
+trap 'rm -f -- "$tmp" "$tmp.enc"; rm -rf -- "$work"' EXIT
 # Skipped: data that is downloaded again (the uploaded Bambu system presets, earlier library versions),
 # half-written builds, and the backup password itself.
 # --acls/--xattrs: the web unit's grants (filament_kit/web_access.py) come back with a restore
@@ -82,8 +83,15 @@ else
 fi
 
 # Keep backup.keep_days days (14 unless set on the setup page): the nightly ones, the page's and a restore's own.
-find "$DEST" -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.tar.gz.enc' -o -name 'filament-kit-backup-*.zip' -o -name 'filament-kit-backup-*.zip.enc' -o -name 'pre-restore-*.zip' -o -name 'pre-restore-*.zip.enc' \) \
-    -mtime +$((KEEP - 1)) -delete
+if ! find "$DEST" -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.tar.gz.enc' -o -name 'filament-kit-backup-*.zip' -o -name 'filament-kit-backup-*.zip.enc' -o -name 'pre-restore-*.zip' -o -name 'pre-restore-*.zip.enc' \) \
+    -mtime +$((KEEP - 1)) -delete; then
+    echo "warning: backup retention could not finish" >&2
+fi
+# Reclaim interrupted nightly work, without touching another run's active files.
+if ! find "$DEST" -maxdepth 1 -type f \( -name '.nightly-*.tar.gz.tmp' -o -name '.nightly-*.tar.gz.tmp.enc' -o -name '????-??-??.tar.gz.tmp' -o -name '????-??-??.tar.gz.tmp.enc' \) \
+    -mmin +1440 -delete; then
+    echo "warning: could not remove interrupted backup files" >&2
+fi
 
 size=$(stat -c %s "$out" 2>/dev/null || wc -c < "$out")
 "$PYTHON" -I -m filament_kit.backup event-finished "$(basename "$out")" "$size" "$encrypted" true 2>/dev/null || true

@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from . import event_sink, events, tags
+from .alerts_api import say
 
 UNDOABLE_KINDS: frozenset[str] = frozenset({
     "spool.weighed",
@@ -17,14 +18,8 @@ UNDOABLE_KINDS: frozenset[str] = frozenset({
 })
 
 UNDO_WINDOW = timedelta(days=7)
-LOAD_UNLOAD_NOTE = "The printer still shows what it was set to."
-
-WHY_NOT_TEXTS: dict[str, str] = {
-    "changed_since": "This changed again since, so it cannot be undone.",
-    "too_old": "This is older than 7 days, so it cannot be undone.",
-    "already_undone": "This was already undone.",
-    "not_undoable": "This cannot be undone.",
-}
+LOAD_UNLOAD_NOTE = say("undo_load_note")
+WHY_NOT = ("changed_since", "too_old", "already_undone", "not_undoable")
 
 
 class EventNotFound(LookupError):
@@ -36,7 +31,7 @@ class UndoError(Exception):
 
     def __init__(self, code: str, message: str | None = None):
         self.code = code
-        self.message = message or WHY_NOT_TEXTS.get(code, "This cannot be undone.")
+        self.message = message or say(f"undo_why_{code}" if code in WHY_NOT else "undo_why_not_undoable")
         super().__init__(self.message)
 
 
@@ -50,8 +45,43 @@ def _parse_iso(ts: str) -> datetime:
 
 
 def _slots_of(ev: dict) -> set[str]:
+    """The printer slots an event is about, each as the slot's location ("<printer> - <label>"), so slot A1 of one
+    printer is not slot A1 of another; the bare label only when the event has no location for it."""
     d = ev.get("data") or {}
-    return {v for k in ("slot", "before_slot", "after_slot") if (v := d.get(k))}
+    out: set[str] = set()
+    for label, loc in (("before_slot", "before_location"), ("after_slot", "after_location"), ("slot", "before_location")):
+        if d.get(label):
+            out.add(d.get(loc) or d[label])
+    return out
+
+
+def _location(data: dict, side: str) -> str | None:
+    """The location before or after a change; a side the event left out was empty when the other side is given
+    (the store drops an empty value), None when the event holds neither (it cannot be put back)."""
+    if f"{side}_location" in data:
+        return data[f"{side}_location"]
+    return "" if ("before_location" in data or "after_location" in data) else None
+
+
+def _grams(data: dict) -> float | None:
+    try:
+        return float(data["before_grams"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _restorable(ev: dict) -> bool:
+    """Whether the event holds what undoing it must put back (events from before this version, or handed over
+    without before-values, do not)."""
+    kind, data = ev["kind"], ev.get("data") or {}
+    if kind in ("spool.weighed", "spool.emptied"):
+        return _grams(data) is not None
+    if kind in ("spool.moved", "spool.loaded", "spool.unloaded", "slot.cleared"):
+        return _location(data, "before") is not None
+    if kind == "spool.opened":
+        return any(k in data for k in ("before_location", "before_grams", "before_tag", "before_first_used",
+                                       "before_comment"))
+    return True
 
 
 def _matches_current_spool(ev: dict, cur: dict) -> bool:
@@ -78,7 +108,10 @@ def evaluate(ev: dict, *, all_evs: list[dict] | None = None, undone_ids: set[int
     if ev.get("kind") not in UNDOABLE_KINDS or ev.get("undo_of") is not None:
         return {"possible": False, "why_not": "not_undoable"}
     data = ev.get("data") or {}
-    if ev["kind"] == "slot.cleared" and not (data.get("spool") or (ev.get("subject") or {}).get("id")):
+    subject = ev.get("subject") or {}
+    if ev["kind"] == "slot.cleared" and not (subject.get("type") == "spool" and subject.get("id")):
+        return {"possible": False, "why_not": "not_undoable"}       # an empty slot cleared has no spool to put back
+    if not _restorable(ev):
         return {"possible": False, "why_not": "not_undoable"}
 
     if undone_ids is None and all_evs is not None:
@@ -135,16 +168,28 @@ def undo_event(event_id: int, sm, *, store=None, now: datetime | None = None, ac
     try:
         eid = int(event_id)
     except (TypeError, ValueError):
-        raise EventNotFound(f"there is no event {event_id}.") from None
+        raise EventNotFound(say("undo_no_event", id=event_id)) from None
     all_evs = st.all_events()
     ev = next((e for e in all_evs if e["id"] == eid), None)
     if ev is None:
-        raise EventNotFound(f"there is no event {event_id}.")
+        raise EventNotFound(say("undo_no_event", id=event_id))
 
-    res = evaluate(ev, all_evs=all_evs, now=now, sm=sm)
-    if not res["possible"]:
-        raise UndoError(res["why_not"])
+    from . import inventory                                 # the lock every spool change takes
+    with inventory._LOCK:                                   # check and change as one step: two undos, or an undo
+        all_evs = st.all_events()                           # and a change, cannot both pass the check
+        ev = next((e for e in all_evs if e["id"] == eid), None)
+        if ev is None:
+            raise EventNotFound(say("undo_no_event", id=event_id))
+        res = evaluate(ev, all_evs=all_evs, now=now, sm=sm)
+        if not res["possible"]:
+            raise UndoError(res["why_not"])
+        out = _apply(ev, sm, st, now, actor)
+    if out["event"]["kind"] in ("spool.weighed", "spool.emptied"):
+        event_sink.weight_changed(sm)                       # the running-low state need not wait for its loop
+    return out
 
+
+def _apply(ev: dict, sm, st, now, actor) -> dict:
     kind = ev["kind"]
     subj = ev["subject"]
     sid = subj["id"]
@@ -152,17 +197,17 @@ def undo_event(event_id: int, sm, *, store=None, now: datetime | None = None, ac
     cur = sm.get(f"spool/{sid}")
     patch: dict = {}
     new_data: dict = {"spool": str(sid)}
+    before_loc = _location(data, "before")
 
     if kind == "spool.weighed":
-        patch["remaining_weight"] = float(data["before_grams"])
+        patch["remaining_weight"] = _grams(data)
         new_data.update(before_grams=data.get("after_grams"), after_grams=data["before_grams"])
     elif kind == "spool.moved":
-        before_loc = data.get("before_location", "")
         patch["location"] = before_loc
         new_data.update(before_location=data.get("after_location"), after_location=before_loc)
     elif kind == "spool.emptied":
         before_arch = str(data.get("before_archived", "false")).lower() in ("true", "1", "yes")
-        patch["remaining_weight"] = float(data["before_grams"])
+        patch["remaining_weight"] = _grams(data)
         patch["archived"] = before_arch
         new_data.update(before_grams=data.get("after_grams"), after_grams=data["before_grams"],
                         before_archived="true")
@@ -173,33 +218,43 @@ def undo_event(event_id: int, sm, *, store=None, now: datetime | None = None, ac
         if "before_grams" in data and data["before_grams"] != "":
             patch["remaining_weight"] = float(data["before_grams"])
             new_data.update(before_grams=data.get("after_grams"), after_grams=data["before_grams"])
+        if "before_first_used" in data:                    # opening set it, and dropped the sealed note
+            patch["first_used"] = data["before_first_used"] or None
+        if "before_comment" in data:
+            patch["comment"] = data["before_comment"]
         if "before_tag" in data:
             patch["extra"] = {**(cur.get("extra") or {}), "nfc_id": json.dumps(data["before_tag"])}
             new_data.update(before_tag=data.get("after_tag"), after_tag=data["before_tag"])
     elif kind == "spool.loaded":
-        before_loc = data.get("before_location", "")
-        patch = {"location": before_loc, "extra": {**(cur.get("extra") or {}), "prev_location": json.dumps("")}}
+        patch = {"location": before_loc}
+        if not data.get("before_slot"):                    # from a shelf: it has no earlier place to go back to
+            patch["extra"] = {**(cur.get("extra") or {}), "prev_location": json.dumps("")}
         new_data.update(before_location=data.get("after_location"), after_location=before_loc,
                         before_slot=data.get("after_slot", ""), after_slot=data.get("before_slot", ""))
     elif kind == "spool.unloaded":
-        before_loc = data.get("before_location", "")
         after_loc = data.get("after_location", "")
         patch = {"location": before_loc,
                  "extra": {**(cur.get("extra") or {}), "prev_location": json.dumps(after_loc)}}
         new_data.update(before_location=after_loc, after_location=before_loc,
                         before_slot=data.get("after_slot", ""), after_slot=data.get("before_slot", ""))
     elif kind == "slot.cleared":
-        before_loc = data.get("before_location", "")
         after_loc = data.get("after_location", "")
         patch = {"location": before_loc,
                  "extra": {**(cur.get("extra") or {}), "prev_location": json.dumps(after_loc)}}
         new_data.update(slot=data.get("slot", ""), before_location=after_loc, after_location=before_loc)
 
     sm.patch(f"spool/{sid}", patch)
+    if kind == "spool.opened":                              # a tag the link took from other spools goes back to them
+        for other in (data.get("took_tag_from") or "").split(","):
+            if other.strip().isdigit() and data.get("after_tag"):
+                o = sm.get(f"spool/{other.strip()}")
+                if not tags.stored(o):
+                    sm.patch(f"spool/{other.strip()}",
+                             {"extra": {**(o.get("extra") or {}), "nfc_id": json.dumps(data["after_tag"])}})
     new_ev = st.write(kind, subj, actor or event_sink.current_actor(), new_data, undo_of=ev["id"])
     new_ev["undone"] = False
     new_ev["undo"] = {"possible": False, "why_not": "not_undoable"}
     out: dict = {"undone": True, "event": new_ev}
     if kind in ("spool.loaded", "spool.unloaded"):
-        out["note"] = LOAD_UNLOAD_NOTE
+        out["note"] = say("undo_load_note")
     return out

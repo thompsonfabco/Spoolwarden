@@ -217,8 +217,12 @@ def test_reader_health_and_test_forward_trust(env, helper, monkeypatch):
 
     r_post = post(c, "settings/local-intake/test", {"url": "https://reader.local:7915", "tier": "auto"})
     assert r_post.status_code == 200
+    assert calls[-1] == ("https://reader.local:7915", False)
+    assert r_post.json()["pin"] == "changed"
+    trusted_post = post(c, "settings/local-intake/test", {"url": "https://reader.local:7915", "tier": "auto", "trust": True})
+    assert trusted_post.status_code == 200
     assert calls[-1] == ("https://reader.local:7915", True)
-    assert r_post.json()["pin"] == "replaced" and r_post.json()["fp"] == "abcd1234ef567890"
+    assert trusted_post.json()["pin"] == "replaced" and trusted_post.json()["fp"] == "abcd1234ef567890"
 
 
 def test_setup_start_static_assets_present_and_iife_scoped():

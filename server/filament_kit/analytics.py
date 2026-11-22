@@ -10,13 +10,14 @@ import time
 from typing import Any
 
 from . import config, events
+from .alerts_api import say
 from .bridge import registry, usage as busage
 from .bridge.klipper import usage as kusage
 from .spoolman import Spoolman, SpoolmanError
 
 REMOVED_PRINTER_ID = "_removed"
-REMOVED_PRINTER_NAME = "A removed printer"
-UNKNOWN_MATERIAL = "Unknown material"
+REMOVED_PRINTER_NAME = say("analytics_removed_printer")
+UNKNOWN_MATERIAL = say("analytics_unknown_material")
 _UNFINISHED = frozenset({"failed", "cancelled", "unknown"})
 
 
@@ -124,8 +125,16 @@ def _spools_finished_in_month(month: str) -> int:
     try:
         y, m = (int(x) for x in month.split("-"))
         start = dt.datetime(y, m, 1, tzinfo=dt.timezone.utc)
-        res = events.read(limit=1000, kinds="spool.emptied", since_at=start)
-        return sum(1 for ev in res.get("events", []) if str(ev.get("at") or "")[:7] == month)
+        n, cur = 0, 0
+        while True:
+            res = events.read(cur, 1000, "spool.emptied", since_at=start, include_undo=True)
+            got = res.get("events", [])
+            # an undo writes a spool.emptied of its own (undo_of set), and an undone one never counted
+            n += sum(1 for ev in got if str(ev.get("at") or "")[:7] == month and ev.get("undo_of") is None
+                     and not ev.get("undone"))
+            if len(got) < 1000 or res["next"] <= cur:
+                return n
+            cur = res["next"]
     except Exception:  # noqa: BLE001
         return 0
 
@@ -185,8 +194,7 @@ def view(months: int = 12, printer: str | None = None, *, sm: Spoolman | None = 
             if job_name and (b["_biggest"] is None or g > b["_biggest"][0]):
                 b["_biggest"] = (g, job_name)
 
-        outcome = e.get("outcome") or "unknown"
-        if outcome in _UNFINISHED:
+        if e.get("outcome") in _UNFINISHED:             # an entry without an outcome (before it was kept) is not counted
             b["unfinished_prints"] += 1
             b["unfinished_grams"] += g
 
@@ -236,45 +244,44 @@ def view(months: int = 12, printer: str | None = None, *, sm: Spoolman | None = 
 
     if cur["grams"] > 0:
         if prev is not None and prev["grams"] > 0:
-            text = f"Filament used this month: {_fmt_weight(cur['grams'])} (last month {_fmt_weight(prev['grams'])})."
+            text = say("analytics_insight_total_prev", used=_fmt_weight(cur["grams"]), last=_fmt_weight(prev["grams"]))
         else:
-            text = f"Filament used this month: {_fmt_weight(cur['grams'])}."
+            text = say("analytics_insight_total", used=_fmt_weight(cur["grams"]))
         insights.append({"key": "total", "text": text})
 
     known_mats = [m for m in cur["by_material"] if m["material"] != UNKNOWN_MATERIAL]
     if known_mats:
         fav = known_mats[0]
         insights.append({"key": "favourite_material",
-                         "text": f"Your favourite material this month was {fav['material']} ({_fmt_weight(fav['grams'])})."})
+                         "text": say("analytics_insight_favourite", material=fav["material"],
+                                     used=_fmt_weight(fav["grams"]))})
 
     if cur["by_printer"] and (cur["by_printer"][0]["grams"] > 0 or cur["by_printer"][0]["prints"] > 0):
         bp = cur["by_printer"][0]
-        plural = "print" if bp["prints"] == 1 else "prints"
         insights.append({"key": "busiest_printer",
-                         "text": f"{bp['name']} did the most work this month ({_fmt_weight(bp['grams'])}, {bp['prints']} {plural})."})
+                         "text": say("analytics_insight_busiest", printer=bp["name"], used=_fmt_weight(bp["grams"]),
+                                     count=bp["prints"])})
 
     if cur["unfinished_prints"] > 0:
         insights.append({"key": "unfinished",
-                         "text": (f"{cur['unfinished_prints']} of {cur['prints']} prints did not finish this month "
-                                  f"({_fmt_weight(cur['unfinished_grams'])}).")})
+                         "text": say("analytics_insight_unfinished", count=cur["unfinished_prints"],
+                                     total=cur["prints"], used=_fmt_weight(cur["unfinished_grams"]))})
 
     if cur_biggest is not None:
         bg, bname = cur_biggest
         insights.append({"key": "biggest_print",
-                         "text": f"The biggest print this month was {bname} ({_fmt_weight(bg)})."})
+                         "text": say("analytics_insight_biggest", job=bname, used=_fmt_weight(bg))})
 
     finished_spools = _spools_finished_in_month(cur["month"])
     if finished_spools > 0:
-        noun = "spool" if finished_spools == 1 else "spools"
-        insights.append({"key": "spools_finished",
-                         "text": f"You finished {finished_spools} {noun} this month."})
+        insights.append({"key": "spools_finished", "text": say("analytics_insight_finished", count=finished_spools)})
 
     notes: list[str] = []
     logged_total = sum(m["logged_only_grams"] for m in months_out)
     if logged_total > 0:
-        notes.append(f"Includes {round(logged_total)} g the Hub logged but took off no spool.")
+        notes.append(say("analytics_note_logged", grams=round(logged_total)))
     no_weight_total = sum(m["no_weight_prints"] for m in months_out)
     if no_weight_total > 0:
-        notes.append(f"{no_weight_total} {'print has' if no_weight_total == 1 else 'prints have'} no weight.")
+        notes.append(say("analytics_note_no_weight", count=no_weight_total))
 
     return {"months": months_out, "insights": insights, "notes": notes}

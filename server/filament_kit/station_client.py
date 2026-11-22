@@ -422,6 +422,10 @@ class StationCallError(Exception):
         self.status, self.message = status, message
 
 
+class StationPinMissing(StationCallError):
+    """The Hub knows the station's address but has no certificate to check."""
+
+
 def proof_key() -> bytes | None:
     """The key of the Hub's proofs for the one station pairing that holds a certificate: HKDF of the SHA-256 of its token,
     which is what the pairing record keeps (`hash`). None when there is no such pairing or there are two."""
@@ -429,8 +433,8 @@ def proof_key() -> bytes | None:
     from .station import page
     try:
         with pairing._locked():
-            found = [d for d in pairing._load_devices()
-                     if d.get("claimed") is not None and pairing.device_type(d) and d.get("fp")]
+            found = [d for d in pairing._load_devices() if d.get("claimed") is not None
+                     and pairing.device_type(d) == "station" and d.get("fp")]
     except (OSError, ValueError):
         return None
     if len(found) != 1 or not re.fullmatch(r"[0-9a-f]{64}", str(found[0].get("hash") or "")):
@@ -448,14 +452,28 @@ def pinned_endpoint(url: str | None) -> tuple[str, int, str]:
     if not host:
         raise StationCallError(503, "the Hub does not know the Weigh Station's address")
     if info is None:
-        raise StationCallError(503, TEXT_STATION_NO_PIN)
+        raise StationPinMissing(503, TEXT_STATION_NO_PIN)
     return host, info["port"], info["fp"]
 
 
 def call(url: str | None, method: str, path: str, body: bytes | None = None, cap: int = MAX_JSON,
          timeout: float = STATION_TIMEOUT) -> tuple[int, str, bytes]:
     """(status, content type, body) of one pinned call to the Station, with one deadline and no redirects."""
-    return _call(pinned_endpoint(url), method, path, body, cap, timeout)
+    return _call(station_endpoint(url), method, path, body, cap, timeout)
+
+
+def station_endpoint(url: str | None) -> tuple[str, int, str | None]:
+    """Permit the configured HTTP endpoint only when no station certificate was announced."""
+    try:
+        return pinned_endpoint(url)
+    except StationPinMissing:
+        try:
+            parsed = urllib.parse.urlsplit(url or "")
+            if parsed.scheme == "http" and parsed.hostname:
+                return parsed.hostname, parsed.port or 80, None
+        except ValueError:
+            raise StationCallError(503, "the Hub does not know the Weigh Station's address") from None
+        raise
 
 
 def _call(endpoint, method, path, body, cap=MAX_JSON, timeout=STATION_TIMEOUT):
@@ -467,16 +485,21 @@ def _call(endpoint, method, path, body, cap=MAX_JSON, timeout=STATION_TIMEOUT):
         headers["Content-Type"] = "application/json"
     purpose = {("POST", "/ticket"): "ticket", ("POST", "/settings"): "settings"}.get((method, path))
     if purpose:
+        if fp is None:
+            raise StationPinMissing(503, TEXT_STATION_NO_PIN)
         key = proof_key()
         if key is None:
             raise StationCallError(503, "the Hub cannot prove itself to the Weigh Station: pair it again")
         headers[page.PROOF_HEADER] = page.make_proof(key, purpose, body or b"")
     try:
-        status, kind, data = bounded_call(host, port, fp, method, path, body, headers, cap, timeout)
-    except (PinMismatch, ssl.SSLError):
+        options = {"plain": True} if fp is None else {}
+        status, kind, data = bounded_call(host, port, fp, method, path, body, headers, cap, timeout, **options)
+    except PinMismatch:
         raise StationCallError(502, f"{TEXT_STATION_CERT_CHANGED} {TEXT_STATION_CERT_FIX}") from None
     except TimeoutError:
         raise StationCallError(502, "the Weigh Station answers too slowly") from None
+    except UnicodeError:
+        raise StationCallError(502, "the Weigh Station address is not valid") from None
     except ValueError:
         raise StationCallError(502, "the Weigh Station's answer is too large") from None
     except (OSError, http.client.HTTPException) as e:
@@ -508,10 +531,10 @@ def _json_reply(status: int, kind: str, data: bytes) -> dict:
     return out
 
 
-def ticket(url: str | None, *, endpoint: tuple[str, int, str] | None = None) -> dict:
+def ticket(url: str | None, *, endpoint: tuple[str, int, str | None] | None = None) -> dict:
     """A one-time ticket for the station's own page, `{ticket, expires_in: 60}` (the proof goes with the call). The
     caller opens `<the station's address>#ticket=<ticket>` for the browser: the ticket is never in a request line."""
-    got = _json_reply(*_call(endpoint if endpoint is not None else pinned_endpoint(url), "POST", "/ticket", b"{}"))
+    got = _json_reply(*_call(endpoint if endpoint is not None else station_endpoint(url), "POST", "/ticket", b"{}"))
     t, expires = got.get("ticket"), got.get("expires_in")
     if not (isinstance(t, str) and TICKET.fullmatch(t)) or expires != 60 or isinstance(expires, bool):
         raise StationCallError(502, "the Weigh Station's ticket is not valid")

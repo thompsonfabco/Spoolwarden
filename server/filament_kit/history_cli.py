@@ -10,6 +10,10 @@ import urllib.parse
 from . import output
 from .spools_cli import confirmed, down, fail
 
+EVENTS_SHOWN = 200          # `activity` shows this many of the newest
+UNDO_LOOK = 50              # plain `undo` looks at this many of the newest command-line changes
+WHO_LOOK = 1000             # `--who <device name>` finds the name among this many of the newest events
+
 EXPORT_SETS = ("usage", "locations", "recent", "activity", "printers", "lines",
                "spoolman-spools", "spoolman-filaments")
 
@@ -19,6 +23,10 @@ CLI_ACTIVITY_EMPTY = "Nothing has been done in the last {days} days."
 CLI_ACTIVITY_COUNT_ONE = "1 event in the last {days} days."
 CLI_ACTIVITY_COUNT = "{n} events in the last {days} days."
 CLI_ACTIVITY_MORE = "Showing the newest 200. Narrow it with --days, --who or --spool."
+CLI_ACTOR_HUB = "The Hub"
+CLI_ACTOR_PAGE = "Hub page"
+CLI_ACTOR_CLI = "command line"
+CLI_ACTOR_CONNECTOR = "Claude connector"
 CLI_WHO_UNKNOWN = "unknown actor {who}."
 CLI_WHO_UNKNOWN_FIX = "available: {names}"
 CLI_UNDO_NONE = "Nothing has been changed from the command line in the last 7 days."
@@ -58,37 +66,42 @@ def _who_label(actor: dict) -> str:
     t = actor.get("type", "")
     if actor.get("name"):
         return actor["name"]
-    return {"hub": "The Hub", "page": "Hub page", "cli": "command line",
-            "connector": "Claude connector"}.get(t, t or "The Hub")
+    return {"hub": CLI_ACTOR_HUB, "page": CLI_ACTOR_PAGE, "cli": CLI_ACTOR_CLI,
+            "connector": CLI_ACTOR_CONNECTOR}.get(t, t or CLI_ACTOR_HUB)
 
 
 def _resolve_who(api, who: str) -> tuple[str | None, list[str]]:
-    """Map `--who <name>` to `actor=<type>[:<id>]`; returns (param, available_names)."""
+    """Map `--who <name>` to `actor=<type>[:<id>]`; returns (param, available_names). A device is found by the name
+    or id it has in the newest events (the paired devices are not an API route)."""
     fixed = {
         "the hub": "hub",
         "hub": "hub",
-        "hub page": "page",
+        CLI_ACTOR_PAGE.lower(): "page",
         "page": "page",
-        "command line": "cli",
+        CLI_ACTOR_CLI: "cli",
         "cli": "cli",
-        "claude connector": "connector",
+        CLI_ACTOR_CONNECTOR.lower(): "connector",
         "connector": "connector",
     }
     low = who.strip().lower()
     if low in fixed:
         return fixed[low], []
-    names = ["The Hub", "Hub page", "command line", "Claude connector"]
+    names = [CLI_ACTOR_HUB, CLI_ACTOR_PAGE, CLI_ACTOR_CLI, CLI_ACTOR_CONNECTOR]
     try:
-        info = api.get("/api/hub") or {}
-        devs = info.get("devices") or []
-    except Exception:  # noqa: BLE001
-        devs = []
-    for d in devs:
-        dname = d.get("name") or ""
-        if dname:
+        seen = (api.get("/api/events?" + urllib.parse.urlencode(
+            [("activity", "1"), ("newest", str(WHO_LOOK))])) or {}).get("events") or []
+    except Exception:  # noqa: BLE001 - the names are a courtesy; a name not found ends as "unknown actor"
+        seen = []
+    devs: dict[str, str] = {}
+    for ev in seen:
+        a = ev.get("actor") or {}
+        if a.get("type") == "device" and a.get("id"):
+            devs[str(a["id"])] = a.get("name") or ""
+    for did, dname in devs.items():
+        if dname and dname not in names:
             names.append(dname)
-        if dname.lower() == low or d.get("id") == who:
-            return f"device:{d['id']}", names
+        if dname.lower() == low or did == who:
+            return f"device:{did}", names
     return None, names
 
 
@@ -98,7 +111,7 @@ def cmd_activity(api, *, spool: int | None = None, who: str | None = None, days:
     if api is None:
         return down()
     from .web.slots import SlotError
-    params: list[tuple[str, str]] = [("activity", "1"), ("limit", "201"), ("since_at", _since_at(days))]
+    params: list[tuple[str, str]] = [("activity", "1"), ("newest", str(EVENTS_SHOWN + 1)), ("since_at", _since_at(days))]
     if spool is not None:
         params.append(("subject", f"spool:{spool}"))
     if who:
@@ -112,8 +125,8 @@ def cmd_activity(api, *, spool: int | None = None, who: str | None = None, days:
     except SlotError as e:
         return fail(e)
     evs = list(reversed(r.get("events") or []))
-    more = len(evs) > 200
-    evs = evs[:200]
+    more = len(evs) > EVENTS_SHOWN
+    evs = evs[:EVENTS_SHOWN]
     output.emit({**r, "events": evs})
     if not evs:
         output.out(CLI_ACTIVITY_EMPTY.format(days=days))
@@ -135,7 +148,19 @@ def cmd_activity(api, *, spool: int | None = None, who: str | None = None, days:
 
 # ---------- undo ----------
 
-def cmd_undo(api, *, event_id: int | None = None, yes: bool = False) -> int:
+def _need_root(command: str) -> int | None:
+    """None when this runs as root; else the exit code after the `sudo` error. These commands read or change what the
+    Hub's service user cannot reach, so they run as root and call the modules, not the Hub page's routes (D5)."""
+    from . import cli
+    if cli._is_root():
+        return None
+    return output.need_sudo(cli._sudo_command(command))
+
+
+def cmd_undo(api, sm_factory, *, event_id: int | None = None, yes: bool = False) -> int:
+    rc = _need_root("sudo spoolwarden undo" + (f" {event_id}" if event_id is not None else ""))
+    if rc is not None:
+        return rc
     if api is None:
         return down()
     from .web.slots import SlotError
@@ -143,7 +168,7 @@ def cmd_undo(api, *, event_id: int | None = None, yes: bool = False) -> int:
     if event_id is None:
         try:
             r = api.get("/api/events?" + urllib.parse.urlencode([
-                ("activity", "1"), ("actor", "cli"), ("since_at", _since_at(7)), ("limit", "50"),
+                ("activity", "1"), ("actor", "cli"), ("since_at", _since_at(7)), ("newest", str(UNDO_LOOK)),
             ]))
         except SlotError as e:
             return fail(e)
@@ -171,10 +196,13 @@ def cmd_undo(api, *, event_id: int | None = None, yes: bool = False) -> int:
     rc = confirmed(CLI_UNDO_ASK, f"undo event {event_id}", f"spoolwarden undo {event_id}", yes)
     if rc is not None:
         return rc
+    from . import event_sink, undo
+    from .spoolman import SpoolmanError
     try:
-        res = api.post(f"/api/events/{event_id}/undo", {})
-    except SlotError as e:
-        output.emit({"ok": False, "error": getattr(e, "code", "error"), "text": str(e)})
+        with event_sink.acting({"type": "cli"}):
+            res = undo.undo_event(event_id, sm_factory(), actor={"type": "cli"})
+    except (undo.EventNotFound, undo.UndoError, SpoolmanError) as e:
+        output.emit({"ok": False, "error": type(e).__name__, "text": str(e)})
         output.error(str(e))
         return output.FAILED
     output.emit({"ok": True, **res})
@@ -243,24 +271,28 @@ def cmd_usage(api, *, by: str | None = None, printer: str | None = None) -> int:
 
 # ---------- export / import ----------
 
-def cmd_export(api, *, dataset: str, out_file: str | None = None, days: int | None = None,
+def cmd_export(sm_factory, *, dataset: str, out_file: str | None = None, days: int | None = None,
                printer: str | None = None) -> int:
-    if api is None:
-        return down()
-    from .web.slots import SlotError
-    q = []
+    rc = _need_root(f"sudo spoolwarden export {dataset}")
+    if rc is not None:
+        return rc
+    from . import csv_io
+    params: dict = {}
     if days is not None:
-        q.append(("days", str(days)))
+        params["days"] = days
     if printer:
-        q.append(("printer", printer))
-    route = f"/api/export/{dataset}.csv" + ("?" + urllib.parse.urlencode(q) if q else "")
+        params["printer"] = printer
     try:
-        raw = api.get_raw(route) if hasattr(api, "get_raw") else api.get(route)
-    except SlotError as e:
-        return fail(e)
-    text = raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else str(raw)
+        if dataset.startswith("spoolman-"):
+            params["sm"] = sm_factory()
+        data = csv_io.export_csv(dataset, **params)
+    except csv_io.CsvError as e:
+        output.error(e.message)
+        return output.FAILED
+    text = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else str(data)
     if out_file:
-        pathlib.Path(out_file).write_text(text, encoding="utf-8")
+        with open(out_file, "w", encoding="utf-8", newline="") as fh:     # the CSV's own line ends, on every system
+            fh.write(text)
         nrows = max(0, len([ln for ln in text.splitlines() if ln.strip()]) - 1)
         output.emit({"ok": True, "file": out_file, "rows": nrows})
         output.out(CLI_EXPORT_WROTE.format(n=nrows, file=out_file))
@@ -269,19 +301,31 @@ def cmd_export(api, *, dataset: str, out_file: str | None = None, days: int | No
     return 0
 
 
-def cmd_import(api, *, kind: str, file: str, yes: bool = False) -> int:
-    if api is None:
-        return down()
-    from .web.slots import SlotError
+def _import_call(sm_factory, kind: str, csv_text: str, dry_run: bool) -> dict:
+    """The Hub page's import (setup_console/history_tab._call_import), made as the command line."""
+    from . import csv_io, event_sink
+    with event_sink.acting({"type": "cli"}):
+        if kind == "spools":
+            return csv_io.import_spools(sm_factory(), csv_text, dry_run=dry_run)
+        return csv_io.import_locations(csv_text, dry_run=dry_run)
+
+
+def cmd_import(sm_factory, *, kind: str, file: str, yes: bool = False) -> int:
+    rc = _need_root(f"sudo spoolwarden import {kind} {file}")
+    if rc is not None:
+        return rc
+    from . import csv_io
+    from .spoolman import SpoolmanError
     try:
-        csv_text = pathlib.Path(file).read_text(encoding="utf-8")
+        csv_text = pathlib.Path(file).read_bytes().decode("utf-8-sig")
     except (OSError, UnicodeDecodeError):
         output.error(CLI_IMPORT_BAD_CSV)
         return output.FAILED
     try:
-        dry = api.post(f"/api/import/{kind}?dry_run=1", csv_text)
-    except SlotError as e:
-        return fail(e)
+        dry = _import_call(sm_factory, kind, csv_text, True)
+    except (csv_io.CsvError, ValueError, SpoolmanError) as e:
+        output.error(getattr(e, "message", None) or str(e))
+        return output.FAILED
     rows = dry.get("rows") or []
     ok_count = sum(1 for r in rows if r.get("ok"))
     bad_count = len(rows) - ok_count
@@ -301,9 +345,10 @@ def cmd_import(api, *, kind: str, file: str, yes: bool = False) -> int:
     if rc is not None:
         return rc
     try:
-        res = api.post(f"/api/import/{kind}?dry_run=0", csv_text)
-    except SlotError as e:
-        return fail(e)
+        res = _import_call(sm_factory, kind, csv_text, False)
+    except (csv_io.CsvError, ValueError, SpoolmanError) as e:
+        output.error(getattr(e, "message", None) or str(e))
+        return output.FAILED
     output.emit(res)
     if kind == "spools":
         ids = ", ".join(str(i) for i in (res.get("spool_ids") or []))
@@ -320,44 +365,42 @@ def read_password_file(path: str) -> str:
     return pathlib.Path(path).read_text(encoding="utf-8").rstrip("\r\n")
 
 
-def run_backup_password(api=None, *, remove: bool = False, show: bool = False, password: str | None = None) -> int:
-    if api is None:
-        return down()
-    from .web.slots import SlotError
+def run_backup_password(*, remove: bool = False, show: bool = False, password: str | None = None) -> int:
+    """`backup password`: the helper's own functions, as `backup keep` calls them (the password file is root-only)."""
+    from . import backup, setup_helper
     try:
         if show:
-            r = api.get("/setup/api/backup/password")
-            output.emit(r)
-            output.out(CLI_BACKUP_PW_SET if r.get("set") else CLI_BACKUP_PW_UNSET)
+            is_set = backup.password_set()
+            output.emit({"set": is_set})
+            output.out(CLI_BACKUP_PW_SET if is_set else CLI_BACKUP_PW_UNSET)
             return 0
         if remove:
-            r = api.post("/setup/api/backup/password", {"remove": True})
+            r = setup_helper._backup_password_remove({})
             output.emit({"ok": True, **r})
             output.out(CLI_BACKUP_PW_REMOVED)
             return 0
-        r = api.post("/setup/api/backup/password", {"password": password or ""})
-        output.emit({"ok": True, **r})
-        output.out(CLI_BACKUP_PW_SAVED)
-        return 0
-    except SlotError as e:
-        return fail(e)
+        r = setup_helper._backup_password_set({"password": password or ""})
+    except setup_helper.Refused as e:
+        output.error(str(e).rstrip(".") + ".")
+        return output.USAGE
+    output.emit({"ok": True, **r})
+    output.out(CLI_BACKUP_PW_SAVED)
+    return 0
 
 
-def cmd_report(api, *, out_file: str | None = None) -> int:
-    if api is None:
-        return down()
-    from .web.slots import SlotError
+def cmd_report(*, out_file: str | None = None) -> int:
+    rc = _need_root("sudo spoolwarden report")
+    if rc is not None:
+        return rc
+    from . import report
     try:
-        r = api.post("/setup/api/report", {})
-    except SlotError as e:
-        return fail(e)
-    file_path = r.get("file") or ""
-    if out_file and file_path:
-        src = pathlib.Path(file_path)
-        if src.exists():
-            pathlib.Path(out_file).write_bytes(src.read_bytes())
-    output.emit({"ok": True, "file": out_file or file_path})
-    output.out(CLI_REPORT_DONE.format(file=out_file or file_path))
+        path = report.collect(out=out_file)
+    except OSError as e:
+        output.error(str(e))
+        return output.FAILED
+    shown = out_file or str(path)
+    output.emit({"ok": True, "file": shown})
+    output.out(CLI_REPORT_DONE.format(file=shown))
     return 0
 
 
@@ -392,17 +435,20 @@ def add_parser(sub) -> None:
     p.add_argument("--out", default=None, help="copy the report to this file")
 
 
-def run(args: argparse.Namespace, api) -> int:
+def run(args: argparse.Namespace, api, sm_factory=None) -> int:
+    if sm_factory is None:
+        from . import cli
+        sm_factory = cli._default_spoolman
     if args.cmd == "activity":
         return cmd_activity(api, spool=args.spool, who=args.who, days=args.days)
     if args.cmd == "undo":
-        return cmd_undo(api, event_id=args.event_id, yes=args.yes)
+        return cmd_undo(api, sm_factory, event_id=args.event_id, yes=args.yes)
     if args.cmd == "usage":
         return cmd_usage(api, by=args.by, printer=args.printer)
     if args.cmd == "export":
-        return cmd_export(api, dataset=args.dataset, out_file=args.out, days=args.days, printer=args.printer)
+        return cmd_export(sm_factory, dataset=args.dataset, out_file=args.out, days=args.days, printer=args.printer)
     if args.cmd == "import":
-        return cmd_import(api, kind=args.kind, file=args.file, yes=args.yes)
+        return cmd_import(sm_factory, kind=args.kind, file=args.file, yes=args.yes)
     if args.cmd == "report":
-        return cmd_report(api, out_file=args.out)
+        return cmd_report(out_file=args.out)
     return output.USAGE

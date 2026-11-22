@@ -2367,6 +2367,30 @@
     <string name="spools_tag_linked">Linked to spool %1$s, %2$s</string>
     <!-- 1=grams -->
     <string name="spools_tag_scale">scale %1$s g</string>
+    <!-- 1=name 2=id 3=grams -->
+    <string name="spools_toast_weight">Updated %1$s (%2$s): %3$s g left.</string>
+    <!-- 1=name 2=id 3=location -->
+    <string name="spools_toast_move">Moved %1$s (%2$s) to %3$s.</string>
+    <!-- 1=name 2=id -->
+    <string name="spools_toast_empty">Marked %1$s (%2$s) empty.</string>
+    <!-- 1=tag 2=name 3=id -->
+    <string name="spools_toast_link">Linked tag %1$s to %2$s (%3$s).</string>
+    <!-- 1=what -->
+    <string name="spools_undo_name">Undo: %1$s</string>
+    <string name="spools_put_back">Put back.</string>
+    <string name="spools_undo_refused">This changed again since, so it cannot be undone.</string>
+    <!-- 1=reason -->
+    <string name="spools_undo_failed">Could not undo: %1$s</string>
+    <string name="spools_events_title">Last ten events</string>
+    <string name="spools_events_none">Nothing recorded yet.</string>
+    <string name="spools_events_error">Could not read the events.</string>
+    <string name="spools_event_undone">undone</string>
+    <string name="spools_download_csv">Download as CSV</string>
+    <string name="spools_csv_spools">Spools (Spoolman\'s file)</string>
+    <string name="spools_csv_filaments">Filaments (Spoolman\'s file)</string>
+    <!-- 1=reason -->
+    <string name="spools_csv_failed">Could not download the file: %1$s</string>
+    <string name="spools_more_actions">More actions for spools</string>
     <!-- 1=job -->
     <string name="printer_state_failed">Print failed: %1$s</string>
     <!-- 1=job -->
@@ -4578,11 +4602,18 @@
     <string name="cli_next">Next: %1$s</string>
     <!-- 1=name -->
     <string name="check_station_not_https">The Weigh Station %1$s is not using HTTPS. Update it.</string>
-    <string name="check_station_not_https_fix">run this on the Weigh Station\'s machine: sudo spoolwarden update</string>
+    <string name="check_station_not_https_fix">Update it: on that machine run sudo spoolwarden update.</string>
     <!-- 1=address -->
     <string name="check_station_not_https_at">The Weigh Station at %1$s is not using HTTPS.</string>
     <!-- 1=address 2=reason -->
     <string name="check_station_not_https_why">The Weigh Station at %1$s is not using HTTPS: it could not make its certificate (%2$s).</string>
+    <string name="check_station_not_https_why_fix">Put right what the reason names on that machine, then restart the Weigh Station.</string>
+    <!-- 1=count -->
+    <plurals name="check_devices_out_of_date">
+        <item quantity="one">%1$d device is out of date.</item>
+        <item quantity="other">%1$d devices are out of date.</item>
+    </plurals>
+    <string name="check_devices_out_of_date_fix">see Devices on the Hub page</string>
     <string name="check_station_cert_changed">The Weigh Station\'s certificate is not the one the Hub trusts.</string>
     <string name="check_station_cert_fix">Restart the Weigh Station so it tells the Hub its new certificate (sudo systemctl restart filament-kit-station), or pair it again.</string>
     <!-- 1=address -->
@@ -4881,6 +4912,240 @@
     <string name="nav_summary_spools_low">%1$d running low</string>
     <!-- 1=count -->
     <string name="overview_tile_devices_outdated">%1$d out of date</string>
+    <string name="station_page_title">Weigh Station</string>
+    <string name="station_page_open_from_hub">Open this page from the Hub: Devices, this Weigh Station, Open this device\'s page.</string>
+    <string name="station_page_session_over">This session is over. Open this page from the Hub: Devices, this Weigh Station, Open this device\'s page.</string>
+    <string name="station_page_status">Status</string>
+    <string name="station_page_settings">Settings</string>
+    <!-- 1=mode -->
+    <string name="station_page_page_from">Page access: %1$s</string>
+    <string name="station_page_page_from_subnets_note">If the network changes, run sudo spoolwarden modules apply on this Weigh Station.</string>
+    <string name="station_page_save">Save</string>
+    <string name="station_page_reset">Back to the installed values</string>
+    <string name="station_page_saved">Saved.</string>
+    <string name="station_page_reset_done">Back to the installed values.</string>
+    <!-- 1=reason -->
+    <string name="station_page_not_saved">Not saved: %1$s</string>
+    <string name="station_page_tag">Tag</string>
+    <string name="station_page_scale">Scale</string>
+    <string name="station_page_last_weight">Last weight</string>
+    <string name="station_page_panel">Panel</string>
+    <string name="station_page_air">Air</string>
+    <string name="station_page_step">Intake step</string>
+    <string name="station_page_version">Software version</string>
+    <string name="station_page_none">none</string>
+    <string name="station_page_no_photo">No photo.</string>
+    <string name="station_page_own_values">These settings differ from the installed values.</string>
+    <string name="station_page_on">On</string>
+    <string name="station_page_off">Off</string>
+    <string name="station_page_unreachable">The station did not answer.</string>
+    <string name="station_step_pairing">Asking the Hub to pair</string>
+    <string name="station_step_idle">Ready</string>
+    <string name="station_step_lookup">Looking up a tag</string>
+    <string name="station_step_camera">Show the spool to the camera</string>
+    <string name="station_step_recognising">Recognising the spool</string>
+    <string name="station_step_weigh">Put it on the scale</string>
+    <string name="station_step_ready">Weight taken</string>
+    <string name="station_step_saving">Saving</string>
+    <string name="station_step_done">Saved</string>
+    <string name="station_step_phone">Use the phone</string>
+    <string name="station_lamp_off">No lamp</string>
+    <string name="station_lamp_yellow">Yellow lamp</string>
+    <string name="station_lamp_red">Red lamp</string>
+    <string name="station_lamp_both">Both lamps</string>
+    <string name="station_setting_beep">Beep when a tag is scanned</string>
+    <string name="station_setting_speech">Speak the steps aloud</string>
+    <string name="station_setting_voice">Voice</string>
+    <string name="station_setting_volume">Speaker volume (percent)</string>
+    <string name="station_setting_panel_swap">Swap the yellow and red buttons and lamps</string>
+    <!-- 1=step -->
+    <string name="station_setting_lamp">Lamp for: %1$s</string>
+    <string name="station_voice_auto">Automatic</string>
+    <string name="station_voice_espeak">eSpeak</string>
+    <!-- 1=id -->
+    <string name="station_settings_bad_value">%1$s: not a value this setting takes</string>
+    <string name="station_settings_none">nothing to change</string>
+    <!-- 1=id -->
+    <string name="station_settings_no_such">%1$s: no such setting</string>
+    <!-- 1=reason -->
+    <string name="station_settings_save_failed">the settings could not be saved (%1$s)</string>
+    <!-- 1=reason -->
+    <string name="station_settings_remove_failed">the station\'s own values could not be removed (%1$s)</string>
+    <string name="station_refusal_forbidden">This address may not ask for that.</string>
+    <string name="station_refusal_not_found">There is nothing here.</string>
+    <string name="station_refusal_too_many_wrong_tickets">Too many wrong tickets from this address. Try again in a minute.</string>
+    <string name="station_refusal_bad_request">The request is not valid.</string>
+    <string name="station_refusal_too_big">The request is too big.</string>
+    <string name="station_not_pinned">The Weigh Station has not told the Hub its certificate yet. Update it: on that machine run sudo spoolwarden update.</string>
+    <string name="reader_auto_say">Auto</string>
+    <string name="reader_auto_queued">Auto: load any slot (waits 15 min)</string>
+    <string name="auto_where">Where should it go?</string>
+    <string name="auto_option">Automatic</string>
+    <string name="auto_option_hint">The slot where the spool appears.</string>
+    <string name="auto_continue">Continue</string>
+    <!-- 1=spool 2=slots -->
+    <string name="auto_plan">%1$s goes into the slot where it appears (%2$s). The Hub waits up to 15 minutes.</string>
+    <!-- 1=spool -->
+    <string name="auto_replaces">Replaces %1$s, which was waiting.</string>
+    <!-- 1=spool 2=printer -->
+    <string name="auto_started">Waiting for %1$s to appear in a slot of %2$s.</string>
+    <string name="auto_not_possible">This printer has no slots the Hub can watch. Choose a slot.</string>
+    <string name="auto_load_any">Load a spool</string>
+    <!-- 1=spool 2=printer -->
+    <string name="auto_waiting">Waiting for %1$s to be loaded into any slot of %2$s.</string>
+    <string name="auto_stop">Stop waiting</string>
+    <!-- 1=spool -->
+    <string name="auto_stopped">Stopped waiting for %1$s.</string>
+    <!-- 1=spool -->
+    <string name="auto_choose">Two slots were loaded. Which one got %1$s?</string>
+    <!-- 1=spool 2=slot -->
+    <string name="auto_chosen">%1$s is loaded into %2$s.</string>
+    <string name="auto_slot_gone">That slot is no longer available for Auto.</string>
+    <string name="auto_nothing_to_choose">There is no slot choice waiting on this printer.</string>
+    <string name="auto_not_waiting">No Auto assignment is waiting on this printer.</string>
+    <!-- 1=slot -->
+    <string name="event_title_slot_cleared">Slot %1$s cleared</string>
+    <!-- 1=name 2=slot -->
+    <string name="event_text_slot_cleared">%1$s was cleared from %2$s.</string>
+    <string name="event_slot_unknown">slot</string>
+    <string name="event_title_hub_started">Hub started</string>
+    <!-- 1=version -->
+    <string name="event_text_hub_started_version">Version %1$s.</string>
+    <string name="event_text_hub_started">The Hub started.</string>
+    <string name="event_title_hub_updated">Hub updated</string>
+    <!-- 1=version -->
+    <string name="event_text_hub_updated_to">Updated to %1$s.</string>
+    <string name="event_text_hub_updated">The Hub was updated.</string>
+    <string name="event_title_hub_restored">Hub restored from backup</string>
+    <!-- 1=backup -->
+    <string name="event_text_hub_restored_from">Restored from %1$s.</string>
+    <string name="event_text_hub_restored">Restored from a backup.</string>
+    <string name="event_title_backup_finished">Backup finished</string>
+    <!-- 1=file -->
+    <string name="event_text_backup_finished_file">Saved %1$s.</string>
+    <string name="event_text_backup_finished">Backup completed.</string>
+    <string name="event_title_backup_failed">Backup failed</string>
+    <!-- 1=reason -->
+    <string name="event_text_backup_failed_reason">%1$s.</string>
+    <string name="event_text_backup_failed">The backup did not finish.</string>
+    <!-- 1=name -->
+    <string name="event_title_device_paired">Device paired: %1$s</string>
+    <!-- 1=name -->
+    <string name="event_text_device_paired">%1$s was paired.</string>
+    <!-- 1=name -->
+    <string name="event_title_device_removed">Device removed: %1$s</string>
+    <!-- 1=name -->
+    <string name="event_text_device_removed">%1$s was removed.</string>
+    <!-- 1=group -->
+    <string name="event_title_settings_changed">Settings changed (%1$s)</string>
+    <!-- 1=names -->
+    <string name="event_text_settings_changed_names">Updated %1$s.</string>
+    <!-- 1=group -->
+    <string name="event_text_settings_changed">%1$s settings changed.</string>
+    <string name="event_settings_group_hub">Hub</string>
+    <!-- 1=printer -->
+    <string name="event_title_printer_added">Printer added: %1$s</string>
+    <!-- 1=printer -->
+    <string name="event_text_printer_added">%1$s was added.</string>
+    <!-- 1=printer -->
+    <string name="event_title_printer_changed">Printer changed: %1$s</string>
+    <!-- 1=printer -->
+    <string name="event_text_printer_changed">%1$s was changed.</string>
+    <!-- 1=printer -->
+    <string name="event_title_printer_removed">Printer removed: %1$s</string>
+    <!-- 1=printer -->
+    <string name="event_text_printer_removed">%1$s was removed.</string>
+    <string name="event_title_catalog_changed">Filament Catalog changed</string>
+    <!-- 1=what -->
+    <string name="event_text_catalog_changed">Catalog %1$s.</string>
+    <string name="event_catalog_updated">updated</string>
+    <!-- 1=printer -->
+    <string name="event_title_usage_undone">Usage undone on %1$s</string>
+    <!-- 1=grams 2=job -->
+    <string name="event_text_usage_undone">Undid %1$s g on %2$s.</string>
+    <string name="event_title_record_changed">Intake record changed</string>
+    <!-- 1=what -->
+    <string name="event_text_record_changed">Record %1$s.</string>
+    <string name="event_record_changed">changed</string>
+    <string name="undo_why_changed_since">This changed again since, so it cannot be undone.</string>
+    <string name="undo_why_too_old">This is older than 7 days, so it cannot be undone.</string>
+    <string name="undo_why_already_undone">This was already undone.</string>
+    <string name="undo_why_not_undoable">This cannot be undone.</string>
+    <!-- 1=id -->
+    <string name="undo_no_event">there is no event %1$s.</string>
+    <string name="undo_load_note">The printer still shows what it was set to.</string>
+    <string name="analytics_removed_printer">A removed printer</string>
+    <string name="analytics_unknown_material">Unknown material</string>
+    <!-- 1=used -->
+    <string name="analytics_insight_total">Filament used this month: %1$s.</string>
+    <!-- 1=used 2=last -->
+    <string name="analytics_insight_total_prev">Filament used this month: %1$s (last month %2$s).</string>
+    <!-- 1=material 2=used -->
+    <string name="analytics_insight_favourite">Your favourite material this month was %1$s (%2$s).</string>
+    <!-- 1=printer 2=used 3=count -->
+    <plurals name="analytics_insight_busiest">
+        <item quantity="one">%1$s did the most work this month (%2$s, %3$d print).</item>
+        <item quantity="other">%1$s did the most work this month (%2$s, %3$d prints).</item>
+    </plurals>
+    <!-- 1=count 2=total 3=used -->
+    <string name="analytics_insight_unfinished">%1$d of %2$s prints did not finish this month (%3$s).</string>
+    <!-- 1=job 2=used -->
+    <string name="analytics_insight_biggest">The biggest print this month was %1$s (%2$s).</string>
+    <!-- 1=count -->
+    <plurals name="analytics_insight_finished">
+        <item quantity="one">You finished %1$d spool this month.</item>
+        <item quantity="other">You finished %1$d spools this month.</item>
+    </plurals>
+    <!-- 1=grams -->
+    <string name="analytics_note_logged">Includes %1$s g the Hub logged but took off no spool.</string>
+    <!-- 1=count -->
+    <plurals name="analytics_note_no_weight">
+        <item quantity="one">%1$d print has no weight.</item>
+        <item quantity="other">%1$d prints have no weight.</item>
+    </plurals>
+    <string name="health_row_storage">Storage on the Hub</string>
+    <string name="csv_export_unavailable">Spoolman\'s own export is not available in this Spoolman version.</string>
+    <!-- 1=selector -->
+    <string name="csv_ambiguous_printer">More than one printer starts with %1$s.</string>
+    <!-- 1=selector -->
+    <string name="csv_no_printer">No printer named %1$s.</string>
+    <string name="csv_days_number">days must be a number.</string>
+    <string name="csv_days_above_zero">days must be above 0.</string>
+    <!-- 1=name -->
+    <string name="csv_unknown_set">Unknown export set %1$s.</string>
+    <string name="csv_not_readable">This file is not a CSV file that Spoolwarden can read.</string>
+    <!-- 1=column -->
+    <string name="csv_enter_yes_no">%1$s: Enter yes or no.</string>
+    <!-- 1=column -->
+    <string name="csv_enter_whole">%1$s: Enter a whole number.</string>
+    <!-- 1=column 2=min -->
+    <string name="csv_enter_whole_min">%1$s: Enter a whole number of at least %2$s.</string>
+    <!-- 1=column -->
+    <string name="csv_enter_number">%1$s: Enter a number.</string>
+    <!-- 1=column -->
+    <string name="csv_enter_number_above_zero">%1$s: Enter a number above 0.</string>
+    <string name="csv_need_vendor">vendor: Enter a vendor.</string>
+    <string name="csv_need_name">name: Enter a filament name.</string>
+    <string name="csv_need_material">material: Enter a material.</string>
+    <string name="csv_need_net">net: Enter grams above 0.</string>
+    <string name="csv_bad_color">color_hex: Enter 6 or 8 hex digits, like #2B2B2E.</string>
+    <string name="csv_gross_count">gross: Gross weight requires count 1.</string>
+    <string name="csv_gross_tare">gross: Gross weight must be above tare.</string>
+    <string name="csv_need_location_name">name: Enter a name for the location.</string>
+    <string name="csv_bad_type">type: Use bulk or containers.</string>
+    <string name="csv_bad_fill">fill: Use none, any, or materials.</string>
+    <string name="csv_left_out">left out</string>
+    <!-- 1=count 2=vendor 3=name 4=material 5=net -->
+    <string name="csv_line_add_spools">Add %1$d × %2$s %3$s (%4$s, %5$s)</string>
+    <!-- 1=count 2=vendor 3=name 4=material 5=net 6=location -->
+    <string name="csv_line_add_spools_at">Add %1$d × %2$s %3$s (%4$s, %5$s, %6$s)</string>
+    <!-- 1=name 2=type -->
+    <string name="csv_line_add_location">Add %1$s (%2$s)</string>
+    <!-- 1=name 2=type -->
+    <string name="csv_line_change_location">Change %1$s (%2$s)</string>
+    <!-- 1=field 2=error -->
+    <string name="csv_problem_line">%1$s: %2$s</string>
+    <string name="csv_locations_invalid">Locations CSV has validation errors.</string>
     <!-- 1=n 2=days -->
     <string name="cli_activity_count">%1$s events in the last %2$s days.</string>
     <!-- 1=days -->
@@ -4888,6 +5153,10 @@
     <!-- 1=days -->
     <string name="cli_activity_empty">Nothing has been done in the last %1$s days.</string>
     <string name="cli_activity_more">Showing the newest 200. Narrow it with --days, --who or --spool.</string>
+    <string name="cli_actor_cli">command line</string>
+    <string name="cli_actor_connector">Claude connector</string>
+    <string name="cli_actor_hub">The Hub</string>
+    <string name="cli_actor_page">Hub page</string>
     <string name="cli_backup_pw_removed">Backup password removed.</string>
     <string name="cli_backup_pw_saved">Backup password saved.</string>
     <string name="cli_backup_pw_set">Backup password is set.</string>
@@ -4987,6 +5256,10 @@
     <string name="cli_slot_auto_preview">Watch %1$s on %2$s for spool %3$s.</string>
     <!-- 1=n 2=name -->
     <string name="cli_slot_auto_replaces">Replaces waiting for spool %1$s, %2$s.</string>
+    <string name="cli_slot_auto_stop_fix">stop the waiting: spoolwarden printer load &lt;name> auto --stop</string>
+    <string name="cli_slot_auto_stop_only">--stop goes with the slot auto.</string>
+    <!-- 1=name -->
+    <string name="cli_slot_auto_stopped">Stopped waiting for %1$s.</string>
     <!-- 1=value -->
     <string name="cli_slot_bad">%1$s is not a slot of a printer.</string>
     <string name="cli_slot_bad_fix">see the slots: spoolwarden printer show &lt;name></string>
@@ -5000,6 +5273,8 @@
     <string name="cli_slot_load_ask">Load spool %1$s into slot %2$s of %3$s?</string>
     <!-- 1=n 2=slot 3=printer -->
     <string name="cli_slot_load_done">Spool %1$s is loaded in slot %2$s of %3$s.</string>
+    <string name="cli_slot_load_needs_spool">load needs the spool\'s number.</string>
+    <string name="cli_slot_load_needs_spool_fix">give it after the slot: spoolwarden printer load &lt;name> &lt;slot> &lt;spool n></string>
     <!-- 1=n 2=name 3=slot 4=printer -->
     <string name="cli_slot_load_preview">Load spool %1$s, %2$s, into slot %3$s of %4$s.</string>
     <!-- 1=slot -->

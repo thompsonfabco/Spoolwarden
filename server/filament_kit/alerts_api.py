@@ -106,8 +106,101 @@ MESSAGES = {
     "event_reason_reconciled": "it is no longer true",
     "event_reason_subject_removed": "what it was about was removed",
     "event_reason_feature_off": "the check is gone",
+    "event_title_slot_cleared": "Slot {slot} cleared",
+    "event_text_slot_cleared": "{name} was cleared from {slot}.",
+    "event_slot_unknown": "slot",
+    "event_title_hub_started": "Hub started",
+    "event_text_hub_started_version": "Version {version}.",
+    "event_text_hub_started": "The Hub started.",
+    "event_title_hub_updated": "Hub updated",
+    "event_text_hub_updated_to": "Updated to {version}.",
+    "event_text_hub_updated": "The Hub was updated.",
+    "event_title_hub_restored": "Hub restored from backup",
+    "event_text_hub_restored_from": "Restored from {backup}.",
+    "event_text_hub_restored": "Restored from a backup.",
+    "event_title_backup_finished": "Backup finished",
+    "event_text_backup_finished_file": "Saved {file}.",
+    "event_text_backup_finished": "Backup completed.",
+    "event_title_backup_failed": "Backup failed",
+    "event_text_backup_failed_reason": "{reason}.",
+    "event_text_backup_failed": "The backup did not finish.",
+    "event_title_device_paired": "Device paired: {name}",
+    "event_text_device_paired": "{name} was paired.",
+    "event_title_device_removed": "Device removed: {name}",
+    "event_text_device_removed": "{name} was removed.",
+    "event_title_settings_changed": "Settings changed ({group})",
+    "event_text_settings_changed_names": "Updated {names}.",
+    "event_text_settings_changed": "{group} settings changed.",
+    "event_settings_group_hub": "Hub",
+    "event_title_printer_added": "Printer added: {printer}",
+    "event_text_printer_added": "{printer} was added.",
+    "event_title_printer_changed": "Printer changed: {printer}",
+    "event_text_printer_changed": "{printer} was changed.",
+    "event_title_printer_removed": "Printer removed: {printer}",
+    "event_text_printer_removed": "{printer} was removed.",
+    "event_title_catalog_changed": "Filament Catalog changed",
+    "event_text_catalog_changed": "Catalog {what}.",
+    "event_catalog_updated": "updated",
+    "event_title_usage_undone": "Usage undone on {printer}",
+    "event_text_usage_undone": "Undid {grams} g on {job}.",
+    "event_title_record_changed": "Intake record changed",
+    "event_text_record_changed": "Record {what}.",
+    "event_record_changed": "changed",
     "event_title_location_renamed": "Storage location renamed",
     "event_text_location_renamed": "{from} is now {to}. {spools} spools were updated.",
+    # undo (the history: what undoing says, and why it cannot)
+    "undo_why_changed_since": "This changed again since, so it cannot be undone.",
+    "undo_why_too_old": "This is older than 7 days, so it cannot be undone.",
+    "undo_why_already_undone": "This was already undone.",
+    "undo_why_not_undoable": "This cannot be undone.",
+    "undo_no_event": "there is no event {id}.",
+    "undo_load_note": "The printer still shows what it was set to.",
+    # monthly usage (analytics): the plain-language lines and notes
+    "analytics_removed_printer": "A removed printer",
+    "analytics_unknown_material": "Unknown material",
+    "analytics_insight_total": "Filament used this month: {used}.",
+    "analytics_insight_total_prev": "Filament used this month: {used} (last month {last}).",
+    "analytics_insight_favourite": "Your favourite material this month was {material} ({used}).",
+    "analytics_insight_busiest": {"one": "{printer} did the most work this month ({used}, {count} print).",
+                                  "other": "{printer} did the most work this month ({used}, {count} prints)."},
+    "analytics_insight_unfinished": "{count} of {total} prints did not finish this month ({used}).",
+    "analytics_insight_biggest": "The biggest print this month was {job} ({used}).",
+    "analytics_insight_finished": {"one": "You finished {count} spool this month.",
+                                   "other": "You finished {count} spools this month."},
+    "analytics_note_logged": "Includes {grams} g the Hub logged but took off no spool.",
+    "analytics_note_no_weight": {"one": "{count} print has no weight.", "other": "{count} prints have no weight."},
+    # health history
+    "health_row_storage": "Storage on the Hub",
+    # CSV export and import
+    "csv_export_unavailable": "Spoolman's own export is not available in this Spoolman version.",
+    "csv_ambiguous_printer": "More than one printer starts with {selector}.",
+    "csv_no_printer": "No printer named {selector}.",
+    "csv_days_number": "days must be a number.",
+    "csv_days_above_zero": "days must be above 0.",
+    "csv_unknown_set": "Unknown export set {name}.",
+    "csv_not_readable": "This file is not a CSV file that Spoolwarden can read.",
+    "csv_enter_yes_no": "{column}: Enter yes or no.",
+    "csv_enter_whole": "{column}: Enter a whole number.",
+    "csv_enter_whole_min": "{column}: Enter a whole number of at least {min}.",
+    "csv_enter_number": "{column}: Enter a number.",
+    "csv_enter_number_above_zero": "{column}: Enter a number above 0.",
+    "csv_need_vendor": "vendor: Enter a vendor.",
+    "csv_need_name": "name: Enter a filament name.",
+    "csv_need_material": "material: Enter a material.",
+    "csv_need_net": "net: Enter grams above 0.",
+    "csv_bad_color": "color_hex: Enter 6 or 8 hex digits, like #2B2B2E.",
+    "csv_gross_count": "gross: Gross weight requires count 1.",
+    "csv_gross_tare": "gross: Gross weight must be above tare.",
+    "csv_need_location_name": "name: Enter a name for the location.",
+    "csv_bad_type": "type: Use bulk or containers.",
+    "csv_bad_fill": "fill: Use none, any, or materials.",
+    "csv_left_out": "left out",
+    "csv_line_add_spools": "Add {count} \u00d7 {vendor} {name} ({material}, {net})",
+    "csv_line_add_spools_at": "Add {count} \u00d7 {vendor} {name} ({material}, {net}, {location})",
+    "csv_line_add_location": "Add {name} ({type})",
+    "csv_line_change_location": "Change {name} ({type})",
+    "csv_problem_line": "{field}: {error}",
+    "csv_locations_invalid": "Locations CSV has validation errors.",
     # the alert types (GET api/alerts)
     "alerts_type_runout": "Filament ran out",
     "alerts_type_paused": "Print paused",
@@ -347,42 +440,50 @@ def words(ev: dict) -> tuple[str, str]:
         return say("event_title_location_renamed"), say("event_text_location_renamed", **{
             "from": _d(ev, "from"), "to": _d(ev, "to"), "spools": _d(ev, "spools") or "0"})
     if kind == "slot.cleared":
-        slot = _d(ev, "slot") or _d(ev, "before_slot") or "slot"
-        return f"Slot {slot} cleared", f"{_spool_name(ev)} was cleared from {slot}."
+        slot = _d(ev, "slot") or _d(ev, "before_slot") or say("event_slot_unknown")
+        return say("event_title_slot_cleared", slot=slot), say("event_text_slot_cleared", name=_spool_name(ev), slot=slot)
     if kind == "hub.started":
         ver = _d(ev, "version")
-        return "Hub started", (f"Version {ver}." if ver else "The Hub started.")
+        return say("event_title_hub_started"), (say("event_text_hub_started_version", version=ver) if ver
+                                                 else say("event_text_hub_started"))
     if kind == "hub.updated":
         to_v = _d(ev, "to")
-        return "Hub updated", (f"Updated to {to_v}." if to_v else "The Hub was updated.")
+        return say("event_title_hub_updated"), (say("event_text_hub_updated_to", version=to_v) if to_v
+                                                 else say("event_text_hub_updated"))
     if kind == "hub.restored":
         b = _d(ev, "backup")
-        return "Hub restored from backup", (f"Restored from {b}." if b else "Restored from a backup.")
+        return say("event_title_hub_restored"), (say("event_text_hub_restored_from", backup=b) if b
+                                                  else say("event_text_hub_restored"))
     if kind == "backup.finished":
         f = _d(ev, "file")
-        return "Backup finished", (f"Saved {f}." if f else "Backup completed.")
+        return say("event_title_backup_finished"), (say("event_text_backup_finished_file", file=f) if f
+                                                     else say("event_text_backup_finished"))
     if kind == "backup.failed":
         r = _d(ev, "reason")
-        return "Backup failed", (f"{r}." if r else "The backup did not finish.")
+        return say("event_title_backup_failed"), (say("event_text_backup_failed_reason", reason=r) if r
+                                                   else say("event_text_backup_failed"))
     if kind in ("device.paired", "device.removed"):
         name = sub.get("name") or sub.get("id") or say("alert_device_unknown")
-        verb = "paired" if kind == "device.paired" else "removed"
-        return f"Device {verb}: {name}", f"{name} was {verb}."
+        what = kind.split(".", 1)[1]
+        return say(f"event_title_device_{what}", name=name), say(f"event_text_device_{what}", name=name)
     if kind == "settings.changed":
-        grp = _d(ev, "group") or _d(ev, "feature") or "Hub"
+        grp = _d(ev, "group") or _d(ev, "feature") or say("event_settings_group_hub")
         names = _d(ev, "names")
-        return f"Settings changed ({grp})", (f"Updated {names}." if names else f"{grp} settings changed.")
+        return say("event_title_settings_changed", group=grp), (say("event_text_settings_changed_names", names=names)
+                                                                  if names else say("event_text_settings_changed", group=grp))
     if kind in ("printer.added", "printer.changed", "printer.removed"):
-        verb = kind.split(".", 1)[1]
-        return f"Printer {verb}: {_printer(ev)}", f"{_printer(ev)} was {verb}."
+        what = kind.split(".", 1)[1]
+        return say(f"event_title_printer_{what}", printer=_printer(ev)), say(f"event_text_printer_{what}",
+                                                                               printer=_printer(ev))
     if kind == "catalog.changed":
-        what = _d(ev, "what") or "updated"
-        return "Filament Catalog changed", f"Catalog {what.replace('_', ' ')}."
+        what = _d(ev, "what").replace("_", " ") or say("event_catalog_updated")
+        return say("event_title_catalog_changed"), say("event_text_catalog_changed", what=what)
     if kind == "usage.undone":
-        return f"Usage undone on {_printer(ev)}", f"Undid {number(_d(ev, 'grams'))} g on {_job(ev)}."
+        return (say("event_title_usage_undone", printer=_printer(ev)),
+                say("event_text_usage_undone", grams=number(_d(ev, "grams")), job=_job(ev)))
     if kind == "record.changed":
-        what = _d(ev, "what") or "changed"
-        return "Intake record changed", f"Record {what}."
+        what = _d(ev, "what") or say("event_record_changed")
+        return say("event_title_record_changed"), say("event_text_record_changed", what=what)
     return kind, ""
 
 
@@ -433,11 +534,13 @@ def parse_time(text: str) -> str:
 
 def events_answer(*, since: int | None = None, since_at: str | None = None, wait: float = 0, kinds=None,
                   limit: int = events.LIMIT_DEFAULT, alert: bool = False, callers=(),
-                  activity: bool = False, subject: str | None = None, actor: str | None = None) -> dict:
+                  activity: bool = False, subject: str | None = None, actor: str | None = None,
+                  newest: int | None = None) -> dict:
     """`GET api/events`: {events, next, oldest, gap, test, conditions}. `since` (an id) or `since_at` (a time, UTC);
     `wait` up to 55 s waits for news; `alert` keeps only the events an alert type that is on covers (the cursor still
     moves over the others); `callers` are the keys this caller is known by (`device:<id>`, `client:<browser id>`),
-    for the test alert it may be waiting for. Blocking: call it in a thread."""
+    for the test alert it may be waiting for. `newest=N` answers the newest N matching events (oldest of them first)
+    instead of the oldest page after `since`. Blocking: call it in a thread."""
     if since is not None and since_at:
         raise ValueError("give since or since_at, not both")
     store, settings = events.store(), alerts.load()
@@ -445,11 +548,14 @@ def events_answer(*, since: int | None = None, since_at: str | None = None, wait
     cur, shown, res = max(int(since or 0), 0), [], {"events": [], "next": 0}
     while True:
         res = store.read(cur, limit, kinds, max(0.0, deadline - time.monotonic()),
-                         since_at=since_at, activity=activity, subject=subject, actor=actor)
+                         since_at=since_at, activity=activity, subject=subject, actor=actor,
+                         newest=events.LIMIT_MAX if newest and alert else newest)
         found = res["events"]
         shown = [e for e in found if alerts.is_alert(e, settings)] if alert else found
+        if newest:
+            shown = shown[-int(newest):]
         cur = res["next"]
-        if shown or not found:
+        if shown or not found or newest:
             break
     oldest = res.get("oldest", store.oldest())
     gap = since is not None and oldest > 0 and since < oldest - 1
@@ -458,16 +564,9 @@ def events_answer(*, since: int | None = None, since_at: str | None = None, wait
 
 
 def newest(n: int = 50, kinds=None) -> list[dict]:
-    """The last `n` events (oldest first) with their views; reads from just under the newest id."""
-    store, settings = events.store(), alerts.load()
-    last, span = store.last_id(), max(int(n), 1)
-    got: list[dict] = []
-    for _ in range(6):                                  # ids are rising by one, but a failed write can skip one
-        got = store.read(max(last - span, 0), 1000, kinds)["events"]
-        if len(got) >= n or last - span <= 0:
-            break
-        span *= 2
-    return [event_view(e, settings) for e in got[-n:]]
+    """The last `n` events (oldest first) with their views."""
+    settings = alerts.load()
+    return [event_view(e, settings) for e in events.store().read(kinds=kinds, newest=max(int(n), 1))["events"]]
 
 
 # ---------------------------------------------------------------- the test alert (R80 E4)

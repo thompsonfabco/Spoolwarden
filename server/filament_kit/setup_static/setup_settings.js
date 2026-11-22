@@ -566,7 +566,7 @@ async function testReader(out, fpBox, addr, tier, saved) {
   fpBox.replaceChildren();
   working(out, SW.t("settings_reader_testing"));
   if (url === saved) { try { show(await api("settings/local-intake")); } catch (e) { failed(e); } return; }
-  await runRemoteTest(true);
+  await runRemoteTest(false);
 }
 
 // the reader that runs on this machine: install, upgrade, remove, and its token (jobs and one setting; not part of the Save)
@@ -854,7 +854,7 @@ function openCustomEntriesDialog(opener, onChanged) {
 }
 
 function groupCatalog({ lib }) {
-  const on = !!(S.library_token?.library || S.modules?.find((m) => m.name === "library")?.on);
+  const on = !!S.modules?.find((m) => m.name === "library")?.on;
   const c = lib.last_check, none = lib.source === "none";
   const badges = [];
   if (!on) { /* switched off: no state badge */ } else if (none) badges.push(h("span", { class: "settings__badge", textContent: SW.t("settings_catalog_none") }));

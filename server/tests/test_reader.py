@@ -826,12 +826,13 @@ def test_auto_slot_is_first_when_auto_possible_and_respects_cap(app, token, kit)
     kit.get = get
     with client(app) as c:
         sl = c.get("/reader/printers/SER1/slots", headers={"X-Auth-Token": token}).json()
-    assert sl[0] == {"label": "auto", "say": "Auto"}
+    auto = {"label": "auto", "say": ["Auto"], "kind": "auto", "present": None, "type": "", "spool": None}
+    assert sl[0] == auto
     assert [s["label"] for s in sl] == ["auto", "A1", "A2", "HT-A", "Ext-L", "Ext-R"]
     kit.slots["SER1"] = [slot(f"{reader.slots.letters(i // 4)}{i % 4 + 1}") for i in range(200)]
     with client(app) as c:
         capped = c.get("/reader/printers/SER1/slots", headers={"X-Auth-Token": token}).json()
-    assert capped[0] == {"label": "auto", "say": "Auto"} and "note" in capped[-1]
+    assert capped[0] == auto and "note" in capped[-1]
     assert len([s for s in capped if "label" in s]) <= reader.MAX_SLOTS
 
 

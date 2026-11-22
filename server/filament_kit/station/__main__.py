@@ -71,7 +71,9 @@ def main():
     if store.problem:
         log.warning("%s", store.problem)
     access = page.Access(server_api.proof_key)
-    handler = http.make_handler(st.view, s["allow"], access, store, page_ranges=os.environ.get("STATION_PAGE_RANGES"))
+    handler = http.make_handler(st.view, s["allow"], access, store,
+                                page_ranges=os.environ.get("STATION_PAGE_RANGES"),
+                                page_from=os.environ.get("STATION_PAGE_FROM", "home"))
     server, fp, plain = make_server(s["port"], handler)
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, stop_service)

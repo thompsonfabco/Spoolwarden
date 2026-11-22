@@ -46,10 +46,11 @@ def specs() -> list[dict]:
     """The settings and what each accepts, in the order the page shows them: id, label, kind and (choices | min, max)."""
     out = [_spec("beep", "Beep when a tag is scanned", "switch"),
            _spec("speech", "Speak the steps aloud", "switch"),
-           _spec("voice", "Voice", "choice", choices=list(VOICES)),
+           _spec("voice", "Voice", "choice", choices=list(VOICES), choice_labels={"auto": "Automatic", "espeak": "eSpeak"}),
            _spec("volume", "Speaker volume (percent)", "number", min=0, max=100),
            _spec("panel_swap", "Swap the yellow and red buttons and lamps", "switch")]
-    out += [_spec(f"lamp.{step}", f"Lamp for: {STEP_LABELS.get(step, step)}", "choice", choices=list(flow.LAMP_CHOICES))
+    out += [_spec(f"lamp.{step}", f"Lamp for: {STEP_LABELS.get(step, step)}", "choice", choices=list(flow.LAMP_CHOICES),
+                  choice_labels=LAMP_LABELS)
             for step in flow.STEP_LAMPS]
     return out
 

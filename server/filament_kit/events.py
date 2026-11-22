@@ -683,16 +683,18 @@ class EventStore:
     def read(self, since: int = 0, limit: int = LIMIT_DEFAULT, kinds=None, wait: float = 0, *,
              since_at: datetime | str | None = None, activity: bool = False,
              subject: str | None = None, actor: str | None = None,
-             include_undo: bool = False) -> dict:
+             include_undo: bool = False, newest: int | None = None) -> dict:
         """Events newer than `since` (an id) and, when `since_at` (a time, UTC: a datetime or an ISO text) is given,
         at or after it; oldest first, at most `limit` (1 to 1000), whose kind starts with one of `kinds` (a list or a
         comma-separated string of prefixes; none = all). `activity` limits to Activity kinds; `subject` (`<type>:<id>`)
         and `actor` (`<type>` or `<type>:<id>`) filter by subject/actor. `wait` (0 to 55 s) blocks until such an event
         exists; the answer is empty after the time. Returns {"events": [...], "next": id, "oldest": lowest id kept}:
-        continue with since=next. `next` is the store's highest id, also when nothing is new (never an echo of `since`:
+        continue with since=next. `newest=N` (1 to 1000) returns the newest N matching events instead (still in ascending
+        id order; `limit` is then not used): a "last ten" asks for those. `next` is the store's highest id, also when nothing is new (never an echo of `since`:
         a `since` above it, from another Hub, shows as next < since); only a page cut by `limit` ends at its last event."""
         since = max(int(since or 0), 0)
         limit = min(max(int(limit or LIMIT_DEFAULT), 1), LIMIT_MAX)
+        newest = None if newest in (None, "") else min(max(int(newest), 1), LIMIT_MAX)
         at_text = _iso(since_at)
         if isinstance(kinds, str):
             kinds = kinds.split(",")
@@ -701,13 +703,14 @@ class EventStore:
         _, cond = _shared_for(self.root)
         seen = None                                      # the newest id looked at, so a wait reads only on news
         while True:
-            newest = self.last_id()
-            if seen is None or newest > seen:
-                seen = newest
+            top = self.last_id()
+            if seen is None or top > seen:
+                seen = top
                 found = self._events_after(since, prefixes, at_text)
                 if activity or subject or actor:
                     found = [e for e in found if self._matches(e, activity, subject, actor)]
-                evs = copy.deepcopy(found[:limit])
+                cut = newest is None and len(found) > limit
+                evs = copy.deepcopy(found[-newest:] if newest is not None else found[:limit])
                 if evs:
                     if activity or include_undo:
                         from . import undo
@@ -715,7 +718,7 @@ class EventStore:
                         evs = undo.enrich(evs, all_evs=all_evs)
                     # cut by `limit`: continue after the last one given; else everything up to the store's highest id
                     # is covered (what is in between does not match), so `next` is that
-                    return {"events": evs, "next": evs[-1]["id"] if len(found) > limit else max(evs[-1]["id"], newest),
+                    return {"events": evs, "next": evs[-1]["id"] if cut else max(evs[-1]["id"], top),
                             "oldest": self.oldest()}
             left = deadline - time.monotonic()
             if left <= 0:
@@ -793,9 +796,9 @@ def write_many(items: list[dict]) -> list[int]:
 
 def read(since: int = 0, limit: int = LIMIT_DEFAULT, kinds=None, wait: float = 0, *, since_at=None,
          activity: bool = False, subject: str | None = None, actor: str | None = None,
-         include_undo: bool = False) -> dict:
+         include_undo: bool = False, newest: int | None = None) -> dict:
     return store().read(since, limit, kinds, wait, since_at=since_at, activity=activity, subject=subject,
-                        actor=actor, include_undo=include_undo)
+                        actor=actor, include_undo=include_undo, newest=newest)
 
 
 def get(event_id: int) -> dict | None:

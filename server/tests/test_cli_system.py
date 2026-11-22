@@ -60,7 +60,7 @@ def test_config_show_prints_every_group_in_the_menus_order_and_secrets_as_set_or
     rc, out, _ = run(capsys, ["config", "show"])
     assert rc == 0
     heads = ["Appearance", "General", "Storage locations", "Label Reader", "Backups and restore",
-             "Network and addresses", "Web passphrase", "Filament Catalog"]
+             "Network and addresses", "Web passphrase"]       # the Catalog has no item to show
     at = [out.index(f"\n{h}\n") if h != heads[0] else out.index(h) for h in heads]
     assert at == sorted(at)
     assert re.search(r"^  Theme for new devices +Console$", out, re.M)
@@ -926,6 +926,7 @@ def test_status_history_calls_health_endpoint(capsys, monkeypatch):
 
 
 def test_history_cli_commands_are_wired(capsys, monkeypatch):
+    """activity and usage ask the Hub's API; export, report and backup password run as root on the modules (D5)."""
     calls = []
 
     class _Api:
@@ -935,32 +936,23 @@ def test_history_cli_commands_are_wired(capsys, monkeypatch):
                 return {"events": []}
             if path.startswith("/api/analytics"):
                 return {"months": [], "insights": [], "notes": []}
-            if path == "/setup/api/backup/password":
-                return {"set": False}
             return {}
 
-        def get_raw(self, path):
-            calls.append(("GET_RAW", path))
-            return b"col\nval\n"
-
-        def post(self, path, body):
-            calls.append(("POST", path))
-            if path.startswith("/api/import/"):
-                return {"rows": [], "add": 0, "change": 0, "dry": True}
-            return {"ok": True, "file": ""}
-
     monkeypatch.setattr(cli, "_server_api", lambda: _Api())
-    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: "correct horse battery")
     assert run(capsys, ["activity", "--days", "7"])[0] == 0
     assert run(capsys, ["usage", "--by", "month"])[0] == 0
-    assert run(capsys, ["export", "locations"])[0] == 0
-    assert run(capsys, ["report"])[0] == 0
-    assert run(capsys, ["backup", "password", "--show"])[0] == 0
+    rc, out, _ = run(capsys, ["export", "locations"])
+    assert rc == 0 and out.splitlines()[0]                       # the CSV of csv_io, header first
+    rc, out, _ = run(capsys, ["report"])
+    assert rc == 0 and out.startswith("Hub report written:")
+    assert run(capsys, ["backup", "password", "--show"])[1] == "Backup password is not set.\n"
+    assert run(capsys, ["backup", "password"])[1] == "Backup password saved.\n"
+    assert run(capsys, ["backup", "password", "--show"])[1] == "Backup password is set.\n"
+    assert run(capsys, ["backup", "password", "--remove"])[1] == "Backup password removed.\n"
     assert any(c[1].startswith("/api/events?activity=1") for c in calls)
     assert any(c[1].startswith("/api/analytics?") for c in calls)
-    assert ("GET_RAW", "/api/export/locations.csv") in calls
-    assert ("POST", "/setup/api/report") in calls
-    assert ("GET", "/setup/api/backup/password") in calls
+    assert not [c for c in calls if "/setup/api" in c[1] or "/api/export" in c[1]]      # no page route, no export route
 
 
 def test_restore_password_file_is_passed_to_backup_restore(capsys, monkeypatch, tmp_path):

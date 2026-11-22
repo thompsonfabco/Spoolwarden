@@ -9,7 +9,7 @@ from starlette.applications import Starlette
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from filament_kit import alerts_api, config, redact, report
+from filament_kit import config, events, redact, report
 from filament_kit.setup_console import history_tab
 from filament_kit.setup_page import SetupPage
 from test_setup_page import BASE, CODE, H, HOME, HOSTNAME, env, helper, post  # noqa: F401
@@ -106,107 +106,107 @@ def test_report_collect_keeps_newest_three_and_copies_out(monkeypatch, tmp_path,
 
 # ---------- history_tab.py ----------
 
-def test_activity_route_open_and_validates_params(monkeypatch, env, helper):
-    seen = {}
+def _seed_moves(count: int, subject_id: str = "212"):
+    from datetime import datetime, timedelta, timezone
+    st = events.store()
+    t0 = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+    for i in range(count):
+        st.write("spool.moved", {"type": "spool", "id": subject_id}, {"type": "hub"},
+                 {"spool": subject_id, "before_location": f"A{i}", "after_location": f"A{i + 1}"},
+                 now=t0 + timedelta(minutes=i))
+    return st
 
-    def fake_events_answer(**kw):
-        seen.update(kw)
-        return {"events": [{"id": 1, "kind": "spool.moved"}], "next": 2, "oldest": 1}
 
-    monkeypatch.setattr(alerts_api, "events_answer", fake_events_answer)
+def test_activity_route_open_and_validates_params(env, helper):
+    _seed_moves(15)
     c = _history_client(helper)
 
-    r = c.get("/setup/api/activity?subject=spool:212&actor=hub_page&kinds=spool.moved&since=0&limit=25")
+    r = c.get("/setup/api/activity?subject=spool:212&kinds=spool.moved&since=0&limit=5")
     assert r.status_code == 200
-    assert r.json()["events"][0]["id"] == 1
-    assert seen["subject"] == "spool:212"
-    assert seen["actor"] == "hub_page"
-    assert seen["limit"] == 25
+    assert [e["id"] for e in r.json()["events"]] == [1, 2, 3, 4, 5]           # `since` pages from the oldest
+    newest = c.get("/setup/api/activity?subject=spool:212&limit=10")           # no `since`: the newest ten
+    assert [e["id"] for e in newest.json()["events"]] == list(range(6, 16))
+    assert newest.json()["events"][-1]["undo"]["possible"] is True
 
     bad = c.get("/setup/api/activity?since=-1")
     assert bad.status_code == 400
     assert "error" in bad.json()
 
 
-def test_undo_route_code_gated_and_conflict_shape(monkeypatch, env, helper):
-    class FakeConflict(Exception):
-        status = 409
-        code = "changed_since"
-
-    def fake_undo(event_id, actor=None):
-        if event_id == 99:
-            raise LookupError("no such event")
-        if event_id == 42:
-            raise FakeConflict("That spool was changed since.")
-        return {"undone": True, "event": {"id": 100, "undo_of": event_id}}
-
-    import sys
-    import filament_kit
-    fake_mod = SimpleNamespace(undo_event=fake_undo)
-    monkeypatch.setitem(sys.modules, "filament_kit.undo", fake_mod)
-    monkeypatch.setattr(filament_kit, "undo", fake_mod, raising=False)
+def test_undo_route_code_gated_and_conflict_shape(env, helper, monkeypatch, spoolman_url):
+    from filament_kit.spoolman import Spoolman
+    sm = Spoolman(spoolman_url)
+    sm.ensure_fields()
+    st = _seed_moves(2)
+    monkeypatch.setattr(history_tab, "_spoolman", lambda page: sm)
+    # a real spool 1 for the undone event to act on
+    from filament_kit import inventory
+    sid = inventory.add_spools(sm, [{"vendor": "SUNLU", "name": "PLA+ Grey", "material": "PLA", "net": 1000, "tare": 213,
+                                     "density": 1.27, "count": 1, "sealed": False}],
+                               {"pla_location": "Rack 1", "box_prefix": "Box ", "box_count": 1, "overflow": "Overflow",
+                                "sealed_location": "Sealed stock"}, dry=False).spool_ids[0]
+    st.write("spool.weighed", {"type": "spool", "id": str(sid)}, {"type": "hub"},
+             {"spool": str(sid), "before_grams": "900", "after_grams": "800"})
+    sm.patch(f"spool/{sid}", {"remaining_weight": 800})
+    weighed = st.last_id()
 
     c = _history_client(helper)
-    assert post(c, "events/10/undo", {}, code=None).status_code == 403
+    assert post(c, f"events/{weighed}/undo", {}, code=None).status_code == 403
 
-    ok = post(c, "events/10/undo", {})
+    ok = post(c, f"events/{weighed}/undo", {})
     assert ok.status_code == 200
-    assert ok.json()["undone"] is True
+    assert ok.json()["undone"] is True and ok.json()["event"]["undo_of"] == weighed
+    assert ok.json()["event"]["actor"]["type"] in ("page", "hub")
+    assert sm.get(f"spool/{sid}")["remaining_weight"] == 900
 
-    conflict = post(c, "events/42/undo", {})
-    assert conflict.status_code == 409
-    assert conflict.json() == {"error": "That spool was changed since.", "code": "changed_since"}
+    again = post(c, f"events/{weighed}/undo", {})                              # already undone
+    assert again.status_code == 409
+    assert again.json() == {"error": "This was already undone.", "code": "already_undone"}
 
-    missing = post(c, "events/99/undo", {})
+    changed = post(c, "events/1/undo", {})                                     # spool 212 moved again since
+    assert changed.status_code == 409 and changed.json()["code"] == "changed_since"
+
+    missing = post(c, "events/999/undo", {})
     assert missing.status_code == 404
 
 
-def test_health_route_open_and_validates_days(monkeypatch, env, helper):
-    import sys
-    import filament_kit
-    fake_mod = SimpleNamespace(view=lambda days=7: {"from": "2026-11-01", "to": "2026-11-08", "checks": [], "changes": [], "days": days})
-    monkeypatch.setitem(sys.modules, "filament_kit.health", fake_mod)
-    monkeypatch.setattr(filament_kit, "health", fake_mod, raising=False)
-
+def test_health_route_open_and_validates_days(env, helper):
+    events.store().write("check.failed", {"type": "hub"}, {"type": "hub"}, {"text": "Spoolman is down"}, key="spoolman")
     c = _history_client(helper)
     r = c.get("/setup/api/health?days=30")
     assert r.status_code == 200
-    assert r.json()["days"] == 30
+    assert r.json()["days"] == 30 and [row["key"] for row in r.json()["checks"]] == ["spoolman"]
 
     bad = c.get("/setup/api/health?days=14")
     assert bad.status_code == 400
     assert "error" in bad.json()
 
 
-def test_export_and_import_routes_code_gated(monkeypatch, env, helper):
-    import sys
-    import filament_kit
-    fake_csv = SimpleNamespace(
-        export_csv=lambda set_name, **kw: f"col1,col2\n{set_name},{kw.get('days', '')}\n",
-        import_spools=lambda text, dry_run=True, actor=None: {"rows": [], "add": 1, "dry": dry_run},
-        import_locations=lambda text, dry_run=True, actor=None: {"rows": [], "add": 1, "change": 0, "dry": dry_run},
-    )
-    monkeypatch.setitem(sys.modules, "filament_kit.csv_io", fake_csv)
-    monkeypatch.setattr(filament_kit, "csv_io", fake_csv, raising=False)
-
+def test_export_and_import_routes_code_gated(env, helper, monkeypatch, spoolman_url):
+    from filament_kit.spoolman import Spoolman
+    sm = Spoolman(spoolman_url)
+    sm.ensure_fields()
+    monkeypatch.setattr(history_tab, "_spoolman", lambda page: sm)
     c = _history_client(helper)
     assert c.get("/setup/api/export/usage.csv").status_code == 403
 
     r = c.get("/setup/api/export/usage.csv?days=7", headers={"X-Setup-Code": CODE})
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
-    assert "usage,7" in r.text
+    assert r.text.startswith("time,printer,job,slot,spool,")
 
     assert c.get("/setup/api/export/nope.csv", headers={"X-Setup-Code": CODE}).status_code == 404
 
-    assert c.post("/setup/api/import/spools", content=b"a,b\n1,2\n", headers=H).status_code == 403
-    imp = c.post("/setup/api/import/spools?dry_run=0", content=b"a,b\n1,2\n",
-                 headers={**H, "X-Setup-Code": CODE})
-    assert imp.status_code == 200
-    assert imp.json()["dry"] is False
+    spools = b"vendor,name,material,net\nSUNLU,PLA+ Grey,PLA,1000\n"
+    assert c.post("/setup/api/import/spools", content=spools, headers=H).status_code == 403
+    imp = c.post("/setup/api/import/spools?dry_run=0", content=spools, headers={**H, "X-Setup-Code": CODE})
+    assert imp.status_code == 200, imp.text
+    assert imp.json()["dry"] is False and imp.json()["add"] == 1 and len(sm.get("spool")) == 1
 
-    imp_loc = c.post("/setup/api/import/locations", content=b"name\nShelf A\n",
-                     headers={**H, "X-Setup-Code": CODE})
+    bad = c.post("/setup/api/import/spools", content=b"a,b\n1,2\n", headers={**H, "X-Setup-Code": CODE})
+    assert bad.status_code == 400
+
+    imp_loc = c.post("/setup/api/import/locations", content=b"name\nShelf A\n", headers={**H, "X-Setup-Code": CODE})
     assert imp_loc.status_code == 200
     assert imp_loc.json()["dry"] is True
 

@@ -75,7 +75,7 @@ def routes(page) -> list[tuple]:
             return row
 
         row = await anyio.to_thread.run_sync(run)
-        page.audit(request, f"local library entry added ({row.get('vendor', '')} {row.get('product', '')})")
+        page.audit(request, f"local library entry added ({row.get('brand', '')} {row.get('name', '')})")
         return JSONResponse({"ok": True, "entry": row}, status_code=201)
 
     async def remove_form(request, body):

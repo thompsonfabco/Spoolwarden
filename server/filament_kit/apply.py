@@ -40,7 +40,9 @@ DROPIN = "/etc/systemd/system/filament-kit-station.service.d/kit.conf"
 SPOOLMAN_DROPIN = "/etc/systemd/system/spoolman.service.d/kit.conf"
 # station.page_from (R83 01:14): which addresses the station's unit admits for its page, besides station.allow
 PAGE_FROM = ("home", "subnets", "allowed")
-HOME_RANGES = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "fc00::/7", "fe80::/10")
+LOOPBACK_RANGES = ("127.0.0.0/8", "::1/128")
+HOME_RANGES = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "fc00::/7", "fe80::/10",
+               *LOOPBACK_RANGES)
 PAGE_MARK = "# page_from="      # the drop-in says which value wrote it: an older drop-in has no such line
 PAGE_UNREAD = "(the subnets could not be read)"
 TEXT_PAGE_NOW_HOME = ("Weigh Station: its page now opens from computers on your home network; its data still answers "
@@ -203,7 +205,7 @@ def page_ranges(cfg: dict, subnets: Callable[[], list[str] | None] | None = None
     if mode == "subnets":
         found = (subnets or own_subnets)()
         if found:
-            return mode, found
+            return mode, _uniq([*found, *LOOPBACK_RANGES])
         return f"home {PAGE_UNREAD}", list(HOME_RANGES)
     return mode, list(HOME_RANGES)
 
@@ -217,6 +219,7 @@ def station_dropin(cfg: dict, addresses: list[str], *, subnets: Callable[[], lis
     mark, ranges = page_ranges(cfg, subnets)
     allow = _uniq(["127.0.0.1", *addresses])
     env = [f"STATION_ALLOW={' '.join(allow)}",
+           f"STATION_PAGE_FROM={st['page_from']}",
            f"STATION_PAGE_RANGES={' '.join(ranges)}",
            f"STATION_PORT={int(st['port'])}",
            f"NFC_DEVICE={st['nfc_device']}",

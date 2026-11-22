@@ -641,9 +641,7 @@ class Tracker:
                 outcome = 'finished'
             else:
                 fr = str(report.get('fail_reason') or '').strip().lower()
-                if fr == 'cancelled':
-                    outcome = 'cancelled'
-                elif status._print_error(report) or fr:
+                if status._print_error(report) or fr not in ('', '0'):
                     outcome = 'failed'
                 else:
                     outcome = 'unknown'

@@ -39,7 +39,7 @@ from typing import Callable, Iterable
 
 from defusedxml import ElementTree as SafeET
 
-from . import API_VERSION, __version__, backup_crypt, config, events, modules, output, release
+from . import API_VERSION, __version__, backup_crypt, config, event_sink, events, modules, output, release
 
 log = logging.getLogger(__name__)
 
@@ -105,10 +105,14 @@ def write_password(password: str) -> Path:
         raise ValueError(f"Backup password must be at least {MIN_PASSWORD_LEN} characters.")
     if len(password) > MAX_PASSWORD_LEN:
         raise ValueError(f"Backup password must be at most {MAX_PASSWORD_LEN} characters.")
+    return _put_password_file((password + "\n").encode("utf-8"))
+
+
+def _put_password_file(data: bytes) -> Path:
+    """The password file with exactly these bytes, owner only (a restore puts back what it found, as it was)."""
     dest = password_path()
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".tmp")
-    data = (password + "\n").encode("utf-8")
     try:
         if os.name == "nt":
             tmp.write_bytes(data)
@@ -138,6 +142,8 @@ def remove_password() -> bool:
 def _emit_event(kind: str, actor: str | None, data: dict[str, str]) -> None:
     if not actor:
         return
+    if actor == "hub":                  # the default: the request's own actor (the page, the command line) when it has one
+        actor = event_sink.current_actor()
     try:
         events.write(kind, "hub", actor, data)
     except (events.EventError, OSError) as e:
@@ -457,9 +463,18 @@ class Entry:
     encrypted: bool = False
 
 
-def open_for_download(name: str) -> tuple[int, str]:
+def _scratch_parent() -> Path | None:
+    """Where the decrypted copies of a backup go: the backups folder (root only, on the disk the backups are on), not
+    the system temporary folder, which may be memory. None (the system's) when the folder does not exist."""
+    folder = backups_dir()
+    return folder if folder.is_dir() else None
+
+
+def open_for_download(name: str, password: str | None = None) -> tuple[int, str]:
     """(an open file descriptor of the zip or .zip.enc, the name to save it as) for the backup `name` in the listing:
     a stored zip or .zip.enc as it is, a nightly tar.gz(.enc) turned into the zip(.enc) in an anonymous temporary file.
+    An encrypted nightly is opened with `password` when given, else the Hub's backup password, and encrypted again with
+    the one that opened it (not the current one), so it stays as the owner's password of that day opens it.
     Root: the folder is root only. BackupError when there is no such backup."""
     found = next((e for e in listing() if e.name == name), None)
     if found is None:
@@ -467,19 +482,25 @@ def open_for_download(name: str) -> tuple[int, str]:
     path = backups_dir() / found.name
     if found.kind != "daily":
         return os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)), found.download
-    tmp = tempfile.TemporaryFile()
+    tmp = tempfile.TemporaryFile(dir=_scratch_parent())
     try:
         if found.encrypted:
-            pwd = read_password()
-            if pwd is None:
+            tries = [p for p in (password, read_password()) if p]
+            if not tries:
                 raise BackupError(backup_crypt.WRONG_MESSAGE)
-            with tempfile.TemporaryDirectory(prefix=".daily-dl-") as scratch:
+            with tempfile.TemporaryDirectory(dir=_scratch_parent(), prefix=".daily-dl-") as scratch:
                 tar_plain = Path(scratch) / "daily.tar.gz"
                 zip_plain = Path(scratch) / "daily.zip"
-                try:
-                    backup_crypt.decrypt_file(path, tar_plain, pwd)
-                except backup_crypt.WrongPasswordOrDamaged as e:
-                    raise BackupError(str(e)) from None
+                pwd, wrong = None, None
+                for cand in tries:
+                    try:
+                        backup_crypt.decrypt_file(path, tar_plain, cand)
+                        pwd = cand
+                        break
+                    except backup_crypt.WrongPasswordOrDamaged as e:
+                        wrong = e
+                if pwd is None:
+                    raise BackupError(str(wrong)) from None
                 with open(zip_plain, "wb") as zfh:
                     from_daily(tar_plain, zfh)
                 with open(zip_plain, "rb") as in_fh:
@@ -778,6 +799,15 @@ def _carry_event_ids(last: int) -> None:
         log.warning("restore: the event counter could not be carried over (%s)", e)
 
 
+def _password_bytes() -> bytes | None:
+    """The password file as it is now (None when there is none)."""
+    try:
+        data = password_path().read_bytes()
+    except OSError:
+        return None
+    return data if data.strip() else None
+
+
 def _prompt_password(ask: Callable[[str], str]) -> str:
     if ask is input:
         try:
@@ -851,7 +881,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
     step = step or (lambda _text: None)
     zip_path = Path(zip_path)
     step("Checking the backup")
-    with tempfile.TemporaryDirectory(prefix=".restore-dec-") as dec_dir:
+    with tempfile.TemporaryDirectory(dir=_scratch_parent(), prefix=".restore-dec-") as dec_dir:
         opened_with: str | None = None
         work_zip = zip_path
         if backup_crypt.is_encrypted(zip_path):
@@ -902,6 +932,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
         step("Stopping the services")
         _stop_kit(run)
         step("Putting the backup in place")
+        kept_password = _password_bytes()   # a restore never replaces the Hub's backup password (it is not in the backup)
         last_event = _last_event_id()       # the ids this Hub has given: the restored store must go on above them (R80 E6)
         here = dict(roots())
         folders = {}            # each root folder's owner and mode on this install: the restored one keeps them
@@ -953,7 +984,12 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
                     "sudo spoolwarden modules apply")
             return 1
         _carry_event_ids(last_event)
-        if opened_with is not None and not password_set():
+        if kept_password is not None:       # the folder swap took it away with the old etc/: put the same bytes back
+            try:
+                _put_password_file(kept_password)
+            except OSError as e:
+                log.warning("restore: could not put the backup password back (%s)", e)
+        elif opened_with is not None and not password_set():       # none was set: this backup's password becomes it
             try:
                 write_password(opened_with)
             except (OSError, ValueError) as e:

@@ -477,7 +477,10 @@ class Pack:
         if port == LASTTAG_PORT:
             return unit
         extra = "Environment=LASTTAG_PORT={}\n".format(port) + (LASTTAG_CAPS if port < 1024 else "")
-        return unit.replace("StateDirectoryMode=0700\n", "StateDirectoryMode=0700\n" + extra, 1)
+        unit = unit.replace("\r\n", "\n")
+        if "[Service]\n" not in unit:
+            raise ValueError("the lasttag service template has no [Service] section")
+        return unit.replace("[Service]\n", "[Service]\n" + extra, 1)
 
     def lasttag_unit_update(self, unit):
         """An existing lasttag install made before the service served HTTPS: its unit has no StateDirectory, so the
@@ -490,8 +493,9 @@ class Pack:
             return False
         if re.search(r"(?m)^StateDirectory=", old):
             return False
-        found = re.search(r"(?m)^Environment=\"?LASTTAG_PORT=(\d+)", old)
-        unit = self.lasttag_port(unit, int(found.group(1)) if found else LASTTAG_PORT)
+        ports = [port for line in re.findall(r"(?m)^Environment=(.*)$", old)
+                 for port in re.findall(r'(?:^|\s)"?LASTTAG_PORT=(\d+)"?(?=\s|$)', line)]
+        unit = self.lasttag_port(unit, int(ports[-1]) if ports else LASTTAG_PORT)
         self.out("  lasttag: its service file is from before it served HTTPS (it answers plain HTTP)")
         if not self.ask("Update the lasttag service so it serves HTTPS (it restarts)?"):
             return False

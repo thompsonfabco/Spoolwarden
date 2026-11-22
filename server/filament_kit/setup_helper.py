@@ -74,6 +74,7 @@ import re
 import shutil
 import signal
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -838,11 +839,11 @@ def _backup_password_set(req: dict) -> dict:
     pw = req.get("password")
     if not isinstance(pw, str):
         raise Refused(400, f"Backup password must be at least {backup.MIN_PASSWORD_LEN} characters.",
-                      field="password")
+                      field="password", code="too_short")
     try:
         backup.write_password(pw)
     except ValueError as e:
-        raise Refused(400, str(e), field="password") from None
+        raise Refused(400, str(e), field="password", code="too_short") from None
     _emit_settings_changed(group="backup", names="backup_password")
     return {"set": True}
 
@@ -891,15 +892,15 @@ def _restore_password(req: dict) -> dict:
     from . import backup, backup_crypt
     pw = req.get("password")
     if not isinstance(pw, str) or not pw:
-        raise Refused(400, backup_crypt.WRONG_MESSAGE, field="password")
+        raise Refused(400, backup_crypt.WRONG_MESSAGE, field="password", code="wrong_password")
     try:
         m, sha = backup.unlock_pending(pw)
     except backup_crypt.WrongPasswordOrDamaged as e:
-        raise Refused(400, str(e), field="password") from None
+        raise Refused(400, str(e), field="password", code="wrong_password") from None
     except backup.Unfit as e:
         raise Refused(409, str(e)) from None
     except backup.BackupError as e:
-        raise Refused(400, str(e)) from None
+        raise Refused(400, str(e), code="bad_backup") from None
     except OSError as e:
         raise Refused(500, f"the uploaded backup cannot be read ({type(e).__name__})") from None
     return m.summary() | {"sha256": sha, "other_host": bool(m.host) and m.host != backup.host(),
@@ -926,12 +927,33 @@ def _backup_open(req: dict) -> dict:
     return {"download": download, "size": os.fstat(fd).st_size, "fd": fd}
 
 
+def _report_open(req: dict) -> dict:
+    """Open the newest report in the root-only folder for one authorized download."""
+    from . import report
+    fd = None
+    try:
+        path = report.latest()
+        if path is None:
+            raise Refused(404, "no Hub report has been collected yet")
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError("report is not a regular file")
+    except OSError:
+        if fd is not None:
+            os.close(fd)
+        raise Refused(500, "could not read the Hub report") from None
+    return {"download": path.name, "size": info.st_size, "fd": fd}
+
+
 def _job(req: dict) -> dict:
     name = req.get("name")
     if not isinstance(name, str) or name not in JOBS:
         raise Refused(400, "job must be one of: " + ", ".join(JOBS))
     if name == "reader_setup":
         raise Refused(400, "the Tag Reader is set up from the Flash a device tab (op reader_usb)")
+    if name == "port_change":
+        raise Refused(400, "change the Hub port using the port_change operation")
     _not_applying()
     if name in ("update", "rollback"):
         from . import updates
@@ -1141,6 +1163,7 @@ OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphr
        "local_intake_token_set": _local_intake_token_set, "local_intake_token_remove": _local_intake_token_remove,
        "module": _module, "setting": _setting, "general": _general, "general_group": _general_group, "backup_last": lambda req: _backup_last(), "spoolman_url": _spoolman_url, "apply": _apply, "mode": _mode, "job": _job,
        "journal": _journal, "backup_keep": _backup_keep, "backup_list": _backup_list, "backup_open": _backup_open,
+       "report_open": _report_open,
        "backup_password_set": _backup_password_set, "backup_password_remove": _backup_password_remove,
        "restore_pin": _restore_pin, "restore_password": _restore_password,
        "restore_forget": _restore_forget, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,

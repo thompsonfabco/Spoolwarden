@@ -272,6 +272,23 @@ def test_an_explicit_https_station_without_a_pin_is_never_sent_cleartext(monkeyp
     assert station_client.station_https(url) == "unreachable"
 
 
+def test_legacy_http_station_reads_without_sending_a_proof(monkeypatch):
+    monkeypatch.setattr(station_client, "_station_info", lambda: None)
+    calls = []
+
+    def receive(host, port, fp, method, path, body=None, headers=None, cap=0, timeout=5, plain=False):
+        calls.append((host, port, fp, method, path, plain))
+        assert headers == {"Accept": "*/*"} and body is None
+        return 200, "application/json", b'{"photo":false}'
+
+    monkeypatch.setattr(station_client, "bounded_call", receive)
+    url = "http://station.example:5003"
+    assert station_client.read_state(url) == {"photo": False}
+    with pytest.raises(StationCallError, match="certificate"):
+        station_client.ticket(url)
+    assert calls == [("station.example", 5003, None, "GET", "/state", True)]
+
+
 def test_the_call_deadline_also_bounds_dns(monkeypatch):
     started = threading.Event()
     release = threading.Event()

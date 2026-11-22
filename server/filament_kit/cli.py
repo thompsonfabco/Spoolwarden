@@ -425,8 +425,8 @@ def cmd_backup(action: str, out: str | None, days: int | None = None, *,
     if action == "password":
         pw = None
         if not remove and not show:
-            pw = secret_input.ask("Backup password: ") if hasattr(secret_input, "ask") else input("Backup password: ")
-        return history_cli.run_backup_password(_server_api(), remove=remove, show=show, password=pw)
+            pw = secret_input.ask("Backup password: ")
+        return history_cli.run_backup_password(remove=remove, show=show, password=pw)
     if action == "keep":
         try:
             r = setup_helper._backup_keep({"days": days})
@@ -514,14 +514,8 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
                 held.clear()
                 return input(prompt)
         with waiting:
-            import inspect
-            _params = inspect.signature(backup.restore).parameters
-            _has_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in _params.values())
-            kw = {"yes": yes, "ask": ask, "out": say, "step": steps.Steps(backup.restore_steps()).next}
-            if "password_file" in _params or _has_varkw:
-                kw["password_file"] = Path(password_file) if password_file else None
-            if "actor" in _params or _has_varkw:
-                kw["actor"] = "cli"
+            kw = {"yes": yes, "ask": ask, "out": say, "step": steps.Steps(backup.restore_steps()).next,
+                  "password_file": Path(password_file) if password_file else None, "actor": "cli"}
             rc = backup.restore(path, **kw)
         if rc == 0:                     # R82 s4 p6: a restored Hub starts with Getting started hidden
             firstrun.hide_after_restore()
@@ -749,7 +743,7 @@ class _Sentence(ValueError):
 
 
 class _Remove:
-    """A staged removal of a secret (the Anthropic key, the Catalog token)."""
+    """A staged removal of a secret (the Anthropic key)."""
 
 
 _THEMES = (("console", "Console (dense and technical)"), ("workbench", "Workbench (calm cards)"),
@@ -805,7 +799,6 @@ _ITEMS = {i.id: i for i in (
     _Item("hosts", "Names for this page", "list", "setup.hosts", sep=" "),
     _Item("changes", "Allow printer changes from the public address", "bool", "web.printer_changes"),
     _Item("passphrase", "New passphrase", "secret", "web_passphrase"),
-    _Item("token", "Catalog token", "secret", "library_token"),
     _Item("voice", "Voice", "choice", "station.tts", choices=_VOICES),
 )}
 
@@ -818,7 +811,7 @@ _GROUP_ITEMS = {"appearance": ("theme",), "general": ("name", "spoolman"),
                 "alerts": tuple("alert_" + k for k in alerts.KEYS) + ("alert_last", "alert_low", "alert_warn"),
                 "reader": ("engine", "apikey", "model", "reads", "address", "tier", "keep"),
                 "backups": ("days",), "network": ("public", "station", "hosts", "changes"),
-                "passphrase": ("passphrase",), "catalog": ("token",), "voice": ("voice",)}
+                "passphrase": ("passphrase",), "catalog": (), "voice": ("voice",)}
 
 
 def _lower_first(label: str) -> str:
@@ -1020,9 +1013,6 @@ class _ConfigMenu:
             if not raw:
                 ui.say("Unchanged.")
                 return
-            if it.id == "token" and (" " in raw or not raw.isprintable() or len(raw) > 400):
-                ui.error("a GitHub token is one word of printable characters.")
-                continue
             self.staged[it.id] = raw
             ui.say("Changed, not saved yet.")
             return
@@ -1097,14 +1087,15 @@ class _ConfigMenu:
             return ("set" if self.passphrase_set() else "not set"), False
         if gid == "catalog":
             if "library" not in on:
-                return "off: only Catalog token", True
-            return f"Catalog token {'set' if self.token_set() else 'not set'}", False
+                return f"off: switch it on in Features ({FEATURES_ROW})", True
+            st = library.status()
+            return (f"Version {st['version']}" if st["source"] != "none" else "Not downloaded yet"), False
         if "station" not in on:
             return f"off: switch it on in Features ({FEATURES_ROW})", True
         return {"auto": "Piper (natural)", "espeak": "espeak-ng (robotic)"}.get(self.value(it["voice"]), ""), False
 
     def is_set(self, it: _Item) -> bool:
-        return {"apikey": self.key_set, "token": self.token_set, "passphrase": self.passphrase_set}[it.id]()
+        return {"apikey": self.key_set, "passphrase": self.passphrase_set}[it.id]()
 
     def key_set(self) -> bool:
         if "apikey" in self.staged:
@@ -1113,11 +1104,6 @@ class _ConfigMenu:
             return bool((config.paths().etc / KEY_FILE).read_text(encoding="utf-8").strip())
         except OSError:
             return False
-
-    def token_set(self) -> bool:
-        if "token" in self.staged:
-            return self.staged["token"] is not _Remove
-        return library._token() is not None
 
     def passphrase_set(self) -> bool:
         return "passphrase" in self.staged or (config.paths().etc / WEB_PASSPHRASE).exists()
@@ -1173,12 +1159,10 @@ class _ConfigMenu:
                 if iid == "changes" and "web" not in on:
                     continue
                 add(iid)
-                if iid == "token":
-                    actions.append(("x", "remove the token"))
         if gid == "backups":
             after = ["Back up now: sudo spoolwarden backup create", "Restore: sudo spoolwarden restore <zip>"]
         elif gid == "catalog":
-            after = ["Update now: sudo spoolwarden catalog update"]
+            after = ["Update now: sudo spoolwarden catalog update", "Catalog token: sudo spoolwarden catalog token"]
         elif gid == "network":
             after = ["Firewall rules: spoolwarden remote firewall"]
         sc = menu_ui.Screen(f"group-{gid}", f"Settings > {title}", rows, actions=tuple(actions),
@@ -1231,6 +1215,7 @@ class _ConfigMenu:
                    f"({FEATURES_ROW}).")
         if gid == "catalog" and "library" not in on:
             ui.say(f"The Filament Catalog is switched off. Switch it on in Features ({FEATURES_ROW}).")
+            return
         if gid == "storage":
             return self.storage_editor().run()
         show = True
@@ -1239,9 +1224,6 @@ class _ConfigMenu:
             sc, targets = self.group_screen(gid)
             if gid == "reader" and not ({"ai_intake", "local_intake"} & on):
                 sc.rows, targets = sc.rows[-1:], targets[-1:]
-            if gid == "catalog" and "library" not in on:
-                sc.rows, targets = sc.rows[:1], targets[:1]
-                sc.after = ()
             ev = ui.choose(sc, show)
             show = False
             if ev[0] == "eof":
@@ -1275,16 +1257,6 @@ class _ConfigMenu:
                 raise _Ended
             if yes:
                 self.staged["apikey"] = _Remove
-                ui.say("Changed, not saved yet.")
-        elif letter == "x" and gid == "catalog":
-            if not self.token_set():
-                ui.say("No token is set.")
-                return
-            yes = ui.yesno("Remove the Catalog token? The Filament Catalog can then download only from public sources.")
-            if yes is None:
-                raise _Ended
-            if yes:
-                self.staged["token"] = _Remove
                 ui.say("Changed, not saved yet.")
 
     def features(self) -> None:
@@ -1418,12 +1390,6 @@ class _ConfigMenu:
             else:
                 write_key(s["apikey"])
             done.append("apikey")
-        if "token" in s:
-            if s["token"] is _Remove:
-                library.remove_token()
-            else:
-                library.write_token(s["token"])
-            done.append("token")
 
 
 def _check_general(it: _Item, raw):
@@ -1494,7 +1460,7 @@ def cmd_config(sm_factory=None) -> int:
 # ---------- config show and config set (06 9.8) ----------
 
 _KEY_ALIASES = {"backups.keep_days": "backup.keep_days"}      # 06 8.3 writes the key this way; the file holds backup.keep_days
-_SECRET_WHERE = {"apikey": "Label Reader", "passphrase": "Web passphrase", "token": "Filament Catalog"}
+_SECRET_WHERE = {"apikey": "Label Reader", "passphrase": "Web passphrase"}
 
 
 def _menu_items(cfg: dict) -> list[tuple[str, list[_Item]]]:
@@ -3730,6 +3696,16 @@ def cmd_printer_show(arg: str) -> int:
     if not row["configured"]:
         return 0
     slots = hub.slots(row["serial"]) if _state_word(row) == "connected" else None
+    auto = (hub.view(row["serial"]) or {}).get("auto")
+    if auto:                                # an Auto assignment (06 9.2): the notice, or the slots to choose from
+        output.out()
+        if auto.get("state") == "choose" and auto.get("slots"):
+            choices = list(auto["slots"])
+            output.out_lines(output.status_row(
+                "needs a look", f"{auto.get('text', '')} {', '.join(choices)}",
+                f"spoolwarden printer load {klipper_cli._q(row['name'])} {choices[0]} {auto.get('spool_id')}"))
+        else:
+            output.out_lines([f"Note: {auto.get('text', '')}"])
     output.out()
     if slots is None:
         output.out("No slot data while offline." if hub.up else "No slot data while the Hub is not running.")
@@ -3933,6 +3909,18 @@ def cmd_printer_dismiss(arg: str, yes: bool = False) -> int:
     return 0
 
 
+def _drop_auto(hub: "_Hub", serial: str) -> None:
+    """A forgotten printer's Auto assignment ends with it (R83 A6, as `DELETE /api/printers/<id>` does it). The
+    assignment is held by the running Hub, so it is asked to stop it; with no Hub running there is none to stop."""
+    if not hub.up:
+        return
+    from .web.slots import SlotError
+    try:
+        hub.api.post(f"/api/printers/{urllib.parse.quote(serial, safe='')}/auto/cancel", {})
+    except SlotError:       # not_waiting: nothing to end
+        pass
+
+
 def cmd_printer_forget(arg: str, yes: bool = False) -> int:
     row = _printer_named(arg, found_verb="dismiss")
     if row is None:
@@ -3947,6 +3935,7 @@ def cmd_printer_forget(arg: str, yes: bool = False) -> int:
     if stop is not None:
         return stop
     hub = _hub()
+    _drop_auto(hub, row["serial"])
     _, rc = hub.call(hub.page.printer_forget, row["serial"])
     if rc is not None:
         return rc
@@ -7153,9 +7142,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     if _is_root() or _no_systemd():          # as root the command line writes the Hub's events itself (R80 E1)
         event_sink.set_sink(event_sink.StoreSink())
     try:
-        with output.muted() if _reports_results(args) else contextlib.nullcontext():
+        with event_sink.acting("cli"), output.muted() if _reports_results(args) else contextlib.nullcontext():
             return _dispatch(args, client_factory=client_factory, manager_factory=manager_factory,
-                             sm_factory=sm_factory)
+                             sm_factory=sm_factory)         # what the command line changes is done by `cli` (R84 1.2)
     finally:
         event_sink.set_sink(before)
 
@@ -7358,7 +7347,7 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return cmd_reader({"list": "tokens", "new-token": "token"}.get(args.tag_reader_cmd, args.tag_reader_cmd),
                           getattr(args, "name", None), getattr(args, "ref", None), yes=getattr(args, "yes", False))
     if args.cmd in ("activity", "undo", "usage", "export", "import", "report"):
-        return history_cli.run(args, _server_api())
+        return history_cli.run(args, _server_api(), sm_factory or _default_spoolman)
     if args.cmd == "backup":
         return cmd_backup(args.backup_cmd, args.out if args.backup_cmd == "create" else None,
                           days=args.days if args.backup_cmd == "keep" else None,

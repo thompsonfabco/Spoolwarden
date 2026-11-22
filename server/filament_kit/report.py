@@ -111,11 +111,8 @@ def _name_map(cfg: dict) -> list[tuple[str, str]]:
 
     try:
         from . import storage
-        locs = getattr(storage, "locations", None)
-        if callable(locs):
-            for idx, loc in enumerate(locs(), start=1):
-                name = loc.get("name") if isinstance(loc, dict) else getattr(loc, "name", None)
-                add(name, f"location-{idx}")
+        for idx, loc in enumerate(storage.current().locations, start=1):
+            add(loc.name, f"location-{idx}")
     except Exception:  # noqa: BLE001
         pass
 
@@ -277,14 +274,12 @@ def _last_update_section() -> list[str]:
 def _events_section() -> list[str]:
     try:
         from . import events
-        res = events.read(since=0, limit=EVENT_LIMIT)
+        res = events.read(newest=EVENT_LIMIT)            # the newest ones, oldest of them first
         items = res.get("events") or []
     except Exception:  # noqa: BLE001
         return ["(unavailable)"]
     if not items:
         return ["(none)"]
-    # Keep newest 200
-    items = items[-EVENT_LIMIT:]
     lines: list[str] = []
     for ev in items:
         at = ev.get("at") or ""

@@ -300,7 +300,7 @@ def _kit_error(e: slots.SlotError) -> JSONResponse:
     if e.code in ("printer_busy", "already_running", "needs_developer_mode", "write_refused", "module_off",
                   "slot_in_use", "auto_not_possible", "nothing_to_choose", "not_waiting"):
         return reply(409, "error", msg)
-    if isinstance(e.http, int) and 400 <= e.http < 500:
+    if isinstance(e.http, int) and 400 <= e.http < 500 and e.http not in (401, 403):
         return reply(e.http, "error", msg)
     return reply(502, "error", msg)
 
@@ -454,7 +454,8 @@ class Reader:
                      "type": clip(s.get("type") or ""), "spool": _short_spool(s.get("spool"))}
                     for s in reader_slots(slots.status_slots(st), pid)]
             if pv.get("auto_possible") or st.get("auto_possible"):
-                rows = [{"label": "auto", "say": "Auto"}] + [r for r in rows if slots.label_key(r["label"]) != "AUTO"]
+                rows = [{"label": "auto", "say": ["Auto"], "kind": "auto", "present": None, "type": "", "spool": None},
+                        *(r for r in rows if slots.label_key(r["label"]) != "AUTO")]
             return cap_slots(rows, pid)
         return JSONResponse(await run_in_threadpool(build))
 

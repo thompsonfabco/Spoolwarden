@@ -47,7 +47,7 @@ try:
 except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
-from . import __version__, config, events, modules, output, release, steps
+from . import __version__, config, event_sink, events, modules, output, release, steps
 from .release import ReleaseError
 
 SCHEDULES = {"daily": 20 * 3600, "weekly": 6.5 * 86400}
@@ -110,7 +110,7 @@ def _read_state() -> dict:
 
 def _emit_updated(from_ver: str, to_ver: str, is_rollback: bool) -> None:
     try:
-        events.write("hub.updated", "hub", "hub", {
+        events.write("hub.updated", "hub", event_sink.current_actor(), {
             "from": from_ver,
             "to": to_ver,
             "rollback": "true" if is_rollback else "false",

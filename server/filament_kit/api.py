@@ -236,6 +236,24 @@ VIEWER_ROUTES = (
 _VIEWER_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in VIEWER_ROUTES}
 
 
+MAX_IMPORT_BYTES = 5 * 1024 * 1024      # a CSV import's body, as on the Hub page (setup_console/history_tab.py)
+
+
+def _current_checks() -> list[dict]:
+    """The Overview's rows as the health history knows them: `{key, group, text, state}`, redacted as `GET api/hub` does,
+    so a check that never failed shows with its group. An empty list when the rows cannot be read: the history stands alone."""
+    from . import redact, status
+    try:
+        cfg = config.load()
+        known = redact.known_values(cfg)
+        return [{"key": r.key, "group": r.group, "text": redact.text(r.text, known),
+                 "state": "ok" if r.state == status.OK else "look"}
+                for r in status.collect(cfg) if r.key and r.state in (status.OK, status.FAIL)]
+    except Exception:  # noqa: BLE001 - the history is still worth showing
+        log.exception("health: the current checks cannot be read")
+        return []
+
+
 def _device_name(device: str | None) -> str:
     """The paired device's name for a log or a history record (its id when it has none)."""
     if not device:
@@ -252,6 +270,18 @@ def _is_intake_device(device: str) -> bool:
         return any(d["id"] == device and d["name"] == INTAKE_DEVICE for d in pairing.devices())
     except Exception:  # noqa: BLE001
         return False
+
+
+def _actor_name(actor: dict, device: str) -> str:
+    """The name of the device an event is written for, looked up when the first event is written (`event_sink.acting`).
+    The command line's own pairing (CLI_DEVICE, the one `spoolwarden` asks this server with) writes as `cli` (R84 1.2):
+    the actor becomes {type: cli} here, before the event takes it."""
+    name = _device_name(device)
+    if name == CLI_DEVICE:
+        actor.pop("id", None)
+        actor["type"] = "cli"
+        return ""
+    return name
 
 
 def _web_may(method: str, path: str) -> bool:
@@ -312,7 +342,7 @@ def _authed(fn):
         # the name is looked up when an event is written, not for every request (pairing.devices() reads a file)
         actor = {"type": "device", "id": device}
         if request.method not in ("GET", "HEAD", "OPTIONS"):
-            actor["name"] = functools.partial(_device_name, device)
+            actor["name"] = functools.partial(_actor_name, actor, device)
         with event_sink.acting(actor):
             return await fn(request)
     return _handle(wrapper)
@@ -1055,7 +1085,7 @@ class _Refused(Exception):
 # ---- end slot mapping, loading and usage routes ----------------------------------------------------------
 
 
-from .web.slots import INTAKE_DEVICE  # noqa: E402  (the kit's own phone web app's pairing; no mcp import)
+from .web.slots import CLI_DEVICE, INTAKE_DEVICE  # noqa: E402  (the kit's own pairings; no mcp import)
 INTAKE_TOKEN = "intake_kit_token"       # in the state folder: the kit server's own phone web app's pairing
 
 
@@ -1458,6 +1488,11 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             raise BadRequest("give since or since_at, not both")
         if since is not None and since < 0:
             raise BadRequest("since must be 0 or more", "since")
+        newest = _number(q, "newest")
+        if newest is not None and newest < 1:
+            raise BadRequest("newest must be 1 or more", "newest")
+        if newest is not None and since is not None:
+            raise BadRequest("give since or newest, not both")
         if since_at:
             try:
                 since_at = alerts_api.parse_time(since_at)
@@ -1472,7 +1507,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             alerts_api.events_answer, since=since, since_at=since_at, wait=_number(q, "wait", float) or 0,
             kinds=q.get("kinds") or None, limit=_number(q, "limit") or events.LIMIT_DEFAULT,
             alert=q.get("alert", "").lower() in ("1", "true", "yes"), callers=callers,
-            activity=activity, subject=subject, actor=actor))
+            activity=activity, subject=subject, actor=actor, **({"newest": newest} if newest is not None else {})))
         return JSONResponse(out)
 
     @_authed
@@ -1546,7 +1581,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             days = 7
         if days not in (7, 30):
             raise BadRequest("days must be 7 or 30", "days")
-        return JSONResponse(await run_in_threadpool(health.health_view, days=days))
+        return JSONResponse(await run_in_threadpool(
+            functools.partial(health.health_view, days=days, current_checks=_current_checks())))
 
     @_authed
     async def analytics_get(request: Request):
@@ -1581,7 +1617,11 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         )
 
     async def _import_csv(request: Request, kind: str):
-        raw_bytes = await request.body()
+        raw_bytes = bytearray()
+        async for chunk in request.stream():          # the Hub page's twin takes 5 MiB at most
+            if len(raw_bytes) + len(chunk) > MAX_IMPORT_BYTES:
+                return _err(413, "too_large", "the CSV file is larger than the Hub takes (5 MB at most)")
+            raw_bytes.extend(chunk)
         try:
             raw_text = raw_bytes.decode("utf-8-sig")
         except UnicodeDecodeError:

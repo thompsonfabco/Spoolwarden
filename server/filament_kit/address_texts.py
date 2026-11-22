@@ -144,10 +144,13 @@ MESSAGES: dict[str, str | dict] = {
 
     # ---- Checks rows of the satellites (R82 section 2 points 4 and 5, 06 9.1)
     "check_station_not_https": "The Weigh Station {name} is not using HTTPS. Update it.",
-    "check_station_not_https_fix": "run this on the Weigh Station's machine: sudo {command} update",
+    "check_station_not_https_fix": "Update it: on that machine run sudo {command} update.",
     "check_station_not_https_at": "The Weigh Station at {address} is not using HTTPS.",
     "check_station_not_https_why": "The Weigh Station at {address} is not using HTTPS: it could not make its "
                                    "certificate ({reason}).",
+    "check_station_not_https_why_fix": "Put right what the reason names on that machine, then restart the Weigh Station.",
+    "check_devices_out_of_date": {"one": "{count} device is out of date.", "other": "{count} devices are out of date."},
+    "check_devices_out_of_date_fix": "see Devices on the Hub page",
     "check_station_cert_changed": "The Weigh Station's certificate is not the one the Hub trusts.",
     "check_station_cert_fix": "Restart the Weigh Station so it tells the Hub its new certificate "
                               "(sudo systemctl restart filament-kit-station), or pair it again.",

@@ -297,6 +297,16 @@ def test_empty_or_invalid_page_networks_allow_only_listed_peers():
         assert guard.caller_class("::ffff:127.0.0.1", {"127.0.0.1"}, ranges) == guard.LISTED
 
 
+def test_installed_home_and_subnets_include_loopback():
+    from filament_kit import apply
+
+    for mode in ("home", "subnets"):
+        _, installed = apply.page_ranges({"station": {"page_from": mode}}, lambda: ["192.0.2.0/24"])
+        ranges = guard.page_networks(" ".join(installed))
+        assert guard.caller_class("::1", (), ranges) == guard.HOME
+        assert guard.caller_class("127.0.0.2", (), ranges) == guard.HOME
+
+
 @pytest.mark.skipif(not socket.has_dualstack_ipv6(), reason="the host has no dual-stack IPv6 listener")
 def test_the_station_listener_accepts_both_ipv4_and_ipv6(monkeypatch):
     from http.server import BaseHTTPRequestHandler

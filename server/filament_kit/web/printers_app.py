@@ -150,9 +150,9 @@ class PrintersApp:
             ("/{id}/report", g(self.map_report), ["POST"]),
             ("/{id}/manual-map", g(self.manual_get), ["GET"]),
             ("/{id}/manual-map/{step}", g(self.manual_step), ["POST"]),
-            ("/{id}/slots/auto/load", g(self.auto_load), ["POST"]),       # before {label}: "auto" is a reserved label, not a slot
-            ("/{id}/auto/choose", g(self.auto_choose), ["POST"]),
-            ("/{id}/auto/cancel", g(self.auto_cancel), ["POST"]),
+            ("/{id}/slots/auto/load", g(self.auto_load, kit_refusal=True), ["POST"]),
+            ("/{id}/auto/choose", g(self.auto_choose, kit_refusal=True), ["POST"]),
+            ("/{id}/auto/cancel", g(self.auto_cancel, kit_refusal=True), ["POST"]),
             ("/{id}/slots/{label}/load", g(self.slot_load), ["POST"]),
             ("/{id}/slots/{label}/unload", g(self.slot_unload), ["POST"]),
             ("/{id}/slots/{label}/clear", g(self.slot_clear), ["POST"]),
@@ -174,12 +174,14 @@ class PrintersApp:
             routes.append(Route("/intake/api/alerts/test", g(self.push_test), methods=["POST"]))
         return routes
 
-    def guard(self, fn):
+    def guard(self, fn, *, kit_refusal: bool = False):
         """LAN, Host and Origin checks (the intake app's), plus the kit's refusals as readable errors."""
         async def inner(request: Request):
             try:
                 return await fn(request)
             except SlotError as e:
+                if kit_refusal:
+                    return self.intake._kit_refusal(e)
                 st = e.http
                 body = {"error": REFUSALS.get(e.code or "", str(e))}
                 if e.code:
