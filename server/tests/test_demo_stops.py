@@ -248,3 +248,23 @@ def test_the_demos_event_ids_continue_above_the_real_log_and_the_real_log_above_
     demo.leave()
     after = events.write("print.started", {"type": "printer", "id": "p1", "name": "P"}, who, {"job": "r6"})
     assert after["id"] > second["id"]
+
+
+def test_a_demo_print_goes_through_the_real_tracker_and_the_switch_and_leaves_nothing_behind(env):
+    """R587 M1 / R609: the Tracker wired to the demo's Switch (as `main()` wires it) sees the pretend X1's print end; the
+    demo records it itself, so no file lands under the real state folder and no `no_mapping` entry piles up."""
+    from filament_kit.bridge import usage
+    from filament_kit.demo import printers as demo_printers
+    pid = "00M00A000000001"
+    real = Manager(client_factory=lambda *a, **k: SimpleNamespace(), port=1)
+    switch = demo_printers.Switch(real, demo_printers.Family("bambu", Empty()))
+    tracker = usage.Tracker(switch, Empty())
+    on()
+    assert switch.command(pid, "pause")["ok"] and switch.command(pid, "stop")["ok"]       # RUNNING, PAUSE, FAILED
+    tracker.flush(5)
+    assert tracker._watch == {} and tracker._futures == []                # nothing is watched or queued
+    assert usage.entries(pid, days=3650) == []                          # no `no_mapping` entry (GET .../usage shows these)
+    assert not (env / "state" / "printers").exists()
+    assert [e["job"] for e in demo_printers.usage_entries(pid, 3650)]    # the demo's own log has the print
+    demo.leave()
+    assert not (env / "state" / "printers").exists()

@@ -738,7 +738,7 @@ class Tracker:
         wait(fs, timeout)
 
     def _on_report(self, serial: str, report: dict, first: bool) -> None:
-        if self._stopped:
+        if self._stopped or demo.is_on():       # the pretend printers' prints are recorded by the demo itself
             return
         gs = report.get('gcode_state')
         if not isinstance(gs, str):
