@@ -161,6 +161,33 @@ def test_return_caller_rules(sm, printers, store):  # noqa: F811
     assert ("POST", "/api/spools/{id}/return") in api.WEB_ROUTES and ("POST", "/api/spools/{id}/return") not in api.VIEWER_ROUTES
 
 
+def test_return_and_home_have_the_callers_of_the_spools_move_and_weight(sm, printers, store):  # noqa: F811
+    """Pins the orchestrator's ruling (CO2 follow-up 1): `return` and the `home` change are for the callers of the existing spool
+    move / weight route (PATCH /api/spools/{id}). Compared by running both for every kind of token. The one difference is the
+    web token, which the kit route refuses (the web app writes a move and a weight in its own process, through its twin) while
+    the Return twin must reach the Hub, which tells a Klipper printer: that is why return is in WEB_ROUTES (HOME_WEB_ROUTES
+    is for the voice routes). Any other divergence fails here."""
+    app = create_app(sm=sm)
+    tokens = {"viewer": _auth("Viewer", role=pairing.VIEWER_ROLE), "station": _auth("station", scope="station"),
+              "phone": _auth("Phone"), "home_web": _auth(INTAKE_DEVICE, role=web_access.WEB_ROLE),
+              "public_web": _auth("web (MCP)", role=web_access.WEB_ROLE)}
+    allowed = {"return": set(), "home": set(), "move": set(), "weight": set()}
+    with TestClient(app, raise_server_exceptions=False) as client:
+        for who, h in tokens.items():
+            ids = [_out(sm, name=f"{who} {i}")["id"] for i in range(4)]
+            calls = {"return": client.post(f"/api/spools/{ids[0]}/return", json={}, headers=h),
+                     "home": client.patch(f"/api/spools/{ids[1]}", json={"home": NEW()}, headers=h),
+                     "move": client.patch(f"/api/spools/{ids[2]}", json={"location": "Rack 2"}, headers=h),
+                     "weight": client.patch(f"/api/spools/{ids[3]}", json={"remaining": 400}, headers=h)}
+            for name, r in calls.items():
+                if r.status_code not in (401, 403):
+                    allowed[name].add(who)
+    assert allowed["home"] == allowed["move"] == allowed["weight"] == {"phone"}
+    assert allowed["return"] == allowed["home"] | {"home_web", "public_web"}       # only the web token differs, and said so above
+    assert "viewer" not in allowed["return"] | allowed["home"] and "station" not in allowed["return"] | allowed["home"]
+    assert ("PATCH", "/api/spools/{id}") not in api.WEB_ROUTES and ("POST", "/api/spools/{id}/return") not in api.HOME_WEB_ROUTES
+
+
 # ---------- a Klipper printer is told ----------
 
 class FakeBambu:
