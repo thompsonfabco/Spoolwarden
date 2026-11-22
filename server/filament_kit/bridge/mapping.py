@@ -40,6 +40,7 @@ from the saved SlotMap). A status file still saying "running" whose job no proce
 `failed` (interrupted), never "running" forever."""
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -299,13 +300,18 @@ def _dir(serial: str):
     return config.paths().state / "printers" / serial
 
 
+def _old_form(data) -> bytes:
+    """mapping.json as the release before wrote it (json.dumps indent 2, no newline), kept current for a rollback."""
+    return json.dumps(data, indent=2).encode("utf-8")
+
+
 def _save_status(serial: str, job: _Job) -> None:
     try:
         data = {"kit": __version__, "job_id": job.id, "state": job.state, "step": job.step, "problems": job.problems,
                 "notes": job.notes, "scheme_unsettled": job.scheme_unsettled,
                 "report_wanted": job.report_wanted, "reason": job.reason, "trail": job.trail, "started": job.started,
                 "finished": job.finished}
-        statexml.write(_dir(serial) / STATUS_FILE, data, mode=0o600)
+        statexml.write(_dir(serial) / STATUS_FILE, data, mode=0o600, old_format=_old_form)
     except OSError:
         log.exception("mapping on %s: cannot write the status file", registry.log_label(serial))
 

@@ -35,11 +35,11 @@ def _full_map():
 
 # ---------------------------------------------------------------- the slot map
 
-def test_slotmap_round_trips_in_xml_only(state):
+def test_slotmap_round_trips_in_xml_with_the_json_beside(state):
     m = _full_map()
     ams.save_map(SERIAL, m)
     d = state / "printers" / SERIAL
-    assert (d / "slotmap.xml").is_file() and not (d / "slotmap.json").exists()
+    assert (d / "slotmap.xml").is_file() and (d / "slotmap.json").is_file()
     assert (d / "slotmap.xml").read_bytes().startswith(b"<?xml")
     back = ams.load_map(SERIAL)
     for name in ("slots", "calibrated", "observe", "updated", "fingerprint", "stale", "scheme", "learned",
@@ -135,10 +135,10 @@ class _Job:
     started, finished = 1762800000.5, 1762800060.25
 
 
-def test_mapping_status_round_trips_in_xml_only(state):
+def test_mapping_status_round_trips_in_xml_with_the_json_beside(state):
     mapping._save_status(SERIAL, _Job)
     d = state / "printers" / SERIAL
-    assert (d / "mapping.xml").is_file() and not (d / "mapping.json").exists()
+    assert (d / "mapping.xml").is_file() and (d / "mapping.json").is_file()
     v = mapping._load_status(SERIAL)
     assert v["state"] == "done" and v["job_id"] == "12345" and v["step"] == "Mapping finished"
     assert v["problems"] == ["Ext-L: no slot", "1.0"] and v["notes"] == ["a & b <c>"]

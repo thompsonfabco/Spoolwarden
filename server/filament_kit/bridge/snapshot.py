@@ -42,14 +42,16 @@ def save(serial: str, kind: str, slots: list[dict], test_colours=()) -> None:
             "slots": [{"label": s["label"], "ams_id": int(s["ams_id"]), "tray_id": int(s["tray_id"]),
                        "setting": dict(s["setting"])} for s in slots],
             "test_colours": [str(c).upper() for c in test_colours]}
-    statexml.write(path(serial), data, mode=0o600)
+    # a cache: the release before rebuilds nothing from it, and a stale slottest-snapshot.json there would be a false
+    # pending restore, so the JSON form is not kept
+    statexml.write(path(serial), data, mode=0o600, keep_old_form=False)
 
 
 def load(serial: str) -> dict | None:
     f = path(serial)
     if not statexml.exists(f):
         return None
-    d = statexml.read(f)
+    d = statexml.read(f, keep_old_form=False)
     if d is None:
         # unreadable but present: still a pending restore, with nothing we can trust in it
         return {"kind": "unknown", "slots": [], "test_colours": [], "corrupt": True}

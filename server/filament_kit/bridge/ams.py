@@ -12,6 +12,7 @@ proven), and `learned` (numbers a print taught: `usage`, exactly one loaded slot
 (observe until re-mapped; `mapping.LayoutWatch` re-maps when the printer is idle)."""
 from __future__ import annotations
 
+import json
 import threading
 import time
 from dataclasses import dataclass, field
@@ -140,6 +141,11 @@ def _current_labels(slots: dict, model) -> dict:
     return out
 
 
+def _old_form(data) -> bytes:
+    """slotmap.json as the release before wrote it (json.dumps indent 2, no newline), kept current for a rollback."""
+    return json.dumps(data, indent=2).encode("utf-8")
+
+
 def load_map(serial: str) -> SlotMap:
     d = statexml.read(_file(serial))        # slotmap.xml; a slotmap.json from before is moved on the way
     if d is None:
@@ -181,7 +187,7 @@ def save_map(serial: str, m: SlotMap) -> None:
                 'fingerprint': m.fingerprint, 'stale': m.stale, 'scheme': m.scheme, 'learned': m.learned,
                 'mismatch_streak': m.mismatch_streak, 'suspect': m.suspect, 'by_user': m.by_user,
                 'job_file': m.job_file}
-        statexml.write(_file(serial), data, mode=0o600)
+        statexml.write(_file(serial), data, mode=0o600, old_format=_old_form)
 
 
 def save_map_if(serial: str, m: SlotMap, stamp) -> bool:
