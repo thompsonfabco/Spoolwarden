@@ -173,6 +173,8 @@ import com.thompsonfabco.filamentkit.tags.disableTagReader
 import com.thompsonfabco.filamentkit.tags.enableTagReader
 import com.thompsonfabco.filamentkit.ui.rememberLocalNetworkAccess
 import com.thompsonfabco.filamentkit.ui.alerts.AlertBannerActions
+import com.thompsonfabco.filamentkit.ui.demo.DemoNotice
+import com.thompsonfabco.filamentkit.ui.demo.demoNoticeShown
 import com.thompsonfabco.filamentkit.ui.alerts.AlertsScreen
 import com.thompsonfabco.filamentkit.ui.alerts.alertsPlaceTitle
 import com.thompsonfabco.filamentkit.ui.add.AddStep
@@ -412,6 +414,10 @@ internal fun FilamentKitApp(
     }
     // The Hub's default theme is kept for the phones that have not chosen (S6.3).
     RememberHubLook(info?.look, app::rememberHubLook)
+    // The demo notice (05-android-app 3.7): what the Hub last said, kept while it is out of reach; gone once left
+    var demoOn by remember { mutableStateOf(false) }
+    var demoLeft by remember(info) { mutableStateOf(false) }
+    LaunchedEffect(info) { info?.let { demoOn = it.demo } }
     val labelPhotos = showLabelPhotos(info)
     val version = versionLine(BuildConfig.VERSION_NAME, config.isPaired(), info?.version)
     // On screen: the chip follows the server, and is checked right away on return to the app. Not while pairing,
@@ -906,6 +912,9 @@ internal fun FilamentKitApp(
                         AppearanceMenu(appearance, app::setAppearance)
                         // on the list page only the list's own actions show, not the screen's under it
                         if (!sectionPage) topBarActions.content?.invoke(this)
+                    }
+                    if (!scanning && demoNoticeShown(demoOn, config.isPaired(), inPairing || settingsOverPairing, demoLeft)) {
+                        DemoNotice(leave = { api?.leaveDemo() ?: throw ApiError.noHubPaired() }, onGone = { demoLeft = true })
                     }
                     SwPills(
                         tab, navVisible && !scanning, tabTapped, settingsUpdate = update.available != null,
