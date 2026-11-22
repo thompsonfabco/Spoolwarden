@@ -197,7 +197,7 @@ def _parse_root(data: bytes, tag: str):
     if root.tag != tag:
         raise StateXmlError(f"root element is <{root.tag}>, not <{tag}>")
     v = root.get("version", "")
-    if not re.fullmatch(r"\d{1,6}", v or "1"):
+    if not re.fullmatch(r"[0-9]{1,18}", v or "1"):
         raise StateXmlError(f"version {v!r} is not a number")
     return root, v
 
