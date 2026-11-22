@@ -209,6 +209,21 @@ def test_export_writes_the_csv_of_csv_io_and_needs_root(capsys, monkeypatch, tmp
     assert rc == 3 and "administrator rights" in err
 
 
+def test_sudo_export_printers_keeps_the_slot_columns(capsys, spoolman_url):
+    """R559 8 / R597 (Antigravity's point): `sudo spoolwarden export printers` goes through the command line (no live printers) and
+    still lists a slot's spool, read from the spools' Spoolman locations."""
+    from filament_kit import spoolman
+    from filament_kit.bridge import registry
+    config.save({"spoolman_url": spoolman_url})
+    registry.add_klipper("Voron", "voron.local", 7125)
+    sm = spoolman.Spoolman(spoolman_url)
+    fil = sm.post("filament", {"name": "Red PLA", "material": "PLA"})
+    spool = sm.post("spool", {"filament_id": fil["id"], "location": "Voron – T0"})
+    rc, out, _ = run(capsys, ["export", "printers"])
+    rows = [line.split(",") for line in out.strip().splitlines()]
+    assert rc == 0 and ["Voron", "klipper", "", "T0", str(spool["id"])] in rows
+
+
 def test_import_sends_the_file_as_it_is_and_adds_the_rows(capsys, tmp_path):
     f = tmp_path / "in.csv"
     f.write_text(csv_io.export_csv("locations") + "Garage,,,,,,,\n", encoding="utf-8")
@@ -302,19 +317,32 @@ def test_backup_password_from_the_command_line_is_recorded_as_cli(monkeypatch):
 
 # ---------- R559 03 M3: plain undo finds the newest change that can be undone ----------
 
-def test_plain_undo_twice_undoes_the_two_last_command_line_changes(capsys):
+def test_plain_undo_never_skips_to_an_older_change(capsys):
+    """D15: plain `undo` is for the newest change of this command line. Once that one is undone, a second plain `undo` finds the
+    compensating event as the newest and says so, naming `activity`; it does not undo the older change."""
     sm = _Spoolman({1: {"id": 1, "location": "Shelf B", "archived": False},
                     2: {"id": 2, "location": "Shelf B", "archived": False}})
     first, second = _spool_moved(1, {"type": "cli"}), _spool_moved(2, {"type": "cli"})
     hub = HubApi(token())
     assert history_cli.cmd_undo(hub, lambda: sm, yes=True) == 0
     assert events.store().get(second["id"])["undone"] is True
-    assert history_cli.cmd_undo(hub, lambda: sm, yes=True) == 0          # not the compensating event of the first
-    assert events.store().get(first["id"])["undone"] is True
-    assert sm.spools[1]["location"] == "Shelf A" and sm.spools[2]["location"] == "Shelf A"
     capsys.readouterr()
     assert history_cli.cmd_undo(hub, lambda: sm, yes=True) == 0
-    assert "Nothing has been changed from the command line in the last 7 days." in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "cannot be undone" in out and "spoolwarden activity" in out and "spoolwarden undo <number>" in out
+    assert not events.store().get(first["id"]).get("undone")             # the older change is untouched
+    assert sm.spools[1]["location"] == "Shelf B" and sm.spools[2]["location"] == "Shelf A"
+
+
+def test_plain_undo_says_so_when_the_newest_change_is_not_undoable(capsys):
+    """D15: the newest command-line change is one the Hub does not undo (a settings change): the same sentence, nothing undone."""
+    sm = _Spoolman({1: {"id": 1, "location": "Shelf B", "archived": False}})
+    older = _spool_moved(1, {"type": "cli"})
+    events.write("settings.changed", "hub", {"type": "cli"}, {"group": "backup", "names": "password"})
+    assert history_cli.cmd_undo(HubApi(token()), lambda: sm, yes=True) == 0
+    out = capsys.readouterr().out
+    assert "cannot be undone" in out and "spoolwarden activity" in out
+    assert not events.store().get(older["id"]).get("undone") and sm.spools[1]["location"] == "Shelf B"
 
 
 # ---------- R559 03 M2: an automatic job is `hub` ----------

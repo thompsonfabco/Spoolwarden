@@ -108,20 +108,56 @@ def test_cli_status_without_root_queries_helper_for_backup_done(monkeypatch):
     monkeypatch.setattr(cli, "_is_root", lambda: False)
     monkeypatch.setattr(cli, "_no_systemd", lambda: False)
     monkeypatch.setattr(cli.modules, "enabled", lambda cfg: {"server"})
-    monkeypatch.setattr(setup_page.HelperClient, "__call__", lambda self, req: {"last": "2026-11-22"} if req["op"] == "last_backup" else {})
+    from filament_kit import setup_helper
+    ops = []
+
+    def helper(self, req):                                  # D11: only an op the real helper has ("unknown request" otherwise)
+        ops.append(req["op"])
+        assert req["op"] in setup_helper.OPS, req["op"]
+        return {"last": "2026-11-22"} if req["op"] == "backup_last" else {}
+    monkeypatch.setattr(setup_page.HelperClient, "__call__", helper)
     monkeypatch.setattr(cli.status_rows, "rows", lambda **kw: [])
     monkeypatch.setattr(cli.status_rows, "print_rows", lambda rows, **kw: True)
     monkeypatch.setattr(cli.getting_started, "view", lambda **kw: seen.append(kw) or {"show": False})
     assert cli.cmd_status(lambda: None) == 0
-    assert seen == [{"backup_done": True}]
+    assert seen == [{"backup_done": True}] and ops == ["backup_last"]
 
 
 def test_cli_backup_password_json_refusal_and_yes_flag(monkeypatch, capsys):
     assert cli.main(["--json", "backup", "password"]) == 2
     assert "backup password" in capsys.readouterr().err
 
-    calls = []
+    # the real history_cli function and the real helper function (D11): --yes is handed over, nothing is asked, the password goes
+    from filament_kit import backup
     monkeypatch.setattr(cli, "_is_root", lambda: True)
-    monkeypatch.setattr(cli.history_cli, "run_backup_password", lambda **kw: calls.append(kw) or 0)
+    backup.write_password("correct horse battery")
+
+    def never_asked(*a, **k):
+        raise AssertionError("asked although --yes was given")
+    monkeypatch.setattr("builtins.input", never_asked)
     assert cli.main(["backup", "password", "--remove", "--yes"]) == 0
-    assert calls == [{"remove": True, "show": False, "password": None}]
+    assert not backup.password_set()
+    backup.write_password("correct horse battery")
+    capsys.readouterr()
+    assert cli.main(["backup", "password", "--remove"]) != 0 and backup.password_set()       # without --yes (and no terminal): it changes nothing
+    assert "--yes" in capsys.readouterr().err
+
+
+def test_the_automatic_preset_build_is_recorded_as_the_hub():
+    """R559 5 / R606: the build unit (started by its path unit, not by a person) runs `profiles build` with the actor `hub`; a person's
+    run keeps `cli`. The unit file is the real one; `_cli_actor` is the real function the dispatcher uses."""
+    import argparse
+    import os
+    from pathlib import Path
+    unit = (Path(__file__).resolve().parents[2] / "install" / "systemd" / "filament-kit-build.service").read_text(encoding="utf-8")
+    assert "ExecStart=/opt/filament-kit/venv/bin/filament-kit profiles build" in unit and "Environment=FILAMENT_KIT_ACTOR=hub" in unit
+    args = argparse.Namespace(cmd="profiles")
+    old = os.environ.pop("FILAMENT_KIT_ACTOR", None)
+    try:
+        assert cli._cli_actor(args) == "cli"
+        os.environ["FILAMENT_KIT_ACTOR"] = "hub"
+        assert cli._cli_actor(args) == "hub"
+    finally:
+        os.environ.pop("FILAMENT_KIT_ACTOR", None)
+        if old is not None:
+            os.environ["FILAMENT_KIT_ACTOR"] = old
