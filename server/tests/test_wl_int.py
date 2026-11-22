@@ -179,7 +179,7 @@ def sender(hub, monkeypatch):
     sent = []
     hub.clock.t = _time.time()
     monkeypatch.setattr(station_client, "station_endpoint", lambda url: ("127.0.0.1", hub.port, "ab" * 32))
-    monkeypatch.setattr(station_client, "proof_key", lambda: hub.key)
+    monkeypatch.setattr(station_client, "proof_key", lambda *, pinned=True: hub.key)       # the real signature (D11)
 
     def bounded(host, port, fp, method, path, body=None, headers=None, cap=0, timeout=0, **kw):
         sent.append((method, path, dict(headers or {}), body))

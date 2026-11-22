@@ -185,7 +185,7 @@ def test_a_catalog_pointer_and_hold_changed_and_deleted_by_v062_win_and_the_next
     assert library._pointer("current.json")["dir"] == "8-20261102"
     assert library.rolled_back_from() is None
     assert not statexml.xml_path(d / "rolled_back.json").exists()                  # the hold is gone, not revived
-    assert (d / "rolled_back.xml.unreadable").is_file()                            # kept aside for the owner
+    assert not (d / "rolled_back.xml.unreadable").exists()                         # the deletion is a deletion: no copy is kept (statexml-ext 7f897d3a)
     assert statexml.read(d / "current.json", keep_version=True, keep_old_form=False)["version"] == 8  # the XML form was written from it
     cur = library._read_state("current.json")
     library._write_state("current.json", {**cur, "at": 3.0})                       # the next save of current.json itself
@@ -213,7 +213,7 @@ def test_an_owner_entry_changed_by_v062_survives_the_next_save_and_a_deleted_one
     assert json.loads(jp.read_text(encoding="utf-8"))["colors"] == ["Blue"]
     jp.unlink()                                                                       # v0.6.2 deleted it
     assert library._read_local(jp) is None and library._load_local() == []
-    assert not statexml.xml_path(jp).exists() and statexml.xml_path(jp).with_name("pla-plus-2-0.xml.unreadable").is_file()
+    assert not statexml.xml_path(jp).exists() and not statexml.xml_path(jp).with_name("pla-plus-2-0.xml.unreadable").exists()   # no copy kept
     assert library.remove_local("sunlu--pla-plus-2-0") is False                    # nothing left to remove
 
 
