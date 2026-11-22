@@ -103,12 +103,17 @@ def version_text() -> str:
 
 def _read_state() -> dict:
     f = store() / STATE
+    xp = statexml.xml_path(f)
     try:
-        return statexml.loads(statexml.xml_path(f).read_bytes(), statexml.tag_of(f))
+        out = statexml.loads(xp.read_bytes(), statexml.tag_of(f))
+        statexml.clear_problem(xp)
+        return out
     except FileNotFoundError:
         pass
-    except (OSError, statexml.StateXmlError):
-        pass                    # an XML file that cannot be read: the JSON form of an earlier release, else nothing
+    except (OSError, statexml.StateXmlError) as e:
+        # an XML file that cannot be read: noted, so the next write keeps it as state.xml.unreadable instead of
+        # writing over it; the JSON form is read meanwhile, else nothing
+        statexml.note_problem(xp, str(e) if isinstance(e, statexml.StateXmlError) else f"cannot read: {e.strerror or e}")
     try:
         st = json.loads(f.read_text(encoding="utf-8"))
     except (OSError, ValueError):
