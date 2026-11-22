@@ -276,6 +276,12 @@ MESSAGES = {
 PRODUCT, COMMAND = "Spoolwarden", "spoolwarden"     # the catalogue holds {product} and {command} (app_name, command_name)
 
 
+# spool.returned: not in strings/en.json yet (the catalogue is not this change's), so not in MESSAGES (the drift test).
+RETURNED_TITLE = "Spool {spool} returned"
+RETURNED_TEXT = "Returned {spool} from {slot} to {location}."
+RETURNED_TEXT_NO_HOME = "Returned {spool} from {slot}."     # the rules placed it nowhere: no place
+
+
 def say(key: str, /, **fill) -> str:
     """The text of `key` with its {names} filled in; a plural text takes its form from `count`. {product} and
     {command} are the product's and the command's name, as in the generated catalogues."""
@@ -408,9 +414,9 @@ def words(ev: dict) -> tuple[str, str]:
         return say("event_title_spool_ok", filament=sub.get("name", "")), say("event_text_spool_ok",
                                                                              spool=_d(ev, "spool") or sub.get("id", ""))
     if kind.startswith("spool.") and kind[6:] in ("added", "opened", "weighed", "moved", "emptied", "loaded",
-                                                  "unloaded"):
+                                                  "unloaded", "returned"):
         what, sid, name = kind[6:], _d(ev, "spool") or sub.get("id", ""), _spool_name(ev)
-        title = say(f"event_title_spool_{what}", spool=sid)
+        title = RETURNED_TITLE.format(spool=sid) if what == "returned" else say(f"event_title_spool_{what}", spool=sid)
         if what == "weighed" and _d(ev, "before_grams") and _d(ev, "after_grams"):
             return title, say("event_text_spool_weighed", before=number(_d(ev, "before_grams")),
                               after=number(_d(ev, "after_grams")))
@@ -421,6 +427,11 @@ def words(ev: dict) -> tuple[str, str]:
             return title, say("event_text_spool_loaded", slot=_d(ev, "after_slot"))
         if what == "unloaded" and _d(ev, "before_slot"):
             return title, say("event_text_spool_unloaded", slot=_d(ev, "before_slot"))
+        if what == "returned" and _d(ev, "before_slot"):
+            if not _d(ev, "after_location"):
+                return title, RETURNED_TEXT_NO_HOME.format(spool=name, slot=_d(ev, "before_slot"))
+            return title, RETURNED_TEXT.format(spool=name, slot=_d(ev, "before_slot"),
+                                               location=_d(ev, "after_location"))
         if what in ("added", "opened", "emptied"):
             return title, say(f"event_text_spool_{what}", name=name)
         return title, say("event_text_spool_changed", name=name)

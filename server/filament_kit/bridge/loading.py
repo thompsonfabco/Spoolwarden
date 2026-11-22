@@ -21,9 +21,14 @@
      (CONFIRM_TIMEOUT). A refused write raises `SlotWriteFailed` and Spoolman is untouched; a write that is not
      confirmed in time is reported (`confirmed: false`, `problems`), not raised, and Spoolman is still updated;
   4. Spoolman (under the inventory lock): every other spool at "<printer name> – AMS <label>" goes back to its
-     `extra.prev_location` (or the sealed location, "Sealed stock", if it has none) and its prev_location is
-     cleared; the spool moves to that location with its previous location in `extra.prev_location` (a spool
-     coming from another printer slot keeps the prev_location it already had).
+     `extra.prev_location` (its home; with none recorded, where the placement rules put it, as `auto_location`
+     does: `inventory.send_back`) and its prev_location is cleared (placed nowhere: it has no location and the
+     answer names none); the spool moves to that location with its previous
+     location and the time of the load in `extra.prev_since` beside it (a spool coming from another printer slot
+     keeps the prev_location and the time it already had). A spool is checked out from the load until it is sent
+     back, whether or not it had a place: the time in `prev_since` marks it (`inventory.checked_out`).
+  `sealed_location` (load, unload, clear) is kept for callers and no longer used: a spool with no home is placed by
+  the placement rules, not put in "Sealed stock".
   Loads into the same printer slot are serialised (a lock per (serial, label)): the last one wins on the printer
   and in Spoolman, and Spoolman ends with exactly one spool at that location. The write phase holds the printer
   against slot mapping (`mapping.load_guard`: refused at once with `mapping.AlreadyRunning` while a mapping job
@@ -34,7 +39,7 @@
 
 `unload(manager, sm, serial, label, dry)`: Spoolman only, the printer's slot setting is left as it is (no MQTT
 command, so it works whatever the printer is doing): every spool at that slot's location goes back to its
-prev_location (or "Sealed stock").
+prev_location (or, with none, where the placement rules put it).
 
 Both return `{spool, slot: {label, ams_id, tray_id, location}, preset, dry_run, moved_back: [{id, location}]}`;
 load adds `confirmed` (None on a dry run), `problems`, `nozzle_mm`, `nozzle_assumed` and, on a dry run, `command`.
@@ -52,7 +57,6 @@ Errors (the API maps them):
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import threading
 import time
@@ -320,13 +324,11 @@ def _shows(report: dict, ams_id: int, tray_id: int, setting: dict) -> bool:
 
 
 def _prev(s: dict) -> str:
-    v = (s.get("extra") or {}).get("prev_location")
-    if isinstance(v, str):
-        try:
-            v = json.loads(v)
-        except ValueError:
-            pass
-    return v if isinstance(v, str) else ""
+    return inventory.prev_entry(s)[0]
+
+
+def checked_out(s: dict) -> bool:
+    return inventory.checked_out(s)
 
 
 def _is_slot_location(loc: str) -> bool:
@@ -348,21 +350,22 @@ def _slot_from_location(loc: str | None) -> str:
     return ""
 
 
-def _send_back(sm, spools: list[dict], sealed: str, dry: bool, *, kind: str = "spool.unloaded",
+def _send_back(sm, spools: list[dict], dry: bool, *, kind: str = "spool.unloaded",
                slot: str | None = None) -> list[dict]:
-    """Move each spool to its prev_location (or the sealed location) and clear the prev_location."""
+    """Send each spool back (`inventory.send_back`: to its home, else where the placement rules put it) and report it."""
     out = []
     for s in sorted(spools, key=lambda s: s["id"]):
-        dest = _prev(s) or sealed
+        dest = inventory.send_back(sm, s, dry=dry)
         if not dry:
-            sm.patch(f"spool/{s['id']}", {"location": dest,
-                                          "extra": {**(s.get("extra") or {}), "prev_location": json.dumps("")}})
+            home, since = inventory.prev_entry(s)
             if kind == "slot.cleared":
                 event_sink.emit_spool("slot.cleared", s, s["id"], slot=slot or _slot_from_location(s.get("location")),
-                                      before_location=s.get("location"), after_location=dest)
+                                      before_location=s.get("location"), after_location=dest or None,
+                                      before_since=since, before_home=home)
             else:
                 event_sink.emit_spool("spool.unloaded", s, s["id"], before_location=s.get("location"),
-                                      after_location=dest, before_slot=slot or _slot_from_location(s.get("location")))
+                                      after_location=dest or None, before_since=since, before_home=home,
+                                      before_slot=slot or _slot_from_location(s.get("location")))
         out.append({"id": s["id"], "location": dest})
     return out
 
@@ -385,8 +388,11 @@ def _target_patch(s: dict, loc: str) -> dict:
     cur = s.get("location") or ""
     if cur == loc:
         return {}
-    prev = _prev(s) if _is_slot_location(cur) else cur      # slot-to-slot moves keep the original shelf
-    return {"location": loc, "extra": {**(s.get("extra") or {}), "prev_location": json.dumps(prev)}}
+    if _is_slot_location(cur):                              # slot-to-slot moves keep the original shelf and its time
+        prev, since = inventory.prev_entry(s)
+    else:
+        prev, since = cur, inventory._now()
+    return {"location": loc, "extra": {**(s.get("extra") or {}), **inventory.prev_extra(prev, since)}}
 
 
 def _preset_view(p: profiles.PresetRef) -> dict:
@@ -430,7 +436,7 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
 
     if dry:
         with inventory._LOCK:
-            moved = _send_back(sm, _occupants(sm, loc, spool["id"], old_loc), sealed_location, dry=True)
+            moved = _send_back(sm, _occupants(sm, loc, spool["id"], old_loc), dry=True)
         patch = _target_patch(spool, loc)
         return {**result, "spool": {**spool, **patch}, "confirmed": None, "moved_back": moved,
                 "command": {"ams_id": ams_id, "tray_id": tray_id, **setting}}
@@ -455,7 +461,7 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
                                       f"{CONFIRM_TIMEOUT:g} s)")
             log.warning("load on %s: %s not confirmed", serial, label)
         with event_sink.capture() as cap, inventory._LOCK, event_sink.batch_scope():       # what leaves and what enters: one batch
-            moved = _send_back(sm, _occupants(sm, loc, spool["id"], old_loc), sealed_location, dry=False)
+            moved = _send_back(sm, _occupants(sm, loc, spool["id"], old_loc), dry=False)
             fresh = sm.get(f"spool/{spool['id']}")
             patch = _target_patch(fresh, loc)
             if patch:
@@ -489,11 +495,11 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: 
         here = _occupants(sm, loc, also=old_loc)
         if not here:
             raise NotFound(f"no spool is in {name} slot {label}")
-        moved = _send_back(sm, here, sealed_location, dry, slot=label)
+        moved = _send_back(sm, here, dry, slot=label)
         first = min(here, key=lambda s: s["id"])
         if dry:
             spool = {**first, "location": moved[0]["location"],
-                     "extra": {**(first.get("extra") or {}), "prev_location": json.dumps("")}}
+                     "extra": {**(first.get("extra") or {}), **inventory.prev_extra("")}}
         else:
             spool = sm.get(f"spool/{first['id']}")
     ev = cap[-1] if (not dry and cap) else None
@@ -527,7 +533,7 @@ def clear(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: s
     guard = mapping.load_guard(serial) if not dry else contextlib.nullcontext()
     with event_sink.capture() as cap, guard, _slot_lock(serial, label), inventory._LOCK, event_sink.batch_scope():
         here = _occupants(sm, loc, also=old_loc)
-        moved = _send_back(sm, here, sealed_location, dry, kind="slot.cleared", slot=label) if here else []
+        moved = _send_back(sm, here, dry, kind="slot.cleared", slot=label) if here else []
         if not here and not dry:
             event_sink.emit("slot.cleared", {"type": "printer", "id": serial, "name": name}, {"slot": label})
         first = min(here, key=lambda s: s["id"]) if here else None
@@ -535,7 +541,7 @@ def clear(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: s
             spool = None
         elif dry:
             spool = {**first, "location": moved[0]["location"],
-                     "extra": {**(first.get("extra") or {}), "prev_location": json.dumps("")}}
+                     "extra": {**(first.get("extra") or {}), **inventory.prev_extra("")}}
         else:
             spool = sm.get(f"spool/{first['id']}")
     ev = cap[-1] if (not dry and cap) else None

@@ -38,6 +38,8 @@ class Kind:
 # What a person or the Hub changes about a spool: the spool, and the before and after of what changed.
 _SPOOL_CHANGE = ("spool", "before_location", "after_location", "before_grams", "after_grams",
                  "before_slot", "after_slot", "before_tag", "after_tag", "before_archived",
+                 "before_since",      # when it was checked out, so an undo of an unload or return puts the time back
+                 "before_home",       # its home then ("" when it came from no place), so that undo restores the mark exactly
                  "batch",      # batch: all spool events of one request (R80 E5)
                  # what opening a spool by linking its tag changed, so an undo can put it back
                  "before_first_used", "before_comment", "took_tag_from")
@@ -65,7 +67,7 @@ def _kinds() -> dict[str, Kind]:
     add("usage.recorded", "info", ("printer", "job", "spool", "material", "grams") + _RUN)
     add("spool.low", "warn", ("spool", "filament", "material", "grams", "in_stock"), RAISES, "spool-low")
     add("spool.ok", "ok", ("spool",), CLEARS, "spool-low")
-    for name in ("added", "opened", "weighed", "moved", "emptied", "loaded", "unloaded"):
+    for name in ("added", "opened", "weighed", "moved", "emptied", "loaded", "unloaded", "returned"):
         add(f"spool.{name}", "info", _SPOOL_CHANGE + (("auto",) if name == "loaded" else ()))
     add("storage.low", ("warn", "bad"), ("free", "total", "percent", "direction"), RAISES, "storage-low", keyed=False)
     add("storage.ok", "ok", ("free", "total"), CLEARS, "storage-low", keyed=False)
@@ -100,7 +102,7 @@ KINDS: dict[str, Kind] = _kinds()
 
 ACTIVITY_KINDS: frozenset[str] = frozenset({
     "spool.added", "spool.opened", "spool.weighed", "spool.moved", "spool.emptied", "spool.loaded", "spool.unloaded",
-    "slot.cleared",
+    "spool.returned", "slot.cleared",
     "usage.recorded", "usage.undone",
     "location.renamed",
     "hub.started", "hub.updated", "hub.restored",

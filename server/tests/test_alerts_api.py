@@ -165,6 +165,14 @@ def test_every_kind_the_store_writes_has_a_title(store):
         assert alerts_api.words(ev)[0] != name, name
 
 
+def test_spool_returned_has_a_title_and_the_activity_sentence():
+    ev = {"id": 1, "at": "2026-11-17T04:12:09Z", "kind": "spool.returned", "severity": "info",
+          "subject": {"type": "spool", "id": "7", "name": "Prusament PLA"}, "actor": {"type": "hub", "id": "", "name": ""},
+          "data": {"spool": "7", "before_location": "X1 – A2", "after_location": "Rack 1", "before_slot": "A2"},
+          "condition": None}
+    assert alerts_api.words(ev) == ("Spool 7 returned", "Returned Prusament PLA from A2 to Rack 1.")
+
+
 # ---------------------------------------------------------------- GET api/events
 
 def test_the_answer_has_the_contract_fields(hub, store):

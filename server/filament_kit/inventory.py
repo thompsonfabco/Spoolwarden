@@ -31,6 +31,9 @@ from .spoolman import Spoolman, SpoolmanError
 log = logging.getLogger(__name__)
 
 SEALED_COMMENT = "SEALED - tag when opened"
+NOT_CHECKED_OUT = "This spool is not checked out."
+RETURNED_TEXT = "Returned {spool} from {slot} to {location}."      # the activity sentence of spool.returned
+RETURNED_TEXT_NO_HOME = "Returned {spool} from {slot}."         # ... when the rules place it nowhere: no place
 
 # serializes add + placement (in this process and the other one) so two adds never pick the same box
 _LOCK = locks.ProcessLock(lambda: config.paths().state / "inventory.lock")
@@ -94,6 +97,13 @@ class SpoolEditError(ValueError):
         self.field = field
 
 
+class NotCheckedOut(Exception):
+    """The spool is not checked out (not loaded into a printer by the Hub): it cannot be returned and has no home to change."""
+
+    def __init__(self, message: str = NOT_CHECKED_OUT):
+        super().__init__(message)
+
+
 class TagConflict(Exception):
     """reason "tag_on_other_spool": `other` is the spool holding the tag.
     reason "spool_has_other_tag": the target spool has a different tag; `other` is None."""
@@ -106,6 +116,51 @@ class TagConflict(Exception):
 
 def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def prev_entry(s: dict) -> tuple[str, str | None]:
+    """(home, since): the place a loaded spool came from and the time of the load. The home is `extra.prev_location`
+    exactly as older Hubs write and read it (plain place text); the time is in `extra.prev_since` beside it, used only
+    when it names that same home (an older Hub moving the spool rewrites prev_location alone). No `prev_since`: no time."""
+    ex = s.get("extra") or {}
+    v = ex.get("prev_location")
+    if isinstance(v, str):
+        try:
+            v = json.loads(v)
+        except ValueError:
+            pass
+    since = None
+    if isinstance(v, dict):                                 # the unreleased object form: still read
+        home, since = v.get("location"), v.get("since")
+    else:
+        home = v
+        w = ex.get("prev_since")
+        if isinstance(w, str):
+            try:
+                w = json.loads(w)
+            except ValueError:
+                w = None
+        if isinstance(w, dict) and w.get("location") == home:
+            since = w.get("since")
+    return (home if isinstance(home, str) else ""), (since if isinstance(since, str) and since else None)
+
+
+def checked_out(s: dict) -> bool:
+    """A spool is checked out from the load into a printer until it is returned, with or without a recorded home: a
+    remembered home (`prev_location`, the older release's own signal) or the time of the load (`prev_since`)."""
+    home, since = prev_entry(s)
+    return bool(home or since)
+
+
+def prev_extra(home: str, since: str | None = None) -> dict:
+    """The `extra` entries for a checked-out spool: its `home` ("" when it came from no place) and the time of the load.
+    `prev_location` stays the plain place, as older Hubs wrote it (empty with no place), so a rolled-back Hub still
+    finds the home; the checked-out mark and its time go in `prev_since` ({"location", "since"}, the location being
+    that same home, possibly ""). Neither home nor time: not checked out, both emptied."""
+    if not home and not since:
+        return {"prev_location": json.dumps(""), "prev_since": json.dumps("")}
+    return {"prev_location": json.dumps(home),
+            "prev_since": json.dumps({"location": home, "since": since} if since else "")}
 
 
 def describe(s: dict) -> str:
@@ -650,7 +705,28 @@ def state_of(s: dict) -> str:
     return "sealed" if SEALED_COMMENT in (s.get("comment") or "") else "opened"
 
 
-FILTERS = ("sealed", "opened", "loaded", "low")
+FILTERS = ("sealed", "opened", "loaded", "low", "checked_out")
+
+
+def filter_names() -> list[str]:
+    """The filter names this Hub applies: the list answers' top-level `filters` (an interface shows "Checked out" only
+    when it is there; an answer without it is an older Hub). Present even when no spool is returned."""
+    return list(FILTERS)
+
+
+def filter_counts(sm: Spoolman) -> dict[str, int]:
+    """How many spools each filter keeps (empty spools never count), from the same `spool_view` the filters use: the
+    "Running low" count with `checked_out` (and the others) beside it."""
+    ctx = view_context()
+    out = dict.fromkeys(FILTERS, 0)
+    for sp in find(sm, "", False):
+        v = spool_view(sp, ctx)
+        if v["state"] == "empty":
+            continue
+        for f in FILTERS:
+            out[f] += bool(v["state"] == f if f in ("sealed", "opened") else v["loaded"] is not None
+                           if f == "loaded" else v[f])
+    return out
 
 
 class ViewContext:
@@ -686,7 +762,9 @@ def spool_view(s: dict, ctx: ViewContext | None = None) -> dict:
     """One spool as the phones read it (GET spools/{id}, and `view` / `before` of an edit): location, remaining, net and
     empty spool weight, tag, state, filament (number, brand, name, material, colour) and lot, and two more: `loaded`
     ({printer_id, printer, slot} when the spool is recorded in a printer's slot, else None) and `low` (opened and at
-    or under the running-low threshold). Weights are grams. Give `ctx` (`view_context()`) when viewing a list."""
+    or under the running-low threshold), and the checked-out trio: `checked_out` (loaded into a printer and not yet
+    returned, home or no home), `home` (the place it came from, else None) and `checked_out_since` (the time of the
+    load; None for an older entry). Weights are grams. Give `ctx` (`view_context()`) when viewing a list."""
     ctx = ctx or view_context()
     f = s.get("filament") or {}
     tare = s.get("spool_weight")
@@ -694,19 +772,23 @@ def spool_view(s: dict, ctx: ViewContext | None = None) -> dict:
         tare = f.get("spool_weight")
     state = state_of(s)
     left = s.get("remaining_weight")
+    home, since = prev_entry(s)
     low = (state == "opened" and isinstance(left, (int, float)) and not isinstance(left, bool)
            and left <= ctx.low_g)
     return {"id": s.get("id"), "location": s.get("location"), "remaining_g": left,
             "net_g": f.get("weight"), "tare_g": tare, "tag": tags.stored(s) or None, "state": state,
             "filament_id": f.get("id"), "vendor": (f.get("vendor") or {}).get("name"), "name": f.get("name"),
             "material": f.get("material"), "color_hex": f.get("color_hex"), "lot": s.get("lot_nr"),
-            "loaded": ctx.slot_of(s.get("location")), "low": low}
+            "loaded": ctx.slot_of(s.get("location")), "low": low,
+            "checked_out": bool(home or since), "home": home or None, "checked_out_since": since}
 
 
 def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, remaining: float | None = None,
                  location: str | None = None, empty: bool = False, dry: bool,
-                 locations: list[str] | None = None, rules=None) -> dict:
-    """Set a spool's weight (`gross` with the spool, or `remaining` filament), move it, or mark it empty. With
+                 locations: list[str] | None = None, rules=None, home: str | None = None) -> dict:
+    """Set a spool's weight (`gross` with the spool, or `remaining` filament), move it, or mark it empty. `home`
+    changes the remembered place of a checked-out spool (NotCheckedOut when it is not; a place that is not one of
+    the storage locations is refused, `field` "home"). With
     `locations` (the web app's list), a location outside it is refused; the app's route passes none and takes any.
     With `rules` (the storage list), the name of an Individual containers location means its lowest free container."""
     spool = sm.get(f"spool/{spool_id}")
@@ -738,6 +820,21 @@ def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, rem
             except placement.NoFreeContainer as e:
                 raise SpoolEditError(str(e), "location") from None
         patch["location"] = location
+    if home is not None:
+        _cur_home, since = prev_entry(spool)
+        if not checked_out(spool):
+            raise NotCheckedOut()
+        if not isinstance(home, str) or not home.strip():
+            raise SpoolEditError("home must be one of the Hub's storage locations", "home")
+        st = placement.as_storage(rules) if rules is not None else storage.current()
+        if home not in (locations if locations is not None else st.choosable()):
+            raise SpoolEditError(f"{home!r} is not one of the Hub's storage locations", "home")
+        used = Counter(x["location"] for x in sm.get("spool") if x.get("location") and x["id"] != spool_id)
+        try:
+            home = placement.resolve(st, home, used)
+        except placement.NoFreeContainer as e:
+            raise SpoolEditError(str(e), "home") from None
+        patch["extra"] = {**(spool.get("extra") or {}), **prev_extra(home, since)}
     if not patch:
         return spool
     if dry:
@@ -780,6 +877,57 @@ def auto_place(sm: Spoolman, spool: dict, rules) -> tuple[str, str]:
     return got["location"], got["placed_by"]
 
 
+def send_back(sm: Spoolman, spool: dict, *, rules=None, dry: bool = False) -> str:
+    """The one way a spool goes back (Unload, Clear, a replacing load and Return): its location becomes its home
+    (`prev_location`); with no home recorded (a spool loaded from no place) it is placed as `auto_location` places it (`rules`, else the storage list
+    in force; an opened spool is not sealed stock); `prev_location` (and `prev_since`) is emptied. Where the rules place
+    it nowhere (no rule, no free container) it does not fail: the location is emptied and "" is returned (the return
+    ends with "Returned." and no place). Returns the new location; `dry` writes nothing. The caller holds `_LOCK` and
+    reports the event."""
+    home, _since = prev_entry(spool)
+    dest = home
+    if not dest:
+        try:
+            dest = auto_place(sm, spool, rules if rules is not None else storage.current())[0]
+        except SpoolEditError:
+            dest = ""
+    if not dry:
+        sm.patch(f"spool/{spool['id']}", {"location": dest,
+                                          "extra": {**(spool.get("extra") or {}), **prev_extra("")}})
+    return dest
+
+
+def return_spool(sm: Spoolman, spool_id: int, *, grams: float | None = None, rules=None, dry: bool = False) -> dict:
+    """Send a checked-out spool back that was taken out of the printer by hand: `send_back`, so its location (the Hub's
+    record of the slot) becomes its home; the printer itself is not told here (a Klipper printer is, by
+    `LoadsMixin.return_spool`). NotCheckedOut for a spool that is not checked out (a spool with no home is). `grams` (the weight just taken at
+    the Weigh Station, already saved by the caller) is only recorded as `after_grams`. Reports spool.returned
+    (`before_location`, `after_location` (left out when the rules place it nowhere), `before_slot`, `after_grams`,
+    `before_since`, `before_home`). Answers `spool` (Spoolman's, after), `view`,
+    `before`, `dry`, `event_id` and `event`."""
+    with event_sink.capture() as cap:
+        with event_sink.held(), _LOCK:
+            before = sm.get(f"spool/{spool_id}")
+            if not checked_out(before):
+                raise NotCheckedOut()
+            dest = send_back(sm, before, rules=rules, dry=dry)
+            if dry:
+                final = {**before, "location": dest,
+                         "extra": {**(before.get("extra") or {}), **prev_extra("")}}
+            else:
+                final = sm.get(f"spool/{spool_id}")
+                slot = (view_context().slot_of(before.get("location")) or {}).get("slot")
+                with event_sink.batch_scope():
+                    event_sink.emit_spool("spool.returned", before, spool_id, before_location=before.get("location"),
+                                          after_location=dest or None, before_slot=slot, after_grams=grams,
+                                          before_since=prev_entry(before)[1], before_home=prev_entry(before)[0])
+    out = {"spool": final, "view": spool_view(final), "before": spool_view(before), "dry": dry}
+    if cap:
+        out["event_id"] = cap[-1]["id"]
+        out["event"] = cap[-1]
+    return out
+
+
 def edit_spool(sm: Spoolman, spool_id: int, *, auto_location: bool = False, **kw) -> dict:
     """`update_spool`, answered with what the phones show: `spool` (Spoolman's spool after the change, or as it would be
     after it when `dry`), `view` (the same in spool_view's shape), `before` (spool_view of it as it was) and `dry`.
@@ -794,6 +942,8 @@ def edit_spool(sm: Spoolman, spool_id: int, *, auto_location: bool = False, **kw
     with event_sink.capture() as cap:
         spool = update_spool(sm, spool_id, **kw)
     out = {"spool": spool, "view": spool_view(spool), "before": spool_view(before), "dry": kw["dry"], **(placed or {})}
+    if kw.get("home") is not None:
+        out["home_text"] = "Home is now {location}.".format(location=spool_view(spool)["home"])    # the result sentence
     if not kw["dry"] and cap:
         out["event_id"] = cap[-1]["id"]
         out["event"] = cap[-1]
@@ -840,7 +990,7 @@ class FilterError(ValueError):
 
 def search(sm: Spoolman, q: str, sealed_only: bool, flt: str | None = None) -> list[dict]:
     """`find`, narrowed by `flt` (GET /api/spools `filter`): sealed, opened, loaded (recorded in a printer slot) or
-    low (running low). None: every spool that is not empty. Each row is Spoolman's spool plus `view`, its
+    low (running low) or checked_out (loaded into a printer, not yet returned). None: every spool that is not empty. Each row is Spoolman's spool plus `view`, its
     `spool_view`."""
     if flt not in (None, "") and flt not in FILTERS:
         raise FilterError(f"filter must be one of {', '.join(FILTERS)}")
@@ -854,6 +1004,8 @@ def search(sm: Spoolman, q: str, sealed_only: bool, flt: str | None = None) -> l
             keep = v["state"] == flt
         elif flt == "loaded":
             keep = v["loaded"] is not None and v["state"] != "empty"
+        elif flt == "checked_out":
+            keep = v["checked_out"] and v["state"] != "empty"
         else:
             keep = v["low"]
         if keep:
