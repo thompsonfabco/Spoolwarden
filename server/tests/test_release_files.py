@@ -646,6 +646,44 @@ def test_station_upgrade_without_server_reuses_the_saved_address(tmp_path):
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_station_upgrade_with_a_damaged_config_xml_uses_config_json(tmp_path):
+    """R582 M3: an unreadable config.xml does not hide a good config.json from the station re-run."""
+    etc = _saved_station_etc(tmp_path)
+    (etc / "config.xml").write_bytes(b"<config")
+    r = _install_no_tty(tmp_path, etc, "--mode", "station")
+    assert SAVED_NOTE in r.stderr and "needs the kit server's address" not in r.stderr, r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_station_upgrade_reads_config_xml_with_the_hubs_python(tmp_path, monkeypatch):
+    """R582 M3: the address comes from the Hub's own Python ($VENV/bin/python), which reads the settings as the program
+    does: here config.json was changed after config.xml was saved (an older release after a rollback), so it wins."""
+    import os
+    import subprocess
+    import sys
+    import json
+    from filament_kit import config
+    etc = tmp_path / "etc"
+    etc.mkdir()
+    monkeypatch.setenv("FK_ETC", str(etc))
+    config.save({"station": {"allow": ["127.0.0.1", "old.example.lan"]}})
+    (etc / "config.json").write_text(json.dumps({"station": {"allow": ["127.0.0.1", "kit.example.lan"]}}), encoding="utf-8")
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "python").write_text(f'#!/bin/sh\n[ "$1" = -I ] && shift\nexec "{Path(sys.executable).as_posix()}" "$@"\n',
+                                         encoding="utf-8", newline="\n")
+    (venv / "bin" / "python").chmod(0o755)
+    text = _read("install/install.sh")
+    assert 'VENV="$OPT/venv"' in text
+    vpath = subprocess.run([_bash(), "-c", "cygpath -u \"$1\" 2>/dev/null || printf %s \"$1\"", "_", str(venv)],
+                           capture_output=True, text=True).stdout.strip()
+    (tmp_path / "i.sh").write_text(text.replace('VENV="$OPT/venv"', f'VENV="{vpath}"', 1), encoding="utf-8", newline="\n")
+    r = subprocess.run([_bash(), "i.sh", "--mode", "station"], cwd=tmp_path, stdin=subprocess.DEVNULL,
+                       capture_output=True, text=True, timeout=60, env={**os.environ, "FK_ETC": str(etc)})
+    assert SAVED_NOTE in r.stderr, r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
 def test_custom_run_without_terminal_uses_the_saved_address_unless_one_is_given(tmp_path):
     etc = _saved_station_etc(tmp_path)
     r = _install_no_tty(tmp_path, etc, "--modules", "station")
@@ -746,7 +784,7 @@ def test_wrapper_reader_revoke_as_root_and_list_as_user(tmp_path):
     assert _wrapper_run(tmp_path / "b", "reader", "tokens") == "as-user ./stubs/prog reader tokens"
 
 
-def _wrapper_half(tmp_path, *, marker=False, state=None, program=True, installing=False):
+def _wrapper_half(tmp_path, *, marker=False, state=None, program=True, installing=False, state_xml=None):
     """Run the wrapper over a kit folder with stand-ins; (exit code, stdout, stderr)."""
     import os
     import subprocess
@@ -765,6 +803,12 @@ def _wrapper_half(tmp_path, *, marker=False, state=None, program=True, installin
         (kit / ".fk-installed").write_text("x\n")
     if state:
         (kit / "releases" / "state.json").write_text(state, encoding="utf-8")
+    if state_xml:       # read by the kit's own Python (a stand-in that is this test's interpreter)
+        (kit / "releases" / "state.xml").write_bytes(state_xml)
+        (kit / "venv" / "bin").mkdir(parents=True)
+        (kit / "venv" / "bin" / "python").write_text(f'#!/bin/sh\n[ "$1" = -I ] && shift\nexec "{Path(sys.executable).as_posix()}" "$@"\n',
+                                                     encoding="utf-8", newline="\n")
+        (kit / "venv" / "bin" / "python").chmod(0o755)
     text = _read("install/spoolwarden-cli.sh")
     for old, new in (("BIN=/opt/filament-kit/venv/bin/filament-kit", "BIN=./stubs/prog"),
                      ("KIT_OPT=/opt/filament-kit", "KIT_OPT=./kit")):
@@ -794,6 +838,19 @@ def test_wrapper_prints_the_repair_and_still_runs_the_program(tmp_path):
     rc, out, err = _wrapper_half(tmp_path, state='{"previous": "1.2.3", "held": null}')
     assert rc == 0 and out == "ran status\n"
     assert "stopped halfway" in err and f"  {config.GET_COMMAND} --version 1.2.3\n" in err
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_reads_the_repair_version_from_state_xml_with_the_kits_python(tmp_path):
+    from filament_kit.profiles import statexml
+    xml = statexml.dumps("state", {"previous": "1.2.3", "held": None})
+    rc, out, err = _wrapper_half(tmp_path, state_xml=xml)
+    assert "--version 1.2.3\n" in err, err
+    (tmp_path / "again").mkdir()
+    # the XML says there is no previous: the stale JSON's "1.0.0" is not used
+    rc, out, err = _wrapper_half(tmp_path / "again", state='{"previous": "1.0.0"}',
+                                 state_xml=statexml.dumps("state", {"previous": None, "held": None}))
+    assert "stopped halfway" in err and "--version" not in err, err
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
@@ -860,7 +917,7 @@ def test_wrapper_status_without_sudo_passes_nothing(tmp_path):
 
 # The shell scripts with multi-line `python -c '...'` blocks (test_no_other_script_has_python_c_blocks keeps the list
 # complete): each must keep at least one block, so the check below never passes on nothing.
-PYTHON_C_SCRIPTS = ["get.sh", "install/install.sh"]
+PYTHON_C_SCRIPTS = ["get.sh", "install/install.sh", "install/spoolwarden-cli.sh"]
 
 
 def test_no_other_script_has_python_c_blocks():

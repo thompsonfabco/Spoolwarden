@@ -12,6 +12,11 @@ from filament_kit.profiles import statexml
 POSIX = pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes and ACLs")
 
 
+def _sha(f):
+    import hashlib
+    return hashlib.sha256(f.read_bytes()).hexdigest()
+
+
 @pytest.fixture
 def etc(tmp_path, monkeypatch):
     d = tmp_path / "etc"
@@ -25,7 +30,7 @@ def test_save_writes_both_forms_and_they_read_back_equal(etc):
     cfg = {"port": 1234, "tare_hints": {"PLA Basic": 3}, "locations": ["A", "B"], "web": {"lan": []}}
     config.save(cfg)
     assert json.loads((etc / "config.json").read_text(encoding="utf-8")) == cfg
-    assert statexml.loads((etc / "config.xml").read_bytes(), "config") == cfg
+    assert statexml.loads((etc / "config.xml").read_bytes(), "config") == cfg | {"json_sha256": _sha(etc / "config.json")}
     assert config.load_raw() == cfg
 
 
@@ -132,8 +137,8 @@ def opt(tmp_path, monkeypatch):
 def test_the_update_state_is_written_as_xml_and_read_back(opt):
     from filament_kit import updates
     updates._write_state(previous="1.2.3", latest={"version": "9.9.9", "notes": "x", "at": 1.0})
-    assert (opt / "state.xml").is_file() and not (opt / "state.json").exists()
-    assert b'previous="1.2.3"' in (opt / "state.xml").read_bytes()      # spoolwarden-cli.sh reads it with sed
+    assert (opt / "state.xml").is_file() and (opt / "state.json").is_file()
+    assert json.loads((opt / "state.json").read_text(encoding="utf-8")) == updates._read_state()
     assert updates._read_state() == {"previous": "1.2.3", "latest": {"version": "9.9.9", "notes": "x", "at": 1.0}}
 
 
@@ -144,7 +149,7 @@ def test_an_old_json_state_is_read_and_left_for_a_rollback(opt):
     assert updates._read_state()["previous"] == "1.0.0" and not (opt / "state.xml").exists()
     updates._write_state(held="1.1.0")
     assert updates._read_state() == {"previous": "1.0.0", "failed": None, "held": "1.1.0"}
-    assert (opt / "state.json").read_text(encoding="utf-8") == old
+    assert json.loads((opt / "state.json").read_text(encoding="utf-8")) == updates._read_state()
 
 
 def test_installed_means_either_form_of_the_settings(etc):
@@ -167,6 +172,57 @@ def test_the_rollback_cleans_modules_in_both_forms(etc):
         assert name not in form["modules"]
 
 
+def test_a_hold_set_through_the_state_is_seen_in_state_json(opt):
+    """R582 H2: the release `update --rollback` goes to reads only state.json; its timer must see the hold."""
+    from filament_kit import updates
+    updates._write_state(previous=None, held="9.9.9")
+    assert json.loads((opt / "state.json").read_text(encoding="utf-8")).get("held") == "9.9.9"
+    updates._write_state(last_ok_at=5.0)
+    assert json.loads((opt / "state.json").read_text(encoding="utf-8")).get("held") == "9.9.9"
+    updates._write_state(held=None)
+    assert json.loads((opt / "state.json").read_text(encoding="utf-8")).get("held") is None
+
+
+def test_a_damaged_state_xml_is_kept_aside_not_written_over(opt, monkeypatch):
+    """R582 M2: the read notes it, so the next write keeps the damaged file as state.xml.unreadable."""
+    from filament_kit import updates
+    monkeypatch.setattr(statexml, "_unreadable", {})
+    (opt / "state.xml").write_bytes(b"<state")
+    (opt / "state.json").write_text(json.dumps({"previous": "1.0.0"}), encoding="utf-8")
+    assert updates._read_state()["previous"] == "1.0.0"
+    assert any("state.xml" in p for p in statexml.problems())
+    updates._write_state(held="1")
+    assert (opt / "state.xml.unreadable").read_bytes() == b"<state"
+    assert updates._read_state()["held"] == "1" and not statexml.problems()
+
+
+def test_a_json_changed_after_a_rollback_wins_over_the_older_xml(etc):
+    """R582 H1: config.xml records the hash of the config.json it was saved with; another JSON is a newer one."""
+    config.save({"port": 1, "modules": {"server": True}})
+    (etc / "config.json").write_text(json.dumps({"port": 2, "modules": {"server": True, "station": True}}),
+                                     encoding="utf-8")                      # what an older release writes
+    assert config.load_raw()["port"] == 2 and config.load()["modules"]["station"] is True
+    config.save(config.load_raw())                                           # the next save carries it into both forms
+    assert statexml.loads((etc / "config.xml").read_bytes(), "config")["port"] == 2
+    assert config.load_raw()["port"] == 2
+
+
+def test_an_xml_without_a_hash_and_a_matching_hash_are_read_as_before(etc):
+    (etc / "config.json").write_text(json.dumps({"port": 1}), encoding="utf-8")
+    (etc / "config.xml").write_bytes(statexml.dumps("config", {"port": 2}))      # saved before the hash existed
+    assert config.load_raw()["port"] == 2
+    config.save({"port": 3})
+    assert config.load_raw() == {"port": 3}
+
+
+def test_a_restored_config_xml_is_read_by_the_service():
+    """R582 M1: the restore policy and `modules apply` treat config.xml as they do config.json."""
+    from filament_kit import backup
+    it = backup.Item(root="etc/filament-kit", path="config.xml", kind="file", mode=0o666, owner="x", group="x")
+    assert backup._policy(it) == ("root", "filament-kit", 0o640)
+    assert 'etc / "config.xml"' in _text("server/filament_kit/apply.py")
+
+
 # ---------- the scripts ----------
 
 def _text(rel):
@@ -178,7 +234,7 @@ def test_install_sh_reads_and_owns_both_forms():
     t = _text("install/install.sh")
     assert 'config.xml" ] || [ -f "$ETC/config.json"' in t                  # the first-install test
     assert "for cf in config.xml config.json; do" in t and 'chmod 640 "$ETC/$cf"' in t
-    assert "config.load_raw()" in t and 'findall("./station/allow/item")' in t
+    assert "config.load_raw()" in t and "ElementTree" not in t        # the Hub's Python reads the XML (R85 1.6)
 
 
 def test_the_cli_script_reads_the_xml_state_then_the_json_one():
