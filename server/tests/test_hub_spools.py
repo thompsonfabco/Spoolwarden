@@ -130,7 +130,7 @@ const state = () => ({ ids: ids(), count: text($(".spools-count")), pressed: $$(
 out.chips = $$(".spools-chip").map(text);
 out.group = $(".spools-chips").getAttribute("aria-label");
 out.field = { label: text($(".spools-toolbar .field__label")), hint: text($(".spools-toolbar .field__hint")), type: $(".spools-toolbar input").type };
-// the four chips, each alone
+// the four chips that filter on the list's own state, each alone (the fifth, Checked out, has its own tests)
 out.chip = {};
 for (const f of ["sealed", "opened", "loaded", "low"]) {
   chip(f).click();
@@ -165,7 +165,7 @@ out.gone = await api("spools/9999").then(() => null, (e) => ({ status: e.status,
 out.badOffset = await api("spools?offset=-1").then(() => null, (e) => ({ status: e.status, message: e.message }));
 out.noCode = await fetch("/setup/api/spools/2", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gross: 300, dry_run: true }) }).then(async (r) => ({ status: r.status, body: await r.json() }));
 """)
-    assert page["chips"] == [T("common_sealed"), T("spool_state_opened"), "In a printer", "Running low"] and page["group"] == "Show only"
+    assert page["chips"] == [T("common_sealed"), T("spool_state_opened"), "In a printer", "Running low", "Checked out (0)"] and page["group"] == "Show only"   # R88: the fifth chip, its count the total of filter=checked_out
     assert page["field"] == {"label": "Find a spool", "hint": "Brand, name, material, place, number or tag.", "type": "search"}
     assert page["chip"]["sealed"]["ids"] == SEALED and page["chip"]["sealed"]["pressed"] == ["sealed"] and page["chip"]["sealed"]["count"] == "3 spools"
     assert len(page["chip"]["opened"]["ids"]) == 50 and page["chip"]["opened"]["more"] and page["chip"]["opened"]["count"] == f"{OPENED} spools"
@@ -392,3 +392,13 @@ def test_in_panes_the_spools_summaries_stay_readable_blocks(hub, stock, tmp_path
     assert any(c["label"] == "real" for _, c in seen) and any(c["label"] == "long" for _, c in seen), "no spool summary cell was found to measure"
     bad = [(c["label"], c["text"], c["w"], c["lines"]) for _, c in seen if c["lines"] > 2 or (c["em"] < 8 and c["lines"] > 1)]
     assert not bad, (width, "a summary squeezed to a sliver or wrapped past two lines", bad)
+
+
+def test_a_hub_that_names_no_filters_shows_the_four_chips_and_no_checked_out(hub, stock, tmp_path, monkeypatch):
+    """R88 (1954.2): the Checked out chip is drawn only when the list answer's `filters` has it; an older Hub's answer has none."""
+    from filament_kit.setup_console import spools_tab
+    monkeypatch.setattr(spools_tab, "filters", lambda: None)
+    page = _go(hub, tmp_path, r"""
+out.chips = $$(".spools-chip").map(text);
+""")
+    assert page["chips"] == [T("common_sealed"), T("spool_state_opened"), "In a printer", "Running low"]
