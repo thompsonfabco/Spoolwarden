@@ -497,6 +497,9 @@ const button = (label, root = document) => $$('button', root).find((b) => b.text
 const field = (label, root = document) => $$('.field', root).find((f) => f.querySelector('.field__label').firstChild.textContent.trim() === label);
 const search = async (q) => { typeIn($('.add__search .field__control'), q); await until('no rows for ' + q, () => $('.add__row') || $('.add__none'), 6000); };
 const waitPage = () => until('the page did not draw', () => $('.add__bar-text') && !document.querySelector('[aria-busy="true"]:not(button)'));
+// the page starts its own alerts poll when alerts.js has loaded, with the real Hub, and poll() ignores a call while one is on its way: a
+// poll the test starts at once can be dropped, and the stubbed answer then waits for the 10 s timer. Ask again until the stub is heard.
+const alertsUntil = (what, fn) => until(what, () => fn() || (SW_ALERTS.poll(), false));
 const newFilament = async (vendor, name, material, tare) => {
   button('New filament').click();
   const card = $$('.add__card').pop();
@@ -610,14 +613,13 @@ READY = {
   let answer = { events: mine, next: 5, conditions: mine };
   stub('events', () => reply(answer));
   startAlerts();
-  await until('the banner', () => $('.alert-host .banner'));
+  await alertsUntil('the banner', () => $('.alert-host .banner'));
   need('the host is at the top of the page, before the heading', $('.page').firstElementChild === $('.alert-host'));
   need('the banner names the alert, its sentence and the time', text('.alert-host .banner').includes('Filament ran out on Workshop X1') && text('.alert-host .banner').includes('bracket.3mf is paused at 41 %') && /since \d\d:\d\d/.test(text('.alert-host .banner')));
   need('one banner', $$('.alert-host .banner').length === 1);
   const more = [ev(6, 'print.failed', 'bad', 2, { job: 'cube.3mf', percent: 10, reason: 'cancelled' }), ev(7, 'storage.low', 'warn', 1, { free: 3e9, total: 20e9, percent: 85 }, 'storage-low')];
   answer = { events: [...mine, ...more], next: 7, conditions: [mine[0], more[1]] };
-  await SW_ALERTS.poll();
-  await until('the third alert is one line', () => $('.alert-host .alert-more'));
+  await alertsUntil('the third alert is one line', () => $('.alert-host .alert-more'));
   need('two banners and one line for the rest', $$('.alert-host .banner').length === 2 && text('.alert-more') === '1 more alert');
   need('the most serious first', text('.alert-host .banner').includes('Print stopped on Workshop X1'));
   $('.alert-more button').click();
@@ -638,13 +640,12 @@ READY = {
   let answer = { events: [raised], next: 5, conditions: [raised] };
   stub('events', () => reply(answer));
   startAlerts();
-  await until('the banner', () => $('.alert-host .banner'));
+  await alertsUntil('the banner', () => $('.alert-host .banner'));
   // the clearing event is not an alert (alert false) and still reaches the page; the condition is gone from the raised ones
   const clearing = { id: 6, at: at(0), kind: 'print.resumed', severity: 'ok', subject: raised.subject, actor: { type: 'hub' }, data: {},
     condition: { key: 'print-paused:p-3', state: 'cleared' }, alert: false, title: '', text: '', action: null };
   answer = { events: [raised, clearing], next: 6, conditions: [] };
-  await SW_ALERTS.poll();
-  await until('the banner closes on its clearing event', () => !$('.alert-host .banner'));
+  await alertsUntil('the banner closes on its clearing event', () => !$('.alert-host .banner'));
   need('the clearing event was kept by the page, not filtered out', SW_ALERTS.state().events.some((e) => e.id === 6 && e.kind === 'print.resumed'));
 """,
     "alerts_restored_hub": r"""
@@ -655,11 +656,10 @@ READY = {
   let answer = { events: [ev(50, 'Before the restore')], next: 50, conditions: [] };
   stub('events', () => reply(answer));
   startAlerts();
-  await until('the first banner', () => text('.alert-host .banner').includes('Before the restore'));
+  await alertsUntil('the first banner', () => text('.alert-host .banner').includes('Before the restore'));
   need('the page holds the cursor 50', SW_ALERTS.state().cursor === 50);
   answer = { events: [ev(2, 'After the restore')], next: 2, conditions: [] };      // a restored or reinstalled Hub: its ids start again, lower
-  await SW_ALERTS.poll();
-  await until('the page starts over and shows the new Hub\'s alert', () => text('.alert-host .banner').includes('After the restore') && SW_ALERTS.state().cursor === 2);
+  await alertsUntil('the page starts over and shows the new Hub\'s alert', () => text('.alert-host .banner').includes('After the restore') && SW_ALERTS.state().cursor === 2);
   need('nothing of the old Hub is kept', !SW_ALERTS.state().events.some((e) => e.id === 50));
 """,
     "alerts_none": r"""
