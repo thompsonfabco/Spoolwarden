@@ -147,7 +147,8 @@ def _old_form(data) -> bytes:
 
 
 def load_map(serial: str) -> SlotMap:
-    d = statexml.read(_file(serial))        # slotmap.xml; a slotmap.json from before is moved on the way
+    with _SAVE_LOCK:        # a read that rewrites the XML (a JSON an older release changed) must not undo a save
+        d = statexml.read(_file(serial), mode=0o600)        # slotmap.xml; a slotmap.json from before is moved on the way
     if d is None:
         return SlotMap()
     slots = d.get('slots')

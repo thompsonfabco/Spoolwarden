@@ -322,7 +322,7 @@ def job_held_elsewhere(serial: str) -> bool:
 
 
 def _load_status(serial: str) -> dict | None:
-    d = statexml.read(_dir(serial) / STATUS_FILE)       # mapping.xml; a mapping.json from before is moved on the way
+    d = statexml.read(_dir(serial) / STATUS_FILE, mode=0o600)       # mapping.xml; a mapping.json from before is moved on the way
     if d is None or d.get("state") not in ("running", "done", "failed"):
         return None
     probs, notes = d.get("problems"), d.get("notes")

@@ -179,10 +179,10 @@ SNAP_SLOTS = [{"label": "A1", "ams_id": 0, "tray_id": 0, "setting": {"tray_info_
               {"label": "A2", "ams_id": 0, "tray_id": 1, "setting": {}}]
 
 
-def test_snapshot_round_trips_in_xml_only(state):
+def test_snapshot_round_trips_in_xml_with_the_json_kept_beside_it(state):
     snapshot.save(SERIAL, "slottest", SNAP_SLOTS, ["FA0100ff"])
     d = state / "printers" / SERIAL
-    assert (d / "slottest-snapshot.xml").is_file() and not (d / "slottest-snapshot.json").exists()
+    assert (d / "slottest-snapshot.xml").is_file() and (d / "slottest-snapshot.json").is_file()
     assert snapshot.pending(SERIAL) and snapshot.pending_serials() == [SERIAL]
     got = snapshot.load(SERIAL)
     assert got == {"kind": "slottest", "slots": SNAP_SLOTS, "test_colours": ["FA0100FF"]}
