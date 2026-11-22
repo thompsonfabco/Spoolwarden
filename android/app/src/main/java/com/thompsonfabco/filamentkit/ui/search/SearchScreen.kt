@@ -559,7 +559,7 @@ fun SearchScreen(
                         }
                     }
                     if (ui.query.isBlank() && !ui.lowOnly && !ui.checkedOnly) TagHint(nfc, onNfcSettings ?: { openNfcSettings(context) })
-                    if (onScanLabel != null && ui.query.isBlank() && !ui.lowOnly) {
+                    if (onScanLabel != null && ui.query.isBlank() && !ui.lowOnly && !ui.checkedOnly) {
                         SwButton(LabelScan.SCAN_BUTTON, onScanLabel, Modifier.fillMaxWidth(), icon = R.drawable.sw_ic_camera)
                     }
                     HubNoticeOf(ui.failure, onPairAgain)
