@@ -2,14 +2,17 @@
 // and Test. No Save button: each row applies as it is changed (a slider when it is let go). Loaded after setup_settings.js (setGroup,
 // sbox, offNote, paintList, setSeen, followApply) and setup.js. It is the pattern of
 // setup_alerts.js: voiceGroup(data) is the group's builder, and the group's row in SET_GROUPS names it. The data is the read of
-// settings/general (`values`, `station_on`, and `station_remote` for a Weigh Station on another computer; a stub until VO2), and
-// Test calls the page route `P station/voice/test` (code) with the values as they stand in the form. Everything from the Hub goes
-// in through textContent.
+// settings/general for the Voice row only (`values` station.tts and station.voice, applied through the settings route) and
+// `station_on`. Speak, Speaker, Speed and Volume live in voice.xml (R88 01:50): the group reads them, `remote` and `voice_file` from
+// the answer of the page route `P station/voice` (code) and saves each changed one there; a value out of range is refused by the
+// Hub, and the control goes back. Test calls `P station/voice/test` (code) with the values as they stand in the form. Everything
+// from the Hub goes in through textContent.
 "use strict";
 
 // ----- the words -----
 // Texts the catalogue does not have yet (only RG1 opens it): the catalogue's own wins once the key is there.
 const VOICE_STUB = {
+  settings_voice_locked: "The voice settings are shown once the page is unlocked.",
   settings_voice_speak: "Speak",
   settings_voice_choice_many: "Piper, many speakers",
   settings_voice_choice_one: "Piper, one clear speaker",
@@ -44,6 +47,8 @@ const SLIDING = "input";                                         // the event a 
 const VOICE_SPEAKERS = 903;                                      // the many-speaker voice has the speakers 0 to 903
 const voiceChoiceOf = (v) => (v["station.tts"] === "espeak" ? "espeak" : v["station.voice"] === "en_US-ljspeech-medium" ? "one" : "many");
 const voiceNumber = (v, key, dflt) => (v[key] == null || v[key] === "" || Number.isNaN(Number(v[key])) ? dflt : Number(v[key]));
+const voiceLocked = () => h("div", { class: "banner banner--info banner--inline" }, SW.icon("lock", "icon--s"),
+  h("p", { class: "banner__text" }, voT("settings_voice_locked")), h("div", { class: "actions" }, unlockToShow()));
 const voiceSpeaker = (v) => (/^\d+$/.test(String(v).trim()) && +v >= 0 && +v <= VOICE_SPEAKERS ? null : SW.t("field_error_range", { min: 0, max: VOICE_SPEAKERS }));
 
 
@@ -58,12 +63,27 @@ function voiceTestText(e) {
 }
 
 // ----- the group -----
+// The head and a body that fills itself from `P station/voice` once the page is open (a read that needs the code); while Locked it
+// holds the locked note instead.
 function voiceGroup({ g }) {
   if (!g.station_on) return setGroup("voice", { desc: SW.t("settings_voice_desc"), body: [offNote("settings_voice_off")] });
-  const v = g.values || {}, remote = !!g.station_remote, box = sbox();
-  const saved = { choice: voiceChoiceOf(v), speaker: voiceNumber(v, "station.voice_speaker", 0), speed: voiceNumber(v, "station.voice_speed", 100),
-    volume: voiceNumber(v, "station.speaker_volume", 50) };
-  // one write of settings/general; `back` puts the control back when it was refused or the code was not given
+  const note = h("div", { role: "status" }), body = h("div", { class: "voice__rows" });
+  const el = setGroup("voice", { desc: SW.t("settings_voice_desc"), body: [note, body] });
+  whenOpen(body, (open) => {
+    if (!open) { body.replaceChildren(); note.replaceChildren(voiceLocked()); return; }
+    note.replaceChildren();
+    return api("station/voice", { code: theCode() }).then((answer) => {
+      body.replaceChildren(...(answer.station === false ? [offNote("settings_voice_off")] : voiceRows(g.values || {}, answer)));
+    });
+  });
+  return el;
+}
+
+// the rows, from the settings' Voice values (`v`) and the answer of `P station/voice`: speech, speaker, speed, volume, remote
+function voiceRows(v, a) {
+  const remote = !!a.remote, box = sbox();
+  const saved = { choice: voiceChoiceOf(v), speaker: voiceNumber(a, "speaker", 0), speed: voiceNumber(a, "speed", 100), volume: voiceNumber(a, "volume", 50) };
+  // one write of the Voice row through settings/general; `back` puts the control back when it was refused or the code was not given
   const put = (values, back, after) => needCode(async () => {
     working(box, SW.t("common_saving"));
     try { await api("settings/general", { values, code: theCode() }); } catch (e) {
@@ -77,12 +97,22 @@ function voiceGroup({ g }) {
     if (after) after();
     paintList();
   }, back);
+  // one write of a value in voice.xml, only the changed one; the Hub refuses a value out of range and `back` puts the control back
+  const putVoice = (values, back, after) => needCode(async () => {
+    working(box, SW.t("common_saving"));
+    try { await api("station/voice", { ...values, code: theCode() }); } catch (e) {
+      back();
+      if (e.locked) { SW.result(box, null); throw e; }
+      say(box, hubText(e.message), false);
+      return;
+    }
+    say(box, SW.t("common_saved"), true);
+    if (after) after();
+  }, back);
 
-  const speak = SW.toggle({ label: voT("settings_voice_speak"), checked: v["station.speech"] !== false && v["station.speech"] !== "false",
+  const speak = SW.toggle({ label: voT("settings_voice_speak"), checked: a.speech !== false,
     apply: async (on) => {
-      try { await api("settings/general", { values: { "station.speech": on }, code: theCode() }); } catch (e) { throw Object.assign(e, { text: () => hubText(e.message) }); }
-      if (setSeen.g && setSeen.g.values) setSeen.g.values["station.speech"] = on;
-      paintList();
+      try { await api("station/voice", { speech: on, code: theCode() }); } catch (e) { throw Object.assign(e, { text: () => hubText(e.message) }); }
       return SW.t("common_saved");
     } });
 
@@ -106,8 +136,7 @@ function voiceGroup({ g }) {
   const volume = slider("settings_voice_volume", 0, 100, 1, saved.volume, "");
 
   const test = SW.btn(voT("settings_voice_test"), { action: "voice-test", run: () => press() });
-  const el = setGroup("voice", { desc: SW.t("settings_voice_desc"),
-    body: [speak, pick, remoteLine, speaker, speed, volume, h("div", { class: "voice__test" }, test, box)].filter(Boolean) });
+  const rows = [speak, pick, remoteLine, speaker, speed, volume, h("div", { class: "voice__test" }, test, box)].filter(Boolean);
 
   const nowChoice = () => (pick ? pick._control.value : saved.choice);
   const paint = () => { speaker.hidden = nowChoice() !== "many"; };
@@ -125,13 +154,13 @@ function voiceGroup({ g }) {
     if (bad) return;
     const n = Number(speaker._control.value), was = saved.speaker;
     if (n === was) return;
-    put({ "station.voice_speaker": n }, () => { speaker._control.value = String(was); SW.fieldError(speaker, null); }, () => { saved.speaker = n; });
+    putVoice({ speaker: n }, () => { speaker._control.value = String(was); SW.fieldError(speaker, null); }, () => { saved.speaker = n; });
   });
-  for (const [f, key, name] of [[speed, "station.voice_speed", "speed"], [volume, "station.speaker_volume", "volume"]]) {
+  for (const [f, name] of [[speed, "speed"], [volume, "volume"]]) {
     f._control.addEventListener("change", () => {                   // let go
       const n = Number(f._control.value), was = saved[name];
       if (n === was) return;
-      put({ [key]: n }, () => f._show(was), () => { saved[name] = n; });
+      putVoice({ [name]: n }, () => f._show(was), () => { saved[name] = n; });
     });
   }
 
@@ -158,5 +187,5 @@ function voiceGroup({ g }) {
       });
     } finally { testing = false; }
   }
-  return el;
+  return rows;
 }
