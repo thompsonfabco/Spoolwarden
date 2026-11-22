@@ -16,7 +16,7 @@ to it). Reading goes through defusedxml (no DTD, no entities); a file larger tha
 
 A reader gets the XML form when there is one and it can be read. With only the JSON form it reads that and writes the
 XML form once (`read` moves it; a failing move changes nothing). An XML file that cannot be read is never overwritten:
-the next write keeps it (`quarantine`) as `<name>.xml.unreadable`. Both forms stay for one release (a rollback reads the JSON form as
+the next write keeps it (`quarantine`) as `<name>.xml.unreadable` (earlier copies `.1`, `.2`, ...; five at most). Both forms stay for one release (a rollback reads the JSON form as
 it was at the move); the release after next deletes the JSON files.
 """
 from __future__ import annotations
@@ -285,15 +285,32 @@ def _plain_list(path: Path):
     return data if isinstance(data, list) else None
 
 
+KEEP_UNREADABLE = 5       # copies of a set-aside file kept: `.unreadable` (newest), `.unreadable.1` ... `.unreadable.4` (oldest)
+
+
 def quarantine(path: Path) -> bool:
     """Keep the XML form of `path` (its JSON name, or the XML name) as `<name>.xml.unreadable` so the next write does
-    not destroy it, and forget its problem. True when there was a file to keep."""
+    not destroy it, and forget its problem. An earlier copy is not replaced: it is renamed `<name>.xml.unreadable.1`
+    (an older one `.2`, ...), the newest copy always takes `.unreadable`. At most KEEP_UNREADABLE copies are kept; the
+    oldest one beyond that is deleted and noted as a problem. True when there was a file to keep."""
     xp = xml_path(path)
+    if not xp.is_file():
+        return False
+    names = [xp.with_name(xp.name + ".unreadable" + (f".{i}" if i else "")) for i in range(KEEP_UNREADABLE)]
+    dropped = None
     try:
-        os.replace(xp, xp.with_name(xp.name + ".unreadable"))
+        if names[-1].exists():
+            names[-1].unlink()
+            dropped = names[-1]
+        for i in range(KEEP_UNREADABLE - 1, 0, -1):
+            if names[i - 1].exists():
+                os.replace(names[i - 1], names[i])
+        os.replace(xp, names[0])
     except OSError:
         return False
     clear_problem(xp)
+    if dropped is not None:
+        note_problem(dropped, f"the oldest set-aside copy was deleted (only {KEEP_UNREADABLE} are kept)")
     return True
 
 
@@ -360,8 +377,8 @@ def _newer_json(path: Path, xml_data, t: str, is_list: bool, keep_version: bool,
     """The data of a JSON form that changed after this code last wrote it (an older release after a rollback), or None.
     It wins once: the XML form is written from it and its hash recorded. Nothing recorded, an unreadable JSON, or one
     that holds what the XML form holds: the XML form wins. A recorded hash with the JSON gone means an older release
-    deleted the file (the way it says "none"): the XML form is set aside (`quarantine`), the hash cleared and `_GONE`
-    returned. A store that cannot be rewritten still returns the data."""
+    deleted the file (the way it says "none"): the XML form is removed (kept only if the removal fails, with the hash and a noted problem), the hash cleared
+    and `_GONE` returned. A store that cannot be rewritten still returns the data."""
     jp = _json_path(path, old_name)
     want = _recorded(jp)
     if want is None:
@@ -369,7 +386,11 @@ def _newer_json(path: Path, xml_data, t: str, is_list: bool, keep_version: bool,
     try:
         raw = jp.read_bytes()
     except FileNotFoundError:
-        quarantine(path)
+        try:                                    # a deletion is a deletion: no copy is kept (it may hold a secret)
+            xml_path(path).unlink(missing_ok=True)
+        except OSError as e:                    # not removed: keep the hash, so the next read tries again
+            note_problem(path, f"deleted by an older release, but the XML form could not be removed: {e}")
+            return None
         try:
             _sha_path(jp).unlink()
         except OSError:
@@ -499,9 +520,12 @@ def _write_xml(path: Path, data, t: str, mode: int, state_owned: bool, is_list: 
     xp = xml_path(path)
     if xp.exists():                                 # never overwrite what could not be read
         try:
-            loads_list(xp.read_bytes(), t) if is_list else loads(xp.read_bytes(), t, keep_version=True)
-        except (OSError, StateXmlError):
+            raw = xp.read_bytes()
+            loads_list(raw, t) if is_list else loads(raw, t, keep_version=True)
+        except StateXmlError:                       # only a file that is really broken is set aside
             quarantine(path)
+        except OSError as e:                        # a read that failed (EACCES, EIO) says nothing of the file
+            note_problem(xp, f"cannot read: {e.strerror or e}")
     _mkdir(xp.parent)
     _put(xp, dumps_list(t, data) if is_list else dumps(t, data), mode, state_owned)
     clear_problem(xp)
@@ -528,7 +552,7 @@ def write(path: Path, obj: dict, mode: int | None = None, *, tag: str | None = N
           keep_old_form: bool = True, old_name=None, old_format=None) -> None:
     """Save `obj` as state file `path`'s XML form, then its JSON form as the older release wrote it (same `mode` and
     owner; written after the XML, so a stop leaves the XML as the truth) and the hash of that JSON, so a later read can
-    tell an older release changed it. An XML file that cannot be read is kept as `<name>.xml.unreadable`. `mode` and
+    tell an older release changed it. An XML file that is broken (not XML, wrong root, bad value) is kept as `<name>.xml.unreadable` (earlier copies `.1`, `.2`, ... up to five). `mode` and
     `state_owned` as `read`. `keep_old_form=False` is for a cache an older release rebuilds by itself. `old_name` is the
     older release's file name when it differs (usage.jsonl); `old_format` the json.dumps keyword arguments, or a function
     that returns the bytes, when the older writer did not use this copy's OLD_FORMAT."""
