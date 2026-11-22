@@ -312,6 +312,27 @@ out.back = { speed: sliders()[0].value, readout: readout(sliders()[0]), speaker:
     assert page["back"] == {"speed": "100", "readout": "100 %", "speaker": "0", "speak": True, "voice": "many", "shown": True, "calls": 0}
 
 
+def test_while_locked_a_slow_code_check_leaves_the_prompt_busy_until_its_refusal_shows_then_cancel_works(hub, tmp_path):
+    page = _drive_voice(hub, tmp_path, LOCKED + r"""
+const realFetch = window.fetch;                            // the Hub's code check answers 800 ms late, as it does on a box under load
+window.fetch = async (u, i) => { if (String(u).includes("code/check")) await sleep(800); return realFetch(u, i); };
+change(sliders()[0], "60");
+await giveCode("00000000");
+const dlg = $("dialog[open]");
+out.emptyAtOnce = text($(".field__error", dlg));            // the error line is in the dialog from the start, empty
+await sleep(300);
+out.busyAt300 = !!dlg._busy;
+await until(() => text($(".field__error", dlg)), "the refusal");
+out.busyWhenShown = !!dlg._busy;
+$('dialog[open] [data-action="cancel"]').click();
+await until(() => !$("dialog[open]"), "the prompt to close");
+await sleep(150);
+out.back = { speed: sliders()[0].value, calls: calls.length };
+""")
+    assert page["emptyAtOnce"] == "" and page["busyAt300"] is True and page["busyWhenShown"] is False
+    assert page["back"] == {"speed": "100", "calls": 0}
+
+
 def test_while_locked_test_asks_for_the_code_too_and_plays_with_the_values_after_it(hub, tmp_path):
     page = _drive_voice(hub, tmp_path, LOCKED + r"""
 testBtn().click();
