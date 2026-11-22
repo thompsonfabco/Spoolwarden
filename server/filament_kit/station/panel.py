@@ -249,10 +249,13 @@ def find_panel():
     for dev in st.panel_ttys():
         if dev != st.ports["nfc"] and (ser := open_panel(dev)):
             break
-    st.ports["panel"] = ser.port if ser else None
-    st.ports["panel_version"] = ser.panel_version if ser else None
-    st.ports["panel_chip"] = ser.panel_chip if ser else None
-    st.ports["panel_nfc"] = None  # until the panel says
+    if ser or not getattr(st.panel["ser"], "wifi", False):
+        st.ports["panel"] = ser.port if ser else None
+        st.ports["panel_version"] = ser.panel_version if ser else None
+        st.ports["panel_chip"] = ser.panel_chip if ser else None
+        st.ports["panel_nfc"] = None  # until the panel says
+    # else a panel on Wi-Fi is connected and the USB search found none: its HELLO set the version, chip and nfc, and the
+    # speech format and volume read them; only a panel found on USB replaces them
     st.probed.set()  # after ports["panel"], so a waiting reader never sees the panel's port as free
     return ser
 

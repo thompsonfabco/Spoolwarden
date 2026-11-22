@@ -342,7 +342,8 @@ def test_a_panel_dialling_in_from_the_same_address_replaces_its_dead_link():
 
 def test_a_second_panel_from_another_address_is_refused_while_the_first_is_heard(monkeypatch):
     closed = []
-    other = panel_net.Link(types.SimpleNamespace(settimeout=lambda t: None, close=lambda: closed.append(1)),
+    other = panel_net.Link(types.SimpleNamespace(settimeout=lambda t: None, setsockopt=lambda *a: None,
+                                                  close=lambda: closed.append(1)),
                            "10.9.9.9", "13", "esp32c3")
     monkeypatch.setitem(st.panel, "ser", other)
     p = FakePanel(net.port).hello()

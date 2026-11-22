@@ -129,3 +129,25 @@ def test_the_write_is_not_held_up_while_a_read_waits_and_no_delay_is_set():
     ln.write(b"L 0 0"+bytes([10]))
     assert _time.time() - t0 < 0.5
     reader.join(5)
+
+
+def test_a_usb_search_that_finds_nothing_keeps_the_facts_of_a_wifi_panel(monkeypatch):
+    from filament_kit.station import panel, speech
+    connect()
+    assert (st.ports["panel_version"], st.ports["panel_chip"]) == ("13", "esp32c3")
+    st.ports["panel_nfc"] = "pn532"
+    monkeypatch.setattr(st, "panel_ttys", lambda: [])
+    assert panel.find_panel() is None
+    assert (st.ports["panel_version"], st.ports["panel_chip"], st.ports["panel_nfc"]) == ("13", "esp32c3", "pn532")
+    heard = []
+    monkeypatch.setattr(panel, "send_volume", lambda: heard.append(1))
+    speech.apply_voice({"volume": 50})                       # speech.py: the C3 panel is told its volume
+    assert heard == [1] and st.ports["panel_chip"] == "esp32c3"   # (and the ESP32 audio format is chosen from the chip)
+
+
+def test_a_usb_search_with_no_panel_at_all_still_clears_the_facts(monkeypatch):
+    from filament_kit.station import panel
+    st.ports["panel_version"], st.ports["panel_chip"], st.ports["panel_nfc"] = "13", "esp32c3", "pn532"
+    monkeypatch.setattr(st, "panel_ttys", lambda: [])
+    assert panel.find_panel() is None
+    assert (st.ports["panel_version"], st.ports["panel_chip"], st.ports["panel_nfc"]) == (None, None, None)
