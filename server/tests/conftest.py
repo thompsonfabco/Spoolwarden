@@ -312,6 +312,7 @@ def wait_for_reader_seen_threads(timeout: float = 15.0) -> None:
     for t in threading.enumerate():
         if t.name == "reader-seen" and t is not threading.current_thread():
             t.join(timeout)
+            assert not t.is_alive(), f"the reader-seen thread did not end within {timeout} s"
 
 
 @pytest.fixture(autouse=True)
