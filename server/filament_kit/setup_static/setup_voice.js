@@ -1,5 +1,6 @@
-// The Settings section's Weigh Station voice group (DECISIONS R88 2.1 to 2.4; 03 10.10): Speak, Voice, Speaker, Speed, Volume and Test.
-// Loaded after setup_settings.js (setGroup, wireGroup, sender, setRefusal, wrapOf, sbox) and setup.js. It is the pattern of
+// The Settings section's Weigh Station voice group (DECISIONS R88 2.1 to 2.4, 02:00 ruling; 03 10.10): Speak, Voice, Speaker, Speed, Volume
+// and Test. No Save button: each row applies as it is changed (a slider when it is let go). Loaded after setup_settings.js (setGroup,
+// sbox, offNote, paintList, setSeen, followApply) and setup.js. It is the pattern of
 // setup_alerts.js: voiceGroup(data) is the group's builder, and the group's row in SET_GROUPS names it. The data is the read of
 // settings/general (`values`, `station_on`, and `station_remote` for a Weigh Station on another computer; a stub until VO2), and
 // Test calls the page route `P station/voice/test` (code) with the values as they stand in the form. Everything from the Hub goes
@@ -20,12 +21,11 @@ const VOICE_STUB = {
   settings_voice_speed_unit: "%",
   settings_voice_volume: "Volume",
   settings_voice_test: "Test",
-  settings_voice_save_test: "Save, then test",
+  settings_voice_restarts: "The Weigh Station restarts when the voice changes.",
   settings_voice_test_ok: "Played on the Weigh Station.",
   settings_voice_test_no_answer: "The Weigh Station did not answer.",
   settings_voice_test_busy: "The Weigh Station is in use. Try again when it is idle.",
   settings_voice_test_off: "Speaking is switched off.",
-  settings_voice_save: "Save voice",
 };
 const voT = (key, vars) => {
   const got = SW.t(key, vars);
@@ -46,8 +46,6 @@ const voiceChoiceOf = (v) => (v["station.tts"] === "espeak" ? "espeak" : v["stat
 const voiceNumber = (v, key, dflt) => (v[key] == null || v[key] === "" || Number.isNaN(Number(v[key])) ? dflt : Number(v[key]));
 const voiceSpeaker = (v) => (/^\d+$/.test(String(v).trim()) && +v >= 0 && +v <= VOICE_SPEAKERS ? null : SW.t("field_error_range", { min: 0, max: VOICE_SPEAKERS }));
 
-// the result slot of the latest drawn group: a save redraws the group, and a result goes where the group now is
-let voiceBox = null;
 
 // a refusal of the Test route in words: by its code (busy, off, no_answer), else by the status, else the Hub's own sentence
 function voiceTestText(e) {
@@ -62,88 +60,100 @@ function voiceTestText(e) {
 // ----- the group -----
 function voiceGroup({ g }) {
   if (!g.station_on) return setGroup("voice", { desc: SW.t("settings_voice_desc"), body: [offNote("settings_voice_off")] });
-  const v = g.values || {}, remote = !!g.station_remote, choice = voiceChoiceOf(v);
-  const speak = SW.toggle({ label: voT("settings_voice_speak"), checked: v["station.speech"] !== false && v["station.speech"] !== "false" });
-  speak._control.name = "station.speech";
+  const v = g.values || {}, remote = !!g.station_remote, box = sbox();
+  const saved = { choice: voiceChoiceOf(v), speaker: voiceNumber(v, "station.voice_speaker", 0), speed: voiceNumber(v, "station.voice_speed", 100),
+    volume: voiceNumber(v, "station.speaker_volume", 50) };
+  // one write of settings/general; `back` puts the control back when it was refused or the code was not given
+  const put = (values, back, after) => needCode(async () => {
+    working(box, SW.t("common_saving"));
+    try { await api("settings/general", { values, code: theCode() }); } catch (e) {
+      back();
+      if (e.locked) { SW.result(box, null); throw e; }
+      say(box, hubText(e.message), false);
+      return;
+    }
+    if (setSeen.g && setSeen.g.values) Object.assign(setSeen.g.values, values);
+    say(box, SW.t("common_saved"), true);
+    if (after) after();
+    paintList();
+  }, back);
+
+  const speak = SW.toggle({ label: voT("settings_voice_speak"), checked: v["station.speech"] !== false && v["station.speech"] !== "false",
+    apply: async (on) => {
+      try { await api("settings/general", { values: { "station.speech": on }, code: theCode() }); } catch (e) { throw Object.assign(e, { text: () => hubText(e.message) }); }
+      if (setSeen.g && setSeen.g.values) setSeen.g.values["station.speech"] = on;
+      paintList();
+      return SW.t("common_saved");
+    } });
 
   // the Voice row: a select of three, or on a Weigh Station on another computer the line that says where it is chosen
-  const pick = remote ? null : SW.field({ row: true, type: "select", name: "voice_choice", label: SW.t("settings_voice_label"), value: choice, effect: "applies",
+  const pick = remote ? null : SW.field({ row: true, type: "select", label: SW.t("settings_voice_label"), value: saved.choice, hint: voT("settings_voice_restarts"),
     options: VOICE_CHOICES.map(([value, key]) => ({ value, label: voT(key) })) });
   const remoteLine = remote ? h("p", { class: "voice__remote", textContent: voT("settings_voice_remote") }) : null;
 
-  const speaker = SW.field({ row: true, type: "number", name: "station.voice_speaker", mono: true, label: voT("settings_voice_speaker"), hint: voT("settings_voice_speaker_hint"),
-    value: String(voiceNumber(v, "station.voice_speaker", 0)), check: (x) => (speaker.hidden ? null : voiceSpeaker(x)) });
+  const speaker = SW.field({ row: true, type: "number", mono: true, label: voT("settings_voice_speaker"), hint: voT("settings_voice_speaker_hint"), value: String(saved.speaker) });
   speaker.classList.add("voice__speaker");
-  const slider = (name, key, min, max, step, dflt, unit) => {
-    const f = SW.field({ row: true, type: "range", name, mono: true, label: voT(key), value: String(voiceNumber(v, name, dflt)), unit: unit || String(dflt), attrs: { min, max, step } });
+  const slider = (key, min, max, step, value, unit) => {
+    const f = SW.field({ row: true, type: "range", mono: true, label: voT(key), value: String(value), unit: unit || String(value), attrs: { min, max, step } });
     f.classList.add("voice__slider");
-    const out = f.querySelector(".field__unit"), paint = () => { out.textContent = f._control.value + (unit ? " " + unit : ""); };
-    f._control.addEventListener(SLIDING, paint);
-    f._paint = paint;
-    paint();
+    const out = f.querySelector(".field__unit");
+    f._control.addEventListener(SLIDING, () => { out.textContent = f._control.value + (unit ? " " + unit : ""); });
+    f._show = (n) => { f._control.value = String(n); out.textContent = n + (unit ? " " + unit : ""); };
+    f._show(value);
     return f;
   };
-  const speedUnit = voT("settings_voice_speed_unit");
-  const speed = slider("station.voice_speed", "settings_voice_speed", 50, 200, 10, 100, speedUnit);
-  const volume = slider("station.speaker_volume", "settings_voice_volume", 0, 100, 1, 50, "");
+  const speed = slider("settings_voice_speed", 50, 200, 10, saved.speed, voT("settings_voice_speed_unit"));
+  const volume = slider("settings_voice_volume", 0, 100, 1, saved.volume, "");
 
-  const test = SW.btn(voT("settings_voice_test"), { action: "voice-test", run: () => press() }), box = sbox();
-  const el = setGroup("voice", { desc: SW.t("settings_voice_desc"), save: voT("settings_voice_save"),
+  const test = SW.btn(voT("settings_voice_test"), { action: "voice-test", run: () => press() });
+  const el = setGroup("voice", { desc: SW.t("settings_voice_desc"),
     body: [speak, pick, remoteLine, speaker, speed, volume, h("div", { class: "voice__test" }, test, box)].filter(Boolean) });
-  voiceBox = box;
 
-  // what the form shows now: the Speaker row for the many-speaker voice only, the Test button for an unsaved Voice, the readouts
-  const form = () => el.elements;
-  const nowChoice = () => (pick ? pick._control.value : choice);
-  const unsavedVoice = () => nowChoice() !== choice;
-  const paint = () => {
-    speaker.hidden = nowChoice() !== "many";
-    test.textContent = unsavedVoice() ? voT("settings_voice_save_test") : voT("settings_voice_test");
-    speed._paint();
-    volume._paint();
-  };
-  for (const ev of ["input", "change", "sw:dirty"]) el.addEventListener(ev, paint);
+  const nowChoice = () => (pick ? pick._control.value : saved.choice);
+  const paint = () => { speaker.hidden = nowChoice() !== "many"; };
   paint();
 
-  // the keys of the form: Speak, Speaker, Speed and Volume go in one request of settings/general; the Voice is its own request
-  // (it writes `station.tts` and `station.voice`, and applies: a download and a restart of the Weigh Station)
-  const o = { send: null };
-  const own = { voice_choice: async (value) => {
-    const values = VOICE_CHOICES.find((c) => c[0] === value)[2];
-    try { return await api("settings/general", { values, code: theCode() }); } catch (e) { throw setRefusal(el, e); }
-  } };
-  o.send = sender(() => el, () => o.group, own, { "station.voice_speaker": Number, "station.voice_speed": Number, "station.speaker_volume": Number });
-  wireGroup(el, "voice", o);
+  // each row applies when it changes; a refused one goes back to what was kept
+  if (pick) pick._control.addEventListener("change", () => {
+    const value = pick._control.value, was = saved.choice;
+    paint();
+    put(VOICE_CHOICES.find((c) => c[0] === value)[2], () => { pick._control.value = was; paint(); }, () => { saved.choice = value; followApply(true); });
+  });
+  speaker._control.addEventListener("change", () => {
+    const bad = voiceSpeaker(speaker._control.value);
+    SW.fieldError(speaker, bad);
+    if (bad) return;
+    const n = Number(speaker._control.value), was = saved.speaker;
+    if (n === was) return;
+    put({ "station.voice_speaker": n }, () => { speaker._control.value = String(was); SW.fieldError(speaker, null); }, () => { saved.speaker = n; });
+  });
+  for (const [f, key, name] of [[speed, "station.voice_speed", "speed"], [volume, "station.speaker_volume", "volume"]]) {
+    f._control.addEventListener("change", () => {                   // let go
+      const n = Number(f._control.value), was = saved[name];
+      if (n === was) return;
+      put({ [key]: n }, () => f._show(was), () => { saved[name] = n; });
+    });
+  }
 
-  // Test says what the form says (saved or not); an unsaved Voice is saved first, and the test follows when the save went through
+  // Test plays with the values on the page; right after a Voice change the Weigh Station restarts and does not answer until it is back
   let testing = false;
-  const body = () => {
-    const f = form(), out = { speed: Number(f["station.voice_speed"].value), volume: Number(f["station.speaker_volume"].value) };
-    if (nowChoice() === "many") out.speaker = Number(f["station.voice_speaker"].value);
-    return out;
-  };
-  const redrawn = async (was) => { for (let i = 0; i < 50 && voiceBox === was; i++) await new Promise((done) => setTimeout(done, 100)); };
   async function press() {
     if (testing) return;
-    if (speaker._check && !speaker.hidden) { const bad = speaker._check(); SW.fieldError(speaker, bad); if (bad) { speaker._control.focus(); return; } }
+    const speakerBad = !speaker.hidden && voiceSpeaker(speaker._control.value);
+    if (speakerBad) { SW.fieldError(speaker, speakerBad); speaker._control.focus(); return; }
     testing = true;
     try {
-      const sent = body();
-      if (unsavedVoice()) {
-        const was = voiceBox;
-        await o.group.save();
-        if (o.group.dirty()) return;                             // the save did not go through: it said why, and nothing is tested
-        await redrawn(was);                                      // the group is drawn again from what the Hub kept
-      }
+      const sent = { speed: Number(speed._control.value), volume: Number(volume._control.value) };
+      if (nowChoice() === "many") sent.speaker = Number(speaker._control.value);
       await needCode(async () => {
-        working(voiceBox, SW.t("common_testing"));
+        working(box, SW.t("common_testing"));
         try {
           await api("station/voice/test", { ...sent, code: theCode() });
-          say(voiceBox, voT("settings_voice_test_ok"), true);
+          say(box, voT("settings_voice_test_ok"), true);
         } catch (e) {
-          if (e.locked) { SW.result(voiceBox, null); throw e; }
+          if (e.locked) { SW.result(box, null); throw e; }
           const [kind, text] = voiceTestText(e);
-          say(voiceBox, text, kind);
+          say(box, text, kind);
         }
       });
     } finally { testing = false; }
