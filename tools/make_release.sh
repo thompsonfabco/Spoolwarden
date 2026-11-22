@@ -56,7 +56,7 @@ cp install/backup.sh install/spoolwarden-cli.sh install/filament-kit-wrapper.sh 
 cp install/systemd/*.service install/systemd/*.timer install/systemd/*.path install/systemd/*.socket "$stage/install/systemd/"
 cp install/avahi/filament-kit.service "$stage/install/avahi/"
 cp install/remote/* "$stage/install/remote/"
-cp station/panel/firmware/intake-panel.bin station/panel/firmware/VERSION "$stage/install/panel/"
+cp station/panel/firmware/intake-panel.bin station/panel/firmware/intake-panel-program.bin station/panel/firmware/VERSION "$stage/install/panel/"
 cp reader/firmware/printer-station.bin reader/firmware/VERSION "$stage/install/reader/"
 # A Windows checkout may have CRLF line endings; Linux needs LF.
 find "$stage" -type f \( -name '*.sh' -o -name '*.service' -o -name '*.timer' -o -name '*.path' -o -path '*/install/remote/*' \) \

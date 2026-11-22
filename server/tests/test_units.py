@@ -91,6 +91,8 @@ def test_install_copies_the_panel_firmware_pair_as_a_resource():
     fw = INSTALL.parent / "station" / "panel" / "firmware"
     assert (fw / "intake-panel.bin").read_bytes()[:1] == b"\xe9"  # a C3 merged image, untouched by line-ending rules
     assert (fw / "VERSION").read_text().strip().isdigit()
+    assert "intake-panel-program.bin" in text and "intake-panel-program.bin" in rel
+    assert (fw / "intake-panel-program.bin").read_bytes()[:1] == b"\xe9"
     assert "firmware/*.bin binary" in _text(INSTALL.parent / ".gitattributes")
 
 

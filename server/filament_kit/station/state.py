@@ -23,6 +23,14 @@ def volume_from_env() -> int:
         return 50
 
 
+def panel_port_from_env() -> int:
+    """STATION_PANEL_PORT clamped to 1-65535; 5004 when unset or not a number."""
+    try:
+        return max(1, min(65535, int(os.environ.get("STATION_PANEL_PORT", "5004"))))
+    except ValueError:
+        return 5004
+
+
 # the live voice values (R88 2.5): the ranges the station takes, and where each one sits in `settings`
 VOICE_RANGES = {"speaker": (0, 903), "speed": (50, 200), "volume": (0, 100)}
 VOICE_SPEED_STEP = 10      # the speed goes in steps of 10 (R88 2.5): the station checks it again
@@ -62,6 +70,9 @@ def settings_from_env() -> dict:
         "panel_flash": os.environ.get("STATION_PANEL_FLASH", "1") != "0",
         # the panel is wired the other way round (yellow on D2/D6, red on D1/D5): swap the buttons and lamps
         "panel_swap": os.environ.get("STATION_PANEL_SWAP", "0") == "1",
+        # the panel's carrier (R88 4.3): usb (default) or wifi, which turns the TLS listener on `panel_port` on (WL4 writes both)
+        "panel_link": "wifi" if os.environ.get("STATION_PANEL_LINK", "usb") == "wifi" else "usb",
+        "panel_port": panel_port_from_env(),
         "speaker_volume": volume_from_env(),  # the C3 panel's speaker, percent
         # the voice's speaker number (Piper's many-speaker voice only) and speaking speed in percent: only the Hub sets
         # these (`live`, R88 2.5), so no drop-in key reads them
@@ -118,7 +129,10 @@ MIN_GRAMS = 20  # an empty pan reads 0; anything under this isn't a spool
 lock = threading.Lock()
 state = {"tag": None, "tag_at": None, "scale": None, "scale_at": None, "last": None, "last_at": None,
          "held": None, "held_at": None, "blink_until": 0, "air": None, "air_at": None,
-         "photo": None, "photo_at": None}
+         "photo": None, "photo_at": None,
+         "panel_scale": None,  # the panel's last `W` line: {"grams": float, "status": "settled"|"unsettled", "unit": "g"} or None
+         "flash_notice": None}  # a sentence the station says after a flash (the panel lost its Wi-Fi set-up), or None
+notice_link = {"ser": None}  # the Wi-Fi panel link that was current when that notice was set (it does not prove the set-up is back)
 # the intake flow (flow.py): its step, attempt number, the linked spool or recognised filament, the server's display
 # lines for the step and the station's own message
 flow = {"step": "idle", "seq": 0, "spool": None, "filament": None, "display": [], "message": "", "at": 0.0}
@@ -130,6 +144,7 @@ panel_lock = threading.Lock()
 panel = {"ser": None}
 panel_dirty = threading.Event()
 panel_resend = threading.Event()  # the panel said HELLO on its own (it reset): refresh sends every row and lamp again
+panel_scale = {"on": False}  # state["scale"] holds a reading the panel sent (`W` lines), not the computer's own scale
 
 
 def usb_ttys() -> list[str]:
@@ -164,7 +179,9 @@ def panel_ttys() -> list[str]:
 def state_dir() -> Path:
     """The station's own state folder (systemd's StateDirectory, owned by its service user): its certificate and key
     (`tls/`) and its settings file (`settings.xml`)."""
-    return Path(os.environ.get("STATE_DIRECTORY", "/var/lib/filament-kit-station").split(":")[0])
+    value = os.environ.get("STATE_DIRECTORY", "/var/lib/filament-kit-station")
+    end = value.find(":", 2 if re.match(r"[A-Za-z]:[\\/]", value) else 0)      # systemd joins folders with ":"; a drive's is not one
+    return Path(value if end < 0 else value[:end])
 
 
 def tls_dir() -> Path:
@@ -189,8 +206,33 @@ def ensure_cert(folder: Path | None = None) -> tuple[Path, Path, str]:
     return cert, key, fp
 
 
-def view() -> dict:
-    """A snapshot for the HTTP handler: the state plus the panel's port and firmware version and the flow."""
+def panel_kind() -> str | None:
+    """How the panel is connected now: "usb", "wifi" (R88 4.3) or None when there is none."""
+    ser = panel["ser"]
+    return None if not ser else "wifi" if getattr(ser, "wifi", False) else "usb"
+
+
+def set_flash_notice(text: str) -> None:
+    """Keep `text` as the flash notice for `view` (`flash_notice`)."""
     with lock:
-        return dict(state, panel=ports["panel"], panel_version=ports["panel_version"], panel_nfc=ports["panel_nfc"],
+        state["flash_notice"] = text
+        ser = panel["ser"]
+        notice_link["ser"] = ser if panel_kind() == "wifi" else None
+
+
+def clear_flash_notice() -> None:
+    with lock:
+        state["flash_notice"] = None
+        notice_link["ser"] = None
+
+
+def view() -> dict:
+    """A snapshot for the HTTP handler: the state plus how the panel is connected ("usb", "wifi" or None), its
+    firmware version, the flow and `flash_notice` (a string or None). A panel that is on Wi-Fi again (a link other than
+    the one that was there when the notice was set) proves its Wi-Fi set-up is back, so the notice is dropped."""
+    with lock:
+        if state.get("flash_notice") and panel_kind() == "wifi" and panel["ser"] is not notice_link["ser"]:
+            state["flash_notice"] = None
+            notice_link["ser"] = None
+        return dict(state, panel=panel_kind(), panel_version=ports["panel_version"], panel_nfc=ports["panel_nfc"],
                     flow={k: flow[k] for k in ("step", "message", "spool", "filament")})

@@ -93,7 +93,8 @@ DEFAULTS: dict = {
                 "speech": True, "tts": "auto", "voice": None, "camera": "auto", "panel_flash": True,
                 "panel_swap": False,  # the panel's yellow and red are wired to each other's pins
                 "page_from": "home",  # who the unit admits for the page: home, subnets or allowed (apply.page_ranges)
-                "speaker_volume": 50},  # the C3 panel's speaker, percent
+                "speaker_volume": 50,   # the C3 panel's speaker, percent
+                "panel_link": "usb", "panel_port": 5004},   # how the panel reaches the station, and its Wi-Fi listener (R88 4.4)
     # merge-ops: web unit, remote access, orders file, tag readers, slot service, slicer/presets/intake extras
     "web": {"port": 8101, "public_url": None, "push": False,   # push: Web Push alerts (needs internet egress)
             "lan": ["192.168.0.0/16", "10.0.0.0/8"]},   # not 172.16/12: Docker's bridges live there (A-M6)
@@ -124,6 +125,26 @@ def keep_days(cfg: dict) -> int:
     if isinstance(v, bool) or not isinstance(v, int) or not KEEP_DAYS_MIN <= v <= KEEP_DAYS_MAX:
         return DEFAULTS["events"]["keep_days"]
     return v
+
+def _whole_in(v, low: int, high: int, default: int) -> int:
+    return v if isinstance(v, int) and not isinstance(v, bool) and low <= v <= high else default
+
+
+PANEL_LINKS = ("usb", "wifi")
+
+
+def panel_link(cfg: dict) -> str:
+    """`station.panel_link` (R88 4.4): `usb` or `wifi`; `usb` when it is missing or anything else."""
+    st = cfg.get("station")
+    v = st.get("panel_link") if isinstance(st, dict) else None
+    return v if v in PANEL_LINKS else DEFAULTS["station"]["panel_link"]
+
+
+def panel_port(cfg: dict) -> int:
+    """`station.panel_port`: the port the Wi-Fi listener takes, 1 to 65535; 5004 when it is missing or out of range."""
+    st = cfg.get("station")
+    return _whole_in(st.get("panel_port") if isinstance(st, dict) else None, 1, 65535, DEFAULTS["station"]["panel_port"])
+
 
 LOOKS = ("console", "workbench", "palette", "panes")    # the four themes, Console first (design 01 section 6)
 

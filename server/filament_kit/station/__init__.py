@@ -2,7 +2,7 @@
 flow on the panel, asking the paired kit server, and a read-only HTTPS view.
 
 GET /state    -> {"tag": {...as /last-tag...}, "scale": {"grams", "status", "unit", "stable", "age_seconds"} | null,
-                  "last_weight": {"grams", "age_seconds", "held"} | null, "panel": "/dev/ttyACMn" or "/dev/ttyUSBn" | null,
+                  "last_weight": {"grams", "age_seconds", "held"} | null, "panel": "usb" | "wifi" | null (how the panel is connected),
                   "panel_version": "2" | null, "panel_nfc": true | false | null (the panel's own PN532 answers;
                   null until the panel says),
                   "air": {"temp_c", "rh", "hpa", "age_seconds"} | null, "photo": {"url", "taken_at", "age_seconds"} | null,
@@ -22,7 +22,7 @@ owner's filament-mcp reads a kit station unchanged):
 - `panel`: the button panel (station/panel/ + PANEL.md in the repo), an ESP32-C3 on USB serial with a buzzer, an OLED
   and lit yellow (Hold) / red (Discard) buttons, found by its HELLO; the panel's port is a ttyACM (C3) or ttyUSB (older panel) and the reader gets a ttyUSB port the panel isn't on
   (NFC_DEVICE=auto). A panel on other firmware than the bundled one is reflashed with esptool (STATION_PANEL_FLASH=0
-  stops that);
+  stops that); with station.panel_link `wifi` it can dial the station over TLS instead (`panel_net`, port 5004, a token);
 - `flow`: the intake flow the panel runs (scan, camera + recognition, weigh, long yellow saves; red cancels), asking
   the kit server through `server_api` (pinned TLS, the pairing files from `spoolwarden station pair`);
 - `wire`: the one write path to the panel, shared by panel, beep and speech;
