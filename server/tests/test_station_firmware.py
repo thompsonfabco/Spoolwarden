@@ -155,12 +155,12 @@ def test_nfc_port_stays_out_of_the_panels_way_while_flashing(fw):
     assert nfc.nfc_path() == "tty:USB0:pn532"
 
 
-def test_bundled_firmware_is_version_13_and_flashes_an_older_c3_panel(fw, monkeypatch):
+def test_bundled_firmware_is_version_14_and_flashes_an_older_c3_panel(fw, monkeypatch):
     """The repo's own bundled pair (not the fixture's) is what the self-flash logic picks up."""
     bundled = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "station", "panel", "firmware")
     bundled = os.path.normpath(bundled)   # from the test file: the package may be installed (CI), not editable
     monkeypatch.setitem(st.settings, "panel_fw", os.path.join(bundled, "intake-panel.bin"))
-    assert panel.fw_version() == "13"
+    assert panel.fw_version() == "14"
     FakeSerial.VERSIONS = {"/dev/ttyACM1": "10 esp32c3"}
     ser = panel.find_panel()
     assert panel.update_firmware(ser) is True
