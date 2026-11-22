@@ -23,7 +23,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlparse
 
-from .. import config, events
+from .. import config, demo, events
 
 log = logging.getLogger(__name__)
 
@@ -138,6 +138,7 @@ class Store:
         return subs
 
     def _save(self, subs: dict) -> None:
+        demo.stop()             # a phone's subscription is not kept in the demo (push.xml is the real Hub's)
         root = ET.Element("push", version="1")
         for ep, sub in subs.items():
             k = sub["info"]["keys"]
@@ -228,6 +229,7 @@ def vapid() -> tuple[str, str]:
     from cryptography.hazmat.primitives.asymmetric import ec
     path = state_dir() / "vapid.pem"
     if not path.exists():
+        demo.stop()             # no key is made in the demo
         path.parent.mkdir(parents=True, exist_ok=True)
         key = ec.generate_private_key(ec.SECP256R1())
         tmp = path.with_name("vapid.pem.tmp")
@@ -251,6 +253,7 @@ def webpush_sender(subject: str):
     """sender(info, payload, topic=None, ttl=None) -> HTTP status, through pywebpush (imported here, so a missing
     package only fails when an alert is sent)."""
     def send(info: dict, payload: str, topic: str | None = None, ttl: int | None = None) -> int:
+        demo.stop()             # nothing goes to a push service in the demo
         from pywebpush import WebPushException, webpush
         try:
             r = webpush(info, payload, vapid_private_key=vapid()[0], ttl=ttl or 6 * 3600, vapid_claims={"sub": subject},
@@ -276,6 +279,7 @@ def send_all(store: Store, title: str, body: str, tag: str, *, sender, url: str 
     its tag; a service that answers 4xx to it gets the push once more without it and, when that is taken, is not sent
     the Topic again. `texts(lang)`: the (title, body) in a phone's language (R85 3.8), asked once per language among the
     subscriptions that sent one; when it fails or gives nothing, those phones get `title` and `body`."""
+    demo.stop()                 # no push in the demo: not even the subscriptions are read
     subs = store.subs()
     deadline = None if budget is None else time.monotonic() + budget
     payloads: dict = {}
@@ -368,6 +372,8 @@ class Feed(threading.Thread):
         """One notification for one alert event; a condition that is already raised at that severity sends nothing.
         A condition that ends sends the ending event's own notification in place of the alert's (print paused or
         runout, device down); nothing for any other ending, and no push that shows nothing."""
+        if demo.is_on():        # the demo's alerts are for its own page: no phone is told
+            return
         cond = event.get("condition") or {}
         key = cond.get("key") if isinstance(cond, dict) else None
         if key and cond.get("state") != "raised":

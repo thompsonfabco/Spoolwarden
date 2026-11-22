@@ -19,7 +19,7 @@ from typing import Annotated, Callable
 import anyio
 from pydantic import BaseModel, Field
 
-from .. import config, inventory, modules, placement, storage, storage_api, tags, tagsources
+from .. import config, demo, inventory, modules, placement, storage, storage_api, tags, tagsources
 from ..inventory import AddFailed, TagConflict
 from ..profiles.errors import ProfileError
 from ..spoolman import Spoolman, SpoolmanError
@@ -340,6 +340,8 @@ def error_text(e: BaseException) -> str | None:
     if isinstance(e, SpoolmanError):
         return "Spoolman is not reachable" if e.status is None else str(e)
     if isinstance(e, ProfileError):
+        return e.message
+    if isinstance(e, demo.DemoError):    # a stop of the demo ("Not in the demo.")
         return e.message
     if isinstance(e, ValueError):        # Problem, and the validation in inventory / intake / tags
         return str(e) or type(e).__name__
