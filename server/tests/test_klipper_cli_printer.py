@@ -299,7 +299,7 @@ def test_catalogue_texts_are_named_like_keys_and_use_known_fields():
         assert set(re.findall(r"\{(\w+)\}", text)) <= {"n", "name", "slot", "slots", "printer", "place", "why", "value",
                                                           "days", "url", "brand", "material", "field", "text", "id",
                                                           "names", "setting", "ids", "choices", "low", "high", "label",
-                                                          "device", "after", "before", "command"}, key
+                                                          "device", "after", "before", "command", "undo"}, key
 
 
 def test_texts_already_in_the_catalogue_have_not_drifted():
