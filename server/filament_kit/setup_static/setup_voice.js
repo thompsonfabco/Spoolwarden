@@ -40,6 +40,7 @@ const VOICE_CHOICES = [
   ["one", "settings_voice_choice_one", { "station.tts": "auto", "station.voice": "en_US-ljspeech-medium" }],
   ["espeak", "settings_voice_choice_espeak", { "station.tts": "espeak" }],
 ];
+const SLIDING = "input";                                         // the event a slider moves with
 const VOICE_SPEAKERS = 903;                                      // the many-speaker voice has the speakers 0 to 903
 const voiceChoiceOf = (v) => (v["station.tts"] === "espeak" ? "espeak" : v["station.voice"] === "en_US-ljspeech-medium" ? "one" : "many");
 const voiceNumber = (v, key, dflt) => (v[key] == null || v[key] === "" || Number.isNaN(Number(v[key])) ? dflt : Number(v[key]));
@@ -77,7 +78,7 @@ function voiceGroup({ g }) {
     const f = SW.field({ row: true, type: "range", name, mono: true, label: voT(key), value: String(voiceNumber(v, name, dflt)), unit: unit || String(dflt), attrs: { min, max, step } });
     f.classList.add("voice__slider");
     const out = f.querySelector(".field__unit"), paint = () => { out.textContent = f._control.value + (unit ? " " + unit : ""); };
-    f._control.addEventListener("input", paint);
+    f._control.addEventListener(SLIDING, paint);
     f._paint = paint;
     paint();
     return f;
@@ -111,7 +112,7 @@ function voiceGroup({ g }) {
     const values = VOICE_CHOICES.find((c) => c[0] === value)[2];
     try { return await api("settings/general", { values, code: theCode() }); } catch (e) { throw setRefusal(el, e); }
   } };
-  o.send = sender(form, () => o.group, own, { "station.voice_speaker": Number, "station.voice_speed": Number, "station.speaker_volume": Number });
+  o.send = sender(() => el, () => o.group, own, { "station.voice_speaker": Number, "station.voice_speed": Number, "station.speaker_volume": Number });
   wireGroup(el, "voice", o);
 
   // Test says what the form says (saved or not); an unsaved Voice is saved first, and the test follows when the save went through

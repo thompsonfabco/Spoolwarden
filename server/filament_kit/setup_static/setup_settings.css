@@ -163,3 +163,10 @@
 @media (max-width: 600px) {
   .settings__cat-grid { grid-template-columns: 1fr; }
 }
+/* Settings > Weigh Station voice (R88 2.1): the sliders show their value beside the track, the Test button sits with its result */
+.voice__slider .field__box { display: flex; align-items: center; gap: var(--s3); }
+.voice__slider .field__control { flex: 1 1 auto; min-width: 0; padding: 0; }
+.voice__slider .field__unit { position: static; flex: none; min-width: calc(var(--s7) - var(--s1)); text-align: right; }
+.voice__remote { margin: 0; padding: var(--s3) 0; border-top: var(--hairline) solid var(--border); color: var(--muted); }
+.voice__test { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding-top: var(--s3); border-top: var(--hairline) solid var(--border); }
+.voice__test .result { margin: 0; min-width: 0; }

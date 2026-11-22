@@ -1,7 +1,7 @@
 """Settings > Weigh Station voice on the Hub page (DECISIONS R88 2.1 to 2.4, step VO3), in a real headless browser: the rows Speak,
 Voice, Speaker, Speed, Volume and Test, the Speaker row for the many-speaker voice only, "Save, then test" for an unsaved Voice, the
 four results of Test, and a Weigh Station on another computer. The group is built by setup_voice.js, which RG1 registers; until then
-this test loads it the way RG1 will (its script and style next to the others, its builder in the Voice row of SET_GROUPS). The Hub's
+this test loads it the way RG1 will (its script next to the others, its builder in the Voice row of SET_GROUPS). The Hub's
 side (VO2) is a stub here: the page's `api` is wrapped, so settings/general and station/voice/test answer from the test. The same skip
 rules as the page audit: no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
@@ -16,9 +16,8 @@ from test_hub_settings import PRELUDE
 
 @pytest.fixture(autouse=True)
 def _voice_files(monkeypatch):
-    """The script and the style are served as RG1 will have them listed (an autouse fixture runs before the Hub is built)."""
+    """The script is served as RG1 will have it listed (an autouse fixture runs before the Hub is built)."""
     monkeypatch.setattr(setup_page, "SHELL_SCRIPTS", (*setup_page.SHELL_SCRIPTS, "setup_voice.js"))
-    monkeypatch.setattr(setup_page, "CSS_SECTIONS", (*setup_page.CSS_SECTIONS, "setup_voice.css"))
 
 
 HELPERS = r"""
@@ -197,6 +196,8 @@ out.test = { text: text(testBtn()), sent: calls[0], result: resultText() };
 
 def test_the_group_is_laid_out_without_sideways_scrolling_on_a_phone(hub, tmp_path):
     page = _drive_voice(hub, tmp_path, r"""
+location.hash = "#settings/voice";
+await until(() => shown(form()), "the voice group on its own page");
 out.wide = document.documentElement.scrollWidth <= document.documentElement.clientWidth;
 out.slider = shown(form().elements["station.voice_speed"]);
 """, width=390)
