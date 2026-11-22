@@ -76,6 +76,9 @@ fun mapOfferRoute(id: String, mapNow: Boolean) = PrinterRoute(id, askMap = mapNo
 @Serializable data class RecordEditRoute(val hid: String, val item: Int)
 @Serializable data class RecordPhotoRoute(val hid: String, val n: Int)
 
+/** `recent/corrections`: Corrections waiting (05-android-app 10.6), opened from Recently added and from a saved correction. */
+@Serializable data object RecentCorrectionsRoute
+
 @Serializable data object SettingsGraph
 @Serializable data object SettingsRoute
 @Serializable data object LicencesRoute

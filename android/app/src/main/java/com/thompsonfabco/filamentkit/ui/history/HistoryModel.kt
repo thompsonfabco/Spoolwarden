@@ -15,7 +15,10 @@ import com.thompsonfabco.filamentkit.net.HistorySaved
 import com.thompsonfabco.filamentkit.net.HistorySpool
 import com.thompsonfabco.filamentkit.net.IntakeHistory
 import com.thompsonfabco.filamentkit.net.RevisionProposal
+import com.thompsonfabco.filamentkit.net.ShareState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +48,9 @@ interface HistoryBackend : ActivityBackend {
     suspend fun applyValues(id: String, item: Int, values: JsonObject): HistoryRecord
     suspend fun undo(id: String, revision: Int): HistoryRecord
 
+    /** Whether Share corrections is on (05-android-app 10.6); null from a Hub that has no such route. The default keeps older fakes compiling. */
+    suspend fun share(): ShareState? = null
+
     companion object {
         /** Every call goes to the Api [current] gives at that moment (a trusted certificate or a re-pair is used at once). */
         fun of(current: () -> Api): HistoryBackend = object : HistoryBackend {
@@ -57,6 +63,7 @@ interface HistoryBackend : ActivityBackend {
             override suspend fun undo(id: String, revision: Int) = current().undoIntake(id, revision)
             override suspend fun exportCsv(set: String, to: java.io.File, days: Int?, printer: String?) =
                 current().exportCsv(set, to, days, printer)
+            override suspend fun share() = current().shareStateOrNull()
         }
     }
 }
@@ -362,6 +369,8 @@ data class HistoryListState(
     /** The downloaded file, waiting for the screen to open the share sheet ([HistoryListViewModel.csvShown]). */
     val csvFile: java.io.File? = null,
     val csvProblem: RecentFailure? = null,
+    /** Share corrections as the Hub says (null: an older Hub, or not known yet): its line shows only while it is on. */
+    val share: ShareState? = null,
 ) {
     val offline: Boolean get() = error == RecentFailure.Offline
 
@@ -393,6 +402,8 @@ class HistoryListViewModel(
             guard(_state, { f -> _state.update { it.copy(error = f) } }, { u, m -> copy(unauthorized = u || unauthorized, mismatch = m ?: mismatch) }) {
                 val h = backend.list()
                 _state.update { it.copy(history = h, error = null, loadedAt = now(), unauthorized = false, mismatch = null) }
+                // the Hub asks the reader for this and can wait on it: the list does not
+                viewModelScope.launch { backend.shareQuietly().let { s -> _state.update { it.copy(share = s) } } }
             }
             _state.update { it.copy(loading = false) }
         }
@@ -497,6 +508,8 @@ data class RecordState(
     val undoFailure: RecentFailure? = null,
     val unauthorized: Boolean = false,
     val mismatch: Pair<String, String>? = null,
+    /** Share corrections as the Hub says (null: an older Hub, or not known yet): its lines show only while it is on. */
+    val share: ShareState? = null,
 ) {
     /** The Hub cannot be reached: what needs it is disabled (05-android-app 3.2). */
     val offline: Boolean get() = error == RecentFailure.Offline
@@ -515,6 +528,8 @@ class RecordViewModel(
     private val backend: HistoryBackend,
     private val id: String,
     private val now: () -> Long = System::currentTimeMillis,
+    /** How long after a save the record is read again to see whether its correction is waiting (the Hub queues it in the background). */
+    private val settleMs: Long = SETTLE_MS,
 ) : ViewModel() {
     private val _state = MutableStateFlow(RecordState())
     val state: StateFlow<RecordState> = _state.asStateFlow()
@@ -567,6 +582,8 @@ class RecordViewModel(
                         edit = it.edit?.let { e -> if (e.failure == RecentFailure.Offline) e.copy(failure = null) else e },
                     )
                 }
+                // the Hub asks the reader for this and can wait on it: the record does not
+                viewModelScope.launch { backend.shareQuietly().let { s -> _state.update { it.copy(share = s) } } }
             }
             _state.update { it.copy(loading = false) }
         }
@@ -613,6 +630,7 @@ class RecordViewModel(
             guard(_state, { f -> _state.update { it.copy(ask = Ask.Failed(f, p)).failed(f) } }, auth) {
                 val r = backend.applyProposal(id, p.proposal)
                 _state.update { it.copy(record = r, error = null, unauthorized = false, mismatch = null, ask = Ask.Accepted(p.changes.size, r.revisions.lastOrNull()?.n ?: 0)) }
+                settleShare(r)
             }
             _state.update { it.copy(applyBusy = false) }
         }
@@ -677,7 +695,38 @@ class RecordViewModel(
                 _state.update {
                     it.copy(record = r, error = null, unauthorized = false, mismatch = null, edit = null, saved = SavedEdit(e.item, changes.keys.toList()), ask = Ask.Idle)
                 }
+                settleShare(r)
                 onDone()
+            }
+        }
+    }
+
+    // ---- Share corrections (10.6) ----
+
+    private var settleJob: Job? = null
+
+    /**
+     * The Hub queues a correction in the background, so the reply to a save can still say `none`. While Share corrections is on
+     * and a photo was kept, the record is read again a few times until its state is something else; saving never waits for it.
+     */
+    private fun settleShare(saved: HistoryRecord) {
+        settleJob?.cancel()
+        val s = _state.value
+        if (s.share?.on != true || saved.photos == 0 || (saved.share != null && saved.share.state != NONE)) return
+        settleJob = viewModelScope.launch {
+            repeat(SETTLE_TRIES) {
+                delay(settleMs)
+                val again = try {
+                    backend.record(id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    return@launch
+                }
+                if (again.share != null && again.share.state != NONE) {
+                    _state.update { it.copy(record = it.record?.copy(share = again.share)) }
+                    return@launch
+                }
             }
         }
     }
@@ -716,6 +765,35 @@ fun HistorySpool.asSpoolJson(): JsonObject = buildJsonObject {
         colorHex?.let { put("color_hex", it) }
         vendor?.let { v -> put("vendor", buildJsonObject { put("name", v) }) }
     })
+}
+
+private const val NONE = "none"
+private const val SETTLE_MS = 1500L
+private const val SETTLE_TRIES = 4
+
+/** Share corrections for a place that can do without it: a Hub that has none, or one that does not answer, is "not on". */
+internal suspend fun HistoryBackend.shareQuietly(): ShareState? = try {
+    share()
+} catch (e: CancellationException) {
+    throw e
+} catch (_: Exception) {
+    null
+}
+
+/** The line a saved correction gets under its result line (05-android-app 10.6). */
+sealed interface ShareResult {
+    data object Waiting : ShareResult
+    data object NoPhoto : ShareResult
+    data class NotWaiting(val reason: String) : ShareResult
+}
+
+/** What the Hub did with a correction that was just saved: nothing at all while Share corrections is off. */
+fun shareResultOf(share: ShareState?, r: HistoryRecord): ShareResult? = when {
+    share?.on != true -> null
+    r.photos == 0 -> ShareResult.NoPhoto
+    r.share?.state == "waiting" -> ShareResult.Waiting
+    r.share?.state == "not_queued" -> ShareResult.NotWaiting(r.share.reason.orEmpty().trim().trimEnd('.'))
+    else -> null
 }
 
 /** The key a record's view model is kept under, in the record's own back stack entry. */

@@ -148,6 +148,41 @@ class Api(
     suspend fun undoIntake(id: String, revision: Int): HistoryRecord =
         decode(call(history(id, "undo").post(buildJsonObject { put("revision", revision) }.toBody())))
 
+    // ---- Share corrections (Hub stage V1.4; an older Hub answers 404 `not_found`) ----
+
+    /** Whether Share corrections is on (`GET api/intake/share-corrections`: the state only, it is switched on the Hub page). */
+    suspend fun shareCorrections(): ShareState = decode(call(request("api", "intake", "share-corrections").get()))
+
+    /**
+     * The corrections waiting on the reader (`GET api/label-reader/corrections`). An entry the app cannot read is left out;
+     * [CorrectionsWaiting.count] is the Hub's own count. 503 `unreachable` when the reader does not answer.
+     */
+    suspend fun corrections(): CorrectionsWaiting {
+        val body = call(request("api", "label-reader", "corrections").get()).jsonObject
+        val entries = body["entries"]?.let { it as? JsonArray }.orEmpty().mapNotNull {
+            try {
+                decode<CorrectionEntry>(it)
+            } catch (_: Exception) {
+                null
+            }
+        }
+        val notQueued = body["not_queued"]?.let { it as? JsonArray }.orEmpty().mapNotNull {
+            try {
+                decode<NotQueuedCorrection>(it)
+            } catch (_: Exception) {
+                null
+            }
+        }
+        val bytes = (body["bytes"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toLong() ?: 0L
+        val count = (body["count"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toInt() ?: entries.size
+        return CorrectionsWaiting(count, bytes, entries, notQueued)
+    }
+
+    /** Takes correction [id] out of the reader's queue; the record it came from is unchanged. 404 `not_found` when it is gone. */
+    suspend fun removeCorrection(id: String) {
+        call(request("api", "label-reader", "corrections", id, "remove").post(ByteArray(0).toRequestBody(null)))
+    }
+
     /** The spool linked to tag [uid] (format `4:77:90:e`), or null. */
     suspend fun tag(uid: String): JsonObject? {
         val spool = call(request("api", "tags", uid).get()).jsonObject["spool"]
