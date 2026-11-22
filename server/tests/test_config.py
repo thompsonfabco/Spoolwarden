@@ -36,7 +36,8 @@ def test_file_overrides_and_nested_merge(etc):
 @pytest.mark.skipif(os.name == "nt", reason="POSIX modes")
 def test_save_is_atomic_and_640(etc):
     config.save({"port": 1234})
-    assert stat.S_IMODE((etc / "config.json").stat().st_mode) == 0o640
+    for name in ("config.xml", "config.json"):
+        assert stat.S_IMODE((etc / name).stat().st_mode) == 0o640
 
 
 def test_save_leaves_no_tmp_and_roundtrips(etc):

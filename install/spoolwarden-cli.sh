@@ -25,7 +25,11 @@ kit_installing() {
 }
 if [ -d "$KIT_OPT" ] && [ ! -f "$KIT_OPT/.fk-installed" ] && ! kit_installing; then
     repair='curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh'
-    earlier=$(sed -n 's/.*"previous": *"\([0-9][0-9.]*\)".*/\1/p' "$KIT_OPT/releases/state.json" 2>/dev/null) || earlier=""
+    # state.xml (the XML form writes "previous" as an attribute), else the state.json of an earlier release
+    earlier=$(sed -n 's/.*previous="\([0-9][0-9.]*\)".*/\1/p' "$KIT_OPT/releases/state.xml" 2>/dev/null | head -n 1) || earlier=""
+    if [ -z "$earlier" ]; then
+        earlier=$(sed -n 's/.*"previous": *"\([0-9][0-9.]*\)".*/\1/p' "$KIT_OPT/releases/state.json" 2>/dev/null) || earlier=""
+    fi
     if [ -n "$earlier" ]; then
         repair="$repair --version $earlier"
     fi

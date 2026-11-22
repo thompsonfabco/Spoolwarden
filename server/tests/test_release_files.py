@@ -352,7 +352,7 @@ def test_install_usage_mentions_server():
 
 def _save_snippet() -> str:
     text = _read("install/install.sh")
-    start = text.index("import json, os, sys\nfrom filament_kit import config, modules")
+    start = text.index("import os, sys\nfrom filament_kit import config, modules")
     return text[start:text.index("\n'\n", start)]
 
 

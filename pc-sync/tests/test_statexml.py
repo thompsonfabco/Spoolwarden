@@ -52,6 +52,13 @@ def test_same_bytes_as_the_hub_writes():
         assert hub_side.dumps("t", obj) == statexml.dumps("t", obj)
 
 
+def test_note_problem_feeds_problems_like_the_hubs():
+    statexml.note_problem("/x/config.xml", "not readable XML")
+    assert "/x/config.xml (not readable XML)" in statexml.problems()
+    statexml.clear_problem("/x/config.xml")
+    assert not any("/x/config.xml" in p for p in statexml.problems())
+
+
 def test_json_is_read_once_moved_and_the_xml_wins(tmp_path):
     p = tmp_path / "state.json"
     p.write_text(json.dumps({"installed": {"stamp": "s", "at": 2.0}, "last": {"outcome": "installed"}}), encoding="utf-8")

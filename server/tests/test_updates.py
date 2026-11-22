@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from filament_kit import apply, cli, config, modules, release, updates
+from filament_kit.profiles import statexml
 from step_lines import sentences
 from test_release import FakeRelease
 
@@ -108,7 +109,7 @@ class Runner:
 
 
 def _state(env) -> dict:
-    return json.loads((env / "opt" / "releases" / "state.json").read_text())
+    return statexml.read(env / "opt" / "releases" / "state.json")
 
 
 # ---------------------------------------------------------------- registration
