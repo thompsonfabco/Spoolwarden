@@ -229,7 +229,7 @@ internal fun ResultLine(result: SpoolResult, modifier: Modifier = Modifier) {
         SpoolResult.TagMoved -> stringResource(R.string.spool_result_tag_moved)
         is SpoolResult.Loaded -> stringResource(R.string.spool_result_loaded, result.printer, result.slot)
         is SpoolResult.LoadedUnconfirmed -> stringResource(R.string.spool_load_unconfirmed)
-        is SpoolResult.Waiting -> LoadTexts.waitingIn(result.slot)
+        is SpoolResult.Waiting -> LoadTexts.waiting(result)
     }
     NoticeCard(
         if (result is SpoolResult.LoadedUnconfirmed) NoticeKind.Warn else NoticeKind.Ok, text,

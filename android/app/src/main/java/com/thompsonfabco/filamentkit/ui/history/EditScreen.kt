@@ -235,6 +235,7 @@ private fun ActionBar(
                 s.mismatch != null -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
                 s.unauthorized -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
             }
+            if (s.share?.on == true) ShareWillWaitLine()
         }
         Row(
             Modifier.fillMaxWidth().padding(space.s3),

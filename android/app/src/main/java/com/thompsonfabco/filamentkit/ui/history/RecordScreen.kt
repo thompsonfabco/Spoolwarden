@@ -98,6 +98,7 @@ internal fun RecordScreen(
     onPairAgain: () -> Unit,
     online: Boolean = false,
     embedded: Boolean = false,
+    onOpenCorrections: () -> Unit = {},
 ) {
     val s by vm.state.collectAsState()
     val ls by list.state.collectAsState()
@@ -155,8 +156,13 @@ internal fun RecordScreen(
                     onOpenRecord = onOpenRecord, onOpenSpool = { onOpenSpool(it.asSpoolJson()) },
                 )
                 PhotosPanel(r, list, onOpenPhoto)
-                r.saved.forEach { item -> FieldsPanel(r, item, s.saved?.takeIf { it.item == item.item }, severalItems = r.saved.size > 1) { vm.beginEdit(item.item); onEdit(item.item) } }
-                AskPanel(vm, s, ls.aiAvailable, note, onNote = { note = it; vm.noteTyped() })
+                val shared = shareResultOf(s.share, r)
+                r.saved.forEach { item ->
+                    FieldsPanel(r, item, s.saved?.takeIf { it.item == item.item }, severalItems = r.saved.size > 1, shared, onOpenCorrections) {
+                        vm.beginEdit(item.item); onEdit(item.item)
+                    }
+                }
+                AskPanel(vm, s, ls.aiAvailable, note, onNote = { note = it; vm.noteTyped() }, shared, onOpenCorrections)
                 RevisionsPanel(vm, s, r)
             }
         }
@@ -256,7 +262,15 @@ private fun PhotosPanel(r: HistoryRecord, list: HistoryListViewModel, onOpenPhot
 }
 
 @Composable
-private fun FieldsPanel(r: HistoryRecord, item: HistorySaved, saved: SavedEdit?, severalItems: Boolean, onEdit: () -> Unit) {
+private fun FieldsPanel(
+    r: HistoryRecord,
+    item: HistorySaved,
+    saved: SavedEdit?,
+    severalItems: Boolean,
+    shared: ShareResult?,
+    onOpenCorrections: () -> Unit,
+    onEdit: () -> Unit,
+) {
     val ids = item.spoolIds
     val marks = remember(r, item) { RecentMarks.of(r, item) }
     val title = if (severalItems && ids.isNotEmpty()) {
@@ -297,6 +311,7 @@ private fun FieldsPanel(r: HistoryRecord, item: HistorySaved, saved: SavedEdit?,
                 NoticeKind.Ok,
                 pluralStringResource(R.plurals.recent_edit_saved, saved.fields.size, saved.fields.size, names),
             )
+            ShareResultLines(shared, onOpenCorrections)
         }
     }
 }
@@ -357,7 +372,15 @@ private fun IconTextButton(@DrawableRes icon: Int, text: String, onClick: () -> 
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AskPanel(vm: RecordViewModel, s: RecordState, ai: Boolean?, note: String, onNote: (String) -> Unit) {
+private fun AskPanel(
+    vm: RecordViewModel,
+    s: RecordState,
+    ai: Boolean?,
+    note: String,
+    onNote: (String) -> Unit,
+    shared: ShareResult?,
+    onOpenCorrections: () -> Unit,
+) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     val off = ai == false
@@ -393,10 +416,13 @@ private fun AskPanel(vm: RecordViewModel, s: RecordState, ai: Boolean?, note: St
             }
             is Ask.Proposal -> ProposalBox(vm, s, ask.proposal, needsHub)
             Ask.NoChange -> Text(stringResource(R.string.changes_none), style = MaterialTheme.typography.bodyMedium)
-            is Ask.Accepted -> NoticeCard(
-                NoticeKind.Ok,
-                pluralStringResource(R.plurals.changes_accepted, ask.count, ask.count, ask.revision),
-            )
+            is Ask.Accepted -> {
+                NoticeCard(
+                    NoticeKind.Ok,
+                    pluralStringResource(R.plurals.changes_accepted, ask.count, ask.count, ask.revision),
+                )
+                ShareResultLines(shared, onOpenCorrections)
+            }
             Ask.Discarded -> RecentStatusLine(R.drawable.sw_st_hollow, stringResource(R.string.changes_discarded), colors.muted)
             is Ask.Failed -> {
                 // a failed accept keeps its proposal on screen; "Try again" accepts it again
@@ -447,6 +473,7 @@ private fun ProposalBox(vm: RecordViewModel, s: RecordState, p: RevisionProposal
             }
         }
         if (!decided) {
+            if (s.share?.on == true) ShareWillWaitLine()
             FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
                 SwButton(stringResource(R.string.common_accept), vm::accept, kind = SwButtonKind.Main, busy = s.applyBusy, enabled = !needsHub)
                 SwButton(stringResource(R.string.common_discard), vm::discard, enabled = !s.applyBusy)

@@ -1,0 +1,8 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CorrectionsModel.kt | cloud | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CorrectionsModel.kt | corrections | a route segment of the Hub's API; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CorrectionsModel.kt | local | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CorrectionsModel.kt | name | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CorrectionsModel.kt | not_found | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CorrectionsModel.kt | unauthorized | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CorrectionsModel.kt | unreachable | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/history/CorrectionsModel.kt | vendor | wire name or value of the Hub's reply, matched as given; not a text

@@ -42,7 +42,8 @@ internal fun AlertItem.target(): AlertTarget = alertTarget(event.action.place, e
 internal fun AlertTarget.labelRes(): Int = when (this) {
     is AlertTarget.Printer -> R.string.alert_open_printer
     AlertTarget.RunningLow -> R.string.alert_show_low
-    AlertTarget.AlertsList -> R.string.alerts_action_list
+    // the two below come from links, never from an alert
+    AlertTarget.AlertsList, is AlertTarget.Spool, is AlertTarget.Record -> R.string.alerts_action_list
 }
 
 /** The sentence and, after it, how long ago it was ("3 min ago"); [nowMillis] is the time ages count from. */

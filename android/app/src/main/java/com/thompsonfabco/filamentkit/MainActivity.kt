@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -111,12 +112,14 @@ import com.thompsonfabco.filamentkit.nav.PairNetworkAccessRoute
 import com.thompsonfabco.filamentkit.nav.PairRoute
 import com.thompsonfabco.filamentkit.nav.PairScanRoute
 import com.thompsonfabco.filamentkit.nav.PrinterMapRoute
+import com.thompsonfabco.filamentkit.nav.mapOfferRoute
 import com.thompsonfabco.filamentkit.nav.PrinterPickRoute
 import com.thompsonfabco.filamentkit.nav.PrinterRoute
 import com.thompsonfabco.filamentkit.nav.PrinterSettingsRoute
 import com.thompsonfabco.filamentkit.nav.PrintersGraph
 import com.thompsonfabco.filamentkit.nav.PrintersRoute
 import com.thompsonfabco.filamentkit.nav.RecentGraph
+import com.thompsonfabco.filamentkit.nav.RecentCorrectionsRoute
 import com.thompsonfabco.filamentkit.nav.RecentRoute
 import com.thompsonfabco.filamentkit.nav.RecordEditRoute
 import com.thompsonfabco.filamentkit.nav.RecordPhotoRoute
@@ -135,6 +138,12 @@ import com.thompsonfabco.filamentkit.nav.TagLinkPreviewRoute
 import com.thompsonfabco.filamentkit.nav.TagLinkRoute
 import com.thompsonfabco.filamentkit.nav.TagRoute
 import com.thompsonfabco.filamentkit.nav.SpoolsGraph
+import com.thompsonfabco.filamentkit.nav.SpoolsScanRoute
+import com.thompsonfabco.filamentkit.ui.spool.LabelSource
+import com.thompsonfabco.filamentkit.ui.pair.LabelLookup
+import com.thompsonfabco.filamentkit.ui.pair.LabelScan
+import com.thompsonfabco.filamentkit.ui.pair.labelSpoolNumber
+import com.thompsonfabco.filamentkit.ui.pair.lookupLabelSpool
 import com.thompsonfabco.filamentkit.nav.SpoolsRoute
 import com.thompsonfabco.filamentkit.nav.Tab
 import com.thompsonfabco.filamentkit.nav.TabTap
@@ -161,6 +170,7 @@ import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
+import com.thompsonfabco.filamentkit.net.SpoolFilter
 import com.thompsonfabco.filamentkit.session.CONNECTION_POLL_MS
 import com.thompsonfabco.filamentkit.session.AppViewModel
 import com.thompsonfabco.filamentkit.session.Startup
@@ -173,6 +183,8 @@ import com.thompsonfabco.filamentkit.tags.disableTagReader
 import com.thompsonfabco.filamentkit.tags.enableTagReader
 import com.thompsonfabco.filamentkit.ui.rememberLocalNetworkAccess
 import com.thompsonfabco.filamentkit.ui.alerts.AlertBannerActions
+import com.thompsonfabco.filamentkit.ui.demo.DemoNotice
+import com.thompsonfabco.filamentkit.ui.demo.demoNoticeShown
 import com.thompsonfabco.filamentkit.ui.alerts.AlertsScreen
 import com.thompsonfabco.filamentkit.ui.alerts.alertsPlaceTitle
 import com.thompsonfabco.filamentkit.ui.add.AddStep
@@ -210,9 +222,12 @@ import android.view.accessibility.AccessibilityManager
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
 import com.thompsonfabco.filamentkit.ui.history.HistoryEditEntry
+import com.thompsonfabco.filamentkit.ui.history.CorrectionsEntry
+import com.thompsonfabco.filamentkit.ui.history.CorrectionsTexts
 import com.thompsonfabco.filamentkit.ui.history.HistoryListEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryPhotoEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
+import com.thompsonfabco.filamentkit.ui.history.UndoFlow
 import com.thompsonfabco.filamentkit.ui.history.showUndoable
 import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersViewModel
@@ -263,10 +278,13 @@ import com.thompsonfabco.filamentkit.ui.settings.SettingsGroup
 import com.thompsonfabco.filamentkit.ui.settings.SettingsGroupPage
 import com.thompsonfabco.filamentkit.ui.settings.SettingsHub
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
+import com.thompsonfabco.filamentkit.ui.settings.SettingsVoiceRoute
 import com.thompsonfabco.filamentkit.ui.settings.UpdateActions
+import com.thompsonfabco.filamentkit.ui.settings.VoiceActions
 import com.thompsonfabco.filamentkit.ui.settings.icon
 import com.thompsonfabco.filamentkit.ui.settings.settingsGroups
 import com.thompsonfabco.filamentkit.ui.settings.titleText
+import com.thompsonfabco.filamentkit.ui.settings.voicePlaceTitle
 import com.thompsonfabco.filamentkit.ui.spool.LinkFindScreen
 import com.thompsonfabco.filamentkit.ui.spool.LinkFindViewModel
 import com.thompsonfabco.filamentkit.ui.spool.LinkPreviewScreen
@@ -390,6 +408,7 @@ internal fun FilamentKitApp(
     val notice by app.router.notice.collectAsStateWithLifecycle()
     val alertsUi by app.alerts.state.collectAsStateWithLifecycle()
     val alertsOn by app.alertsStore.on.collectAsStateWithLifecycle(initialValue = false)
+    val voiceUi by app.voice.state.collectAsStateWithLifecycle()
     // each ask for Spools with the Running low filter on (Home's line, an alert's action) counts one up
     var lowRequest by rememberSaveable { mutableIntStateOf(0) }
 
@@ -412,6 +431,9 @@ internal fun FilamentKitApp(
     }
     // The Hub's default theme is kept for the phones that have not chosen (S6.3).
     RememberHubLook(info?.look, app::rememberHubLook)
+    // The demo notice (05-android-app 3.7): what the Hub last said, kept while it is out of reach; gone once left
+    var demoOn by remember { mutableStateOf(false) }
+    LaunchedEffect(info) { info?.let { demoOn = it.demo } }
     val labelPhotos = showLabelPhotos(info)
     val version = versionLine(BuildConfig.VERSION_NAME, config.isPaired(), info?.version)
     // On screen: the chip follows the server, and is checked right away on return to the app. Not while pairing,
@@ -434,6 +456,10 @@ internal fun FilamentKitApp(
     val appContext = LocalContext.current.applicationContext
     LaunchedEffect(lifecycle, config) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { AlertsLauncher.startIfNeeded(appContext) }
+    }
+    // The Weigh Station voice (R88): read when the Hub answers, so the Settings list knows whether the group exists
+    LaunchedEffect(api, online) {
+        if (!inPairing && api != null && online) app.voice.refresh()
     }
     // The banners, the Alerts list and the running-low count are read about every 10 s while the app is showing: a day
     // back for the banners, seven days for the list
@@ -459,6 +485,19 @@ internal fun FilamentKitApp(
         initializer { HubViewModel(load = { currentApi().hub() }) }
     })
     val hubUi by hubVm.state.collectAsStateWithLifecycle()
+    // `api/hub` says it too (05-android-app 3.7)
+    LaunchedEffect(hubUi.hub) { hubUi.hub?.let { demoOn = it.demo } }
+    // Scan a label and Print a label are absent until the Hub has the label routes (05 16)
+    val labelRoutes by produceState(false, api, online) {
+        val a = api
+        value = if (a == null || !online) value else try {
+            a.labelRoutes()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        }
+    }
     // the check history table on the Hub screen (R84 4.3)
     val healthVm: HealthViewModel = viewModel(key = "hub-health-${System.identityHashCode(api)}", factory = viewModelFactory {
         initializer { HealthViewModel(load = { days -> currentApi().health(days) }) }
@@ -560,7 +599,8 @@ internal fun FilamentKitApp(
     val phone = SpoolwardenTheme.window == WindowClass.Phone
     val imeVisible = WindowInsets.isImeVisible
     val openSettingsOverPairing: () -> Unit = { nav.navigate(SettingsGraph) { launchSingleTop = true } }
-    val navVisible = !inPairing && !settingsOverPairing && destination != null && !(phone && imeVisible)
+    val navVisible = !inPairing && !settingsOverPairing && destination != null && !(phone && imeVisible) &&
+        destination?.hasRoute(SpoolsScanRoute::class) != true
     // Panes on a phone (02 2.3, 08 9): the root page is the list of sections, choosing one drills in, and Back at that
     // section's root returns to the list with focus on its row; a screen deeper in a section keeps its own Back
     val listNav = LocalNavStyle.current == NavStyle.List
@@ -574,7 +614,7 @@ internal fun FilamentKitApp(
     val pairingOverMain = remember(entry) { nav.previousBackStackEntry != null }
     val atPairStart = destination?.hasRoute(PairRoute::class) == true || destination?.hasRoute(PairNetworkAccessRoute::class) == true
     val showBack = showsBackArrow(atTabRoot, inPairing, pairingOverMain, atPairStart) || settingsOverPairing || drilledIn
-    val scanning = destination?.hasRoute(PairScanRoute::class) == true
+    val scanning = destination?.hasRoute(PairScanRoute::class) == true || destination?.hasRoute(SpoolsScanRoute::class) == true
     val storedCertificate = destination?.hasRoute(PairCertificateRoute::class) == true &&
         entry?.toRoute<PairCertificateRoute>()?.source == MismatchSource.STORED.routeSource()
     val update = updater?.state?.collectAsStateWithLifecycle()?.value ?: UpdateUi()
@@ -604,6 +644,17 @@ internal fun FilamentKitApp(
                 tabTapped(Tab.Spools)
             }
             AlertTarget.AlertsList -> nav.navigate(AlertsRoute) { launchSingleTop = true }
+            // a link builds its tab's stack, root first, so Back behaves as if the person had navigated there (05 2.5)
+            is AlertTarget.Spool -> {
+                nav.selectTab(Tab.Spools)
+                nav.popBackStack<SpoolsRoute>(inclusive = false)
+                nav.navigate(SpoolRoute(target.id))
+            }
+            is AlertTarget.Record -> {
+                nav.selectTab(Tab.Recent)
+                nav.popBackStack<RecentRoute>(inclusive = false)
+                nav.navigate(RecordRoute(target.hid))
+            }
         }
     }
     // a tapped alert notification
@@ -655,6 +706,7 @@ internal fun FilamentKitApp(
                 onPairAgain = app.router::pairAgain,
                 online = online,
                 printersOn = info?.printersOn != false,
+                label = if (labelRoutes) LabelSource({ size -> currentApi().labelSvg(route.id, size) }) else null,
             )
         }
 
@@ -897,7 +949,7 @@ internal fun FilamentKitApp(
                 // the pills of Palette are a row under the top bar on a tablet and wider; nothing on a phone or in another look
                 Column {
                     if (!scanning) SwTopBar(
-                        title = if (sectionPage) stringResource(R.string.nav_label) else printerPlaceTitle(destination, entry) ?: alertsPlaceTitle(destination) ?: hubPlaceTitle(destination) ?: placeTitle(destination, entry, storedCertificate),
+                        title = if (sectionPage) stringResource(R.string.nav_label) else printerPlaceTitle(destination, entry) ?: alertsPlaceTitle(destination) ?: hubPlaceTitle(destination) ?: voicePlaceTitle(destination) ?: placeTitle(destination, entry, storedCertificate),
                         subtitle = if (destination?.hasRoute(HomeRoute::class) == true && !sectionPage) config?.name?.takeIf { it.isNotBlank() } else null,
                         onBack = if (showBack) ({ backDispatcher?.onBackPressed() }) else null,
                         scrollBehavior = scroll,
@@ -907,11 +959,18 @@ internal fun FilamentKitApp(
                         // on the list page only the list's own actions show, not the screen's under it
                         if (!sectionPage) topBarActions.content?.invoke(this)
                     }
+                    if (demoNoticeShown(demoOn, config.isPaired(), inPairing || settingsOverPairing)) {
+                        DemoNotice(
+                            leave = { api?.leaveDemo() ?: throw ApiError.noHubPaired() }, onGone = { demoOn = false },
+                            // the full-screen scanner has no top bar: the notice clears the status bar itself
+                            modifier = if (scanning) Modifier.statusBarsPadding() else Modifier,
+                        )
+                    }
                     SwPills(
                         tab, navVisible && !scanning, tabTapped, settingsUpdate = update.available != null,
                         more = paletteMore(
                             tab, stringResource(Tab.Settings.label),
-                            settingsGroups(BuildConfig.DEBUG).map { group ->
+                            settingsGroups(BuildConfig.DEBUG, voiceUi.shown).map { group ->
                                 val route = group.route()
                                 PillMore(
                                     group.titleText(), group.icon, destination?.hasRoute(route::class) == true,
@@ -1184,6 +1243,46 @@ internal fun FilamentKitApp(
                 }
 
                 navigation<SpoolsGraph>(startDestination = SpoolsRoute) {
+                    composable<SpoolsScanRoute> {
+                        if (api == null) {
+                            HubNoticePage(::pushPairing)
+                            return@composable
+                        }
+                        var notice by remember { mutableStateOf<String?>(null) }
+                        var rescan by remember { mutableIntStateOf(0) }
+                        var scanReads by remember { mutableIntStateOf(0) }
+                        val scanScope = rememberCoroutineScope()
+                        val leave = { nav.currentDestination?.hasRoute(SpoolsScanRoute::class) == true }
+                        QrScanner(
+                            onResult = { text ->
+                                val id = labelSpoolNumber(text)
+                                if (id != null && leave()) scanScope.launch {
+                                    val read = ++scanReads
+                                    notice = null
+                                    when (val found = lookupLabelSpool { currentApi().spoolById(id) }) {
+                                        LabelLookup.Found -> if (leave()) nav.navigate(SpoolRoute(id)) {
+                                            popUpTo<SpoolsScanRoute> { inclusive = true }
+                                        }
+                                        else -> {
+                                            val shown = when (found) {
+                                                is LabelLookup.Failed -> found.text.ifBlank { appContext.getString(R.string.common_hub_answer_unknown) }
+                                                LabelLookup.CertificateChanged -> appContext.getString(R.string.common_cert_changed_notice)
+                                                else -> LabelScan.NOT_FOUND_TEXT
+                                            }
+                                            notice = shown
+                                            delay(LabelScan.RESCAN_MS)
+                                            rescan++
+                                            delay(LabelScan.NOTICE_MS - LabelScan.RESCAN_MS)
+                                            // a newer notice of a later read is not cleared early
+                                            if (notice == shown && scanReads == read) notice = null
+                                        }
+                                    }
+                                }
+                            },
+                            onClose = { if (leave()) nav.popBackStack() },
+                            label = LabelScan(notice, rescan),
+                        )
+                    }
                     composable<SpoolsRoute> {
                         val a = api
                         if (a == null) {
@@ -1196,6 +1295,9 @@ internal fun FilamentKitApp(
                                     loadLow = { currentApi().lowSpools().spools },
                                     loadSpoolmanUrl = { currentApi().spools("", null).spoolmanUrl },
                                     exportCsv = { file -> currentApi().exportCsv("spoolman-spools", file) },
+                                    loadChecked = { currentApi().spools("", SpoolFilter.CHECKED_OUT) },
+                                    returnSpool = { id -> currentApi().returnSpool(id) },
+                                    undoFlow = UndoFlow(SpoolBackend.of(::currentApi)),
                                 ) { q, sealedOnly ->
                                     currentApi().search(q, sealedOnly)
                                 }
@@ -1216,7 +1318,9 @@ internal fun FilamentKitApp(
                             },
                             onPairAgain = app.router::pairAgain,
                             online = online,
+                            onScanLabel = if (labelRoutes) ({ nav.navigate(SpoolsScanRoute) { launchSingleTop = true } }) else null,
                             lowCount = alertsUi.lowCount,
+                            hubKey = a,
                             spoolDetail = { spool, embedded, _ ->
                                 val spoolVm: SpoolViewModel = viewModel(
                                     key = "spool-${spool.id}",
@@ -1235,6 +1339,7 @@ internal fun FilamentKitApp(
                                     online = online,
                                     printersOn = info?.printersOn != false,
                                     embedded = embedded,
+                                    label = if (labelRoutes) LabelSource({ size -> currentApi().labelSvg(spool.id, size) }) else null,
                                 )
                             },
                         )
@@ -1256,6 +1361,7 @@ internal fun FilamentKitApp(
                                 nav.navigate(PrinterSettingsRoute(id, replaceCode = true))
                             },
                             onPairAgain = app.router::pairAgain,
+                            onMapOffer = { id, mapNow -> nav.navigate(mapOfferRoute(id, mapNow)) },
                             printerDetail = { id, embedded, _ ->
                                 PrinterEntry(
                                     a, ::currentApi, id,
@@ -1284,6 +1390,7 @@ internal fun FilamentKitApp(
                             onMapByLoading = { nav.navigate(PrinterMapRoute(id)) },
                             onPickSlot = { nav.navigate(PrinterPickRoute(id, it)) },
                             onOpenSpool = { sp -> sp.id?.let { nav.navigate(SpoolRoute(it)) } },
+                            askMap = e.toRoute<PrinterRoute>().askMap,
                         )
                     }
 
@@ -1350,6 +1457,7 @@ internal fun FilamentKitApp(
                         HistoryListEntry(
                             ::currentApi, a,
                             onOpen = { nav.navigate(RecordRoute(it)) },
+                            onOpenCorrections = { nav.navigate(RecentCorrectionsRoute) { launchSingleTop = true } },
                             onPairAgain = app.router::pairAgain,
                             recordDetail = { hid, embedded, onClose ->
                                 HistoryRecordEntry(
@@ -1363,11 +1471,30 @@ internal fun FilamentKitApp(
                                         SpoolCache.put(spool)
                                         nav.navigate(SpoolRoute(spool.id))
                                     },
+                                    onOpenCorrections = { nav.navigate(RecentCorrectionsRoute) { launchSingleTop = true } },
                                     onPairAgain = app.router::pairAgain,
                                     embedded = embedded,
                                 )
                             },
                             onSummary = { sectionSummaries = sectionSummaries + (Tab.Recent to it) },
+                        )
+                    }
+
+                    composable<RecentCorrectionsRoute> {
+                        val a = api
+                        if (a == null) {
+                            HubNoticePage(::pushPairing)
+                            return@composable
+                        }
+                        CorrectionsEntry(
+                            ::currentApi, a,
+                            onOpenRecord = { hid -> nav.navigate(RecordRoute(hid)) },
+                            // the viewer opens over the record, which keeps the photos' owner on the back stack
+                            onOpenPhoto = { hid, n ->
+                                nav.navigate(RecordRoute(hid))
+                                nav.navigate(RecordPhotoRoute(hid, n))
+                            },
+                            onPairAgain = app.router::pairAgain,
                         )
                     }
 
@@ -1390,6 +1517,7 @@ internal fun FilamentKitApp(
                                 SpoolCache.put(spool)
                                 nav.navigate(SpoolRoute(spool.id))
                             },
+                            onOpenCorrections = { nav.navigate(RecentCorrectionsRoute) { launchSingleTop = true } },
                             onPairAgain = app.router::pairAgain,
                         )
                     }
@@ -1438,6 +1566,7 @@ internal fun FilamentKitApp(
                         appVersion = BuildConfig.VERSION_NAME,
                         developer = BuildConfig.DEBUG,
                         alerts = AlertsFacts(alertsOn, alertsUi.available, localNetwork.granted),
+                        voice = voiceUi,
                     )
                     val settingsActions = SettingsActions(
                         onAppearance = app::setAppearance,
@@ -1471,6 +1600,7 @@ internal fun FilamentKitApp(
                             onRecent = { openAlertTarget(AlertTarget.AlertsList) },
                             requestLocalNetwork = localNetwork.request,
                         ),
+                        voice = VoiceActions(onSave = app.voice::save, onTest = app.voice::test, said = app.voice.said),
                     )
                     composable<SettingsRoute> {
                         SettingsScreen(
@@ -1484,6 +1614,7 @@ internal fun FilamentKitApp(
                     composable<SettingsAppearanceRoute> { SettingsGroupPage(SettingsGroup.Appearance, settingsFacts, settingsActions) }
                     composable<SettingsHubRoute> { SettingsGroupPage(SettingsGroup.Hub, settingsFacts, settingsActions) }
                     composable<SettingsAlertsRoute> { SettingsGroupPage(SettingsGroup.Alerts, settingsFacts, settingsActions) }
+                    composable<SettingsVoiceRoute> { SettingsGroupPage(SettingsGroup.Voice, settingsFacts, settingsActions) }
                     composable<SettingsUpdatesRoute> { SettingsGroupPage(SettingsGroup.Updates, settingsFacts, settingsActions) }
                     composable<LicencesRoute> { SettingsGroupPage(SettingsGroup.Licences, settingsFacts, settingsActions) }
                     composable<SettingsDeveloperRoute> { SettingsGroupPage(SettingsGroup.Developer, settingsFacts, settingsActions) }
@@ -1549,6 +1680,7 @@ private fun placeTitle(destination: NavDestination?, entry: NavBackStackEntry?, 
             return SpoolCache.title(id) ?: stringResource(R.string.spool_title, id.toString())
         }
         entry != null && tagUidOf(entry) != null -> return stringResource(R.string.common_tag, tagUidOf(entry).orEmpty())
+        destination?.hasRoute(RecentCorrectionsRoute::class) == true -> return CorrectionsTexts.TITLE
     }
     return stringResource(
     when {
@@ -1668,6 +1800,7 @@ private fun SettingsGroup.route(): Any = when (this) {
     SettingsGroup.Appearance -> SettingsAppearanceRoute
     SettingsGroup.Hub -> SettingsHubRoute
     SettingsGroup.Alerts -> SettingsAlertsRoute
+    SettingsGroup.Voice -> SettingsVoiceRoute
     SettingsGroup.Updates -> SettingsUpdatesRoute
     SettingsGroup.Licences -> LicencesRoute
     SettingsGroup.Developer -> SettingsDeveloperRoute

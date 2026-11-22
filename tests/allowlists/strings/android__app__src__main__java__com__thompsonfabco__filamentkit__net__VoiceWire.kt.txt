@@ -1,0 +1,8 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/VoiceWire.kt | remote | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/VoiceWire.kt | speaker | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/VoiceWire.kt | speaker_range | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/VoiceWire.kt | speech | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/VoiceWire.kt | speed | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/VoiceWire.kt | station | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/VoiceWire.kt | voice | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/VoiceWire.kt | volume | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)

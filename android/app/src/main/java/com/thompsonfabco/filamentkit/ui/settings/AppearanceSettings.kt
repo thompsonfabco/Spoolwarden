@@ -50,6 +50,7 @@ internal fun AppearanceSettings(
             }
         }
         ThemePicker(look, isDark(current), onLook)
+        LanguageSetting()
         Text(
             stringResource(R.string.appearance_note), color = colors.muted, style = MaterialTheme.typography.bodySmall,
         )

@@ -1,5 +1,6 @@
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | $t:${} | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | JSON only | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | LenientAuto | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | LenientBool | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | LenientDouble | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | LenientInt | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
@@ -21,6 +22,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | ams | li
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | ams_id | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | apk_version | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | at | not text: a route, JSON field or wire value of history and data (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | auto_possible | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | backup | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | bad_response | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | bambu | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
@@ -31,9 +33,13 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | catalog 
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | changed_since | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | changes | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | checked_at | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | checked_out | not text: a route, JSON field or wire value of checked-out spools (CO6, R88 1.7)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | checks | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | choose | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | color_hex | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | connected | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | created_at | wire name or value of the Hub's reply, matched as given; not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | demo | not text: a route, query key, header name or JSON field of the RC5 calls (demo, label drawing, language)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | detected | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | device_id | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | devices | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
@@ -44,10 +50,13 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | engine |
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | entries | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | event | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | events | not text: a route, JSON field or wire value of history and data (HD9)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | expires_at | wire key, route or value of the Auto slot (AS4), not a text
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | expires_in | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | false | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | features | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | field | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | filament_id | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | filters | not text: a route, JSON field or wire value of checked-out spools (CO6, R88 1.7)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | finished | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | fix | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | from | not text: a route, JSON field or wire value of history and data (HD9)
@@ -65,6 +74,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | key | no
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | key_set | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | kind | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | klipper | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | language | not text: a route, query key, header name or JSON field of the RC5 calls (demo, label drawing, language)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | last_at | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | last_attempt | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | last_check | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
@@ -78,6 +88,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | look | w
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | low | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | material | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | materials | wire key of GET /api/library/local, not shown (EV7b)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | message | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | model_name | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | month | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | months | not text: a route, JSON field or wire value of history and data (HD9)
@@ -87,6 +98,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | newest |
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | next_step | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | nfc_id | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | nightly | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | no_answer | wire name or value of the Hub's reply, matched as given; not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | no_photo | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | none | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | not_configured | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
@@ -122,6 +134,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | reader |
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | records_kept | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | remaining_min | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | remaining_weight | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | replaces | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | report_wanted | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | report_why | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | reported_label | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
@@ -130,6 +143,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | scheme_u
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | sealed | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | since | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | slot | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | slots | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | spool | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | spool_id | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | spool_ids | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
@@ -140,6 +154,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | state | 
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | subject | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | text | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | this | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | thumbnail_b64 | wire name or value of the Hub's reply, matched as given; not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | title | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | to | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | too_old | not text: a route, JSON field or wire value of history and data (HD9)
@@ -159,6 +174,8 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | until | 
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | update_available | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | version | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | view | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | waiting | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | waiting_ended | wire key, route or header of phase 3 (EV7a), not a text; found by the widened scan (request 0238)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | watching | wire key, route or value of the Auto slot (AS4), not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | why_not | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Models.kt | wrong_code | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps

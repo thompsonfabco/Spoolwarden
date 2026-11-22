@@ -704,7 +704,7 @@ class PrinterViewModelTest {
         )
         assertEquals("Clear slot A1? The Hub forgets the spool recorded here.", PrinterTexts.clearQuestion("A1", null, null))
         assertEquals(
-            "Clear slot A1? The Hub forgets the spool recorded here. Spool #7 goes back to its previous place.",
+            "Clear slot A1? The Hub forgets the spool recorded here. Spool 7 goes back to its previous place.",
             PrinterTexts.clearQuestion("A1", PrinterTexts.spoolName(buildJsonObject { put("id", 7) }), " "),
         )
         assertEquals("Cleared slot A1.", PrinterTexts.clearDone("A1", null, null, waitingEnded = false, printerCleared = false))
@@ -730,8 +730,19 @@ class PrinterViewModelTest {
         assertEquals("AMS A", PrinterHelp.unitTitle(AmsUnit(0, "A", "ams")))
         assertEquals("the external spool holder", PrinterHelp.slotName("Ext"))
         assertEquals("slot B3", PrinterHelp.slotName("B3"))
-        assertEquals("Moved back: #3 → Shelf 1", PrinterHelp.movedBackLine(null, 3, "Shelf 1"))
-        assertEquals("spool #9", PrinterHelp.spoolName(SlotSpool(9)))
+        assertEquals("Moved back: Spool 3 → Shelf 1", PrinterHelp.movedBackLine(null, 3, "Shelf 1"))
+        assertEquals("Spool 9", PrinterHelp.spoolName(SlotSpool(9)))
+        assertEquals("the spool", PrinterHelp.spoolName(SlotSpool()))
+        assertEquals("Moved back: the spool → Shelf 1", PrinterHelp.movedBackLine(null, null, "Shelf 1"))
+        assertEquals("the spool", PrinterTexts.spoolName(buildJsonObject { }))
+        assertEquals(
+            "Clear slot A1? The Hub forgets the spool recorded here. The spool goes back to Shelf 1.",
+            PrinterTexts.clearQuestion("A1", "the spool", "Shelf 1"),
+        )
+        assertEquals(
+            "Cleared slot A1. The spool is back on Shelf 1.",
+            PrinterTexts.clearDone("A1", "the spool", "Shelf 1", waitingEnded = false, printerCleared = false),
+        )
     }
 
     @Test fun externalHoldersAreNamedFromSay() {
