@@ -36,6 +36,7 @@ from pathlib import Path, PurePosixPath
 from typing import Callable
 
 from . import local_reader, output, release
+from .profiles import statexml
 
 # The module's release key: ed25519, the raw 32 bytes in base64, as release.PUBKEY: the module's own key pair (never
 # the kit's), published by its builder in KIT-INTEGRATION-STATUS.md on 2026-11-12 with the repository name. Empty
@@ -95,14 +96,49 @@ def _valid_version(v) -> bool:
         return False
 
 
+def _to_xml(d: dict) -> dict:
+    """The record as the XML codec takes it: its `version` is a release number (X.Y.Z), and the root's `version` is the
+    file format, so the record's is kept as `release`."""
+    return {("release" if k == "version" else k): v for k, v in d.items()}
+
+
+def _from_xml(d: dict) -> dict:
+    return {("version" if k == "release" else k): v for k, v in d.items()}
+
+
+def _load(name: str) -> dict | None:
+    """The record `name` (given by its JSON name): its XML form when there is one, else the JSON form, moved to XML on
+    the way when this process may write the store (root); a reader with no write permission (the setup page runs as the
+    service user) reads the old form, records nothing and raises nothing. None when neither form holds an object."""
+    f = store() / name
+    xp = statexml.xml_path(f)
+    try:
+        raw = xp.read_bytes()
+    except OSError:
+        raw = None
+    else:
+        try:
+            d = _from_xml(statexml.loads(raw, statexml.tag_of(f)))
+            statexml.clear_problem(xp)
+            return d
+        except statexml.StateXmlError as e:
+            statexml.note_problem(xp, str(e))
+    try:
+        d = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(d, dict):
+        return None
+    if raw is None:
+        statexml.migrate(f, _to_xml(d), 0o644, state_owned=False)       # root's store: not handed to the service user
+    return d
+
+
 def installed() -> dict | None:
     """{version, tier, port, at, previous} of the installed reader, or None (also for a record that is not one: a
     version that is not X.Y.Z, a tier that is not one of TIERS)."""
-    try:
-        d = json.loads((store() / RECORD).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if not isinstance(d, dict) or not _valid_version(d.get("version")) or d.get("tier") not in local_reader.TIERS:
+    d = _load(RECORD)
+    if d is None or not _valid_version(d.get("version")) or d.get("tier") not in local_reader.TIERS:
         return None
     if d.get("previous") is not None and not _valid_version(d["previous"]):
         d["previous"] = None
@@ -125,12 +161,15 @@ def installed_identity(have: dict | None = None) -> tuple[str, str, str, str]:
 def _write_json(name: str, d: dict | None) -> None:
     f = store() / name
     if d is None:
-        f.unlink(missing_ok=True)
+        statexml.unlink(f)          # both forms
         return
-    f.parent.mkdir(parents=True, exist_ok=True)
+    statexml.write(f, _to_xml(d), 0o644, state_owned=False)     # the page reads it as the service user; only root writes the store
+    if name != RECORD:
+        return
+    # the install record also stays as JSON for one release: the uninstaller script and `update --rollback` read it
     tmp = f.with_suffix(".tmp")
     tmp.write_text(json.dumps(d, indent=2), encoding="utf-8")
-    os.chmod(tmp, 0o644)        # the page reads it as the service user; only root writes the store
+    os.chmod(tmp, 0o644)
     os.replace(tmp, f)
 
 
@@ -148,10 +187,7 @@ def save_plan(p: dict) -> None:
 
 def saved_plan(now: float | None = None) -> dict | None:
     """{at, plan, text, fresh} the last plan job saved, or None."""
-    try:
-        d = json.loads((store() / PLAN).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
+    d = _load(PLAN)
     p = d.get("plan") if isinstance(d, dict) else None
     if not isinstance(p, dict) or not _valid_version(p.get("version")) or not isinstance(d.get("at"), (int, float)):
         return None
