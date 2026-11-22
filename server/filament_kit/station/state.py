@@ -11,6 +11,7 @@ import re
 import threading
 from pathlib import Path
 
+from . import page as _station_page
 from . import voice
 
 
@@ -20,6 +21,27 @@ def volume_from_env() -> int:
         return max(0, min(100, int(os.environ.get("STATION_SPEAKER_VOLUME", "50"))))
     except ValueError:
         return 50
+
+
+# the live voice values (R88 2.5): the ranges the station takes, and where each one sits in `settings`
+VOICE_RANGES = {"speaker": (0, 903), "speed": (50, 200), "volume": (0, 100)}
+VOICE_SPEED_STEP = 10      # the speed goes in steps of 10 (R88 2.5): the station checks it again
+VOICE_KEYS = {"speech": "speech", "speaker": "voice_speaker", "speed": "voice_speed", "volume": "speaker_volume"}
+# the sentences of the voice routes' refusals (the string catalogue's, the English as the fallback: RC9 / RG1 add the keys)
+_t = _station_page.catalogue_text
+VOICE_TEXTS = {
+    "bad_speech": _t("station_voice_bad_speech", "speech must be true or false."),
+    "bad_speaker": _t("station_voice_bad_speaker", "speaker must be a whole number from 0 to 903."),
+    "bad_speed": _t("station_voice_bad_speed", "speed must be a whole number from 50 to 200, in steps of 10."),
+    "bad_volume": _t("station_voice_bad_volume", "volume must be a whole number from 0 to 100."),
+    "busy": _t("station_voice_busy", "The Weigh Station is in use. Try again when it is idle."),
+    "off": _t("station_voice_off", "Speaking is switched off."),
+    # once the Hub has sent voice values the station page's Speak and Volume are read-only: the line beside them, and the
+    # sentence of the 409 `set_on_hub` that answers a change of either
+    "set_on_hub_note": _t("station_voice_set_on_hub_note",
+                          "Speaking and volume are set on the Hub: Settings > Weigh Station voice."),
+    "set_on_hub": _t("station_voice_set_on_hub", "Speaking and volume are set on the Hub."),
+}
 
 
 def settings_from_env() -> dict:
@@ -41,6 +63,10 @@ def settings_from_env() -> dict:
         # the panel is wired the other way round (yellow on D2/D6, red on D1/D5): swap the buttons and lamps
         "panel_swap": os.environ.get("STATION_PANEL_SWAP", "0") == "1",
         "speaker_volume": volume_from_env(),  # the C3 panel's speaker, percent
+        # the voice's speaker number (Piper's many-speaker voice only) and speaking speed in percent: only the Hub sets
+        # these (`live`, R88 2.5), so no drop-in key reads them
+        "voice_speaker": 0,
+        "voice_speed": 100,
         # the intake flow: no progress this long and it goes back to idle; a recognition (local AI, then Claude)
         # may take this long. The server's address and token come from the pairing files (server_api).
         "flow_timeout": int(os.environ.get("STATION_FLOW_TIMEOUT", "600")),
@@ -52,6 +78,40 @@ settings = settings_from_env()
 # the lamp the owner chose for a step of the intake flow on the station's page (settings.py): {step: "yellow" | "red" |
 # "both" | "off"}; a step with no entry keeps the lamps flow.STEP_LAMPS gives it
 lamp_map: dict[str, str] = {}
+
+# The voice values the Hub handed over (`POST /voice`, the hello answer): kept in memory over the drop-in's values in
+# `settings`, so a change needs no restart and the station page's own store (settings.py) cannot undo it
+live: dict = {}
+
+
+def voice_value(name: str):
+    """The voice value `name` (speech, speaker, speed or volume): the live one, else the drop-in's."""
+    return live[name] if name in live else settings[VOICE_KEYS[name]]
+
+
+def voice_values() -> dict:
+    return {name: voice_value(name) for name in VOICE_KEYS}
+
+
+def clean_voice(body: dict) -> tuple[dict, dict]:
+    """`(values, problems)` of a voice request: the values that are valid (a whole number inside its range; speech a
+    true/false) and `{name: sentence}` for each that is not. Names the station does not know are left out."""
+    values, problems = {}, {}
+    for name in VOICE_KEYS:
+        if name not in body:
+            continue
+        v = body[name]
+        if name == "speech":
+            ok = isinstance(v, bool)
+        else:
+            ok = isinstance(v, int) and not isinstance(v, bool) and VOICE_RANGES[name][0] <= v <= VOICE_RANGES[name][1]
+            ok = ok and (name != "speed" or v % VOICE_SPEED_STEP == 0)
+        if ok:
+            values[name] = v
+        else:
+            problems[name] = VOICE_TEXTS["bad_" + name]
+    return values, problems
+
 
 MIN_GRAMS = 20  # an empty pan reads 0; anything under this isn't a spool
 

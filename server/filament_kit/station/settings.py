@@ -53,6 +53,18 @@ class SettingsError(ValueError):
     """A value the station refuses (unknown id, wrong kind, out of range), or a file it could not write."""
 
 
+class SetOnHub(SettingsError):
+    """A change of Speak or Volume after the Hub has sent voice values: the Hub's win, so the page may not change them."""
+
+    code = "set_on_hub"
+
+    def __init__(self):
+        super().__init__(st.VOICE_TEXTS["set_on_hub"])
+
+
+HUB_VOICE_IDS = ("speech", "volume")     # the two settings the Hub's voice values (`state.live`) take over
+
+
 def _spec(id_, label, kind, **more) -> dict:
     return {"id": id_, "label": label, "kind": kind, **more}
 
@@ -196,7 +208,13 @@ class Store:
     def listing(self) -> list[dict]:
         """`[{id, label, kind, value, choices?, min?, max?}]`: the contract's answer of GET /settings."""
         with self._lock:
-            return [dict(s, value=self.current(s["id"])) for s in specs()]
+            return [self._listed(s) for s in specs()]
+
+    def _listed(self, s: dict) -> dict:
+        """One setting of the list. Speak and Volume show the Hub's value, read-only with a note, once it sent voice values."""
+        if s["id"] in HUB_VOICE_IDS and st.live:
+            return dict(s, value=st.voice_value(s["id"]), readonly=True, note=st.VOICE_TEXTS["set_on_hub_note"])
+        return dict(s, value=self.current(s["id"]))
 
     @property
     def changed(self) -> bool:
@@ -220,6 +238,8 @@ class Store:
         """Take `{id: value}` (all of it or none: one bad value refuses the whole), keep it, apply it, answer the list."""
         if not isinstance(body, dict) or not body:
             raise SettingsError(_t("station_settings_none", "nothing to change"))
+        if st.live and any(k in body for k in HUB_VOICE_IDS):
+            raise SetOnHub()
         wanted = {s["id"]: s for s in specs()}
         new = {}
         for k, v in body.items():
