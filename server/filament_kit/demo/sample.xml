@@ -1,0 +1,221 @@
+<?xml version='1.0' encoding='utf-8'?>
+<demo-sample version="1">
+  <vendors>
+    <vendor id="1" name="Polymaker" empty-spool-weight="140" />
+    <vendor id="2" name="Bambu Lab" empty-spool-weight="250" />
+    <vendor id="3" name="eSUN" empty-spool-weight="230" />
+    <vendor id="4" name="Prusament" empty-spool-weight="200" />
+    <vendor id="5" name="Overture" empty-spool-weight="150" />
+    <vendor id="6" name="Hatchbox" empty-spool-weight="220" />
+    <vendor id="7" name="Sunlu" empty-spool-weight="160" />
+    <vendor id="8" name="Elegoo" empty-spool-weight="170" />
+    <vendor id="9" name="Inland" empty-spool-weight="180" />
+  </vendors>
+  <filaments>
+    <filament id="1" vendor-id="1" name="PolyTerra PLA Charcoal Black" material="PLA" color-hex="2B2B2E" density="1.31" diameter="1.75" weight="1000" spool-weight="140" settings-extruder-temp="210" settings-bed-temp="55">
+      <extra key="nozzle_range" value="&quot;190-230&quot;" />
+      <extra key="bed_range" value="&quot;25-60&quot;" />
+      <extra key="line" value="&quot;PolyTerra PLA&quot;" />
+    </filament>
+    <filament id="2" vendor-id="2" name="PETG HF Orange" material="PETG" color-hex="F2762E" density="1.27" diameter="1.75" weight="1000" spool-weight="250" settings-extruder-temp="250" settings-bed-temp="70">
+      <extra key="nozzle_range" value="&quot;230-260&quot;" />
+      <extra key="bed_range" value="&quot;70-80&quot;" />
+      <extra key="line" value="&quot;PETG HF&quot;" />
+    </filament>
+    <filament id="3" vendor-id="3" name="ABS+ White" material="ABS" color-hex="F4F4F2" density="1.04" diameter="1.75" weight="1000" spool-weight="230" settings-extruder-temp="250" settings-bed-temp="95">
+      <extra key="nozzle_range" value="&quot;230-270&quot;" />
+      <extra key="bed_range" value="&quot;90-100&quot;" />
+      <extra key="line" value="&quot;ABS+&quot;" />
+    </filament>
+    <filament id="4" vendor-id="4" name="PLA Galaxy Silver" material="PLA" color-hex="8D9199" density="1.24" diameter="1.75" weight="1000" spool-weight="200" settings-extruder-temp="215" settings-bed-temp="60">
+      <extra key="nozzle_range" value="&quot;205-225&quot;" />
+      <extra key="bed_range" value="&quot;50-65&quot;" />
+      <extra key="line" value="&quot;Prusament PLA&quot;" />
+    </filament>
+    <filament id="5" vendor-id="5" name="TPU Blue" material="TPU" color-hex="2E6FD9" density="1.21" diameter="1.75" weight="1000" spool-weight="150" settings-extruder-temp="225" settings-bed-temp="45">
+      <extra key="nozzle_range" value="&quot;210-235&quot;" />
+      <extra key="bed_range" value="&quot;30-60&quot;" />
+      <extra key="line" value="&quot;Overture TPU&quot;" />
+    </filament>
+    <filament id="6" vendor-id="1" name="PolyTerra PLA Cotton White" material="PLA" color-hex="EDEDEA" density="1.31" diameter="1.75" weight="1000" spool-weight="140" settings-extruder-temp="210" settings-bed-temp="55">
+      <extra key="nozzle_range" value="&quot;190-230&quot;" />
+      <extra key="bed_range" value="&quot;25-60&quot;" />
+      <extra key="line" value="&quot;PolyTerra PLA&quot;" />
+    </filament>
+    <filament id="7" vendor-id="1" name="PolyLite PETG Red" material="PETG" color-hex="C8312B" density="1.27" diameter="1.75" weight="1000" spool-weight="140" settings-extruder-temp="245" settings-bed-temp="75">
+      <extra key="nozzle_range" value="&quot;230-260&quot;" />
+      <extra key="bed_range" value="&quot;70-80&quot;" />
+      <extra key="line" value="&quot;PolyLite PETG&quot;" />
+    </filament>
+    <filament id="8" vendor-id="2" name="PLA Basic Jade White" material="PLA" color-hex="FFFFFF" density="1.26" diameter="1.75" weight="1000" spool-weight="250" settings-extruder-temp="220" settings-bed-temp="55">
+      <extra key="nozzle_range" value="&quot;190-230&quot;" />
+      <extra key="bed_range" value="&quot;35-45&quot;" />
+      <extra key="line" value="&quot;PLA Basic&quot;" />
+    </filament>
+    <filament id="9" vendor-id="2" name="PLA Matte Ice Blue" material="PLA" color-hex="A3D8E1" density="1.32" diameter="1.75" weight="1000" spool-weight="250" settings-extruder-temp="220" settings-bed-temp="55">
+      <extra key="nozzle_range" value="&quot;190-230&quot;" />
+      <extra key="bed_range" value="&quot;35-45&quot;" />
+      <extra key="line" value="&quot;PLA Matte&quot;" />
+    </filament>
+    <filament id="10" vendor-id="2" name="ASA Black" material="ASA" color-hex="1A1A1A" density="1.07" diameter="1.75" weight="1000" spool-weight="250" settings-extruder-temp="260" settings-bed-temp="90">
+      <extra key="nozzle_range" value="&quot;240-280&quot;" />
+      <extra key="bed_range" value="&quot;90-100&quot;" />
+      <extra key="line" value="&quot;ASA&quot;" />
+    </filament>
+    <filament id="11" vendor-id="3" name="PLA+ Fire Engine Red" material="PLA" color-hex="D32F2F" density="1.24" diameter="1.75" weight="1000" spool-weight="230" settings-extruder-temp="210" settings-bed-temp="60">
+      <extra key="nozzle_range" value="&quot;205-225&quot;" />
+      <extra key="bed_range" value="&quot;50-70&quot;" />
+      <extra key="line" value="&quot;PLA+&quot;" />
+    </filament>
+    <filament id="12" vendor-id="3" name="PETG Natural" material="PETG" color-hex="E8E4DA" density="1.27" diameter="1.75" weight="1000" spool-weight="230" settings-extruder-temp="245" settings-bed-temp="75">
+      <extra key="nozzle_range" value="&quot;230-250&quot;" />
+      <extra key="bed_range" value="&quot;70-80&quot;" />
+      <extra key="line" value="&quot;eSUN PETG&quot;" />
+    </filament>
+    <filament id="13" vendor-id="4" name="PETG Jet Black" material="PETG" color-hex="101010" density="1.27" diameter="1.75" weight="1000" spool-weight="200" settings-extruder-temp="250" settings-bed-temp="85">
+      <extra key="nozzle_range" value="&quot;230-260&quot;" />
+      <extra key="bed_range" value="&quot;80-90&quot;" />
+      <extra key="line" value="&quot;Prusament PETG&quot;" />
+    </filament>
+    <filament id="14" vendor-id="4" name="PLA Lipstick Red" material="PLA" color-hex="B71C2C" density="1.24" diameter="1.75" weight="1000" spool-weight="200" settings-extruder-temp="215" settings-bed-temp="60">
+      <extra key="nozzle_range" value="&quot;205-225&quot;" />
+      <extra key="bed_range" value="&quot;50-65&quot;" />
+      <extra key="line" value="&quot;Prusament PLA&quot;" />
+    </filament>
+    <filament id="15" vendor-id="5" name="PLA Matte Olive" material="PLA" color-hex="6B7A4B" density="1.25" diameter="1.75" weight="1000" spool-weight="150" settings-extruder-temp="215" settings-bed-temp="55">
+      <extra key="nozzle_range" value="&quot;190-230&quot;" />
+      <extra key="bed_range" value="&quot;45-60&quot;" />
+      <extra key="line" value="&quot;Overture PLA Matte&quot;" />
+    </filament>
+    <filament id="16" vendor-id="5" name="PETG Grey" material="PETG" color-hex="9E9E9E" density="1.27" diameter="1.75" weight="1000" spool-weight="150" settings-extruder-temp="245" settings-bed-temp="75">
+      <extra key="nozzle_range" value="&quot;230-250&quot;" />
+      <extra key="bed_range" value="&quot;70-80&quot;" />
+      <extra key="line" value="&quot;Overture PETG&quot;" />
+    </filament>
+    <filament id="17" vendor-id="6" name="PLA True Black" material="PLA" color-hex="000000" density="1.24" diameter="1.75" weight="1000" spool-weight="220" settings-extruder-temp="200" settings-bed-temp="60">
+      <extra key="nozzle_range" value="&quot;180-220&quot;" />
+      <extra key="bed_range" value="&quot;50-70&quot;" />
+      <extra key="line" value="&quot;Hatchbox PLA&quot;" />
+    </filament>
+    <filament id="18" vendor-id="6" name="PLA Orange" material="PLA" color-hex="F57C00" density="1.24" diameter="1.75" weight="1000" spool-weight="220" settings-extruder-temp="200" settings-bed-temp="60">
+      <extra key="nozzle_range" value="&quot;180-220&quot;" />
+      <extra key="bed_range" value="&quot;50-70&quot;" />
+      <extra key="line" value="&quot;Hatchbox PLA&quot;" />
+    </filament>
+    <filament id="19" vendor-id="7" name="PLA Meta Yellow" material="PLA" color-hex="F9D71C" density="1.24" diameter="1.75" weight="1000" spool-weight="160" settings-extruder-temp="210" settings-bed-temp="60">
+      <extra key="nozzle_range" value="&quot;190-230&quot;" />
+      <extra key="bed_range" value="&quot;50-60&quot;" />
+      <extra key="line" value="&quot;Sunlu PLA Meta&quot;" />
+    </filament>
+    <filament id="20" vendor-id="7" name="Silk PLA Gold" material="PLA" color-hex="D4AF37" density="1.25" diameter="1.75" weight="1000" spool-weight="160" settings-extruder-temp="215" settings-bed-temp="60">
+      <extra key="nozzle_range" value="&quot;200-230&quot;" />
+      <extra key="bed_range" value="&quot;50-60&quot;" />
+      <extra key="line" value="&quot;Sunlu Silk PLA&quot;" />
+    </filament>
+    <filament id="21" vendor-id="8" name="PLA Rapid Green" material="PLA" color-hex="3CB371" density="1.24" diameter="1.75" weight="1000" spool-weight="170" settings-extruder-temp="210" settings-bed-temp="60">
+      <extra key="nozzle_range" value="&quot;190-230&quot;" />
+      <extra key="bed_range" value="&quot;50-60&quot;" />
+      <extra key="line" value="&quot;Elegoo PLA Rapid&quot;" />
+    </filament>
+    <filament id="22" vendor-id="8" name="PETG Translucent Clear" material="PETG" color-hex="E6F0F2" density="1.27" diameter="1.75" weight="1000" spool-weight="170" settings-extruder-temp="245" settings-bed-temp="75">
+      <extra key="nozzle_range" value="&quot;230-250&quot;" />
+      <extra key="bed_range" value="&quot;70-80&quot;" />
+      <extra key="line" value="&quot;Elegoo PETG&quot;" />
+    </filament>
+    <filament id="23" vendor-id="9" name="PLA+ Purple" material="PLA" color-hex="6A3FA0" density="1.24" diameter="1.75" weight="1000" spool-weight="180" settings-extruder-temp="210" settings-bed-temp="60">
+      <extra key="nozzle_range" value="&quot;190-230&quot;" />
+      <extra key="bed_range" value="&quot;50-60&quot;" />
+      <extra key="line" value="&quot;Inland PLA+&quot;" />
+    </filament>
+  </filaments>
+  <locations>
+    <location name="Sealed stock" />
+    <location name="Rack 1" />
+    <location name="Storage box" />
+    <location name="Overflow" />
+  </locations>
+  <spools>
+    <spool id="151" filament-id="7" remaining-weight="90" location="Rack 1" registered="2026-10-07T10:00:00+00:00" />
+    <spool id="152" filament-id="8" remaining-weight="310" location="Storage box" registered="2026-09-22T10:00:00+00:00" />
+    <spool id="153" filament-id="13" remaining-weight="180" location="Overflow" registered="2026-09-25T10:00:00+00:00" />
+    <spool id="154" filament-id="22" remaining-weight="90" location="Overflow" registered="2026-11-20T10:00:00+00:00" />
+    <spool id="155" filament-id="14" remaining-weight="1000" location="Sealed stock" registered="2026-08-22T10:00:00+00:00" />
+    <spool id="156" filament-id="18" remaining-weight="1000" location="Sealed stock" registered="2026-11-16T10:00:00+00:00" />
+    <spool id="157" filament-id="20" remaining-weight="35" location="Storage box" registered="2026-11-22T10:00:00+00:00" />
+    <spool id="158" filament-id="8" remaining-weight="35" location="Rack 1" registered="2026-09-14T10:00:00+00:00" />
+    <spool id="159" filament-id="23" remaining-weight="1000" location="Sealed stock" registered="2026-10-06T10:00:00+00:00" />
+    <spool id="160" filament-id="1" remaining-weight="420" location="Overflow" registered="2026-09-17T10:00:00+00:00" />
+    <spool id="161" filament-id="22" remaining-weight="180" location="Rack 1" registered="2026-08-28T10:00:00+00:00" />
+    <spool id="162" filament-id="15" remaining-weight="560" location="Rack 1" registered="2026-08-09T10:00:00+00:00" />
+    <spool id="163" filament-id="4" remaining-weight="420" location="Rack 1" registered="2026-09-12T10:00:00+00:00" />
+    <spool id="164" filament-id="14" remaining-weight="180" location="Rack 1" registered="2026-09-08T10:00:00+00:00" />
+    <spool id="165" filament-id="4" remaining-weight="470" location="Garage Voron – T0" registered="2026-10-22T10:00:00+00:00" />
+    <spool id="166" filament-id="23" remaining-weight="1000" location="Sealed stock" registered="2026-10-05T10:00:00+00:00" />
+    <spool id="167" filament-id="16" remaining-weight="310" location="Rack 1" registered="2026-09-02T10:00:00+00:00" />
+    <spool id="168" filament-id="9" remaining-weight="560" location="Rack 1" registered="2026-09-27T10:00:00+00:00" />
+    <spool id="169" filament-id="21" remaining-weight="1000" location="Sealed stock" registered="2026-10-13T10:00:00+00:00" />
+    <spool id="170" filament-id="18" remaining-weight="180" location="Rack 1" registered="2026-09-05T10:00:00+00:00" />
+    <spool id="171" filament-id="5" remaining-weight="710" location="Garage Voron – T1" registered="2026-09-28T10:00:00+00:00" />
+    <spool id="172" filament-id="20" remaining-weight="700" location="Storage box" registered="2026-10-06T10:00:00+00:00" />
+    <spool id="173" filament-id="18" remaining-weight="700" location="Rack 1" registered="2026-11-24T10:00:00+00:00" />
+    <spool id="174" filament-id="22" remaining-weight="1000" location="Sealed stock" registered="2026-09-17T10:00:00+00:00" />
+    <spool id="175" filament-id="17" remaining-weight="180" location="Overflow" registered="2026-10-08T10:00:00+00:00" />
+    <spool id="176" filament-id="3" remaining-weight="350" location="Workshop X1 – AMS A3" registered="2026-11-24T10:00:00+00:00" />
+    <spool id="177" filament-id="15" remaining-weight="560" location="Overflow" registered="2026-09-08T10:00:00+00:00" />
+    <spool id="178" filament-id="23" remaining-weight="420" location="Overflow" registered="2026-11-10T10:00:00+00:00" />
+    <spool id="179" filament-id="8" remaining-weight="700" location="Storage box" registered="2026-10-17T10:00:00+00:00" />
+    <spool id="180" filament-id="16" remaining-weight="1000" location="Sealed stock" registered="2026-11-22T10:00:00+00:00" />
+    <spool id="181" filament-id="9" remaining-weight="310" location="Rack 1" registered="2026-09-07T10:00:00+00:00" />
+    <spool id="182" filament-id="16" remaining-weight="560" location="Rack 1" registered="2026-10-03T10:00:00+00:00" />
+    <spool id="183" filament-id="8" remaining-weight="90" location="Rack 1" registered="2026-10-04T10:00:00+00:00" />
+    <spool id="184" filament-id="2" remaining-weight="90" location="Rack 1" registered="2026-09-26T10:00:00+00:00" />
+    <spool id="185" filament-id="19" remaining-weight="420" location="Rack 1" registered="2026-08-01T10:00:00+00:00" />
+    <spool id="186" filament-id="6" remaining-weight="420" location="Storage box" registered="2026-11-03T10:00:00+00:00" />
+    <spool id="187" filament-id="1" remaining-weight="620" location="Workshop X1 – AMS A1" registered="2026-08-26T10:00:00+00:00" />
+    <spool id="188" filament-id="1" remaining-weight="1000" location="Sealed stock" registered="2026-08-28T10:00:00+00:00" />
+    <spool id="189" filament-id="9" remaining-weight="1000" location="Sealed stock" registered="2026-08-01T10:00:00+00:00" />
+    <spool id="190" filament-id="7" remaining-weight="420" location="Rack 1" registered="2026-09-11T10:00:00+00:00" />
+    <spool id="191" filament-id="5" remaining-weight="700" location="Rack 1" registered="2026-10-03T10:00:00+00:00" />
+    <spool id="192" filament-id="10" remaining-weight="850" location="Rack 1" registered="2026-08-28T10:00:00+00:00" />
+    <spool id="193" filament-id="11" remaining-weight="1000" location="Sealed stock" registered="2026-08-17T10:00:00+00:00" />
+    <spool id="194" filament-id="2" remaining-weight="1000" location="Sealed stock" registered="2026-11-09T10:00:00+00:00" />
+    <spool id="195" filament-id="4" remaining-weight="850" location="Rack 1" registered="2026-09-25T10:00:00+00:00" />
+    <spool id="196" filament-id="9" remaining-weight="35" location="Overflow" registered="2026-11-21T10:00:00+00:00" />
+    <spool id="197" filament-id="6" remaining-weight="1000" location="Sealed stock" registered="2026-08-13T10:00:00+00:00" />
+    <spool id="198" filament-id="2" remaining-weight="880" location="Workshop X1 – AMS A2" registered="2026-11-12T10:00:00+00:00" />
+    <spool id="199" filament-id="7" remaining-weight="1000" location="Sealed stock" registered="2026-08-20T10:00:00+00:00" />
+    <spool id="200" filament-id="19" remaining-weight="90" location="Storage box" registered="2026-11-13T10:00:00+00:00" />
+    <spool id="201" filament-id="8" remaining-weight="35" location="Overflow" registered="2026-11-20T10:00:00+00:00" />
+    <spool id="202" filament-id="16" remaining-weight="180" location="Overflow" registered="2026-09-22T10:00:00+00:00" />
+    <spool id="203" filament-id="18" remaining-weight="420" location="Storage box" registered="2026-10-08T10:00:00+00:00" />
+    <spool id="204" filament-id="11" remaining-weight="850" location="Storage box" registered="2026-09-12T10:00:00+00:00" />
+    <spool id="205" filament-id="12" remaining-weight="420" location="Storage box" registered="2026-10-20T10:00:00+00:00" />
+    <spool id="206" filament-id="20" remaining-weight="420" location="Storage box" registered="2026-09-09T10:00:00+00:00" />
+    <spool id="207" filament-id="19" remaining-weight="1000" location="Sealed stock" registered="2026-09-19T10:00:00+00:00" />
+    <spool id="208" filament-id="18" remaining-weight="560" location="Rack 1" registered="2026-09-01T10:00:00+00:00" />
+    <spool id="209" filament-id="5" remaining-weight="1000" location="Storage box" registered="2026-11-06T10:00:00+00:00" />
+    <spool id="210" filament-id="4" remaining-weight="1000" location="Rack 1" registered="2026-11-03T10:00:00+00:00" />
+    <spool id="211" filament-id="3" remaining-weight="1000" location="Rack 1" registered="2026-08-03T10:00:00+00:00" />
+    <spool id="212" filament-id="2" remaining-weight="1000" location="Sealed stock" registered="2026-08-28T10:00:00+00:00" />
+    <spool id="213" filament-id="2" remaining-weight="1000" location="Sealed stock" registered="2026-09-20T10:00:00+00:00" />
+    <spool id="214" filament-id="1" remaining-weight="1000" location="Rack 1" registered="2026-09-08T10:00:00+00:00" />
+  </spools>
+  <printers>
+    <printer id="00M00A000000001" family="bambu" name="Workshop X1" model="X1C" ip="192.0.2.40" state="connected" job="bracket-v3.3mf" percent="42" layer="96" total-layers="228" remaining-min="72" nozzle="220" bed="65" light="on">
+      <slot label="A1" color="2B2B2E" material="PLA" />
+      <slot label="A2" color="F2762E" material="PETG" />
+      <slot label="A3" color="F4F4F2" material="ABS" />
+      <slot label="A4" color="" material="" />
+    </printer>
+    <printer id="garage-voron" family="klipper" name="Garage Voron" model="Voron 2.4" host="voron.example" port="7125" state="connected" job="" percent="0" nozzle="25" bed="24">
+      <slot label="T0" color="8D9199" material="PLA" />
+      <slot label="T1" color="2E6FD9" material="TPU" />
+    </printer>
+    <printer id="03000A000000002" family="bambu" name="Study A1 mini" model="A1 mini" ip="192.0.2.41" state="offline" />
+    <printer id="mainsailos" family="klipper" name="mainsailos" model="" host="192.0.2.57" port="7125" state="found" />
+  </printers>
+  <usage>
+    <entry ago-hours="20" printer="00M00A000000001" slot="A1" grams="18.4" spool="187" />
+    <entry ago-hours="44" printer="garage-voron" slot="T0" grams="42.0" spool="165" />
+  </usage>
+</demo-sample>
