@@ -291,8 +291,8 @@ class _Page:
 
 
 def _route():
-    (path, fn, method), = voice_tab.routes(_Page())
-    assert (path, method) == ("/station/voice/test", "POST")
+    (fn, method), = [(f, m) for p, f, m in voice_tab.routes(_Page()) if p == "/station/voice/test"]
+    assert method == "POST"
     return fn
 
 
