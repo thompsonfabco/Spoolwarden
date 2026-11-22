@@ -179,7 +179,8 @@ out.noCode = await fetch("/setup/api/spools/2", { method: "POST", headers: { "Co
     assert page["none"] == {"title": T("spools_empty_filtered"), "clear": "Clear the search and filter", "count": "0 spools", "rows": 0}
     assert page["back"]["count"] == f"{TOTAL} spools" and page["back"]["pressed"] == [] and page["back"]["field"] == ""
     assert page["page"] == {"n": 2, "total": TOTAL, "offset": 3, "more": True, "url": True, "keys": sorted(
-        ["id", "location", "remaining_g", "net_g", "tare_g", "tag", "state", "filament_id", "vendor", "name", "material", "color_hex", "lot", "loaded", "low"])}
+        ["id", "location", "remaining_g", "net_g", "tare_g", "tag", "state", "filament_id", "vendor", "name", "material", "color_hex", "lot", "loaded", "low",
+        "checked_out", "home", "checked_out_since"])}   # R88 CO1: the view's three new keys
     assert page["one"] == {"low": True, "loaded": None, "state": "opened", "use": None} and page["loadedView"]["printer"] == "Workshop X1" and page["loadedView"]["slot"] == "A1"
     assert page["lastTag"] == {"tag": None}
     assert page["badFilter"]["status"] == 400 and page["gone"]["status"] == 404 and page["badOffset"]["status"] == 400
