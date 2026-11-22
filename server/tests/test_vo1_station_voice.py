@@ -533,19 +533,21 @@ def test_a_phrase_is_never_read_with_another_phrases_values(monkeypatch):
     class Racing(dict):
         """The moment the loop has read the text, a newer phrase (a test, with its own volume) arrives."""
         fired = False
+        newer = None
 
         def __getitem__(self, key):
             value = super().__getitem__(key)
             if key == "text" and not Racing.fired:
                 Racing.fired = True
-                t = threading.Thread(target=speech.say, args=("test sentence", {"volume": 90}))
-                t.start()
-                t.join(0.3)             # with the lock the newer phrase waits until the pair is taken
+                Racing.newer = threading.Thread(target=speech.say, args=("test sentence", {"volume": 90}))
+                Racing.newer.start()
+                Racing.newer.join(0.3)  # with the lock the newer phrase waits until the pair is taken
             return value
 
     monkeypatch.setattr(speech, "speech", Racing(text="Cancelled.", opts=None))
     pair = speech.next_phrase()
     assert pair == ("Cancelled.", None)
+    Racing.newer.join(5)                # the newer phrase writes once the lock is free: on a loaded runner after the next read
     assert speech.next_phrase() == ("test sentence", {"volume": 90})
 
 
