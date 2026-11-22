@@ -48,11 +48,12 @@ except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
 from . import __version__, config, event_sink, events, modules, output, release, steps
+from .pairing import _write_atomic
 from .profiles import statexml
 from .release import ReleaseError
 
 SCHEDULES = {"daily": 20 * 3600, "weekly": 6.5 * 86400}
-STATE = "state.json"        # state.xml is the form written; this one is read when there is no XML, and left for a rollback
+STATE = "state.json"        # state.xml is read first; this one is written too, for one release, for a rollback
 MODULE = "updates"
 HW_ASSET = "bambu_hardware.xml"
 NOTES_LIMIT = 32 * 1024         # characters of a release's notes kept for the setup console
@@ -136,6 +137,9 @@ def _write_state(**changes) -> None:
     st = _read_state()
     st.update(changes)
     statexml.write(store() / STATE, st, state_owned=False)       # root's file in /opt, world-readable as it was
+    # state.json too, for one release: the release `update --rollback` goes to reads only this form, and its update
+    # timer must see the `held` set here (R85 section 1.5)
+    _write_atomic(store() / STATE, json.dumps(st, indent=2).encode("utf-8"), 0o644)
 
 
 def default_fetcher(cfg: dict) -> release.Fetcher:
