@@ -8,10 +8,21 @@ on:
 
 permissions:
   contents: read
+
+# The one recipe, tools/testenv.sh, the same as a builder's run, a review and the merge gate: [test,web], every suite, -rs. Without
+# [web] the web module's tests skip themselves, and that is the module facing the internet. Run whole on a 4-core runner the server
+# suite took more than 25 minutes, so it is split over parallel jobs: the not-browser_audit tests in 4 shards (--shard I/4, a fixed
+# split of the test files), the browser_audit tests in one job of their own, and the other suites in a third. The job `test` at the
+# end is what a required check names: it passes only when all of them did. server/tests/test_testenv_shards.py proves that the
+# shards, the audit job and the rest together run every test file and that this file runs every one of them.
 jobs:
-  test:
+  server-shard:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
@@ -23,7 +34,51 @@ jobs:
         with:
           python-version: "3.12"
 
-      # The one recipe, the same as a builder's run, a review and the merge gate: [test,web], every suite, -rs. Without [web] the
-      # web module's tests skip themselves, and that is the module facing the internet.
-      - name: Tests
-        run: bash tools/testenv.sh --root --lint
+      - name: Server tests, shard ${{ matrix.shard }} of 4
+        run: bash tools/testenv.sh --shard ${{ matrix.shard }}/4
+
+  server-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Fetch the v0.3.0 tag
+        run: git fetch --depth=1 origin refs/tags/v0.3.0:refs/tags/v0.3.0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Server tests, the browser audits
+        run: bash tools/testenv.sh --shard audit
+
+  other-suites:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Fetch the v0.3.0 tag
+        run: git fetch --depth=1 origin refs/tags/v0.3.0:refs/tags/v0.3.0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: pc-sync, printer-pack, the design tokens, get.sh, the root tests and shellcheck
+        run: bash tools/testenv.sh --only pc-sync,other,get --root --lint
+
+  # The required check: its name is the one the single job had before the split.
+  test:
+    needs: [server-shard, server-audit, other-suites]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do [ "$r" = success ] || exit 1; done
