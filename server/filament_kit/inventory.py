@@ -1013,6 +1013,15 @@ def search(sm: Spoolman, q: str, sealed_only: bool, flt: str | None = None) -> l
     return out
 
 
+def listing(sm: Spoolman, q: str, sealed_only: bool, flt: str | None = None) -> list[dict]:
+    """The rows of `GET api/spools` (and its web twin), each Spoolman's spool plus `view`: with a `flt` the filter's
+    (`search`, empty spools left out); without one every spool, as before, now with its `view`."""
+    if flt:
+        return search(sm, q, sealed_only, flt)
+    ctx = view_context()
+    return [{**s, "view": spool_view(s, ctx)} for s in find(sm, q, sealed_only)]
+
+
 def page_args(params) -> tuple[int, int | None]:
     """`offset` (default 0) and `limit` (default none: all the rest) from query parameters."""
     out = []

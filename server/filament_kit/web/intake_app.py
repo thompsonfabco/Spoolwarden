@@ -262,8 +262,10 @@ class IntakeApp:
             ("/intake/api/filaments", self.api(self.filaments), ["GET"]),
             ("/intake/api/vendors", self.api(self.vendors), ["GET"]),
             ("/intake/api/open", self.api(self.open), ["POST"]),
+            ("/intake/api/spools", self.api(self.spools_list), ["GET"]),
             ("/intake/api/spools/{id:int}", self.api(self.spool_get), ["GET"]),
             ("/intake/api/spools/{id:int}", self.api(self.spool_edit), ["POST"]),
+            ("/intake/api/spools/{id:int}/return", self.api(self.spool_return), ["POST"]),
             ("/intake/api/storage", self.api(self.storage_get), ["GET"]),
             # the twins of the Hub's events and alerts routes (R80 section 8): answered by the Hub, through this app's channel
             ("/intake/api/events", self.api(self.events_twin), ["GET"]),
@@ -873,19 +875,50 @@ class IntakeApp:
         for key in ("empty", "dry_run"):
             if b.get(key) is not None and not isinstance(b[key], bool):
                 raise Problem(f"{key} must be true or false", key)
+        home = b.get("home")        # the home of a checked-out spool (R88 1.7): a listed storage location
+        if home is not None and (not isinstance(home, str) or not home.strip()):
+            raise Problem("home must be text", "home")
 
         def run() -> dict:
             st = self.tools.storage_list()
             return inventory.edit_spool(
                 self.tools.sm, request.path_params["id"], gross=_num(b, "gross"), remaining=_num(b, "remaining"),
                 location=loc, empty=bool(b.get("empty")), dry=b.get("dry_run") is not False,
-                locations=inventory.known_locations(self.tools.sm, st.choosable()), rules=st)
+                locations=inventory.known_locations(self.tools.sm, st.choosable()), rules=st, home=home)
         try:
             return await anyio.to_thread.run_sync(run)
+        except inventory.NotCheckedOut as e:
+            return JSONResponse({"error": str(e), "code": "not_checked_out"}, 409)
         except SpoolmanError as e:
             if e.status == 404:
                 return self._no_spool(request)
             raise
+
+    async def spools_list(self, request: Request):
+        """The twin of GET api/spools: `q`, `sealed`, `filter` (sealed, opened, loaded, low, checked_out), `offset` and `limit`; the
+        rows carry their `view`, and `filters` names the filters this Hub applies (an answer without it is an older Hub)."""
+        q = request.query_params
+        offset, limit = inventory.page_args(q)
+        try:
+            rows = await anyio.to_thread.run_sync(inventory.listing, self.tools.sm, q.get("q", ""),
+                                                  q.get("sealed") == "1", q.get("filter", ""))
+        except inventory.FilterError as e:
+            raise Problem(str(e), "filter") from None
+        rows, paging = inventory.page(rows, offset, limit)
+        return {"spools": rows, **paging, "filters": inventory.filter_names()}
+
+    async def spool_return(self, request: Request):
+        """The twin of POST api/spools/{id}/return: the Hub's answer, a refusal as the kit gives it ({error: code, message}; 409
+        not_checked_out). The Hub tells a Klipper printer too, so this goes through the Hub, not Spoolman; the spool answered
+        carries its `view`, as the app's sheet reads it."""
+        spool = request.path_params["id"]
+        try:
+            out = await anyio.to_thread.run_sync(self.kit.post, f"/api/spools/{spool}/return", {})
+        except SlotError as e:
+            return self._kit_refusal(e)
+        if isinstance(out, dict) and isinstance(out.get("spool"), dict) and isinstance(out.get("view"), dict):
+            out = {**out, "spool": {**out["spool"], "view": out["view"]}}
+        return out
 
     async def storage_get(self, request: Request):
         """The twin of the app's GET api/storage: the same data (storage_api.view), under this app's base."""

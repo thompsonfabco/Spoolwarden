@@ -80,6 +80,8 @@ def _to_response(e: Exception) -> JSONResponse:
         return _err(404 if e.code == "not_found" else 502, e.code, e.message, read_id=e.read_id)
     if isinstance(e, TagConflict):
         return _err(409, "tag_conflict", str(e), reason=e.reason, other_spool=e.other)
+    if isinstance(e, inventory.NotCheckedOut):      # a return, or a home change, of a spool that is not checked out (R88 1.7)
+        return _err(409, "not_checked_out", str(e))
     if isinstance(e, AddFailed):
         return _err(502, "spoolman_error", str(e), partial_spool_ids=e.partial.spool_ids)
     if isinstance(e, SpoolmanError):
@@ -217,6 +219,7 @@ WEB_ROUTES = (
     ("GET", "/api/export/{set}.csv"),
     ("GET", "/api/hub"),
     ("GET", "/api/voice"),
+    ("POST", "/api/spools/{id}/return"),    # R88 CO2: the web app's Return (the spool-change rule: no printer switch)
 )
 _WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
 HOME_WEB_ROUTES = (("PATCH", "/api/voice"), ("POST", "/api/voice/test"))
@@ -1494,7 +1497,11 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     async def station_save(request: Request):
         body = await _json(request)
-        return await run_in_threadpool(lambda: station_flow.save(sm, rules(), body))
+        return await run_in_threadpool(lambda: station_flow.save(sm, rules(), body, returner=returner))
+
+    async def station_return(request: Request):
+        body = await _json(request)
+        return await run_in_threadpool(lambda: station_flow.return_spool(sm, rules(), body, returner=returner))
 
     @_authed
     async def tag_lookup(request: Request):
@@ -1521,8 +1528,31 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         out = await run_in_threadpool(functools.partial(
             inventory.edit_spool, sm, request.path_params["id"], gross=_opt(body, "gross", float),
             remaining=_opt(body, "remaining", float), location=_opt(body, "location", str),
-            empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, True), rules=rules()))
-        return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added (S3.9)
+            empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, True), rules=rules(),
+            home=_opt(body, "home", str)))
+        return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added (S3.9); `home` (R88): 409 not_checked_out
+
+    def returner(spool_id: int, *, grams: float | None = None, dry: bool = False) -> dict:
+        """`inventory.return_spool`, or the Klipper family's when the spool sits in one of its printers' slots (the
+        printer is then told to clear the slot when it answers). Sync: call it from inside the threadpool."""
+        spool = sm.get(f"spool/{spool_id}")
+        where = inventory.view_context().slot_of(spool.get("location")) or {}
+        p = registry.load().get(where.get("printer_id") or "")
+        kf = getattr(printers, "klipper", None) if p is not None and p.family == "klipper" else None
+        if kf is not None:
+            return kf.return_spool(sm, p.serial, spool_id, grams=grams, rules=rules(), dry=dry)
+        return inventory.return_spool(sm, spool_id, grams=grams, rules=rules(), dry=dry)
+
+    @_authed
+    async def spool_return(request: Request):
+        """`POST api/spools/{id}/return` (R88 1.7): a checked-out spool goes back to its home (the place the rules chose when
+        none was recorded) with no question and no body. `location` is where it went (None when the rules place it nowhere);
+        `event_id` is its Undo. 409 not_checked_out otherwise."""
+        sid = request.path_params["id"]
+        if not sid.isdecimal():
+            return _err(404, "not_found", f"no spool {sid}")
+        out = await run_in_threadpool(returner, int(sid))
+        return JSONResponse({**out, "location": out["view"]["location"] or None})
 
     @_authed
     async def spool_get(request: Request):
@@ -1533,10 +1563,17 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     async def spool_search(request: Request):
         q = request.query_params.get("q", "")
         sealed = request.query_params.get("sealed", "").lower() in ("1", "true", "yes")
+        flt = request.query_params.get("filter", "")
         offset, limit = inventory.page_args(request.query_params)
-        rows = await run_in_threadpool(inventory.find, sm, q, sealed)
+
+        def build() -> list[dict]:
+            try:                    # `filter`: sealed, opened, loaded, low or checked_out; the rows carry their `view` (R88 CO2)
+                return inventory.listing(sm, q, sealed, flt)
+            except inventory.FilterError as e:
+                raise BadRequest(str(e), "filter") from None
+        rows = await run_in_threadpool(build)
         rows, paging = inventory.page(rows, offset, limit)
-        return JSONResponse({"spools": rows, **paging})
+        return JSONResponse({"spools": rows, **paging, "filters": inventory.filter_names()})
 
     @_authed
     async def filament_list(request: Request):
@@ -1800,6 +1837,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/filaments", filament_list),
             Route("/api/vendors", vendor_list),
             Route("/api/spools/{id:int}/link", spool_link, methods=["POST"]),
+            Route("/api/spools/{id}/return", spool_return, methods=["POST"]),   # `{id}` as WEB_ROUTES spells it
             Route("/api/spools/{id:int}", spool_get),
             Route("/api/spools/{id:int}", spool_update, methods=["PATCH"]),
             Route("/api/locations", locations),
@@ -1824,6 +1862,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/station/tag/{uid}", _flow(station_tag)),
             Route("/api/station/recognize", _flow(station_recognize), methods=["POST"]),
             Route("/api/station/save", _flow(station_save), methods=["POST"]),
+            Route("/api/station/return", _flow(station_return), methods=["POST"]),
             *voice_tab.kit_routes(_authed),
             *_gated([*_printer_routes(printers), *_bridge_routes(printers, mapper, sm),
                      *camera.routes(camera_hub, _authed)],
