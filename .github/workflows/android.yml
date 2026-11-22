@@ -43,7 +43,8 @@ jobs:
               doLast {
                 ["debugCompileClasspath", "debugRuntimeClasspath", "debugUnitTestCompileClasspath", "debugUnitTestRuntimeClasspath"].each { name ->
                   def c = project.configurations.findByName(name)
-                  if (c != null) c.files
+                  // only the downloaded libraries (not the project's own outputs): the build and the unit tests need their files
+                  if (c != null) c.incoming.artifactView { componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier } }.files.files
                 }
               }
             }
