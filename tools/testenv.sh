@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # The one test recipe: a builder, a reviewer, the merge gate and CI all run this, so "green" means the same at each stage.
 #
-#   bash tools/testenv.sh [--root] [--klipper] [--lint] [--no-retry] [--only server,pc-sync,other,get] [--workers N] [-- PYTEST-ARGS]
+#   bash tools/testenv.sh [--root] [--klipper] [--lint] [--no-retry] [--only server,pc-sync,other,get] [--workers N] [--shard I/N|audit [--list]] [-- PYTEST-ARGS]
 #
 # Default: the server suite and pc-sync in parallel, then printer-pack + orca-spool-sync + the reader's tools, the design tokens and the get.sh end
 # to end. --root adds the tests that need root (sudo without a password), --klipper the Klipper end to end (tools/e2e/klipper.sh),
 # --lint shellcheck. PYTEST-ARGS go to the server suite (for example --durations=30). Every suite runs even after a failure, and
 # the last lines are each suite's counts and wall time; the exit code is non-zero if any of them failed.
+#
+# CI splits the server suite into parallel jobs, because on a 4-core runner the whole of it outlasts any sensible time limit:
+# --shard I/N runs the not-browser_audit tests of shard I of N (1-based), a fixed split of the test files (tools/testenv_plugin/
+# fk_shard.py), and --shard audit runs the browser_audit tests alone. Both run the server suite only. Every file is in exactly one
+# shard and the audit group takes the marked tests of all of them, so the shards and the audit group together are the whole
+# suite (server/tests/test_testenv_shards.py proves that, and that the workflow runs every shard). --list prints a shard's files
+# and exits. No --shard: everything, as above.
 #
 # The server suite is two runs: everything but the tests marked browser_audit (Node + headless Chrome, test_*audit*.py) on
 # --workers N, then those alone on 2 workers: more browsers at once time out starting DevTools. Where Node or a browser is missing
@@ -31,7 +38,9 @@ RETRY=1
 WORKERS=auto
 SUITE_TIMEOUT=${FK_SUITE_TIMEOUT:-1500}
 EXTRA=()
-usage() { echo "usage: bash tools/testenv.sh [--root] [--klipper] [--lint] [--no-retry] [--only server,pc-sync,other,get] [--workers N] [-- PYTEST-ARGS]" >&2; exit 2; }
+SHARD=
+LIST=0
+usage() { echo "usage: bash tools/testenv.sh [--root] [--klipper] [--lint] [--no-retry] [--only server,pc-sync,other,get] [--workers N] [--shard I/N|audit [--list]] [-- PYTEST-ARGS]" >&2; exit 2; }
 while [ $# -gt 0 ]; do
     case "$1" in
         --root) WITH_ROOT=1; shift ;;
@@ -52,10 +61,22 @@ while [ $# -gt 0 ]; do
             [ "$named" -eq 1 ] || usage
             ONLY=$2; shift 2 ;;
         --workers) [ $# -ge 2 ] || usage; WORKERS=$2; shift 2 ;;
+        --shard)
+            [ $# -ge 2 ] || usage
+            case "$2" in
+                audit) ;;
+                [1-9]*/[1-9]*) [[ "$2" =~ ^[0-9]+/[0-9]+$ ]] && [ "${2%/*}" -le "${2#*/}" ] || { echo "error: --shard I/N wants 1 <= I <= N, not '$2'" >&2; exit 2; } ;;
+                *) echo "error: --shard wants I/N (for example 2/4) or audit, not '$2'" >&2; exit 2 ;;
+            esac
+            SHARD=$2; shift 2 ;;
+        --list) LIST=1; shift ;;
         --) shift; EXTRA=("$@"); break ;;
         *) usage ;;
     esac
 done
+[ -z "$SHARD" ] || [ "$ONLY" = server,pc-sync,other,get ] || { echo "error: --shard runs the server suite only; leave --only out" >&2; exit 2; }
+[ "$LIST" -eq 0 ] || [ -n "$SHARD" ] || { echo "error: --list goes with --shard" >&2; exit 2; }
+[ -z "$SHARD" ] || ONLY=server
 wanted() { case ",$ONLY," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
 
 case "$ROOT" in
@@ -65,6 +86,17 @@ case "$ROOT" in
         exit 2 ;;
 esac
 command -v python3 >/dev/null || { echo "error: python3 is missing" >&2; exit 2; }
+SHARD_FILES=()
+if [ -n "$SHARD" ] && [ "$SHARD" != audit ]; then
+    mapfile -t SHARD_FILES < <(python3 "$ROOT/tools/testenv_plugin/fk_shard.py" "${SHARD%/*}" "${SHARD#*/}" "$ROOT/server/tests") || exit 2
+    [ "${#SHARD_FILES[@]}" -gt 0 ] && [ -n "${SHARD_FILES[0]}" ] || { echo "error: shard $SHARD has no test file" >&2; exit 2; }
+    SHARD_FILES=("${SHARD_FILES[@]/#/tests/}")      # pytest runs in server/
+fi
+if [ "$LIST" -eq 1 ]; then
+    if [ "$SHARD" = audit ]; then echo "audit: every test marked browser_audit, in all of server/tests"; else printf '%s
+' "${SHARD_FILES[@]}"; fi
+    exit 0
+fi
 
 CACHE=$HOME/.cache/filament-kit
 mkdir -p "$CACHE"
@@ -166,8 +198,10 @@ parallel() {
 }
 
 if wanted server; then
-    parallel server "$ROOT/server" -m "not browser_audit" "${EXTRA[@]}"
-    if grep -rqs --include='*.py' browser_audit "$ROOT/server/tests"; then      # a tree without any has nothing to run as a group
+    if [ "$SHARD" != audit ]; then
+        parallel server "$ROOT/server" -m "not browser_audit" "${SHARD_FILES[@]}" "${EXTRA[@]}"
+    fi
+    if { [ -z "$SHARD" ] || [ "$SHARD" = audit ]; } && grep -rqs --include='*.py' browser_audit "$ROOT/server/tests"; then      # a tree without any has nothing to run as a group
         saved=$WORKERS
         WORKERS=2
         parallel server-audit "$ROOT/server" -m browser_audit "${EXTRA[@]}"
