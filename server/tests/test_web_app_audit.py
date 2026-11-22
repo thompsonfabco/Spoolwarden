@@ -2044,37 +2044,45 @@ const dlg = await until(() => $("dialog[open] ol.install"), "the install sheet")
 return { title: text($("dialog[open] .sheet__title")), steps: [...dlg.querySelectorAll("li")].map(text),
          note: text($("dialog[open] .banner")), done: !!press("Done") };
 """
+# The outage is switched on in every new document (from the first line), so the page's own requests sent while it loads are
+# held to it too: a Hub that stopped answering also drops the answers still on their way, and one of them arriving now would be
+# "the Hub answered" and take the banner away again.
+OUTAGE = """
+window.__hub = { down: false };
+{
+  const real = window.fetch, gone = () => Promise.reject(new TypeError("Failed to fetch"));
+  window.fetch = (u, o) => (String(u).includes("/api/") ? (__hub.down ? gone() : real(u, o).then((r) => (__hub.down ? gone() : r))) : real(u, o));
+}
+"""
 OFFLINE = """
-const real = window.fetch;
-let down = false;
-window.fetch = (u, o) => (down && String(u).includes("/api/") ? Promise.reject(new TypeError("Failed to fetch")) : real(u, o));
+const hub = window.__hub;
 const chip = () => $(".topbar__offline"), banner = () => $(".offline-banner");
 const seen = { before: !!banner() && !chip().hidden };
 const search = () => api("vendors").catch(() => {});   // any request of the page: the app's own helper
-async function lose() { down = true; search(); await until(() => banner(), "the offline banner"); }
+async function lose() { hub.down = true; search(); await until(() => banner(), "the offline banner"); }
 // the Hub stops answering: the shell stays, the chip and the banner show
 await lose();
 seen.chip = text(chip()); seen.chipShown = !chip().hidden; seen.banner = text(banner()); seen.role = banner().getAttribute("role");
 seen.icon = !!banner().querySelector("use[href='#i-wifi-off']"); seen.title = text($("h1")); seen.nav = !!$(".nav");
 if (__LEAVE__) return seen;
 // the Hub answers again, Try now: the banner and the chip go and a toast says so
-down = false; press("Try now").focus(); press("Try now").click();
+hub.down = false; press("Try now").focus(); press("Try now").click();
 await until(() => !banner(), "the banner to go");
 seen.focus = document.activeElement === $("h1"); seen.chipGone = chip().hidden; seen.toast = text($(".toast"));
 // the Hub stops again and answers again without a press: the page tries again by itself within 10 s
-if (__AUTO__) { await lose(); down = false; await until(() => !banner(), "the automatic retry", 14000); seen.auto = true; }
+if (__AUTO__) { await lose(); hub.down = false; await until(() => !banner(), "the automatic retry", 14000); seen.auto = true; }
 return seen;
 """
 
 
-def _drive(url: str, tmp_path, script: str, width: int, scheme: str, shot: str | None = None) -> dict:
+def _drive(url: str, tmp_path, script: str, width: int, scheme: str, shot: str | None = None, init_js: str = "") -> dict:
     node = _node()
     if not node:
         _missing("the page driver needs Node 22 or later")
     file = tmp_path / "drive.js"
     file.write_text(HOME_PRELUDE + script, encoding="utf-8")
     init = tmp_path / "init.js"       # the browser's own install offer is not taken, so the sheet is what the row opens
-    init.write_text("addEventListener('beforeinstallprompt', (e) => e.stopImmediatePropagation(), true);", encoding="utf-8")
+    init.write_text("addEventListener('beforeinstallprompt', (e) => e.stopImmediatePropagation(), true);" + init_js, encoding="utf-8")
     cmd = [node, str(DRIVER), "--url", url + "#add", "--script", str(file), "--width", str(width), "--scheme", scheme, "--init", str(init)]
     if SHOTS and shot:
         Path(SHOTS).mkdir(parents=True, exist_ok=True)
@@ -2105,7 +2113,7 @@ def test_the_install_sheet_shows_the_three_iphone_steps(served_web, tmp_path, wi
 def test_the_hub_not_answering_shows_the_chip_and_the_banner_and_the_app_recovers(served_web, tmp_path, width, scheme):
     auto = (width, scheme) == (1280, "light")      # the 10 s wait is done once
     out = _drive(served_web.url, tmp_path, OFFLINE.replace("__LEAVE__", "true" if SHOTS else "false").replace("__AUTO__", "false" if SHOTS else str(auto).lower()),
-                 width, scheme, "offline")
+                 width, scheme, "offline", OUTAGE)
     assert out["before"] is False
     assert out["chip"] == "Offline" and out["chipShown"] and out["icon"] and out["role"] == "status" and out["nav"]
     assert out["banner"] == "Needs a look: Cannot reach the Hub. Retrying every 10 s.Try now"
