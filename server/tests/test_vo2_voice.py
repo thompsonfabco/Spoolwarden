@@ -13,6 +13,7 @@ from test_console_general import app  # noqa: F401
 from test_setup_page import client, env, post  # noqa: F401
 
 from filament_kit import config, setup_helper, station_client, voice_state
+from filament_kit.profiles import statexml
 from filament_kit.setup_console import voice_tab
 from filament_kit.setup_page import Refused
 from filament_kit.station_client import StationCallError
@@ -358,3 +359,15 @@ def test_a_station_named_by_the_hubs_lan_name_or_address_is_not_remote(host, mon
     monkeypatch.setattr(socket, "gethostbyname_ex", lambda n: (n, [], ["192.168.1.20"]))
     assert voice_tab.station_remote(_cfg("http://192.168.1.20:5003")) is False
     assert voice_tab.station_remote(_cfg("http://192.168.1.21:5003")) is True
+
+
+# ---- rework 2 (R602) ----
+
+def test_a_broken_file_is_kept_aside_and_never_overwritten():
+    f = _file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(b"<voice speed=1")
+    assert voice_state.save({"speed": 80}, _cfg()) is True
+    assert (f.parent / "voice.xml.unreadable").read_bytes() == b"<voice speed=1"
+    assert voice_state.stored(_cfg()) == {"speed": 80}
+    assert any("voice.xml" in p for p in statexml.problems())
