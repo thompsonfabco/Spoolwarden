@@ -393,7 +393,7 @@ def _flash_and_verify(panel, port: str, version: str) -> int:
     output.emit({"ok": True, "port": port, "version": version, **({"notice": result.notice} if result.notice else {})})
     output.out_lines(output.status_row("done", "The display answered."))
     if result.notice:
-        output.out(result.notice.format(command="spoolwarden") if "{command}" in result.notice else result.notice)
+        output.out(output.fill(result.notice, command=spools_cli.COMMAND))
     return 0
 
 
@@ -554,7 +554,7 @@ def cmd_station_panel_wifi(off: bool = False, ask=input, secret=None, run=subpro
     is told over USB through panel_setup's plain functions, whose sentences are printed as they are (they never hold the
     password). The change is then applied (the drop-in, the station's restart)."""
     from .station import panel, panel_setup, state as station_state
-    command = "sudo spoolwarden weigh-station panel-wifi" + (" --off" if off else "")
+    command = f"sudo {spools_cli.COMMAND} weigh-station panel-wifi" + (" --off" if off else "")
     if not _is_root():
         return output.need_sudo(_sudo_command(command))
     if not off and ask is input and not output.terminal():     # the name and the password are asked: nothing is stopped
@@ -610,7 +610,7 @@ def cmd_station_panel_wifi(off: bool = False, ask=input, secret=None, run=subpro
                 output.emit({"ok": True, **done})
                 output.out_lines(output.status_row("done", "The panel is set up for Wi-Fi."))
         except panel_setup.PanelSetupError as e:
-            output.error(str(e).format(command="spoolwarden") if "{command}" in str(e) else str(e))
+            output.error(output.fill(str(e), command=spools_cli.COMMAND))
             return 1
         if ser:
             ser.close()

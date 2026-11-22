@@ -487,6 +487,13 @@ def note(text: str, *, old_name: bool = False) -> None:
     _write(sys.stderr, wrap("Note: " + text, indent=6, first=0))
 
 
+def fill(text: str, **names: str) -> str:
+    """The named {tokens} of a catalogue text filled in; any other brace stays as it is (str.format raises on one)."""
+    for name, value in names.items():
+        text = text.replace("{" + name + "}", str(value))
+    return text
+
+
 def error(what: str, fix: str | None = None, *, cmd: str | None = None) -> None:
     """`Error: <what>` on standard error and, when something can be done about it, `Fix: <fix>`. `cmd`, the exact
     command that does it, goes on its own line, indented five spaces, so it can be copied whole. A `what` that holds

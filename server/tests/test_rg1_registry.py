@@ -168,6 +168,36 @@ def test_the_flash_notice_is_printed_after_the_done_line(monkeypatch, capsys):
     assert out.index("The display answered.") < out.index("Its Wi-Fi set-up is gone: sudo spoolwarden weigh-station panel-wifi")
 
 
+def test_fill_fills_only_the_named_tokens_and_never_raises():
+    assert output.fill("run sudo {command} x", command="spoolwarden") == "run sudo spoolwarden x"
+    for text in ("{undo} then {command}", "{0} {command}", "a { b {command}", "} {command} }"):
+        got = output.fill(text, command="C")
+        assert got == text.replace("{command}", "C")
+    assert output.fill("no tokens {undo}", command="C") == "no tokens {undo}"
+
+
+def test_the_flash_notice_with_other_braces_prints_and_the_name_is_the_constant(monkeypatch, capsys):
+    ser = type("S", (), {"panel_version": "15", "close": lambda s: None})()
+    monkeypatch.setattr(panel, "open_panel", lambda port: ser)
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
+    monkeypatch.setattr(spools_cli, "COMMAND", "othername")
+    note = "Gone {undo}: sudo {command} weigh-station panel-wifi {0}"
+    monkeypatch.setattr(panel, "flash_panel_result", lambda port, version, have=None: panel_flash.Flash(True, True, note))
+    assert cli._flash_and_verify(panel, "/dev/ttyACM0", "15") == 0
+    assert "Gone {undo}: sudo othername weigh-station panel-wifi {0}" in capsys.readouterr().out
+
+
+def test_a_panel_setup_error_with_other_braces_is_printed_and_the_command_is_the_constant(bench, monkeypatch, capsys):
+    monkeypatch.setattr(spools_cli, "COMMAND", "othername")
+    monkeypatch.setattr(panel, "open_panel", lambda dev: None)
+
+    def boom(send=None):
+        raise panel_setup.PanelSetupError("bad {undo}: {command} again")
+    monkeypatch.setattr(panel_setup, "disable", boom)
+    assert cli.cmd_station_panel_wifi(off=True, run=bench.run) == 1
+    assert "bad {undo}: othername again" in capsys.readouterr().err
+
+
 # ---- (c) status ----
 
 def test_the_status_rows_of_the_station_carry_the_panel_rows(monkeypatch):
