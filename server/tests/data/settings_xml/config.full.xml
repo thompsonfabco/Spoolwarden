@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config version="1" server-name="workshop-hub" spoolman-url="http://127.0.0.1:7912" port="8710" model="claude-opus-5-5" reads-per-day="60" auto-remap="true" presets-orca="false">
+  <locations as="list">
+    <item>Sealed stock</item>
+    <item>Rack 1</item>
+    <item>Storage box</item>
+    <item>Overflow</item>
+  </locations>
+  <placement pla-location="Rack 1" box-prefix="Storage box " box-count="12" overflow="Overflow" sealed-location="Sealed stock"/>
+  <printers as="list"/>
+  <library schedule="daily">
+    <url as="null"/>
+  </library>
+  <station url="http://127.0.0.1:5003" port="5003" nfc-device="auto" beep="true" beep-device="" speech="true" tts="auto" camera="auto" panel-flash="true" panel-swap="false" page-from="home" speaker-volume="50">
+    <allow as="list">
+      <item>127.0.0.1</item>
+      <item>192.0.2.10</item>
+    </allow>
+    <voice as="null"/>
+  </station>
+  <web port="8101" public-url="https://hub.example.net" push="false" printer-changes="true">
+    <lan as="list">
+      <item>192.168.0.0/16</item>
+      <item>10.0.0.0/8</item>
+    </lan>
+  </web>
+  <remote>
+    <hostname as="null"/>
+    <acme-window as="null"/>
+    <email as="null"/>
+  </remote>
+  <spoolman>
+    <allow as="list">
+      <item>192.0.2.0/24</item>
+    </allow>
+  </spoolman>
+  <orders>
+    <file as="null"/>
+  </orders>
+  <tag-sources as="list">
+    <item name="bench reader" url="http://192.0.2.20:5004/lasttag"/>
+  </tag-sources>
+  <slicer-printers as="list"/>
+  <intake reader="auto" history-keep="100">
+    <tare-hints as="map">
+      <entry key="Acme" as="int">177</entry>
+      <entry key="PLA Basic" as="float">0.5</entry>
+    </tare-hints>
+    <model as="null"/>
+  </intake>
+  <local-intake url="http://127.0.0.1:7915" tier="auto"/>
+  <label-reader share-corrections="false"/>
+  <web-instructions as="null"/>
+  <appearance theme="console"/>
+  <events keep-days="400"/>
+  <backup keep-days="14"/>
+  <updates schedule="weekly" token-file="/etc/filament-kit/github_token" repo="thompsonfabco/filament-kit" api="https://api.github.com"/>
+  <setup>
+    <hosts as="list">
+      <item>hub.example.lan</item>
+    </hosts>
+  </setup>
+  <slot-service token-file="/etc/filament-kit/slot_token"/>
+  <modules server="true" spoolman="true" printers="true" station="false" ai-intake="true"/>
+</config>
