@@ -706,8 +706,8 @@ private fun GuideSheet(g: AddGuide, found: List<Printer>, onPairAgain: () -> Uni
                 g.searching -> BusyReason(R.string.add_picker_looking)
                 rows.isEmpty() -> Text(PrinterTexts.GUIDE_NONE, style = MaterialTheme.typography.bodyMedium, color = SpoolwardenTheme.colors.muted)
             }
-            SwButton(PrinterTexts.GUIDE_BY_ADDRESS, viewModel::addByAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Plain)
             SwButton(PrinterTexts.GUIDE_BAMBU_BY_ADDRESS, viewModel::addBambuByAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Plain)
+            SwButton(PrinterTexts.GUIDE_BY_ADDRESS, viewModel::addByAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Plain)
         }
     }
 }
