@@ -182,6 +182,7 @@ await sleep(300);
 change(pickEl(), "espeak");
 await until(() => calls.length === 3, "the refused voice");
 await sleep(400);
+await until(() => resultText(), "the refusal line");
 out.refused = { calls: calls.map((c) => c[0]), speed: sliders()[0].value, readout: readout(sliders()[0]), voice: pickEl().value, speaker: shown(speakerEl()), result: resultText() };
 """)
     assert page["bad"] == {"calls": 0, "error": "Enter a number from 0 to 903."}

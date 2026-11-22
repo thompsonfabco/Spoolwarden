@@ -218,6 +218,7 @@ const out = { start: tiles() };
 const radio = [...document.querySelectorAll(".theme-picker__input")].find((i) => i.value === "palette");
 radio.checked = true; radio.dispatchEvent(new Event("change", { bubbles: true }));
 await sleep(300);
+await until(() => text($(".theme-picker").parentElement.querySelector(":scope > .result .result__text")), "the result line");
 out.chose = { stored: localStorage.getItem("spoolwarden.look"), look: root.getAttribute("data-look"), tiles: tiles(),
   result: text($(".theme-picker").parentElement.querySelector(":scope > .result .result__text")),
   metas: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.content.toLowerCase()), surface: getComputedStyle(root).getPropertyValue("--surface").trim().toLowerCase() };
