@@ -199,8 +199,8 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
                     wrong_tickets.wrong(address)
                     return self._error(403, "forbidden", "That ticket is not valid.")
                 return self._send(200, {"ok": True}, {"Set-Cookie": page.cookie_header(sid)})
-            if path in ("/voice", "/voice/test"):    # the Hub's call: an address on the allow-list (guard), no other
-                if caller != guard.LISTED:
+            if path in ("/voice", "/voice/test"):    # the Hub's call: an allow-listed address and the proof, as /settings
+                if not (caller == guard.LISTED and proof is not None and access.proof_ok("voice", proof, raw)):
                     return self._error(403, "forbidden")
                 data = self._json(raw)
                 if data is None:
@@ -222,9 +222,11 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
             data = self._json(raw)
             if data is None:
                 return
-            from .settings import SettingsError
+            from .settings import SetOnHub, SettingsError
             try:
                 listing = store.reset() if data.get("reset") is True and len(data) == 1 else store.change(data)
+            except SetOnHub as e:
+                return self._error(409, e.code, str(e))
             except SettingsError as e:
                 return self._error(400, "bad_request", str(e))
             self._send(200, {"settings": listing})

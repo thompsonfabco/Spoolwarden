@@ -4,7 +4,9 @@ length scale 100 / speed and speaker id; espeak-ng words per minute 165 x speed 
 from __future__ import annotations
 
 import io
+import json
 import sys
+import threading
 import types
 import wave
 
@@ -167,15 +169,13 @@ def test_the_drop_in_values_speak_until_a_live_one_comes(espeak, monkeypatch):
     assert espeak[1][espeak[1].index("-s") + 1] == "165"
 
 
-def test_the_environment_gives_the_drop_in_values_clamped(monkeypatch):
-    monkeypatch.setenv("STATION_VOICE_SPEAKER", "5000")
-    monkeypatch.setenv("STATION_VOICE_SPEED", "10")
-    s = st.settings_from_env()
-    assert (s["voice_speaker"], s["voice_speed"]) == (903, 50)
-    monkeypatch.setenv("STATION_VOICE_SPEAKER", "x")
-    monkeypatch.delenv("STATION_VOICE_SPEED")
+def test_the_environment_does_not_set_the_speaker_or_the_speed(monkeypatch):
+    """R88 2.5 (01:50): the speaker and the speed are never drop-in settings; only the Hub's live values move them."""
+    monkeypatch.setenv("STATION_VOICE_SPEAKER", "5")
+    monkeypatch.setenv("STATION_VOICE_SPEED", "150")
     s = st.settings_from_env()
     assert (s["voice_speaker"], s["voice_speed"]) == (0, 100)
+    assert not hasattr(st, "int_from_env")
 
 
 def test_a_phrase_with_its_own_values_leaves_the_live_ones(piper):
@@ -233,8 +233,10 @@ def test_a_test_phrase_sets_its_volume_on_the_panel_and_puts_the_live_one_back(m
 
 # ---- POST /voice
 
-def post(station, path, body):
-    status, d, _ = station.json("POST", path, body)
+def post(station, path, body, proof=True):
+    """The Hub's call: the body signed with the pairing proof for `voice` (`proof=False`: no header at all)."""
+    raw = json.dumps(body).encode()
+    status, d, _ = station.json("POST", path, body, station.proof("voice", raw) if proof else None)
     return status, d
 
 
@@ -274,7 +276,7 @@ def test_one_bad_value_refuses_the_whole_request(hub):
 
 
 def test_a_body_that_is_not_an_object_is_refused(hub):
-    status, d, _ = hub.json("POST", "/voice", [1, 2])
+    status, d, _ = hub.json("POST", "/voice", [1, 2], hub.proof("voice", json.dumps([1, 2]).encode()))
     assert status == 400 and d["error"] == "bad_request"
 
 
@@ -300,10 +302,67 @@ def test_the_voice_routes_answer_post_only(hub):
     assert hub.json("GET", "/voice")[0] == 404 and hub.json("GET", "/voice/test")[0] == 404
 
 
-def test_the_page_settings_cannot_undo_a_live_value(hub):
-    post(hub, "/voice", {"volume": 77, "speech": False})
-    hub.store.change({"beep": False})                                 # any station-page change rewrites the drop-in values
+def settings_post(station, body, headers=None):
+    """A change on the page's settings route: the Hub's call (the proof) unless `headers` is a page session's."""
+    raw = json.dumps(body).encode()
+    status, d, _ = station.json("POST", "/settings", body, station.proof("settings", raw) if headers is None else headers)
+    return status, d
+
+
+def listed(station, id_):
+    return next(s for s in station.store.listing() if s["id"] == id_)
+
+
+def test_before_the_hub_sends_a_value_the_page_changes_speak_and_volume_as_before(hub):
+    assert st.live == {}
+    for id_ in ("speech", "volume"):
+        assert "readonly" not in listed(hub, id_) and "note" not in listed(hub, id_)
+    status, d = settings_post(hub, {"speech": False, "volume": 20})
+    assert status == 200
+    assert {s["id"]: s["value"] for s in d["settings"] if s["id"] in ("speech", "volume")} == {"speech": False, "volume": 20}
+
+
+def test_once_the_hub_sent_values_speak_and_volume_show_the_hubs_values_read_only(hub):
+    post(hub, "/voice", {"speech": False, "volume": 77})
+    for id_, value in (("speech", False), ("volume", 77)):
+        row = listed(hub, id_)
+        assert row["value"] == value == st.voice_value(id_)           # the list never contradicts the value in force
+        assert row["readonly"] is True
+        assert row["note"] == "Speaking and volume are set on the Hub: Settings > Weigh Station voice."
+    assert "readonly" not in listed(hub, "beep") and "readonly" not in listed(hub, "panel_swap")
+
+
+def test_the_hello_values_lock_the_page_too(hub):
+    speech.apply_hello({"voice": {"speed": 90}})
+    assert listed(hub, "volume")["readonly"] is True and listed(hub, "speech")["readonly"] is True
+
+
+def test_a_page_change_of_speak_or_volume_is_refused_and_the_live_value_stands(hub):
+    post(hub, "/voice", {"speech": False, "volume": 77})
+    for body in ({"volume": 20}, {"speech": True}, {"volume": 77}):
+        status, d = settings_post(hub, body)
+        assert status == 409 and d == {"error": "set_on_hub", "message": "Speaking and volume are set on the Hub."}
     assert st.voice_value("volume") == 77 and st.voice_value("speech") is False
+    assert listed(hub, "volume")["value"] == 77 and listed(hub, "speech")["value"] is False
+    assert not hub.store.changed                                       # nothing was kept for them
+
+
+def test_a_refused_change_is_all_or_none_and_the_other_settings_still_change(hub):
+    post(hub, "/voice", {"volume": 77})
+    assert settings_post(hub, {"beep": False, "volume": 20})[0] == 409
+    assert listed(hub, "beep")["value"] is True                        # not even the beep
+    assert settings_post(hub, {"beep": False})[0] == 200
+    assert listed(hub, "beep")["value"] is False
+
+
+def test_a_page_session_is_refused_the_same_way(elsewhere):
+    ticket = elsewhere.access.new_ticket()
+    status, d, r = elsewhere.json("POST", "/session", {"ticket": ticket})
+    cookie = {"Cookie": r.getheader("Set-Cookie").split(";")[0], "Content-Type": "application/json"}
+    st.live["volume"] = 77                                             # what the Hub sent (the voice route is for the Hub)
+    status, d = settings_post(elsewhere, {"volume": 20}, cookie)
+    assert status == 409 and d["error"] == "set_on_hub"
+    assert st.voice_value("volume") == 77
 
 
 # ---- POST /voice/test
@@ -327,7 +386,7 @@ def test_test_cannot_be_made_to_say_anything_else(hub):
     assert speech.speech["opts"] == {"speed": 100}                    # the text and `speech` are not read
 
 
-@pytest.mark.parametrize("step", ["weigh", "ready", "camera", "recognise", "phone", "done", "pairing"])
+@pytest.mark.parametrize("step", ["weigh", "ready", "camera", "recognising", "phone", "done", "pairing"])
 def test_test_is_busy_while_a_step_is_open(hub, monkeypatch, step):
     monkeypatch.setitem(st.flow, "step", step)
     status, d = post(hub, "/voice/test", {})
@@ -419,3 +478,113 @@ def test_the_station_says_the_test_sentence_end_to_end(hub, piper):
     assert text == speech.SENTENCE and (cfg.speaker_id, cfg.length_scale) == (77, 0.5)
     with wave.open(io.BytesIO(wav)) as w:
         assert w.getnframes() == 10
+
+
+# ---- R594: the texts are the catalogue's (D13)
+
+def _state_copy():
+    """A second copy of station/state.py, read fresh, so its texts are resolved again against the page's catalogue."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("filament_kit.station.state_copy", st.__file__)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_voice_refusal_sentences_come_from_the_catalogue_with_the_english_as_fallback(monkeypatch):
+    from filament_kit.station import page
+    english = {"bad_speech": "speech must be true or false.",
+               "bad_speaker": "speaker must be a whole number from 0 to 903.",
+               "bad_speed": "speed must be a whole number from 50 to 200, in steps of 10.",
+               "bad_volume": "volume must be a whole number from 0 to 100.",
+               "busy": "The Weigh Station is in use. Try again when it is idle.",
+               "off": "Speaking is switched off.",
+               "set_on_hub_note": "Speaking and volume are set on the Hub: Settings > Weigh Station voice.",
+               "set_on_hub": "Speaking and volume are set on the Hub."}
+    monkeypatch.setattr(page, "_CATALOGUE", {})                       # no catalogue key yet: the English
+    assert _state_copy().VOICE_TEXTS == english
+    monkeypatch.setattr(page, "_CATALOGUE", {f"station_voice_{k}": f"[{k}]" for k in english})
+    assert _state_copy().VOICE_TEXTS == {k: f"[{k}]" for k in english}  # a catalogue key wins
+
+
+# ---- R594 L2: the speed goes in steps of 10 at the station too
+
+@pytest.mark.parametrize("speed", [55, 51, 199, 101])
+def test_a_speed_off_the_steps_of_ten_is_refused(hub, speed):
+    status, d = post(hub, "/voice", {"speed": speed})
+    assert status == 400 and d["error"] == "bad_request" and "steps of 10" in d["message"]
+    assert st.live == {}
+    assert post(hub, "/voice/test", {"speed": speed})[0] == 400 and speech.speech["text"] is None
+
+
+@pytest.mark.parametrize("speed", [50, 60, 100, 130, 200])
+def test_a_speed_on_the_steps_of_ten_is_taken(hub, speed):
+    assert post(hub, "/voice", {"speed": speed}) == (200, {}) and st.voice_value("speed") == speed
+
+
+def test_a_hello_speed_off_the_steps_is_skipped():
+    speech.apply_hello({"voice": {"speed": 95, "volume": 10}})
+    assert st.live == {"volume": 10}
+
+
+# ---- R594 L5: a phrase's text and its own values are taken as one pair
+
+def test_a_phrase_is_never_read_with_another_phrases_values(monkeypatch):
+    class Racing(dict):
+        """The moment the loop has read the text, a newer phrase (a test, with its own volume) arrives."""
+        fired = False
+
+        def __getitem__(self, key):
+            value = super().__getitem__(key)
+            if key == "text" and not Racing.fired:
+                Racing.fired = True
+                t = threading.Thread(target=speech.say, args=("test sentence", {"volume": 90}))
+                t.start()
+                t.join(0.3)             # with the lock the newer phrase waits until the pair is taken
+            return value
+
+    monkeypatch.setattr(speech, "speech", Racing(text="Cancelled.", opts=None))
+    pair = speech.next_phrase()
+    assert pair == ("Cancelled.", None)
+    assert speech.next_phrase() == ("test sentence", {"volume": 90})
+
+
+# ---- R594 / R88 2.5 ruling: the routes need the pairing proof as /settings does
+
+@pytest.mark.parametrize("path", ["/voice", "/voice/test"])
+def test_the_voice_routes_refuse_a_listed_address_with_no_proof(hub, path):
+    status, d = post(hub, path, {"volume": 10, "speed": 100}, proof=False)
+    assert status == 403 and d["error"] == "forbidden" and d["message"]
+    assert st.live == {} and speech.speech["text"] is None
+
+
+@pytest.mark.parametrize("path", ["/voice", "/voice/test"])
+def test_the_voice_routes_refuse_a_proof_for_another_purpose_body_or_key(hub, path):
+    from filament_kit.station import page
+    body = {"speed": 100}
+    raw = json.dumps(body).encode()
+    other_body = json.dumps({"speed": 90}).encode()
+    wrong_key = {page.PROOF_HEADER: page.make_proof(page.token_key("another token 0123456789"), "voice", raw, now=hub.clock())}
+    for h in (hub.proof("settings", raw), hub.proof("ticket", raw), hub.proof("voice", other_body), wrong_key,
+              {page.PROOF_HEADER: "garbage"}):
+        status, d, _ = hub.json("POST", path, body, h)
+        assert status == 403 and d["error"] == "forbidden"
+    assert st.live == {} and speech.speech["text"] is None
+
+
+@pytest.mark.parametrize("path", ["/voice", "/voice/test"])
+def test_the_voice_routes_refuse_a_replayed_or_stale_proof(hub, path):
+    from filament_kit.station import page
+    raw = json.dumps({"speed": 100}).encode()
+    h = hub.proof("voice", raw)
+    assert hub.json("POST", path, {"speed": 100}, h)[0] == 200
+    assert hub.json("POST", path, {"speed": 100}, h)[0] == 403            # the same proof again: a replay
+    old = {page.PROOF_HEADER: page.make_proof(hub.key, "voice", raw, now=hub.clock() - 120)}
+    assert hub.json("POST", path, {"speed": 100}, old)[0] == 403
+
+
+def test_the_voice_routes_refuse_a_right_proof_from_an_address_off_the_list(elsewhere):
+    for path in ("/voice", "/voice/test"):
+        status, d = post(elsewhere, path, {"speed": 100})
+        assert status == 403 and d["error"] == "forbidden"
+    assert st.live == {} and speech.speech["text"] is None

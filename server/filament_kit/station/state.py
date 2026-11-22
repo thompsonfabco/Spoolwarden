@@ -11,6 +11,7 @@ import re
 import threading
 from pathlib import Path
 
+from . import page as _station_page
 from . import voice
 
 
@@ -22,25 +23,24 @@ def volume_from_env() -> int:
         return 50
 
 
-def int_from_env(name: str, default: int, low: int, high: int) -> int:
-    """The environment variable `name` clamped to low-high; `default` when unset or not a number."""
-    try:
-        return max(low, min(high, int(os.environ.get(name, str(default)))))
-    except ValueError:
-        return default
-
-
 # the live voice values (R88 2.5): the ranges the station takes, and where each one sits in `settings`
 VOICE_RANGES = {"speaker": (0, 903), "speed": (50, 200), "volume": (0, 100)}
+VOICE_SPEED_STEP = 10      # the speed goes in steps of 10 (R88 2.5): the station checks it again
 VOICE_KEYS = {"speech": "speech", "speaker": "voice_speaker", "speed": "voice_speed", "volume": "speaker_volume"}
-# the sentences of the voice routes' refusals (plain constants; the string catalogue takes them later, RC9 / RG1)
+# the sentences of the voice routes' refusals (the string catalogue's, the English as the fallback: RC9 / RG1 add the keys)
+_t = _station_page.catalogue_text
 VOICE_TEXTS = {
-    "bad_speech": "speech must be true or false.",
-    "bad_speaker": "speaker must be a whole number from 0 to 903.",
-    "bad_speed": "speed must be a whole number from 50 to 200.",
-    "bad_volume": "volume must be a whole number from 0 to 100.",
-    "busy": "The Weigh Station is in use. Try again when it is idle.",
-    "off": "Speaking is switched off.",
+    "bad_speech": _t("station_voice_bad_speech", "speech must be true or false."),
+    "bad_speaker": _t("station_voice_bad_speaker", "speaker must be a whole number from 0 to 903."),
+    "bad_speed": _t("station_voice_bad_speed", "speed must be a whole number from 50 to 200, in steps of 10."),
+    "bad_volume": _t("station_voice_bad_volume", "volume must be a whole number from 0 to 100."),
+    "busy": _t("station_voice_busy", "The Weigh Station is in use. Try again when it is idle."),
+    "off": _t("station_voice_off", "Speaking is switched off."),
+    # once the Hub has sent voice values the station page's Speak and Volume are read-only: the line beside them, and the
+    # sentence of the 409 `set_on_hub` that answers a change of either
+    "set_on_hub_note": _t("station_voice_set_on_hub_note",
+                          "Speaking and volume are set on the Hub: Settings > Weigh Station voice."),
+    "set_on_hub": _t("station_voice_set_on_hub", "Speaking and volume are set on the Hub."),
 }
 
 
@@ -66,9 +66,10 @@ def settings_from_env() -> dict:
         "panel_link": "wifi" if os.environ.get("STATION_PANEL_LINK", "usb") == "wifi" else "usb",
         "panel_port": int_from_env("STATION_PANEL_PORT", 5004, 1, 65535),
         "speaker_volume": volume_from_env(),  # the C3 panel's speaker, percent
-        # the voice: Piper's speaker number (the many-speaker voice only) and the speaking speed in percent
-        "voice_speaker": int_from_env("STATION_VOICE_SPEAKER", 0, *VOICE_RANGES["speaker"]),
-        "voice_speed": int_from_env("STATION_VOICE_SPEED", 100, *VOICE_RANGES["speed"]),
+        # the voice's speaker number (Piper's many-speaker voice only) and speaking speed in percent: only the Hub sets
+        # these (`live`, R88 2.5), so no drop-in key reads them
+        "voice_speaker": 0,
+        "voice_speed": 100,
         # the intake flow: no progress this long and it goes back to idle; a recognition (local AI, then Claude)
         # may take this long. The server's address and token come from the pairing files (server_api).
         "flow_timeout": int(os.environ.get("STATION_FLOW_TIMEOUT", "600")),
@@ -107,6 +108,7 @@ def clean_voice(body: dict) -> tuple[dict, dict]:
             ok = isinstance(v, bool)
         else:
             ok = isinstance(v, int) and not isinstance(v, bool) and VOICE_RANGES[name][0] <= v <= VOICE_RANGES[name][1]
+            ok = ok and (name != "speed" or v % VOICE_SPEED_STEP == 0)
         if ok:
             values[name] = v
         else:
