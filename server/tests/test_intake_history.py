@@ -493,14 +493,24 @@ def test_a_record_json_moved_to_xml_keeps_its_private_mode(sm):
 
 
 @pytest.mark.skipif(not hasattr(os, "geteuid"), reason="file modes are the Hub's on Linux")
-def test_a_pending_read_json_moved_to_xml_keeps_its_private_mode(sm):
+def test_a_pending_read_json_moved_to_xml_keeps_its_private_mode(sm, monkeypatch):
     out = read(sm)
     pend = config.paths().state / "intake-history" / "pending" / out["read_id"]
     body = statexml.read(pend / "read.json")
     (pend / "read.xml").unlink()
     (pend / "read.json").write_text(json.dumps(body), encoding="utf-8")
     os.chmod(pend / "read.json", 0o600)
+    modes = []
+    real = intake_history.shutil.rmtree
+
+    def rmtree(path, *a, **kw):                                 # the pending folder is deleted right after the read
+        if os.path.exists(os.path.join(path, "read.xml")):
+            modes.append(stat.S_IMODE(os.stat(os.path.join(path, "read.xml")).st_mode))
+        return real(path, *a, **kw)
+
+    monkeypatch.setattr(intake_history.shutil, "rmtree", rmtree)
     r, hid = add(sm, read_id=out["read_id"])                    # record_save reads the pending read
+    assert modes == [0o600]                                     # moved to XML at the private mode, not 0644
     assert intake_history.get(hid)["read"]["items"][0]["vendor"] == "SUNLU"
 
 
