@@ -80,7 +80,7 @@ def test_install_sh_is_valid_bash():
 
 # ---- the first question
 
-GUIDED_BLOCK = between("# The first question (R82 section 3)", '    ASKED="features"').rsplit("\nif [ -z", 1)[0] + "\n"
+GUIDED_BLOCK = between("# The first question:", '    ASKED="features"').rsplit("\nif [ -z", 1)[0] + "\n"
 
 
 def guided(answers: str, default: str = "y", first=1, pre: str = "") -> tuple[str, str]:

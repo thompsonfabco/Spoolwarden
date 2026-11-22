@@ -4,7 +4,6 @@ android/app/src/test/java/com/thompsonfabco/filamentkit/nav/DestinationsTest.kt 
 android/app/src/test/java/com/thompsonfabco/filamentkit/nav/TagTapsTest.kt | assertEquals("Preview and Done do not take it (05 2.6)", TagTapped.Opened, tap("04:b2").what) | 1 | a message in a test assertion
 android/app/src/test/java/com/thompsonfabco/filamentkit/ui/PaletteLayoutTest.kt | assertEquals("08 14: Android has no rounded system font, the default family stands in", FontFamily.Default, tokens.type.sans) | 1 | a message in a test assertion
 android/app/src/test/java/com/thompsonfabco/filamentkit/ui/history/RefuterProbeTest.kt | assertNotNull("typing kept (05 2.7)", vm.state.value.edit) | 1 | a message in a test assertion
-server/tests/test_af1_installer.py | GUIDED_BLOCK = between("# The first question (R82 section 3)", '    ASKED="features"').rsplit("\nif [ -z", 1)[0] + "\n" | 1 | a marker text the test finds in the script it reads
 server/tests/test_demo_sealed.py | "DELETE /api/pair": "pairing works in the demo (R85 4.3): test_pairing_in_the_demo_touches_only_the_pairing_files", | 1 | data: dictionary values the test compares
 server/tests/test_demo_sealed.py | "POST /api/pair": "pairing works in the demo (R85 4.3): test_pairing_in_the_demo_touches_only_the_pairing_files", | 1 | data: dictionary values the test compares
 server/tests/test_demo_sealed.py | "POST /setup/api/pair": "pairing works in the demo (R85 4.3): test_pairing_in_the_demo_touches_only_the_pairing_files", | 1 | data: dictionary values the test compares
@@ -16,7 +15,6 @@ server/tests/test_hub_storage_locations.py | // the default overflow cannot be s
 server/tests/test_rc4_co5_vo4.py | // R622 2: the Hub away with values read before: the panel at once from them, every control marked, nothing sent | 1 | script source inside a Python string
 server/tests/test_rc4_co5_vo4.py | // R88 04:20: the Voice row's line follows `remote` | 1 | script source inside a Python string
 server/tests/test_rc4_co5_vo4.py | // the one answer shape of R88 04:15: {station, remote, speech, voice, speaker, speaker_range, speed, volume} | 1 | script source inside a Python string
-server/tests/test_rc4_co5_vo4.py | return _node(tmp_path, VO_HARNESS % {**_parts(js), "vo": _cut(js, "// ----- Weigh Station voice", "// ----- the language (R85 3.7")}) | 1 | a marker text the test finds in the script it reads
 server/tests/test_rc4_web_page.py | // R574 13 (re-review): an entry exactly as the reader fake answers it, its record no longer kept: its own thumbnail and its time | 1 | script source inside a Python string
 server/tests/test_storage_api.py | assert placement.resolve(st, "Box 02", storage.counts_of({})) == "Box 02 01"       # the set named "Box 02" | 1 | data: a container's name
 server/tests/test_web_app_audit.py | // a desktop Chrome that finds the app installable offers its own prompt: the row then reads "Install app" (04 10.1) | 1 | script source inside a Python string

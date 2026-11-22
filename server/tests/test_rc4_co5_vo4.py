@@ -301,7 +301,7 @@ def _co(tmp_path):
 
 def _vo(tmp_path):
     js = _app()
-    return _node(tmp_path, VO_HARNESS % {**_parts(js), "vo": _cut(js, "// ----- Weigh Station voice", "// ----- the language (R85 3.7")})
+    return _node(tmp_path, VO_HARNESS % {**_parts(js), "vo": _cut(js, "// ----- Weigh Station voice", "// ----- the language")})
 
 
 # ---- CO5 ----
