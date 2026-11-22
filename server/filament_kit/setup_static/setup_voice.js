@@ -3,16 +3,15 @@
 // sbox, offNote, paintList, setSeen, followApply) and setup.js. It is the pattern of
 // setup_alerts.js: voiceGroup(data) is the group's builder, and the group's row in SET_GROUPS names it. The data is the read of
 // settings/general for the Voice row only (`values` station.tts and station.voice, applied through the settings route) and
-// `station_on`. Speak, Speaker, Speed and Volume live in voice.xml (R88 01:50): the group reads them, `remote` and `voice_file` from
-// the answer of the page route `P station/voice` (code) and saves each changed one there; a value out of range is refused by the
-// Hub, and the control goes back. Test calls `P station/voice/test` (code) with the values as they stand in the form. Everything
+// `station_on`. Speak, Speaker, Speed and Volume live in voice.xml (R88 01:50): the group reads them, `remote` and `voice` from
+// the view read `G station/voice` (no code: looking needs nothing, so a locked page shows the values) and saves each changed
+// one with `P station/voice` (code); on a locked page a change or Test asks for the code in place, as every group does, and goes back if it is not given; a value out of range is refused by the Hub, and the control goes back. Test calls `P station/voice/test` (code) with the values as they stand in the form. Everything
 // from the Hub goes in through textContent.
 "use strict";
 
 // ----- the words -----
 // Texts the catalogue does not have yet (only RG1 opens it): the catalogue's own wins once the key is there.
 const VOICE_STUB = {
-  settings_voice_locked: "The voice settings are shown once the page is unlocked.",
   settings_voice_speak: "Speak",
   settings_voice_choice_many: "Piper, many speakers",
   settings_voice_choice_one: "Piper, one clear speaker",
@@ -47,8 +46,6 @@ const SLIDING = "input";                                         // the event a 
 const VOICE_SPEAKERS = 903;                                      // the many-speaker voice has the speakers 0 to 903
 const voiceChoiceOf = (v) => (v["station.tts"] === "espeak" ? "espeak" : v["station.voice"] === "en_US-ljspeech-medium" ? "one" : "many");
 const voiceNumber = (v, key, dflt) => (v[key] == null || v[key] === "" || Number.isNaN(Number(v[key])) ? dflt : Number(v[key]));
-const voiceLocked = () => h("div", { class: "banner banner--info banner--inline" }, SW.icon("lock", "icon--s"),
-  h("p", { class: "banner__text" }, voT("settings_voice_locked")), h("div", { class: "actions" }, unlockToShow()));
 const voiceSpeaker = (v) => (/^\d+$/.test(String(v).trim()) && +v >= 0 && +v <= VOICE_SPEAKERS ? null : SW.t("field_error_range", { min: 0, max: VOICE_SPEAKERS }));
 
 
@@ -63,26 +60,23 @@ function voiceTestText(e) {
 }
 
 // ----- the group -----
-// The head and a body that fills itself from `P station/voice` once the page is open (a read that needs the code); while Locked it
-// holds the locked note instead.
+// The head and a body that fills itself once from the view read `G station/voice`, locked or not; the controls stay enabled while
+// Locked: a change or Test asks for the code in place (needCode), then applies.
 function voiceGroup({ g }) {
   if (!g.station_on) return setGroup("voice", { desc: SW.t("settings_voice_desc"), body: [offNote("settings_voice_off")] });
-  const note = h("div", { role: "status" }), body = h("div", { class: "voice__rows" });
-  const el = setGroup("voice", { desc: SW.t("settings_voice_desc"), body: [note, body] });
-  whenOpen(body, (open) => {
-    if (!open) { body.replaceChildren(); note.replaceChildren(voiceLocked()); return; }
-    note.replaceChildren();
-    return api("station/voice", { code: theCode() }).then((answer) => {
-      body.replaceChildren(...(answer.station === false ? [offNote("settings_voice_off")] : voiceRows(g.values || {}, answer)));
-    });
-  });
+  const body = h("div", { class: "voice__rows" });
+  const el = setGroup("voice", { desc: SW.t("settings_voice_desc"), body: [body] });
+  later(api("station/voice").then((answer) => {
+    body.replaceChildren(...(answer.station === false ? [offNote("settings_voice_off")] : voiceRows(g.values || {}, answer)));
+  }).catch((e) => say(body, e.message, false)));
   return el;
 }
 
-// the rows, from the settings' Voice values (`v`) and the answer of `P station/voice`: speech, speaker, speed, volume, remote
+// the rows, from the settings' Voice values (`v`) and the answer of `G station/voice`: speech, voice, speaker, speed, volume, remote;
+// the Voice row shows the choice the settings values give, else the one the answer's voice name gives
 function voiceRows(v, a) {
   const remote = !!a.remote, box = sbox();
-  const saved = { choice: voiceChoiceOf(v), speaker: voiceNumber(a, "speaker", 0), speed: voiceNumber(a, "speed", 100), volume: voiceNumber(a, "volume", 50) };
+  const saved = { choice: voiceChoiceOf({ "station.voice": a.voice, ...v }), speaker: voiceNumber(a, "speaker", 0), speed: voiceNumber(a, "speed", 100), volume: voiceNumber(a, "volume", 50) };
   // one write of the Voice row through settings/general; `back` puts the control back when it was refused or the code was not given
   const put = (values, back, after) => needCode(async () => {
     working(box, SW.t("common_saving"));
