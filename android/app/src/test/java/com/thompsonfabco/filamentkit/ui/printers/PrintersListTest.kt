@@ -429,6 +429,46 @@ class PrintersListTest {
         assertNull(vm.state.value.klipper)
     }
 
+    @Test fun aHubWithoutTheTestRouteGetsTheKeyAfterTheAdd() = runTest(dispatcher) {
+        backend.addResult = printer("K1", family = "klipper")
+        backend.testError = ApiError(404, "not_found", "no such route")
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.submitAddKlipper("voron.example", "7125", "", "s3cret")
+        runCurrent()
+        assertEquals(listOf("K1" to "s3cret"), backend.keys)
+        assertNull(vm.state.value.klipper)
+    }
+
+    @Test fun addAnywayAlsoSetsTheKeyAfterTheAdd() = runTest(dispatcher) {
+        backend.addResult = printer("K1", family = "klipper")
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.addKlipperAnyway("voron.example", "7125", "", "s3cret")
+        runCurrent()
+        assertEquals(listOf("K1" to "s3cret"), backend.keys)
+        assertEquals(listOf("s3cret" as String?), backend.addKeys)
+    }
+
+    @Test fun aKeyTheHubRefusesAfterTheAddKeepsTheFormForTheKeyOnly() = runTest(dispatcher) {
+        backend.addResult = printer("K1", family = "klipper")
+        backend.testError = ApiError(404, "not_found", "no such route")
+        backend.keyError = ApiError(400, "bad_request", "That API key is not valid")
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.submitAddKlipper("voron.example", "7125", "", "bad key")
+        runCurrent()
+        val d = vm.state.value.klipper!!
+        assertEquals("K1", d.createdId)
+        assertEquals(Problem.HubSaid("That API key is not valid"), d.keyProblem)
+        backend.keyError = null
+        vm.submitAddKlipper("voron.example", "7125", "", "good key")
+        runCurrent()
+        assertEquals(1, backend.added.size)
+        assertEquals(listOf("K1" to "bad key", "K1" to "good key"), backend.keys)
+        assertNull(vm.state.value.klipper)
+    }
+
     @Test fun aRefusedAddKeepsTheFormWithTheHubsMessage() = runTest(dispatcher) {
         backend.addResult = printer("K1", family = "klipper")
         backend.addError = ApiError(400, "bad_request", "That API key is not valid", JsonObject(mapOf("field" to JsonPrimitive("api_key"))))
