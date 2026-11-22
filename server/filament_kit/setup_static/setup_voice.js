@@ -9,30 +9,6 @@
 // from the Hub goes in through textContent.
 "use strict";
 
-// ----- the words -----
-// Texts the catalogue does not have yet (only RG1 opens it): the catalogue's own wins once the key is there.
-const VOICE_STUB = {
-  settings_voice_speak: "Speak",
-  settings_voice_choice_many: "Piper, many speakers",
-  settings_voice_choice_one: "Piper, one clear speaker",
-  settings_voice_choice_espeak: "espeak-ng, robotic, no download",
-  settings_voice_remote: "Chosen on the Weigh Station's own computer: spoolwarden config.",
-  settings_voice_speaker: "Speaker",
-  settings_voice_speed: "Speed",
-  settings_voice_speed_unit: "%",
-  settings_voice_volume: "Volume",
-  settings_voice_test: "Test",
-  settings_voice_restarts: "The Weigh Station restarts when the voice changes.",
-  settings_voice_test_ok: "Played on the Weigh Station.",
-  settings_voice_test_no_answer: "The Weigh Station did not answer.",
-  settings_voice_test_busy: "The Weigh Station is in use. Try again when it is idle.",
-  settings_voice_test_off: "Speaking is switched off.",
-};
-const voT = (key, vars) => {
-  const got = SW.t(key, vars);
-  if (got !== key || !Object.hasOwn(VOICE_STUB, key)) return got;
-  return VOICE_STUB[key].replace(/\{(\w+)\}/g, (_, k) => (vars && vars[k] !== undefined ? vars[k] : `{${k}}`));
-};
 
 // ----- the choices of the Voice row: what each one writes -----
 // "many" is the default (libritts_r, 904 speakers); "one" is ljspeech; "espeak" writes `tts` only and leaves the voice file as it was
@@ -54,9 +30,9 @@ const voiceSpeaker = (v) => (/^\d+$/.test(String(v).trim()) && +v >= 0 && +v <= 
 function voiceTestText(e) {
   if (e.unreachable) return [false, SW.t("common_hub_no_answer")];
   const code = e.data && e.data.code;
-  if (code === "busy") return ["warn", voT("settings_voice_test_busy")];
-  if (code === "off") return ["warn", voT("settings_voice_test_off")];
-  if (code === "no_answer" || e.status === 502) return [false, voT("settings_voice_test_no_answer")];
+  if (code === "busy") return ["warn", SW.t("settings_voice_test_busy")];
+  if (code === "off") return ["warn", SW.t("settings_voice_test_off")];
+  if (code === "no_answer" || e.status === 502) return [false, SW.t("settings_voice_test_no_answer")];
   return [false, hubText(e.message)];
 }
 
@@ -105,21 +81,21 @@ function voiceRows(v, a) {
     if (after) after();
   }, back);
 
-  const speak = SW.toggle({ label: voT("settings_voice_speak"), checked: a.speech !== false,
+  const speak = SW.toggle({ label: SW.t("settings_voice_speak"), checked: a.speech !== false,
     apply: async (on) => {
       try { await api("station/voice", { speech: on, code: theCode() }); } catch (e) { throw Object.assign(e, { text: () => hubText(e.message) }); }
       return SW.t("common_saved");
     } });
 
   // the Voice row: a select of three, or on a Weigh Station on another computer the line that says where it is chosen
-  const pick = remote ? null : SW.field({ row: true, type: "select", label: SW.t("settings_voice_label"), value: saved.choice, hint: voT("settings_voice_restarts"),
-    options: VOICE_CHOICES.map(([value, key]) => ({ value, label: voT(key) })) });
-  const remoteLine = remote ? h("p", { class: "voice__remote", textContent: voT("settings_voice_remote") }) : null;
+  const pick = remote ? null : SW.field({ row: true, type: "select", label: SW.t("settings_voice_label"), value: saved.choice, hint: SW.t("settings_voice_restarts"),
+    options: VOICE_CHOICES.map(([value, key]) => ({ value, label: SW.t(key) })) });
+  const remoteLine = remote ? h("p", { class: "voice__remote", textContent: SW.t("settings_voice_remote") }) : null;
 
-  const speaker = SW.field({ row: true, type: "number", mono: true, label: voT("settings_voice_speaker"), hint: SW.t("voice_speaker_hint", { count: voiceSpeakerCount(a) }), value: String(saved.speaker) });
+  const speaker = SW.field({ row: true, type: "number", mono: true, label: SW.t("settings_voice_speaker"), hint: SW.t("voice_speaker_hint", { count: voiceSpeakerCount(a) }), value: String(saved.speaker) });
   speaker.classList.add("voice__speaker");
   const slider = (key, min, max, step, value, unit) => {
-    const f = SW.field({ row: true, type: "range", mono: true, label: voT(key), value: String(value), unit: unit || String(value), attrs: { min, max, step } });
+    const f = SW.field({ row: true, type: "range", mono: true, label: SW.t(key), value: String(value), unit: unit || String(value), attrs: { min, max, step } });
     f.classList.add("voice__slider");
     const out = f.querySelector(".field__unit");
     f._control.addEventListener(SLIDING, () => { out.textContent = f._control.value + (unit ? " " + unit : ""); });
@@ -127,10 +103,10 @@ function voiceRows(v, a) {
     f._show(value);
     return f;
   };
-  const speed = slider("settings_voice_speed", 50, 200, 10, saved.speed, voT("settings_voice_speed_unit"));
+  const speed = slider("settings_voice_speed", 50, 200, 10, saved.speed, SW.t("settings_voice_speed_unit"));
   const volume = slider("settings_voice_volume", 0, 100, 1, saved.volume, "");
 
-  const test = SW.btn(voT("settings_voice_test"), { action: "voice-test", run: () => press() });
+  const test = SW.btn(SW.t("settings_voice_test"), { action: "voice-test", run: () => press() });
   const rows = [speak, pick, remoteLine, speaker, speed, volume, h("div", { class: "voice__test" }, test, box)].filter(Boolean);
 
   const nowChoice = () => (pick ? pick._control.value : saved.choice);
@@ -173,7 +149,7 @@ function voiceRows(v, a) {
         working(box, SW.t("common_testing"));
         try {
           await api("station/voice/test", { ...sent, code: theCode() });
-          say(box, voT("settings_voice_test_ok"), true);
+          say(box, SW.t("settings_voice_test_ok"), true);
         } catch (e) {
           if (e.locked) { SW.result(box, null); throw e; }
           const [kind, text] = voiceTestText(e);

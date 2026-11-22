@@ -9,115 +9,8 @@
 const PAGE = 50;
 const SECTION = "spools";
 
-// ----- texts: the catalogue's own where it has the key, else this table (key -> English), as web-shared/alerts.js does -----
-const spSTUB = {
-  spools_count: { one: "{count} spool", other: "{count} spools" },
-  spools_open_spoolman: "Open Spoolman",
-  spools_search: "Find a spool",
-  spools_search_hint: "Brand, name, material, place, number or tag.",
-  spools_filters: "Show only",
-  spools_chip_loaded: "In a printer",
-  spools_chip_low: "Running low",
-  spools_empty_title: "No spools yet.",
-  spools_empty_text: "Add your first one from your phone.",
-  spools_clear: "Clear the search and filter",
-  spools_col_number: "Number",
-  spools_col_colour: "Colour",
-  spools_col_spool: "Spool",
-  spools_col_left: "Left",
-  spools_col_where: "Where",
-  spools_no_place: "Not placed",
-  spools_not_weighed: "Not weighed",
-  spools_tagged: "Tagged",
-  spools_untagged: "No tag",
-  spools_low: "Running low",
-  spools_unnamed: "Unnamed spool",
-  spools_show_more: "Show more",
-  spools_shown: "Showing {shown} of {total}",
-  spools_more_failed: "Could not read more spools: {reason}",
-  spools_error: "Could not read the spools",
-  spools_pane_empty: "Choose a spool to see its details.",
-  spools_fact_left: "Left",
-  spools_fact_state: "State",
-  spools_fact_last_use: "Last taken off",
-  spools_last_use: "{grams} g on {printer}, {at}",
-  spools_last_use_none: "Nothing yet",
-  spools_group_change: "Change this spool",
-  spools_group_empty: "When it is used up",
-  spools_weight_hint: "What the scale shows with the empty spool on it, in grams.",
-  spools_weight_error: "Enter the weight in grams, a number above 0.",
-  spools_link_last: "Link the last tapped tag",
-  spools_previewing: "Checking what would change…",
-  spools_apply: "Apply",
-  spools_apply_name: "Apply: {what}",
-  spools_nothing: "Nothing would change.",
-  spools_preview_weight: "Preview: {left} g left becomes {after} g.",
-  spools_preview_move: "Preview: it moves from {before} to {after}.",
-  spools_preview_move_why: "Preview: it moves from {before} to {after}: {why}.",
-  spools_preview_link: "Preview: tag {tag} is linked to this spool.",
-  spools_preview_link_opens: "It then counts as opened.",
-  spools_preview_empty: "Preview: {left} g left becomes 0 g and the spool is marked empty.",
-  spools_done_weight: "Updated: {grams} g left.",
-  spools_done_empty: "Marked empty.",
-  spools_ask_empty_title: "Mark spool {id} empty?",
-  spools_ask_empty_text: "{name} is recorded as used up: 0 g left, and it leaves this list.",
-  spools_toast_weight: "Updated {name} ({id}): {grams} g left.",
-  spools_toast_move: "Moved {name} ({id}) to {location}.",
-  spools_toast_empty: "Marked {name} ({id}) empty.",
-  spools_toast_link: "Linked tag {tag} to {name} ({id}).",
-  spools_undo_name: "Undo: {what}",
-  spools_put_back: "Put back.",
-  spools_undo_refused: "This changed again since, so it cannot be undone.",
-  spools_undo_failed: "Could not undo: {reason}",
-  spools_events_title: "Latest events",
-  spools_events_none: "Nothing has been recorded for this spool yet.",
-  spools_events_error: "Could not read the events.",
-  spools_event_undone: "undone",
-  spools_download_csv: "Download as CSV",
-  spools_csv_spools: "Spools (Spoolman's file)",
-  spools_csv_filaments: "Filaments (Spoolman's file)",
-  spools_csv_failed: "Could not download the file: {reason}",
-  spools_more_actions: "More actions for spools",
-  spools_print_label: "Print a label",
-  spools_print_labels: "Print labels",
-  spools_print_label_name: "Print a label: {name}",
-  spools_select_name: "Select {name}",
-  spools_select_all: "Select all shown",
-  spools_selection: "Selected spools",
-  spools_selected: "{count} selected",
-  spools_clear_selection: "Clear selection",
-  spools_selection_cleared: "Selection cleared.",
-  spools_chip_checked_out: "Checked out ({count})",
-  spools_chip_checked_out_plain: "Checked out",
-  spools_empty_checked_out: "No spool is checked out.",
-  spools_in_place: "In {place}",
-  spools_home: "Home: {home}",
-  spools_home_none: "Home: not recorded",
-  spools_since: "since {at}",
-  spools_return_to: "Return to {home}",
-  spools_return: "Return",
-  spools_return_name: "{what}: {name}",
-  spools_returned_to: "Returned to {location}.",
-  spools_returned: "Returned.",
-  spools_return_failed: "Could not return the spool: {reason}",
-  spools_change_home: "Change home",
-  spools_change_home_name: "Change home: {name}",
-  spools_home_title: "Home",
-  spools_home_place: "Home",
-  spools_home_option: "{name}: {used} in use",
-  spools_home_option_of: "{name}: {used} of {capacity} in use",
-  spools_home_save: "Save",
-  spools_home_done: "Home is now {location}.",
-  spools_home_failed: "Could not change the home: {reason}",
-};
-const tx = (key, vars) => {
-  if (window.SW_TEXT && window.SW_TEXT[key] != null) return SW.t(key, vars);
-  let v = spSTUB[key];
-  if (v == null) return key;
-  if (typeof v === "object") v = v[new Intl.PluralRules("en").select(vars && vars.count != null ? Number(vars.count) : 0)] || v.other;
-  return vars ? v.replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : v;
-};
-window.SPOOLS_TEXT_KEYS = Object.freeze(Object.keys(spSTUB));
+// ----- texts -----
+const tx = (key, vars) => SW.t(key, vars);
 
 // ----- small helpers -----
 const spX = (...args) => SW.h(...args);
@@ -137,7 +30,7 @@ const pad2 = (n) => String(n).padStart(2, "0");
 const when = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? String(iso || "") : `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
 const ago = (iso) => {
   const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
-  return s < 90 ? `${s} s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : when(iso);
+  return s < 90 ? tx("common_age_seconds", { count: s }) : s < 5400 ? tx("common_age_minutes", { count: Math.round(s / 60) }) : when(iso);
 };
 const slotBox = () => spE("p", "result result--block", { role: "status" });
 const spCanCO = () => Array.isArray(st.filters) && st.filters.includes("checked_out");       // an older Hub's answer has no `filters`: none of Checked out, Return, Home

@@ -2,11 +2,13 @@
 behaviour each finding asks for. The browser suites that drive these scripts are not run in this round."""
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1] / "filament_kit"
 STATIC = PKG / "setup_static"
+CATALOGUE = Path(__file__).resolve().parents[2] / "strings" / "en.json"
 
 
 def js(name: str) -> str:
@@ -20,6 +22,10 @@ def station_js() -> str:
 def between(text: str, start: str, end: str) -> str:
     i = text.index(start)
     return text[i:text.index(end, i + len(start))]
+
+
+def en() -> dict:
+    return json.loads(CATALOGUE.read_text(encoding="utf-8"))
 
 
 def stub(text: str, key: str) -> str:
@@ -101,8 +107,8 @@ def test_a_spools_events_are_the_newest_ten_newest_first_in_the_hubs_words():
     for t in ("page", "cli", "hub", "device", "connector"):
         assert f'{t}: "activity_who_{t}"' in who
     assert '"activity_who_unknown"' in between(src, "const spWho = ", "\n")
-    assert stub(src, "spools_events_title") == "Latest events"
-    assert stub(src, "spools_events_none") == "Nothing has been recorded for this spool yet."
+    assert '"spools_events_title"' in src and en()["spools_events_title"] == "Latest events"
+    assert '"spools_events_none"' in src and en()["spools_events_none"] == "Nothing has been recorded for this spool yet."
 
 
 # ---- MEDIUM 13: the station page's status rows hold no English of their own and no raw ids (D13)
