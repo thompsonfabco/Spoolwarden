@@ -189,16 +189,24 @@ def _kv(pairs: list[tuple[str, object]]) -> list[str]:
 FILTERS = ("sealed", "opened", "loaded", "low", "checked_out")
 
 
-def cmd_spools(api, words: list[str] | None = None, filter: str | None = None) -> int:
-    """`spools`: the spools matching every word and the one filter, one row each, then the count and Spoolman's address."""
+def cmd_spools(api, words: list[str] | None = None, filter: str | None = None, low: bool = False) -> int:
+    """`spools`: the spools matching every word and the one filter, one row each, then the count and Spoolman's address.
+    `low` is the first word `low` (the same as --low): with another filter the Hub is asked for that filter and the rows
+    that are not running low are dropped here."""
     if api is None:
         return down()
     from .web.slots import SlotError
+    keep_low = low and filter not in (None, "low")
+    if low and filter is None:
+        filter = "low"
     query = {k: v for k, v in (("q", " ".join(words or [])), ("filter", filter)) if v}
     try:
         r = api.get("/api/spools" + ("?" + urllib.parse.urlencode(query) if query else ""))
     except SlotError as e:
         return fail(e)
+    if keep_low:
+        r = {**r, "spools": [x for x in r.get("spools") or [] if (x.get("view") or {}).get("low")]}
+        r["total"] = len(r["spools"])
     output.emit(r)
     rows = r.get("spools") or []
     if filter == "checked_out":
@@ -660,7 +668,9 @@ def add_parser(sub) -> None:
 
 def run(args, api) -> int:
     if args.cmd == "spools":
-        return cmd_spools(api, args.words, args.filter)
+        words = list(args.words)
+        low = bool(words) and words[0] == "low"          # the first word `low` is the low filter, never a search word
+        return cmd_spools(api, words[1:] if low else words, args.filter, low)
     c = args.spool_cmd
     if c == "show":
         return cmd_spool_show(api, args.number)

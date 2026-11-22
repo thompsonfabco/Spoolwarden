@@ -182,3 +182,28 @@ def test_the_status_rows_of_the_station_carry_the_panel_rows(monkeypatch):
     rows = list(status.station_rows("http://127.0.0.1:5003"))
     assert [(r.group, r.text) for r in rows if r.key == "devices.panel-link"] == [("Devices", "Panel: on Wi-Fi")]
     assert not [r for r in rows if r.key == "weigh-station.panel"]
+
+
+def _asked_by_spools(monkeypatch, capsys, argv):
+    """What the Hub is asked, and the numbers listed, for `argv`; the Hub has two low and one not low spool."""
+    asked = []
+
+    class Api:
+        def get(self, path, *a, **kw):
+            asked.append(path)
+            rows = [{"view": {"id": 1, "low": True}}, {"view": {"id": 2, "low": False}}, {"view": {"id": 3, "low": True}}]
+            return {"spools": rows, "total": 3}
+    monkeypatch.setattr(cli, "_server_api", lambda: Api())
+    rc, out, _ = run(capsys, argv)
+    return rc, asked, out
+
+
+def test_the_first_word_low_is_the_low_filter_with_any_other_filter_or_words_and_never_a_search_word(monkeypatch, capsys):
+    rc, asked, out = _asked_by_spools(monkeypatch, capsys, ["spools", "--low"])
+    assert rc == 0 and asked == ["/api/spools?filter=low"]
+    rc, asked, out = _asked_by_spools(monkeypatch, capsys, ["spools", "low", "pla"])       # the low filter and the word pla
+    assert asked == ["/api/spools?q=pla&filter=low"]
+    for flag, name in (("--sealed", "sealed"), ("--opened", "opened"), ("--loaded", "loaded")):
+        rc, asked, out = _asked_by_spools(monkeypatch, capsys, ["spools", "low", flag])    # low AND the other filter
+        assert asked == [f"/api/spools?filter={name}"], flag
+        assert "2 spools." in out, out                                                     # spool 2 is not low
