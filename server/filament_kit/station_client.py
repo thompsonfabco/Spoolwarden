@@ -498,7 +498,8 @@ def _call(endpoint, method, path, body, cap=MAX_JSON, timeout=STATION_TIMEOUT):
     headers = {"Accept": "*/*"}
     if body is not None:
         headers["Content-Type"] = "application/json"
-    purpose = {("POST", "/ticket"): "ticket", ("POST", "/settings"): "settings"}.get((method, path))
+    purpose = {("POST", "/ticket"): "ticket", ("POST", "/settings"): "settings", ("POST", "/voice"): "voice",
+               ("POST", "/voice/test"): "voice"}.get((method, path))
     if purpose == "ticket" and fp is None:
         # D14: the page ticket is the way into the station's own page: the Hub never asks for one over plain HTTP, whatever the proof
         raise StationPinMissing(503, TEXT_STATION_NO_PIN)
@@ -574,6 +575,27 @@ def read_settings(url: str | None) -> tuple[list[dict], bool]:
 def change_settings(url: str | None, values: dict) -> tuple[list[dict], bool]:
     """`POST /settings` with the proof: `{<id>: <value>}` or `{reset: true}`; the new list, checked as `read_settings`."""
     return clean_settings(call_json(url, "POST", "/settings", values).get("settings"))
+
+
+def send_voice(url: str | None, values: dict) -> None:
+    """`POST /voice` with `{speech, speaker, speed, volume}` (any subset; R88 2.5): the station keeps them in memory, with
+    no restart. Raises StationCallError when it does not answer or refuses them."""
+    call_json(url, "POST", "/voice", values)
+
+
+def voice_test(url: str | None, values: dict) -> tuple[int, str]:
+    """`POST /voice/test` with `{speaker?, speed?, volume?}`: (status, the station's `error` code or ""). 200 played, 409
+    `busy` or `off`. Raises StationCallError when it does not answer."""
+    status, kind, data = call(url, "POST", "/voice/test", json.dumps(values).encode())
+    code = ""
+    if kind.split(";")[0].strip().lower() == "application/json":
+        try:
+            got = json.loads(data or b"{}")
+        except ValueError:
+            got = None
+        if isinstance(got, dict) and isinstance(got.get("error"), str):
+            code = got["error"]
+    return status, code
 
 
 def read_photo(url: str | None) -> bytes:
