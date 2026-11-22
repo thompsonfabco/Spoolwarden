@@ -130,7 +130,9 @@ lock = threading.Lock()
 state = {"tag": None, "tag_at": None, "scale": None, "scale_at": None, "last": None, "last_at": None,
          "held": None, "held_at": None, "blink_until": 0, "air": None, "air_at": None,
          "photo": None, "photo_at": None,
-         "panel_scale": None}  # the panel's last `W` line: {"grams": float, "status": "settled"|"unsettled", "unit": "g"} or None
+         "panel_scale": None,  # the panel's last `W` line: {"grams": float, "status": "settled"|"unsettled", "unit": "g"} or None
+         "flash_notice": None}  # a sentence the station says after a flash (the panel lost its Wi-Fi set-up), or None
+notice_link = {"ser": None}  # the Wi-Fi panel link that was current when that notice was set (it does not prove the set-up is back)
 # the intake flow (flow.py): its step, attempt number, the linked spool or recognised filament, the server's display
 # lines for the step and the station's own message
 flow = {"step": "idle", "seq": 0, "spool": None, "filament": None, "display": [], "message": "", "at": 0.0}
@@ -210,9 +212,27 @@ def panel_kind() -> str | None:
     return None if not ser else "wifi" if getattr(ser, "wifi", False) else "usb"
 
 
+def set_flash_notice(text: str) -> None:
+    """Keep `text` as the flash notice for `view` (`flash_notice`)."""
+    with lock:
+        state["flash_notice"] = text
+        ser = panel["ser"]
+        notice_link["ser"] = ser if panel_kind() == "wifi" else None
+
+
+def clear_flash_notice() -> None:
+    with lock:
+        state["flash_notice"] = None
+        notice_link["ser"] = None
+
+
 def view() -> dict:
     """A snapshot for the HTTP handler: the state plus how the panel is connected ("usb", "wifi" or None), its
-    firmware version and the flow."""
+    firmware version, the flow and `flash_notice` (a string or None). A panel that is on Wi-Fi again (a link other than
+    the one that was there when the notice was set) proves its Wi-Fi set-up is back, so the notice is dropped."""
     with lock:
+        if state.get("flash_notice") and panel_kind() == "wifi" and panel["ser"] is not notice_link["ser"]:
+            state["flash_notice"] = None
+            notice_link["ser"] = None
         return dict(state, panel=panel_kind(), panel_version=ports["panel_version"], panel_nfc=ports["panel_nfc"],
                     flow={k: flow[k] for k in ("step", "message", "spool", "filament")})

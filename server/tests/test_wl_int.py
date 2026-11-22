@@ -22,6 +22,17 @@ def etc(tmp_path, monkeypatch):
     monkeypatch.setenv("FK_ETC", str(tmp_path / "etc"))
 
 
+@pytest.fixture(autouse=True)
+def station_values_restored():
+    """Module-level station values (the live voice values, ports, state, settings) are put back after each test here,
+    so nothing set in this file reaches test_station_panel.py (R641 follow-up 2)."""
+    saved = [(d, dict(d)) for d in (st.live, st.ports, st.state, st.settings)]
+    yield
+    for d, was in saved:
+        d.clear()
+        d.update(was)
+
+
 def set_up():
     """`panel-wifi` against a stub panel over USB: returns the token that went down the cable."""
     lines = []
@@ -261,3 +272,19 @@ def test_with_wifi_on_and_page_from_allowed_the_page_refuses_a_home_address_and_
         server.server_close()
     connect(token=ps.stored_token() or set_up())              # the panel port's gate is the token and the pin
     assert link() is not None
+
+
+def test_the_two_modules_pass_in_the_problem_order(tmp_path):
+    """The two tests that set voice values here, then the one in test_station_panel.py that sends `V 40`: in this order,
+    without random ordering, in a fresh pytest."""
+    import subprocess
+    import sys
+    from pathlib import Path
+    here = Path(__file__).parent
+    ids = ["test_wl_int.py::test_a_usb_search_that_finds_nothing_keeps_the_facts_of_a_wifi_panel",
+           "test_wl_int.py::test_the_station_accepts_the_senders_voice_call",
+           "test_station_panel.py::test_unsolicited_hello_from_a_c3_resends_volume_and_every_row"]
+    run = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:randomly", "-p", "no:cacheprovider",
+                          f"--basetemp={tmp_path / 'order'}", *ids], cwd=here, capture_output=True, text=True, timeout=240)
+    assert run.returncode == 0, run.stdout[-2000:] + run.stderr[-500:]
+    assert "3 passed" in run.stdout

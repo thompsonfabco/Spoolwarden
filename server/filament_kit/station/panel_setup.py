@@ -33,9 +33,7 @@ REPLY_OK = "OK"
 REPLY_ERR = "ERR"
 MIN_FIRMWARE = 14                         # the first panel firmware with Wi-Fi (13, the shipped one, is USB-only)
 MAX_ADDRESS = 64                          # characters; the panel's line holds 256 and answers `ERR long`, never truncates
-MAX_UNASKED = 50                          # unasked lines (AIR, P, ...) skipped while waiting for OK or ERR
-# the panel's own lines that may arrive between a set-up line and its answer
-UNASKED = re.compile(r"(AIR|P|L|TAG|NFC|HELLO)(?![A-Za-z0-9])")
+MAX_UNASKED = 50                          # lines that are neither OK nor ERR (AIR, P, W, K, ...) skipped while waiting for the answer
 
 TOKEN_FILE = "panel_link.xml"             # in the station's state folder: {token, created}; 0600, the station user's
 
@@ -60,6 +58,8 @@ TEXT_FIRMWARE_OLD = _t("panel_setup_firmware_old", "This panel's firmware is too
 TEXT_NO_ANSWER_USB = _t("panel_setup_no_answer_usb", "The panel did not answer over USB. Check the cable and try again.")
 TEXT_NOT_ACCEPTED = _t("panel_setup_not_accepted", "The panel did not accept the Wi-Fi settings.")
 TEXT_TIMEOUT = _t("panel_setup_timeout", "The panel did not answer in time.")
+TEXT_NOT_SAVED = _t("panel_setup_not_saved", "The panel took the Wi-Fi settings, but the station could not save them. "
+                    "Run the set-up again.")
 TEXT_NOT_CONNECTED = _t("check_panel_not_connected", "The Weigh Station's panel is not connected.")
 TEXT_NOT_CONNECTED_FIX = _t("check_panel_not_connected_fix", "check the panel has power and is in Wi-Fi range; to go back to "
                             "the USB cable: sudo spoolwarden weigh-station panel-wifi --off")
@@ -115,8 +115,9 @@ def check_version(version: str | None) -> None:
 
 
 def _answer(send: Callable[[str | None], str], line: str | None) -> None:
-    """Send `line` (None sends nothing, it only reads) and read until the panel says OK or ERR, skipping its unasked
-    lines. `send` returns the next line, "" when none came in 5 s. No sentence repeats a line or a reply."""
+    """Send `line` (None sends nothing, it only reads) and read until the panel says OK or ERR, skipping every other line
+    it sends on its own (AIR, buttons, W, K, ...), at most MAX_UNASKED of them. `send` returns the next line, "" when none
+    came in 5 s. No sentence repeats a line or a reply."""
     for _ in range(MAX_UNASKED):
         try:
             reply = (send(line) or "").strip()
@@ -127,8 +128,8 @@ def _answer(send: Callable[[str | None], str], line: str | None) -> None:
             raise PanelSetupError(TEXT_TIMEOUT)
         if reply.split(None, 1)[0] == REPLY_OK:
             return
-        if not UNASKED.match(reply):
-            raise PanelSetupError(TEXT_NOT_ACCEPTED)        # ERR <reason>, or a line that is not the panel's
+        if reply.split(None, 1)[0] == REPLY_ERR:
+            raise PanelSetupError(TEXT_NOT_ACCEPTED)        # ERR <reason>: the reason is never shown
     raise PanelSetupError(TEXT_TIMEOUT)
 
 
@@ -229,8 +230,16 @@ def enable(send: Callable[[str | None], str], *, version: str | None, ssid: str,
     fp = check_values(ssid=ssid, password=password, address=address, port=port, fingerprint=fingerprint)
     token = new_token()
     _send_all(send, setup_lines(ssid=ssid, password=password, address=address, port=port, fingerprint=fp, token=token))
-    store_token(token, folder)
-    _set_link("wifi", port)
+    try:                                                    # the panel said OK: what fails now is the station's own side
+        store_token(token, folder)
+        _set_link("wifi", port)
+    except (OSError, ValueError):
+        try:
+            forget_token(folder)                            # not saved: no half-kept token
+            _answer(send, LINE_CLEAR)                       # best effort: the panel forgets what it just took
+        except (OSError, PanelSetupError):
+            pass
+        raise PanelSetupError(TEXT_NOT_SAVED) from None     # never the OSError's text (paths, reasons)
     return {"panel_link": "wifi", "panel_port": port}
 
 
