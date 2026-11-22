@@ -80,3 +80,52 @@ def test_flash_panel_result_carries_the_notice_and_flash_panel_stays_a_bool(fw):
     assert r.ok and r.whole and r.notice and st.state["flash_notice"] == r.notice
     assert panel.flash_panel("/dev/ttyACM1", "15") is True
     assert _written(fw[-1]) == ("0x0", pf.WHOLE_IMAGE)       # a blank board (cli): whole
+
+
+# ---- the notice in the station's GET /state view (st.view), cleared by a new flash or a Wi-Fi panel ----
+
+@pytest.fixture
+def notice_state(monkeypatch):
+    monkeypatch.setitem(st.notice_link, "ser", None)
+    monkeypatch.setitem(st.panel, "ser", None)
+
+
+def test_the_view_carries_the_notice_after_a_whole_flash_while_wifi(fw, notice_state):
+    assert st.view()["flash_notice"] is None
+    panel.update_firmware(Ser("12"))
+    notice = st.view()["flash_notice"]
+    assert isinstance(notice, str) and "panel-wifi" in notice
+    assert st.view()["flash_notice"] == notice          # reading it does not use it up
+
+
+def test_the_next_flash_start_clears_the_notice(fw, notice_state, monkeypatch):
+    panel.flash_panel_result("/dev/ttyACM1", "15", None)
+    assert st.view()["flash_notice"]
+    seen = []
+    real = pf.flash
+    monkeypatch.setattr(pf, "flash", lambda *a: seen.append(st.view()["flash_notice"]) or real(*a))
+    panel.flash_panel_result("/dev/ttyACM1", "15", "14")       # a program-only flash: no new notice
+    assert seen == [None] and st.view()["flash_notice"] is None
+
+
+def test_a_wifi_hello_clears_the_notice(fw, notice_state, monkeypatch):
+    panel.flash_panel_result("/dev/ttyACM1", "15", None)
+    assert st.view()["flash_notice"]
+    monkeypatch.setitem(st.panel, "ser", types.SimpleNamespace(wifi=True))    # what panel_net.admit puts there
+    assert st.view()["panel"] == "wifi" and st.view()["flash_notice"] is None
+    assert st.state["flash_notice"] is None
+
+
+def test_a_usb_panel_does_not_clear_the_notice(fw, notice_state, monkeypatch):
+    panel.flash_panel_result("/dev/ttyACM1", "15", None)
+    monkeypatch.setitem(st.panel, "ser", types.SimpleNamespace(wifi=False))
+    assert st.view()["flash_notice"]
+
+
+def test_a_wifi_link_that_was_there_during_the_flash_does_not_clear_it(fw, notice_state, monkeypatch):
+    old = types.SimpleNamespace(wifi=True)
+    monkeypatch.setitem(st.panel, "ser", old)
+    panel.flash_panel_result("/dev/ttyACM1", "15", None)
+    assert st.view()["flash_notice"]
+    monkeypatch.setitem(st.panel, "ser", types.SimpleNamespace(wifi=True))    # a new Wi-Fi session after it
+    assert st.view()["flash_notice"] is None

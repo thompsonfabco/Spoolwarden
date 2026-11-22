@@ -142,10 +142,12 @@ def flash_panel_result(dev, version, have=None):
     """Write the bundled firmware to the ESP32-C3 panel on dev with esptool (panel_flash picks the image: program only
     for a wireless panel, else the whole one; have is the panel's HELLO version, None for a blank board). Never touches
     the reader's port; the panel's port stays claimed (ports["panel"]) so nfcpy never opens it meanwhile. Returns
-    panel_flash.Flash(ok, whole, notice); notice is also left in st.state["flash_notice"] for the station's answer."""
+    panel_flash.Flash(ok, whole, notice); notice is also left in st.state["flash_notice"] for the station's answer
+    (GET /state); a new flash clears the old one first, and a panel that connects over Wi-Fi afterwards clears it."""
+    st.clear_flash_notice()
     result = panel_flash.flash(dev, have, version)
     if result.notice:
-        st.state["flash_notice"] = result.notice
+        st.set_flash_notice(result.notice)
     return result
 
 
