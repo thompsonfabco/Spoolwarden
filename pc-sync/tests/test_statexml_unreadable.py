@@ -130,6 +130,7 @@ def test_a_removal_that_fails_keeps_the_hash_and_notes_it(tmp_path, monkeypatch,
     monkeypatch.undo()
     assert statexml.read(p) is None                                        # the next read tries again and succeeds
     assert not (tmp_path / "pair-aside.xml").exists() and not (tmp_path / "pair-aside.json.sha256").exists()
+    assert not any("could not be removed" in x for x in statexml.problems())          # the note goes with the problem
 
 
 def test_a_save_while_the_stale_xml_remains_writes_only_what_the_caller_gives(tmp_path, monkeypatch):

@@ -395,6 +395,7 @@ def _newer_json(path: Path, xml_data, t: str, is_list: bool, keep_version: bool,
             _sha_path(jp).unlink()
         except OSError:
             pass
+        clear_problem(path)
         return _GONE
     except OSError:
         return None
