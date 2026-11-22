@@ -20,10 +20,30 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          # the Gradle dependency cache (keyed on the build files): Maven Central answered HTTP 429 for a test runtime jar and failed three
+          # runs before any test ran; a cache hit downloads nothing
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle*
+            android/**/gradle-wrapper.properties
+            android/gradle/libs.versions.toml
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407  # v3.2.2
         with:
           # the default also asks for the legacy 'tools' package, which current sdkmanager no longer has;
           # AGP downloads the platform and build-tools it needs itself
           packages: 'platform-tools'
           log-accepted-android-sdk-licenses: false
-      - run: ./gradlew testDebugUnitTest assembleDebug
+      # a failure that is only the network (HTTP 429/5xx from the repository, a dependency that could not be downloaded) gets up to two more tries
+      # after a pause; any other failure, a failing test above all, fails the first time
+      - name: Test and assemble
+        run: |
+          rc=0
+          for attempt in 1 2 3; do
+            rc=0
+            ./gradlew testDebugUnitTest assembleDebug 2>&1 | tee gradle.log || rc=$?
+            [ "$rc" -eq 0 ] && exit 0
+            grep -qE 'HTTP (429|5[0-9][0-9])|Could not (resolve|GET|download|HEAD)|Read timed out|Connection (reset|timed out)' gradle.log || exit "$rc"
+            echo "::warning::dependency download failed (attempt $attempt of 3)"
+            [ "$attempt" -lt 3 ] && sleep $((attempt * 60))
+          done
+          exit "$rc"
