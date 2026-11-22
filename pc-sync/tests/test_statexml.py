@@ -65,8 +65,9 @@ def test_json_is_read_once_moved_and_the_xml_wins(tmp_path):
     st = sync.load_state(store.AppDirs(tmp_path))
     assert st["installed"] == {"stamp": "s", "at": 2.0}
     assert (tmp_path / "state.xml").is_file()
-    p.write_text(json.dumps({"installed": {"stamp": "stale"}}), encoding="utf-8")
-    assert sync.load_state(store.AppDirs(tmp_path))["installed"]["stamp"] == "s"
+    p.write_text(json.dumps({"installed": {"stamp": "stale"}}), encoding="utf-8")     # an older Sync changed it: wins once
+    assert sync.load_state(store.AppDirs(tmp_path))["installed"]["stamp"] == "stale"
+    assert sync.load_state(store.AppDirs(tmp_path))["installed"]["stamp"] == "stale"
     d = store.AppDirs(tmp_path)
     sync._save_state(d, {"installed": {"stamp": "new"}})
     assert sync.load_state(d) == {"installed": {"stamp": "new"}}
@@ -189,7 +190,7 @@ def test_the_marker_is_xml_and_moves_with_the_folder_record(tmp_path):
     a.ensure()
     b.ensure()
     statexml.write(sync.marker_path(a), {"stamp": "s", "backup": "bk", "at": 1.5, "orca": False, "accept": {"base": {"N": "h"}}})
-    assert statexml.xml_path(sync.marker_path(a)).is_file() and not sync.marker_path(a).exists()
+    assert statexml.xml_path(sync.marker_path(a)).is_file() and sync.marker_path(a).is_file()
     assert sync._read_marker(a)["accept"] == {"base": {"N": "h"}}
     sync._move_marker(a, b)
     assert not statexml.exists(sync.marker_path(a)) and sync._read_marker(b)["stamp"] == "s"

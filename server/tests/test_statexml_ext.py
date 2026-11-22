@@ -43,8 +43,9 @@ def test_a_list_json_is_read_once_moved_and_the_xml_wins(tmp_path):
     p.write_text(json.dumps([{"id": "a"}, {"id": "b"}]), encoding="utf-8")
     assert statexml.read_list(p) == [{"id": "a"}, {"id": "b"}]
     assert (tmp_path / "reads.xml").is_file() and p.is_file() and not list(tmp_path.glob("*.moving"))
-    p.write_text(json.dumps([{"id": "stale"}]), encoding="utf-8")
-    assert statexml.read_list(p) == [{"id": "a"}, {"id": "b"}]
+    p.write_text(json.dumps([{"id": "stale"}]), encoding="utf-8")        # an older release changed it after a rollback
+    assert statexml.read_list(p) == [{"id": "stale"}]                    # it wins once (R85 1.5, see test_statexml_keepjson)
+    assert statexml.read_list(p) == [{"id": "stale"}] and statexml.loads_list((tmp_path / "reads.xml").read_bytes(), "reads") == [{"id": "stale"}]
     statexml.write_list(p, [{"id": "new"}])
     assert statexml.read_list(p) == [{"id": "new"}]
     assert statexml.read_list(tmp_path / "none.json") is None
@@ -131,7 +132,7 @@ def test_a_month_file_takes_its_tag_not_the_stem(tmp_path):
     statexml.write_list(p, [{"id": 1}], tag="events")
     assert b"<events " in (tmp_path / "2026-11.xml").read_bytes()
     assert statexml.read_list(p, tag="events") == [{"id": 1}]
-    assert statexml.read_list(p) is None                                  # the stem is the wrong tag
+    assert statexml.read_list(p) == [{"id": 1}]                           # the stem is the wrong tag: the JSON form is read
     statexml.clear_problem(tmp_path / "2026-11.xml")
     q = tmp_path / "2026-12.json"
     statexml.write(q, {"n": 1}, tag="usage")
