@@ -228,29 +228,46 @@ def _month_files(serial: str, since: str | None = None) -> list[Path]:
     return [folder / n for n in names if since is None or n[:7] >= since]
 
 
+def _report(path: Path, reason: str) -> None:
+    """Note a file that could not be read or moved (statexml.problems(), the Checks row) and log it once."""
+    statexml.note_problem(path, reason)
+    if str(path) not in _reported:
+        _reported.add(str(path))
+        log.warning("usage: %s: %s", path, reason)
+
+
+def _forget(path: Path) -> None:
+    statexml.clear_problem(path)
+    _reported.discard(str(path))
+
+
 def _load(path: Path, for_write: bool = False) -> dict:
-    """{'entries': [...], 'undone': [...]} of a month file. An unreadable one is logged once (statexml.problems()) and
-    read as empty; before the next write it is kept as `<name>.unreadable`, never overwritten."""
+    """{'entries': [...], 'undone': [...]} of a month file. An unreadable one is logged once and noted
+    (statexml.problems()) and read as empty; before the next write it is kept as `<name>.unreadable`, never
+    overwritten, and the problem stays noted under that name."""
     empty = {'entries': [], 'undone': []}
     try:
         raw = path.read_bytes()
     except FileNotFoundError:
         return empty
     except OSError as e:
-        statexml._unreadable[str(path)] = f"cannot read: {e.strerror or e}"
+        reason = f"cannot read: {e.strerror or e}"
         raw = None
     if raw is not None:
         try:
             data = statexml.loads(raw, TAG)
         except statexml.StateXmlError as e:
-            statexml._unreadable[str(path)] = str(e)
+            reason = str(e)
         else:
-            statexml._unreadable.pop(str(path), None)
+            _forget(path)
             return {k: [x for x in data[k] if isinstance(x, dict)] if isinstance(data.get(k), list) else []
                     for k in ('entries', 'undone')}
+    _report(path, reason)
     if for_write and path.exists():
-        os.replace(path, path.with_name(path.name + ".unreadable"))
-        statexml._unreadable.pop(str(path), None)
+        if not statexml.quarantine(path):
+            raise OSError(f"cannot keep the damaged {path.name} aside ({reason})")
+        _forget(path)
+        _report(path.with_name(path.name + ".unreadable"), f"damaged ({reason}); kept aside, its entries are not shown")
     return empty
 
 
@@ -261,9 +278,13 @@ def _save(path: Path, data: dict) -> None:
 
 def _old_log(serial: str) -> tuple[list[dict], dict[str, str]] | None:
     """(entries, {undone entry id: undo time}) of the old usage.jsonl, or None when there is none."""
+    path = _dir(serial) / FILE
     try:
-        raw = (_dir(serial) / FILE).read_bytes()
-    except OSError:
+        raw = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError as e:
+        _report(path, f"cannot read: {e.strerror or e}; its entries are not shown")
         return None
     out, undone = [], {}
     for line in raw.splitlines():
@@ -320,8 +341,9 @@ def _migrate(serial: str) -> tuple[list[dict], dict[str, str]] | None:
             make_state_dir(d / DIR)
             _write_atomic(marker, b"moved from usage.jsonl\n", 0o600, state_owned=True)
         except (OSError, statexml.StateXmlError, TypeError, ValueError) as e:
-            log.error("usage: printer %s: cannot move %s to month files (%s); reading it until it can", serial, FILE, e)
+            _report(d / FILE, f"could not be converted ({e}); reading it until it can")
             return old
+        _forget(d / FILE)
     return None
 
 

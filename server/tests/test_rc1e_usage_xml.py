@@ -162,3 +162,40 @@ def test_a_byte_that_is_not_utf8_in_the_old_log_does_not_stop_appends():
     got = {e["id"] for e in usage.entries(SERIAL, days=30)}
     assert got == {E1, r["id"]}
     assert (d / "usage" / usage.MIGRATED).exists()
+
+
+def test_a_damaged_month_file_is_logged_once_and_stays_noted_after_it_is_kept(caplog):
+    usage._write_line(SERIAL, _entry(E1, "2026-11-02T00:00:00Z"))
+    f = _dir() / "usage" / "2026-11.xml"
+    f.write_bytes(b"<usage version='1'><entries as='list'><item id=")
+    with caplog.at_level("WARNING"):
+        usage.entries(SERIAL, days=30)
+        usage.entries(SERIAL, days=30)
+    assert len([r for r in caplog.records if "2026-11.xml" in r.getMessage()]) == 1       # once, not per read
+    assert any(p.startswith(str(f) + " (") for p in statexml.problems())
+    usage._write_line(SERIAL, _entry(E3, "2026-11-03T00:00:00Z"))
+    kept = str(f) + ".unreadable"
+    assert any(p.startswith(kept + " (") and "kept aside" in p for p in statexml.problems())     # the owner still sees it
+    assert not any(p.startswith(str(f) + " (") for p in statexml.problems())
+
+
+def test_a_failed_move_is_logged_once_and_noted_until_it_works(monkeypatch, caplog):
+    d = _dir()
+    d.mkdir(parents=True)
+    (d / "usage.jsonl").write_text(json.dumps(_entry(E1, "2026-11-10T10:00:00Z")) + "\n", encoding="utf-8")
+    real = usage._write_atomic
+
+    def broken(path, *a, **kw):
+        if path.name == usage.MIGRATED:
+            raise OSError("disk full")
+        return real(path, *a, **kw)
+    monkeypatch.setattr(usage, "_write_atomic", broken)
+    with caplog.at_level("WARNING"):
+        for _ in range(3):
+            usage.entries(SERIAL, days=10_000)
+    assert len([r for r in caplog.records if "usage.jsonl" in r.getMessage()]) == 1
+    [p] = [p for p in statexml.problems() if "usage.jsonl" in p]
+    assert "could not be converted" in p and "disk full" in p
+    monkeypatch.setattr(usage, "_write_atomic", real)
+    usage.entries(SERIAL, days=10_000)
+    assert not any("usage.jsonl" in p for p in statexml.problems())            # moved: nothing to report
