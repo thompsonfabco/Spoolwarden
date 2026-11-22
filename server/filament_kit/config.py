@@ -181,14 +181,17 @@ def _read_xml(xf: Path) -> dict | None:
 def load_raw() -> dict:
     """What the settings files hold, with no defaults merged in ({} when there is none): config.xml when it reads, else
     config.json; an error (ValueError) only when no form reads."""
+    damaged = None
     try:
         stored = _read_xml(_xml_file())
-    except ValueError:
-        stored = None                   # damaged: config.json is read, and an error only when it fails too
+    except ValueError as e:
+        stored, damaged = None, e       # damaged: config.json is read, and an error only when it fails too
     if stored is not None:
         return stored
     f = _file()
     if not f.exists():
+        if damaged:
+            raise damaged
         return {}
     return json.loads(f.read_text(encoding="utf-8"))
 

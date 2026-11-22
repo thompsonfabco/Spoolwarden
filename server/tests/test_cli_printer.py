@@ -582,6 +582,7 @@ def test_a_module_that_is_off_says_how_to_turn_it_on(capsys):
 def test_an_unreadable_config_stops_every_printer_command(capsys, argv):
     seed()
     (config.paths().etc / "config.json").write_text("{not json", encoding="utf-8")
+    (config.paths().etc / "config.xml").write_text("<config", encoding="utf-8")       # both forms unreadable
     rc, out, err = run(capsys, "printer", *argv)
     assert (rc, out) == (1, "") and err.startswith("Error: ") and "Traceback" not in err
     assert "config.json cannot be read" in err and "\nFix: " in err
