@@ -108,7 +108,7 @@ def test_a_certificate_without_a_local_name_or_none_refuses_with_a_text_that_say
     (etc / "cert.pem").write_bytes(cert.public_bytes(serialization.Encoding.PEM))
     with pytest.raises(rs.SetupError) as e:
         rs.reader_base({"port": 8443})
-    assert "renews" in str(e.value) and "no .local name" in str(e.value)
+    assert "sudo spoolwarden certificate --renew" in str(e.value) and "no .local name" in str(e.value)
 
 
 def test_home_settings_are_the_certificate_the_first_address_and_the_printer(hub, monkeypatch):
