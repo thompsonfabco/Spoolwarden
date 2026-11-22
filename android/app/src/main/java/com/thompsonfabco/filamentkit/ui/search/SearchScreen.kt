@@ -82,6 +82,7 @@ import com.thompsonfabco.filamentkit.ui.history.showUndoable
 import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.history.shareCsv
 import com.thompsonfabco.filamentkit.ui.spool.CheckedOutRules
+import com.thompsonfabco.filamentkit.ui.spool.CheckedOutSupport
 import com.thompsonfabco.filamentkit.ui.spool.CheckedOutTexts
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
 import com.thompsonfabco.filamentkit.ui.spool.HubFailureNotice
@@ -322,7 +323,7 @@ class SearchViewModel(
                 _state.update { s ->
                     val left = s.checked.filter { it.id != spool.id }
                     s.copy(
-                        returningId = null, checked = left, checkedCount = it.checkedCount?.let { n -> maxOf(n - 1, 0) },
+                        returningId = null, checked = left, checkedCount = s.checkedCount?.let { n -> maxOf(n - 1, 0) },
                         returnToast = ReturnToast(CheckedOutTexts.returned(where), event),
                     )
                 }
