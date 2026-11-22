@@ -83,7 +83,8 @@ def test_routes_need_a_paired_device(sm):
 def test_unknown_tag_is_new(sm):
     r = client(sm).get(f"/api/station/tag/{UID}", headers=auth())
     assert r.status_code == 200
-    assert r.json() == {"known": False, "uid": tags.normalize_uid(UID), "display": ["New Tag Scanned"]}
+    assert r.json() == {"known": False, "uid": tags.normalize_uid(UID), "display": ["New Tag Scanned"],
+                  "speak": "New Tag Scanned"}
 
 
 def test_known_tag_shows_the_spool(sm):
@@ -92,6 +93,7 @@ def test_known_tag_shows_the_spool(sm):
     r = c.get(f"/api/station/tag/{UID}", headers=h).json()
     assert r["known"] is True and r["spool"]["name"] == "PETG Black" and r["spool"]["remaining_g"] == 745
     assert r["display"][0] == "PETG Black" and "745 g left" in r["display"][2]
+    assert r["speak"] == "P E T G Black OVERTURE P E T G"
 
 
 # ---------- recognize ----------
@@ -102,7 +104,8 @@ def test_recognize_with_claude(sm):
     assert r.status_code == 200, r.text
     b = r.json()
     assert b["source"] == "claude" and b["confidence"] == "high" and b["item"]["vendor"] == "OVERTURE"
-    assert b["display"] == ["PETG Black", "OVERTURE PETG", "opened"]
+    assert b["display"] == ["PETG Black", "OVERTURE PETG", "opened"]  # the screen keeps "PETG"
+    assert b["speak"] == "P E T G Black OVERTURE P E T G"  # the name says it too; the maker in capitals is not spelled
     assert len(fake.calls) == 1
 
 
@@ -175,7 +178,7 @@ def test_save_new_opened_spool_links_the_tag_and_places_it(sm):
     assert b["created"] is True and b["sealed"] is False and b["remaining_g"] == 745 and b["location"]
     s = sm.get(f"spool/{b['spool_id']}")
     assert tags.stored(s) == tags.normalize_uid(UID) and s["first_used"]
-    assert b["display"][0] == "Saved"
+    assert b["display"][0] == "Saved" and b["speak"] == "Saved P E T G Black"
 
 
 def test_save_new_sealed_spool_links_the_tag_and_stays_sealed(sm):
@@ -390,3 +393,8 @@ def test_a_rejected_item_is_a_422(sm, monkeypatch):
     monkeypatch.setattr(inventory, "add_and_link", reject)
     r = save(client(sm), auth(), gross_g=900, item=ITEM)
     assert r.status_code == 422 and r.json()["error"] == "invalid" and "net weight" in r.json()["message"]
+
+
+def test_dry_run_save_speaks_what_it_would_save(sm):
+    b = save(client(sm), auth(), gross_g=900, item=ITEM, dry_run=True).json()
+    assert b["speak"] == "Would save OVERTURE P E T G Black"
