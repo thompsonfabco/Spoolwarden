@@ -25,7 +25,7 @@ from copy import deepcopy
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 
-from .. import config, event_sink, hostaddr
+from .. import config, demo, event_sink, hostaddr
 from . import xmlfile
 from ..pairing import _write_atomic, open_lock
 
@@ -61,6 +61,7 @@ _lock = threading.Lock()
 @contextmanager
 def _locked():
     """Serialize registry access between threads and with the CLI in another process."""
+    demo.stop()             # every writer takes the lock: the demo's printers are not changed
     with _lock:
         if fcntl is None:
             yield
@@ -285,8 +286,15 @@ def _write(printers: dict[str, Printer]) -> None:
     _write_atomic(state / FILE, _to_xml(printers, _sha(js)), 0o600, state_owned=True)
 
 
+def _demo_printers() -> dict[str, Printer]:
+    from ..demo import printers     # not at the top: demo.printers imports this module
+    return printers.registry_printers()
+
+
 def peek() -> dict[str, Printer]:
     """The registry as load() would see it, for a dry run: no lock file, no migration, nothing written."""
+    if demo.is_on():
+        return _demo_printers()
     return _read(write=False)
 
 
@@ -316,6 +324,8 @@ def load() -> dict[str, Printer]:
     or size moves): the phone and the app poll this several times a second, the file changes on an owner's edit.
     A hit takes no lock and returns a copy, so a caller can change what it gets."""
     global _cache
+    if demo.is_on():
+        return _demo_printers()
     sig = _signature()
     cached = _cache
     if sig is not None and cached is not None and cached[0] == sig:

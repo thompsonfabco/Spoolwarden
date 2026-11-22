@@ -16,7 +16,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from .. import config
+from .. import config, demo
 from ..profiles import statexml
 from . import hardware, layout, registry
 from .status import EXT, EXT_ID, HT_BASE, _s  # noqa: F401 - EXT/EXT_ID re-exported
@@ -124,7 +124,7 @@ def printer_model(serial: str) -> str | None:
 
 
 def _file(serial: str):
-    return config.paths().state / "printers" / serial / FILE
+    return demo.where(config.paths().state / "printers" / serial / FILE, f"printers/{serial}/{FILE}")
 
 
 def _current_labels(slots: dict, model) -> dict:

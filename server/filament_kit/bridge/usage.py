@@ -89,7 +89,7 @@ from pathlib import Path
 from typing import Any
 from defusedxml import ElementTree as SafeET
 
-from .. import config, event_sink
+from .. import config, demo, event_sink
 from ..pairing import _write_atomic, make_state_dir
 from ..profiles import statexml
 from ..spoolman import SpoolmanError
@@ -198,7 +198,7 @@ def _epoch(s: Any) -> float | None:
 def _dir(serial: str) -> Path:
     if not isinstance(serial, str) or not registry.SERIAL.fullmatch(serial):
         raise UsageNotFound(f"no printer {serial!r}")
-    return config.paths().state / "printers" / serial
+    return demo.where(config.paths().state / "printers" / serial, f"printers/{serial}")
 
 
 def append(serial: str, entry: dict) -> dict:
@@ -446,7 +446,7 @@ def undo(entry_id: str, spoolman) -> dict:
     `_undoing` keeps a second Undo of the same entry out meanwhile."""
     if not isinstance(entry_id, str) or not ENTRY_ID.fullmatch(entry_id):
         raise UsageNotFound(f"no usage entry {entry_id!r}")
-    root = config.paths().state / "printers"
+    root = demo.where(config.paths().state / "printers", "printers")
     with _lock:
         found = None
         for d in sorted(root.iterdir()) if root.is_dir() else []:

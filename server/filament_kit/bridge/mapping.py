@@ -48,7 +48,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .. import __version__, config
+from .. import __version__, config, demo
 from ..pairing import make_state_dir, open_lock
 from ..profiles import statexml
 from . import ams, calib3mf, hardware, layout, printer_report, registry, slottest, snapshot, status
@@ -296,7 +296,7 @@ class _Job:
 
 
 def _dir(serial: str):
-    return config.paths().state / "printers" / serial
+    return demo.where(config.paths().state / "printers" / serial, f"printers/{serial}")
 
 
 def _save_status(serial: str, job: _Job) -> None:
