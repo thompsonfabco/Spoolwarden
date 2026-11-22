@@ -142,11 +142,12 @@ def test_the_update_state_is_written_as_xml_and_read_back(opt):
     assert updates._read_state() == {"previous": "1.2.3", "latest": {"version": "9.9.9", "notes": "x", "at": 1.0}}
 
 
-def test_an_old_json_state_is_read_and_left_for_a_rollback(opt):
+def test_an_old_json_state_is_read_moved_and_kept(opt):
     from filament_kit import updates
     old = json.dumps({"previous": "1.0.0", "failed": None})
     (opt / "state.json").write_text(old, encoding="utf-8")
-    assert updates._read_state()["previous"] == "1.0.0" and not (opt / "state.xml").exists()
+    assert updates._read_state()["previous"] == "1.0.0"
+    assert (opt / "state.json").read_text(encoding="utf-8") == old          # the old form is left as it is
     updates._write_state(held="1.1.0")
     assert updates._read_state() == {"previous": "1.0.0", "failed": None, "held": "1.1.0"}
     assert json.loads((opt / "state.json").read_text(encoding="utf-8")) == updates._read_state()
@@ -181,6 +182,55 @@ def test_a_hold_set_through_the_state_is_seen_in_state_json(opt):
     assert json.loads((opt / "state.json").read_text(encoding="utf-8")).get("held") == "9.9.9"
     updates._write_state(held=None)
     assert json.loads((opt / "state.json").read_text(encoding="utf-8")).get("held") is None
+
+
+def test_the_state_json_is_every_field_in_v062s_shape(opt):
+    """Rollback audit row 4: failed, previous, last_ok_at and the hardware hash are current in state.json, byte for byte
+    as v0.6.2 wrote it (json.dumps(indent=2), no newline), and v0.6.2's reader gets the same dict."""
+    from filament_kit import updates
+    updates._write_state(last_ok_at=5.5, previous="1.0.0", failed="1.2.0", held=None,
+                         hardware={"sha256": "ab" * 32, "version": 3}, latest={"version": "1.3.0", "notes": "café"})
+    st = updates._read_state()
+    raw = (opt / "state.json").read_bytes()
+    assert raw == json.dumps(st, indent=2).encode("utf-8") and not raw.endswith(b"\n")
+    old_reader = json.loads(raw.decode("utf-8"))            # v0.6.2 `_read_state`: json.loads of the file, a dict
+    for k in ("last_ok_at", "previous", "failed", "hardware"):
+        assert old_reader[k] == st[k]
+    assert old_reader["hardware"]["sha256"] == "ab" * 32
+    if sys.platform != "win32":
+        assert stat.S_IMODE((opt / "state.json").stat().st_mode) == 0o644
+
+
+def test_the_state_json_stays_current_across_writes(opt):
+    from filament_kit import updates
+    updates._write_state(previous="1.0.0")
+    updates._write_state(failed="1.1.0", last_ok_at=7.0)
+    updates._write_state(failed=None, previous="1.1.0")
+    assert json.loads((opt / "state.json").read_text(encoding="utf-8")) == updates._read_state() == {
+        "previous": "1.1.0", "failed": None, "last_ok_at": 7.0}
+
+
+def test_a_state_json_changed_by_an_older_release_wins_once(opt):
+    """The older release's `update --rollback` rewrites state.json (a new `previous`, the hold cleared)."""
+    from filament_kit import updates
+    updates._write_state(previous="1.0.0", held="2.0.0")
+    (opt / "state.json").write_text(json.dumps({"previous": "0.9.0", "held": None}, indent=2), encoding="utf-8")
+    assert updates._read_state() == {"previous": "0.9.0", "held": None}
+    assert statexml.loads((opt / "state.xml").read_bytes(), "state") == {"previous": "0.9.0", "held": None}
+    updates._write_state(last_ok_at=1.0)
+    assert updates._read_state() == {"previous": "0.9.0", "held": None, "last_ok_at": 1.0}
+    assert json.loads((opt / "state.json").read_text(encoding="utf-8")) == updates._read_state()
+
+
+def test_config_json_is_v062s_shape_and_the_state_helper_sidecar_is_not_involved(etc):
+    """config.py has its own hash (json_sha256 in config.xml), no `<name>.sha256` sidecar: v0.6.2's
+    json.dump(indent=2), no newline."""
+    cfg = {"server_name": "café", "modules": {"server": True}}
+    config.save(cfg)
+    assert (etc / "config.json").read_bytes() == json.dumps(cfg, indent=2).encode("utf-8")
+    assert not (etc / "config.json.sha256").exists()
+    (etc / "config.json").write_text(json.dumps({"server_name": "older"}, indent=2), encoding="utf-8")
+    assert config.load_raw() == {"server_name": "older"}
 
 
 def test_a_damaged_state_xml_is_kept_aside_not_written_over(opt, monkeypatch):

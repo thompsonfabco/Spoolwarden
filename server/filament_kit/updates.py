@@ -48,7 +48,6 @@ except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
 from . import __version__, config, event_sink, events, modules, output, release, steps
-from .pairing import _write_atomic
 from .profiles import statexml
 from .release import ReleaseError
 
@@ -102,23 +101,15 @@ def version_text() -> str:
     return text if re.fullmatch(re.escape(cur) + r"-nightly\.\d{8}", text) else cur
 
 
+def _old_state(st: dict) -> bytes:
+    """state.json as v0.6.2 wrote it: json.dumps(indent=2), no newline, ASCII-escaped."""
+    return json.dumps(st, indent=2).encode("utf-8")
+
+
 def _read_state() -> dict:
-    f = store() / STATE
-    xp = statexml.xml_path(f)
-    try:
-        out = statexml.loads(xp.read_bytes(), statexml.tag_of(f))
-        statexml.clear_problem(xp)
-        return out
-    except FileNotFoundError:
-        pass
-    except (OSError, statexml.StateXmlError) as e:
-        # an XML file that cannot be read: noted, so the next write keeps it as state.xml.unreadable instead of
-        # writing over it; the JSON form is read meanwhile, else nothing
-        statexml.note_problem(xp, str(e) if isinstance(e, statexml.StateXmlError) else f"cannot read: {e.strerror or e}")
-    try:
-        st = json.loads(f.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
+    # state.xml first; state.json when that is missing or cannot be read (noted, so the next write keeps it as
+    # state.xml.unreadable); a state.json changed by an older release after this code wrote it wins once
+    st = statexml.read(store() / STATE, mode=0o644, state_owned=False)
     return st if isinstance(st, dict) else {}
 
 
@@ -136,10 +127,10 @@ def _emit_updated(from_ver: str, to_ver: str, is_rollback: bool) -> None:
 def _write_state(**changes) -> None:
     st = _read_state()
     st.update(changes)
-    statexml.write(store() / STATE, st, state_owned=False)       # root's file in /opt, world-readable as it was
-    # state.json too, for one release: the release `update --rollback` goes to reads only this form, and its update
-    # timer must see the `held` set here (R85 section 1.5)
-    _write_atomic(store() / STATE, json.dumps(st, indent=2).encode("utf-8"), 0o644)
+    # root's file in /opt, world-readable as it was; state.json too, in v0.6.2's shape, for one release: the release
+    # `update --rollback` goes to reads only this form, and its update timer must see `held`, `failed`, `previous`,
+    # `last_ok_at` and the `hardware` hashes kept here
+    statexml.write(store() / STATE, st, 0o644, state_owned=False, old_format=_old_state)
 
 
 def default_fetcher(cfg: dict) -> release.Fetcher:
