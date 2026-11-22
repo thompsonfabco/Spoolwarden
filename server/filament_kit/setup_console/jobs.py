@@ -14,7 +14,7 @@ The server restarts during apply, update and rollback; the log lives in /run, so
 
 A counted job (steps.py) writes `==> step K of N <sentence>` when each step starts. `step` is {index, count, text} of the
 newest complete one and `progress` is (K - 1) / N while step K runs (0 to 1, never full while work remains), so the page
-can draw a determinate bar (docs/design N13); both are null when the job writes no step lines, which the page shows as
+can draw a determinate bar (the design N13); both are null when the job writes no step lines, which the page shows as
 an indeterminate bar. A job that finished with exit 0 after writing step lines reports 1; a failed one keeps its
 fraction. The sentence is redacted like the log.
 """

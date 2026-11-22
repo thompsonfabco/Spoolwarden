@@ -685,7 +685,7 @@ def test_no_systemd_touches_no_unit_file(env, srv, key, unit_dir, monkeypatch):
     assert (unit_dir / "filament-kit-new.timer").exists()
 
 
-# ---------------------------------------------------------------- the job's step lines (docs/design 02 8.4)
+# ---------------------------------------------------------------- the job's step lines (the design, components 8.4)
 
 def test_an_update_writes_its_three_steps_with_the_version_it_installs(env, srv, capsys):
     srv.add("1.0.0")

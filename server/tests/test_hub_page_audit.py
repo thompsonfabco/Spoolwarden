@@ -1,6 +1,6 @@
 """AUT-5 on the Hub page (design 09 S1.11, 07 section 15): the page audit (tests/page_audit.js) in every section of the
 Hub page (/setup), Console light and dark, at 1280 px and 320 px, through tests/aut5_run.mjs in a headless Chrome, Edge
-or Chromium already on the machine. The page is served with example data only (mockups/CONTENT-SPEC.md: "Workshop hub",
+or Chromium already on the machine. The page is served with example data only (the example-data rules: "Workshop hub",
 Workshop X1, Garage Voron, Kitchen phone, rd-01) and the printers and Klipper modules on, with fakes for the managers.
 
 Findings of today's markup that a later step rebuilds are listed in tests/allowlists/aut5_hub/, one file per section; a

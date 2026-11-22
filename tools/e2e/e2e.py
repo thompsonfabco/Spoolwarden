@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The end-to-end scenarios of tools/e2e/run.sh (docs/testing-e2e.md). Run by run.sh as root; not on its own.
+"""The end-to-end scenarios of tools/e2e/run.sh. Run by run.sh as root; not on its own.
 
   python3 -I tools/e2e/e2e.py --work DIR [--only a,d,c,b,e,f,g,h] [--previous vX.Y.Z] [--storage-previous vX.Y.Z,...]
 

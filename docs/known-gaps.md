@@ -1,14 +1,12 @@
 # Known gaps
 
-Things a normal user can't yet do the way the how-tos describe, found while writing them (2026-11-03, main at
-fbe8641) and checking them against the code and an install on Ubuntu 26.04 in WSL. Remove an entry once it is
+Things a normal user can't yet do the way the how-tos describe. Remove an entry once it is
 fixed.
 
 ## Releases and downloads
 
 1. ~~No release exists.~~ Fixed 2026-11-03: v0.2.0 (beta) carries the signed tarball, APK, Slicer Sync setup, `get.sh`,
-   `bambu_hardware.xml` and the signed `SHA256SUMS`. The release signing key is in `release.py` and `get.sh`, and
-   the repository secrets are set.
+   `bambu_hardware.xml` and the signed `SHA256SUMS`.
 2. ~~The repository is private.~~ Fixed 2026-11-03: the repository is public, so the one command and the
    Releases page downloads need no GitHub account.
 3. ~~No library asset.~~ Fixed in v0.3.0: v0.3.0 and v0.4.0 carry `library.tar.gz` (v0.2.0 does not, so

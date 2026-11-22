@@ -1,4 +1,4 @@
-"""Checks of the shared component files of design step S0.11 (docs/design/09-implementation-order.md):
+"""Checks of the shared component files of design step S0.11 (the design, build order):
 web-shared/components.css and web-shared/components.js, and the additions components-jobs.css, components-media.css,
 components-media.js and components-lock.js (the Hub page's lock chip and unlock dialog).
 

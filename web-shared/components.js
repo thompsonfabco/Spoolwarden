@@ -1,4 +1,4 @@
-// Spoolwarden shared components (docs/design/02-components.md 1.4): the one script the Hub page and the web app load
+// Spoolwarden shared components (the design, components 1.4): the one script the Hub page and the web app load
 // after strings/strings.js, holding the element builder, the Hub request helper, guard(), profile(), announce(), the
 // dialog, the toast, the inline result and the behaviour of the other components; their markup is as 02 shows it.
 // Texts come from window.SW_TEXT or the caller; text from the Hub goes in as textContent, never as markup.

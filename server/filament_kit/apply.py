@@ -919,7 +919,7 @@ def _fail(a: Action, e: Exception) -> None:
 
 
 def step_name(a: Action) -> str:
-    """The sentence of the job step an action belongs to (docs/design 02 8.4): the actions of the plan, grouped by what
+    """The sentence of the job step an action belongs to (the design, components 8.4): the actions of the plan, grouped by what
     the person is waiting for."""
     k, arg = a.kind, a.arg
     if k in ("apt", "apt_lean"):

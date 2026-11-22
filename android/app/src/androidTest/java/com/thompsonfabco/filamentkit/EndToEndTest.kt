@@ -40,7 +40,7 @@ import org.junit.runner.RunWith
 private const val TAG = "FkE2E"
 
 /**
- * End to end against a real filament-kit server (see docs/android-e2e.md). Skipped unless `fkPhase` is passed; the
+ * End to end against a real filament-kit server. Skipped unless `fkPhase` is passed; the
  * phases run as separate instrumentation runs, in order, so `cold` starts in a new process:
  *
  * - `main` (`fkCode`, `fkHost`, `fkPhoto`, optional `fkPort`, `fkFingerprint`): manual pair → Printers (empty) →

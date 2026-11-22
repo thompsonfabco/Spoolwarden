@@ -24,7 +24,7 @@ server/tests/data/** -text
 printer-pack/** text eol=lf
 
 # Design sources and what build_tokens.py generates from them: its --check compares byte for byte with "\n" endings, so
-# a CRLF checkout would fail it (docs/design/08-platform-mapping.md 1). Listed now for the outputs later steps add.
+# a CRLF checkout would fail it (the design, platform mapping 1). Listed now for the outputs later steps add.
 tokens/** text eol=lf
 icons/** text eol=lf
 server/filament_kit/shared_static/** text eol=lf
