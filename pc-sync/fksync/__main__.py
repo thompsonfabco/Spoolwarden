@@ -375,13 +375,22 @@ def _task_registered() -> bool | None:
 
 
 def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLayout | None = None) -> int:
+    cfg, err, locked = {}, None, False
     with contextlib.suppress(store.AlreadyRunning):
-        with store.single_instance(dirs):
+        with store.single_instance(dirs):           # the read can rewrite the config: under the lock, as a run's is
+            locked = True
             store.recover_interrupted_pair(dirs)
-    try:
-        cfg = store.load_config(dirs)
-    except ValueError as e:
-        _out(str(e))
+            try:
+                cfg = store.load_config(dirs)
+            except ValueError as e:
+                err = e
+    if not locked:                                  # a run holds the lock: status still answers, from the config as saved
+        try:
+            cfg = store.load_config(dirs)
+        except ValueError as e:
+            err = e
+    if err is not None:
+        _out(str(err))
         cfg = {}
     paired = bool(cfg.get("host")) and store.load_token(dirs) is not None
     if cfg.get("host"):
@@ -496,13 +505,18 @@ def cmd_apply_updates(dirs: store.AppDirs, key: str, names: list[str] | None, dr
 
 def cmd_unpair(dirs: store.AppDirs) -> int:
     try:
-        cfg = store.load_config(dirs)
-    except ValueError:
-        cfg = {}
-    dirs.token.unlink(missing_ok=True)
-    statexml.unlink(dirs.config)
-    store.drop_pair_aside(dirs)
-    store.log(dirs, "unpaired this PC (token and config removed)")
+        with store.single_instance(dirs):           # a run reads and writes the config and token: not under its feet
+            try:
+                cfg = store.load_config(dirs)
+            except ValueError:
+                cfg = {}
+            dirs.token.unlink(missing_ok=True)
+            statexml.unlink(dirs.config)
+            store.drop_pair_aside(dirs)
+            store.log(dirs, "unpaired this PC (token and config removed)")
+    except store.AlreadyRunning:
+        _out("A sync run is in progress; try again in a minute.")
+        return 1
     dev = cfg.get("device")
     _out("This PC is unpaired: its token is deleted.")
     _out(f"On the Hub, also run 'sudo spoolwarden unpair {dev or '<id>'}' so another PC can become the sync PC.")

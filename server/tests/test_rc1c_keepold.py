@@ -166,3 +166,53 @@ def test_the_build_manifests_json_is_v062s_shape(made):
     assert statexml.read(folder / "builds" / stamp / "BUILD.json") == want
     slicer = (folder / "builds" / stamp / "SLICER.json").read_bytes()
     assert slicer == _old_bytes(json.loads(slicer))                                    # v0.6.2 updates.py:158
+
+
+def test_lines_load_never_waits_for_a_build_and_returns_the_newest_lines(made):
+    import threading
+    folder, _ = made
+    assert len(lines_mod.load()) >= 1
+    lines_mod.save({})                                      # the newest saved lines: none
+    held, release, got = threading.Event(), threading.Event(), []
+
+    def build():                                            # a build holds lines.lock for its whole run
+        with lines_mod.locked():
+            held.set()
+            release.wait(30)
+
+    def read():
+        got.append(lines_mod.load())
+    b = threading.Thread(target=build, daemon=True)
+    b.start()
+    try:
+        assert held.wait(10)
+        r = threading.Thread(target=read, daemon=True)
+        r.start()
+        r.join(5)
+        assert not r.is_alive(), "lines.load() waited for the build's lock"
+        assert len(got[0]) == 0
+    finally:
+        release.set()
+        b.join(10)
+
+
+def test_locked_without_waiting_raises_when_held_and_waits_by_default(made):
+    import threading
+    held, release = threading.Event(), threading.Event()
+
+    def hold():
+        with lines_mod.locked():
+            held.set()
+            release.wait(30)
+    t = threading.Thread(target=hold, daemon=True)
+    t.start()
+    try:
+        assert held.wait(10)
+        with pytest.raises(BlockingIOError):
+            with lines_mod.locked(wait=False):
+                pass
+    finally:
+        release.set()
+        t.join(10)
+    with lines_mod.locked(wait=False):                      # free again
+        pass
