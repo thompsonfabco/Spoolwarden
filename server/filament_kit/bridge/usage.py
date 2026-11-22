@@ -241,6 +241,25 @@ def _forget(path: Path) -> None:
     _reported.discard(str(path))
 
 
+@contextmanager
+def _flocked(serial: str):
+    """The module lock, and usage/.lock (flock) so the root CLI and the service do not move or write at once."""
+    with _lock:
+        if fcntl is None or serial in _held:
+            yield
+            return
+        folder = _dir(serial) / DIR
+        make_state_dir(folder)
+        with open_lock(folder / ".lock") as fh:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            _held.add(serial)
+            try:
+                yield
+            finally:
+                _held.discard(serial)
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
 def _load(path: Path, for_write: bool = False) -> dict:
     """{'entries': [...], 'undone': [...]} of a month file. An unreadable one is logged once and noted
     (statexml.problems()) and read as empty; before the next write it is kept as `<name>.unreadable`, never
@@ -314,41 +333,56 @@ def _migrate(serial: str) -> tuple[list[dict], dict[str, str]] | None:
     marker = d / DIR / MIGRATED
     if marker.exists() or not (d / FILE).is_file():
         return None
-    with _lock:
-        if marker.exists():
-            return None
-        old = _old_log(serial)
-        if old is None:
-            return None
-        entries, undone = old
-        month_of = {e['id']: _entry_month(e) for e in entries}
-        fresh: dict[str, dict] = {}
-        for e in entries:
-            fresh.setdefault(month_of[e['id']] or _iso(_now())[:7], {'entries': [], 'undone': []})['entries'].append(e)
-        for eid, at in undone.items():
-            m = month_of.get(eid) or _month_of(at)
-            if m:
-                fresh.setdefault(m, {'entries': [], 'undone': []})['undone'].append({'entry': eid, 'at': at})
-        try:
-            for m, add in sorted(fresh.items()):          # idempotent: a stop half way is finished by the next run
-                path = d / DIR / f"{m}.xml"
-                data = _load(path, True)
-                have = {e.get('id') for e in data['entries']}
-                gone = {u.get('entry') for u in data['undone']}
-                data['entries'] += [e for e in add['entries'] if e['id'] not in have]
-                data['undone'] += [u for u in add['undone'] if u['entry'] not in gone]
-                _save(path, data)
-            make_state_dir(d / DIR)
-            _write_atomic(marker, b"moved from usage.jsonl\n", 0o600, state_owned=True)
-        except (OSError, statexml.StateXmlError, TypeError, ValueError) as e:
-            _report(d / FILE, f"could not be converted ({e}); reading it until it can")
-            return old
-        _forget(d / FILE)
+    try:
+        with _flocked(serial):
+            return _move(serial)
+    except OSError as e:                # the lock could not be taken (a read-only reader): read it from memory
+        _report(d / FILE, f"could not be converted ({e}); reading it until it can")
+        return _old_log(serial)
+
+
+def _move(serial: str) -> tuple[list[dict], dict[str, str]] | None:
+    d = _dir(serial)
+    marker = d / DIR / MIGRATED
+    if marker.exists():
+        return None
+    old = _old_log(serial)
+    if old is None:
+        return None
+    entries, undone = old
+    month_of = {e['id']: _entry_month(e) for e in entries}
+    fresh: dict[str, dict] = {}
+    for e in entries:
+        fresh.setdefault(month_of[e['id']] or _iso(_now())[:7], {'entries': [], 'undone': []})['entries'].append(e)
+    for eid, at in undone.items():
+        m = month_of.get(eid) or _month_of(at)
+        if m:
+            fresh.setdefault(m, {'entries': [], 'undone': []})['undone'].append({'entry': eid, 'at': at})
+    try:
+        for m, add in sorted(fresh.items()):          # idempotent: a stop half way is finished by the next run
+            path = d / DIR / f"{m}.xml"
+            data = _load(path, True)
+            have = {e.get('id') for e in data['entries']}
+            gone = {u.get('entry') for u in data['undone']}
+            data['entries'] += [e for e in add['entries'] if e['id'] not in have]
+            data['undone'] += [u for u in add['undone'] if u['entry'] not in gone]
+            _save(path, data)
+        make_state_dir(d / DIR)
+        _write_atomic(marker, b"moved from usage.jsonl\n", 0o600, state_owned=True)
+    except (OSError, statexml.StateXmlError, TypeError, ValueError) as e:
+        _report(d / FILE, f"could not be converted ({e}); reading it until it can")
+        return old
+    _forget(d / FILE)
     return None
 
 
 def _write_line(serial: str, rec: dict) -> None:
     """Store an entry, or an {"undo": id, "at"} / {"undo_failed": id, "at"} record, in its month's file."""
+    with _flocked(serial):
+        _store(serial, rec)
+
+
+def _store(serial: str, rec: dict) -> None:
     d = _dir(serial)
     make_state_dir(d / DIR)
     _migrate(serial)

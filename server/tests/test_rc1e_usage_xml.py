@@ -4,6 +4,11 @@ reads (analytics reads every month)."""
 import json
 import os
 import stat
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
 
 import pytest
 
@@ -199,3 +204,51 @@ def test_a_failed_move_is_logged_once_and_noted_until_it_works(monkeypatch, capl
     monkeypatch.setattr(usage, "_write_atomic", real)
     usage.entries(SERIAL, days=10_000)
     assert not any("usage.jsonl" in p for p in statexml.problems())            # moved: nothing to report
+
+
+needs_flock = pytest.mark.skipif(usage.fcntl is None, reason="flock: Linux only")
+
+
+def _sub_env():
+    import filament_kit
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([str(Path(filament_kit.__file__).parent.parent), env.get("PYTHONPATH", "")])
+    return env
+
+
+@needs_flock
+def test_a_move_waits_for_another_process_that_holds_the_usage_lock():
+    d = _dir()
+    d.mkdir(parents=True)
+    (d / "usage.jsonl").write_text(json.dumps(_entry(E1, "2026-11-10T10:00:00Z")) + "\n", encoding="utf-8")
+    (d / "usage").mkdir()
+    holder = subprocess.Popen(
+        [sys.executable, "-I", "-c",
+         "import fcntl,sys;f=open(sys.argv[1],'a');fcntl.flock(f,fcntl.LOCK_EX);print('held',flush=True);sys.stdin.read()",
+         str(d / "usage" / ".lock")], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "held"
+        done = threading.Event()
+        worker = threading.Thread(target=lambda: (usage.append(SERIAL, {"job": "new"}), done.set()), daemon=True)
+        worker.start()
+        assert not done.wait(0.7)                         # was: moved and wrote at once, under no cross-process lock
+        assert not (d / "usage" / usage.MIGRATED).exists()
+    finally:
+        holder.stdin.close()
+        holder.wait(10)
+    worker.join(10)
+    assert done.is_set() and (d / "usage" / usage.MIGRATED).exists()
+
+
+@needs_flock
+def test_two_processes_making_the_first_appends_lose_nothing():
+    d = _dir()
+    d.mkdir(parents=True)
+    (d / "usage.jsonl").write_text(json.dumps(_entry(E1, "2026-11-10T10:00:00Z")) + "\n", encoding="utf-8")
+    code = ("import sys\nfrom filament_kit.bridge import usage\n"
+            "for i in range(6): usage.append('%s', {'job': sys.argv[1] + str(i), 'at': '2026-11-12T10:00:00Z'})\n" % SERIAL)
+    procs = [subprocess.Popen([sys.executable, "-c", code, tag], env=_sub_env()) for tag in ("p", "q")]
+    assert [p.wait(60) for p in procs] == [0, 0]
+    recs, _ = usage._read(SERIAL)
+    assert sorted(r["job"] for r in recs if r["id"] != E1) == sorted(t + str(i) for t in "pq" for i in range(6))
+    assert len({r["id"] for r in recs}) == 13
