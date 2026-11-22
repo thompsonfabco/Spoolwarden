@@ -182,3 +182,24 @@ def test_retry_passes_the_xml_note_on(tmp_path, monkeypatch):
     monkeypatch.setattr(intake, "read_labels", lambda sm, images, hint, tag_uid, **k: seen.update(hint=hint, tag=tag_uid) or {})
     intake.retry("r1", None)
     assert seen == {"hint": "note\nwith a break & <angle>", "tag": "04:A2:B3"}
+
+
+def test_one_file_that_will_not_go_does_not_keep_the_rest(monkeypatch, caplog):
+    rf.write_pending(ANSWERS)
+    _litter()
+    etc = rf.pending_path().parent
+    real = pathlib.Path.unlink
+
+    def unlink(self, missing_ok=False):
+        if self.name == "reader-setup.json":
+            raise PermissionError("locked")
+        return real(self, missing_ok=missing_ok)
+    monkeypatch.setattr(pathlib.Path, "unlink", unlink)
+    with caplog.at_level(logging.WARNING, logger="filament_kit.reader_flash"):
+        with pytest.raises(OSError, match="reader-setup.json"):
+            rf.drop_pending()
+    assert sorted(x.name for x in etc.glob("reader-setup*")) == ["reader-setup.json"]      # all the others were removed
+    assert "reader-setup.json could not be deleted" in caplog.text and "12345678" not in caplog.text
+    monkeypatch.undo()
+    rf.drop_pending()
+    assert _left_over() == []

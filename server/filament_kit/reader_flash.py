@@ -104,12 +104,21 @@ def pending_path() -> Path:
 
 def drop_pending() -> None:
     """Delete the answers the page left, in every form: the one place that does. Both forms, the hash beside the JSON,
-    and any temp, moving or set-aside file of them (the Wi-Fi password is in each). No file is not an error."""
+    and any temp, moving or set-aside file of them (the Wi-Fi password is in each). No file is not an error. Each file
+    goes on its own: one that will not go does not keep the rest; after all were tried, OSError names the files left
+    (never what is in them)."""
     etc = pending_path().parent
-    for name in (PENDING, OLD_PENDING, OLD_PENDING + ".sha256"):
-        (etc / name).unlink(missing_ok=True)
-    for p in etc.glob(Path(PENDING).stem + ".*"):
-        p.unlink(missing_ok=True)
+    names = [PENDING, OLD_PENDING, OLD_PENDING + ".sha256"]
+    names += [p.name for p in etc.glob(Path(PENDING).stem + ".*") if p.name not in names]
+    left = []
+    for name in names:
+        try:
+            (etc / name).unlink(missing_ok=True)
+        except OSError as e:
+            log.warning("%s could not be deleted (%s)", name, type(e).__name__)
+            left.append(name)
+    if left:
+        raise OSError("could not delete: " + ", ".join(left))
 
 
 def write_pending(answers: dict) -> None:
