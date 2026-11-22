@@ -22,6 +22,7 @@ import zipfile
 from pathlib import Path
 
 from . import orca_opc
+from . import statexml
 from .treehash import preset_files
 
 MAX_BUILD_UNCOMPRESSED = 64 * 1024 * 1024
@@ -135,7 +136,7 @@ def _check_entries(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
         ftype = stat.S_IFMT(info.external_attr >> 16)
         if info.is_dir() or ftype not in (0, stat.S_IFREG):  # 0: no Unix mode recorded (DOS attrs only)
             raise ValueError(f"build zip: refusing entry {name!r} (not a regular file)")
-        if name != "BUILD.json":
+        if name not in ("BUILD.json", "BUILD.xml"):
             head, sep, tail = name.partition("/")
             if head not in ("base", "orca") or not sep or not _safe_name(tail):
                 raise ValueError(f"build zip: refusing entry {name!r}")
@@ -147,8 +148,9 @@ def _check_entries(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
         if declared > MAX_BUILD_UNCOMPRESSED:
             raise ValueError("build zip: too large uncompressed")
         files.append(info)
-    if "build.json" not in seen:
-        raise ValueError("build zip: BUILD.json missing")
+    if ("build.json" in seen) == ("build.xml" in seen):
+        raise ValueError("build zip: BUILD.xml (or BUILD.json) missing" if "build.json" not in seen
+                         else "build zip: both BUILD.xml and BUILD.json")
     return files
 
 
@@ -176,12 +178,16 @@ def unpack_build(data: bytes, dest: Path) -> dict:
                         if total > MAX_BUILD_UNCOMPRESSED:
                             raise ValueError("build zip: too large uncompressed")
                         dst.write(chunk)
+            name = "BUILD.xml" if (tmp / "BUILD.xml").is_file() else "BUILD.json"
             try:
-                build = json.loads((tmp / "BUILD.json").read_text(encoding="utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError) as e:
-                raise ValueError(f"build zip: BUILD.json is not valid JSON ({e})") from None
+                if name == "BUILD.xml":
+                    build = statexml.loads((tmp / name).read_bytes(), "build")
+                else:
+                    build = json.loads((tmp / name).read_text(encoding="utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError, statexml.StateXmlError) as e:
+                raise ValueError(f"build zip: {name} is not valid ({e})") from None
             if not isinstance(build, dict):
-                raise ValueError("build zip: BUILD.json is not an object")
+                raise ValueError(f"build zip: {name} is not an object")
             if dest.exists():
                 dest.rmdir()  # checked empty above
             tmp.replace(dest)

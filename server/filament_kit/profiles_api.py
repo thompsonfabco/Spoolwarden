@@ -311,7 +311,8 @@ def routes(authed, sm) -> list[Route]:
     @authed
     async def sync_build(request: Request):
         stamp = request.query_params.get("stamp", "")
-        data = await run_in_threadpool(builds.build_zip, stamp)
+        fmt = "xml" if request.query_params.get("format") == "xml" else "json"      # RC1c: a Slicer Sync that reads XML asks
+        data = await run_in_threadpool(builds.build_zip, stamp, fmt)
         return Response(data, media_type="application/zip",
                         headers={"Content-Disposition": f'attachment; filename="build-{_safe(stamp)}.zip"'})
 
