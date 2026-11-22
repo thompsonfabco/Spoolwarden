@@ -56,7 +56,7 @@ try:
 except ImportError:  # Windows dev PC
     fcntl = None
 
-from .. import config
+from .. import config, demo
 from .. import library as library_mod
 from ..library import Library
 from ..pairing import _write_atomic, make_state_dir, open_lock
@@ -492,7 +492,7 @@ _held = threading.local()
 
 
 def _path() -> Path:
-    return config.paths().state / "profiles" / "lines.json"
+    return demo.where(config.paths().state / "profiles" / "lines.json", "profiles/lines.json")
 
 
 @contextmanager
