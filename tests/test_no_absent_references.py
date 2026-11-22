@@ -5,7 +5,7 @@ and fails naming `path:line` and the kind on:
 
   folder   the folder docs/design exists
   A        a path or file name of a document that is not in this repository, or of a page that was removed
-  B        a decision id ("R80 section 2", "(R83)", "ruling 11:55")
+  B        a decision id (the letter R and two or three digits, in any wording around it; "ruling 11:55")
   C        a citation of such a document by its bare number ("(05 2.7)", "of 06 3.2")
   D        a hand-off file name of the form YYYY-MM-DD-HHMM-<words>.md
 
@@ -48,6 +48,7 @@ LOCS = rf" {LOCITEM}(?:(?:, |,? and |; ?){GUARD}{LOCITEM_C})*"
 LOCS_B = rf" {LOCITEM_B}(?:(?:, |,? and |; ?){GUARD}(?:{LOCITEM_B}|(?:ruling of |ruled ){CLOCK}))*(?: ruling)?"
 B_REF = rf"(?:(?:the )?(?:ruling|DECISIONS|design) )?R\d{{1,3}}\b(?:{LOCS_B})?"
 B_CLOCK = rf"(?<!\w)(?:ruling|design|ruled)(?: of)? {CLOCK}"
+B_ANY = r"(?<![A-Za-z0-9_-])R\d{2,3}(?![A-Za-z0-9_-])"
 D_NAME = (r"(?<!\w)(?:(?:see|per|in|the brief|the handoff|the hand-off|brief|handoff|hand-off) )?"
           r"`?20\d\d-\d\d-\d\d-\d{4}-[a-z0-9-]+\.md`?")
 PAGE = r"(?<!\w)(?:(?:see|per|in) )?`?(?:docs/)?(?:maintainer|testing-e2e|android-e2e)\.md(?::\d+)?`?"
@@ -65,6 +66,7 @@ def _one(i):
 UNIT_SEP = r"(?:, |; | and )"
 GROUP = rf"(?:{_one(1)}(?:{UNIT_SEP}{_one(2)})*)"
 CATCH = r"docs/design(?:/(?:README\.md|mockups/?[\w./-]*)?)?"
+BARE_ID = re.compile(B_ANY)
 UNIT_RE = re.compile(rf"(?P<B>{B_REF})|(?P<BC>{B_CLOCK})|(?P<D>{D_NAME})|(?P<P>{PAGE})|(?P<G>{GROUP})|(?P<X>{CATCH})")
 GROUP_ONE = re.compile(_one(9))
 
@@ -95,7 +97,10 @@ def _hits(line):
     """The kinds of reference in one line."""
     if not any(c in line for c in ("R", "0", "1", "docs", ".md", "design", "ruling", "ruled", "DECISIONS")):
         return []
-    return [_kind(m) for m in UNIT_RE.finditer(line) if _valid(line, m)]
+    kinds = [_kind(m) for m in UNIT_RE.finditer(line) if _valid(line, m)]
+    if BARE_ID.search(line):
+        kinds.append("B")
+    return kinds
 
 
 # ---- the tree ----
