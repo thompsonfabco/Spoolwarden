@@ -1,6 +1,6 @@
 """Guard: comments, docstrings, strings and texts in this repository cite nothing that is not in the repository.
 
-It scans the repository's text files, enumerated by walking the tree (the test host holds an extracted archive, no git),
+It scans the repository's text files, enumerated by `git ls-files` in a checkout and by walking the tree where there is no .git (the test host's extracted archive),
 and fails naming `path:line` and the kind on:
 
   folder   the folder docs/design exists
@@ -104,7 +104,13 @@ def _hits(line):
 
 
 # ---- the tree ----
-def _files():
+def _kept(rel):
+    parts = rel.split("/")
+    return not (set(parts[:-1]) & SKIP_DIRS or parts[0] == "release-notes" and len(parts) > 1 or rel in ITSELF
+                or parts[-1] in SKIP_FILES or Path(rel).suffix.lower() in SKIP_SUFFIXES)
+
+
+def _walked_files():
     out = []
     for d, ds, fs in os.walk(ROOT):
         rel_dir = Path(d).relative_to(ROOT).as_posix()
@@ -115,6 +121,19 @@ def _files():
                 continue
             out.append(rel)
     return out
+
+
+def _files():
+    """A checkout (a .git entry in the root): the tracked files, so git-ignored folders are not read. A tree with no .git
+    (the test host's extracted archive), or no git to ask: the walk."""
+    if (ROOT / ".git").exists():
+        import subprocess
+        try:
+            out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], capture_output=True, check=True).stdout
+        except (subprocess.CalledProcessError, OSError):
+            return _walked_files()
+        return sorted(f for f in out.decode("utf-8").split("\0") if f and _kept(f) and (ROOT / f).is_file())
+    return _walked_files()
 
 
 def _exceptions():
