@@ -16,11 +16,13 @@ to it). Reading goes through defusedxml (no DTD, no entities); a file larger tha
 
 A reader gets the XML form when there is one and it can be read. With only the JSON form it reads that and writes the
 XML form once (`read` moves it; a failing move changes nothing). An XML file that cannot be read is never overwritten:
-the next write keeps it as `<name>.xml.unreadable`. Both forms stay for one release (a rollback reads the JSON form as
+the next write keeps it (`quarantine`) as `<name>.xml.unreadable`. Both forms stay for one release (a rollback reads the JSON form as
 it was at the move); the release after next deletes the JSON files.
 """
 from __future__ import annotations
 
+import errno
+import hashlib
 import json
 import math
 import os
@@ -131,6 +133,17 @@ def dumps(tag: str, obj: dict, *, version: int | None = None) -> bytes:
     return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + body).encode("utf-8")
 
 
+def dumps_list(tag: str, items: list, *, version: int | None = None) -> bytes:
+    """A top-level JSON list as the XML form: the root has `as="list"` and one `<item>` per entry."""
+    if not isinstance(items, (list, tuple)):
+        raise StateXmlError("a list file holds a list")
+    ver = FORMAT if version is None else version
+    head = f"<{tag} version=\"{ver}\" as=\"list\""
+    kids = "".join(_element("item", x, "  ") for x in items)
+    body = f"{head}>\n{kids}</{tag}>\n" if kids else f"{head}/>\n"
+    return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + body).encode("utf-8")
+
+
 # ---------- reading ----------
 
 def _literal(v: str):
@@ -173,8 +186,8 @@ def _record(el) -> dict:
     return out
 
 
-def loads(data: bytes, tag: str, *, keep_version: bool = False) -> dict:
-    """The object in an XML form file; StateXmlError when it is not one (too large, not well-formed, wrong root)."""
+def _parse_root(data: bytes, tag: str):
+    """(root element, its version text) of an XML form file; StateXmlError when it is not one."""
     if len(data) > MAX_BYTES:
         raise StateXmlError(f"larger than {MAX_BYTES} bytes")
     try:
@@ -186,6 +199,12 @@ def loads(data: bytes, tag: str, *, keep_version: bool = False) -> dict:
     v = root.get("version", "")
     if not re.fullmatch(r"\d{1,6}", v or "1"):
         raise StateXmlError(f"version {v!r} is not a number")
+    return root, v
+
+
+def loads(data: bytes, tag: str, *, keep_version: bool = False) -> dict:
+    """The object in an XML form file; StateXmlError when it is not one (too large, not well-formed, wrong root)."""
+    root, v = _parse_root(data, tag)
     try:
         out = _slot(root) if root.get("as") == "map" else _record(root)
     except (ValueError, TypeError) as e:
@@ -193,6 +212,17 @@ def loads(data: bytes, tag: str, *, keep_version: bool = False) -> dict:
     if keep_version and v:
         out = {"version": int(v), **out}
     return out
+
+
+def loads_list(data: bytes, tag: str) -> list:
+    """The list in an XML form list file; StateXmlError when it is not one."""
+    root, _ = _parse_root(data, tag)
+    if root.get("as") != "list":
+        raise StateXmlError("not a list file")
+    try:
+        return [_slot(c) for c in root if c.tag == "item"]
+    except (ValueError, TypeError) as e:
+        raise StateXmlError(f"a value is not what its type says ({e})") from None
 
 
 # ---------- the files ----------
@@ -223,6 +253,21 @@ def clear_problem(path: Path) -> None:
     _unreadable.pop(str(path), None)
 
 
+_DEFAULT_MODE = 0o644
+_NO_WRITE = {errno.EACCES, errno.EPERM, errno.EROFS}
+OLD_FORMAT = {"indent": 2, "ensure_ascii": False}     # how the older Hub release wrote its state files (builds.py, lines.py)
+
+
+def _put(path: Path, data: bytes, mode: int, state_owned: bool) -> None:
+    from ..pairing import _write_atomic
+    _write_atomic(path, data, mode, state_owned=state_owned)
+
+
+def _mkdir(path: Path) -> None:
+    from ..pairing import make_state_dir
+    make_state_dir(path)
+
+
 def _plain(path: Path):
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -231,48 +276,187 @@ def _plain(path: Path):
     return data if isinstance(data, dict) else None
 
 
-def read(path: Path, *, keep_version: bool = False) -> dict | None:
-    """The data of state file `path` (given by its JSON name), or None when there is none or neither form holds an
-    object. The XML form wins; a JSON-only file is moved to XML on the way."""
+def _plain_list(path: Path):
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+    return data if isinstance(data, list) else None
+
+
+def quarantine(path: Path) -> bool:
+    """Keep the XML form of `path` (its JSON name, or the XML name) as `<name>.xml.unreadable` so the next write does
+    not destroy it, and forget its problem. True when there was a file to keep."""
+    xp = xml_path(path)
+    try:
+        os.replace(xp, xp.with_name(xp.name + ".unreadable"))
+    except OSError:
+        return False
+    clear_problem(xp)
+    return True
+
+
+# ---- shared block: identical in both copies (a test holds them to it); OLD_FORMAT, _put, _mkdir are each copy's own ----
+
+def _json_path(path: Path, old_name) -> Path:
+    """The old (JSON) form of state file `path`: its own name, or `old_name` (a file name next to it, or a path) when the
+    old release used another name (usage.jsonl, station_server.json)."""
+    return Path(path) if not old_name else Path(path).parent / old_name
+
+
+def _old_bytes(data, old_format) -> bytes:
+    """`data` as the older release wrote it. `old_format` is the keyword arguments of json.dumps (the default OLD_FORMAT of
+    this copy), or a function that returns the bytes (a file that was not one JSON document). A newline follows when an
+    indent was used, as the older writers did."""
+    if callable(old_format):
+        return old_format(data)
+    kw = OLD_FORMAT if old_format is None else old_format
+    text = json.dumps(data, **kw)
+    return (text + "\n" if kw.get("indent") is not None else text).encode("utf-8")
+
+
+def _sha(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _sha_path(jp: Path) -> Path:
+    return jp.with_name(jp.name + ".sha256")
+
+
+def _recorded(jp: Path) -> str | None:
+    """The hash of the JSON form as this code last wrote it, or None (nothing recorded yet)."""
+    try:
+        return _sha_path(jp).read_text(encoding="ascii").strip() or None
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _note_sha(jp: Path, raw: bytes, mode: int, state_owned: bool) -> None:
+    _put(_sha_path(jp), (_sha(raw) + "\n").encode("ascii"), mode, state_owned)
+
+
+def _keep_old(path: Path, data, mode: int, state_owned: bool, old_name, old_format) -> None:
+    """The JSON form next to the XML one, then the hash of it: written after the XML, so a stop in between leaves the XML as
+    the truth (a JSON that equals the XML's data is never taken for a newer one)."""
+    jp = _json_path(path, old_name)
+    body = _old_bytes(data, old_format)
+    _put(jp, body, mode, state_owned)
+    _note_sha(jp, body, mode, state_owned)
+
+
+def _same(a, b) -> bool:
+    if isinstance(a, dict) and isinstance(b, dict):
+        a, b = {k: v for k, v in a.items() if k != "version"}, {k: v for k, v in b.items() if k != "version"}
+    return a == b
+
+
+def _newer_json(path: Path, xml_data, t: str, is_list: bool, keep_version: bool, mode: int | None, state_owned: bool,
+                old_name):
+    """The data of a JSON form that changed after this code last wrote it (an older release after a rollback), or None.
+    It wins once: the XML form is written from it and its hash recorded. Nothing recorded, an unreadable JSON, or one
+    that holds what the XML form holds: the XML form wins. A store that cannot be rewritten still returns the data."""
+    jp = _json_path(path, old_name)
+    want = _recorded(jp)
+    if want is None:
+        return None
+    try:
+        raw = jp.read_bytes()
+    except OSError:
+        return None
+    if _sha(raw) == want:
+        return None
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return None
+    if not isinstance(data, list if is_list else dict):
+        return None
+    m = _DEFAULT_MODE if mode is None else mode
+    same = _same(data, xml_data)
+    try:
+        if not same:
+            _write_xml(path, data, t, m, state_owned, is_list)
+        _note_sha(jp, raw, m, state_owned)
+    except (OSError, StateXmlError, TypeError, ValueError) as e:
+        if not (isinstance(e, OSError) and e.errno in _NO_WRITE):
+            note_problem(path, f"could not be converted: {e}")
+    if same:
+        return None
+    return {"version": FORMAT, **data} if keep_version and not is_list and "version" not in data else data
+
+
+def _read(path: Path, tag: str | None, keep_version: bool, is_list: bool, mode: int | None, state_owned: bool,
+          keep_old_form: bool = True, old_name=None):
     path = Path(path)
     xp = xml_path(path)
+    jp = _json_path(path, old_name)
+    t = tag or tag_of(path)
     try:
         raw = xp.read_bytes()
     except FileNotFoundError:
         raw = None
     except OSError as e:
-        _unreadable[str(xp)] = f"cannot read: {e.strerror or e}"
+        note_problem(xp, f"cannot read: {e.strerror or e}")
         raw = None
     else:
         try:
-            out = loads(raw, tag_of(path), keep_version=keep_version)
-            _unreadable.pop(str(xp), None)
+            out = loads_list(raw, t) if is_list else loads(raw, t, keep_version=keep_version)
+            clear_problem(xp)
+            if keep_old_form:
+                newer = _newer_json(path, out, t, is_list, keep_version, mode, state_owned, old_name)
+                if newer is not None:
+                    return newer
             return out
         except StateXmlError as e:
-            _unreadable[str(xp)] = str(e)
-    old = _plain(path)
+            note_problem(xp, str(e))
+    old = _plain_list(jp) if is_list else _plain(jp)
     if old is not None and raw is None:
-        migrate(path, old)
+        _move(path, old, t, mode, state_owned, keep_old_form, old_name)
     return old
 
 
-def migrate(path: Path, obj: dict) -> None:
-    """Write `obj` (what the JSON file `path` holds) as its XML form, only when there is none yet: a reader that moves
-    a file must never write over what a writer saved a moment before. A failing move changes nothing (the JSON form
-    is read until the next save writes the XML form)."""
-    from ..pairing import _write_atomic
+def read(path: Path, *, keep_version: bool = False, tag: str | None = None, mode: int | None = None,
+         state_owned: bool = True, keep_old_form: bool = True, old_name=None) -> dict | None:
+    """The data of state file `path` (given by its JSON name), or None when there is none or neither form holds an
+    object. The XML form wins; a JSON-only file is moved to XML on the way (with `mode` and owner as given: the default
+    mode of the copy, the state's owner). `tag` is the root element when it is not the file stem (a month-named file).
+    A store that cannot be rewritten (a read by a user with no write permission) reads the old form, records nothing
+    and raises nothing. `keep_old_form` and `old_name` as `write`: a JSON form that an older release changed after this
+    code wrote it (a rollback) wins once and is written to the XML form."""
+    return _read(path, tag, keep_version, False, mode, state_owned, keep_old_form, old_name)
+
+
+def read_list(path: Path, *, tag: str | None = None, mode: int | None = None, state_owned: bool = True,
+              keep_old_form: bool = True, old_name=None) -> list | None:
+    """Like `read` for a file that holds a JSON list (reads.json, devices.json): None when neither form holds a list."""
+    return _read(path, tag, False, True, mode, state_owned, keep_old_form, old_name)
+
+
+def _move(path: Path, data, tag: str, mode: int | None, state_owned: bool, keep_old_form: bool = True,
+          old_name=None, old_format=None) -> None:
     xp = xml_path(path)
     moving = xp.with_name(xp.name + ".moving")
+    m = _DEFAULT_MODE if mode is None else mode
     try:
         if xp.exists():
             return
-        _write_atomic(moving, dumps(tag_of(path), obj), 0o644, state_owned=True)
+        _put(moving, dumps_list(tag, data) if isinstance(data, list) else dumps(tag, data), m, state_owned)
         try:
             os.link(moving, xp)
         except FileExistsError:
-            pass
+            return
+        if keep_old_form:                       # the JSON form stays as it is when there is one; else it is written
+            jp = _json_path(path, old_name)
+            try:
+                have = jp.read_bytes()
+            except FileNotFoundError:
+                _keep_old(path, data, m, state_owned, old_name, old_format)
+            else:
+                if _same(_plain_list(jp) if isinstance(data, list) else _plain(jp), data):
+                    _note_sha(jp, have, m, state_owned)
     except (OSError, StateXmlError, TypeError, ValueError) as e:
-        _unreadable[str(path)] = f"could not be converted: {e}"
+        if not (isinstance(e, OSError) and e.errno in _NO_WRITE):      # no write permission is not a failure
+            note_problem(path, f"could not be converted: {e}")
     finally:
         try:
             moving.unlink()
@@ -280,19 +464,67 @@ def migrate(path: Path, obj: dict) -> None:
             pass
 
 
-def _store(path: Path, obj: dict, *, mode: int = 0o644, state_owned: bool = True) -> None:
-    from ..pairing import _write_atomic, make_state_dir
+def migrate(path: Path, obj: dict, mode: int | None = None, *, tag: str | None = None, state_owned: bool = True,
+            keep_old_form: bool = True, old_name=None, old_format=None) -> None:
+    """Write `obj` (what the JSON file `path` holds) as its XML form, only when there is none yet: a reader that moves
+    a file must never write over what a writer saved a moment before. A failing move changes nothing (the JSON form
+    is read until the next save writes the XML form); no write permission is not recorded as a problem. The JSON form is
+    written too when there is none (as `write`)."""
+    _move(Path(path), obj, tag or tag_of(path), mode, state_owned, keep_old_form, old_name, old_format)
+
+
+def migrate_list(path: Path, items: list, mode: int | None = None, *, tag: str | None = None,
+                 state_owned: bool = True, keep_old_form: bool = True, old_name=None, old_format=None) -> None:
+    """Like `migrate` for a file that holds a JSON list."""
+    _move(Path(path), list(items), tag or tag_of(path), mode, state_owned, keep_old_form, old_name, old_format)
+
+
+def _write_xml(path: Path, data, t: str, mode: int, state_owned: bool, is_list: bool) -> None:
     xp = xml_path(path)
-    if str(xp) in _unreadable and xp.exists():     # never overwrite what could not be read
-        os.replace(xp, xp.with_name(xp.name + ".unreadable"))
-        _unreadable.pop(str(xp), None)
-    make_state_dir(xp.parent)
-    _write_atomic(xp, dumps(tag_of(path), obj), mode, state_owned=state_owned)
+    if xp.exists():                                 # never overwrite what could not be read
+        try:
+            loads_list(xp.read_bytes(), t) if is_list else loads(xp.read_bytes(), t, keep_version=True)
+        except (OSError, StateXmlError):
+            quarantine(path)
+    _mkdir(xp.parent)
+    _put(xp, dumps_list(t, data) if is_list else dumps(t, data), mode, state_owned)
+    clear_problem(xp)
+    clear_problem(path)
 
 
-def write(path: Path, obj: dict, *, mode: int = 0o644, state_owned: bool = True) -> None:
-    """Save `obj` as state file `path`'s XML form (the JSON form is left as it was at the move)."""
-    _store(Path(path), obj, mode=mode, state_owned=state_owned)
+def _save(path: Path, data, tag: str | None, mode: int | None, state_owned: bool, is_list: bool,
+          keep_old_form: bool, old_name, old_format) -> None:
+    path = Path(path)
+    m = _DEFAULT_MODE if mode is None else mode
+    _write_xml(path, data, tag or tag_of(path), m, state_owned, is_list)
+    if keep_old_form:
+        jp = _json_path(path, old_name)
+        try:
+            _keep_old(path, data, m, state_owned, old_name, old_format)
+        except (OSError, TypeError, ValueError) as e:      # the XML form is saved; the old form is a rollback aid
+            note_problem(jp, f"old form could not be written: {e}")
+        else:
+            clear_problem(jp)
+
+
+def write(path: Path, obj: dict, mode: int | None = None, *, tag: str | None = None, state_owned: bool = True,
+          keep_old_form: bool = True, old_name=None, old_format=None) -> None:
+    """Save `obj` as state file `path`'s XML form, then its JSON form as the older release wrote it (same `mode` and
+    owner; written after the XML, so a stop leaves the XML as the truth) and the hash of that JSON, so a later read can
+    tell an older release changed it. An XML file that cannot be read is kept as `<name>.xml.unreadable`. `mode` and
+    `state_owned` as `read`. `keep_old_form=False` is for a cache an older release rebuilds by itself. `old_name` is the
+    older release's file name when it differs (usage.jsonl); `old_format` the json.dumps keyword arguments, or a function
+    that returns the bytes, when the older writer did not use this copy's OLD_FORMAT."""
+    _save(path, obj, tag, mode, state_owned, False, keep_old_form, old_name, old_format)
+
+
+def write_list(path: Path, items: list, mode: int | None = None, *, tag: str | None = None,
+               state_owned: bool = True, keep_old_form: bool = True, old_name=None, old_format=None) -> None:
+    """Like `write` for a file that holds a JSON list."""
+    _save(path, list(items), tag, mode, state_owned, True, keep_old_form, old_name, old_format)
+
+
+# ---- end of the shared block ----
 
 
 def write_plain(path: Path, obj: dict, *, also_json: bool = False) -> None:
@@ -311,7 +543,7 @@ def exists(path: Path) -> bool:
 
 
 def unlink(path: Path) -> None:
-    for p in (xml_path(path), Path(path)):
+    for p in (xml_path(path), Path(path), _sha_path(Path(path))):
         try:
             p.unlink()
         except FileNotFoundError:
