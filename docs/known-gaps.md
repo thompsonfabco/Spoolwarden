@@ -96,7 +96,7 @@ Things the pages and apps already show, or the other interfaces already do, that
     entries and removing one fail there. Use the Hub page (**Settings**, **Filament Catalog**) or `sudo spoolwarden
     catalog add`.
 25. **The app (Android) shows a spool's ten oldest events, not its newest ten.** The Hub page and the web app show the
-    newest; so does the command line's activity list for one spool.
+    newest; so does `spoolwarden activity --spool <n>`.
 26. **The command line cannot load, unload or clear a printer's slot, the automatic slot included.** It also has no
     command for a printer's filament used, watching one printer, one device's detail, your own catalog entries or a
     spool's label. `spoolwarden spool move <n> auto` is refused; give the location's name. Use the Hub page for the rest.
@@ -106,13 +106,13 @@ Things the pages and apps already show, or the other interfaces already do, that
 29. **Language offers no language besides English.** The choice is there; nothing else is in it.
 30. **Devices shows no kind and no version for paired phones and PCs.** It says "Version not known". A Tag Reader shows
     no build and no last-seen time either.
-31. **Three things are missing on the Hub page.** There is no switch and no list for **Share corrections**; use
-    the command line's Share corrections setting to switch it, and the web app, the app (Android) or the command
-    line's list of label-reader corrections to see what waits. The history of the Checks is not shown; use the apps or
-    the command line's status history. **Import from CSV** is not there; the command line imports spools and
-    locations from a file.
-32. **There is no Home Assistant integration to install yet.** the command line's pairing for Home Assistant makes a
-    pairing, but nothing uses it.
+31. **Three things are missing on the Hub page.** There is no switch and no list for **Share corrections**: switch it
+    with `sudo spoolwarden local-intake share-corrections on` (or `off`), and see what waits in the web app, the app
+    (Android) or with `sudo spoolwarden label-reader corrections list`. The history of the Checks is not shown: use the
+    apps or `spoolwarden status --history`. **Import from CSV** is not there: use `sudo spoolwarden import spools
+    <file>` or `sudo spoolwarden import locations <file>`.
+32. **There is no Home Assistant integration to install yet.** `spoolwarden pair --home-assistant` makes a pairing,
+    but nothing uses it.
 
 ## How this was first checked (v0.2.0)
 
