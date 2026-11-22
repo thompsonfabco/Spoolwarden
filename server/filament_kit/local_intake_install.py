@@ -26,6 +26,7 @@ plan.json; the install job installs exactly the version that plan showed (`--pla
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -106,10 +107,54 @@ def _from_xml(d: dict) -> dict:
     return {("version" if k == "release" else k): v for k, v in d.items()}
 
 
+def _old_json(d: dict) -> bytes:
+    """The record as v0.6.2 wrote it (installed.json, plan.json): indent 2, no newline, its own `version` key."""
+    return json.dumps(_from_xml(d), indent=2).encode("utf-8")
+
+
+def _sha_file(f: Path) -> Path:
+    return f.with_name(f.name + ".sha256")
+
+
+def _note_hash(f: Path, raw: bytes) -> None:
+    """The hash of the JSON form as this code left it (what statexml.write records for its own writes)."""
+    from .pairing import _write_atomic
+    _write_atomic(_sha_file(f), (hashlib.sha256(raw).hexdigest() + "\n").encode("ascii"), 0o644, state_owned=False)
+
+
+def _newer_json(f: Path, have: dict) -> dict | None:
+    """The record an older release wrote to the JSON form after this code did (a rollback), or None. It wins once: the
+    XML form is written from it (root's store; a reader with no write permission just returns it). The statexml rule,
+    done here because the record's own `version` is the XML codec's `release`."""
+    try:
+        want = _sha_file(f).read_text(encoding="ascii").strip()
+        raw = f.read_bytes()
+    except (OSError, UnicodeDecodeError):
+        return None
+    if not want or hashlib.sha256(raw).hexdigest() == want:
+        return None
+    try:
+        d = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return None
+    try:
+        if not isinstance(d, dict):
+            return None
+        if d == have:
+            _note_hash(f, raw)
+            return None
+        statexml.write(f, _to_xml(d), 0o644, state_owned=False, old_format=_old_json)
+        _note_hash(f, raw)
+    except (OSError, statexml.StateXmlError, TypeError, ValueError):
+        pass                                # no write permission (the page's user) or an odd value: the data still wins
+    return d if isinstance(d, dict) and d != have else None
+
+
 def _load(name: str) -> dict | None:
-    """The record `name` (given by its JSON name): its XML form when there is one, else the JSON form, moved to XML on
-    the way when this process may write the store (root); a reader with no write permission (the setup page runs as the
-    service user) reads the old form, records nothing and raises nothing. None when neither form holds an object."""
+    """The record `name` (given by its JSON name): its XML form when there is one (a JSON form that an older release
+    changed after the last write wins once), else the JSON form, moved to XML on the way when this process may write the
+    store (root); a reader with no write permission (the setup page runs as the service user) reads the old form,
+    records nothing and raises nothing. None when neither form holds an object."""
     f = store() / name
     xp = statexml.xml_path(f)
     try:
@@ -120,17 +165,25 @@ def _load(name: str) -> dict | None:
         try:
             d = _from_xml(statexml.loads(raw, statexml.tag_of(f)))
             statexml.clear_problem(xp)
-            return d
+            newer = _newer_json(f, d)
+            return d if newer is None else newer
         except statexml.StateXmlError as e:
             statexml.note_problem(xp, str(e))
     try:
-        d = json.loads(f.read_text(encoding="utf-8"))
+        have = f.read_bytes()
+        d = json.loads(have.decode("utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(d, dict):
         return None
     if raw is None:
-        statexml.migrate(f, _to_xml(d), 0o644, state_owned=False)       # root's store: not handed to the service user
+        # root's store: not handed to the service user. The JSON form stays as it is; its hash is recorded
+        statexml.migrate(f, _to_xml(d), 0o644, state_owned=False, old_format=_old_json)
+        if xp.is_file() and not _sha_file(f).exists():
+            try:
+                _note_hash(f, have)
+            except OSError:
+                pass
     return d
 
 
@@ -163,14 +216,9 @@ def _write_json(name: str, d: dict | None) -> None:
     if d is None:
         statexml.unlink(f)          # both forms
         return
-    statexml.write(f, _to_xml(d), 0o644, state_owned=False)     # the page reads it as the service user; only root writes the store
-    if name != RECORD:
-        return
-    # the install record also stays as JSON for one release: the uninstaller script and `update --rollback` read it
-    tmp = f.with_suffix(".tmp")
-    tmp.write_text(json.dumps(d, indent=2), encoding="utf-8")
-    os.chmod(tmp, 0o644)
-    os.replace(tmp, f)
+    # XML, then the JSON form (indent 2 as v0.6.2 wrote it: the uninstaller script and `update --rollback` read it) and
+    # its hash. The page reads it as the service user; only root writes the store.
+    statexml.write(f, _to_xml(d), 0o644, state_owned=False, old_format=_old_json)
 
 
 def _write_state(d: dict | None) -> None:
