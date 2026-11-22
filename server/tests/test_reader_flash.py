@@ -30,8 +30,9 @@ class Clock:
 class Board:
     """What the firmware does: answers FK? (once it runs our build), takes FK-SET, restarts and reports its start."""
 
-    def __init__(self, clock, build=None, wifi="ok", server="ok", refuse=None):
+    def __init__(self, clock, build=None, wifi="ok", server="ok", refuse=None, line=None):
         self.clock, self.build, self.wifi, self.server, self.refuse = clock, build, wifi, server, refuse
+        self.line = line                # what it answers FK? with once it has settings, whatever its state
         self.settings = None
         self.lines = []
 
@@ -56,6 +57,9 @@ class Board:
                     return                      # a blank board, or another firmware: no answer
                 if cmd == "FK?":
                     done = board.settings is not None
+                    if done and board.line is not None:
+                        self.out.append(board.line)
+                        return
                     self.out.append(f"FK-READER {board.build} configured={int(done)} "
                                     f"wifi={board.wifi if done else '-'} server={board.server if done else '-'}\n")
                 elif cmd.startswith("FK-SET "):
@@ -110,6 +114,29 @@ def test_parse_hello():
     assert rf.parse_hello("garbage") is None and rf.parse_hello("FK-READER x") is None
 
 
+@pytest.mark.parametrize("line", [
+    "FK-READER 1794000000 configured=1 wifi=ok server=-\n",     # joined the Wi-Fi; the Hub check has not ended: no report comes
+    "FK-READER 1794000000 configured=1 wifi=ok server=o",       # cut short (the serial read timed out mid-line)
+    "FK-READER 1794000000 configured=1 wifi=ok server=o\n",     # cut short, newline from a later write
+    "FK-READER 1794000000 configured=1 wifi=f\n",
+    "",
+])
+def test_a_late_or_cut_short_report_from_a_reader_that_joined_the_wifi_says_it_did_not_answer(env, line):
+    """On 58731d34 a report cut after "server=o" read as "could not reach the kit". Never the Wi-Fi text, never the
+    Hub text: the reader that joined the Wi-Fi and sent no whole report gets its own."""
+    clock = Clock()
+    board = Board(clock, build=BUILD, line=line)
+    r = rf.setup("/dev/ttyACM0", dict(SETTINGS), device=_device(board, clock), run=_flasher(board)[0], say=lambda *a: None)
+    assert not r.ok and r.message.startswith("The reader did not answer in time.")
+    assert "join" not in r.message and "could not reach" not in r.message
+
+
+def test_a_half_line_and_a_made_up_value_are_not_a_report():
+    assert rf.parse_hello("FK-READER 1794000000 configured=1 wifi=ok server=o") is None
+    assert rf.parse_hello("FK-READER 1794000000 configured=1 wifi=f server=-") is None
+    assert rf.parse_hello("FK-READER 1794000000 configured=1 wifi=ok server=unauth").server == "unauth"
+
+
 def test_the_bundled_image_is_found_installed(env):
     path, build = rf.bundled_image()
     assert path.name == rf.IMAGE and build == BUILD
@@ -144,13 +171,22 @@ def test_an_older_build_is_flashed(env):
 
 @pytest.mark.parametrize("wifi,server,words", [("fail", "-", "could not join the Wi-Fi network 'Home'"),
                                                ("ok", "unauth", "did not accept its token"),
-                                               ("ok", "fail", "could not reach the kit")])
+                                               ("ok", "fail", "could not reach the Hub at")])
 def test_a_failed_first_start_says_why_plainly(env, wifi, server, words):
     clock = Clock()
     board = Board(clock, build=BUILD, wifi=wifi, server=server)
     r = rf.setup("/dev/ttyACM0", dict(SETTINGS), device=_device(board, clock), run=_flasher(board)[0],
                  say=lambda *a: None)
     assert not r.ok and words in r.message
+
+
+def test_a_hub_that_cannot_be_reached_is_named_by_its_home_address(env):
+    clock = Clock()
+    board = Board(clock, build=BUILD, wifi="ok", server="fail")
+    home = dict(SETTINGS, base="https://fkhub.local:8443/reader", hub_ip="192.0.2.7")
+    r = rf.setup("/dev/ttyACM0", home, device=_device(board, clock), run=_flasher(board)[0], say=lambda *a: None)
+    assert not r.ok and "https://fkhub.local:8443/reader or at 192.0.2.7" in r.message
+    assert "web.public_url" not in r.message
 
 
 def test_refused_settings_and_a_failed_flash(env):
@@ -229,6 +265,18 @@ def test_an_empty_buzzer_answer_is_high_and_the_option_skips_the_question(usb):
     assert usb["settings"]["buzzer_low"] is False
     assert cli._reader_setup_usb(_args(buzzer="low", ssid="Home"), _answers(), _answers("p", "p"), run=run) == 0
     assert usb["settings"]["buzzer_low"] is True
+
+
+@pytest.mark.parametrize("answer, low", [("d", True), ("driver", True), ("l", True), ("b", False), ("bare", False)])
+def test_the_buzzer_question_says_bare_buzzer_or_driver_board(usb, answer, low):
+    prompts = []
+
+    def ask(prompt=""):
+        prompts.append(prompt)
+        return "Home" if len(prompts) == 1 else answer
+    assert cli._reader_setup_usb(_args(), ask, _answers("p", "p"), run=_run()[0]) == 0
+    assert "[b]are buzzer" in prompts[1] and "[d]river board" in prompts[1] and "3-pin" not in prompts[1]
+    assert usb["settings"]["buzzer_low"] is low
 
 
 def test_a_failed_setup_removes_the_new_token(usb, capsys):

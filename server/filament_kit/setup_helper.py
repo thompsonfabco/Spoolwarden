@@ -46,7 +46,7 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
     trust_add {name}                           trust a computer, only with the typed code; the one reply holding a secret,
                                                which goes to the browser's cookie and nowhere else
     trust_list  trust_rename {id, name}  trust_revoke {id}  trust_revoke_all  trust_enabled {enabled}
-    reader_usb {ssid, pass, buzzer[, port][, name]}   the Printer Station plugged into this server: the answers checked,
+    reader_usb {ssid, pass, buzzer[, port][, name][, printer]}   the Printer Station plugged into this server: the answers checked,
                                                left root-only in /etc/filament-kit/reader-setup.json for the job
                                                `reader_setup` (`reader setup --pending`), which deletes the file as it
                                                reads it; a job that does not start deletes it here
@@ -897,6 +897,13 @@ def _reader_usb(req: dict) -> dict:
     name = req.get("name") or "printer-station"
     if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9 _.-]{1,64}", name):
         raise Refused(400, "the name may hold letters, digits, space . _ - (at most 64)")
+    printer = req.get("printer") or ""
+    try:
+        if not isinstance(printer, str):
+            raise reader_setup.SetupError(reader_setup.UNKNOWN_PRINTER)
+        reader_setup.check_printer(printer)
+    except reader_setup.SetupError as e:
+        raise Refused(400, str(e), field="printer") from None
     try:
         reader_setup.secrets_h(ssid, password, "https://x/reader", "x" * 43, reader_setup.PLACEHOLDER_KEY)
     except reader_setup.SetupError as e:
@@ -913,7 +920,7 @@ def _reader_usb(req: dict) -> dict:
         raise Refused(409, "there are several ESP32 boards on this Hub's USB: pick one")
     _not_applying()
     reader_flash.write_pending({"ssid": ssid, "pass": password, "buzzer": buzzer, "port": port or ports[0],
-                                "name": name})
+                                "name": name, "printer": printer})
     try:
         _start_job("reader_setup")
     except Refused:

@@ -860,23 +860,25 @@ to **Flash a device**.
 
 1. Device: **Tag Reader**. Plugged into: **This computer** (the board is on the computer you sit at) or **The Hub**
    (the board is on the Hub's USB port; then pick the board if several are plugged in).
-2. Type the Wi-Fi name (2.4 GHz only) and its password twice. Pick the buzzer: high-triggered for the build in the
-   parts list, low-triggered for the older 3-pin buzzer. A name is optional (for example "bench"). Type the setup code
+2. Type the Wi-Fi name (2.4 GHz only) and its password twice. Pick the buzzer: **Bare buzzer** for the build in the
+   parts list, **Buzzer with driver board** for a buzzer on a driver board. Pick the printer the reader starts on, or
+   **Choose on the reader** (the knob can change it either way). A name is optional (for example "bench"). Type the setup code
    if this computer isn't trusted.
 3. Press **Connect and write** and pick the board in the browser's list (from this computer), or **Write on the Hub**
    (on the Hub).
 4. Wait for "Done. The Tag Reader joined '<Wi-Fi>' and reached the Hub." It takes up to about a minute and a half.
-   If it ends with a reason instead, it names what to fix: the Wi-Fi name or password, the Hub's public address, or
+   If it ends with a reason instead, it names what to fix: the Wi-Fi name or password, the Hub's home address it could not reach, or
    "run this again". A failed run removes the reader's token again.
-5. Unplug it and power it where it lives. It keeps its settings and asks you to pick a printer with the knob.
+5. Unplug it and power it where it lives. It starts on the printer you picked, or asks you to pick one with the knob if you chose Choose on the reader.
 
 Writing from this computer needs Chrome or Edge on a desktop or laptop and the Hub page opened over HTTPS; phones and
 other browsers can't reach USB from a page, and the page says so and disables the button. The firmware comes from the
-installed Hub, never from the internet. The Tag Reader also needs the Hub's public HTTPS address (`web.public_url`,
-see [Remote access](#remote-access)): it only calls the Hub over that address, and the page says so when it is missing.
+installed Hub, never from the internet. The Tag Reader calls the Hub on your home network only, at the Hub's own
+address (`https://<Hub name>.local:<port>/reader`, with the Hub's own certificate, and the Hub's home IP address when
+the name does not resolve): it needs no public address and no Remote access.
 
 **Tag Reader, from the command line.** Plug it into the Hub and run `sudo spoolwarden tag-reader flash`. It asks
-the same three questions (Wi-Fi name, password twice, buzzer) and ends the same way. To update a reader later, run it
+the same three questions (Wi-Fi name, password twice, buzzer) and ends the same way; add `--printer <printer id>` to choose the printer the reader starts on (left out, it is chosen on the reader). To update a reader later, run it
 again with the board plugged in: it keeps its settings and writes the Hub's newer firmware. A reader set up this way
 refuses updates over Wi-Fi unless you gave `--ota-pubkey`; see [reader/README.md](../reader/README.md).
 

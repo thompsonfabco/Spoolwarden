@@ -41,7 +41,10 @@ def parse_hello(line: str) -> Hello | None:
     if len(parts) < 2 or parts[0] != "FK-READER" or not parts[1].isdigit():
         return None
     kv = dict(p.split("=", 1) for p in parts[2:] if "=" in p)
-    return Hello(int(parts[1]), kv.get("configured") == "1", kv.get("wifi", "-"), kv.get("server", "-"))
+    wifi, server = kv.get("wifi", "-"), kv.get("server", "-")
+    if wifi not in ("ok", "fail", "-") or server not in ("ok", "fail", "unauth", "-"):
+        return None             # a line cut short ("server=o"), never read as an answer
+    return Hello(int(parts[1]), kv.get("configured") == "1", wifi, server)
 
 
 def bundled_image() -> tuple[Path, int] | None:
@@ -157,7 +160,7 @@ class Device:
                 while self._clock() < end:
                     s.write(b"FK?\n")
                     line = s.readline().decode("utf-8", "replace")
-                    h = parse_hello(line) if line else None
+                    h = parse_hello(line) if line.endswith("\n") else None     # a half line is not an answer
                     if h is not None:
                         last = h
                         if done(h):
@@ -274,8 +277,8 @@ def setup(port: str, settings: dict, *, reflash: bool = False, device: Device | 
     h = dev.hello(wait=60.0, done=tried)
     ssid = settings.get("ssid", "")
     if h is None:
-        return Result(False, "the reader took its settings but did not report back within a minute. Watch its "
-                             "screen: it says whether it reached the Wi-Fi and the kit.", flashed)
+        return Result(False, "The reader did not answer in time. It took its settings but sent no report within a "
+                             "minute. Watch its screen: it says whether it reached the Wi-Fi and the Hub.", flashed)
     if h.wifi != "ok":
         return Result(False, f"the reader could not join the Wi-Fi network {ssid!r}: check the name and the "
                              "password (and that it is a 2.4 GHz network), then run this again.", flashed)
@@ -283,6 +286,7 @@ def setup(port: str, settings: dict, *, reflash: bool = False, device: Device | 
         return Result(False, "the reader reached the kit, but the kit did not accept its token. Run this again to "
                              "give it a new one.", flashed)
     if h.server != "ok":
-        return Result(False, f"the reader joined {ssid!r} but could not reach the kit at {settings.get('base')}: "
-                             "check web.public_url and that the reader's network can reach it.", flashed)
+        return Result(False, f"the reader joined {ssid!r} but could not reach the Hub at {settings.get('base')}"
+                             f"{' or at ' + settings['hub_ip'] if settings.get('hub_ip') else ''}: check that the reader's Wi-Fi is the "
+                             "Hub's home network.", flashed)
     return Result(True, f"Done. The Printer Station joined {ssid!r} and reached the kit.", flashed)

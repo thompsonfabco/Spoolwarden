@@ -78,19 +78,20 @@ def test_the_address_is_a_page_the_web_app_serves():
     assert '("/intake", self.page, ["GET"])' in src and '+ "/intake"' in src
 
 
-def test_the_state_without_the_code_leaves_the_public_address_out(app):
-    """FA-017 (review MED): GET /setup/api/state answers without the code too, and fills the Settings box."""
+def test_the_state_carries_the_public_address_for_the_settings_field(app):
+    """The owner's ruling (2026-11-21): Settings > Network and addresses shows the stored address in its field. The Hub's
+    report and logs still hide it (redact.py)."""
     _web(public="https://fk.example.org/filament")
     r = client(app).get("/setup/api/state")
-    assert r.status_code == 200 and "fk.example.org" not in r.text
-    assert "public_url" not in r.json()["web"] and r.json()["web"]["public_set"] is True
+    assert r.status_code == 200
+    assert r.json()["web"] == {"public_set": True, "public_url": "https://fk.example.org/filament"}
     _web(public=None)
-    assert client(app).get("/setup/api/state").json()["web"]["public_set"] is False
+    assert client(app).get("/setup/api/state").json()["web"] == {"public_set": False, "public_url": ""}
 
 
 def test_the_page_copes_with_the_missing_address_and_a_wrong_code_keeps_the_card():
     src = "".join((STATIC / n).read_text(encoding="utf-8") for n in ("setup_devices.js", "setup_settings.js"))
-    assert "S.web.public_url" not in src and "S.web.public_set" in src
+    assert 'value: S.web.public_url || ""' in src and "S.web.public_set" in src
     # the public address is a hidden value: read with the code once the page is open, its note beside the card (S1.5)
     assert "devWhenOpen(body, (open) =>" in src and 'lockNote("lock_hidden_note")' in src
     assert "Show the public address" not in src

@@ -1,4 +1,4 @@
 """filament-kit server."""
 
-__version__ = "0.6.2"
+__version__ = "0.6.3"
 API_VERSION = 1

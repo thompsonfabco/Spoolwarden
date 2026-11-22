@@ -1667,7 +1667,8 @@ Desktop
 |   Wi-Fi name          [                ]                                                          |
 |   Wi-Fi password      [                ] [show]   2.4 GHz networks only.                          |
 |   Password again      [                ]                                                          |
-|   Buzzer              (o) High-triggered (the build in the parts list)  ( ) Older 3-pin module     |
+|   Buzzer              (o) Bare buzzer  ( ) Buzzer with driver board                               |
+|   Printer             [ Choose on the reader v ]                                                  |
 |   Name (optional)     [                ]                                                          |
 | 4 WRITE                                                                                           |
 |   [Connect and write]   then pick the board in the browser's list.                                |
@@ -1689,7 +1690,8 @@ Phone:  steps stacked. A phone browser cannot write to USB: "This computer" is d
 | Wi-Fi name | Text | Tag Reader | Required: "Enter the Wi-Fi name." |
 | Wi-Fi password | Secret field with show/hide | Tag Reader | Hint "2.4 GHz networks only." |
 | Password again | Secret field | Tag Reader | "The two passwords do not match." |
-| Buzzer | Radio: "High-triggered (the build in the parts list)" (default), "Older 3-pin module" | Tag Reader | |
+| Buzzer | Radio: "Bare buzzer" (default, high-triggered), "Buzzer with driver board" (low-triggered) | Tag Reader | |
+| Printer | Select: "Choose on the reader" (default; the only choice when there are no printers or the printers feature is off), then the Hub's printers by name | Tag Reader | The printer the reader starts on; the knob can still change it |
 | Name (optional) | Text | Tag Reader | The name the Hub gives the reader's token |
 | **Connect and write** | Primary | This computer | Asks for the code if Locked, then the browser's port picker (it needs the press's user activation, and no token is made when no board is chosen); then (Tag Reader) `P flash/provision` (code) for a token the page never shows; then writes `G firmware/<id>.bin` at 0x0, restarts the board, finds it again, sends the settings and waits up to 60 s for the reader's own report. Any failure revokes the new token (`P readers/<id>/revoke`). |
 | **Write on the Hub** | Primary | The Hub, Tag Reader | `P flash/server` (code) with the answers and the port; the Hub starts job `reader_setup`, which the job strip and the step list follow |
@@ -1710,15 +1712,13 @@ half.
 | Display done | OK | "Done. The Weigh Station display firmware <version> is written. Plug it into the Weigh Station computer." |
 | No Web Serial | Note, button disabled | "This browser cannot write to USB devices. Use Chrome or Edge on a computer, or plug the board into the Hub and choose The Hub." |
 | No board chosen | Note | "No board was chosen. Press Connect and write again and pick the board." |
-| No public address | error, before writing | "A Tag Reader needs the Hub's public address. Set it in Settings > Network and addresses." (link) |
 | Writing failed | error | "Writing the firmware failed (<reason>). Check the cable is a data cable and try again." |
 | Did not come back | error | "The board did not come back on USB after its restart. Unplug it, plug it in again, and run this again." |
 | No answer before the settings | error | "The board did not answer before the settings. Run this again." |
 | Settings refused | error | "The board refused the settings: <reason>. Run this again." |
-| No report | error | "The board did not report back. Run this again." |
 | Wi-Fi failed | error | "The Tag Reader could not join '<Wi-Fi name>'. Check the Wi-Fi name and password (2.4 GHz networks only)." |
 | Hub refused it | error | "The Tag Reader reached the Hub, but the Hub refused it. Run this again." |
-| Hub unreachable | error | "The Tag Reader joined the Wi-Fi but could not reach the Hub at <address>. Check the public address in Settings > Network and addresses." |
+| Hub unreachable | error | "The Tag Reader joined the Wi-Fi but could not reach the Hub at <address>. Check that the Tag Reader's Wi-Fi is the Hub's home network." |
 | Job failed (The Hub) | error | The job strip's end text; the step list marks the failed step |
 
 | State | Text |
