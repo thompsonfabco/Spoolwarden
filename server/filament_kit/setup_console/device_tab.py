@@ -262,7 +262,9 @@ def routes(page) -> list[tuple]:
         try:
             settings, dropped = station_client.change_settings(_station_for(device_id), sent)
         except station_client.StationSetOnHub as e:
-            raise Refused(409, "set_on_hub", message=e.message) from None
+            refusal = Refused(409, "set_on_hub")
+            refusal.extra["message"] = e.message          # the answer is {error: the code, message: the sentence}
+            raise refusal from None
         except station_client.StationCallError as e:
             raise Refused(e.status or 502, e.message) from None
         return {"settings": settings, **({"settings_dropped": True} if dropped else {})}
