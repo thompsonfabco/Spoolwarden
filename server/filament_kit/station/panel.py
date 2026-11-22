@@ -32,10 +32,9 @@ import math
 import os
 import re
 import subprocess
-import sys
 import time
 
-from . import air, flow, nfc, panel_net, scale, wire
+from . import air, flow, nfc, panel_flash, panel_net, scale, wire
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -139,26 +138,20 @@ def fw_version():
         return None
 
 
-def flash_panel(dev, version):
-    """Write the bundled (merged, address 0) firmware to the ESP32-C3 panel on dev with esptool (its native USB
-    resets into the ROM bootloader, so a failed write can always be retried). Never touches the reader's port; keeps the panel's port
-    claimed (ports["panel"]) so nfcpy never opens it meanwhile. True only when esptool exits 0."""
-    if dev == st.ports["nfc"]:
-        log.warning("not flashing %s: it is the NFC reader's port", dev)
-        return False
-    log.info("flashing button panel on %s with firmware %s", dev, version)
-    cmd = [sys.executable, "-m", "esptool", "--chip", "esp32c3", "--port", dev, "--baud", "460800",
-           "--before", "default-reset", "--after", "hard-reset", "write-flash", "0x0", st.settings["panel_fw"]]
-    ok = False
-    try:
-        p = subprocess.run(cmd, capture_output=True, timeout=180)
-        ok = p.returncode == 0
-        tail = (p.stdout + p.stderr).decode(errors="replace").strip().splitlines()[-3:]
-        (log.info if p.returncode == 0 else log.warning)("esptool exit %d: %s", p.returncode, " | ".join(tail))
-    except (OSError, subprocess.TimeoutExpired) as e:
-        log.warning("esptool: %s", e)
-    time.sleep(2)  # let it boot
-    return ok
+def flash_panel_result(dev, version, have=None):
+    """Write the bundled firmware to the ESP32-C3 panel on dev with esptool (panel_flash picks the image: program only
+    for a wireless panel, else the whole one; have is the panel's HELLO version, None for a blank board). Never touches
+    the reader's port; the panel's port stays claimed (ports["panel"]) so nfcpy never opens it meanwhile. Returns
+    panel_flash.Flash(ok, whole, notice); notice is also left in st.state["flash_notice"] for the station's answer."""
+    result = panel_flash.flash(dev, have, version)
+    if result.notice:
+        st.state["flash_notice"] = result.notice
+    return result
+
+
+def flash_panel(dev, version, have=None):
+    """flash_panel_result, as a bool: True only when esptool exits 0."""
+    return flash_panel_result(dev, version, have).ok
 
 
 def _older(have, want) -> bool:
@@ -193,7 +186,7 @@ def update_firmware(ser):
     if st.settings["panel_flash"] and want not in st.flashed:
         st.flashed.add(want)
         ser.close()
-        flash_panel(ser.port, want)
+        flash_panel(ser.port, want, ser.panel_version)
         return True
     log.warning("button panel runs firmware %s, not the bundled %s; using it as it is (%s)",
                 ser.panel_version, want,

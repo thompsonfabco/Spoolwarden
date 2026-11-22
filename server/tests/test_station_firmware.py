@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from filament_kit.station import panel
+from filament_kit.station import panel, panel_flash
 from filament_kit.station import state as st
 
 
@@ -61,6 +61,7 @@ def fw(tmp_path, monkeypatch):
     monkeypatch.setattr(st, "usb_ttys", lambda: ["/dev/ttyUSB0"])
     monkeypatch.setattr(st, "panel_ttys", lambda: ["/dev/ttyACM0", "/dev/ttyACM1"])
     monkeypatch.setattr(panel, "time", types.SimpleNamespace(sleep=lambda s: None, time=time.time))   # panel only: other threads keep the real sleep
+    monkeypatch.setattr(panel_flash, "time", types.SimpleNamespace(sleep=lambda s: None))
     monkeypatch.setitem(st.ports, "panel", None)
     monkeypatch.setitem(st.ports, "panel_version", None)
     monkeypatch.setitem(st.ports, "panel_chip", None)
