@@ -577,3 +577,48 @@ def test_a_line_pended_while_a_drain_renames_the_pending_file_is_not_lost(monkey
     assert out["r"]["id"] in [e["id"] for e in usage.entries(SERIAL, days=30)]          # was: written into the removed file
     assert [x["id"] for x in _v062_read(SERIAL)[0]] == [out["r"]["id"], drainer["out"]["r"]["id"]]
     assert not (_dir() / "usage" / usage.PENDING).exists() and not (_dir() / "usage" / usage.DRAINING).exists()
+
+
+@needs_flock
+def test_a_stop_between_the_append_and_the_removal_of_the_pending_file_adds_no_duplicate_line(monkeypatch):
+    monkeypatch.setattr(usage, "LOCK_WAIT", 0.3, raising=False)
+    holder = _holder(_dir())
+    try:
+        t, out = _in_thread(usage.append, SERIAL, {"job": "p1"})
+        t.join(5)
+    finally:
+        _release(holder)
+    p1 = out["r"]["id"]
+    real = Path.unlink
+    seen = []
+
+    def flaky(self, *a, **kw):
+        if self.name == usage.DRAINING and not seen:
+            seen.append(1)
+            raise OSError("stopped here")
+        return real(self, *a, **kw)
+    with monkeypatch.context() as m:
+        m.setattr(Path, "unlink", flaky)
+        with pytest.raises(OSError):
+            usage.append(SERIAL, {"job": "x"})
+    later = usage.append(SERIAL, {"job": "y"})
+    ids = [x["id"] for x in _v062_read(SERIAL)[0]]
+    assert ids == [p1, later["id"]]                         # was: p1 twice
+
+
+def test_a_batch_that_stopped_part_way_is_finished_without_repeating_lines(monkeypatch):
+    for i, eid in enumerate((E1, E2, E3)):
+        usage._pend(SERIAL, _entry(eid, f"2026-11-1{i}T10:00:00Z"))
+    real = usage._old_form
+    seen = []
+
+    def flaky(serial, rec):
+        if rec["id"] == E2 and not seen:
+            seen.append(1)
+            return False
+        return real(serial, rec)
+    monkeypatch.setattr(usage, "_old_form", flaky)
+    a1 = usage.append(SERIAL, {"job": "a1"})
+    a2 = usage.append(SERIAL, {"job": "a2"})
+    assert [x["id"] for x in _v062_read(SERIAL)[0]] == [E1, E2, E3, a1["id"], a2["id"]]        # each once, in the order made
+    assert not (_dir() / "usage" / usage.PENDING).exists() and not (_dir() / "usage" / usage.DRAINING).exists()

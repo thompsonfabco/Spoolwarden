@@ -116,6 +116,7 @@ MIGRATED = ".migrated"           # says how many bytes of usage.jsonl were taken
 TAKEN = re.compile(r"usage\.jsonl taken in: (\d+) ([0-9a-f]{64})\n")
 LOCK_WAIT = 5.0                 # seconds to wait for usage/.lock
 PENDING_LOCK = ".pending.lock"  # guards the pending file's open and write against the drain's rename
+TAIL = 256 * 1024               # how much of the end of usage.jsonl is looked at for lines a drain already appended
 PENDING = ".pending-old"        # lines for usage.jsonl not appended yet (the lock was busy), in its form, one per line
 DRAINING = ".pending-old.draining"      # the pending lines being appended (kept until all of them are in usage.jsonl)
 MONTH_FILE = re.compile(r"\d{4}-(?:0[1-9]|1[0-2])\.xml")
@@ -538,11 +539,36 @@ def _drain(serial: str) -> bool:
         recs = _pending_in(draining)
         for rec in recs:
             _store(serial, rec, dedupe=True)
-        if not all([_old_form(serial, rec) for rec in recs]):
-            return False
+        for rec in recs[_appended(serial, recs):]:      # in order, and none after one that failed
+            if not _old_form(serial, rec):
+                return False
         draining.unlink()
     _forget(_copy_key(serial))
     return True
+
+
+def _appended(serial: str, recs: list[dict]) -> int:
+    """How many of the first of `recs` the end of usage.jsonl already holds as its last lines (a drain that stopped after
+    some appends, or a line whose append was reported failed after it was written): those are not appended again."""
+    try:
+        with open(_dir(serial) / FILE, 'rb') as fh:
+            size = fh.seek(0, os.SEEK_END)
+            fh.seek(max(0, size - TAIL))
+            raw = fh.read()
+    except OSError:
+        return 0
+    if size > TAIL:
+        raw = raw.partition(b"\n")[2]               # the first line may be cut
+    lines = []
+    for line in raw.splitlines():
+        try:
+            lines.append(json.loads(line))
+        except ValueError:
+            continue
+    for k in range(min(len(recs), len(lines)), 0, -1):
+        if lines[-k:] == recs[:k]:
+            return k
+    return 0
 
 
 def _pending_in(f: Path) -> list[dict]:
