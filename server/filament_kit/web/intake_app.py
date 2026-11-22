@@ -510,7 +510,7 @@ class IntakeApp:
         return None if lang == "en" else f"{self.base}/api/strings/{lang}.js"
 
     def _demo_on(self) -> bool:
-        data = self._cached_kit("info", "/api/info", 10)
+        data = self._cached_kit("hub", "/api/hub", 10)      # the Hub's own object carries `demo` (R85 4.7); the web token may read it
         return isinstance(data, dict) and data.get("demo") is True
 
     async def page(self, request: Request):
@@ -571,7 +571,7 @@ class IntakeApp:
     async def demo_leave(self, request: Request):
         """Leave the demo (R85 4.6): the Hub's answer, {demo: false}; 409 not_in_demo when it was already off."""
         await self._body(request)
-        self._kit_cache.pop("info", None)
+        self._kit_cache.pop("hub", None)
         try:
             return await anyio.to_thread.run_sync(self.kit.post, "/api/demo/leave", {})
         except SlotError as e:

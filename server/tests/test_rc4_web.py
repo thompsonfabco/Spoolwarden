@@ -32,10 +32,10 @@ class RcKit(ManagingKit):
             self._check()
             self.calls.append(("GET", path))
             return self.languages
-        if path == "/api/info":
+        if path == "/api/hub":
             self._check()
             self.calls.append(("GET", path))
-            return {"name": "Hub", "api": 1, "demo": self.demo}
+            return {"name": "Hub", "demo": self.demo}
         return super().get(path)
 
     def post(self, path, body):
