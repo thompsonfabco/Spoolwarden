@@ -132,7 +132,7 @@ def opt(tmp_path, monkeypatch):
 def test_the_update_state_is_written_as_xml_and_read_back(opt):
     from filament_kit import updates
     updates._write_state(previous="1.2.3", latest={"version": "9.9.9", "notes": "x", "at": 1.0})
-    assert (opt / "state.xml").is_file() and not (opt / "state.json").exists()
+    assert (opt / "state.xml").is_file() and json.loads((opt / "state.json").read_text(encoding="utf-8"))["previous"] == "1.2.3"
     assert b'previous="1.2.3"' in (opt / "state.xml").read_bytes()      # spoolwarden-cli.sh reads it with sed
     assert updates._read_state() == {"previous": "1.2.3", "latest": {"version": "9.9.9", "notes": "x", "at": 1.0}}
 
@@ -144,7 +144,7 @@ def test_an_old_json_state_is_read_and_left_for_a_rollback(opt):
     assert updates._read_state()["previous"] == "1.0.0" and not (opt / "state.xml").exists()
     updates._write_state(held="1.1.0")
     assert updates._read_state() == {"previous": "1.0.0", "failed": None, "held": "1.1.0"}
-    assert (opt / "state.json").read_text(encoding="utf-8") == old
+    assert json.loads((opt / "state.json").read_text(encoding="utf-8")) == {"previous": "1.0.0", "failed": None, "held": "1.1.0"}
 
 
 def test_installed_means_either_form_of_the_settings(etc):
