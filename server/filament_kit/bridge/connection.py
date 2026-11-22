@@ -553,8 +553,13 @@ class Manager:
 
     def sync(self) -> None:
         """Reconcile connections with the registry: start new ones, drop removed ones, reconnect on IP/code change.
-        In the demo no connection is made: the pretend printers answer (the demo's registry is not a real printer)."""
+        In the demo no connection is made: the pretend printers answer (the demo's registry is not a real printer), and
+        a connection made before the demo was switched on is closed (it would go on talking to the printer)."""
         if demo.is_on():
+            with self._lock:
+                stale, self._conns = list(self._conns.values()), {}
+            for conn in stale:
+                conn.stop()
             return
         printers = registry.load()
         if self._only is not None:

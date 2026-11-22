@@ -47,7 +47,7 @@ try:
 except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
-from . import __version__, config, event_sink, events, modules, output, release, steps
+from . import __version__, config, demo, event_sink, events, modules, output, release, steps
 from .profiles import statexml
 from .release import ReleaseError
 
@@ -515,6 +515,7 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
            run: Callable[[list[str]], int] = default_run, now: float | None = None) -> int:
     """`update`; the timer's `update --scheduled` is an automatic job, so what it records is done by `hub` (R84 1.2),
     not by the command line it runs through."""
+    demo.stop()                  # no download, no install and no restart in the demo
     if not scheduled:
         return _update(cfg, scheduled=False, fetcher=fetcher, run=run, now=now)
     with event_sink.acting("hub"):
@@ -632,6 +633,7 @@ def _feed(fetcher: release.Fetcher, rel: dict) -> int:
 
 def feed_now(cfg: dict, *, fetcher: release.Fetcher | None = None) -> int:
     """`update --feed` (internal): the hardware data for the latest release, in this process."""
+    demo.stop()                  # no download in the demo
     try:
         s = settings(cfg)
         fetcher = fetcher or default_fetcher(cfg)
@@ -850,6 +852,7 @@ def _modules_fit(target: str) -> bool:
 
 
 def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int:
+    demo.stop()                  # no install and no restart in the demo
     if not _require_root():
         return output.NEEDS_SUDO
     job = steps.Steps(2)

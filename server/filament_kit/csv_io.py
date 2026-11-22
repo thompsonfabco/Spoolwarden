@@ -28,7 +28,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from . import alerts_api, config, events, hostaddr, intake_history, inventory, storage
+from . import alerts_api, config, demo, events, hostaddr, intake_history, inventory, storage
 from .alerts_api import say
 from .bridge import registry, usage as bambu_usage
 from .bridge.klipper import usage as klipper_usage
@@ -427,6 +427,7 @@ def _sanitize_csv_text(raw_text: str) -> str:
 
 
 def _export_spoolman(kind: str, sm: Spoolman | None) -> str:
+    demo.stop()                  # this reads Spoolman's own export (not its client): the demo has none
     if sm is None:
         cfg = config.load()
         sm = Spoolman(cfg["spoolman_url"])

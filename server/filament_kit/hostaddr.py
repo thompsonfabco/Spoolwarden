@@ -15,6 +15,8 @@ import socket
 import threading
 from typing import NamedTuple
 
+from . import demo
+
 _HOSTNAME = re.compile(r"(?=.{1,253}$)([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}"
                        r"[A-Za-z0-9])?)*\.?")
 BAD_FORM = "give an IP address or a host name, for example 192.0.2.40, printer.local or printer.example.com"
@@ -58,6 +60,7 @@ def form_error(host: str) -> str | None:
 
 def _lookup(host: str, timeout: float, lookup) -> list | None:
     """getaddrinfo's answer for `host` within `timeout`, None when there is none. The answer is never kept."""
+    demo.stop()                         # no name lookup in the demo
     lookup = lookup or socket.getaddrinfo
     got: queue.Queue = queue.Queue()
 

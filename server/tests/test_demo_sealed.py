@@ -20,15 +20,21 @@ What is proved here and what is not (the hooks live in files other steps hold; s
 from __future__ import annotations
 
 import builtins
+import contextlib
+import email
 import io
 import json
 import os
 import re
 import socket
 import subprocess
+import sys
+import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
+import urllib.response
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -36,7 +42,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from filament_kit import __main__ as hub_main
-from filament_kit import cli, config, demo, intake, local_reader, modules, pairing, setup_code, setup_helper, setup_page, status
+from filament_kit import cli, config, csv_io, demo, event_sink, events, intake, local_reader, modules, pairing, setup_code, setup_helper, setup_page, status, web_access
 from filament_kit.api import create_app
 from filament_kit.bridge import camera, family, mapping, registry
 from filament_kit.bridge.connection import Manager
@@ -51,8 +57,14 @@ BASE = f"https://{HOSTNAME}:8710"
 HOME = ("192.0.2.20", 50000)                  # on the Hub's own network, as the Hub page wants
 
 READER_URL = "http://192.0.2.77:8765"                     # the configured local reader: the Outside fake fails a connect to it
-PAIRING_ROUTES = ("/api/pair", "/api/pairing/redeem")     # pairing works in the demo (R85 4.3)
-STREAMS = ("/intake/api/printers/{id}/events",)           # a server-sent stream never ends: not walked
+# routes the every-route walk does not send (a request that never ends, or a test that needs its own set-up), each with the
+# test that walks it
+WALKED_ELSEWHERE: dict[str, str] = {
+    "POST /api/pair": "pairing works in the demo (R85 4.3): test_pairing_in_the_demo_touches_only_the_pairing_files",
+    "DELETE /api/pair": "pairing works in the demo (R85 4.3): test_pairing_in_the_demo_touches_only_the_pairing_files",
+    "POST /setup/api/pair": "pairing works in the demo (R85 4.3): test_pairing_in_the_demo_touches_only_the_pairing_files",
+    "GET /intake/api/printers/{id}/events": "a server-sent stream never ends: test_the_event_streams_serve_the_demo_only",
+}
 
 # what still leaves the demo or lands outside its folder in this tree, with the step that adds the stop. Filled from
 # the first runs on the test boxes.
@@ -77,7 +89,26 @@ LEAKS_WITH_BODY: dict[str, str] = {}
 # web/intake_app.py; the hunks are in the RC6d report). Per route, what a request with a real body reaches or writes. Such a
 # route is left out of the every-route walk and held by `test_routes_waiting_for_a_held_file_...`, exactly: when the stop
 # lands the route's entry must go (the test then fails until it does), so the dict can only shrink toward empty.
-TEMPORARY_HELD_ROUTE_LEAKS: dict[str, list[str]] = {}
+ANSWERS_500 = "answers 500: the stop's NotInDemo is not mapped to the page's 409"
+# the page's route wrapper (setup_page.py `route`, held) answers every exception but `Refused` with "internal error" (500), so
+# a stop that fires below `printer_add`, `printer_code` and `printer_forget` (tlspin's, registry's) is no 409 "Not in the demo."
+# yet: the hunk is in the DPROOF report (one `except demo.DemoError` clause in `route`); the three leave when it lands
+TEMPORARY_HELD_ROUTE_LEAKS: dict[str, list[str]] = {
+    "POST /setup/api/printers": [ANSWERS_500],
+    "POST /setup/api/printers/{serial}/code": [ANSWERS_500],
+    "POST /setup/api/printers/{serial}/forget": [ANSWERS_500],
+}
+
+# Command-line leaks found by the CLI walk (first run on testbox-linux, DPROOF-02): each needs a demo stop in cli.py (held) or
+# the module it calls. Held exactly like the route list: the test fails when a leak is gone (the entry must go) or a new one
+# appears, so the dict can only shrink toward empty. "write x" is a write outside the demo's folder, "never ends" a command that
+# waits for a pairing in the demo (no outside reach was recorded while it waited).
+TEMPORARY_HELD_CLI_LEAKS: dict[str, list[str]] = {
+    "never ends": ["pair"],
+    "write etc/config.json": ["features setup server", "local-intake remove --yes", "modules set server"],
+    "write etc/config.xml": ["features setup server", "local-intake remove --yes", "modules set server"],
+    "write state/alert-test": ["alerts test"],
+}
 
 JPEG = bytes([0xFF, 0xD8, 0xFF, 0xE0]) + bytes(64)                  # a photo as far as the Hub checks one
 ZIP = b"PK" + bytes([3, 4]) + bytes(64)                             # an upload as far as the page checks one
@@ -189,6 +220,7 @@ class Outside:
         self.seen: list[str] = []
         self.wrote: list[str] = []
         self.last = None                   # the answer of the last `probe`
+        self.paired: list[str] = []        # the pairing files written (a paired device is allowed: where they are is checked)
         real_open, real_os_open, real_replace, real_mkdir = builtins.open, os.open, os.replace, os.mkdir
 
         def where(path):
@@ -196,6 +228,8 @@ class Outside:
                 rel = Path(os.fsdecode(path)).resolve().relative_to(root.resolve()).as_posix()
             except (TypeError, ValueError, OSError):
                 return None
+            if PAIRING.search(rel) and not rel.startswith("state/demo"):
+                self.paired.append(rel)
             return None if rel.startswith("state/demo") or PAIRING.search(rel) else rel
 
         def writing(path, flags):
@@ -242,6 +276,7 @@ class Outside:
         monkeypatch.setattr(socket.socket, "connect", note("connect", socket.socket.connect))
         monkeypatch.setattr(socket.socket, "connect_ex", note("connect", socket.socket.connect_ex))
         monkeypatch.setattr(socket, "create_connection", note("connect", socket.create_connection))
+        monkeypatch.setattr(socket.socket, "sendto", note("send", socket.socket.sendto))      # a datagram (mDNS, SSDP) leaves too
         monkeypatch.setattr(socket, "getaddrinfo", note("lookup"))
         monkeypatch.setattr(urllib.request, "urlopen", note("urlopen"))
         monkeypatch.setattr(subprocess, "Popen", note("process"))
@@ -267,6 +302,9 @@ def kind_of(what: str, args: tuple) -> str:
         addr = args[1] if isinstance(args[0], socket.socket) else args[0]
         target = str(addr[0] if isinstance(addr, tuple) and addr else addr)
         target = "the local network" if target in ("<broadcast>", "255.255.255.255") else target
+    elif what == "send":                      # sendto(data, address): the address is the last argument
+        addr = args[-1] if args else ""
+        target = str(addr[0] if isinstance(addr, tuple) and addr else addr)
     else:
         target = str(first)
     return f"{what} {target}"
@@ -284,7 +322,38 @@ def norm(rel: str, serial: str = "00M00A000000001") -> str:
 def sample_path(path: str) -> str:
     path = re.sub(r"\{(\w+):path\}", "x", path)
     names = {"id": "00M00A000000001", "label": "A1", "serial": "00M00A000000001", "entry_id": "x", "code": "en"}
-    return re.sub(r"\{(\w+)\}", lambda m: names.get(m.group(1), "1"), path)
+    return re.sub(r"\{(\w+)(?::\w+)?\}", lambda m: names.get(m.group(1), "1"), path)
+
+
+# what a path parameter takes in the walk (every value is walked; a parameter not listed takes "1", an `:int` one a number)
+VALUES: dict[str, list[str]] = {
+    "id": list(PRINTER_IDS), "serial": list(PRINTER_IDS), "label": ["A1", "T1"], "entry_id": ["x"], "entry": ["x"],
+    "code": ["en"], "set": sorted(csv_io.EXPORT_SETS), "device": list(FIRMWARE), "hid": ["0123456789ab"],
+    "read_id": ["0123456789ab"], "cid": ["7"], "request_id": ["x"], "uid": ["04AABBCCDD"], "line_id": ["1"],
+    "name": [*sorted(csv_io.EXPORT_SETS), *(n + ".csv" for n in sorted(csv_io.EXPORT_SETS)), *FIRMWARE, "en", "x.js"],
+}
+SPOOLS = ["152", "171"]                         # spools of the demo's inventory: one in a drawer, one in a slot of a pretend printer
+INTS = {"id": SPOOLS, "n": ["1"]}               # an integer parameter: a spool, the first photo
+
+
+def urls_of(path: str) -> list[str]:
+    """Every address a route is walked at: the k-th value of each parameter for k in 0 .. (the most values any has). A
+    spool route's `id` is a spool of the demo; a printer route's is each of the pretend printers."""
+    path = re.sub(r"\{(\w+):path\}", "x", path)
+    found = re.findall(r"\{(\w+)(?::(\w+))?\}", path)
+
+    def values(name, kind):
+        if name == "id" and "/spools/" in path:
+            return SPOOLS
+        return INTS.get(name, ["1"]) if kind == "int" else (VALUES.get(name) or ["1"])
+    most = max((len(values(n, k)) for n, k in found), default=1) or 1
+
+    def pick(k):
+        def sub(m):
+            vals = values(m.group(1), m.group(2))
+            return vals[min(k, len(vals) - 1)]
+        return sub
+    return [re.sub(r"\{(\w+)(?::(\w+))?\}", pick(k), path) for k in range(most)]
 
 
 def routes_of(app):
@@ -325,14 +394,71 @@ def probe(c, out, root, method: str, url: str, settle: float = 0.0, **kw) -> set
     return found | {"write " + norm(k) for k in out.wrote[w:]}
 
 
+# the whole body of a mutating route's fields: the union of what the routes read (a field a route does not read is ignored)
+SINK = {**KIT_BODY, "password": PASSWORD, "key": "sk-ant-api03-" + "x" * 30, "url": READER_URL, "tier": "auto",
+        "address": "192.0.2.99", "api_key": "k", "hint": "a label", "days": 7, "enabled": True, "id": "x", "rows": [],
+        "kind": "spools", "text": "x", "q": "x", "lines": [], "devices": [], "token": "t", "ticket": "t", "uid": "04AABBCC",
+        "weight": 100, "grams": 1, "location": "Shelf A", "color": "#112233", "material": "PLA"}
+SINK_ON = {**SINK, "dry_run": False}
+CSV_BYTES = bytes([110, 97, 109, 101, 10, 120, 10])          # `name`, a line, `x`, a line
+WEB_AUTH = {"Authorization": ""}              # the phone web app's own token (the web role): the hub fixture sets it
+BODIES.update({
+    "PATCH /api/printers/{id}": [{"json": b} for b in ({"name": "Renamed"}, {"address": "192.0.2.99"}, {"access_code": "12345678"},
+                                                       {"address": "192.0.2.99", "port": 7125}, {"api_key": "k"}, {"unpin": True})],
+    "POST /api/spools/{id:int}/link": [{"json": {"tag": "04AABBCCDD", "dry_run": False}}],
+    "PATCH /api/spools/{id:int}": [{"json": b} for b in ({"home": "Shelf A", "dry_run": False}, {"location": "Shelf A", "dry_run": False},
+                                                         {"remaining": 400, "dry_run": False}, {"home": "Shelf A", "dry_run": True})],
+    "POST /api/spools/{id}/return": [{"json": {}}, {"json": {"dry_run": False}}],
+    "POST /intake/api/spools/{id:int}/return": [{"json": {}}],
+    "POST /api/intake/add": [{"json": {"items": [{"name": "x", "material": "PLA", "color": "#112233"}], "dry_run": False, "tag": "04AABBCCDD"}}],
+    "POST /api/station/save": [{"json": {"uid": "04AABBCCDD", "gross_g": 600, "return": True}}],
+    "POST /api/station/return": [{"json": {"uid": "04AABBCCDD"}}],
+    "POST /api/station/recognize": [photo("image")],
+    "POST /api/events/web": [{"json": {"events": [{"kind": "spool.low", "subject": {"type": "spool", "id": "152"},
+                                                    "data": {"spool": 152, "grams": 10}}]}, "headers": WEB_AUTH}],
+    "POST /setup/api/library/add": [j(entry="{}")],
+    "POST /setup/api/import/spools": [{"content": CSV_BYTES, "headers": {"X-Setup-Code": CODE}}],
+    "POST /setup/api/import/locations": [{"content": CSV_BYTES, "headers": {"X-Setup-Code": CODE}}],
+    **{f"POST /api/profiles/web/{n}": [{"json": SINK, "headers": WEB_AUTH}]
+       for n in ("generate", "line_add", "line_new", "restore_deleted", "updates_accept")},
+})
+# extra query strings a read is walked with (the long-poll of the event feed, the activity range)
+QUERIES: dict[str, list[str]] = {
+    "GET /api/events": ["?since=0&wait=1", "?since_at=2020-01-01T00:00:00Z&kinds=spool.*&limit=5"],
+    "GET /intake/api/events": ["?since=0&wait=1"],
+    "GET /setup/api/events": ["?since=0&wait=1"],
+}
+
+
 def requests_for(method: str, path: str) -> list[tuple[str, dict]]:
-    """What the walk sends to a route: first what it always sent (an empty body; the setup code under /setup/), then
-    every body the route takes that gets past its first checks (the empty ones stop there)."""
-    url = sample_path(path)
-    base = {"json": {"code": CODE} if path.startswith("/setup/") else {}} if method in WRITES else {}
-    if path == "/setup/api/firmware/{device}":
-        return [(f"/setup/api/firmware/{name}", {}) for name in FIRMWARE]
-    return [(url, base), *[(url, kw) for kw in BODIES.get(f"{method} {path}", [])]]
+    """What the walk sends to a route, at every address `urls_of` gives it: an empty body (the setup code under /setup/),
+    the kitchen-sink body of every field a route reads (a mutating route), and every body the route takes that gets past
+    its first checks (`BODIES`); a read also with its extra queries."""
+    out = []
+    for url in urls_of(path):
+        page = path.startswith("/setup/")
+        base = {"json": {"code": CODE} if page else {}} if method in WRITES else {}
+        out.append((url, base))
+        if method in WRITES:
+            for body in (SINK, {**SINK, "family": "klipper"}, SINK_ON):
+                out.append((url, {"json": {**body, "code": CODE} if page else body}))
+        out += [(url + q, {}) for q in QUERIES.get(f"{method} {path}", [])]
+        out += [(url, kw) for kw in BODIES.get(f"{method} {path}", [])]
+    return out
+
+
+def serve_kit(c, req):
+    """What the kit server answers the phone web app's own call over the loopback (the web app is a part of the Hub and calls
+    the Hub's API through `KitApi`): the same request, handed to the in-process app, as the response `urlopen` gives (an
+    error status raises `HTTPError`, as it does there)."""
+    r = c.request(req.get_method(), urllib.parse.urlsplit(req.full_url).path + (
+        "?" + urllib.parse.urlsplit(req.full_url).query if urllib.parse.urlsplit(req.full_url).query else ""),
+        content=req.data, headers={"Authorization": req.get_header("Authorization"),
+                                   "Content-Type": req.get_header("Content-type") or "application/json", "Origin": BASE})
+    heads = email.message_from_string("Content-Type: " + r.headers.get("content-type", "application/json") + "\n\n")
+    if r.status_code >= 400:
+        raise urllib.error.HTTPError(req.full_url, r.status_code, "answer", heads, io.BytesIO(r.content))
+    return urllib.response.addinfourl(io.BytesIO(r.content), heads, req.full_url, r.status_code)
 
 
 class FakeClaude:
@@ -373,6 +499,16 @@ def hub(request, tmp_path, monkeypatch, mountable):
                      setup={"helper": Helper(out.seen), "hosts": lambda: {HOSTNAME}, "client_factory": lambda key: claude})
     c = TestClient(app, base_url=BASE, client=HOME, raise_server_exceptions=False)
     c.headers.update({"Authorization": "Bearer " + pairing.redeem_code(pairing.issue().code), "Origin": BASE})
+    web = pairing.issue("web (MCP)", role=web_access.WEB_ROLE).token                  # the web role's own token (the web unit's)
+    pairing.check(web)
+    WEB_AUTH["Authorization"] = "Bearer " + web
+    outside_urlopen = urllib.request.urlopen
+
+    def urlopen(req, timeout=None, context=None, **kw):
+        if urllib.parse.urlsplit(getattr(req, "full_url", str(req))).netloc == f"127.0.0.1:{config.load()['port']}":
+            return serve_kit(c, req)                       # the Hub's own API, over its loopback
+        return outside_urlopen(req, timeout=timeout, context=context, **kw)
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
     yield c, out, (bambu, klipper)
     if wired:
         bambu.stop()
@@ -404,12 +540,17 @@ def test_the_demo_moves_through_the_api_and_stays_inside(hub, tmp_path):
 
 
 def test_every_route_in_the_demo(hub, tmp_path):
+    """The routes are read from the app (not typed here): every one is walked (at every address `urls_of` gives it, with
+    an empty body, the kitchen-sink body and its `BODIES`) or is in `WALKED_ELSEWHERE` with the test that walks it."""
     c, out, _ = hub
     app = c.app
     leaks: dict[str, set] = {}
-    walked = 0
+    codes: dict[str, set] = {}
+    broken: dict[str, str] = {}
+    walked, every = 0, set()
     for method, path in routes_of(app):
-        if path in PAIRING_ROUTES or path in STREAMS or f"{method} {path}" in {**KLIPPER_ROUTE_LEAKS, **TEMPORARY_HELD_ROUTE_LEAKS}:
+        every.add(f"{method} {path}")
+        if f"{method} {path}" in WALKED_ELSEWHERE or f"{method} {path}" in {**KLIPPER_ROUTE_LEAKS, **TEMPORARY_HELD_ROUTE_LEAKS}:
             continue                                  # (the last two: held by the tests below, with their own lists)
         for url, kw in requests_for(method, path):
             try:
@@ -418,11 +559,18 @@ def test_every_route_in_the_demo(hub, tmp_path):
                 leaks.setdefault(f"crash {type(e).__name__}", set()).add(f"{method} {path}")
                 continue
             walked += 1
+            codes.setdefault(f"{method} {path}", set()).add(out.last.status_code)
+            if out.last.status_code >= 500:                # a refusal is never an internal error
+                broken.setdefault(f"{method} {path}", f"{out.last.status_code} {url} {out.last.text[:80]}")
             for k in found:
                 leaks.setdefault(k, set()).add(f"{method} {path}")
+    print("DPROOF-CODES", json.dumps({k: sorted(v) for k, v in codes.items()}))
     assert walked > 130                                           # the walk really covered the app, with its bodies
+    assert broken == {}, broken
     report = "\n".join(f"    {k!r}: {len(v)} routes, e.g. {sorted(v)[0]}" for k, v in sorted(leaks.items()))
     assert set(leaks) == set(LEAKS), "\n" + report
+    assert set(WALKED_ELSEWHERE) <= every, sorted(set(WALKED_ELSEWHERE) - every)           # a route that is gone is no reason
+    assert all(len(why) > 20 for why in WALKED_ELSEWHERE.values())
 
 
 def test_firmware_download_and_the_per_printer_routes_with_bodies_stay_inside(hub, tmp_path):
@@ -497,6 +645,8 @@ def test_routes_waiting_for_a_held_file_leak_exactly_what_is_listed(hub, tmp_pat
                 got = probe(c, out, tmp_path, method, url, settle=0.3, **kw)    # a thread left behind counts here
             except Exception as e:  # noqa: BLE001 - a route that breaks is a finding of its own
                 got = {f"crash {type(e).__name__}"}
+            if out.last.status_code >= 500 and key in TEMPORARY_HELD_ROUTE_LEAKS:
+                got = got | {ANSWERS_500}
             if got:
                 found.setdefault(key, set()).update(got)
             seen_by.append(f"{method} {url} {sorted(kw.get('json', {}))[:3]} -> {out.last.status_code} {out.last.text[:60]}: {sorted(got)}")
@@ -505,7 +655,7 @@ def test_routes_waiting_for_a_held_file_leak_exactly_what_is_listed(hub, tmp_pat
 
 def leak_lists() -> dict[str, object]:
     return {"LEAKS": LEAKS, "LEAKS_WITH_BODY": LEAKS_WITH_BODY, "KLIPPER_ROUTE_LEAKS": KLIPPER_ROUTE_LEAKS,
-            "TEMPORARY_HELD_ROUTE_LEAKS": TEMPORARY_HELD_ROUTE_LEAKS}
+            "TEMPORARY_HELD_ROUTE_LEAKS": TEMPORARY_HELD_ROUTE_LEAKS, "TEMPORARY_HELD_CLI_LEAKS": TEMPORARY_HELD_CLI_LEAKS}
 
 
 def not_mountable_yet(mountable: bool, lists: dict[str, object]) -> list[str]:
@@ -699,3 +849,409 @@ def test_push_stops_in_the_demo(tmp_path, monkeypatch, mountable):
             call()
     assert sent == [] and out.wrote == [] and [k for k in out.seen if not INSIDE.match(k)] == []
     assert snapshot(tmp_path) == before
+
+
+# ---- the event streams (R85 assumption 5, item 1) -------------------------------------------------------------------
+
+def open_stream(c, path: str, take: int = 1, timeout: float = 20.0) -> tuple[int, list[bytes]]:
+    """GET `path` from the app and read the first `take` chunks of a response that never ends, then the client goes away
+    (`http.disconnect`) as a phone closing its stream does; (status, the chunks)."""
+    import anyio
+
+    async def run():
+        chunks, status, gone, asked = [], [], anyio.Event(), []
+
+        async def receive():
+            if not asked:
+                asked.append(1)
+                return {"type": "http.request", "body": b"", "more_body": False}
+            await gone.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            if message["type"] == "http.response.start":
+                status.append(message["status"])
+            elif message["type"] == "http.response.body" and message.get("body"):
+                chunks.append(message["body"])
+                if len(chunks) >= take:
+                    gone.set()
+        parts = urllib.parse.urlsplit(path)
+        heads = {k.lower(): v for k, v in c.headers.items()} | {"host": f"{HOSTNAME}:8710"}
+        scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "GET", "scheme": "https",
+                 "path": parts.path, "raw_path": parts.path.encode(), "query_string": parts.query.encode(), "root_path": "",
+                 "headers": [(k.encode(), v.encode()) for k, v in heads.items()], "client": HOME, "server": (HOSTNAME, 8710)}
+        with anyio.fail_after(timeout):
+            await c.app(scope, receive, send)
+        return status[0], chunks
+    return anyio.run(run)
+
+
+def test_the_event_streams_serve_the_demos_events_only(hub, tmp_path):
+    """R85 4.3: the Hub's event feed (`GET /api/events`, with its long-poll, and the web twin) and the web app's live status
+    stream of each printer serve the demo's own events and printers: an event the real log holds is not in them, the sink as
+    `main()` sets it writes into the demo's log and not the real one, and nothing reaches outside or is written outside."""
+    c, out, _ = hub
+    real_root = config.paths().state / "events"
+    events.EventStore(real_root).write("print.started", {"type": "printer", "id": "REAL01", "name": "Real printer"},
+                                       {"type": "hub"}, {"job": "real-job"})              # the real log's own event
+    real_files = {p.name: p.stat().st_size for p in real_root.rglob("*") if p.is_file()}
+    before, n, w = snapshot(tmp_path), len(out.seen), len(out.wrote)
+    sink_before = event_sink.sink()
+    event_sink.set_sink(event_sink.StoreSink())                                            # as main() sets it
+    try:
+        event_sink.emit("print.started", {"type": "printer", "id": "garage-voron", "name": "Garage Voron"}, {"job": "demo-job"})
+    finally:
+        event_sink.set_sink(sink_before)
+    assert any("demo-job" in json.dumps(e) for e in events.EventStore(demo.folder() / "events").read(0)["events"])
+    for url in ("/api/events?since=0&limit=500", "/api/events?since=0&wait=1", "/intake/api/events?since=0",
+                "/setup/api/events?since=0&limit=500"):
+        r = c.get(url)
+        assert r.status_code == 200 and "demo-job" in r.text and "real-job" not in r.text, (url, r.status_code, r.text[:200])
+    for pid in PRINTER_IDS + ("03000A000000002",):
+        status_code, chunks = open_stream(c, f"/intake/api/printers/{pid}/events")
+        assert status_code == 200 and chunks[0].startswith((b"data:", b": ping")), (pid, status_code, chunks[:1])
+        assert b"REAL01" not in b"".join(chunks)
+    assert {p.name: p.stat().st_size for p in real_root.rglob("*") if p.is_file()} == real_files     # the real log is as it was
+    assert [e["data"].get("job") for e in events.EventStore(real_root).read(0)["events"]] == ["real-job"]
+    assert [k for k in out.seen[n:] if not INSIDE.match(k)] == [] and out.wrote[w:] == []
+    assert snapshot(tmp_path) == before
+
+
+# ---- pairing (R85 assumption 5, item 2) -----------------------------------------------------------------------------
+
+def test_pairing_in_the_demo_touches_only_the_pairing_files(hub, tmp_path):
+    """R85 4.3: pairing a phone or a PC works in the demo, and it writes the pairing files of the real state and etc folders
+    (a paired device stays paired when the demo is left) and nothing else: no file outside the demo's folder that is not a
+    pairing file, no socket, no process beyond the local address lookup the pairing link needs."""
+    c, out, _ = hub
+    n, w = len(out.seen), len(out.wrote)
+    out.paired.clear()
+    token = pairing.redeem_code(pairing.issue().code)
+    heads = {"Authorization": "Bearer " + token}
+    asks = [("POST", "/api/pair", {"json": {"code": pairing.issue().code}}),
+            ("POST", "/setup/api/pair", j()), ("POST", "/setup/api/pair", j(kind="slicer")),
+            ("POST", "/api/station/pair-request", {"json": {"name": "Station", "fp": "ab" * 32}}),
+            ("DELETE", "/api/pair", {"headers": heads})]
+    for method, url, kw in asks:
+        r = c.request(method, url, **kw)
+        assert r.status_code < 500, (method, url, r.status_code, r.text[:100])
+    assert c.post("/api/pair", json={"code": pairing.issue().code}).status_code == 200      # and a code works
+    here = {f"process hostname", f"lookup {socket.gethostname()}"}                          # `hostname -I`: this machine's own address
+    assert [k for k in out.seen[n:] if not INSIDE.match(k) and k not in here] == []
+    assert out.wrote[w:] == []                                                              # nothing outside the pairing files
+    assert out.paired, "pairing wrote no file: the test does not reach the pairing store"
+    assert all(PAIRING_FILE.fullmatch(p) for p in out.paired), sorted({p for p in out.paired if not PAIRING_FILE.fullmatch(p)})
+
+
+# the pairing files a pairing writes: directly in the real etc and state folders (a paired device is the Hub's, not the
+# demo's), with the temporary names an atomic write goes through
+PAIRING_FILE = re.compile(r"(etc|state)/(devices|pending|spent|setup_lockout|trusted|pairing)[\w.-]*")
+
+
+# ---- a printer family started before the demo (R85 assumption 5, item 5) ---------------------------------------------
+
+class FakeMqtt:
+    """A paho client as the Bambu `Manager` drives it (it connects and publishes through this): every call is logged and a
+    publish is kept, so a call made after the demo was switched on is seen and fails the test. It does what the real class's
+    calls need and no more: no network, no callbacks of its own."""
+
+    def __init__(self, log):
+        self.log = log
+        self.published: list[str] = []
+        self.closed = False
+
+    def tls_set_context(self, ctx):
+        pass
+
+    def reconnect_delay_set(self, min_delay=1, max_delay=120):
+        pass
+
+    def username_pw_set(self, user, password=None):
+        pass
+
+    def connect_async(self, host, port=1883, keepalive=60):
+        self.log.append(f"connect {host}")
+
+    def loop_start(self):
+        self.log.append("loop_start")
+
+    def loop_stop(self):
+        self.log.append("loop_stop")
+
+    def disconnect(self):
+        self.closed = True
+        self.log.append("disconnect")
+
+    def subscribe(self, topic, qos=0):
+        self.log.append("subscribe")
+
+    def publish(self, topic, payload=None, qos=0):
+        self.published.append(topic)
+        self.log.append("publish")
+
+
+def wait_for(check, seconds: float = 5.0, what: str = "the condition") -> None:
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if check():
+            return
+        time.sleep(0.02)
+    raise AssertionError(f"timed out waiting for {what}")
+
+
+def test_a_bambu_manager_started_before_the_demo_goes_quiet_when_it_starts(tmp_path, monkeypatch):
+    """R85 assumption 5: the real Bambu `Manager`, started and connected to a (fake) real printer BEFORE the demo is switched on
+    (as `main()` wires it, behind a `Switch`), keeps no connection open and sends the printer nothing once `demo.start()`
+    returned, and `demo.leave()` puts the connection back for what the real registry holds. The fake client records every
+    call: a call after the switch fails the test; before it, the calls prove the test sees a printer being talked to."""
+    from filament_kit.bridge import connection
+    monkeypatch.setattr(connection, "QUIET_PUSHALL", 0)                  # a connected printer gets a pushall every round
+    out = Outside(monkeypatch, tmp_path)
+    sm = Spoolman("http://127.0.0.1:1")
+    registry.add_bambu("00M00A000000009", "Real X1", "X1C", "192.0.2.50", "12345678")
+    made: list[FakeMqtt] = []
+
+    def factory(client_id):
+        made.append(FakeMqtt([]))
+        return made[-1]
+    mgr = Manager(spoolman=sm, client_factory=factory, port=1)
+    bambu = printers.Switch(mgr, printers.Family("bambu", sm))
+    bambu.start(interval=0.05)
+    try:
+        wait_for(lambda: len(made) == 1, what="the first connection")
+        mgr._conns["00M00A000000009"]._on_connect(made[0], None, {}, 0)           # the printer answers: connected
+        wait_for(lambda: len(made[0].published) >= 3, what="the printer being talked to (the test's positive control)")
+        registry.remove("00M00A000000009")                                       # it is removed: the Hub is empty again ...
+        demo.start(spoolman=type("E", (), {"get": lambda self, p: []})())        # ... and the demo is switched on
+        assert made[0].closed and mgr._conns == {}, made[0].log                   # at once, not at the next round
+        sent = len(made[0].published)
+        time.sleep(0.4)                                                           # eight rounds of the housekeeping
+        assert len(made[0].published) == sent and len(made) == 1, (made[0].log[-6:], len(made))
+        assert [k for k in out.seen if not INSIDE.match(k)] == []
+        demo.leave()
+        # the restore: a printer the real registry holds is connected again by the leave, at once
+        registry.add_bambu("00M00A000000009", "Real X1", "X1C", "192.0.2.50", "12345678")
+        mgr.sync()
+        wait_for(lambda: len(made) == 2, what="the connection back")
+        mgr._conns["00M00A000000009"]._on_connect(made[1], None, {}, 0)
+        demo.start(spoolman=type("E", (), {"get": lambda self, p: []})(), registry_load=lambda: {})   # a Hub "empty" for the check
+        assert made[1].closed
+        sent = len(made[1].published)
+        time.sleep(0.4)
+        assert len(made[1].published) == sent and len(made) == 2
+        demo.leave()
+        wait_for(lambda: len(made) == 3, what="the connection back after leaving")
+    finally:
+        bambu.stop()
+        if demo.is_on():
+            demo.leave()
+
+
+class FakeMoonraker:
+    """A Moonraker client as the Klipper family drives it: every call is logged and answers `Offline`, so a connection
+    attempt that is made is seen (and retried by the family)."""
+
+    timeout = 0.1
+
+    def __init__(self, log, host, port, api_key=""):
+        self.log, self.host, self.port, self._key = log, host, port, api_key
+
+    def __getattr__(self, name):
+        from filament_kit.bridge.klipper.moonraker import Offline
+
+        def call(*a, **k):
+            self.log.append(f"{name}")
+            raise Offline(f"fake Moonraker at {self.host}: down")
+        return call
+
+
+def test_a_klipper_family_started_before_the_demo_goes_quiet_when_it_starts(tmp_path, monkeypatch):
+    """The same for the real `KlipperFamily`: a printer it is connecting to before the demo gets no further call after
+    `demo.start()` returned, and `demo.leave()` connects it again."""
+    out = Outside(monkeypatch, tmp_path)
+    sm = Spoolman("http://127.0.0.1:1")
+    registry.add_klipper("Real Voron", "192.0.2.60", 7125)
+    p = next(p for p in registry.load().values() if p.family == "klipper")
+    log: list[str] = []
+    made: list[FakeMoonraker] = []
+
+    def factory(host, port, api_key=""):
+        made.append(FakeMoonraker(log, host, port, api_key))
+        return made[-1]
+    fam = printers.Switch(KlipperFamily(sm, mr_factory=factory, backoff=(0.05, 0.05), sync_every=3600), printers.Family("klipper", sm))
+    fam.start()
+    try:
+        wait_for(lambda: len(log) >= 3, what="the printer being asked (the test's positive control)")
+        registry.remove(p.serial)
+        demo.start(spoolman=type("E", (), {"get": lambda self, p: []})())
+        sent = len(log)
+        time.sleep(0.4)                                                           # eight retry rounds
+        assert len(log) == sent, log[-5:]
+        demo.leave()
+    finally:
+        fam.stop()
+        if demo.is_on():
+            demo.leave()
+
+
+# ---- the root helper, the apply and the update (R85 assumption 5, item 6) ---------------------------------------------
+
+def test_the_root_helper_and_the_system_jobs_refuse_before_any_process(tmp_path, monkeypatch):
+    """R85 4.3: with the real paths on (no FK_NO_SYSTEMD: systemctl, apt, the job runner), every op of the root helper but the
+    page's own code check answers 409 "Not in the demo." before it starts anything; and the code that runs as root on its
+    own (the apply, the update and its rollback, the backup and its timer, the job runner) refuses the same way. A process,
+    a socket or a write outside the demo's folder fails the test."""
+    from filament_kit import apply, backup, updates
+    monkeypatch.delenv("FK_NO_SYSTEMD")
+    demo.start(spoolman=type("E", (), {"get": lambda self, p: []})(), registry_load=lambda: {})
+    out = Outside(monkeypatch, tmp_path)
+    before, ran = snapshot(tmp_path), []
+
+    def run(cmd, *a, **k):
+        ran.append(cmd)
+        raise OSError("the demo ran a command: " + " ".join(map(str, cmd)))
+    for op in setup_helper.OPS:
+        reply = setup_helper.handle({"op": op, "code": CODE, "client": HOME[0], "name": "update", "confirm": "restore"})
+        if op == "check":
+            continue                                          # the page's own unlock: the code is checked by the helper
+        assert (reply.get("status"), reply.get("code")) == (409, demo.NOT_IN_DEMO_CODE), (op, reply)
+    cfg = config.load()
+    calls = {
+        "apply.execute": lambda: apply.execute([apply.Action("systemctl", ("enable", "x"))] if hasattr(apply, "Action") else [], run=run),
+        "apply.finish": lambda: apply.finish(cfg, run=run, pairing=False),
+        "apply.refresh_station": lambda: apply.refresh_station(cfg, run=run),
+        "updates.update": lambda: updates.update(cfg),
+        "updates.rollback": lambda: updates.rollback(cfg),
+        "updates.feed_now": lambda: updates.feed_now(cfg),
+        "backup.create": lambda: backup.create(),
+        "backup.pin_upload": lambda: backup.pin_upload(),
+        "backup.restore": lambda: backup.restore(Path("x.zip"), yes=True, run=run, out=lambda *a: None, ask=lambda p: "yes"),
+        "setup_helper.run_job": lambda: setup_helper.run_job("update", ["true"]),
+    }
+    reached = {}
+    for what, call in calls.items():
+        try:
+            answer = call()
+        except (demo.NotInDemo, backup.InDemo):
+            continue
+        except Exception as e:  # noqa: BLE001 - anything but the stop: the demo got further than it may
+            reached[what] = f"{type(e).__name__}: {e}"[:100]
+            continue
+        if not (what == "backup.restore" and answer == 1):      # a restore answers the stop with the exit code 1
+            reached[what] = f"returned {answer!r}"
+    assert reached == {}, reached
+    assert ran == [] and [k for k in out.seen if not INSIDE.match(k)] == [] and out.wrote == []
+    assert snapshot(tmp_path) == before
+
+
+# ---- the command line (R85 assumption 5, item 7) ----------------------------------------------------------------------
+
+def cli_commands() -> list[tuple[list[str], bool]]:
+    """Every command of the command line, read from the argparse tree `cli._main` builds (nothing is typed here): the words
+    that reach each leaf, with a sample for what it needs (and whether the command takes `--yes`), and the group alone where
+    the group is a command too."""
+    import argparse
+    from unittest import mock
+    found = []
+
+    def capture(self, args=None, namespace=None):
+        found.append(self)
+        raise SystemExit(0)
+    with mock.patch.object(cli._Parser, "parse_args", capture):
+        try:
+            cli.main([])
+        except SystemExit:
+            pass
+    root = found[0]
+
+    def sample(action) -> str:
+        if action.choices:
+            return str(next(iter(action.choices)))
+        return "1" if action.type in (int, float) else "x"
+
+    def needs(parser) -> list[str]:
+        out = []
+        for a in parser._actions:
+            if isinstance(a, (argparse._HelpAction, argparse._VersionAction, argparse._SubParsersAction)):
+                continue
+            if not a.option_strings and a.nargs in (None, 1, "+"):
+                out.append(sample(a))
+            elif a.option_strings and a.required:
+                out += [a.option_strings[0], sample(a)]
+        return out
+
+    def walk(parser, words):
+        subs = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)]
+        yes = any("--yes" in a.option_strings for a in parser._actions)
+        if not subs:
+            yield [*words, *needs(parser)], yes
+            return
+        for action in subs:
+            if not action.required:
+                yield [*words, *needs(parser)], yes
+            done = set()
+            for name, sub in action.choices.items():
+                if id(sub) not in done:                         # an alias is the same command
+                    done.add(id(sub))
+                    yield from walk(sub, [*words, name])
+    return list(walk(root, []))
+
+
+CLI_SECONDS = 15.0       # a command that has not ended by then counts as one that never ends: a finding, not a pass
+
+
+# what the walk of the command line does not run, with the reason it cannot leak (an interactive or never-ending command)
+CLI_NOT_RUN: dict[str, str] = {
+    "serve": "the Hub's own server loop (the unit's start command): it is the Hub, not a command that reaches out",
+    "watch": "a never-ending loop over the Hub's own events",
+    "events --follow": "a never-ending tail of the Hub's own events",
+}
+
+
+def test_every_command_of_the_command_line_stays_inside_in_the_demo(tmp_path, monkeypatch):
+    """R85 4.3: every command the command line has (read from its argparse tree), alone and with `--yes` where it has one, run
+    in the demo with Spoolman, Claude, the printers' clients, the sockets, the name lookups, the child processes and every
+    write outside the demo's folder recorded and failing: nothing reaches outside."""
+    demo.start(spoolman=type("E", (), {"get": lambda self, p: []})(), registry_load=lambda: {})
+    monkeypatch.setattr(registry, "load", printers.registry_printers)
+    out = Outside(monkeypatch, tmp_path)
+    sm = Spoolman("http://127.0.0.1:1")
+    monkeypatch.setattr(builtins, "input", lambda *a: (_ for _ in ()).throw(EOFError("the demo asked a question")))
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    commands = cli_commands()
+    assert len(commands) > 60, commands
+    leaks, results = {}, {}
+    for argv, yes in commands:
+        if " ".join(argv) in CLI_NOT_RUN or argv[:1] in (["serve"], ["watch"]):
+            continue
+        for extra in ([[]] + ([["--yes"]] if yes else [])):
+            before, n, w = snapshot(tmp_path), len(out.seen), len(out.wrote)
+            sink, buf, box = io.StringIO(), io.StringIO(), []
+            print("DPROOF-RUN", *argv, *extra, file=sys.__stderr__, flush=True)
+
+            def run_one():
+                try:
+                    with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(buf):
+                        box.append(cli.main([*argv, *extra], client_factory=out.reached("claude"),
+                                            manager_factory=out.reached("bambu manager"), sm_factory=lambda: sm))
+                except SystemExit as e:
+                    box.append(e.code)
+                except BaseException as e:  # noqa: BLE001 - a command that breaks is a finding of its own
+                    box.append(f"crash {type(e).__name__}")
+            worker = threading.Thread(target=run_one, daemon=True, name="cli-walk")
+            worker.start()
+            worker.join(CLI_SECONDS)
+            code = box[0] if box else "hung"
+            results[" ".join([*argv, *extra])] = code
+            if code == "hung":
+                leaks.setdefault("never ends", set()).add(" ".join([*argv, *extra]))
+            found = {k for k in out.seen[n:] if not INSIDE.match(k)}
+            after = snapshot(tmp_path)
+            found |= {"write " + norm(k) for k in set(before) | set(after) if before.get(k) != after.get(k)}
+            found |= {"write " + norm(k) for k in out.wrote[w:]}
+            for k in found:
+                leaks.setdefault(k, set()).add(" ".join([*argv, *extra]))
+    sys.stdout, sys.stderr = sys.__stdout__, sys.__stderr__       # a command that closed or swapped them must not hide the result
+    print("DPROOF-CLI", json.dumps({k: str(v) for k, v in results.items()}), file=sys.__stderr__, flush=True)
+    report = "\n".join(f"    {k!r}: {sorted(v)[:6]}" for k, v in sorted(leaks.items()))
+    assert {k: sorted(v) for k, v in leaks.items()} == {k: sorted(v) for k, v in TEMPORARY_HELD_CLI_LEAKS.items()}, "\n" + report

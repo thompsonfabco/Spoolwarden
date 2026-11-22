@@ -18,6 +18,7 @@ import logging
 import ssl
 
 from . import registry, tlspin
+from .. import demo
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +85,7 @@ class Client:
         return f"ftps.Client({self.printer.serial}, {self.printer.ip}:{PORT})"
 
     def __enter__(self) -> Client:
+        demo.stop()                  # no connection to a printer in the demo
         ftp = _ImplicitFTP_TLS(context=tlspin.context())
         try:
             ftp.connect(self.printer.ip, PORT, timeout=self.timeout)

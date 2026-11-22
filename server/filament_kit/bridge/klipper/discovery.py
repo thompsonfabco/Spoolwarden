@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 from .. import registry
-from ... import hostaddr
+from ... import demo, hostaddr
 from .moonraker import Moonraker, MoonrakerError, Unauthorized
 
 log = logging.getLogger(__name__)
@@ -76,6 +76,7 @@ def add(name: str, host: str, port: int = DEFAULT_PORT) -> registry.Printer:
 
 
 def _open(host: str, port: int, timeout: float) -> bool:
+    demo.stop()                  # no probe of the network in the demo
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True
@@ -95,6 +96,7 @@ def _is_moonraker(host: str, port: int, timeout: float) -> bool:
 
 def scan(subnet: ipaddress.IPv4Network, port: int | None = None, workers: int = 64,
          timeout: float = 0.3) -> list[tuple[str, int]]:
+    demo.stop()                  # no scan of the network in the demo
     port = port or DEFAULT_PORT
     if subnet.num_addresses > MAX_HOSTS:
         raise ValueError("scan at most a /24 (256 addresses)")
@@ -136,6 +138,8 @@ class Browser:
     def _on_change(self, zeroconf, service_type, name, state_change) -> None:
         from zeroconf import ServiceStateChange
         if state_change is not ServiceStateChange.Added:
+            return
+        if demo.is_on():                  # a found printer is not asked about in the demo
             return
         info = zeroconf.get_service_info(service_type, name, timeout=3000)
         if info is not None:

@@ -1219,6 +1219,7 @@ def run_job(name: str, cmd: list[str] | None = None) -> int:
     """filament-kit-setup-job.service: the job's command, its output in job_log() for the page. /run is root's, so
     the log cannot be swapped for a link by the service user; it is made 640 root:filament-kit. stdin is /dev/null:
     with no terminal nothing asks, and neither the setup code nor a pairing link is printed."""
+    demo.stop()                  # a job that was queued before the demo does not run in it
     d = run_dir()
     d.mkdir(mode=0o750, parents=True, exist_ok=True)
     os.chmod(d, 0o750)
