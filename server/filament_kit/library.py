@@ -50,7 +50,6 @@ from pathlib import Path
 
 from . import __version__, config, event_sink, release
 from .pairing import _write_atomic, give_to_state_owner, make_state_dir, open_lock
-from .profiles import statexml
 
 try:
     import fcntl
@@ -332,14 +331,17 @@ def _read_json(path: Path):
 def _read_state(name: str):
     """library/<name> (current.json, previous.json, last_check.json, rolled_back.json) as its XML form; a file that
     only exists as JSON is read and moved to XML (R85 section 1)."""
+    from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
     return statexml.read(_dir() / name, keep_version=True)
 
 
 def _write_state(name: str, obj: dict) -> None:
+    from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
     statexml.write(_dir() / name, obj)
 
 
 def _drop_state(name: str) -> None:
+    from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
     statexml.unlink(_dir() / name)
 
 
@@ -494,6 +496,7 @@ def _read_local(path: Path):
     """One of the owner's entries (given by its JSON name): the XML form, else the JSON form, which is moved to XML
     once (the JSON file stays as it was). The root element is `entry` for every file: a product name may start with a
     digit, which no element name can."""
+    from .profiles import statexml   # not at the top: the release builder imports this module without defusedxml
     xp = path.with_suffix(".xml")
     try:
         raw = xp.read_bytes()
@@ -616,6 +619,7 @@ def add_local(data: bytes) -> tuple[dict, str]:
     if problems:
         raise ValueError("; ".join(problems))
     entry = canonical(entry)
+    from .profiles import statexml   # lazily, see _read_state
     path = _local_dir() / rel_path(entry).removeprefix("library/")
     with _locked():
         make_state_dir(path.parent)
