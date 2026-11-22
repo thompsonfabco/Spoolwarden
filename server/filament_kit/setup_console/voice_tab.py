@@ -1,6 +1,7 @@
 """The Weigh Station's voice settings (R88 section 2, the rulings of 2026-11-22 01:35 and 01:50): the logic behind the
 three kit routes (`GET` / `PATCH /api/voice`, `POST /api/voice/test`; api.py only mounts them) and the page's routes.
 
+    GET  station/voice                                        the view read, no code: `get_voice`
     POST station/voice {speech?, speaker?, speed?, volume?}   the values as `get_voice`, or the refusal {error: sentence, code, field}
     POST station/voice/test {speaker?, speed?, volume?}       {} or the refusal {error: sentence, code}
 
@@ -112,12 +113,12 @@ def hand_over(cfg: dict, only: tuple | list | None = None) -> bool:
 
 def get_voice(cfg: dict) -> dict:
     """`GET /api/voice`; `station: false` when the Hub has no Weigh Station (the rest is then left out). The values are
-    voice.xml's; `voice_file` (also `voice`: the voice and engine shown), `remote` (the Weigh Station runs on another
+    voice.xml's; `voice` (the voice and engine as a person sees them), `remote` (the Weigh Station runs on another
     computer) and `speaker_range` come from the settings, read-only. The Hub page's group reads only this answer."""
     if not station_url(cfg):
         return {"station": False}
     name = voice_name(cfg)
-    return {"station": True, **voice_state.values(cfg), "voice": name, "voice_file": name,
+    return {"station": True, **voice_state.values(cfg), "voice": name,
             "remote": station_remote(cfg), "speaker_range": voice_state.speaker_range(cfg)}
 
 
@@ -232,5 +233,9 @@ def routes(page) -> list[tuple]:
             raise refuse(e) from None
         return {}
 
-    return [("/station/voice", page.guard(save, write=True), "POST"),
+    async def view(request, body):
+        return await anyio.to_thread.run_sync(lambda: get_voice(config.load()))
+
+    return [("/station/voice", page.guard(view), "GET"),
+            ("/station/voice", page.guard(save, write=True), "POST"),
             ("/station/voice/test", page.guard(test, write=True), "POST")]
