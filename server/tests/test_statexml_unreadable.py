@@ -182,10 +182,10 @@ needs_nofollow = pytest.mark.skipif(not hasattr(os, "O_NOFOLLOW"), reason="POSIX
 
 @needs_nofollow
 def test_a_link_in_place_of_the_xml_is_not_followed(tmp_path):
-    other = tmp_path / "elsewhere.xml"
-    statexml.write(tmp_path / "elsewhere.json", {"secret": 1}, keep_old_form=False)
+    (tmp_path / "src").mkdir()
+    statexml.write(tmp_path / "src" / "linked.json", {"secret": 1}, keep_old_form=False)     # a valid file of the right name
     p = tmp_path / "linked.json"
-    (tmp_path / "linked.xml").symlink_to(other)
+    (tmp_path / "linked.xml").symlink_to(tmp_path / "src" / "linked.xml")
     assert statexml.read(p) is None
     assert statexml.read_list(p) is None
     assert statexml.problems()
