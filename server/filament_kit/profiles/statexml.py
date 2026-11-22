@@ -307,7 +307,8 @@ def _json_path(path: Path, old_name) -> Path:
 def _old_bytes(data, old_format) -> bytes:
     """`data` as the older release wrote it. `old_format` is the keyword arguments of json.dumps (the default OLD_FORMAT of
     this copy), or a function that returns the bytes (a file that was not one JSON document). A newline follows when an
-    indent was used, as the older writers did."""
+    indent was used, as the older writers did. A file written by a function is not read back: a change an older release
+    makes to it (lines appended to usage.jsonl) is not noticed, and the next save writes it again."""
     if callable(old_format):
         return old_format(data)
     kw = OLD_FORMAT if old_format is None else old_format

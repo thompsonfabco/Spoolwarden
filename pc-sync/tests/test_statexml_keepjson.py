@@ -222,3 +222,6 @@ def test_a_json_an_older_release_deleted_takes_the_xml_with_it(tmp_path):
     assert statexml.read(p) is None
     statexml.write(p, {"n": 2})
     assert statexml.read(p) == {"n": 2}
+
+def test_a_function_format_file_is_compared_by_hash_only_and_the_docs_say_so():
+    assert "not read back" in statexml._old_bytes.__doc__
