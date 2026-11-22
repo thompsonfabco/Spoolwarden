@@ -974,6 +974,7 @@ function settingsBody(wide) {
     group(SW.t("appearance_theme_title"), SW.themePicker(), h("p", { class: "muted" }, SW.t("settings_theme_help")), live()),
     languageGroup(group),
     alertsGroup(group),
+    voiceGroup(group),
     group(SW.t("settings_this_hub"), HUB ? h("p", { class: "settings__hub" }, HUB) : null,
       h("p", { class: "settings__address" }, location.origin + location.pathname), hubPageLink()),
     wide && !installed() ? group(SW.t("nav_more_home_screen"), h("p", { class: "muted" }, SW.t("nav_more_home_screen_summary", { product: PRODUCT })),
@@ -1124,6 +1125,17 @@ function tt(key, vars) {
     running_low_in_stock: { one: "{count} more in stock", other: "{count} more in stock" },
     running_low_last_one: "Last one",
     running_low_empty: "Nothing is running low.",
+    checked_out_chip: "Checked out ({count})", checked_out_in: "In {printer} – {slot}", checked_out_home: "Home: {home}",
+    checked_out_home_none: "Home: not recorded", checked_out_since: "since {time}", checked_out_empty: "No spool is checked out.",
+    checked_out_return_to: "Return to {home}", checked_out_return: "Return", checked_out_returned_to: "Returned to {location}.",
+    checked_out_returned: "Returned.", checked_out_change_home: "Change home", checked_out_home_title: "Home",
+    checked_out_home_now: "Home is now {location}.",
+    voice_speak: "Speak", voice_name: "Voice: {voice}", voice_change_on_hub: "Change the voice on the Hub page.", voice_speaker: "Speaker",
+    voice_speaker_hint: "This voice has {count} speakers. Try a few with Test.", voice_speaker_error: "Enter a whole number from {min} to {max}.",
+    voice_speed: "Speed", voice_speed_value: "{value} %", voice_volume: "Volume", voice_test: "Test",
+    voice_test_played: "Played on the Weigh Station.", voice_test_no_answer: "The Weigh Station did not answer.",
+    voice_test_busy: "The Weigh Station is in use. Try again when it is idle.", voice_test_off: "Speaking is switched off.",
+    voice_at_home: "Change this at home.",
     auto_where: "Where should it go?", auto_option: "Automatic", auto_option_hint: "The slot where the spool appears.", auto_continue: "Continue",
     auto_plan: "{spool} goes into the slot where it appears ({slots}). The Hub waits up to 15 minutes.", auto_replaces: "Replaces {spool}, which was waiting.",
     auto_started: "Waiting for {spool} to appear in a slot of {printer}.", auto_not_possible: "This printer has no slots the Hub can watch. Choose a slot.",
@@ -1317,6 +1329,159 @@ function historyGroup() {
 }
 window.SW_HISTORY = { offerUndo, undoEvent, downloadLink };           // printers.js uses these
 window.SW_LANG = { code: () => document.documentElement.lang || "en" };   // printers.js sends it with the push subscription
+
+// ----- Checked out (R88 1.6, 01:55, 02:00 point 5, 02:05; 04 5.4, 5.5): a spool with a remembered home, its Home line and its Return. Shown
+// only when the Hub's answer of GET spools names `checked_out` in its top-level `filters`: an answer without them is an older Hub, and then
+// nothing of it is shown. The twins: GET spools?filter=checked_out, POST spools/<id>/return, and `home` on the spool editing twin. -----
+// (functions, not constants: the tabs are built before this part of the script has run)
+function knowsCheckedOut(res) { return !!res && Array.isArray(res.filters) && res.filters.includes("checked_out"); }
+function coView(r) { return (r && r.view) || r || {}; }     // a list row is Spoolman's spool with its `view`; the sheet holds the view
+function homeLine(v) { return v.home ? tt("checked_out_home", { home: v.home }) : tt("checked_out_home_none"); }
+function returnLabel(v) { return v.home ? tt("checked_out_return_to", { home: v.home }) : tt("checked_out_return"); }
+function sinceText(v) {                                      // "YYYY-MM-DD HH:MM" on the phone's clock; nothing for an entry without a time
+  if (v == null || v === "") return "";
+  const n = typeof v === "number" ? v : /^\d+(\.\d+)?$/.test(String(v).trim()) ? Number(v) : null;
+  const d = n != null ? new Date(n < 1e12 ? n * 1000 : n) : new Date(v);
+  if (isNaN(d)) return "";
+  const p = (x) => String(x).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+// the result of a return names the place the Hub's answer gives (the home, or where the placement rules put it); "Returned." only when it gives none
+function returnedText(r) {
+  const s = r && r.spool, at = s && ((s.view && s.view.location) || s.location);
+  return at ? tt("checked_out_returned_to", { location: at }) : tt("checked_out_returned");
+}
+// sends the spool back at once and asks nothing; the toast offers Undo through the event the answer names (R84 3). `done` runs after a put back.
+async function returnSpool(id, done) {
+  const r = await api(`spools/${encodeURIComponent(id)}/return`, { body: {} });
+  const text = returnedText(r);
+  offerUndo(id, text, done, r.event_id).then((offered) => { if (!offered) SW.toast(text); });
+  return { r, text };
+}
+// The chip "Checked out (<n>)" and its list (04 5.5). o: {box: the results, open(id, opener): the spool sheet, toggle(on): the chip pressed,
+// known(): the gate may have changed (an open sheet paints its Home line again)}
+function checkedOutFilter(o) {
+  const st = { known: false, on: false, rows: null, total: 0 };
+  const chip = h("button", { class: "btn spools__low hidden", type: "button", "aria-pressed": "false", "data-action": "checked-out", on: { click: () => o.toggle(!st.on) } });
+  const paint = () => {
+    chip.classList.toggle("hidden", !st.known);               // shown also at 0, while the Hub knows the filter
+    chip.textContent = tt("checked_out_chip", { count: st.total });   // the list's `total` (R88 02:30)
+    chip.setAttribute("aria-pressed", String(st.on));
+  };
+  let stamp = 0;
+  async function load() {                                    // when Spools opens and after a return: the rows and the chip's count
+    const mine = ++stamp;
+    try {
+      const res = await api("spools?filter=checked_out");
+      if (mine !== stamp) return;
+      st.known = knowsCheckedOut(res); st.rows = st.known ? (Array.isArray(res.spools) ? res.spools : []) : null;
+      st.total = st.known ? (Number.isInteger(res.total) ? res.total : st.rows.length) : 0;   // `total` counts every match, not one page
+    } catch (e) {
+      if (mine !== stamp) return;
+      if (!(e instanceof SW.HubError && e.unreachable)) { st.known = false; st.rows = null; }   // a Hub without the list says nothing of it; one that is away keeps what was shown
+    }
+    const was = st.on;
+    if (!st.known) st.on = false;
+    paint(); o.known();
+    if (st.on) draw(); else if (was) o.toggle(false);
+  }
+  function row(r) {
+    const v = coView(r), id = v.id ?? r.id, line = resultLine(), since = sinceText(v.checked_out_since);
+    const at = v.loaded ? tt("checked_out_in", { printer: v.loaded.printer || v.loaded.printer_id || "?", slot: v.loaded.slot || "?" }) : v.location || "?";
+    const name = [v.vendor, v.name].filter(Boolean).join(" ") || SW.t("spool_title", { id });
+    const colour = /^[0-9A-Fa-f]{6}$/.test(v.color_hex || "") ? "#" + v.color_hex : "";
+    const back = needsHub(SW.btn(returnLabel(v), { cls: "spools__return", action: "return-spool", run: (e) => send(e.currentTarget) }));
+    async function send(button) {                            // the row leaves the list and the count is read again; a refusal shows under the row
+      await act(line, SW.t("common_working"), async () => { await returnSpool(id, () => load()); load(); return null; }, { button });
+    }
+    return h("li", { class: "spools__co" }, h("button", { class: "spools__row", type: "button", on: { click: (e) => o.open(id, e.currentTarget) } },
+      SW.swatch(colour, {}),
+      h("span", { class: "spools__row-text" }, h("b", { textContent: name }), h("span", { class: "muted mono", textContent: SW.t("spool_title", { id }) }),
+        h("span", { class: "muted", textContent: at }), h("span", { class: "muted", textContent: homeLine(v) }),
+        since ? h("span", { class: "muted", textContent: tt("checked_out_since", { time: since }) }) : null),
+      SW.icon("chevron", "icon--s spools__chevron")), back, line);
+  }
+  function draw() {
+    if (!st.rows) { o.box.replaceChildren(h("p", { class: "muted", textContent: SW.t("common_working") })); return; }
+    o.box.replaceChildren(st.rows.length ? h("ul", { class: "spools__rows" }, ...st.rows.map(row)) : h("p", { class: "spools__none", textContent: tt("checked_out_empty") }));
+  }
+  return { chip, st, load, draw, paint };
+}
+
+// ----- Weigh Station voice (R88 01:35 point 5, 01:50, 02:00 point 2; 04 9.2): Speak, Voice (read only), Speaker, Speed, Volume and Test, each
+// row applying when its control is let go, with no Save. The twins GET voice, PATCH voice and POST voice/test; a Hub without them (404), or
+// without a Weigh Station (`station: false`), shows no panel. On the public address the panel is read only and says so. -----
+function voiceTestText(e) {                                  // Test's refusals in the words of 03 10.10; anything else is the Hub's own
+  const words = { busy: "voice_test_busy", off: "voice_test_off", no_answer: "voice_test_no_answer" };
+  const c = e instanceof SW.HubError ? [e.data?.error, e.data?.code, e.error].find((k) => words[k]) : null;
+  return c ? tt(words[c]) : says(e);
+}
+function voiceGroup(group) {
+  const home = !!HUB_PAGE;                                   // the home address: the public one has no Hub page link
+  const box = h("div", { class: "voice" });
+  const sec = group(SW.t("settings_group_voice"), box);
+  sec.hidden = true;                                         // until the Hub says it has a Weigh Station
+  let now = null;                                            // the values as the Hub last gave them
+  const patch = async (body) => { const r = await api("voice", { method: "PATCH", body }); now = { ...now, ...r }; return r; };
+  // a slider sends its value when it is let go (`change`); a refusal shows at its row and the slider goes back
+  function slider(label, key, lo, hi, step, show) {
+    const id = SW.uid("voice"), line = resultLine(), out = h("output", { class: "voice__value mono", for: id });
+    const input = h("input", { class: "voice__range", type: "range", id, min: String(lo), max: String(hi), step: String(step), value: String(now[key] ?? lo), disabled: !home, "data-voice": key });
+    const paint = () => { out.textContent = show(input.value); };
+    input.oninput = paint;                                   // the value beside it follows the thumb
+    input.addEventListener("change", async () => {
+      const was = now[key], v = Number(input.value);
+      try { await patch({ [key]: v }); SW.result(line, "ok", SW.t("common_saved")); }
+      catch (e) { input.value = String(was ?? lo); paint(); failed(line, e); }
+    });
+    paint();
+    return h("div", { class: "voice__row" }, h("label", { class: "field__label", for: id }, label), h("div", { class: "voice__slider" }, input, out), line);
+  }
+  function speakerRow(lo, hi) {
+    const line = resultLine();
+    const f = SW.field({ type: "number", label: tt("voice_speaker"), hint: tt("voice_speaker_hint", { count: hi - lo + 1 }), value: String(now.speaker ?? lo),
+      disabled: !home, attrs: { "data-voice": "speaker" } });
+    f._control.addEventListener("change", async () => {
+      const was = now.speaker ?? lo, raw = f._control.value.trim(), v = Number(raw);
+      if (!/^\d+$/.test(raw) || v < lo || v > hi) { f._control.value = String(was); SW.fieldError(f, tt("voice_speaker_error", { min: lo, max: hi })); return; }
+      SW.fieldError(f, null);
+      try { await patch({ speaker: v }); SW.result(line, "ok", SW.t("common_saved")); }
+      catch (e) { f._control.value = String(was); SW.fieldError(f, says(e)); }
+    });
+    return h("div", { class: "voice__row" }, f, line);
+  }
+  function rows() {
+    const range = Array.isArray(now.speaker_range) && now.speaker_range.length === 2 ? now.speaker_range.map(Number) : null;
+    const speak = SW.toggle({ label: tt("voice_speak"), checked: !!now.speech, disabled: !home,
+      apply: async (on) => { await patch({ speech: on }); return SW.t("common_saved"); } });
+    const speaker = range ? speakerRow(range[0], range[1]) : null;
+    const test = home ? needsHub(SW.btn(tt("voice_test"), { action: "voice-test", run: (e) => play(e.currentTarget) })) : null;
+    async function play(button) {                            // with the values on the screen, saved or not
+      const body = {};
+      const sp = speaker && speaker.querySelector("[data-voice=speaker]");
+      if (sp && /^\d+$/.test(sp.value.trim())) body.speaker = Number(sp.value.trim());
+      for (const k of ["speed", "volume"]) { const i = box.querySelector(`[data-voice=${k}]`); if (i) body[k] = Number(i.value); }
+      if (!SW.busy(button, tt("voice_test"))) return;
+      try { await api("voice/test", { body }); SW.toast(tt("voice_test_played"), "ok"); }
+      catch (e) { SW.toast(voiceTestText(e), "bad"); }
+      finally { SW.idle(button); }
+    }
+    return [speak,
+      h("p", { class: "voice__name" }, tt("voice_name", { voice: now.voice || "" })), h("p", { class: "muted" }, tt("voice_change_on_hub")),
+      speaker,
+      slider(tt("voice_speed"), "speed", 50, 200, 10, (v) => tt("voice_speed_value", { value: v })),
+      slider(tt("voice_volume"), "volume", 0, 100, 1, (v) => String(v)),
+      test ? h("p", {}, test) : null,
+      home ? null : h("p", { class: "muted" }, tt("voice_at_home"))];
+  }
+  (async () => {
+    try { now = await api("voice"); } catch (e) { return; }  // an older Hub (404), or one that does not answer: no panel
+    if (!now || now.station !== true) return;                // no Weigh Station on this Hub: nothing to show
+    box.replaceChildren(...rows().filter(Boolean));
+    sec.hidden = false;
+  })();
+  return sec;
+}
 
 // ----- the language (R85 3.7; 04 9.2) and leaving the demo (R85 4.6) -----
 // The choice is kept on the phone (`localStorage` spoolwarden.language) and in a cookie of the same name, because the Hub chooses the
@@ -2476,12 +2641,16 @@ function openTab() {
   // ----- Running low (R80 section 7): a filter chip with the count; on, the list is the Hub's spools/low (least filament first) -----
   let low = false, lowRows = null;
   const lowBtn = h("button", { class: "btn spools__low hidden", type: "button", "aria-pressed": "false", on: { click: () => setLow(!low) } });
+  // Checked out (R88 1.6; 04 5.5): a second chip beside it, only while the Hub knows the filter; one of the two chips is on at a time
+  const co = checkedOutFilter({ box: resultsBox, open: (id, opener) => openSheet(id, opener), toggle: (on) => setCo(on),
+    known: () => { if (sheet && sheet.co) sheet.co(); } });
   function paintLow() {
     const n = lowRows ? lowRows.length : 0;
     lowBtn.classList.toggle("hidden", !lowRows || (n === 0 && !low));       // a Hub without the list, or nothing low: no chip
     lowBtn.textContent = tt("running_low_chip", { count: n });
     lowBtn.setAttribute("aria-pressed", String(low));
-    searchField.classList.toggle("hidden", low); sealedBox.classList.toggle("hidden", low);
+    const filtered = low || co.st.on;                          // a chip that is on shows its list instead of the search
+    searchField.classList.toggle("hidden", filtered); sealedBox.classList.toggle("hidden", filtered);
   }
   function lowRow(r) {
     const colour = hexOf(r.color), more = Number(r.in_stock) || 0;
@@ -2505,10 +2674,12 @@ function openTab() {
     catch (e) { if (mine !== lowStamp) return; if (lowRows == null && low) { low = false; find(lastQ); } }      // no list on this Hub: back to the search
     paintLow(); if (low) drawLow();
   }
-  function setLow(on) { low = on; paintLow(); if (on) { drawLow(); loadLow(); } else find(lastQ); }
+  function setLow(on) { low = on; if (on) { co.st.on = false; co.paint(); } paintLow(); if (on) { drawLow(); loadLow(); } else find(lastQ); }
+  function setCo(on) { co.st.on = on; if (on) low = false; co.paint(); paintLow(); if (on) { co.draw(); co.load(); } else find(lastQ); }
   async function find(q) {
     lastQ = q;
     if (low) { loadLow(); return; }
+    if (co.st.on) { co.load(); return; }
     const mine = ++findStamp;
     if (!asked && !firstLoad) firstLoad = SW.loading(resultsBox, { thing: SW.t("nav_spools"), items: 3 });
     searchField._busy(true);
@@ -2573,6 +2744,38 @@ function openTab() {
       return [SW.swatch(hexOf(v.color_hex), { size: "l" }), h("div", { class: "spools__sum-text" }, h("b", { textContent: nameOf(v) }),
         h("span", { class: "muted", textContent: detail }))];
     };
+    // -- Home (R88 01:55 point 1; 04 5.4): under the summary while the spool is checked out and the Hub knows the filter; "Change home" saves
+    // the chosen storage location at once through the spool editing twin (`home`), with the inline result and no toast --
+    const homeText = h("span", { class: "spools__home-text" }), homeAns = resultLine();
+    const homeBtn = needsHub(SW.btn(tt("checked_out_change_home"), { cls: "btn--ghost", action: "change-home" }));
+    const homeBox = h("div", { class: "spools__home", hidden: true }, h("p", {}, homeText), homeBtn, homeAns);
+    SW.menu(homeBtn, () => placeEntries().map((e) => ({ label: e.value, reason: e.detail || null, run: () => setHome(e.value) })), { label: tt("checked_out_home_title") });
+    const retBtn = needsHub(SW.btn(tt("checked_out_return"), { action: "return-spool", run: (e) => sendBack(e.currentTarget) }));
+    retBtn.hidden = true;
+    function paintCo() {
+      const out = co.st.known && !!view && !!view.checked_out;
+      homeBox.hidden = !out; retBtn.hidden = !out;
+      if (out) { homeText.textContent = homeLine(view); retBtn.textContent = returnLabel(view); }
+    }
+    async function setHome(l) {
+      await act(homeAns, SW.t("common_saving"), async () => {
+        const r = await api(`spools/${id}`, { body: { home: l, dry_run: false } });
+        const now = (r.view && r.view.home) || l;
+        changed = true;
+        if (r.view) applyView(r.view); else { view = { ...view, home: now }; paintCo(); }
+        return tt("checked_out_home_now", { location: now });
+      });
+    }
+    async function sendBack(button) {                          // Return: at once, no preview; the summary follows the returned spool
+      await act(actAns, SW.t("common_working"), async () => {
+        const { r, text } = await returnSpool(id, () => { refresh(); co.load(); });
+        const v = r.spool && (r.spool.view || (r.spool.state ? r.spool : null));
+        changed = true;
+        if (v) applyView(v); else refresh();
+        co.load();
+        return text;
+      }, { button });
+    }
     let loadHistory = null;                                    // set below: the spool's last ten events, read again after a change
     const applyView = (v) => { view = v; sum.replaceChildren(...sumKids(v)); paintActions(); if (loadHistory) loadHistory(); };
     let readFailed = false;                                    // the spool could not be read: Preview and Link say so, the error has Try again
@@ -2671,6 +2874,7 @@ function openTab() {
     function paintActions() {
       const empty = gone(), why = SW.t("spool_sheet_reason_empty");
       disabled(previewBtn, holdWhy()); link(linkKey);            // an empty spool is not opened
+      paintCo();
       if (!other) return;
       other.hidden = false;
       disabled(weightBtn, empty ? why : null); disabled(emptyBtn, empty ? why : null); disabled(loadBtn, empty ? why : null);
@@ -2844,15 +3048,15 @@ function openTab() {
       send(true);                                              // the plan first: nothing is sent until Load
     }
     const other = part(SW.t("spool_sheet_other_actions"),
-      h("div", { class: "spools__buttons" }, EDIT ? weightBtn : null, EDIT ? moveBtn : null, printBtn, PRINTERS ? loadBtn : null), weightForm, loadBox,
+      h("div", { class: "spools__buttons" }, EDIT ? weightBtn : null, EDIT ? moveBtn : null, retBtn, printBtn, PRINTERS ? loadBtn : null), weightForm, loadBox,
       EDIT ? h("div", { class: "spools__danger" }, emptyBtn) : null, actAns);
     if (other) other.hidden = true;                            // until the spool is read: its state decides which actions can be pressed
     const hist = historyBox(id), historyPart = part(tt("history_recent_title"), hist.box);
     historyPart.hidden = true; loadHistory = async () => { historyPart.hidden = !(await hist.load()); };
 
-    const dlg = SW.sheet({ title: SW.t("spool_title", { id }), body: h("div", { class: "spools__sheet" }, sum, openPart, other, historyPart), onClose: () => {
+    const dlg = SW.sheet({ title: SW.t("spool_title", { id }), body: h("div", { class: "spools__sheet" }, sum, homeBox, openPart, other, historyPart), onClose: () => {
       if (sheet && sheet.dlg === dlg) sheet = null;            // a sheet that was replaced by another one closes after the new one is set
-      if (changed) { changed = false; if (shown && (asked || low)) find(lastQ); }
+      if (changed) { changed = false; if (shown && (asked || low || co.st.on)) find(lastQ); }
       if (shellView) shellView.paint(false);
     } });
     if (how === "push") history.pushState({ sheet: true }, "", `#spools/${id}`);
@@ -2862,7 +3066,7 @@ function openTab() {
       return p.length && p.every((x) => /^[0-9a-f]{1,2}$/i.test(x)) ? p.map((x) => parseInt(x, 16).toString(16)).join(":") : s; };
     const tapKey = (id, at) => `${uidOf(id)}|${at}`;
     let seenId = lastTag && lastTag.nfc_id ? uidOf(lastTag.nfc_id) : null, seenKey = lastTag && lastTag.nfc_id ? tapKey(lastTag.nfc_id, lastTag.read_at) : null;   // the tap this sheet knows
-    sheet = { id, dlg, rec, tag(t, fresh, key) {
+    sheet = { id, dlg, rec, co: paintCo, tag(t, fresh, key) {
       paintTag(t);
       const tapped = t.nfc_id ? tapKey(t.nfc_id, t.read_at) : null;
       if (!fresh || !tapped || tapped === seenKey) return;       // a poll that brings no tap, or the tap the sheet already knows (shown or previewed): nothing is out of date
@@ -2892,7 +3096,7 @@ function openTab() {
   const el = h("section", { class: "hidden" }, h("div", { class: "spools" },
     h("p", { class: "muted", textContent: SW.t("spools_intro") }), spoolmanBox,
     group(SW.t("spools_last_tag"), tagBody, tagLine),
-    h("div", { class: "spools__find" }, searchField, sealedBox, lowBtn, findLine), resultsBox,
+    h("div", { class: "spools__find" }, searchField, sealedBox, h("div", { class: "spools__chips" }, lowBtn, co.chip), findLine), resultsBox,
     locsList));
   return {
     el,
@@ -2906,6 +3110,7 @@ function openTab() {
       if (!document.hidden) startPoll();
       find(asked ? lastQ : "");
       if (!low) loadLow();                                     // the chip's count
+      if (!co.st.on) co.load();                                // the Checked out chip and its count (find reads it while it is on)
     },
     leave() { shown = false; stopPoll(); closeSheet(); },
     address(more, initial) {                                   // #spools or #spools/<id> (04 2.4)

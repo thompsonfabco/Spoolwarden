@@ -389,6 +389,21 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .spools__low { justify-self: start; }
 .spools__low[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); }      /* the chosen chip: 02 5.7 */
 .spools__last { color: var(--warn); font-weight: var(--fw-label); }
+/* Checked out (R88 1.6; 04 5.4, 5.5): the second chip, a row with its own Return under it, the Home line of the sheet */
+.spools__chips { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.spools__chips:empty { display: none; }
+.spools__co { display: grid; gap: var(--s1); }
+.spools__return { justify-self: start; }
+.spools__home { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); }
+.spools__home[hidden] { display: none; }
+.spools__home .result { flex-basis: 100%; }
+/* Weigh Station voice (R88 01:35 point 5; 04 9.2): a slider with its value beside it */
+.voice { display: grid; gap: var(--s3); }
+.voice p { margin: 0; }
+.voice__row { display: grid; gap: var(--s1); }
+.voice__slider { display: flex; align-items: center; gap: var(--s2); }
+.voice__range { flex: 1 1 auto; min-width: 0; min-height: var(--ctl); }
+.voice__value { min-width: var(--s7); text-align: right; }
 .spools__search .field__box { position: relative; }
 .spools__search .field__box, .spools__search .field__control { width: 100%; }
 .spools__search .field__control { padding-right: calc(var(--ctl) + var(--s5)); }
