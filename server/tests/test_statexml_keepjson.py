@@ -219,3 +219,35 @@ def test_the_shared_block_is_the_same_in_both_copies():
 
     hub = block(REPO / "server" / "filament_kit" / "profiles" / "statexml.py")
     assert hub == block(REPO / "pc-sync" / "fksync" / "statexml.py") and "def _keep_old" in hub
+
+
+def test_a_json_an_older_release_deleted_takes_the_xml_with_it(tmp_path):
+    p = tmp_path / "pair-aside.json"
+    statexml.write(p, {"n": 1})
+    p.unlink()                                      # the older release said "none" by deleting the JSON
+    assert statexml.read(p) is None
+    assert not (tmp_path / "pair-aside.xml").exists()
+    assert (tmp_path / "pair-aside.xml.unreadable").is_file()          # kept for the user
+    assert not (tmp_path / "pair-aside.json.sha256").exists()
+    assert statexml.read(p) is None
+    statexml.write(p, {"n": 2})
+    assert statexml.read(p) == {"n": 2}
+
+def test_a_function_format_file_is_compared_by_hash_only_and_the_docs_say_so():
+    assert "not read back" in statexml._old_bytes.__doc__
+
+def test_a_failed_old_form_write_is_logged_and_noted_and_the_xml_is_saved(tmp_path, monkeypatch, caplog):
+    p = tmp_path / "a.json"
+    real = statexml._put
+
+    def refuse_json(path, data, mode, so):
+        if Path(path).name.startswith("a.json"):
+            raise PermissionError(13, "no")
+        return real(path, data, mode, so)
+
+    monkeypatch.setattr(statexml, "_put", refuse_json)
+    with caplog.at_level("WARNING"):
+        statexml.write(p, {"n": 1})
+    assert statexml.read(p) == {"n": 1}
+    assert any("a.json" in x and "old form" in x for x in statexml.problems())
+    assert any("a.json" in r.getMessage() for r in caplog.records)
