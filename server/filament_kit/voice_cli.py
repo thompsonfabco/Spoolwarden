@@ -16,7 +16,11 @@ SPEAKER_MAX = 903                   # a many-speaker Piper voice: 904 speakers
 SPEED_MIN, SPEED_MAX, SPEED_STEP = 50, 200, 10
 FIELDS = ("speech", "speaker", "speed", "volume")
 
-TEXT_NO_SERVICE = "The Hub is not running, so the voice cannot be changed or tested."
+# The sentences resolve from the string catalogue by their keys; the English is the fallback.
+TEXT_NO_SERVICE = catalogue_text("voice_cli_no_service", "The Hub is not running, so the voice cannot be changed or tested.")
+TEXT_NO_SERVICE_FIX = catalogue_text("voice_cli_no_service_fix", "start it, then try again.")
+TEXT_NO_ANSWER_FIX = catalogue_text("voice_cli_no_answer_fix", "check that it is on, then try again.")
+COMMAND_CONFIG = catalogue_text("voice_cli_config_command", "sudo {command} config")
 
 
 class VoiceRefused(Exception):
@@ -41,13 +45,14 @@ def check(field: str, n: int, got: dict) -> int:
     if field == "speaker":
         top = SPEAKER_MAX if got.get("speaker_range") else 0
         if not 0 <= n <= top:
-            raise VoiceRefused(f"speaker must be a whole number from 0 to {top}.")
+            raise VoiceRefused(catalogue_text("voice_cli_speaker_range", "speaker must be a whole number from 0 to {top}.", top=str(top)))
     elif field == "speed":
         if not SPEED_MIN <= n <= SPEED_MAX or n % SPEED_STEP:
-            raise VoiceRefused(f"speed must be a whole number from {SPEED_MIN} to {SPEED_MAX}, in steps of {SPEED_STEP}.")
+            raise VoiceRefused(catalogue_text("voice_cli_speed_range", "speed must be a whole number from {low} to {high}, in steps of {step}.",
+                                              low=str(SPEED_MIN), high=str(SPEED_MAX), step=str(SPEED_STEP)))
     elif field == "volume":
         if not 0 <= n <= 100:
-            raise VoiceRefused("volume must be a whole number from 0 to 100.")
+            raise VoiceRefused(catalogue_text("voice_cli_volume_range", "volume must be a whole number from 0 to 100."))
     return n
 
 
@@ -66,15 +71,15 @@ def cmd_voice_test(api) -> int:
     """`weigh-station voice-test`: the Weigh Station says its test sentence, as the Hub's `POST /api/voice/test`."""
     client = api() if callable(api) else api
     if client is None:
-        output.error(TEXT_NO_SERVICE, "start it, then try again.")
+        output.error(TEXT_NO_SERVICE, TEXT_NO_SERVICE_FIX)
         return output.FAILED
     try:
         client.post("/api/voice/test", {})
     except SlotError as e:
         if e.code == "no_answer":
-            output.error(str(e), "check that it is on, then try again.")
+            output.error(str(e), TEXT_NO_ANSWER_FIX)
         elif e.code == "off":
-            output.error(str(e), cmd="sudo spoolwarden config")
+            output.error(str(e), cmd=COMMAND_CONFIG)
         else:
             output.error(str(e))
         return output.FAILED
