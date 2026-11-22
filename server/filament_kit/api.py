@@ -1537,7 +1537,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             home=_opt(body, "home", str)))
         return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added (S3.9); `home` (R88): 409 not_checked_out
 
-    def returner(spool_id: int, *, grams: float | None = None, dry: bool = False) -> dict:
+    def returner(spool_id: int, *, grams: float | None = None, dry: bool = False, gross: float | None = None) -> dict:
         """`inventory.return_spool`, or the Klipper family's when the spool sits in one of its printers' slots (the
         printer is then told to clear the slot when it answers). Sync: call it from inside the threadpool."""
         spool = sm.get(f"spool/{spool_id}")
@@ -1545,8 +1545,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         p = registry.load().get(where.get("printer_id") or "")
         kf = getattr(printers, "klipper", None) if p is not None and p.family == "klipper" else None
         if kf is not None:
-            return kf.return_spool(sm, p.serial, spool_id, grams=grams, rules=rules(), dry=dry)
-        out = inventory.return_spool(sm, spool_id, grams=grams, rules=rules(), dry=dry)
+            return kf.return_spool(sm, p.serial, spool_id, grams=grams, rules=rules(), dry=dry, gross=gross)
+        out = inventory.return_spool(sm, spool_id, grams=grams, rules=rules(), dry=dry, gross=gross)
         if p is not None and p.family == "klipper":     # its family is not running: the Hub's record is all that changed
             log.warning("return: spool %s was in a slot of Klipper printer %s, which cannot be told (the Klipper family is "
                         "not running); only the Hub's record changed", spool_id, p.serial)

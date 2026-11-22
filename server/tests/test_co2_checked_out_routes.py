@@ -251,9 +251,9 @@ class FakeKlipper(FakeBambu):
     def __init__(self, sm):
         self.sm, self.calls = sm, []
 
-    def return_spool(self, sm, pid, spool_id, *, grams=None, rules=None, dry=False):
+    def return_spool(self, sm, pid, spool_id, *, grams=None, rules=None, dry=False, gross=None):
         self.calls.append((pid, spool_id, grams, dry))
-        return inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry)
+        return inventory.return_spool(sm, spool_id, grams=grams, rules=rules, dry=dry, gross=gross)
 
 
 def test_a_spool_in_a_klipper_slot_goes_back_through_the_klipper_family(sm, printers, store):  # noqa: F811
@@ -393,6 +393,34 @@ def test_save_with_return_that_loses_a_race_writes_no_weight(stc, sm, monkeypatc
     r = stc.post("/api/station/save", json={"uid": uid, "gross_g": 600, "return": True})
     assert r.status_code == 409 and r.json()["error"] == "not_checked_out"
     assert sm.get(f"spool/{s['id']}")["remaining_weight"] == before
+
+
+def test_save_with_return_keeps_the_returns_undo_possible_weighed_before_returned(stc, sm, store):  # noqa: F811
+    """R701: the weight is written under the return's lock, so spool.weighed comes before spool.returned and the return's Undo
+    (the event_id the station answers) is not refused with changed_since."""
+    from filament_kit import undo
+    s = _out(sm, home="Rack 2", name="Undoable")
+    uid = _own_tag(sm, s)
+    b = stc.post("/api/station/save", json={"uid": uid, "gross_g": 600, "return": True}).json()
+    evs = [e for e in store.all_events() if e["kind"] in ("spool.weighed", "spool.returned")]
+    assert [e["kind"] for e in sorted(evs, key=lambda e: e["id"])] == ["spool.weighed", "spool.returned"]
+    ret = next(e for e in evs if e["kind"] == "spool.returned")
+    assert ret["id"] == b["event_id"]
+    assert undo.evaluate(ret, all_evs=store.all_events(), sm=sm)["possible"] is True
+
+
+def test_save_with_return_that_loses_the_race_writes_no_event_at_all(stc, sm, store, monkeypatch):  # noqa: F811
+    s = _out(sm, home="Rack 2", name="Raced twice")
+    uid = _own_tag(sm, s)
+    real = inventory.return_spool
+
+    def raced(sm_, spool_id, **kw):
+        sm_.patch(f"spool/{spool_id}", {"location": "Rack 2", "extra": {**(sm_.get(f"spool/{spool_id}").get("extra") or {}), **inventory.prev_extra("")}})
+        return real(sm_, spool_id, **kw)
+    monkeypatch.setattr(inventory, "return_spool", raced)
+    r = stc.post("/api/station/save", json={"uid": uid, "gross_g": 600, "return": True})
+    assert r.status_code == 409
+    assert [e for e in store.all_events() if e["kind"] in ("spool.weighed", "spool.returned")] == []
 
 
 def test_save_with_return_and_no_place_for_the_spool_says_returned_alone(stc, sm, monkeypatch):
