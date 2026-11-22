@@ -222,9 +222,11 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
             data = self._json(raw)
             if data is None:
                 return
-            from .settings import SettingsError
+            from .settings import SetOnHub, SettingsError
             try:
                 listing = store.reset() if data.get("reset") is True and len(data) == 1 else store.change(data)
+            except SetOnHub as e:
+                return self._error(409, e.code, str(e))
             except SettingsError as e:
                 return self._error(400, "bad_request", str(e))
             self._send(200, {"settings": listing})

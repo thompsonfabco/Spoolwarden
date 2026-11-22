@@ -302,10 +302,67 @@ def test_the_voice_routes_answer_post_only(hub):
     assert hub.json("GET", "/voice")[0] == 404 and hub.json("GET", "/voice/test")[0] == 404
 
 
-def test_the_page_settings_cannot_undo_a_live_value(hub):
-    post(hub, "/voice", {"volume": 77, "speech": False})
-    hub.store.change({"beep": False})                                 # any station-page change rewrites the drop-in values
+def settings_post(station, body, headers=None):
+    """A change on the page's settings route: the Hub's call (the proof) unless `headers` is a page session's."""
+    raw = json.dumps(body).encode()
+    status, d, _ = station.json("POST", "/settings", body, station.proof("settings", raw) if headers is None else headers)
+    return status, d
+
+
+def listed(station, id_):
+    return next(s for s in station.store.listing() if s["id"] == id_)
+
+
+def test_before_the_hub_sends_a_value_the_page_changes_speak_and_volume_as_before(hub):
+    assert st.live == {}
+    for id_ in ("speech", "volume"):
+        assert "readonly" not in listed(hub, id_) and "note" not in listed(hub, id_)
+    status, d = settings_post(hub, {"speech": False, "volume": 20})
+    assert status == 200
+    assert {s["id"]: s["value"] for s in d["settings"] if s["id"] in ("speech", "volume")} == {"speech": False, "volume": 20}
+
+
+def test_once_the_hub_sent_values_speak_and_volume_show_the_hubs_values_read_only(hub):
+    post(hub, "/voice", {"speech": False, "volume": 77})
+    for id_, value in (("speech", False), ("volume", 77)):
+        row = listed(hub, id_)
+        assert row["value"] == value == st.voice_value(id_)           # the list never contradicts the value in force
+        assert row["readonly"] is True
+        assert row["note"] == "Speaking and volume are set on the Hub: Settings > Weigh Station voice."
+    assert "readonly" not in listed(hub, "beep") and "readonly" not in listed(hub, "panel_swap")
+
+
+def test_the_hello_values_lock_the_page_too(hub):
+    speech.apply_hello({"voice": {"speed": 90}})
+    assert listed(hub, "volume")["readonly"] is True and listed(hub, "speech")["readonly"] is True
+
+
+def test_a_page_change_of_speak_or_volume_is_refused_and_the_live_value_stands(hub):
+    post(hub, "/voice", {"speech": False, "volume": 77})
+    for body in ({"volume": 20}, {"speech": True}, {"volume": 77}):
+        status, d = settings_post(hub, body)
+        assert status == 409 and d == {"error": "set_on_hub", "message": "Speaking and volume are set on the Hub."}
     assert st.voice_value("volume") == 77 and st.voice_value("speech") is False
+    assert listed(hub, "volume")["value"] == 77 and listed(hub, "speech")["value"] is False
+    assert not hub.store.changed                                       # nothing was kept for them
+
+
+def test_a_refused_change_is_all_or_none_and_the_other_settings_still_change(hub):
+    post(hub, "/voice", {"volume": 77})
+    assert settings_post(hub, {"beep": False, "volume": 20})[0] == 409
+    assert listed(hub, "beep")["value"] is True                        # not even the beep
+    assert settings_post(hub, {"beep": False})[0] == 200
+    assert listed(hub, "beep")["value"] is False
+
+
+def test_a_page_session_is_refused_the_same_way(elsewhere):
+    ticket = elsewhere.access.new_ticket()
+    status, d, r = elsewhere.json("POST", "/session", {"ticket": ticket})
+    cookie = {"Cookie": r.getheader("Set-Cookie").split(";")[0], "Content-Type": "application/json"}
+    st.live["volume"] = 77                                             # what the Hub sent (the voice route is for the Hub)
+    status, d = settings_post(elsewhere, {"volume": 20}, cookie)
+    assert status == 409 and d["error"] == "set_on_hub"
+    assert st.voice_value("volume") == 77
 
 
 # ---- POST /voice/test

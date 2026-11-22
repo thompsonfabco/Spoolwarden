@@ -35,6 +35,11 @@ VOICE_TEXTS = {
     "bad_volume": _t("station_voice_bad_volume", "volume must be a whole number from 0 to 100."),
     "busy": _t("station_voice_busy", "The Weigh Station is in use. Try again when it is idle."),
     "off": _t("station_voice_off", "Speaking is switched off."),
+    # once the Hub has sent voice values the station page's Speak and Volume are read-only: the line beside them, and the
+    # sentence of the 409 `set_on_hub` that answers a change of either
+    "set_on_hub_note": _t("station_voice_set_on_hub_note",
+                          "Speaking and volume are set on the Hub: Settings > Weigh Station voice."),
+    "set_on_hub": _t("station_voice_set_on_hub", "Speaking and volume are set on the Hub."),
 }
 
 
