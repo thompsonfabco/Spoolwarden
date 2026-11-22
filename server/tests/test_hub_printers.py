@@ -805,7 +805,7 @@ return { links, addBtn, csv };
 
 def test_ev4b_mounts_printer_live_above_facts_and_stops_polling_and_camera_on_collapse_and_redraw(printers_hub, tmp_path):
     """EV4b phase 2 mounts window.printerLive(p) above facts(p, box), drops slotsBox/detailSlots, and stops polling and
-    camera sessions cleanly on detail collapse, re-open, table redraw, and leaving the section."""
+    camera sessions cleanly on detail collapse, re-open and leaving the section, and keeps the live view across a lock redraw."""
     live_js = (STATIC / "setup_printer_live.js").read_text(encoding="utf-8")
     url, _ = printers_hub
     script = PRE + UNLOCK + """
@@ -879,17 +879,20 @@ const callsWhileCollapsed = liveCalls() - callsAtCollapse;
 const createdBeforeReopen = created.length;
 x1.querySelector(".coll__expand").click();
 await until(() => created.length > createdBeforeReopen && liveCalls() > callsAtCollapse, "live resumed on reopen");
-// Table redraw (lock change) invokes live.stop() on old rows
-const stopBeforeRedraw = stopped.length;
+// Table redraw for a lock change (R83 22:10.3): the running live view is carried over by serial, neither stopped nor made again
+const stopBeforeRedraw = stopped.length, createdBeforeRedraw = created.length;
+const liveBeforeRedraw = det().querySelector(".plive");
 SW.setLock("locked");
-await until(() => stopped.length > stopBeforeRedraw, "live.stop on redraw");
+await until(() => rowOf("Workshop X1") !== x1, "the table redrawn");
+const keptOnRedraw = { stopped: stopped.length - stopBeforeRedraw, created: created.length - createdBeforeRedraw,
+  sameLive: rowOf("Workshop X1").querySelector(".plive") === liveBeforeRedraw && rowViews.get("00M00A000000001").live === liveBeforeRedraw };
 // Leave section invokes live.stop() and stops polling
 const stopBeforeLeave = stopped.length;
 location.hash = "#overview";
 await until(() => stopped.length > stopBeforeLeave, "live.stop on leaving printers");
 const callsAtLeave = liveCalls();
 await sleep(2400);
-return { beforeOpen, openState, callsWhileCollapsed, callsAfterLeave: liveCalls() - callsAtLeave,
+return { beforeOpen, openState, keptOnRedraw, callsWhileCollapsed, callsAfterLeave: liveCalls() - callsAtLeave,
   createdCount: created.length, stoppedCount: stopped.length };
 """
     page = _drive(url, tmp_path, script)
@@ -900,7 +903,8 @@ return { beforeOpen, openState, callsWhileCollapsed, callsAfterLeave: liveCalls(
     }, page
     assert page["callsWhileCollapsed"] == 0, page
     assert page["callsAfterLeave"] == 0, page
-    assert page["stoppedCount"] >= 3, page
+    assert page["keptOnRedraw"] == {"stopped": 0, "created": 0, "sameLive": True}, page
+    assert page["createdCount"] - len(page["beforeOpen"]["created"]) == 1 and page["stoppedCount"] == 4, page      # one made again on re-open; stopped: Workshop X1 on collapse, the three rows on leaving, none on the lock redraw
 
 
 def test_ev4b_falls_back_to_slots_box_when_printer_live_is_undefined(printers_hub, tmp_path):
