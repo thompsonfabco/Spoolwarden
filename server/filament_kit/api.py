@@ -1546,7 +1546,12 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         kf = getattr(printers, "klipper", None) if p is not None and p.family == "klipper" else None
         if kf is not None:
             return kf.return_spool(sm, p.serial, spool_id, grams=grams, rules=rules(), dry=dry)
-        return inventory.return_spool(sm, spool_id, grams=grams, rules=rules(), dry=dry)
+        out = inventory.return_spool(sm, spool_id, grams=grams, rules=rules(), dry=dry)
+        if p is not None and p.family == "klipper":     # its family is not running: the Hub's record is all that changed
+            log.warning("return: spool %s was in a slot of Klipper printer %s, which cannot be told (the Klipper family is "
+                        "not running); only the Hub's record changed", spool_id, p.serial)
+            out["printer_notified"] = False
+        return out
 
     @_authed
     async def spool_return(request: Request):

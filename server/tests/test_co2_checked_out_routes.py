@@ -223,6 +223,21 @@ def test_a_spool_in_a_klipper_slot_goes_back_through_the_klipper_family(sm, prin
         assert len(klipper.calls) == 1
 
 
+def test_a_klipper_slot_with_no_klipper_family_says_the_printer_was_not_told(sm, printers, store, caplog):  # noqa: F811
+    app = create_app(sm, printers=family.Printers(bambu=FakeBambu(), klipper=None), camera_hub=object(), mapper=object(),
+                     enabled_modules=frozenset({"server", "printers"}))
+    with TestClient(app, raise_server_exceptions=False) as client:
+        client.headers.update(_auth())
+        sk = _opened(sm, 600, name="On the Sovol")
+        sm.patch(f"spool/{sk['id']}", {"location": "Big Sovol – T0", "extra": {**(sk.get("extra") or {}), **inventory.prev_extra("Rack 2", SINCE)}})
+        with caplog.at_level("WARNING"):
+            r = client.post(f"/api/spools/{sk['id']}/return", json={})
+        assert r.status_code == 200 and r.json()["location"] == "Rack 2" and r.json()["printer_notified"] is False
+        assert "cannot be told" in caplog.text
+        bambu = _out(sm, name="On the H2D")             # a spool that was not in a Klipper slot says nothing of it
+        assert "printer_notified" not in client.post(f"/api/spools/{bambu['id']}/return", json={}).json()
+
+
 # ---------- PATCH home ----------
 
 def test_the_home_edit_previews_then_saves_and_has_no_event(c, sm):

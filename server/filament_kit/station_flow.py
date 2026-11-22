@@ -187,7 +187,8 @@ def returned_answer(name: str, out: dict, grams=None, dry: bool = False) -> dict
     title = TEXT_WOULD_RETURN if dry else TEXT_RETURNED
     return {"location": where, "speak": SAID_RETURNED_TO.format(location=where) if where else SAID_RETURNED,
             "display": [_ascii(title)[:TITLE_WIDTH], *[_ascii(r)[:DISPLAY_WIDTH] for r in rows]],
-            **({"event_id": out["event_id"]} if out.get("event_id") is not None else {})}
+            **({"event_id": out["event_id"]} if out.get("event_id") is not None else {}),
+            **({"printer_notified": False} if out.get("printer_notified") is False else {})}
 
 
 def return_spool(sm, rules: dict, body: dict, returner=None) -> dict:
