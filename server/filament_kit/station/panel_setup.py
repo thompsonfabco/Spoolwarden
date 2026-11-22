@@ -23,7 +23,7 @@ from typing import Callable, Iterator
 from .. import config
 from . import state as st
 
-# The two set-up lines the panel's firmware accepts over USB (firmware 13 and later, WL2: the contract it is
+# The two set-up lines the panel's firmware accepts over USB (firmware 14 and later, WL2: the contract it is
 # built against). Each is one line ending in a newline; the panel answers with `OK` or `ERR <reason>`.
 # The name and password go as the hex of their UTF-8 bytes, so a space or any other character cannot break the line.
 LINE_WIFI = "CFG WIFI {ssid_hex} {password_hex}"
@@ -31,7 +31,7 @@ LINE_LINK = "CFG LINK {address} {port} {fingerprint} {token}"
 LINE_CLEAR = "CFG CLEAR"                  # `--off`: the panel forgets all of it (best effort; the token is gone anyway)
 REPLY_OK = "OK"
 REPLY_ERR = "ERR"
-MIN_FIRMWARE = 13                         # the first panel firmware with Wi-Fi (12 is the shipped USB-only one)
+MIN_FIRMWARE = 14                         # the first panel firmware with Wi-Fi (13, the shipped one, is USB-only)
 MAX_ADDRESS = 64                          # characters; the panel's line holds 256 and answers `ERR long`, never truncates
 MAX_UNASKED = 50                          # unasked lines (AIR, P, ...) skipped while waiting for OK or ERR
 # the panel's own lines that may arrive between a set-up line and its answer
@@ -108,7 +108,7 @@ def setup_lines(*, ssid: str, password: str, address: str, port: int, fingerprin
 
 
 def check_version(version: str | None) -> None:
-    """PanelSetupError unless the panel's firmware version (its HELLO's, as the caller read it) is 13 or later."""
+    """PanelSetupError unless the panel's firmware version (its HELLO's, as the caller read it) is 14 or later."""
     m = re.match(r"\d+", str(version or "").strip())
     if not m or int(m.group()) < MIN_FIRMWARE:
         raise PanelSetupError(TEXT_FIRMWARE_OLD)
@@ -216,7 +216,7 @@ def _set_link(link: str, port: int | None = None) -> None:
 
 def enable(send: Callable[[str | None], str], *, version: str | None, ssid: str, password: str, address: str, port: int, fingerprint: str,
            folder: Path | None = None) -> dict:
-    """Set the panel up for Wi-Fi. `version` is the panel's firmware version (13 or later). `send(line)` writes one line to
+    """Set the panel up for Wi-Fi. `version` is the panel's firmware version (14 or later). `send(line)` writes one line to
     the panel over USB (None: writes nothing) and returns the next line the panel sends, "" after 5 s. With a new
     token the two set-up lines go to the panel; when it answers OK to both, the token is kept in the station's state and
     `station.panel_link` becomes `wifi` (with `station.panel_port`). Any refusal leaves the config and the token as they

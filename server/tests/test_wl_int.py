@@ -30,7 +30,7 @@ def set_up():
         lines.append(line)
         return ps.REPLY_OK
 
-    ps.enable(send, version="13", fingerprint=net.fp, **SETUP)
+    ps.enable(send, version="14", fingerprint=net.fp, **SETUP)
     return re.fullmatch(r"CFG LINK \S+ \d+ [0-9a-f]{64} ([0-9a-f]{32})", lines[1]).group(1)
 
 
@@ -135,11 +135,11 @@ def test_the_write_is_not_held_up_while_a_read_waits_and_no_delay_is_set():
 def test_a_usb_search_that_finds_nothing_keeps_the_facts_of_a_wifi_panel(monkeypatch):
     from filament_kit.station import panel, speech
     connect()
-    assert (st.ports["panel_version"], st.ports["panel_chip"]) == ("13", "esp32c3")
+    assert (st.ports["panel_version"], st.ports["panel_chip"]) == ("14", "esp32c3")
     st.ports["panel_nfc"] = "pn532"
     monkeypatch.setattr(st, "panel_ttys", lambda: [])
     assert panel.find_panel() is None
-    assert (st.ports["panel_version"], st.ports["panel_chip"], st.ports["panel_nfc"]) == ("13", "esp32c3", "pn532")
+    assert (st.ports["panel_version"], st.ports["panel_chip"], st.ports["panel_nfc"]) == ("14", "esp32c3", "pn532")
     heard = []
     monkeypatch.setattr(panel, "send_volume", lambda: heard.append(1))
     speech.apply_voice({"volume": 50})                       # speech.py: the C3 panel is told its volume
@@ -148,7 +148,7 @@ def test_a_usb_search_that_finds_nothing_keeps_the_facts_of_a_wifi_panel(monkeyp
 
 def test_a_usb_search_with_no_panel_at_all_still_clears_the_facts(monkeypatch):
     from filament_kit.station import panel
-    st.ports["panel_version"], st.ports["panel_chip"], st.ports["panel_nfc"] = "13", "esp32c3", "pn532"
+    st.ports["panel_version"], st.ports["panel_chip"], st.ports["panel_nfc"] = "14", "esp32c3", "pn532"
     monkeypatch.setattr(st, "panel_ttys", lambda: [])
     assert panel.find_panel() is None
     assert (st.ports["panel_version"], st.ports["panel_chip"], st.ports["panel_nfc"]) == (None, None, None)

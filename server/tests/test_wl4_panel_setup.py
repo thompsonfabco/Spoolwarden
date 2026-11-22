@@ -15,7 +15,7 @@ from filament_kit.station import panel_setup as ps
 PASSWORD = "hunter2-wifi-pass"
 SSID = "Workshop net"
 FP = "ab" * 32
-GOOD = dict(version="13", ssid=SSID, password=PASSWORD, address="192.168.1.20", port=5004, fingerprint=FP)
+GOOD = dict(version="14", ssid=SSID, password=PASSWORD, address="192.168.1.20", port=5004, fingerprint=FP)
 
 
 @pytest.fixture
@@ -129,7 +129,7 @@ def test_a_panel_that_does_not_answer_changes_nothing(env):
     assert ps.stored_token() is None and config.load()["station"]["panel_link"] == "usb"
 
 
-@pytest.mark.parametrize("change", [{"ssid": ""}, {"ssid": "x" * 33}, {"password": "short"}, {"address": "a b"}, {"address": "h" * 65}, {"password": "p" * 64}, {"version": "12"}, {"version": None},
+@pytest.mark.parametrize("change", [{"ssid": ""}, {"ssid": "x" * 33}, {"password": "short"}, {"address": "a b"}, {"address": "h" * 65}, {"password": "p" * 64}, {"version": "12"}, {"version": "13"}, {"version": None},
                                     {"port": 0}, {"port": 70000}, {"fingerprint": "12"}])
 def test_values_the_panel_cannot_take_are_refused_before_anything_is_sent(env, change):
     panel = Panel()

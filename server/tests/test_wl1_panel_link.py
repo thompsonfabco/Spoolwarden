@@ -32,7 +32,7 @@ class FakePanel:
     def send(self, line):
         self.sock.sendall(line if isinstance(line, bytes) else line.encode() + b"\n")
 
-    def hello(self, token=TOKEN, version="13", chip="esp32c3"):
+    def hello(self, token=TOKEN, version="14", chip="esp32c3"):
         self.send(f"HELLO intake-panel {version} {chip} {token}")
         return self
 
@@ -199,13 +199,13 @@ def test_the_stations_own_certificate_is_the_one_the_panel_pins():
 
 
 def test_a_panel_with_the_token_is_taken_and_gets_the_lamps():
-    p = FakePanel(net.port).hello(version="13")
+    p = FakePanel(net.port).hello(version="14")
     assert p.until(b"V 50") is not None            # a C3 panel is told the volume
     assert p.until(b"L ") is not None
     assert wait(lambda: link() is not None)
-    assert link().wifi and link().panel_version == "13" and link().panel_chip == "esp32c3"
-    assert st.ports["panel_version"] == "13" and st.view()["panel"] == "wifi"
-    assert st.view()["panel_version"] == "13"
+    assert link().wifi and link().panel_version == "14" and link().panel_chip == "esp32c3"
+    assert st.ports["panel_version"] == "14" and st.view()["panel"] == "wifi"
+    assert st.view()["panel_version"] == "14"
 
 
 def test_the_panels_lines_reach_the_flow_and_the_station_writes_back(monkeypatch):
@@ -326,25 +326,25 @@ def test_a_panel_that_drops_and_returns_is_taken_again():
     assert wait(lambda: link() is not None)
     a.close()
     assert wait(lambda: link() is None and st.ports["panel_version"] is None) and st.view()["panel"] is None
-    b = connect(version="13")
-    assert link().panel_version == "13" and st.view()["panel"] == "wifi"
+    b = connect(version="14")
+    assert link().panel_version == "14" and st.view()["panel"] == "wifi"
     assert b.until(b"L ") is not None
 
 
 def test_a_panel_dialling_in_from_the_same_address_replaces_its_dead_link():
     a = connect()
     first = link()
-    b = connect(version="13")                        # a never noticed the drop: same address, still looks alive
+    b = connect(version="14")                        # a never noticed the drop: same address, still looks alive
     assert wait(lambda: link() is not first and link() is not None)
-    assert link().panel_version == "13" and a.closed()
-    assert st.ports["panel_version"] == "13"         # the old session's end does not clear the new one's state
+    assert link().panel_version == "14" and a.closed()
+    assert st.ports["panel_version"] == "14"         # the old session's end does not clear the new one's state
 
 
 def test_a_second_panel_from_another_address_is_refused_while_the_first_is_heard(monkeypatch):
     closed = []
     other = panel_net.Link(types.SimpleNamespace(settimeout=lambda t: None, setsockopt=lambda *a: None,
                                                   close=lambda: closed.append(1)),
-                           "10.9.9.9", "13", "esp32c3")
+                           "10.9.9.9", "14", "esp32c3")
     monkeypatch.setitem(st.panel, "ser", other)
     p = FakePanel(net.port).hello()
     assert p.line() == b"REFUSED busy" and link() is other and not closed
