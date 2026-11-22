@@ -252,6 +252,9 @@ class FakeScr:
     def keypad(self, flag):
         pass
 
+    def timeout(self, ms):
+        pass
+
     def get_wch(self):
         if not self.keys:
             if self.ctrl_c:
@@ -298,6 +301,19 @@ def test_the_cursor_row_is_drawn_reversed_and_a_dim_row_dim():
 def test_ctrl_c_in_the_full_screen_variant_is_a_keyboard_interrupt():
     with pytest.raises(KeyboardInterrupt):
         menu_ui.CursesUi(FakeScr([], ctrl_c=True), Curses).choose(menu())
+
+
+def test_a_read_that_times_out_is_tried_again_and_one_that_fails_at_once_is_not(monkeypatch):
+    clock = iter([0.0, menu_ui._KEY_WAIT / 1000, 10.0, 10.0])         # the first read waits its full time, the second fails at once
+    monkeypatch.setattr(menu_ui.time, "monotonic", lambda: next(clock))
+    scr = FakeScr([])
+    answers = iter([Curses.error("no input"), Curses.error("closed")])
+
+    def get_wch():
+        raise next(answers)
+    scr.get_wch = get_wch
+    with pytest.raises(Curses.error, match="closed"):
+        menu_ui.CursesUi(scr, Curses)._getkey()
 
 
 def test_the_cursor_of_a_screen_is_kept_when_it_is_drawn_again():

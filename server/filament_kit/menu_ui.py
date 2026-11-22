@@ -21,6 +21,7 @@ from __future__ import annotations
 import contextlib
 import os
 import sys
+import time
 from dataclasses import dataclass
 from typing import Callable
 
@@ -383,6 +384,9 @@ class NumberedUi:
 
 # ---------- the full-screen variant ----------
 
+_KEY_WAIT = 250                 # ms a read of the keyboard waits before Python may act on a signal
+
+
 class CursesUi:
     """The screen on a curses window. `stdscr` needs keypad, getmaxyx, erase, addstr, refresh and get_wch; `curses`
     is the module (or a stand-in with its A_REVERSE, A_BOLD, A_DIM and error)."""
@@ -417,8 +421,15 @@ class CursesUi:
         self.scr.refresh()
 
     def _getkey(self):
-        k = self.scr.get_wch()
-        return k
+        """The next key. The window reads with a timeout (`_start_curses`): each time it runs out, Python gets to run its
+        signal handlers, so a Ctrl-C that lands just before the read starts to block still ends the menu."""
+        while True:
+            started = time.monotonic()
+            try:
+                return self.scr.get_wch()
+            except self.cur.error:
+                if time.monotonic() - started < _KEY_WAIT / 2000:     # failed at once: not the timeout (a closed terminal)
+                    raise
 
     # the interface
     def choose(self, screen: Screen, show: bool = True) -> tuple:
@@ -609,6 +620,7 @@ def _start_curses(raw: bool):
         cur.noecho()
         cur.cbreak()
         scr.keypad(True)
+        scr.timeout(_KEY_WAIT)
         try:
             cur.curs_set(0)
         except cur.error:
