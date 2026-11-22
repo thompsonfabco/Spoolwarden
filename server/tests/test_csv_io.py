@@ -156,6 +156,33 @@ def test_export_printers_omits_secrets(isolated_state):
     assert ["", "klipper", "Voron 2.4", "", ""] in rows
 
 
+def test_export_printers_keeps_owner_chosen_names_as_typed(isolated_state):
+    """R559 3: a name with a dash, or one word, is the owner's: only an address or the serial is left out."""
+    registry.add_klipper("Ender-3", "192.0.2.50", 7125)
+    registry.add_klipper("Prusa-MK4", "192.0.2.52", 7125)
+    registry.add_klipper("Voron", "station.local", 7125)
+    registry.add_klipper("", "workshop-voron", 7125)                   # the name defaults to the host
+    registry.upsert(registry.Printer(serial="01P00A000000099", name="X1C-Garage", ip="192.0.2.51", configured=True))
+    mgr = SimpleNamespace(status=lambda serial: None)                  # PrinterManager.status: no report held yet
+    names = sorted(row[0] for row in _parse_csv(csv_io.export_csv("printers", printers_mgr=mgr))[1:])
+    assert names == ["", "Ender-3", "Prusa-MK4", "Voron", "X1C-Garage"]
+
+
+def test_export_printers_without_the_hubs_printers_reads_the_slots_from_spoolman(isolated_state, spoolman_url):
+    """R559 8: the command line's export (as root, no live printers) keeps the slot and spool columns: a slot's spool
+    is the one Spoolman holds at its location, as in a printer's status."""
+    registry.upsert(registry.Printer(serial="01P00A000000099", name="Workshop X1", ip="192.0.2.55", configured=True))
+    registry.add_klipper("Voron", "voron.local", 7125)
+    sm = Spoolman(spoolman_url)
+    fil = sm.post("filament", {"name": "Red PLA", "material": "PLA"})
+    a = sm.post("spool", {"filament_id": fil["id"], "location": "Workshop X1 – AMS A2"})
+    b = sm.post("spool", {"filament_id": fil["id"], "location": "Voron – T0"})
+    sm.post("spool", {"filament_id": fil["id"], "location": "Shelf"})
+    rows = _parse_csv(csv_io.export_csv("printers", sm=sm))
+    assert rows[1:] == [["Voron", "klipper", "", "T0", str(b["id"])],
+                        ["Workshop X1", "bambu", "", "A2", str(a["id"])]]
+
+
 def test_export_lines(isolated_state):
     lns = {
         "polymaker__polyterra_pla": lines_mod.Line(

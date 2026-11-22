@@ -30,12 +30,13 @@ import time
 
 import anyio
 
-from .. import config, hostaddr, release, updates
+from .. import config, csv_io, hostaddr, release, updates
 from ..bridge import ams, camera, mapping, registry
 from ..bridge.connection import PrinterOffline, UnknownPrinter
 from ..bridge.klipper import discovery
 from ..bridge.klipper.moonraker import Moonraker, MoonrakerError, Unauthorized
 from ..bridge.slottest import NoStatus, PrinterBusy
+from .texts import say
 
 # Map by loading filament (bridge/manual.py): (route, method, call)
 MANUAL_STEPS = [
@@ -135,14 +136,9 @@ def printers_csv(page) -> str:
     writer = csv.writer(output)
     writer.writerow(("name", "kind", "model", "slot", "spool"))
     for row, state in zip(rows, printer_states(page, rows), strict=True):
-        name, kind = row["name"], row["family"]
-        # Klipper defaults its name to the host, which may be a single DNS label and may have changed since.
-        label = re.sub(r" \d+$", "", name)
-        label = hostaddr.clean(re.sub(r"^(\[[^]]+\]|[^:]+):\d+$", r"\1", label))
-        address_name = ("." in label or "-" in label or hostaddr.is_literal(label)) and hostaddr.form_error(label) is None
-        if (address_name or label.casefold() in {row["ip"].casefold(), row.get("host", "").casefold()}
-                or (kind == "bambu" and name == row["serial"])):
-            name = ""
+        kind = row["family"]
+        # the kit's rule, so both exports name a printer alike (an address or the serial is never in the file)
+        name = csv_io.export_printer_name(row["name"], kind, row["serial"], (row["ip"], row.get("host", "")))
         printer = (cell(name), kind, cell(row["model"]))
         slots = [slot for unit in state["slots"] or [] for slot in unit["slots"]]
         if not slots:
@@ -223,7 +219,7 @@ def routes(page) -> list[tuple]:
             try:
                 info = Moonraker(host, port, key).info()
             except Unauthorized:
-                raise Refused(400, "Moonraker wants a valid API key", field="api_key") from None
+                raise Refused(400, say("hub_moonraker_bad_key"), field="api_key") from None
             except MoonrakerError:
                 return False
             return isinstance(info, dict) and isinstance(info.get("state"), str)

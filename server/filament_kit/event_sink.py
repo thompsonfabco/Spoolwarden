@@ -166,6 +166,13 @@ def current_actor() -> dict:
     return a or HUB
 
 
+def current_actor_or(default: dict | str) -> dict:
+    """`current_actor`, but `default` (a dict, or a bare type) when no `acting` block set one."""
+    if _actor.get():
+        return current_actor()
+    return {"type": default} if isinstance(default, str) else default
+
+
 def new_batch() -> str:
     return "b-" + secrets.token_hex(4)
 

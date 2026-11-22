@@ -121,7 +121,7 @@ def test_api_hub_mounted_for_viewer_and_never_lists_backup_folder(sm, monkeypatc
 # ---------- 3. 02.13 Auto cancels earlier queued reader taps on the same printer ----------
 
 def test_reader_auto_cancels_queued_tap_for_same_printer_only(env, monkeypatch):
-    pytest.importorskip("mcp")
+    # no importorskip("mcp"): the reader and this test need no MCP SDK, so the test runs (never skips) everywhere
 
     class FakeSM:
         def get(self, path):

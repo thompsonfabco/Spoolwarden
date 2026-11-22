@@ -24,6 +24,7 @@ import anyio
 
 from .. import config, getting_started, hubport, local_intake_install, local_reader, modules, redact, remote, setup_helper, share_corrections
 from ..spoolman import Spoolman, SpoolmanError
+from .texts import say
 
 
 def _history_use() -> dict:
@@ -150,7 +151,7 @@ def routes(page) -> list[tuple]:
     async def port_change(request, body):
         raw_port = body.get("port")
         if isinstance(raw_port, bool) or not isinstance(raw_port, (int, str)):
-            raise Refused(400, "give the port number", field="port")
+            raise Refused(400, say("hub_port_give"), field="port")
         text = str(raw_port).strip()
 
         def validate() -> int:

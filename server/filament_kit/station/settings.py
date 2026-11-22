@@ -181,7 +181,7 @@ class Store:
             pass
         except OSError as e:
             raise SettingsError(_t("station_settings_remove_failed",
-                                   "the station's own values could not be removed ({reason})",
+                                   "the Weigh Station's own values could not be removed ({reason})",
                                    reason=str(e.strerror or e))) from e
 
     # ---- values

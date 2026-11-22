@@ -1591,7 +1591,7 @@
     <string name="settings_catalog_token_hint">Lets the Filament Catalog download from a private repository, for example a GitHub token.</string>
     <string name="settings_catalog_token_remove">Remove token</string>
     <string name="settings_catalog_update">Update now</string>
-    <string name="settings_certificate_body">Port 80 on your router must reach this Hub while it runs. Spoolwarden never changes your firewall or router. Tag Readers set up for this Hub must be set up again.</string>
+    <string name="settings_certificate_body">Port 80 on your router must reach this Hub while it runs. Spoolwarden never changes your firewall or router.</string>
     <string name="settings_certificate_title">Get the certificate now?</string>
     <string name="settings_general_desc">The Hub\'s name and its Spoolman database.</string>
     <string name="settings_general_name">Display name</string>
@@ -1745,6 +1745,7 @@
     <string name="settings_restore_discard">Discard the upload</string>
     <string name="settings_restore_error_file">Choose the backup zip first.</string>
     <string name="settings_restore_error_large">The backup is larger than this page can take. Copy it to the Hub and run `sudo spoolwarden restore &lt;file>` there.</string>
+    <string name="settings_restore_encrypted_password">The password that opened it becomes this Hub\'s backup password if none is set.</string>
     <string name="settings_restore_file">Backup zip</string>
     <string name="settings_restore_first">Do step 1 first.</string>
     <string name="settings_restore_heading">Restore</string>
@@ -2447,8 +2448,8 @@
     <string name="spools_undo_refused">This changed again since, so it cannot be undone.</string>
     <!-- 1=reason -->
     <string name="spools_undo_failed">Could not undo: %1$s</string>
-    <string name="spools_events_title">Last ten events</string>
-    <string name="spools_events_none">Nothing recorded yet.</string>
+    <string name="spools_events_title">Latest events</string>
+    <string name="spools_events_none">Nothing has been recorded for this spool yet.</string>
     <string name="spools_events_error">Could not read the events.</string>
     <string name="spools_event_undone">undone</string>
     <string name="spools_download_csv">Download as CSV</string>
@@ -3353,7 +3354,7 @@
     <string name="cli_certificate_fingerprint">Fingerprint:</string>
     <!-- 1=name -->
     <string name="cli_certificate_issued">Certificate issued for %1$s.</string>
-    <string name="cli_certificate_made">Made a new certificate.</string>
+    <string name="cli_certificate_made">Made a new certificate. Tag Readers set up for this Hub must be set up again.</string>
     <!-- 1=reason -->
     <string name="cli_certificate_not_issued">The certificate was not issued: %1$s.</string>
     <string name="cli_certificate_present">Certificate present.</string>
@@ -4746,8 +4747,13 @@
     <string name="devices_setting_number">Enter a number from %1$s to %2$s.</string>
     <string name="devices_setting_number_any">Enter a number.</string>
     <string name="settings_reader_cert_fp">Certificate fingerprint</string>
-    <string name="settings_reader_cert_changed">The reader\'s certificate changed. Trust the new certificate to use this address.</string>
-    <string name="settings_reader_trust">Trust certificate</string>
+    <string name="settings_reader_cert_changed">The Label Reader\'s certificate changed.</string>
+    <string name="settings_reader_cert_old">Old fingerprint</string>
+    <string name="settings_reader_cert_new">New fingerprint</string>
+    <string name="settings_reader_trust">Trust the new certificate</string>
+    <string name="settings_reader_trust_title">Trust the new certificate of the Label Reader?</string>
+    <!-- 1=address -->
+    <string name="settings_reader_trust_body">The Hub accepts the certificate the Label Reader at %1$s shows now, in place of the one it saved. Do this only after the reader was reinstalled or moved.</string>
     <string name="settings_network_port_hint">443, or 1024 to 65535.</string>
     <string name="settings_network_port_empty">Enter a port number.</string>
     <string name="settings_catalog_other">Other</string>
@@ -4769,8 +4775,8 @@
     <string name="settings_catalog_entries_empty">You have no entries of your own yet.</string>
     <string name="settings_catalog_col_added">Added</string>
     <!-- 1=brand 2=name -->
-    <string name="settings_catalog_remove_title">Remove %1$s %2$s?</string>
-    <string name="settings_catalog_remove_body">This custom entry is removed from the catalog and slicer presets will be rebuilt.</string>
+    <string name="settings_catalog_remove_title">Remove %1$s %2$s from your own entries?</string>
+    <string name="settings_catalog_remove_body">Slicer presets are rebuilt.</string>
     <string name="settings_catalog_removed">Removed.</string>
     <string name="settings_catalog_entries_error">Could not load custom entries.</string>
     <string name="live_head">Live view</string>
@@ -4916,6 +4922,7 @@
     <string name="settings_restore_password_need">Enter the password of this backup.</string>
     <string name="settings_restore_wrong_password">Wrong password, or the file is damaged. Nothing was changed.</string>
     <string name="settings_restore_summary_encrypted">This backup is encrypted. Its contents are checked when the password is entered.</string>
+    <string name="settings_restore_summary_encrypted_line">Encrypted: the password that opened it becomes this Hub\'s backup password if none is set.</string>
     <!-- 1=reason -->
     <string name="analytics_error">Could not read the analytics%1$s</string>
     <string name="analytics_title">Analytics</string>
@@ -4987,7 +4994,7 @@
     <string name="station_page_settings">Settings</string>
     <!-- 1=mode -->
     <string name="station_page_page_from">Page access: %1$s</string>
-    <string name="station_page_page_from_subnets_note">If the network changes, run sudo spoolwarden modules apply on this Weigh Station.</string>
+    <string name="station_page_page_from_subnets_note">If this machine\'s network has changed, run: sudo spoolwarden features apply</string>
     <string name="station_page_save">Save</string>
     <string name="station_page_reset">Back to the installed values</string>
     <string name="station_page_saved">Saved.</string>
@@ -4999,14 +5006,26 @@
     <string name="station_page_last_weight">Last weight</string>
     <string name="station_page_panel">Panel</string>
     <string name="station_page_air">Air</string>
-    <string name="station_page_step">Intake step</string>
+    <string name="station_page_step">Step</string>
     <string name="station_page_version">Software version</string>
     <string name="station_page_none">none</string>
-    <string name="station_page_no_photo">No photo.</string>
     <string name="station_page_own_values">These settings differ from the installed values.</string>
-    <string name="station_page_on">On</string>
-    <string name="station_page_off">Off</string>
-    <string name="station_page_unreachable">The station did not answer.</string>
+    <string name="station_page_unreachable">The Weigh Station did not answer.</string>
+    <!-- 1=value 2=seconds -->
+    <string name="station_page_age">%1$s (%2$s s ago)</string>
+    <!-- 1=grams -->
+    <string name="station_page_grams">%1$s g</string>
+    <!-- 1=grams 2=status -->
+    <string name="station_page_scale_value">%1$s g, %2$s</string>
+    <!-- 1=panel 2=version -->
+    <string name="station_page_panel_firmware">%1$s (firmware %2$s)</string>
+    <!-- 1=temp 2=rh -->
+    <string name="station_page_air_value">%1$s °C, %2$s %%</string>
+    <!-- 1=step 2=message -->
+    <string name="station_page_step_message">%1$s: %2$s</string>
+    <string name="station_page_mode_home">Your home network</string>
+    <string name="station_page_mode_subnets">This machine\'s own networks</string>
+    <string name="station_page_mode_allowed">The allow-list only</string>
     <string name="station_step_pairing">Asking the Hub to pair</string>
     <string name="station_step_idle">Ready</string>
     <string name="station_step_lookup">Looking up a tag</string>
@@ -5017,6 +5036,15 @@
     <string name="station_step_saving">Saving</string>
     <string name="station_step_done">Saved</string>
     <string name="station_step_phone">Use the phone</string>
+    <string name="station_scale_fault">Fault</string>
+    <string name="station_scale_zero">At zero</string>
+    <string name="station_scale_moving">Settling</string>
+    <string name="station_scale_stable">Steady</string>
+    <string name="station_scale_negative">Below zero</string>
+    <string name="station_scale_overload">Too heavy for the scale</string>
+    <string name="station_scale_calibrate">Needs calibrating</string>
+    <string name="station_scale_re_zero">Needs zeroing</string>
+    <string name="station_scale_unit">Unknown unit</string>
     <string name="station_lamp_off">No lamp</string>
     <string name="station_lamp_yellow">Yellow lamp</string>
     <string name="station_lamp_red">Red lamp</string>
@@ -5038,12 +5066,15 @@
     <!-- 1=reason -->
     <string name="station_settings_save_failed">the settings could not be saved (%1$s)</string>
     <!-- 1=reason -->
-    <string name="station_settings_remove_failed">the station\'s own values could not be removed (%1$s)</string>
+    <string name="station_settings_remove_failed">the Weigh Station\'s own values could not be removed (%1$s)</string>
     <string name="station_refusal_forbidden">This address may not ask for that.</string>
     <string name="station_refusal_not_found">There is nothing here.</string>
     <string name="station_refusal_too_many_wrong_tickets">Too many wrong tickets from this address. Try again in a minute.</string>
     <string name="station_refusal_bad_request">The request is not valid.</string>
     <string name="station_refusal_too_big">The request is too big.</string>
+    <string name="station_refusal_too_many_waiting_tickets">Too many tickets are waiting. Try again in a minute.</string>
+    <string name="station_refusal_not_json">The request is not a JSON object.</string>
+    <string name="station_refusal_ticket_not_valid">That ticket is not valid.</string>
     <string name="station_not_pinned">The Weigh Station has not told the Hub its certificate yet. Update it: on that machine run sudo spoolwarden update.</string>
     <string name="reader_auto_say">Auto</string>
     <string name="reader_auto_queued">Auto: load any slot (waits 15 min)</string>
@@ -5053,6 +5084,10 @@
     <string name="auto_continue">Continue</string>
     <!-- 1=spool 2=slots -->
     <string name="auto_plan">%1$s goes into the slot where it appears (%2$s). The Hub waits up to 15 minutes.</string>
+    <!-- 1=spool 2=printer -->
+    <string name="auto_plan_load">Load %1$s into any slot of %2$s</string>
+    <!-- 1=slots -->
+    <string name="auto_plan_watching">Watching: %1$s</string>
     <!-- 1=spool -->
     <string name="auto_replaces">Replaces %1$s, which was waiting.</string>
     <!-- 1=spool 2=printer -->
@@ -5071,6 +5106,51 @@
     <string name="auto_slot_gone">That slot is no longer available for Auto.</string>
     <string name="auto_nothing_to_choose">There is no slot choice waiting on this printer.</string>
     <string name="auto_not_waiting">No Auto assignment is waiting on this printer.</string>
+    <string name="auto_the_spool">the spool</string>
+    <!-- 1=count -->
+    <string name="hub_backup_password_short">Backup password must be at least %1$d characters.</string>
+    <string name="hub_port_give">give the port number</string>
+    <!-- 1=name -->
+    <string name="hub_number_needed">%1$s must be a number</string>
+    <!-- 1=name 2=minimum -->
+    <string name="hub_number_minimum">%1$s must be %2$s or more</string>
+    <string name="hub_newest_with_since">newest cannot be combined with since</string>
+    <string name="hub_no_such_event">no such event</string>
+    <string name="hub_undo_spoolman_down">Spoolman cannot be reached for this undo</string>
+    <string name="hub_health_days">days must be 7 or 30</string>
+    <!-- 1=name -->
+    <string name="hub_unknown_export">unknown export set: %1$s</string>
+    <string name="hub_csv_too_large">the CSV file is larger than the page takes</string>
+    <string name="hub_csv_not_utf8">the CSV file must be UTF-8 text</string>
+    <string name="hub_library_check_fields">check the highlighted fields</string>
+    <string name="hub_library_missing_id">missing entry id</string>
+    <string name="hub_library_no_such_entry">no such custom catalog entry</string>
+    <string name="hub_slot_auto_reserved">\"auto\" is reserved for Automatic slot choice, not a slot label</string>
+    <string name="hub_slot_label_needed">slot must be a slot label</string>
+    <string name="hub_slot_label_invalid">slot must be a valid slot label</string>
+    <string name="hub_moonraker_bad_key">Moonraker wants a valid API key</string>
+    <string name="hub_start_hide_or_keep">give either hide or keep</string>
+    <string name="hub_start_hide_bool">hide must be true or false</string>
+    <string name="hub_start_not_saved">could not save the checklist state</string>
+    <string name="hub_start_keep_which">keep must be name, storage, or features</string>
+    <string name="kit_viewer_only_reads">a viewer token may only read Hub status, printers, spools and health</string>
+    <string name="kit_auto_reserved">\'auto\' is a reserved slot label</string>
+    <string name="kit_bad_hello">the certificate fingerprint, port or version is not valid, or this token is not a Weigh Station\'s</string>
+    <string name="kit_newest_minimum">newest must be 1 or more</string>
+    <string name="kit_no_such_event">no such event</string>
+    <string name="devices_station_allow_list_only">This Weigh Station answers only the addresses on its allow-list.</string>
+    <string name="station_call_address_unknown">the Hub does not know the Weigh Station\'s address</string>
+    <string name="station_call_cannot_prove">the Hub cannot prove itself to the Weigh Station: pair it again</string>
+    <string name="station_call_too_slow">the Weigh Station answers too slowly</string>
+    <string name="station_call_address_invalid">the Weigh Station address is not valid</string>
+    <string name="station_call_answer_too_large">the Weigh Station\'s answer is too large</string>
+    <!-- 1=kind -->
+    <string name="station_call_no_answer">the Weigh Station does not answer (%1$s)</string>
+    <string name="station_call_redirect">the Weigh Station answered with a redirect</string>
+    <string name="station_call_not_json">the Weigh Station did not answer with JSON</string>
+    <string name="station_call_answer_invalid">the Weigh Station\'s answer is not valid</string>
+    <string name="station_call_ticket_invalid">the Weigh Station\'s ticket is not valid</string>
+    <string name="station_call_photo_invalid">the Weigh Station\'s photo is not a JPEG picture</string>
     <!-- 1=slot -->
     <string name="event_title_slot_cleared">Slot %1$s cleared</string>
     <!-- 1=name 2=slot -->
@@ -5220,15 +5300,21 @@
     <string name="cli_activity_count_one">1 event in the last %1$s days.</string>
     <!-- 1=days -->
     <string name="cli_activity_empty">Nothing has been done in the last %1$s days.</string>
-    <string name="cli_activity_more">Showing the newest 200. Narrow it with --days, --who or --spool.</string>
+    <string name="cli_activity_empty_ever">Nothing has been done yet.</string>
+    <string name="cli_activity_more">Showing the first 1000. Narrow it with --days, --who or --spool.</string>
     <string name="cli_actor_cli">command line</string>
     <string name="cli_actor_connector">Claude connector</string>
     <string name="cli_actor_hub">The Hub</string>
     <string name="cli_actor_page">Hub page</string>
-    <string name="cli_backup_pw_removed">Backup password removed.</string>
-    <string name="cli_backup_pw_saved">Backup password saved.</string>
-    <string name="cli_backup_pw_set">Backup password is set.</string>
+    <string name="cli_backup_pw_removed">Removed the backup password.</string>
+    <string name="cli_backup_pw_remove_ask">Remove the backup password? New backups are plain again. Backups already made stay encrypted and need the password they were made with.</string>
+    <string name="cli_backup_pw_saved">Backup password set. Every backup is now encrypted.</string>
+    <string name="cli_backup_pw_short">use at least 10 characters.</string>
     <string name="cli_backup_pw_unset">Backup password is not set.</string>
+    <string name="cli_backup_pw_new">"New backup password, at least 10 characters: "</string>
+    <string name="cli_backup_pw_again">"New backup password again: "</string>
+    <string name="cli_backup_pw_mismatch">the two passwords do not match.</string>
+    <string name="cli_backup_pw_write_down">Write this password down. Without it these backups cannot be restored, and Spoolwarden cannot recover it.</string>
     <!-- 1=brand 2=name 3=material -->
     <string name="cli_catalog_add_ask">Add %1$s %2$s (%3$s)?</string>
     <string name="cli_catalog_add_done">Added. Slicer presets are rebuilt in a minute.</string>
@@ -5404,6 +5490,7 @@
     <string name="cli_undo_ask">Undo it?</string>
     <string name="cli_undo_done">Put back.</string>
     <string name="cli_undo_none">Nothing has been changed from the command line in the last 7 days.</string>
+    <string name="cli_undo_newest_cannot">The newest change from the command line cannot be undone: it was already undone, or it is not one that can be undone. To pick another one, run spoolwarden activity, then spoolwarden undo &lt;number>.</string>
     <!-- 1=id -->
     <string name="cli_undo_not_found">there is no event %1$s.</string>
     <!-- 1=value -->

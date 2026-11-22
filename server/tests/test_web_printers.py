@@ -1405,8 +1405,10 @@ def test_the_printer_page_has_load_a_spool_the_notice_and_automatic_first():
         assert words in js, words
     assert "sheetAsk" not in js[js.index("async function autoStop"):js.index("async function autoChoose")]          # Stop waiting does not ask
     app = (STATIC / "app.js").read_text(encoding="utf-8")
-    for words in ("p.auto_possible", 'let chosen = "auto"', 'value: "auto", label: tt("auto_option")', 'name: "spools-target"', 'sl.label === "auto"', "SW.segmented("):
+    for words in ("p.auto_possible", "const autoRow = pickRow(", 'aria-current", "true"', "plan(p, { label: \"auto\" })", "plan(p, sl)"):
         assert words in app, words
+    # R83 01:06 point 2: no step in front of the slot list, so no segmented control with a Continue that a named slot would need
+    assert 'name: "spools-target"' not in app and "let chosen" not in app
 
 
 @pytest.mark.parametrize("refusal", [
@@ -1436,6 +1438,9 @@ const h = (tag, props, ...children) => ({
   tag, ...props, children, replaceChildren(...kids) { this.children = kids; }, addEventListener() {},
 });
 const picker = { id: "P", auto_possible: true };
+const planned = [], grams = (g) => g, hexOf = (x) => x;
+const plan = (p, sl) => planned.push(sl.label);
+const pickRow = (kids, run) => ({ tag: "li", run, classList: { add() {} }, querySelector: () => ({ setAttribute() {} }) });
 const state = { printer: picker, status: { ams: [{ slots: [
   { label: "A1", spool: { id: 7, name: "PLA Red" } }, { label: "A2" },
 ] }] } };
@@ -1449,7 +1454,7 @@ const segments = [], calls = [];
 let sheet;
 const openHere = () => {};
 const SW = {
-  t, btn: (_, opts) => opts, field: () => ({}), sheet: (opts) => (sheet = { ...opts, isConnected: true }),
+  t, btn: (_, opts) => opts, field: () => ({}), swatch: () => ({}), icon: () => ({}), sheet: (opts) => (sheet = { ...opts, isConnected: true }),
   segmented: (opts) => { segments.push(opts); return h("fieldset"); },
   result: (line, kind, text) => Object.assign(line, { kind, text }),
   HubError: class extends Error { constructor(status, data) { super(); this.status = status; this.data = data; } },
@@ -1466,7 +1471,9 @@ const pj = async (path, body) => {
 """
     run = r"""
 (async () => {
-  await pickSlot(picker);
+  const stepList = await pickSlot(picker);
+  const rows = stepList[1].children;                     // Automatic first, then A1 and A2: one list
+  rows[2].run(); rows[0].run(); stepList[2].children[0].run();
   openLoad(null, {});
   await sheet.body.children[0].run();
   await new Promise(setImmediate);
@@ -1474,7 +1481,7 @@ const pj = async (path, body) => {
     await sheet.foot[1].run();
     await new Promise(setImmediate);
   }
-  console.log(JSON.stringify({ segments, calls, lines: sheet.body.children.filter((el) => el.kind), load: sheet.foot[1] }));
+  console.log(JSON.stringify({ planned, rowCount: rows.length, segments, calls, lines: sheet.body.children.filter((el) => el.kind), load: sheet.foot[1] }));
 })().catch((error) => { console.error(error); process.exitCode = 1; });
 """
     script = tmp_path / "auto_picker.js"
@@ -1483,11 +1490,11 @@ const pj = async (path, body) => {
     completed = subprocess.run([node, str(script)], capture_output=True, encoding="utf-8", timeout=60)
     assert completed.returncode == 0, completed.stderr
     out = json.loads(completed.stdout)
-    assert [(s["name"], s["value"]) for s in out["segments"]] == [
-        ("spools-target", "auto"), ("pload-target", "auto"), ("pload-target", "A1"),
-    ]
+    assert [(s["name"], s["value"]) for s in out["segments"]] == [("pload-target", "auto"), ("pload-target", "A1")]
     for segment in out["segments"]:
         assert segment["options"][1] == {"value": "A1", "label": "A1 · PLA Red"}
+    # the spool sheet's step: a slot row goes on at once (no Continue first), Automatic's row and Continue go on with Automatic
+    assert out["rowCount"] == 3 and out["planned"] == ["A2", "auto", "auto"]
     calls = [["P/slots/auto/load", {"spool_id": 9, "dry_run": True}]]
     if not during_dry_run:
         calls.append(["P/slots/auto/load", {"spool_id": 9, "dry_run": False}])

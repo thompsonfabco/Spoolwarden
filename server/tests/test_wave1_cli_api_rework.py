@@ -4,6 +4,7 @@ with a method the real KitApi lacks) and runs the root commands on the real modu
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 from pathlib import Path
 
@@ -91,16 +92,59 @@ def test_the_events_route_gives_the_newest_n_in_ascending_order():
     assert bad.status_code == 400 and bad.json()["error"] == "bad_request"
 
 
-def test_activity_shows_the_newest_200_and_says_so(capsys):
-    for n in range(1, 251):
+def _shown(out: str) -> list[int]:
+    return [int(m.group(1)) for m in re.finditer(r"^\s*(\d+)\s+\d{4}-\d\d-\d\d ", out, re.M)]
+
+
+def test_activity_without_days_shows_the_newest_50_newest_first(capsys):
+    """R86 22:35 point 4 (06 9.22): `newest=50`, not the newest 200 cut by 7 days. This test pinned the newest 200
+    before; it now pins the ruled behaviour."""
+    hub = HubApi(token())                                    # its pairing is an Activity event too: the oldest here
+    old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=30)
+    for n in range(1, 31):
+        _spool_moved(n, "cli", at=old)                       # older than 7 days: still among the newest 50
+    for n in range(31, 61):
         _spool_moved(n, "cli")
-    assert history_cli.cmd_activity(HubApi(token())) == 0
+    assert history_cli.cmd_activity(hub) == 0
     out = capsys.readouterr().out
-    shown = [int(m.group(1)) for m in re.finditer(r"^\s*(\d+)\s+\d{4}-\d\d-\d\d ", out, re.M)]
-    assert len(shown) == 200
-    last = events.store().last_id()
-    assert shown[0] == last and shown[-1] == last - 199
-    assert "Showing the newest 200." in out
+    shown, last = _shown(out), events.store().last_id()
+    assert shown == list(range(last, last - 50, -1))
+    assert "Showing" not in out and "in the last" not in out
+
+
+def test_activity_with_days_shows_from_that_time_oldest_first(capsys):
+    old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=30)
+    for n in range(1, 6):
+        _spool_moved(n, "cli", at=old)
+    recent = [_spool_moved(n, "cli")["id"] for n in range(6, 9)]
+    assert history_cli.cmd_activity(HubApi(token()), who="cli", days=7) == 0      # without the pairing's own event
+    out = capsys.readouterr().out
+    assert _shown(out) == recent
+    assert "3 events in the last 7 days." in out and "Showing" not in out
+
+
+def test_activity_with_days_stops_at_1000_and_says_so(capsys):
+    ids = events.write_many([{"kind": "spool.moved", "subject": {"type": "spool", "id": str(n)}, "actor": "cli",
+                              "data": {"spool": str(n), "before_location": "Shelf A", "after_location": f"Shelf {n}"}}
+                             for n in range(1, 1006)])
+    assert history_cli.cmd_activity(HubApi(token()), who="cli", days=7) == 0
+    out = capsys.readouterr().out
+    assert _shown(out) == ids[:1000]                                          # the first 1000, oldest first
+    assert "Showing the first 1000. Narrow it with --days, --who or --spool." in out
+
+
+def test_activity_with_nothing_to_show_says_the_ruled_line(capsys):
+    hub = HubApi(token())
+    assert history_cli.cmd_activity(hub, who="cli") == 0
+    assert capsys.readouterr().out == "Nothing has been done yet.\n"
+    assert history_cli.cmd_activity(hub, who="cli", days=3) == 0
+    assert capsys.readouterr().out == "Nothing has been done in the last 3 days.\n"
+
+
+def test_activity_parses_with_no_days_by_default():
+    parser = argparse.ArgumentParser()
+    history_cli.add_parser(parser.add_subparsers(dest="cmd"))
+    assert parser.parse_args(["activity"]).days is None
 
 
 # ---------- finding 5: what the command line writes is `cli` (D8) ----------
@@ -165,6 +209,21 @@ def test_export_writes_the_csv_of_csv_io_and_needs_root(capsys, monkeypatch, tmp
     assert rc == 3 and "administrator rights" in err
 
 
+def test_sudo_export_printers_keeps_the_slot_columns(capsys, spoolman_url):
+    """R559 8 / R597 (Antigravity's point): `sudo spoolwarden export printers` goes through the command line (no live printers) and
+    still lists a slot's spool, read from the spools' Spoolman locations."""
+    from filament_kit import spoolman
+    from filament_kit.bridge import registry
+    config.save({"spoolman_url": spoolman_url})
+    registry.add_klipper("Voron", "voron.local", 7125)
+    sm = spoolman.Spoolman(spoolman_url)
+    fil = sm.post("filament", {"name": "Red PLA", "material": "PLA"})
+    spool = sm.post("spool", {"filament_id": fil["id"], "location": "Voron – T0"})
+    rc, out, _ = run(capsys, ["export", "printers"])
+    rows = [line.split(",") for line in out.strip().splitlines()]
+    assert rc == 0 and ["Voron", "klipper", "", "T0", str(spool["id"])] in rows
+
+
 def test_import_sends_the_file_as_it_is_and_adds_the_rows(capsys, tmp_path):
     f = tmp_path / "in.csv"
     f.write_text(csv_io.export_csv("locations") + "Garage,,,,,,,\n", encoding="utf-8")
@@ -180,20 +239,164 @@ def test_report_is_collected_by_the_module(capsys, tmp_path):
     assert run(capsys, ["report", "--out", str(copy)])[0] == 0 and copy.read_text(encoding="utf-8").strip()
 
 
+SET_LINES = ("Write this password down. Without it these backups cannot be restored, and Spoolwarden cannot recover "
+             "it.\nBackup password set. Every backup is now encrypted.\n")
+
+
+def _words(text: str) -> str:
+    return " ".join(text.split())                          # the terminal width wraps the long line
+
+
+def _answer_yes(monkeypatch) -> list[str]:
+    """A terminal whose owner answers y; returns the questions it was asked."""
+    from filament_kit import output
+    asked = []
+    monkeypatch.setattr(output, "terminal", lambda *a, **k: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": asked.append(prompt) or "y")
+    return asked
+
+
 def test_backup_password_is_set_shown_and_removed_through_the_helper(capsys, monkeypatch):
+    """06 9.10, 7, 8.7 (R559 03 M4): this test pinned other texts before; it now pins the design's."""
     monkeypatch.setattr(secret_input, "ask", lambda prompt: "correct horse battery")
     assert run(capsys, ["backup", "password", "--show"])[1] == "Backup password is not set.\n"
-    assert run(capsys, ["backup", "password"])[1] == "Backup password saved.\n"
+    assert _words(run(capsys, ["backup", "password"])[1]) == _words(SET_LINES)
     assert backup.password_set() and backup.read_password() == "correct horse battery"
-    assert run(capsys, ["backup", "password", "--show"])[1] == "Backup password is set.\n"
-    assert run(capsys, ["backup", "password", "--remove"])[1] == "Backup password removed.\n"
+    assert run(capsys, ["backup", "password", "--show"])[1] == "correct horse battery\n"      # the password itself
+    asked = _answer_yes(monkeypatch)
+    out = run(capsys, ["backup", "password", "--remove"])[1]
+    assert out.endswith("Removed the backup password.\n") and asked                          # it asked first
+    assert "Remove the backup password?" in " ".join((out + " ".join(asked)).split())
     assert not backup.password_set()
 
 
-def test_a_password_that_is_too_short_is_refused_with_the_helpers_words(capsys, monkeypatch):
+def test_backup_password_is_typed_twice_with_the_designs_prompts(capsys, monkeypatch):
+    answers = iter(["correct horse battery", "correct horse battery"])
+    prompts = []
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: prompts.append(prompt) or next(answers))
+    assert history_cli.run_backup_password() == 0
+    assert prompts == ["New backup password, at least 10 characters: ", "New backup password again: "]
+    assert backup.read_password() == "correct horse battery"
+    out = capsys.readouterr().out
+    assert _words(out) == _words(SET_LINES) and out.endswith("\nBackup password set. Every backup is now encrypted.\n")
+
+
+def test_two_different_backup_passwords_are_refused(capsys, monkeypatch):
+    answers = iter(["correct horse battery", "correct horse batterY"])
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: next(answers))
+    assert history_cli.run_backup_password() == 2
+    assert "the two passwords do not match." in capsys.readouterr().err and not backup.password_set()
+
+
+def test_backup_password_remove_without_a_yes_changes_nothing(capsys, monkeypatch):
+    backup.write_password("correct horse battery")
+    from filament_kit import output
+    monkeypatch.setattr(output, "terminal", lambda *a, **k: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "n")
+    assert history_cli.run_backup_password(remove=True) == 5
+    assert backup.read_password() == "correct horse battery"
+
+
+def test_a_password_that_is_too_short_is_refused_with_the_designs_words(capsys, monkeypatch):
     monkeypatch.setattr(secret_input, "ask", lambda prompt: "short")
     rc, _, err = run(capsys, ["backup", "password"])
-    assert rc == 2 and "Backup password must be at least" in err and not backup.password_set()
+    assert rc == 2 and "use at least 10 characters." in err and not backup.password_set()
+
+
+def test_backup_password_from_the_command_line_is_recorded_as_cli(monkeypatch):
+    """R559 04 M1 (D8): the helper's settings.changed takes the actor of the command line, not a literal `page`."""
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: "correct horse battery")
+    with event_sink.acting("cli"):
+        assert history_cli.run_backup_password() == 0
+    ev = events.read(kinds="settings.changed")["events"][-1]
+    assert ev["actor"]["type"] == "cli" and ev["data"]["names"] == "backup_password"
+    from filament_kit import setup_helper
+    setup_helper._backup_password_remove({})                # a request over the helper socket: the Hub page
+    assert events.read(kinds="settings.changed")["events"][-1]["actor"]["type"] == "page"
+
+
+# ---------- R559 03 M3: plain undo finds the newest change that can be undone ----------
+
+def test_plain_undo_never_skips_to_an_older_change(capsys):
+    """D15: plain `undo` is for the newest change of this command line. Once that one is undone, a second plain `undo` finds the
+    compensating event as the newest and says so, naming `activity`; it does not undo the older change."""
+    sm = _Spoolman({1: {"id": 1, "location": "Shelf B", "archived": False},
+                    2: {"id": 2, "location": "Shelf B", "archived": False}})
+    first, second = _spool_moved(1, {"type": "cli"}), _spool_moved(2, {"type": "cli"})
+    hub = HubApi(token())
+    assert history_cli.cmd_undo(hub, lambda: sm, yes=True) == 0
+    assert events.store().get(second["id"])["undone"] is True
+    capsys.readouterr()
+    assert history_cli.cmd_undo(hub, lambda: sm, yes=True) == 0
+    out = capsys.readouterr().out
+    assert "cannot be undone" in out and "spoolwarden activity" in out and "spoolwarden undo <number>" in out
+    assert not events.store().get(first["id"]).get("undone")             # the older change is untouched
+    assert sm.spools[1]["location"] == "Shelf B" and sm.spools[2]["location"] == "Shelf A"
+
+
+def test_plain_undo_says_so_when_the_newest_change_is_not_undoable(capsys):
+    """D15: the newest command-line change is one the Hub does not undo (a settings change): the same sentence, nothing undone."""
+    sm = _Spoolman({1: {"id": 1, "location": "Shelf B", "archived": False}})
+    older = _spool_moved(1, {"type": "cli"})
+    events.write("settings.changed", "hub", {"type": "cli"}, {"group": "backup", "names": "password"})
+    assert history_cli.cmd_undo(HubApi(token()), lambda: sm, yes=True) == 0
+    out = capsys.readouterr().out
+    assert "cannot be undone" in out and "spoolwarden activity" in out
+    assert not events.store().get(older["id"]).get("undone") and sm.spools[1]["location"] == "Shelf B"
+
+
+# ---------- R559 03 M2: an automatic job is `hub` ----------
+
+def test_the_scheduled_update_is_recorded_as_the_hub(monkeypatch):
+    from filament_kit import updates
+    seen = []
+    monkeypatch.setattr(updates, "_update", lambda cfg, **kw: seen.append(event_sink.current_actor()["type"]) or 0)
+    with event_sink.acting("cli"):                          # cli.main wraps every command so
+        assert updates.update({}, scheduled=True) == 0
+        assert updates.update({}) == 0
+    assert seen == ["hub", "cli"]
+
+
+# ---------- R559 03 M6: `status` without sudo asks the root helper about backups ----------
+
+def test_the_backup_step_asks_the_root_helper_when_the_folder_is_closed(monkeypatch):
+    import os
+    (backup.backups_dir() / "2026-11-21.tar.gz").write_bytes(b"x")       # there, but this user may not list it
+    monkeypatch.setattr(os, "access", lambda p, mode, **k: False)
+    asked = []
+    for last, want in (("2026-11-21 03:00", True), (None, False)):
+        helper = lambda req, last=last: asked.append(req["op"]) or {"ok": True, "status": 200, "last": last}  # noqa: E731
+        assert getting_started._backup_made(helper) is want
+    assert asked == ["backup_last", "backup_last"]
+    steps = {s["id"]: s for s in getting_started.view()["steps"]}           # `status`: no backup_done given
+    assert steps["backup"]["state"] != "done"                               # no helper here: open, and no error
+
+
+def test_the_backup_step_lists_the_folder_it_can_read():
+    def no_helper(req):
+        raise AssertionError("the helper was asked although the folder can be read")
+    assert getting_started._backup_made(no_helper) is False
+    (backup.backups_dir() / "2026-11-21.tar.gz").write_bytes(b"x")
+    assert getting_started._backup_made(no_helper) is True
+
+
+# ---------- R559 02 L7: the nightly backup fails closed ----------
+
+def test_the_nightly_encrypt_fails_closed_when_the_password_file_cannot_be_read(tmp_path, monkeypatch):
+    src, dst = tmp_path / "a.tar.gz", tmp_path / "a.tar.gz.enc"
+    src.write_bytes(b"archive")
+    assert backup.nightly_encrypt(src, dst) == 2                          # no password: plain, as before
+    backup.write_password("correct horse battery")
+    real = Path.read_text
+
+    def unreadable(self, *a, **k):
+        if self == backup.password_path():
+            raise PermissionError(13, "Permission denied")
+        return real(self, *a, **k)
+    monkeypatch.setattr(Path, "read_text", unreadable)
+    assert backup.nightly_encrypt(src, dst) == 1 and not dst.exists()   # never "no password" (2): no plain archive
+    monkeypatch.setattr(Path, "read_text", real)
+    assert backup.nightly_encrypt(src, dst) == 0 and dst.read_bytes() != b"archive"
 
 
 # ---------- finding 7 and 10 and 11: Auto on the command line ----------

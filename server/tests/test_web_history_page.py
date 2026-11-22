@@ -34,6 +34,11 @@ const window = {};
   out.firstToast = [toasts[0][0], toasts[0][2].label];
   await toasts[0][2].run();
   out.afterUndo = { calls: calls.slice(), toast: toasts[1], done };
+  // D1: the Hub answers the NEWEST events oldest first; the fallback Undo is for the last one, never an older one
+  toasts.length = 0; calls.length = 0;
+  answers = { activity: { events: [{ id: 40, undo: { possible: true } }, { id: 44, undo: { possible: true } }] }, "events/N/undo": { undone: true } };
+  await offerUndo(5, "z"); await toasts[0][2].run();
+  out.newestUndo = calls.map((c) => c[0]);
   // an answer that names its event (event_id): no question to the Hub, Undo posts that event
   toasts.length = 0; calls.length = 0;
   answers = { "events/N/undo": { undone: true } };
@@ -97,8 +102,9 @@ def _run(tmp_path, body):
 def test_undo_is_offered_only_when_the_hub_can_put_it_back(tmp_path):
     out = _run(tmp_path, _source())
     assert out["offered"] is True and out["firstToast"] == ["Moved to Shelf B.", "common_undo"]
-    assert out["afterUndo"]["calls"] == [["activity?subject=spool:5&limit=1", "GET"], ["events/41/undo", "POST"]]
+    assert out["afterUndo"]["calls"] == [["activity?subject=spool:5&newest=1", "GET"], ["events/41/undo", "POST"]]
     assert out["afterUndo"]["toast"][0] == "history_undo_put_back" and out["afterUndo"]["done"] == 1      # the spool is drawn again
+    assert out["newestUndo"] == ["activity?subject=spool:5&newest=1", "events/44/undo"]       # the last of the answer, not the first
     assert out["named"] is True and out["namedCalls"] == [["events/77/undo", "POST"]]
     assert out["notPossible"] is False and out["noEvents"] is False and out["noRoute"] is False and out["quiet"] == 0
     assert [t[0] for t in out["refusals"]] == ["history_undo_changed_since", "history_undo_failed", "history_undo_too_old"]
@@ -110,6 +116,9 @@ def test_a_spools_events_are_listed_with_who_and_a_put_back_mark(tmp_path):
     assert "Moved." in out["row"] and 'history_by{\\"who\\":\\"Pat phone\\"}' in out["row"]
     assert "history_undone" in out["undoneRow"] and "Weighed" in out["undoneRow"]
     assert out["listed"][0] is True and out["empty"] is True and out["none"] is False      # no route: no list, no error
+    js = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "activity?subject=spool:${id}&newest=10" in js and "limit=10" not in js and "limit=1`" not in js       # D1: the newest, shown newest first
+    assert ".slice().reverse()" in js[js.index("function historyBox"):js.index("// the downloads of a phone")]
 
 
 def test_the_downloads_and_by_month_are_wired_to_the_twins():

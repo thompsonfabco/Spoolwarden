@@ -173,10 +173,14 @@ function unlockRestore(opener) {
     } });
 }
 
+// the typed-word confirm (03 10.11): the summary in short, what a restore does, and for a backup from another machine and for an
+// encrypted one the sentence each needs
 function restoreAsk(s, opener) {
+  const para = (text) => h("p", { class: "dialog__text", textContent: text });
   return SW.ask({ kind: "typed", word: "restore", opener,
     title: SW.t("settings_restore_title"), text: SW.t("settings_restore_short", { host: s.host || SW.t("settings_restore_summary_other_hub"), created: s.created }),
-    body: h("p", { class: "dialog__text", textContent: SW.t("settings_restore_body") }), confirm: SW.t("settings_restore_confirm"),
+    body: h("div", {}, para(SW.t("settings_restore_body")), s.other_host ? para(SW.t("reader_setup_again")) : null,
+      s.encrypted ? para(SW.t("settings_restore_encrypted_password")) : null), confirm: SW.t("settings_restore_confirm"),
     run: async (values, { result }) => {
       let r = null;
       await needCode(async () => {
@@ -250,12 +254,13 @@ function restoreSteps() {
       s.replaces_data && h("p", {}, SW.status("needs_look", { small: true, text: SW.t("settings_restore_summary_replaces") })),
       s.other_host && h("p", {}, SW.status("note", { small: true, text: SW.t("settings_restore_summary_other_host") })),
       line("settings_restore_summary_code"),
-      h("p", { class: "mono", textContent: SW.t("settings_restore_summary_sha", { hash: s.sha256 }) })].filter(Boolean));
+      h("p", { class: "mono", textContent: SW.t("settings_restore_summary_sha", { hash: s.sha256 }) }),
+      s.encrypted && line("settings_restore_summary_encrypted_line")].filter(Boolean));
     actions.replaceChildren(
       s.needs_password
         ? SW.btn(SW.t("common_check"), { cls: "btn--primary", action: "unlock-backup", run: async (e) => {
           const unlocked = await unlockRestore(e.currentTarget);
-          if (unlocked) checked(unlocked);
+          if (unlocked) checked({ ...unlocked, encrypted: true });        // opened with its password: the summary and the confirm say so
         } })
         : SW.btn(SW.t("settings_restore_button"), { cls: "btn--danger", action: "restore", run: async (e) => {
           if (await restoreAsk(s, e.currentTarget)) { reset(); followApply(true); }

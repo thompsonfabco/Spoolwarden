@@ -580,12 +580,17 @@ WHOLE_TEXTS = {"here", "click here", "server", "station"}
 WHOLE_EDGE = " \t\r\n.,;:!?'\"\u2026\u2019()[]-"
 
 
+_DOTTED = re.compile(r"(?<![A-Za-z0-9])\.|\.(?![A-Za-z0-9])")    # a dot without a letter or digit on each side
+
+
 def _is_identifier(content):
-    """Single-token paths, URLs, and snake_case / dotted identifiers (no whitespace) are internal keys, not UI text."""
+    """Single-token paths, URLs, and snake_case / dotted identifiers (no whitespace) are internal keys, not UI text. A
+    dot counts only inside a dotted name ("local_intake.url", "updates/app.apk"): a word with a full stop ("Modules.")
+    or dots of its own ("Retry...") is a text."""
     s = content.strip()
     if not s or any(c.isspace() for c in s):
         return False
-    return s.startswith(("/", "#")) or "://" in s or "_" in s or "." in s
+    return s.startswith(("/", "#")) or "://" in s or "_" in s or ("." in s and not _DOTTED.search(s))
 
 
 def word_findings_in(content):
@@ -705,6 +710,9 @@ def test_plants_are_found():
     assert word_findings_in("Features, Colour, okay, hereby, Retrying") == []
     assert word_findings_in("local_intake") == [] and word_findings_in("/intake") == []
     assert word_findings_in("local_intake.url") == [] and word_findings_in("the local_intake failed") == ["intake"]
+    assert [word_findings_in(s) for s in ("Modules.", "Station.", "Presets.", "Retry...")] == \
+        [["module"], ['"station"'], ["presets"], ["retry"]]
+    assert word_findings_in("updates/filament-kit.apk") == [] and word_findings_in("Modules.json") == []
     assert [w for w, _ in word_findings('h("button", { textContent: "Modules" })', True)] == ["module"]
     assert [w for w, _ in word_findings('Text("OK")', False)] == ['"OK"']
 

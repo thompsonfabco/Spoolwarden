@@ -223,7 +223,8 @@ const hubWebMenuItem = () => ({ label: SW.t("start_open_web_app"), run: () => wi
 function pageHead(meta, actions) {
   for (const el of headParts) el.remove();
   if (webMenuTrigger) webMenuTrigger.remove();
-  if (S?.passphrase.web && (tabNow() !== "printers" || !S.printers.on)) {
+  // a section whose own menu is the page menu (data-page-menu: it holds Open the web app) gets no second one
+  if (S?.passphrase.web && (tabNow() !== "printers" || !S.printers.on) && !(actions && actions.querySelector("[data-page-menu]"))) {
     const label = SW.t("common_page_actions");
     webMenuTrigger = SW.iconBtn("more", label, {});
     SW.menu(webMenuTrigger, [hubWebMenuItem()], { label });

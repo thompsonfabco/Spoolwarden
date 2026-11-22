@@ -158,7 +158,7 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
             except ValueError:
                 data = None
             if not isinstance(data, dict):
-                self._error(400, "bad_request", "The request is not a JSON object.")
+                self._error(400, "bad_request", guard.TEXTS["not_json"])
                 return None
             return data
 
@@ -183,7 +183,7 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
                     return self._error(403, "forbidden")
                 ticket = access.new_ticket()
                 if ticket is None:
-                    return self._error(429, "too_many_waiting_tickets", "Too many tickets are waiting. Try again in a minute.")
+                    return self._error(429, "too_many_waiting_tickets")
                 return self._send(200, {"ticket": ticket, "expires_in": page.TICKET_SECONDS})
             if path == "/session":      # the page call: the ticket is the credential
                 address = guard.peer_address(self.client_address[0])
@@ -197,7 +197,7 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
                 sid = access.open_session(data.get("ticket"))
                 if sid is None:
                     wrong_tickets.wrong(address)
-                    return self._error(403, "forbidden", "That ticket is not valid.")
+                    return self._error(403, "forbidden", guard.TEXTS["ticket_not_valid"])
                 return self._send(200, {"ok": True}, {"Set-Cookie": page.cookie_header(sid)})
             if store is None:
                 return self._error(404, "not_found")

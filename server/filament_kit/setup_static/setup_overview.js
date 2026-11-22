@@ -46,8 +46,9 @@ function todoItems() {
   if (S.passphrase.web && !S.passphrase.set) todo.push(go("overview_todo_passphrase", "common_open_settings", "#settings/passphrase"));
   return todo;
 }
-function todoCard() {
-  const todo = todoItems();
+// `codeOnly`: while Getting started shows, only the setup-code row of the card stays drawn; the rest is the panel (R82 20:15.3)
+function todoCard(codeOnly) {
+  const todo = todoItems().filter((t) => !codeOnly || t.code);
   if (!todo.length) return null;
   return h("section", { class: "card overview__todo", "aria-labelledby": "overview-todo-title" },
     h("div", { class: "overview__head" }, h("h2", { id: "overview-todo-title", textContent: SW.t("overview_todo_title") }),
@@ -65,11 +66,18 @@ function tile(name, to, value, line, off) {
     h("span", { class: "tile__value" + (off ? " muted" : ""), textContent: off ? SW.t("common_switched_off") : null }, off ? null : value),
     off || !line ? null : h("span", { class: "tile__line muted", textContent: line })));
 }
+// whether the Getting started panel shows: its Next step then has Overview's one filled button (R82 20:15.1)
+let ovStartShown = false;
+const fieldsCls = () => (ovStartShown ? "" : "btn--primary");
 function overviewStart() {
-  const checklist = h("div"), todo = h("div", { hidden: true }, todoCard());
+  const checklist = h("div"), todo = h("div", {}, todoCard(true));
   gettingStartedCard(checklist, {
     hubName: S.server_name,
-    onChange: (r) => { todo.hidden = Boolean(r?.show); },
+    onChange: (r) => {
+      ovStartShown = Boolean(r?.show);
+      todo.replaceChildren(todoCard(ovStartShown) || "");
+      for (const b of document.querySelectorAll('[data-action="make-fields"]')) b.classList.toggle("btn--primary", !ovStartShown);
+    },
     api: async (body) => {
       if (body === undefined) return api("start");
       let answer;
@@ -163,7 +171,7 @@ function fixCell(r) {
   if (r.state === "ok") return null;
   if (r.action === "ensure_fields") {
     const box = boxFor("check:" + r.action);
-    return h("div", { class: "actions" }, SW.btn(SW.t("overview_make_fields"), { cls: "btn--primary", run: () => change(box, "fields", {}, (d) => say(box,
+    return h("div", { class: "actions" }, SW.btn(SW.t("overview_make_fields"), { cls: fieldsCls(), action: "make-fields", run: () => change(box, "fields", {}, (d) => say(box,
       d.made.length ? SW.t("overview_made_fields", { made: d.made.join(", ") }) : SW.t("overview_fields_present"), true)) }));
   }
   if (!r.fix) return null;

@@ -17,6 +17,7 @@ from starlette.responses import Response, StreamingResponse
 
 from .. import alerts_api, csv_io, event_sink, events, health, trusted, undo
 from ..spoolman import SpoolmanError
+from .texts import say
 
 EXPORT_SETS = (
     "usage",
@@ -59,9 +60,9 @@ def _parse_int(raw: str | None, name: str, *, minimum: int | None = None) -> int
     try:
         val = int(raw)
     except ValueError:
-        raise Refused(400, f"{name} must be a number", field=name) from None
+        raise Refused(400, say("hub_number_needed", name=name), field=name) from None
     if minimum is not None and val < minimum:
-        raise Refused(400, f"{name} must be {minimum} or more", field=name)
+        raise Refused(400, say("hub_number_minimum", name=name, minimum=minimum), field=name)
     return val
 
 
@@ -106,7 +107,10 @@ def routes(page) -> list[tuple]:
     async def activity(request, body):
         q = request.query_params
         since = _parse_int(q.get("since"), "since", minimum=0)
-        limit = _parse_int(q.get("limit"), "limit", minimum=1) or events.LIMIT_DEFAULT
+        newest = _parse_int(q.get("newest"), "newest", minimum=1)        # D1: the newest N, oldest first
+        if newest is not None and since is not None:
+            raise Refused(400, say("hub_newest_with_since"), field="newest")
+        limit = newest or _parse_int(q.get("limit"), "limit", minimum=1) or events.LIMIT_DEFAULT
         subject = (q.get("subject") or "").strip() or None
         actor = (q.get("actor") or "").strip() or None
         kinds = (q.get("kinds") or "").strip() or None
@@ -119,14 +123,14 @@ def routes(page) -> list[tuple]:
         try:
             event_id = int(raw_id)
         except (TypeError, ValueError):
-            raise Refused(404, "no such event") from None
+            raise Refused(404, say("hub_no_such_event")) from None
         actor = await page_actor(page, request)
         try:
             res = await anyio.to_thread.run_sync(_call_undo, page, event_id, actor)
         except LookupError as e:
-            raise Refused(404, str(e) or "no such event") from None
+            raise Refused(404, str(e) or say("hub_no_such_event")) from None
         except SpoolmanError:
-            raise Refused(502, "Spoolman cannot be reached for this undo") from None
+            raise Refused(502, say("hub_undo_spoolman_down")) from None
         except Exception as e:
             status = getattr(e, "status", None)
             code = getattr(e, "code", None) or getattr(e, "error", None)
@@ -142,7 +146,7 @@ def routes(page) -> list[tuple]:
         if days is None:
             days = 7
         if days not in (7, 30):
-            raise Refused(400, "days must be 7 or 30", field="days")
+            raise Refused(400, say("hub_health_days"), field="days")
         res = await anyio.to_thread.run_sync(health.health_view, days)
         return {"days": days, **res}
 
@@ -150,7 +154,7 @@ def routes(page) -> list[tuple]:
         token = await _require_get_code(page, request)
         set_name = request.path_params.get("set", "")
         if set_name not in EXPORT_SETS:
-            raise Refused(404, f"unknown export set: {set_name}")
+            raise Refused(404, say("hub_unknown_export", name=set_name))
         q = request.query_params
         params: dict = {}
         if "days" in q and q["days"] != "":
@@ -174,12 +178,12 @@ def routes(page) -> list[tuple]:
         raw_bytes = bytearray()
         async for chunk in request.stream():
             if len(raw_bytes) + len(chunk) > MAX_IMPORT_BYTES:
-                raise Refused(413, "the CSV file is larger than the page takes")
+                raise Refused(413, say("hub_csv_too_large"))
             raw_bytes.extend(chunk)
         try:
             raw_text = raw_bytes.decode("utf-8-sig")
         except UnicodeDecodeError:
-            raise Refused(400, "the CSV file must be UTF-8 text") from None
+            raise Refused(400, say("hub_csv_not_utf8")) from None
         dry_run = request.query_params.get("dry_run", "1").lower() not in ("0", "false", "no")
         actor = await page_actor(page, request)
         try:

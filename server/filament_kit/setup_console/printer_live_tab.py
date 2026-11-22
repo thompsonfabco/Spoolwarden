@@ -43,6 +43,7 @@ from starlette.responses import JSONResponse
 from .. import camera_ticket, config, inventory, storage
 from ..bridge import camera, family, loading, mapping, pending, registry, usage
 from ..bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, NoReply, PrinterOffline, UnknownPrinter
+from .texts import say
 from ..bridge.slottest import NoStatus, PrinterBusy
 from ..spoolman import Spoolman, SpoolmanError
 
@@ -240,7 +241,7 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
     def label_of(request: Request) -> str:
         label = request.path_params["label"]
         if is_auto_label(label):
-            raise Refused(400, '"auto" is reserved for Automatic slot choice, not a slot label', field="label", code="invalid_slot")
+            raise Refused(400, say("hub_slot_auto_reserved"), field="label", code="invalid_slot")
         if not LABEL.fullmatch(label):
             raise Refused(404, f"no slot {label!r}", code="not_found")
         return label
@@ -339,7 +340,7 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
             not_mapping(serial)
             mod = auto_mod()
             if mod is None:
-                raise Refused(409, "This printer has no slots the Hub can watch. Choose a slot.", code="auto_not_possible")
+                raise Refused(409, say("auto_not_possible"), code="auto_not_possible")
             try:
                 r = mod.default_store().start(page.printers, spoolman(), serial, spool_id, dry=dry)
             except ValueError as e:
@@ -354,10 +355,10 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
         serial = page._serial(request)
         slot = body.get("slot")
         if not isinstance(slot, str) or not slot.strip():
-            raise Refused(400, "slot must be a slot label", field="slot")
+            raise Refused(400, say("hub_slot_label_needed"), field="slot")
         slot = slot.strip()
         if is_auto_label(slot) or not LABEL.fullmatch(slot):
-            raise Refused(400, "slot must be a valid slot label", field="slot", code="invalid_slot")
+            raise Refused(400, say("hub_slot_label_invalid"), field="slot", code="invalid_slot")
 
         def run() -> dict:
             known(serial)
@@ -366,7 +367,7 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
             not_mapping(serial)
             mod = auto_mod()
             if mod is None:
-                raise Refused(409, "No spool is waiting to be chosen on this printer.", code="nothing_to_choose")
+                raise Refused(409, say("auto_nothing_to_choose"), code="nothing_to_choose")
             try:
                 return mod.default_store().choose(page.printers, spoolman(), serial, slot)
             except loading.SlotWriteFailed as e:
@@ -387,14 +388,14 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
             known(serial)
             mod = auto_mod()
             if mod is None:
-                raise Refused(409, "No spool is waiting to be loaded automatically on this printer.", code="not_waiting")
+                raise Refused(409, say("auto_not_waiting"), code="not_waiting")
             try:
                 r = mod.default_store().cancel(serial)
             except ValueError as e:
                 raise Refused(409, str(e), code="not_waiting") from e
             if isinstance(r, bool):
                 if not r:
-                    raise Refused(409, "No spool is waiting to be loaded automatically on this printer.", code="not_waiting")
+                    raise Refused(409, say("auto_not_waiting"), code="not_waiting")
                 return {"cancelled": True}
             return r if isinstance(r, dict) else {"cancelled": True}
         r = await call(run)

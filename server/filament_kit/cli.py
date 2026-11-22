@@ -105,7 +105,7 @@ def cmd_status(client_factory, station_pairing: str | None = None) -> int:
     if hub and not _is_root() and not _no_systemd():
         from . import setup_page
         try:
-            backup_done = bool(setup_page.HelperClient()({"op": "last_backup"}).get("last"))
+            backup_done = bool(setup_page.HelperClient()({"op": "backup_last"}).get("last"))
         except (OSError, setup_page.Refused):
             backup_done = None
     started = getting_started.view(backup_done=backup_done) if hub else None
@@ -430,13 +430,7 @@ def cmd_backup(action: str, out: str | None, days: int | None = None, *,
     if not _is_root():
         return output.need_sudo(_sudo_command(f"sudo spoolwarden backup {action}" + (f" {days}" if days else "")))
     if action == "password":
-        import inspect
-        if "yes" in inspect.signature(history_cli.run_backup_password).parameters:
-            return history_cli.run_backup_password(remove=remove, show=show, yes=yes)
-        pw = None
-        if not remove and not show:
-            pw = secret_input.ask("Backup password: ")
-        return history_cli.run_backup_password(remove=remove, show=show, password=pw)
+        return history_cli.run_backup_password(remove=remove, show=show, yes=yes)    # it asks twice itself when setting
     if action == "keep":
         try:
             r = setup_helper._backup_keep({"days": days})

@@ -69,8 +69,8 @@ const spSTUB = {
   spools_put_back: "Put back.",
   spools_undo_refused: "This changed again since, so it cannot be undone.",
   spools_undo_failed: "Could not undo: {reason}",
-  spools_events_title: "Last ten events",
-  spools_events_none: "Nothing recorded yet.",
+  spools_events_title: "Latest events",
+  spools_events_none: "Nothing has been recorded for this spool yet.",
   spools_events_error: "Could not read the events.",
   spools_event_undone: "undone",
   spools_download_csv: "Download as CSV",
@@ -95,6 +95,9 @@ const spE = (tag, cls, ...kids) => {
   return spX(tag, { class: cls, ...props }, ...kids);
 };
 const spName = (v) => [v.vendor, v.name].filter(Boolean).join(" ") || tx("spools_unnamed");
+// who did it: the actor's name, else the Hub's word for its type (the Logs' Who words), never a raw type
+const SP_WHO = { page: "activity_who_page", cli: "activity_who_cli", hub: "activity_who_hub", device: "activity_who_device", connector: "activity_who_connector" };
+const spWho = (actor) => (actor && actor.name) || SW.t(SP_WHO[actor && actor.type] || "activity_who_unknown");
 const sphexOf = (v) => (/^[0-9A-Fa-f]{6}$/.test(v.color_hex || "") ? "#" + v.color_hex : "");
 const num = (n) => (typeof n === "number" && Number.isFinite(n) ? n : null);
 const grams = (n) => (num(n) == null ? null : Math.round(n * 10) / 10);
@@ -419,16 +422,17 @@ function detail(v0, view, id) {
     done: () => tx("spools_done_empty"),
     toast: (r) => tx("spools_toast_empty", { name: spName(r.spool), id: r.spool.id }) }));
 
-  // the last ten events of this spool (R84 2.2): read when the detail first opens, and again after each change
+  // the latest events of this spool (R84 2.2; 03 16.3): the newest ten (D1: `newest`, answered oldest of them first), shown newest
+  // first; read when the detail first opens, and again after each change. Who and what are the Hub's words, never an id
   const eventsBox = spE("div", "spools-events");
   let asked = false;
   view.events = async (again) => {
     if (!hubHasHistory("activity") || (asked && !again)) return;
     asked = true;
     let r;
-    try { r = await api(`activity?subject=${encodeURIComponent("spool:" + v0.id)}&limit=10`); } catch { eventsBox.replaceChildren(spE("p", "muted", tx("spools_events_error"))); return; }
-    const list = (r.events || []).slice(0, 10), who = (ev) => (ev.actor && (ev.actor.name || ev.actor.type)) || "";
-    eventsBox.replaceChildren(list.length ? spKv(list.map((ev) => [when(ev.at), [ev.text || ev.title || ev.kind, who(ev) ? " · " + who(ev) : "", ev.undone ? ` (${tx("spools_event_undone")})` : ""].join("")]))
+    try { r = await api(`activity?subject=${encodeURIComponent("spool:" + v0.id)}&newest=10`); } catch { eventsBox.replaceChildren(spE("p", "muted", tx("spools_events_error"))); return; }
+    const list = (r.events || []).slice(-10).reverse();
+    eventsBox.replaceChildren(list.length ? spKv(list.map((ev) => [when(ev.at), [ev.text || ev.title || "", " · " + spWho(ev.actor), ev.undone ? ` (${tx("spools_event_undone")})` : ""].join("")]))
       : spE("p", "muted", tx("spools_events_none")));
   };
   const actions = (field, button, out) => spE("div", "spools-act", spE("div", "spools-act__row", field, button), out);

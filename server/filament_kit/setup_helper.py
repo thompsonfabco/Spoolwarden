@@ -353,8 +353,12 @@ def _not_applying() -> None:
 
 
 def _emit_settings_changed(**data: str) -> None:
+    """settings.changed by whoever made the change (D8): the command line calls these functions inside its own
+    `acting(cli)`; a request over the helper socket has no actor set, and it comes from the Hub page."""
+    from . import event_sink
+    actor = event_sink.current_actor_or("page")
     try:
-        events.write("settings.changed", "hub", "page", {k: v for k, v in data.items() if v is not None})
+        events.write("settings.changed", "hub", actor, {k: v for k, v in data.items() if v is not None})
     except (events.EventError, OSError):
         pass
 
