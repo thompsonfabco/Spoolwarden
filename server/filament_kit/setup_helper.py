@@ -1004,12 +1004,12 @@ def _reader_usb(req: dict) -> dict:
     if port is None and len(ports) > 1:
         raise Refused(409, "there are several ESP32 boards on this Hub's USB: pick one")
     _not_applying()
-    reader_flash.write_pending({"ssid": ssid, "pass": password, "buzzer": buzzer, "port": port or ports[0],
-                                "name": name})
     try:
+        reader_flash.write_pending({"ssid": ssid, "pass": password, "buzzer": buzzer, "port": port or ports[0],
+                                    "name": name})
         _start_job("reader_setup")
-    except Refused:
-        reader_flash.drop_pending()
+    except BaseException:
+        reader_flash.drop_pending()         # the Wi-Fi password is in the files: whatever failed, none stays
         raise
     return {"name": "reader_setup"}
 
