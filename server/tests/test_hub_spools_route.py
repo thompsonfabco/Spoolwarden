@@ -1,6 +1,6 @@
 """POST spools/{id} of the Hub page with Move > Automatic (`auto_location: true`), at the route, no browser: the page hands the placing
 to the kit's `edit_spool`, so a sealed spool lands where sealed spools go and an opened one in the first place for its material
-(R79), a dry run changes nothing, and a location together with auto_location is a 400 on `auto_location`."""
+, a dry run changes nothing, and a location together with auto_location is a 400 on `auto_location`."""
 from __future__ import annotations
 
 import httpx

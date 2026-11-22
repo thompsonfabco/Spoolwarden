@@ -1,4 +1,4 @@
-"""VO1 (R88 section 2): the Weigh Station's voice settings. Speaker and speed in both engines (piper-tts 1.8.0 `SynthesisConfig`
+"""VO1: the Weigh Station's voice settings. Speaker and speed in both engines (piper-tts 1.8.0 `SynthesisConfig`
 length scale 100 / speed and speaker id; espeak-ng words per minute 165 x speed / 100), the live values over the drop-in's,
 `POST /voice`, `POST /voice/test` and the `voice` of the hello answer (station/speech.py, state.py, http.py, server_api.py)."""
 from __future__ import annotations
@@ -170,7 +170,7 @@ def test_the_drop_in_values_speak_until_a_live_one_comes(espeak, monkeypatch):
 
 
 def test_the_environment_does_not_set_the_speaker_or_the_speed(monkeypatch):
-    """R88 2.5 (01:50): the speaker and the speed are never drop-in settings; only the Hub's live values move them."""
+    """The speaker and the speed are never drop-in settings; only the Hub's live values move them."""
     monkeypatch.setenv("STATION_VOICE_SPEAKER", "5")
     monkeypatch.setenv("STATION_VOICE_SPEED", "150")
     s = st.settings_from_env()
@@ -480,7 +480,7 @@ def test_the_station_says_the_test_sentence_end_to_end(hub, piper):
         assert w.getnframes() == 10
 
 
-# ---- R594: the texts are the catalogue's (D13)
+# ---- the texts are the catalogue's (D13)
 
 def _state_copy():
     """A second copy of station/state.py, read fresh, so its texts are resolved again against the page's catalogue."""
@@ -507,7 +507,7 @@ def test_the_voice_refusal_sentences_come_from_the_catalogue_with_the_english_as
     assert _state_copy().VOICE_TEXTS == {k: f"[{k}]" for k in english}  # a catalogue key wins
 
 
-# ---- R594 L2: the speed goes in steps of 10 at the station too
+# ---- the speed goes in steps of 10 at the station too
 
 @pytest.mark.parametrize("speed", [55, 51, 199, 101])
 def test_a_speed_off_the_steps_of_ten_is_refused(hub, speed):
@@ -527,7 +527,7 @@ def test_a_hello_speed_off_the_steps_is_skipped():
     assert st.live == {"volume": 10}
 
 
-# ---- R594 L5: a phrase's text and its own values are taken as one pair
+# ---- a phrase's text and its own values are taken as one pair
 
 def test_a_phrase_is_never_read_with_another_phrases_values(monkeypatch):
     class Racing(dict):
@@ -551,7 +551,7 @@ def test_a_phrase_is_never_read_with_another_phrases_values(monkeypatch):
     assert speech.next_phrase() == ("test sentence", {"volume": 90})
 
 
-# ---- R594 / R88 2.5 ruling: the routes need the pairing proof as /settings does
+# ---- the routes need the pairing proof as /settings does
 
 @pytest.mark.parametrize("path", ["/voice", "/voice/test"])
 def test_the_voice_routes_refuse_a_listed_address_with_no_proof(hub, path):

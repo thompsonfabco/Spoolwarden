@@ -16,7 +16,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** The Running low filter of Spools (R80 section 7). */
+/** The Running low filter of Spools. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchLowTest {
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())

@@ -1,4 +1,4 @@
-"""R596 (D13): the sentences of a failed call to the Weigh Station (station_client.StationCallError), which the Hub page shows, are
+"""D13: the sentences of a failed call to the Weigh Station (station_client.StationCallError), which the Hub page shows, are
 catalogue texts, not English literals in the code."""
 import ast
 import json

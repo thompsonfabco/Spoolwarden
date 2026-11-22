@@ -1,8 +1,8 @@
-"""R88 CO2: the checked-out routes of the kit API (`filter=checked_out` and `filters` on GET /api/spools, `POST /api/spools/{id}/return`,
+"""The checked-out routes of the kit API (`filter=checked_out` and `filters` on GET /api/spools, `POST /api/spools/{id}/return`,
 `home` on PATCH /api/spools/{id}), the Weigh Station's three (tag, save with `return`, `POST /api/station/return`) and the web
 app's twins. Real inventory over the fake Spoolman; the Klipper printer is a recorder.
 
-The command line's requests (R682, co7-spools-cli 607c9268) are replayed at the end: every field it reads must be in the answer."""
+The command line's requests (co7-spools-cli 607c9268) are replayed at the end: every field it reads must be in the answer."""
 from __future__ import annotations
 
 import json
@@ -162,7 +162,7 @@ def test_return_caller_rules(sm, printers, store):  # noqa: F811
 
 
 def test_return_and_home_have_the_callers_of_the_spools_move_and_weight(sm, printers, store):  # noqa: F811
-    """Pins the orchestrator's ruling (CO2 follow-up 1): `return` and the `home` change are for the callers of the existing spool
+    """Pins that `return` and the `home` change are for the callers of the existing spool
     move / weight route (PATCH /api/spools/{id}). Compared by running both for every kind of token. The one difference is the
     web token, which the kit route refuses (the web app writes a move and a weight in its own process, through its twin) while
     the Return twin must reach the Hub, which tells a Klipper printer: that is why return is in WEB_ROUTES (HOME_WEB_ROUTES
@@ -396,7 +396,7 @@ def test_save_with_return_that_loses_a_race_writes_no_weight(stc, sm, monkeypatc
 
 
 def test_save_with_return_keeps_the_returns_undo_possible_weighed_before_returned(stc, sm, store):  # noqa: F811
-    """R701: the weight is written under the return's lock, so spool.weighed comes before spool.returned and the return's Undo
+    """The weight is written under the return's lock, so spool.weighed comes before spool.returned and the return's Undo
     (the event_id the station answers) is not refused with changed_since."""
     from filament_kit import undo
     s = _out(sm, home="Rack 2", name="Undoable")
@@ -554,7 +554,7 @@ def test_the_editing_twin_changes_a_home_and_refuses_as_the_hub_does(sm, printer
         assert w.post(f"/intake/api/spools/{plain['id']}", json={"remaining": 450, "dry_run": False}, headers=ORIGIN).status_code == 200
 
 
-# ---------- the command line's requests (R682), replayed ----------
+# ---------- the command line's requests, replayed ----------
 
 def test_the_command_lines_requests_find_every_field_they_read(c, sm):
     s = _out(sm, home="Rack 1", name="Out one")

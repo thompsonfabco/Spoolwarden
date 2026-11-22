@@ -1,11 +1,11 @@
-// The Devices section (03 7): paired devices, the pairing dialog, Weigh Stations asking to pair, the web app on a phone and
+// The Devices section: paired devices, the pairing dialog, Weigh Stations asking to pair, the web app on a phone and
 // Tag Readers. Loaded after setup.js; everything from the server goes in through textContent, as there. Trusted computers
 // are in setup_trust.js. The pairing itself is the Hub's: nothing here makes a code or a token.
 "use strict";
 
 const DEVICES = "devices";       // the section's name in TABS; its catalogue keys start with it
-const ASK_EVERY = 5000;          // Weigh Stations asking to pair: read again this often while the section shows (03 7.3)
-const PAIR_EVERY = 3000;         // the pairing dialog asks for the new device this often (03 7.2)
+const ASK_EVERY = 5000;          // Weigh Stations asking to pair: read again this often while the section shows
+const PAIR_EVERY = 3000;         // the pairing dialog asks for the new device this often
 let devBlocks = 0;
 let devPairing = false;          // a pairing is being asked for: pressed again, it does nothing
 let devMaking = false;           // a reader token is being made: pressed again (or Enter held), it makes no second one
@@ -19,7 +19,7 @@ let devMetaEl = null;            // the line under the title, kept to change its
 let devTrusted = null;           // trusted computers listed, once read (null: not read, locked or off)
 let devQrUrls = [];
 
-// The words of this section's kind, version, Open and device detail (R83 section 9). Until the catalogue holds them (EV2 files
+// The words of this section's kind, version, Open and device detail. Until the catalogue holds them (EV2 files
 // them) the English shows here through devT; a catalogue text of the same key wins as soon as there is one.
 const DEV_EN = {
   devices_kind_phone: "Phone", devices_kind_pc: "Slicer Sync PC", devices_kind_station: "Weigh Station", devices_kind_web: "Web app", devices_kind_reader: "Tag Reader",
@@ -53,7 +53,7 @@ const devGroup = (code) => (code.length === 6 ? `${code.slice(0, 3)} ${code.slic
 // a catalogue text with `code` spans between backticks
 const devParts = (text) => text.split("`").map((p, i) => (i % 2 ? h("code", { class: "mono", textContent: p }) : p));
 
-// a block of code with Copy (02 7.7), as the log in Logs
+// a block of code with Copy, as the log in Logs
 function devCodeBlock(caption, text) {
   const id = "dev-code-" + ++devBlocks;
   return h("div", { class: "code" },
@@ -69,7 +69,7 @@ function devQr(svg, alt, keep) {
   return h("img", { class: "qr", alt, src: url });
 }
 
-// a collection (02 6.1): `cols` columns, one row group per item, each with the slot of its own result
+// a collection: `cols` columns, one row group per item, each with the slot of its own result
 const devHead = (col, label, prio) => h("div", { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": prio, textContent: label });
 const devActionsHead = () => h("div", { class: "coll__cell", role: "columnheader", "data-col": "actions" }, h("span", { class: "sr", textContent: SW.t("common_actions") }));
 const devCell = (col, prio, key, ...kids) => h("div", { class: "coll__cell", role: "cell", "data-col": col, "data-prio": prio },
@@ -98,7 +98,7 @@ function devWhenOpen(el, paint) {
 }
 document.addEventListener("sw:lock", () => { for (const p of devPlaces) if (p.el.isConnected) p.run(); else if (p.checked) devPlaces.delete(p); });
 
-// ----- the section header (02 2.1): the counts under the title, the pairings at the right -----
+// ----- the section header: the counts under the title, the pairings at the right -----
 function devMeta() {
   if (!devMetaEl || !S) return;
   const parts = [SW.t("devices_meta_paired", { count: S.devices.length }), SW.t("devices_meta_readers", { count: S.readers.list.length })];
@@ -120,7 +120,7 @@ function devHeader() {
 // the pairing of the Weigh Station on this Hub is the Hub's own job: it makes its own code and the job strip follows it
 const devPairHere = () => startJob(boxFor("pair"), "station_pair");
 
-// ----- the pairing dialog (03 7.2) -----
+// ----- the pairing dialog -----
 const PAIR_KINDS = {
   phone: { heading: "devices_pair_phone", text: "devices_pair_instruction_phone", print: "devices_pair_fingerprint_phone", back: "pair-phone" },
   pc: { heading: "devices_link_sync", text: "devices_pair_instruction_sync", print: "devices_pair_fingerprint_other", back: "link-sync" },
@@ -200,7 +200,7 @@ function devPairDialog(kind, first, known) {
     foot.replaceChildren(cancel);
   }
 
-  // every second: the bar and the minutes; at one minute and at zero the person hears it (02 7.8)
+  // every second: the bar and the minutes; at one minute and at zero the person hears it
   function count() {
     if (st.phase !== "waiting") return;
     const ms = left(), minutes = Math.max(1, Math.ceil(ms / 60000)), words = SW.t("qr_expires", { minutes });
@@ -277,8 +277,8 @@ function devPairDialog(kind, first, known) {
   if (first1) first1.focus();
 }
 
-// ----- Paired devices (03 7.2; R83 section 9): kind, version and out of date, Open, and the Tag Readers as rows -----
-// the sentence of an out-of-date row, from the table of R83 section 9.4 (the Hub gives the same one as `advice`)
+// ----- Paired devices (the design, Hub page): kind, version and out of date, Open, and the Tag Readers as rows -----
+// the sentence of an out-of-date row (the Hub gives the same one as `advice`)
 const devOod = (d) => (d.out_of_date && d.kind ? devT("devices_ood_" + d.kind, { version: d.version, newest: d.newest }) : null);
 // the line under a name: the kind and the version, "Version not known" when the device has not said; none for a pairing without a kind
 function devKindLine(d) {
@@ -299,7 +299,7 @@ function devRowFor(d) {
   const unpair = d.built_in || isReader ? null : SW.btn(SW.t("devices_unpair"), { cls: "btn--ghost", name: SW.t("devices_unpair_named", { name: d.name }), action: "unpair",
     run: () => asking(at, `devices/${encodeURIComponent(d.id)}/revoke`, destroy("devices_unpair_title", "devices_unpair_body", "devices_unpair", { name: d.name }),
       undefined, () => say(at, SW.t("devices_unpaired", { name: d.name }), true)) });
-  // Open: the detail the Hub page draws itself, at #devices/<id> (R83 9.6, 9.7, ruling of 21:18); a station's page is never served by the Hub
+  // Open: the detail the Hub page draws itself, at #devices/<id>; a station's page is never served by the Hub
   const open = SW.btn(devT("devices_open"), { name: devT("devices_open_named", { name: d.name }), action: "open", run: () => devDetail(d) });
   const kindLine = devKindLine(d), ood = devOod(d);
   return devRow(d.id, at, 4,
@@ -335,7 +335,7 @@ function pairCard() {
   return card(SW.t("devices_paired_title"), box, body);
 }
 
-// ----- a device's detail (R83 9.7), in a dialog: the facts of the row, and for a Weigh Station its status and settings -----
+// ----- a device's detail, in a dialog: the facts of the row, and for a Weigh Station its status and settings -----
 const devFact = (name, ...value) => h("div", { class: "kv__row" }, h("dt", { class: "kv__key", textContent: name }), h("dd", { class: "kv__value" }, ...value));
 const devSay = (v) => (v == null ? SW.t("common_unknown") : typeof v === "object" ? Object.entries(v).map(([k, x]) => `${k.replace(/_/g, " ")} ${devSay(x)}`).join(" · ") : String(v));
 const devLabel = (k) => { const w = String(k == null ? "" : k).replace(/_/g, " ").trim(); return w ? w[0].toUpperCase() + w.slice(1) : SW.t("common_unknown"); };
@@ -431,7 +431,7 @@ function devByAddress(list) {
   const d = id && id !== "pair" ? list.find((x) => x.id === id) : null;
   if (d && !document.querySelector("dialog[open]")) devDetail(d);
 }
-// The station's own page (ruling R83 21:22): its address as text and Open this station's page. The Hub asks the station for a
+// The station's own page: its address as text and Open this station's page. The Hub asks the station for a
 // one-time ticket (the page must be unlocked) and opens the answer in a new tab; it never fetches, frames or passes that page.
 function devOwnPage(d, address, pageFrom) {
   const res = h("p", { class: "result", role: "status" });
@@ -446,7 +446,7 @@ function devOwnPage(d, address, pageFrom) {
   }) });
   return h("div", { class: "devdetail__page" }, h("p", { class: "mono", textContent: devT("devices_own_page", { address }) }),
     h("div", { class: "actions" }, go), h("p", { class: "muted", textContent: devT("devices_open_hint") }),
-    // R83 2026-11-18 01:14 point 1: a station set to the allow-list only says so under its link
+    // a station set to the allow-list only says so under its link
     pageFrom === "allowed" ? h("p", { class: "muted", textContent: devT("devices_station_allow_list_only") }) : null, res);
 }
 
@@ -470,7 +470,7 @@ function devDetail(d) {
         img.addEventListener("error", () => img.remove());
         kids.push(img);
       }
-      // the Weigh Station's panel (R88 4): "Panel: on USB" or "Panel: on Wi-Fi" above the status list; no `panel`, nothing
+      // the Weigh Station's panel: "Panel: on USB" or "Panel: on Wi-Fi" above the status list; no `panel`, nothing
       const { panel: link, ...rest } = r.status || {}, how = link === "usb" || link === "wifi" ? link : null;     // an older station's `panel` is its port: it stays in the list
       const status = how ? rest : r.status;
       if (how) kids.push(h("p", { class: "devdetail__panel", textContent: devT("devices_panel_" + how) }));
@@ -500,7 +500,7 @@ async function devAnswer(id, run) {
   try { await run(); } finally { devAnswering.delete(id); }
 }
 
-// ----- Weigh Stations asking to pair (03 7.3): Pair only when the Weigh Station's screen shows the same six digits -----
+// ----- Weigh Stations asking to pair: Pair only when the Weigh Station's screen shows the same six digits -----
 function stationAsksCard() {
   const body = h("div"), note = h("div", { role: "status" });
   let me = 0, timer = 0, loaded = false, seen = null, L = null;
@@ -560,7 +560,7 @@ function stationAsksCard() {
   return card(SW.t("devices_requests_title"), note, body);
 }
 
-// ----- The web app on a phone (03 7.4): opened in the phone's browser, served by this Hub; nothing is paired -----
+// ----- The web app on a phone: opened in the phone's browser, served by this Hub; nothing is paired -----
 function webAppCard() {
   const body = h("div"), note = h("div", { role: "status" });     // the hidden-values note; the card (home address, QR) stays
   const el = card(SW.t("devices_webapp_title"), body, note);
@@ -594,7 +594,7 @@ function webAppCard() {
   return el;
 }
 
-// ----- Tag Readers (03 7.5): the tokens a reader built by hand needs -----
+// ----- Tag Readers: the tokens a reader built by hand needs -----
 function readersCard() {
   devMeta();
   const R = S.readers, box = boxFor("readers");

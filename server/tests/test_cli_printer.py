@@ -1,4 +1,4 @@
-"""S5.5: the `printer` commands (06 5 and 9.2): naming a printer, `printer list` (AUT-9), `show`, `test`, `add`, `use`,
+"""S5.5: the `printer` commands: naming a printer, `printer list` (AUT-9), `show`, `test`, `add`, `use`,
 `dismiss`, `rename`, `address`, `access-code`, `api-key`, `lane-data`, `detect`, `scan`, `reports`, `forget-certificate`,
 `forget`, `live`, `menu`, the old spellings, and the `--json` shapes of the Hub's own replies. The commands are run
 through `cli.main` against a registry in a temporary folder; the Hub is never running unless a test gives it a fake
@@ -37,7 +37,7 @@ def kit(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def klipper_answers(monkeypatch):
-    """The test before a Klipper printer is saved (R82 s5 p3) finds the printer: the tests of the other commands add one
+    """The test before a Klipper printer is saved finds the printer: the tests of the other commands add one
     at an address nothing answers on. The guided order's own tests are in test_af5_printer_add.py."""
     monkeypatch.setattr(cli, "_klipper_test", lambda host, port, key: True)
     monkeypatch.setattr(discovery, "scan", lambda net, **kw: [])
@@ -131,7 +131,7 @@ def stdin(monkeypatch, text: str):
     monkeypatch.setattr(sys, "stdin", io.StringIO(text))
 
 
-# ---------- naming a printer (06 5) ----------
+# ---------- naming a printer ----------
 
 @pytest.mark.parametrize("arg, serial", [
     (X1, X1), (X1.lower(), X1), ("garage-voron", "garage-voron"), ("Workshop X1", X1), ("workshop x1", X1),

@@ -10,7 +10,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The Weigh Station voice rules (R88 2026-11-22 01:35, point 4). */
+/** The Weigh Station voice rules. */
 class VoiceRulesTest {
     private val many = VoiceSettings(station = true, speech = true, voice = "Piper, many speakers", speaker = 5, speakerRange = 0..903, speed = 100, volume = 50)
     private val one = many.copy(speakerRange = null, speaker = 0)

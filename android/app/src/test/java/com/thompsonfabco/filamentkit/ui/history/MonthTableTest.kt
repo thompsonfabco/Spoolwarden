@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import java.util.Locale
 
-/** The By month table (R84 5.7) and the CSV file names, as pure rules. */
+/** The By month table and the CSV file names, as pure rules. */
 class MonthTableTest {
     @Test fun rowsAreNewestFirstWithGramsPrintsUnfinishedAndTheMostUsedMaterial() {
         val rows = MonthTable.lines(

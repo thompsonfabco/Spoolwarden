@@ -1,6 +1,6 @@
-"""EA5 of R80: the shared alert banner, the Alerts list, the events poller and the browser-notification helper
+"""EA5: the shared alert banner, the Alerts list, the events poller and the browser-notification helper
 (web-shared/alerts.js, alerts.css), pressed in a real headless browser through tests/page_drive.mjs and audited through
-tests/aut5_run.mjs. The Hub is a stub: a fake GET api/events in the shape of DECISIONS R80 section 8, served by the page
+tests/aut5_run.mjs. The Hub is a stub: a fake GET api/events in the shape the Hub gives it, served by the page
 (server/tests/alerts_ui/alerts-page.js); no server code is involved. The same skip rules as the page audit: no Node 22 or no
 browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
@@ -258,7 +258,7 @@ def _notify_page(mode: str, tmp_path: Path, show: bool) -> dict:
 
 @pytest.mark.parametrize("mode", ["interstitial", "flag"])
 def test_assumption_1_notifications_on_the_hubs_self_signed_page(mode, tmp_path):
-    """R80 section 10, assumption 1: a page served with the Hub's own certificate, accepted through the browser's warning (or with
+    """A page served with the Hub's own certificate, accepted through the browser's warning (or with
     its ignore flag), is a secure context and can create a notification once the permission is granted. Headless has no prompt:
     Browser.grantPermissions stands in for the person's "Allow" (alerts_ui/https_notify.mjs says what that does not prove).
     Required, whatever the OS: secure context, Notification present, permission "granted" after the grant, the Notification created

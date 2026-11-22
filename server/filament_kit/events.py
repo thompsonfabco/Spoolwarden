@@ -1,4 +1,4 @@
-"""The event store (ruling R80 section 1, the design, Hub page): one place where the Hub writes what happens.
+"""The event store (the design, Hub page): one place where the Hub writes what happens.
 
 Layout under `<state>/events/`:
   <yyyy-mm>.xml    one file per month, one <event> per event, APPENDED without rewriting the file. The root element
@@ -9,7 +9,7 @@ Layout under `<state>/events/`:
                    can lose an id but never reuse one
   .lock            the lock file two processes (the Hub service and the command line) take around a write
 
-Owner and mode (R464): whoever writes first (the Hub, or root: the command line, the installer), every directory and
+Owner and mode: whoever writes first (the Hub, or root: the command line, the installer), every directory and
 file the store creates or touches belongs to the owner of the state folder, files 0644 and the events directory with
 the state folder's mode bits, so the Hub service can always write and the web unit can read. As root the store chowns
 (guarded: only when the owner differs); nothing is ever followed through a symbolic link (O_NOFOLLOW, new files with
@@ -365,7 +365,7 @@ class EventStore:
                 os.lchown(self.root, uid, gid)
 
     def _counter(self) -> int:
-        """The id the next event gets: one above the highest of every source (R80 E6): the counter file, the highest
+        """The id the next event gets: one above the highest of every source: the counter file, the highest
         id in the month files, the high-water mark (prune and restore record it) and the ids in conditions.xml."""
         try:
             n = int(_read_bytes(self.root / "next-id").decode("ascii").strip()) - 1
@@ -575,7 +575,7 @@ class EventStore:
             cur = conds.get(c["key"])
             if cur is not None and cur["id"] > ev["id"]:
                 return False                             # an older event replayed never replaces a newer raise
-            conds[c["key"]] = ev                         # the newest raise wins, whatever its severity (R80 E2)
+            conds[c["key"]] = ev                         # the newest raise wins, whatever its severity
             return True
         return conds.pop(c["key"], None) is not None
 
@@ -730,7 +730,7 @@ class EventStore:
                                                          # process is noticed by the next look at next-id
 
     def carry(self, high: int) -> None:
-        """Carry `high` as the high-water mark, so ids continue above it (R80 E6). The restore of a backup calls it
+        """Carry `high` as the high-water mark, so ids continue above it. The restore of a backup calls it
         after the state folder is replaced, with the last id the store held before (`last_id()`): the counter is
         the highest of every source, so ids continue above the restored store's own highest and above `high`."""
         high = int(high)

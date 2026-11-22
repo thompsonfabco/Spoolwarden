@@ -1,5 +1,5 @@
 """Logs > Activity, checks that need no browser: the kind list of the Spool changes filter and the Who label are read from
-the script's source (R84 sections 1 and 2.1)."""
+the script's source."""
 import re
 from pathlib import Path
 

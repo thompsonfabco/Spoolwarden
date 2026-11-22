@@ -1,4 +1,4 @@
-"""Panes details (design 09 S6.12, 02 6.2 and 6.4): one detail open at a time, Escape/Back returning focus to the row,
+"""Panes details (step S6.12, the design, components): one detail open at a time, Escape/Back returning focus to the row,
 empty-pane state on desktop, row actions and hidden fields inside the detail, and Settings one group per pane."""
 from __future__ import annotations
 

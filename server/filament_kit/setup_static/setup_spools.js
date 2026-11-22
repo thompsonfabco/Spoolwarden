@@ -1,4 +1,4 @@
-// The Spools section of the Hub page (R83 sections 1 and 10.2; 03 section 5a): the spools as a Collection with a search field and
+// The Spools section of the Hub page: the spools as a Collection with a search field and
 // four chips, 50 rows at a time, and a spool's detail with Update weight, Move, Link the last tapped tag and Mark empty. Every change
 // shows what it would do first (the Hub's dry run) and is applied from that preview; looking needs no code, a change does.
 // Loaded after setup.js (it uses its api, needCode, theCode and say); everything from the Hub goes in through textContent, as there.
@@ -144,11 +144,11 @@ const spCanCO = () => Array.isArray(st.filters) && st.filters.includes("checked_
 const spaddressOf = (id) => `#${SECTION}${id != null ? "/" + id : ""}`;
 const addressId = () => { const m = /^#spools\/(\d+)$/.exec(location.hash); return m ? Number(m[1]) : null; };
 
-// ----- Undo (R84 3): the answer of a change names its event; the toast says what happened and offers Undo for 10 seconds -----
+// ----- Undo: the answer of a change names its event; the toast says what happened and offers Undo for 10 seconds -----
 const spEventId = (r) => {
   const e = r && r.event;
   if (e && e.id != null) return e.undo && e.undo.possible === false ? null : e.id;
-  return r && r.event_id != null ? r.event_id : null;      // the Hub's own words for it (R84 ruling 4); none: no Undo
+  return r && r.event_id != null ? r.event_id : null;      // the Hub's own words for it; none: no Undo
 };
 // Undo answers "Put back." (and the Hub's note), or the Hub's refusal (409) in its words
 const spUndo = (id, view) => needCode(async () => {
@@ -171,7 +171,7 @@ function spToast(text, r, view) {
   SW.toast(text, "ok", id == null ? {} : { action: { label: tx("common_undo"), name: tx("spools_undo_name", { what: text }), run: () => spUndo(id, view) } });
 }
 
-// ----- Return (R88 1.6): sends a checked-out spool back to its home; asks nothing; the result is an Undo toast -----
+// ----- Return: sends a checked-out spool back to its home; asks nothing; the result is an Undo toast -----
 const spReturn = (id, button) => needCode(async () => {
   const view = views.get(id);
   if (!view) return;
@@ -190,7 +190,7 @@ const spReturn = (id, button) => needCode(async () => {
   }
 });
 
-// ----- Download as CSV (R84 6): Spoolman's own files, passed on by the Hub; unlocked, as a file leaves the Hub -----
+// ----- Download as CSV: Spoolman's own files, passed on by the Hub; unlocked, as a file leaves the Hub -----
 async function spDownloadCsv(set, fallback) {
   const r = await fetch(`/setup/api/export/${set}.csv`, { credentials: "same-origin", headers: { "X-Setup-Code": theCode() } });
   if (!r.ok) { let d = {}; try { d = await r.json(); } catch { /* not JSON */ } throw hubError(r.status, d); }
@@ -205,13 +205,13 @@ async function spDownloadCsv(set, fallback) {
 const spCsvItem = (set, key) => ({ label: tx(key), icon: "download", action: `download-${set}`,
   run: () => needCode(async () => { try { await spDownloadCsv(set, set + ".csv"); } catch (e) { if (e.locked) throw e; SW.toast(tx("spools_csv_failed", { reason: hubText(e.message) }), "bad"); } }) });
 
-// ----- Print a label / Print labels (R85 5.3): the Hub's print page opens in a new tab with the size choice and a preview; open, so no code -----
+// ----- Print a label / Print labels: the Hub's print page opens in a new tab with the size choice and a preview; open, so no code -----
 const spPrintAt = (ids) => window.open(`/setup/api/labels?${new URLSearchParams({ ids: ids.join(","), size: "62x29" })}`, "_blank", "noopener");
 
 // ----- what the section knows -----
 const st = { q: "", filter: "", rows: [], total: 0, more: false, url: null, ready: false, filters: null, checked: null };
 const wanted = new Set();            // the rows that are open: kept across a new read
-const chosen = new Set();            // the spools selected for Print labels (02 6.1): kept by Show more, dropped by a new read
+const chosen = new Set();            // the spools selected for Print labels: kept by Show more, dropped by a new read
 let lastPick = null;                 // the spool whose checkbox was pressed last: Shift+click selects from it
 const views = new Map();             // spool number -> {v, update(v), ...}: the parts of a drawn row that a change patches
 let box = null;                      // the section's region
@@ -222,13 +222,13 @@ let storage = null;                  // the storage list for Move, read once per
 const queryOf = (offset) => `spools?${new URLSearchParams({ ...(st.q ? { q: st.q } : {}), ...(st.filter ? { filter: st.filter } : {}), offset, limit: PAGE })}`;
 
 // ----- the list -----
-const spPICK = "select";             // the column of the checkboxes (its name is the collection's reserved one, 02 6.1)
+const spPICK = "select";             // the column of the checkboxes (its name is the collection's reserved one, the design, components)
 const spCOLUMNS = [[spPICK, "spools_select_all", 1], ["expand", "common_details", 1, true], ["visual", "spools_col_colour", 1, true], ["number", "spools_col_number", 1], ["title", "spools_col_spool", 1],
   ["material", "common_field_material", 2], ["left", "spools_col_left", 1], ["where", "spools_col_where", 3], ["state", "common_field_state", 1]];
 const spCell = (col, prio, ...kids) => spX("div", { class: "coll__cell", role: "cell", "data-col": col, "data-prio": prio }, ...kids);
 const key = (k) => spE("span", "coll__key", { "aria-hidden": "true" }, tx(k));
 
-// a checked-out row (R88 1.6): where the spool is, its home and since when, and Return (asks nothing; the toast offers Undo). They sit under
+// a checked-out row: where the spool is, its home and since when, and Return (asks nothing; the toast offers Undo). They sit under
 // the spool's name, a cell every look and width keeps in the row (the Where cell moves into the expansion on a tablet and phone)
 const spHomeText = (v) => (v.home ? tx("spools_home", { home: v.home }) : tx("spools_home_none"));
 function spCheckedLines(v) {
@@ -345,7 +345,7 @@ function spHeader() {
   }
   return meta;
 }
-// ----- the selection (02 6.1): the checkboxes, the bar with "<n> selected", Print labels and Clear selection; Shift+click selects a range, Escape clears -----
+// ----- the selection: the checkboxes, the bar with "<n> selected", Print labels and Clear selection; Shift+click selects a range, Escape clears -----
 function spSync(say) {
   const el = parts.list.querySelector(".coll--spools");
   if (el) {
@@ -497,7 +497,7 @@ async function spHomeSheet(view, opener) {
   SW.openModal(dlg, opener);
 }
 
-// ----- one spool: the facts and the four changes (03 section 5a) -----
+// ----- one spool: the facts and the four changes -----
 function spKv(rows) {
   return spX("dl", { class: "kv" }, rows.map(([k, value, o = {}]) => spE("div", "kv__row", spE("dt", "kv__key", k),
     spE("dd", "kv__value", value == null ? spE("span", "muted", tx("common_empty")) : spE("span", o.mono ? "mono" : null, value)))));
@@ -599,7 +599,7 @@ function detail(v0, view, id) {
   const printGo = SW.btn(tx("spools_print_label"), { cls: "spools-print-one", name: tx("spools_print_label_name", { name: spName(v0) }) });
   printGo.addEventListener("click", () => spPrintAt([view.v.id]));
 
-  // the latest events of this spool (R84 2.2; 03 16.3): the newest ten (D1: `newest`, answered oldest of them first), shown newest
+  // the latest events of this spool: the newest ten (D1: `newest`, answered oldest of them first), shown newest
   // first; read when the detail first opens, and again after each change. Who and what are the Hub's words, never an id
   const eventsBox = spE("div", "spools-events");
   let asked = false;
@@ -612,7 +612,7 @@ function detail(v0, view, id) {
     eventsBox.replaceChildren(list.length ? spKv(list.map((ev) => [when(ev.at), [ev.text || ev.title || "", " · " + spWho(ev.actor), ev.undone ? ` (${tx("spools_event_undone")})` : ""].join("")]))
       : spE("p", "muted", tx("spools_events_none")));
   };
-  // the Home line (R88 1.6): while the spool is checked out, with Change home (a sheet of the storage locations, each with how full)
+  // the Home line: while the spool is checked out, with Change home (a sheet of the storage locations, each with how full)
   const homeLine = spE("p", "spools-homeline", { hidden: true });
   const paintHome = (v) => {
     const on = spCanCO() && v.checked_out === true;

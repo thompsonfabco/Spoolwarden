@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 import java.time.ZoneId
 import java.util.Locale
 
-/** One row of the health table (R84 4.2, 4.3): when a check changed, which, and from and to as words. */
+/** One row of the health table: when a check changed, which, and from and to as words. */
 data class HealthRow(val time: String, val check: String, val from: String, val to: String) {
     val spoken: String get() = HubTexts.healthRowSpoken(time, check, from, to)
 }

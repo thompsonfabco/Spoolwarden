@@ -1,4 +1,4 @@
-"""Monthly filament usage analytics (R84 section 5 / HD3).
+"""Monthly filament usage analytics.
 
 Aggregates Bambu (`usage.jsonl`) and Klipper (`usage.xml`) filament-used logs into monthly totals,
 printer and material breakdowns, plain-language insights for the current month, and honesty notes.

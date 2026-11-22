@@ -30,10 +30,10 @@ interface SpoolBackend : ActivityBackend {
     /** The locations with how full each is (`GET api/storage`); the default is the names alone, so older fakes compile. */
     suspend fun storage(): StorageAnswer = StorageAnswer.ofNames(locations())
 
-    /** `POST api/spools/{id}/return` (R88 1.7); the default is a Hub without it, so older fakes compile. */
+    /** `POST api/spools/{id}/return`; the default is a Hub without it, so older fakes compile. */
     suspend fun returnSpool(spoolId: Int): JsonObject = throw ApiError(404, "not_found", "Not found")
 
-    /** `PATCH api/spools/{id}` with `home` (R88 1.7); the default is a Hub without it. */
+    /** `PATCH api/spools/{id}` with `home`; the default is a Hub without it. */
     suspend fun setHome(spoolId: Int, home: String): JsonObject = throw ApiError(404, "not_found", "Not found")
 
     companion object {
@@ -76,7 +76,7 @@ data class SpoolSummary(
     val filamentId: Int? = null,
     val emptyWeight: Double? = null,
     val lot: String? = null,
-    /** R88 section 1: the spool has a remembered place; [home] is that place, [checkedOutSince] the time of the load. */
+    /** the spool has a remembered place; [home] is that place, [checkedOutSince] the time of the load. */
     val checkedOut: Boolean = false,
     val home: String? = null,
     val checkedOutSince: String? = null,
@@ -154,7 +154,7 @@ private const val GRAMS_EPSILON = 0.05
 private const val TENTHS = 10.0
 
 /**
- * Why a Hub call failed, in 05 3.5's terms, from the real shapes of `Api`'s errors: status 0 is no route, `bad_response`
+ * Why a Hub call failed, in the design, Android app's terms, from the real shapes of `Api`'s errors: status 0 is no route, `bad_response`
  * and an error page without the Hub's `message` are an answer the app cannot read, any other reply carries the Hub's own
  * words. A 401 and a changed certificate are the Hub notices of 3.4.
  */
@@ -166,7 +166,7 @@ sealed interface HubFailure {
     data object SpoolmanDown : HubFailure
     data class Message(val text: String) : HubFailure
 
-    /** The two Hub notices; a later successful call clears them (05 2.7). */
+    /** The two Hub notices; a later successful call clears them. */
     val isNotice: Boolean get() = this == CertificateChanged || this == NotPaired
 }
 
@@ -184,7 +184,7 @@ fun hubFailure(e: Throwable): HubFailure = when {
 /** Keeps [failure] unless it is a Hub notice: any answer from the Hub means the pairing and certificate work again. */
 internal fun HubFailure?.afterSuccess(): HubFailure? = this?.takeUnless { it.isNotice }
 
-/** The last change made on the spool screen, shown as a notice line of kind ok (05 7.2) until the next one. */
+/** The last change made on the spool screen, shown as a notice line of kind ok until the next one. */
 sealed interface SpoolResult {
     data class WeightUpdated(val left: Double?) : SpoolResult
     data class Moved(val location: String) : SpoolResult
@@ -196,7 +196,7 @@ sealed interface SpoolResult {
     /** The printer accepted the load but has not shown the change yet: a warn line. */
     data class LoadedUnconfirmed(val printer: String, val slot: String) : SpoolResult
 
-    /** The Hub assigned the spool to the slot and it waits for the slot to load (`pending: true`, R83 section 3.5). */
+    /** The Hub assigned the spool to the slot and it waits for the slot to load (`pending: true`). */
     data class Waiting(val printer: String, val slot: String, val spool: String = "") : SpoolResult
 
     /** The result as one text, to hand it to the spool screen through its saved state or its route. */

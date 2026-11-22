@@ -25,7 +25,7 @@ async function api(path, body) {
   if (body !== undefined) { init.body = JSON.stringify(body); init.headers["Content-Type"] = "application/json"; }
   let r;
   try { r = await fetch("/setup/api/" + path, init); } catch {
-    hubJobs().down();                                       // nothing answered (03 3.7)
+    hubJobs().down();                                       // nothing answered
     throw Object.assign(new Error(SW.t("common_hub_no_answer")), { unreachable: true });
   }
   hubJobs().up();
@@ -42,7 +42,7 @@ function hubError(status, data) {
   return e;
 }
 
-// ----- the lock (02 3.1, 3.2; 03 2.1): the code typed in the unlock dialog is held by the shared script in a variable,
+// ----- the lock: the code typed in the unlock dialog is held by the shared script in a variable,
 // for this tab only, never stored; Lock now, reloading or closing the tab locks again. It goes as `code` in the body.
 const theCode = () => SW.lock.code || "";
 // the unlock dialog names the change in the words of the control that asked ("To revoke, enter …")
@@ -57,7 +57,7 @@ const needCode = (run, onCancel) => SW.guard(asked(), run, onCancel);
 const coded = (box, run, onCancel) => needCode(async () => {
   try { await run(); } catch (e) { if (e.locked) throw e; say(box, e.message, false); }
 }, onCancel);
-// reads that need the code (02 1.4; 03 2.1): paint(open) runs now and each time the page opens (Unlocked or Trusted) or
+// reads that need the code: paint(open) runs now and each time the page opens (Unlocked or Trusted) or
 // locks; `el` stays registered while it is on the page. A refusal for the code locks the page.
 const places = new Set();
 function whenOpen(el, paint) {
@@ -87,7 +87,7 @@ function codeRead(key, body, load) {
   });
   return h("div", {}, note, body);
 }
-// A result (02 8.6): written into the control's own status region (boxFor), with its shape and the time it was written,
+// A result: written into the control's own status region (boxFor), with its shape and the time it was written,
 // so it is read out where it was asked. `ok`: true, false or a kind (run, warn, info, neutral); `text`: a sentence (a
 // Hub text as sent) or the parts of a longer answer.
 function say(box, text, ok) {
@@ -97,7 +97,7 @@ function say(box, text, ok) {
 }
 const working = (box, text) => say(box, text, "run");
 // after a change: when its control left with its row (a forgotten printer, a revoked token), the result is a toast
-// (02 8.7), and focus, lost with the row, goes to the page title
+// and focus, lost with the row, goes to the page title
 function gone(box) {
   if (box.isConnected || !box._said) return;
   SW.toast(box._said[1], box._said[0]);
@@ -133,7 +133,7 @@ async function change(box, path, body, done, clear) {
   });
   return out;
 }
-// A change behind a dialog (02 9.1): `o` is SW.ask's (kind, title, text, fields, confirm), `body(values)` the request.
+// A change behind a dialog: `o` is SW.ask's (kind, title, text, fields, confirm), `body(values)` the request.
 // Confirming passes the lock (the unlock dialog opens on top and returns); a refusal stays in the dialog with what was
 // typed, at the field it names; a success closes it (focus back on its button), then draws the region again and says
 // the result in `box` as change() does. Resolves with the reply, or null when cancelled.
@@ -169,7 +169,7 @@ function fill(el, ...kids) {
   if (r) carry(r);
   return el;
 }
-// ----- standard states (02 10; 03 2.4, 2.5) -----
+// ----- standard states -----
 // a Hub text as it is shown: first letter upper case, a full stop at the end
 const hubText = (m) => { const s = String(m || "").trim(); return s ? s[0].toUpperCase() + s.slice(1) + (/[.!?…]$/.test(s) ? "" : ".") : s; };
 // the error state of a region that could not be read: `key` is the catalogue's "Could not read …" text, `retry` reads again
@@ -199,7 +199,7 @@ function readRegion(el, section, read, show) {
   };
   return go();
 }
-// A section whose feature is switched off (03 2.5): the empty state with the hollow circle and the way to Features;
+// A section whose feature is switched off: the empty state with the hollow circle and the way to Features;
 // its texts are "<section>_off_title" and "<section>_off_text"
 const switchedOff = (section) => SW.empty({ shape: "s-hollow", title: SW.t(section + "_off_title"), text: SW.t(section + "_off_text"),
   actions: [h("a", { class: "btn btn--primary", href: "#features", textContent: SW.t("common_go_to_features") })] });
@@ -207,14 +207,14 @@ const pill = (on, yes, no) => h("span", { class: "pill " + (on ? "ok" : "no"), t
 const card = (title, ...kids) => h("section", { class: "card" }, h("h2", {}, title), ...kids);
 
 let S = null;
-// result slots (02 8.6; 07 SR-12): a status region in the page before a result is written into it. Kept by key while
+// result slots: a status region in the page before a result is written into it. Kept by key while
 // the section is open, so the redraw of a region after its change keeps the slot and the result is said where it was
 // asked; leaving the section clears their results (render).
 const slot = () => h("div", { class: "result result--block", role: "status" });
 const boxes = {};
 const boxFor = (key) => boxes[key] || (boxes[key] = slot());
 const sections = h("div");
-// A section's own parts of the page header (02 2.1): `meta`, a line under the title, and `actions`, its buttons at the right.
+// A section's own parts of the page header: `meta`, a line under the title, and `actions`, its buttons at the right.
 // Drawn again with the section's region; cleared when the section is drawn again or another opens.
 let headParts = [];
 let webMenuTrigger;
@@ -236,7 +236,7 @@ function pageHead(meta, actions) {
   if (actions) page.firstElementChild.append(actions);
 }
 
-// ----- regions (02 1.4 "Redraw only what changed"; 03 2.2, 2.7): each card of a section is drawn by its own builder.
+// ----- regions (the design, components "Redraw only what changed"; the design, Hub page): each card of a section is drawn by its own builder.
 // A change reads the state again and draws only its own region (and the one its builder names in `also`). What is
 // typed there and not sent, and the focus, go to the new drawing by each control's place: its row (data-key), its kind
 // and words, and how many like it come before. A part a region reads later gets them when it is filled.
@@ -307,7 +307,7 @@ function redraw(r, sent) {
   return Promise.race([fresh._reads, new Promise((done) => setTimeout(done, 5000))]);
 }
 
-// ----- the sections (F8), at the page's own addresses (03 1.2): #<section>[/<place>]; Back and Forward move between them -----
+// ----- the sections (F8), at the page's own addresses: #<section>[/<place>]; Back and Forward move between them -----
 // [catalogue key of the name, icon, the builders of its regions]; the first five are the Everyday group, the rest the
 // System group
 const TABS = {
@@ -325,14 +325,14 @@ const TABS = {
   logs: ["nav_logs", "logs", () => [logsTab]],
 };
 const GROUPS = [["everyday", "nav_everyday", 0, 7], ["system", "nav_system", 7, 12]];
-const BAR = new Set(["overview", "printers", "recent", "settings"]);   // the phone bottom bar (02 2.4); the rest are in More
+const BAR = new Set(["overview", "printers", "recent", "settings"]);   // the phone bottom bar; the rest are in More
 const MOVED = { modules: "features", intake: "recent" };              // the tabs' old addresses
 // the document title: the section's name, and a place inside it (a Settings group) first
 const documentTitle = () => { const n = SW.t(TABS[tabNow()][0]), p = tabNow() === "settings" ? settingsGroupName() : ""; return p ? p + " · " + n : n; };
 const tabNow = () => { const t = location.hash.slice(1).split(/[/?]/)[0]; return Object.hasOwn(TABS, t) ? t : "overview"; };
 
 // draws every region of the section; drawn again in the same section (a job ended, the lock changed), what is typed
-// and the focus stay; on entering a section, the results left in its slots are cleared (02 8.6)
+// and the focus stay; on entering a section, the results left in its slots are cleared
 let shown = null;
 function render() {
   const now = tabNow(), keep = new Map();
@@ -361,8 +361,8 @@ async function refresh(at, sent) {
   hubVersion.replaceChildren(SW.h("span", { class: "sr", text: SW.t("topbar_version_prefix") }), S.version);
   SW.configure({ hub: S.server_name, noCode: !S.code_set });
   hubReadHistorySummaries();
-  window.startDemoBar(S.demo === true, page.parentElement);    // setup_start.js: the demo banner with Leave demo on every section (R85 4.5)
-  setLangApply();                                       // setup_settings.js: the page's `lang`, from the Language choice (R85 3.11)
+  window.startDemoBar(S.demo === true, page.parentElement);    // setup_start.js: the demo banner with Leave demo on every section
+  setLangApply();                                       // setup_settings.js: the page's `lang`, from the Language choice
   if (!at) render();
   else if (r && r.isConnected) {
     const also = r._make.also && [...sections.children].find((x) => x._make === r._make.also);
@@ -374,7 +374,7 @@ async function refresh(at, sent) {
   if (S.apply.running) followApply();
 }
 
-// ----- the shell (02 2.1-2.6; 03 3.1, 3.2, 3.8): top bar, navigation (a rail; on phones the bottom bar and the More
+// ----- the shell: top bar, navigation (a rail; on phones the bottom bar and the More
 // sheet), the page frame. Its behaviour (current section, title, More, the bar hiding over the keyboard) is SW.shell's.
 const hubName = h("span", {}, h("span", { class: "skeleton__line", "aria-hidden": "true" })), hubVersion = h("span", { class: "topbar__version mono" });
 const pageTitle = h("h1", { class: "page-head__title", tabindex: "-1" });
@@ -404,7 +404,7 @@ function navigation() {
 }
 function navItem(s) {
   const [key, icon] = TABS[s];
-  const label = s === "recent"          // the bottom bar shows the short name; the full one is read (02 2.4)
+  const label = s === "recent"          // the bottom bar shows the short name; the full one is read
     ? h("span", { class: "nav__label" }, h("span", { class: "nav__label-full" }, SW.t(key)), h("span", { class: "nav__label-short", "aria-hidden": "true" }, SW.t("nav_recent")))
     : h("span", { class: "nav__label" }, SW.t(key));
   const a = h("a", { class: "nav__item", href: "#" + s }, SW.icon(icon, "nav__icon"), label, h("span", { class: "nav__summary" }),
@@ -412,7 +412,7 @@ function navItem(s) {
   if (BAR.has(s)) a.setAttribute("data-tab", "");
   return a;
 }
-// the live summaries of the More sheet, from the replies the page already has (02 12: a section without data shows none)
+// the live summaries of the More sheet, from the replies the page already has (the design, components: a section without data shows none)
 function summaries() {
   const put = (s, text) => { const el = navEl.querySelector(`a[href="#${s}"] .nav__summary`); if (el) el.textContent = text || ""; };
   if (S.summaries) { for (const s of Object.keys(TABS)) put(s, hubHistorySummary[s] ?? S.summaries[s]); return; }      // the Hub's own lines (N7)
@@ -421,13 +421,13 @@ function summaries() {
   put("printers", P.length ? SW.t("nav_summary_printers", { connected: up, offline: P.length - up }) : "");
   put("devices", SW.t("nav_summary_devices", { paired: S.devices.length, count: S.readers.list.length }));
 }
-// an old or unknown address opens Overview (03 1.2); the address says so, so the navigation marks it
+// an old or unknown address opens Overview; the address says so, so the navigation marks it
 function settleAddress() {
   const t = location.hash.slice(1).split(/[/?]/)[0];
   if (t && !Object.hasOwn(TABS, t)) history.replaceState(null, "", MOVED[t] ? "#" + MOVED[t] + location.hash.slice(1 + t.length) : "#overview");
 }
 
-// ----- appearance (02 3.3, F5): the three choices on this device, applied at once and kept by the shared script -----
+// ----- appearance (the design, components, F5): the three choices on this device, applied at once and kept by the shared script -----
 const APPEARANCE_KEY = "spoolwarden.appearance";
 const APPEARANCE = [["light", "sun"], ["dark", "moon"], ["system", "half-circle"]];
 const appearanceNow = () => { const v = document.documentElement.getAttribute("data-theme"); return v === "light" || v === "dark" ? v : "system"; };
@@ -463,6 +463,6 @@ document.addEventListener("DOMContentLoaded", () => {
     window.scrollTo(0, 0);
     if (S) render(); else pageTitle.textContent = SW.t(TABS[tabNow()][0]);
   } });
-  if (typeof mountAlerts === "function") mountAlerts(main);     // setup_alertbar.js: the alert banners above the page header (03 2.8)
+  if (typeof mountAlerts === "function") mountAlerts(main);     // setup_alertbar.js: the alert banners above the page header
   loadTrust().then(refresh);
 });

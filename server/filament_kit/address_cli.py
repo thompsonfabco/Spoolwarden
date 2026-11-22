@@ -1,5 +1,5 @@
-"""The command line of the address and first-run phase (R82, step AF5): `port` (06 9.19) and the Getting started block of
-`status` (06 9.1). Its texts are in address_texts.MESSAGES (the catalogue); cli.py hooks the parser in and runs it.
+"""The command line of the address and first-run phase (step AF5): `port` and the Getting started block of
+`status`. Its texts are in address_texts.MESSAGES (the catalogue); cli.py hooks the parser in and runs it.
 
     port                 the Hub's port and its address; no sudo
     port <number>        move the Hub to another port (hubport.change_port); asks first, `--yes` answers it
@@ -13,7 +13,7 @@ from .address_texts import COMMAND, say
 
 
 def hub_address(cfg: dict | None = None, path: str = "/setup") -> str:
-    """The Hub's address as a person types it: no port with 443 (`https://192.0.2.10/setup`), else `:8710` (R82 s1 p4)."""
+    """The Hub's address as a person types it: no port with 443 (`https://192.0.2.10/setup`), else `:8710`."""
     cfg = cfg if cfg is not None else config.load()
     ips = pairing.local_ips()
     host = ips[0] if ips else f"{pairing.short_hostname()}.local"
@@ -27,7 +27,7 @@ def add_parser(sub) -> None:
 
 
 def cmd_port(number: str | None, yes: bool = False) -> int:
-    """06 9.19. Reading needs no sudo. A change is refused before anything is asked or changed when the port is not
+    """The design, command line. Reading needs no sudo. A change is refused before anything is asked or changed when the port is not
     allowed or is taken (exit 2, with the Fix for a taken port), asks the dialog's words, then runs
     `hubport.change_port` (config, drop-in, advert, station drop-in, restarts, the firewall line)."""
     from . import cli
@@ -65,7 +65,7 @@ def cmd_port(number: str | None, yes: bool = False) -> int:
     return 0
 
 
-# ---------- the Getting started block of `status` (06 9.1) ----------
+# ---------- the Getting started block of `status` ----------
 
 _WORD = {"done": ("cli_start_done", "good"), "next": ("cli_start_next", "note"), "open": ("cli_start_not_yet", "off")}
 
@@ -111,7 +111,7 @@ def _first_printer() -> str:
     return next((registry.display_name(p) for p in registry.load().values() if p.configured), "")
 
 
-# ---------- after switching features (06 9.6) ----------
+# ---------- after switching features ----------
 
 def reader_next(before, after) -> str | None:
     """The install command `Next:` names when Label Reader: On this Hub was just switched on and the reader is not

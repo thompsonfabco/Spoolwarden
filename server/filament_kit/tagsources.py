@@ -5,7 +5,7 @@ Sources: each `tag_sources[*].url` (a lasttag service such as the SV08's, shape
 is set (reader name "station"). The newest tag is the one with the smallest age. A source that fails is skipped
 for 60 s, so a dead reader costs one connect timeout a minute, not one per call (same idea as station_client).
 
-HTTPS (R82 section 2 points 2 and 5): a source at an https address is read over a connection pinned to the fingerprint
+HTTPS: a source at an https address is read over a connection pinned to the fingerprint
 kept for it (`station_client.pin_get("tag", origin)`, in the state folder's pins.xml). The first time the Hub reads
 the address it takes the certificate it meets and keeps its fingerprint (trust on first use); from then on it accepts
 no other, and the fix for a changed one is to save the tag source again (`trust`, or `forget_pin` then the next

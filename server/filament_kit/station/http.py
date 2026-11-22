@@ -21,7 +21,7 @@ def age(t):
 
 
 class TlsServer(ThreadingHTTPServer):
-    """The station's listener: HTTPS only (R82 section 2: every listener another machine can reach). One thread per
+    """The station's listener: HTTPS only (every listener another machine can reach). One thread per
     caller; the TLS handshake happens in that thread (do_handshake_on_connect=False), so a caller that stalls in it
     holds no one else up."""
     daemon_threads = True
@@ -50,7 +50,7 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
                  page_from: str = "home") -> type[BaseHTTPRequestHandler]:
     """A handler class over `state_view()`: a snapshot of the station state plus "panel" ("usb", "wifi" or null); "photo" is the JPEG bytes.
 
-    Every request is guarded by the caller's address and cookie (guard.py, R83 01:10): an address on `allow` (the Hub) asks
+    Every request is guarded by the caller's address and cookie (guard.py): an address on `allow` (the Hub) asks
     everything, as before, and `POST /ticket` with its proof; another home address gets the page's own files and `POST
     /session` and, with the station's session (page.py), `/state`, `/settings` and `/photo`; the rest is 403
     `{error, message}`. `access` is the page.Access (proofs, tickets, sessions), `store` the settings.Store (with none the

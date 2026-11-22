@@ -17,7 +17,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The calls and models of phase 3 (R83 10.1) against a fake Hub: the client header, clear, hub, catalog entries, spools. */
+/** The calls and models of phase 3 against a fake Hub: the client header, clear, hub, catalog entries, spools. */
 class ApiPhase3Test {
     private val hub = FakeHub()
     private val api = hub.api()

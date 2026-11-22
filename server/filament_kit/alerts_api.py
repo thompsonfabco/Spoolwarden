@@ -1,9 +1,9 @@
-"""What the Hub says about events and alerts (ruling R80 sections 5 to 8): one place behind `GET api/events`,
+"""What the Hub says about events and alerts: one place behind `GET api/events`,
 `GET api/alerts`, `POST api/alerts/test`, `GET api/spools/low`, `GET api/storage-use`, the Hub page's `P settings/alerts`
 and the command line (`spoolwarden events`, `alerts`, `spools low`), so a client and the command line get the same
 data and the same words.
 
-Texts are not stored with an event (R80 section 1); each is built here, in the Hub's language, from the kind and the
+Texts are not stored with an event; each is built here, in the Hub's language, from the kind and the
 values. `MESSAGES` holds every text the server builds, under its key in strings/en.json; the catalogue holds exactly
 the same text (test_alerts_api.py keeps them equal), so a client that builds its own sentence finds the same words by
 the key. A plural text is {"one": ..., "other": ...} and takes its form from `count`.
@@ -27,13 +27,13 @@ from . import alerts, config, events, output
 
 log = logging.getLogger("filament_kit.alerts_api")
 
-TEST_SECONDS = 60                 # a test alert waits this long for the caller's next events request (R80 E4)
+TEST_SECONDS = 60                 # a test alert waits this long for the caller's next events request
 TEST_FILE = "alert-test"          # the command line's test: the time it was asked, in the state folder
 WAIT_MAX = events.WAIT_MAX
 
 # ---------------------------------------------------------------- the texts the server builds
 MESSAGES = {
-    # alert banners: titles, sentences, actions (R80 section 5; the keys the shared alert banner already uses)
+    # alert banners: titles, sentences, actions (the keys the shared alert banner already uses)
     "alert_title_runout": "Filament ran out on {printer}",
     "alert_text_runout": "{job} is paused at {percent} %. Load filament and resume at the printer.",
     "alert_text_runout_no_percent": "{job} is paused. Load filament and resume at the printer.",
@@ -364,7 +364,7 @@ def _spool_name(ev: dict) -> str:
 
 
 def words(ev: dict) -> tuple[str, str]:
-    """(title, sentence) of an event in the Hub's language (R80 section 5's table for the alert kinds)."""
+    """(title, sentence) of an event in the Hub's language."""
     kind, sev = ev.get("kind", ""), ev.get("severity", "")
     sub = ev.get("subject") or {}
     if kind == "print.runout":
@@ -495,7 +495,7 @@ def words(ev: dict) -> tuple[str, str]:
     return kind, ""
 
 
-# where an alert's action goes: the place names the interfaces know (R80 section 5; the Hub page's addresses)
+# where an alert's action goes: the place names the interfaces know (the Hub page's addresses)
 _ACTION = {"print.runout": "printer", "print.paused": "printer", "print.failed": "printer", "printer.error": "printer",
            "print.finished": "printer", "printer.offline": "printer", "storage.low": "storage-use",
            "spool.low": "running-low", "device.down": "devices"}
@@ -513,7 +513,7 @@ def action_of(ev: dict) -> dict | None:
 
 
 def event_view(ev: dict, settings: dict | None = None) -> dict:
-    """An event as the API gives it (R80 section 8): what is stored, whether an alert type that is on covers it, and
+    """An event as the API gives it: what is stored, whether an alert type that is on covers it, and
     its title, sentence and action in the Hub's language."""
     title, text = words(ev)
     out = {"id": ev["id"], "at": ev["at"], "kind": ev["kind"], "severity": ev["severity"],
@@ -577,7 +577,7 @@ def newest(n: int = 50, kinds=None) -> list[dict]:
     return [event_view(e, settings) for e in events.store().read(kinds=kinds, newest=max(int(n), 1))["events"]]
 
 
-# ---------------------------------------------------------------- the test alert (R80 E4)
+# ---------------------------------------------------------------- the test alert
 
 _tests: dict[str, tuple[float, dict]] = {}
 _served: dict[str, int] = {}

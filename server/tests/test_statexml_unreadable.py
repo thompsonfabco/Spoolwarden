@@ -1,4 +1,4 @@
-"""An XML state file is set aside only when it is really broken, and a set-aside copy is never replaced (R630 L3). The same
+"""An XML state file is set aside only when it is really broken, and a set-aside copy is never replaced. The same
 tests run on the Hub copy and the Slicer Sync copy (the Hub's file also holds the test that the two are identical)."""
 import errno
 from pathlib import Path

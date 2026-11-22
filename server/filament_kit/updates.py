@@ -404,14 +404,14 @@ def check_info(cfg: dict, *, fetcher: release.Fetcher | None = None, now: float 
 
 
 def _schedule_words(cfg: dict) -> str:
-    """The line about the Automatic updates feature (06 9.13, the Hub page's words)."""
+    """The line about the Automatic updates feature (the design, command line, the Hub page's words)."""
     if MODULE not in modules.enabled(cfg):
         return "Not checked by itself: the Automatic updates feature is off."
     return f"Checked by itself {settings(cfg)['schedule']} (the Automatic updates feature)."
 
 
 def check(cfg: dict, *, fetcher: release.Fetcher | None = None) -> int:
-    """`update --check` (06 9.13): the installed version, the latest release, what the Hub page says of held and failed."""
+    """`update --check`: the installed version, the latest release, what the Hub page says of held and failed."""
     try:
         with output.wait("Checking for updates…"):
             info = check_info(cfg, fetcher=fetcher)
@@ -513,7 +513,7 @@ def job_refusal(name: str, *, verified: str | None = None) -> str | None:
 
 def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | None = None,
            run: Callable[[list[str]], int] = default_run, now: float | None = None) -> int:
-    """`update`; the timer's `update --scheduled` is an automatic job, so what it records is done by `hub` (R84 1.2),
+    """`update`; the timer's `update --scheduled` is an automatic job, so what it records is done by `hub`,
     not by the command line it runs through."""
     demo.stop()                  # no download, no install and no restart in the demo
     if not scheduled:
@@ -546,7 +546,7 @@ def _update(cfg: dict, *, scheduled: bool, fetcher: release.Fetcher | None,
         nightly_now = on_nightly()
         _note_release(fetcher, s["repo"], rel, now)     # the console shows it, and the timer keeps it fresh
         # a nightly from before they were dropped: the latest signed release always replaces it, even an older one
-        # (R77 review: keeping the unsigned build would leave the owner believing they are back on releases)
+        # (keeping the unsigned build would leave the owner believing they are back on releases)
         downgrade = nightly_now and _newer(cur, latest)
         if downgrade and not _modules_fit(latest):
             return 1

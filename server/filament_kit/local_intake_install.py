@@ -2,8 +2,7 @@
 
 The reader is a separate program in its own repository (spoolwarden-vision). The kit ships none of its code: this
 file downloads a release, checks it the way the kit checks its own (`release.py`: ed25519 over SHA256SUMS, the key
-pinned here), unpacks it and runs that release's installer. The scheme is in the handoff
-`2026-11-12-1214-server-builder-release-signing-scheme.md`; the release layout this file expects:
+pinned here), unpacks it and runs that release's installer. The release layout this file expects:
 
     SHA256SUMS, SHA256SUMS.sig                         every asset below, signed with the module's own key
     manifest.json                                      {"version", "api_version": "1.x", "kit_min": "X.Y.Z",

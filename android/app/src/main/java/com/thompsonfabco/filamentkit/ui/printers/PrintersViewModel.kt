@@ -53,8 +53,8 @@ internal fun problemOf(e: ApiError): Problem = when (e.code) {
 }
 
 /**
- * One slot of a printer as the list's swatch row draws it. A [waiting] slot has a spool assigned that has not loaded yet
- * (R83 section 3.5): it shows the spool's colour when it is known, with the dashed ring.
+ * One slot of a printer as the list's swatch row draws it. A [waiting] slot has a spool assigned that has not loaded yet.
+ * It shows the spool's colour when it is known, with the dashed ring.
  */
 data class SlotLook(val hex: String, val empty: Boolean, val waiting: Boolean = false) {
     /** True when the swatch is the dashed ring of a free slot: empty, and not a waiting one whose colour is known. */
@@ -98,7 +98,7 @@ data class KlipperDialog(
 )
 
 /**
- * The first step of the guided add (R82 section 5): which printer. The found list is the printers the Hub sees that are
+ * The first step of the guided add: which printer. The found list is the printers the Hub sees that are
  * not set up plus what the Klipper search answered; [searching] is the "Looking…" while that search runs ([scanned] is
  * null until it has answered).
  */
@@ -230,7 +230,7 @@ class PrintersViewModel(
         if (d?.guided == true) openGuide() else refresh()
     }
 
-    /** The form for a Bambu Lab printer that was not found: its address is typed (R87 section 2). */
+    /** The form for a Bambu Lab printer that was not found: its address is typed. */
     fun openAddByAddress(guided: Boolean = false) = _state.update {
         it.copy(dialog = AddDialog(serial = "", model = null, name = "", guided = guided), guide = null)
     }
@@ -286,7 +286,7 @@ class PrintersViewModel(
     /**
      * "Add printer" on the Klipper form: the Hub tests the address first (nothing saved) and the printer is added only
      * when one answers. [port] is the form's text, blank meaning the default 7125. A test that finds nothing leaves
-     * [KlipperDialog.notReached] for the form's Try again and Add anyway (R87 section 1).
+     * [KlipperDialog.notReached] for the form's Try again and Add anyway.
      */
     fun submitAddKlipper(host: String, port: String, name: String, apiKey: String = "") = startAddKlipper(host, port, name, apiKey, test = true)
 
@@ -313,7 +313,7 @@ class PrintersViewModel(
             guard(onError = { p -> _state.update { s -> s.copy(klipper = s.klipper?.copy(busy = false, problem = p)) } }) {
                 val id: String
                 val shown: String
-                // true only when the Hub's test route answered: that Hub takes the key on the add (R87 AP1)
+                // true only when the Hub's test route answered: that Hub takes the key on the add
                 var keyOnAdd = false
                 if (d.createdId != null) {
                     id = d.createdId
@@ -367,7 +367,7 @@ class PrintersViewModel(
         }
     }
 
-    // --- the guided add (R82 section 5, R83 section 6): which printer, its details, test then add, map its slots ---
+    // --- the guided add: which printer, its details, test then add, map its slots ---
 
     private var guideJob: Job? = null
 

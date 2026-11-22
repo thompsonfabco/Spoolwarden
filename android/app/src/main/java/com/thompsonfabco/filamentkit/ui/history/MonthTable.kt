@@ -6,7 +6,7 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** One row of the By month table (R84 5.7): month, grams, prints, prints that did not finish, most used material. */
+/** One row of the By month table: month, grams, prints, prints that did not finish, most used material. */
 data class MonthLine(
     val month: String,
     val grams: String,

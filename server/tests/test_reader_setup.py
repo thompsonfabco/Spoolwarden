@@ -328,7 +328,7 @@ def test_main_routes_reader_setup(monkeypatch):
     assert got["out"] == "s.h" and got["ssid"] == "Home" and got["ota_pubkey"] == "k.pem" and got["source"] is None
 
 
-# ---------- under sudo: the owner's PlatformIO, run as the owner (R66) ----------
+# ---------- under sudo: the owner's PlatformIO, run as the owner ----------
 
 posix = pytest.mark.skipif(sys.platform == "win32", reason="POSIX users")
 
@@ -410,7 +410,7 @@ def test_setup_refuses_an_out_path_it_must_not_replace(tmp_path, monkeypatch, ca
         assert victim.read_text() == "127.0.0.1 localhost\n" and reader_tokens.TokenStore().list() == []
         err = capsys.readouterr().err
         assert "not a file of yours" in " ".join(err.split())      # on one line or two
-        assert str(victim) in err                                  # the path is never cut by the wrapping (06 6.3: breaks only at spaces)
+        assert str(victim) in err                                  # the path is never cut by the wrapping (the design, command line: breaks only at spaces)
 
 
 # ---------- the buzzer's trigger (reader/src/main.cpp: no line in secrets.h = the older low-triggered module) ----------

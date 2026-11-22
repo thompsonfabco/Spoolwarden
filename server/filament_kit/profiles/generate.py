@@ -9,17 +9,17 @@ MARK + the owner's lines, `Spoolman filament ids:` last), `check_preset`, then t
 
 "nil" is never written: a parent list with "nil" items gets them filled from the list's first real value (an
 all-"nil" key is dropped) before the library is applied and again after the in-app edits. The generator never sets
-temperature_vitrification: it stays the parent's unless the owner edited it in the app (ruling S16: then the edit
+temperature_vitrification: it stays the parent's unless the owner edited it in the app (then the edit
 is kept like any other; an edit that is only "nil" restores the parent's value).
 
-In-app edits last (rulings S27, S28; see profiles.inapp): the manifest's `inapp` records, per preset, the in-app
+In-app edits last (see profiles.inapp): the manifest's `inapp` records, per preset, the in-app
 values the build carried; the next build reads that record from the installed build's BUILD.json (or, after a
 half-finished install, from the partial build's, whose values then never count as edits).
 
 `restored` lists the presets a restore-deleted build brought back (deleted in the app before): the PC's installer
 does not take their absence from Bambu Studio for a deletion made after the build.
 
-A saved line's filament_id never changes (ruling S12). Only a line created in this run takes the filament_id of an
+A saved line's filament_id never changes. Only a line created in this run takes the filament_id of an
 existing preset of the same name made in the app, or of its installed presets (lines.json was lost); for a saved
 line that preset is reported and listed as an update (the PC never replaces it unless the owner accepts it).
 
@@ -309,7 +309,7 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
     """Build every preset into `out_dir/base`; returns (manifest, updated lines). `snapshot` = the installed
     build's folder; `partial` = a build whose install stopped part-way (its values in live are not edits);
     `owner_edits` = {inapp: {preset: {key: value}}, notes: {preset: [lines]}} saved when the sync PC changed
-    (ruling S34): with no snapshot and no partial build it is the record of the owner's edits and note lines.
+    with no snapshot and no partial build it is the record of the owner's edits and note lines.
     `orca` (None: Bambu Studio only, the manifest exactly as before the Orca target) adds the Orca tree
     `out_dir/orca/` (see `OrcaTarget`)."""
     out_dir = Path(out_dir)

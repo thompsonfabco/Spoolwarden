@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
-/** The rules of the Weigh Station voice group (R88 2026-11-22 01:35, point 4), free of the screen. */
+/** The rules of the Weigh Station voice group, free of the screen. */
 internal const val SPEED_MIN = 50
 internal const val SPEED_MAX = 200
 internal const val SPEED_STEP = 10

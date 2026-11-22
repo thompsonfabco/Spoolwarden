@@ -1,4 +1,4 @@
-// The Overview section (03 4): the header meta line, Still to do, the four tiles and the checks in groups.
+// The Overview section: the header meta line, Still to do, the four tiles and the checks in groups.
 // Loaded after setup.js; everything from the server goes in through textContent, as there.
 "use strict";
 
@@ -23,7 +23,7 @@ function ovTime(ms, text) {
   return SW.tooltip(t, ovExact(ms));
 }
 
-// a command with Copy (02 7.7): `name` is what Copy says it copies
+// a command with Copy: `name` is what Copy says it copies
 function ovCode(command) {
   const cap = SW.uid("cap");
   return h("figure", { class: "code" },
@@ -34,7 +34,7 @@ function ovCode(command) {
         "aria-label": SW.t("common_copy_named", { name: SW.t("overview_command_name"), value: command }) }, SW.icon("copy", "icon--s"), SW.t("common_copy"))));
 }
 
-// ----- Still to do (03 4.2): a warn mark, one sentence, one default button to the exact place -----
+// ----- Still to do: a warn mark, one sentence, one default button to the exact place -----
 function todoItems() {
   const go = (key, label, to) => ({ text: SW.t(key), go: [label, to] });
   const todo = [];
@@ -46,7 +46,7 @@ function todoItems() {
   if (S.passphrase.web && !S.passphrase.set) todo.push(go("overview_todo_passphrase", "common_open_settings", "#settings/passphrase"));
   return todo;
 }
-// `codeOnly`: while Getting started shows, only the setup-code row of the card stays drawn; the rest is the panel (R82 20:15.3)
+// `codeOnly`: while Getting started shows, only the setup-code row of the card stays drawn; the rest is the panel
 function todoCard(codeOnly) {
   const todo = todoItems().filter((t) => !codeOnly || t.code);
   if (!todo.length) return null;
@@ -59,14 +59,14 @@ function todoCard(codeOnly) {
       t.go ? h("a", { class: "btn", href: t.go[1], textContent: SW.t(t.go[0]) }) : null))));
 }
 
-// ----- the four tiles (03 4.2): each a link to its section; "Switched off" when the feature is off -----
+// ----- the four tiles: each a link to its section; "Switched off" when the feature is off -----
 function tile(name, to, value, line, off) {
   return h("li", {}, h("a", { class: "tile", href: to, "data-state": off ? "off" : undefined },
     h("span", { class: "tile__name", textContent: name }),
     h("span", { class: "tile__value" + (off ? " muted" : ""), textContent: off ? SW.t("common_switched_off") : null }, off ? null : value),
     off || !line ? null : h("span", { class: "tile__line muted", textContent: line })));
 }
-// whether the Getting started panel shows: its Next step then has Overview's one filled button (R82 20:15.1)
+// whether the Getting started panel shows: its Next step then has Overview's one filled button
 let ovStartShown = false;
 const fieldsCls = () => (ovStartShown ? "" : "btn--primary");
 function overviewStart() {
@@ -128,7 +128,7 @@ function tiles() {
         SW.t("overview_tile_reader_line"), !S.anthropic.ai_intake));
 }
 
-// ----- the header meta line (03 4.2): the version, the setup, an update, the job, and when it was checked -----
+// ----- the header meta line: the version, the setup, an update, the job, and when it was checked -----
 const SETUP_NAME = { server: "overview_setup_hub", "all-in-one": "features_setup_all_in_one", station: "features_setup_station" };
 function jobTitle(name) {
   const key = "job_title_" + name;
@@ -146,7 +146,7 @@ function metaLine(r, checkedAt) {
     h("span", { class: "overview__checked" }, ...SW.t("overview_meta_checked", { time: "\u0001" }).split("\u0001").flatMap((x, i) => (i ? [ovTime(checkedAt, ovAgo), x] : [x]))));
 }
 
-// the half-install banner (03 4.2): when the last install stopped halfway and no job runs
+// the half-install banner: when the last install stopped halfway and no job runs
 function halfBanner(r) {
   const u = r.update;
   if (!(u.half_install && !r.job.running)) return null;
@@ -156,7 +156,7 @@ function halfBanner(r) {
   return b;
 }
 
-// ----- the checks (03 4.2): the Hub's rows in groups, a detail row under the row before it -----
+// ----- the checks: the Hub's rows in groups, a detail row under the row before it -----
 function checkItems(rows) {
   const out = [];
   for (const r of rows) {
@@ -253,7 +253,7 @@ function overviewTab() {
   const read = (open) => {
     const done = readRegion(body, OVERVIEW, () => (open ? api("overview", { code: theCode() }) : api("overview")), show);
     const sr = body.querySelector(".skeleton .sr");
-    if (sr) sr.textContent = SW.t("overview_loading");      // the skeleton says what 03 4.3 says
+    if (sr) sr.textContent = SW.t("overview_loading");      // the skeleton says what the design, Hub page says
     return done;
   };
   let open = SW.lock.state !== "locked";

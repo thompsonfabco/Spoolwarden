@@ -1,4 +1,4 @@
-"""EA6 phase A, the alert banners on the Hub page (03 2.8): the banner host mounted once in the page frame above the page header and
+"""EA6 phase A, the alert banners on the Hub page: the banner host mounted once in the page frame above the page header and
 below the "Cannot reach the Hub" banner, the toast with its action for an alert that arrives while the page is open, `G events` every
 10 s with the browser id, and the places an alert's action goes to. The Hub is the stub of hub_alerts_stub.py (the server step is not in
 this tree); the page is the real Hub page with the new modules loaded. The same skip rules as the page audit: no Node 22 or no browser is

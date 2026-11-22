@@ -1,4 +1,4 @@
-"""RC3 (R85 sections 3.5, 3.7, 3.11, 4): the Hub page's Language (Settings > General and Appearance, the page's `lang`), the demo banner
+"""RC3: the Hub page's Language (Settings > General and Appearance, the page's `lang`), the demo banner
 with Leave demo on every section, and Try the demo in Getting started. The Hub is the stub of hub_language_stub.py (the server steps RC2
 and RC6 are not in this tree); the page is the real Hub page. The same skip rules as the page audit: no Node 22 or no browser is a skip
 (a failure with AUT5_REQUIRED=1)."""
@@ -203,7 +203,7 @@ out.survived = !!pick();
 """)
     assert page["options"] == [["", "Automatic"], ["en", "English"], ["de", "Deutsch (machine-translated)"]]
     assert page["hint"] == "Automatic uses this browser's language if the Hub has it, otherwise the Hub's language."
-    assert page["said"] == ["Language: Deutsch.", ""]          # said to a screen reader; no visible Saved (03 10.2)
+    assert page["said"] == ["Language: Deutsch.", ""]          # said to a screen reader; no visible Saved
     assert page["initial"] == ["", "en", None]
     assert page["german"] == ["de", "de"] and page["auto"] == ["en", None]
     assert page["gone"] == "en" and page["hubLang"] == "de" and page["survived"]

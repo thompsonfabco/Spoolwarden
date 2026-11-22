@@ -7,7 +7,7 @@
 @media (min-width: 601px) {
   .shell { background: linear-gradient(to right, var(--surface) calc(var(--rail) - var(--hairline)), var(--border) calc(var(--rail) - var(--hairline)) var(--rail), transparent var(--rail)); }
 }
-/* the top bar on phones (02 2.2, 03 3.1): the product name above the Hub name, without the slash */
+/* the top bar on phones: the product name above the Hub name, without the slash */
 .topbar__hub .skeleton__line { width: calc(var(--s7) * 2); height: var(--s3); }
 @media (max-width: 600px) {
   .topbar__brand { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--s2); row-gap: 0; }
@@ -53,13 +53,13 @@
 .row > button { flex: 0 1 auto; max-width: 100%; white-space: normal; }
 /* the bold names and addresses in a sentence (the web app address, printer names) break instead of widening the page */
 :where(.page) p > b { overflow-wrap: anywhere; }
-/* Logs (03 13): the controls wrap on a tablet and stack full width on a phone; the log scrolls sideways inside its block */
+/* Logs: the controls wrap on a tablet and stack full width on a phone; the log scrolls sideways inside its block */
 .logs__controls { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s3); margin: var(--s2) 0; }
 .logs__out { display: grid; gap: var(--s2); min-width: 0; }
 .logs__out > .code { max-width: 100%; }
 .logs__out .code__text { max-height: calc(var(--s7) * 8); }
 @media (max-width: 600px) { .logs__controls { display: grid; align-items: stretch; } .logs__controls .btn { width: 100%; } }
-/* Logs > Activity (R84 2): when, who, what, where, Undo; the cells shrink and wrap rather than push the page sideways, and Show more sits under the table */
+/* Logs > Activity: when, who, what, where, Undo; the cells shrink and wrap rather than push the page sideways, and Show more sits under the table */
 .logs__activity { display: grid; gap: var(--s2); min-width: 0; }
 .logs__out > .btn { justify-self: start; }
 .coll--activity { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1.4fr) max-content; }
@@ -104,12 +104,12 @@ pre.err, p.err { border-color: var(--bad); color: var(--bad); }
 pre.ok { border-color: var(--ok); }
 img.qr { display: block; width: var(--qr); height: var(--qr); max-width: 100%; padding: 0; }
 .hidden { display: none; }
-/* result slots (02 8.6): a panel without a kind stacks its lines, a Hub text keeps its line breaks, and in a row the
+/* result slots: a panel without a kind stacks its lines, a Hub text keeps its line breaks, and in a row the
    slot goes under the controls */
 :where(.page) .result:not([data-state]):not(:empty) { display: block; }
 :where(.page) .result__text { white-space: pre-line; }
 .row > .result { flex-basis: 100%; }
-/* Slicer presets, Product lines (03 8.2): the column template of the collection (02 6.1). The expand column is for narrow
+/* Slicer presets, Product lines: the column template of the collection. The expand column is for narrow
    screens, where the parents are in the expansion; a Hub without Orca Slicer presets has no Orca parent column. */
 .coll--lines { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) max-content minmax(0, 1.5fr) minmax(0, 1.5fr) max-content; }
 .coll--lines-one { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) max-content minmax(0, 1.5fr) max-content; }

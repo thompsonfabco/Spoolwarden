@@ -1,4 +1,4 @@
-"""HD7d: the Undo toasts, a spool's last ten events and the Download as CSV menus of the Hub page (R84 sections 2.2, 3, 6, 9), in a real
+"""HD7d: the Undo toasts, a spool's last ten events and the Download as CSV menus of the Hub page, in a real
 headless browser against a stub Hub: the routes the server steps HD1/HD5/HD6 will add (`POST events/{id}/undo`, `GET activity`,
 `GET export/{set}.csv`, and `event` in the answers of the changes) are not in the tree, so the page's fetch is answered by a stub in
 the page and every request is recorded. The Spools section is answered completely by the stub; the printer's live view is the one
@@ -265,7 +265,7 @@ out.after = evCalls(/^GET activity/).slice(n).map((c) => c.path);
 """)
     assert page["title"][:3] == ["State", "Latest events", "Change this spool"]
     assert len(page["rows"]) == 10 and page["rows"][0] == ["2026-11-13 10:01", "Event number 11 · The command line"] and page["rows"][1][1] == "Event number 10 · Weigh Station"
-    assert page["rows"][8][1].endswith("(undone)") and page["rows"][9][1] == "Event number 2 · Weigh Station"      # the newest ten, newest first (D1, 03 16.3)
+    assert page["rows"][8][1].endswith("(undone)") and page["rows"][9][1] == "Event number 2 · Weigh Station"      # the newest ten, newest first (D1, the design, Hub page)
     assert page["reads"] == ["activity?subject=spool%3A1&newest=10"]
     assert page["none"] == "Nothing has been recorded for this spool yet." and page["error"] == "Could not read the events."
     assert page["after"] == ["activity?subject=spool%3A1&newest=10"]

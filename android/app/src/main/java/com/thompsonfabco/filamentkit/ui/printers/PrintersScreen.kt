@@ -104,7 +104,7 @@ fun PrintersScreen(
     onOpen: (id: String) -> Unit,
     onPairAgain: () -> Unit,
     modifier: Modifier = Modifier,
-    /** A row whose Access Code was refused opens its printer with the Replace Access Code dialog open (05 9.1). */
+    /** A row whose Access Code was refused opens its printer with the Replace Access Code dialog open. */
     onReplaceCode: (id: String) -> Unit = onOpen,
     /** A button of the map offer (05 step 4): Map slots opens the printer with the mapping question open, Later opens it. */
     onMapOffer: (id: String, mapNow: Boolean) -> Unit = { id, _ -> onOpen(id) },
@@ -663,7 +663,7 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
 }
 
 /**
- * Step 1 of the guided add (R82 section 5): the found list first, each row with "Use this printer"; "Looking…" while
+ * Step 1 of the guided add: the found list first, each row with "Use this printer"; "Looking…" while
  * the search runs; "None found. Type its address in the next step." when nothing answered; the address by hand last.
  */
 @Composable

@@ -1,5 +1,5 @@
 """Klipper discovery (mDNS + on-demand scan) and the Klipper halves of the `spoolwarden printer` commands (the old
-`klipper add|scan|detect|set|api-key` spellings are aliases of them, 06 4)."""
+`klipper add|scan|detect|set|api-key` spellings are aliases of them, the design, command line)."""
 import ipaddress
 import json
 import re
@@ -23,7 +23,7 @@ def env(tmp_path, monkeypatch):
         monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
     kh._reset_cache()
     config.save({**config.load(), "modules": {"printers": True, "klipper": True}})       # Klipper is opt-in
-    # the test before a Klipper printer is saved (R82 s5 p3) is test_af5_printer_add.py's; these are about the address
+    # the test before a Klipper printer is saved is test_af5_printer_add.py's; these are about the address
     monkeypatch.setattr(cli, "_klipper_test", lambda host, port, key: True)
     yield
     kh._reset_cache()
@@ -229,7 +229,7 @@ def _detect_cli(moonraker, capsys, *argv):
 
 
 def test_cli_detect_output_is_06_9_2(moonraker, capsys):
-    """`printer add --klipper` and `printer detect` (the old `klipper add` / `detect` do the same): 06 9.2's lines."""
+    """`printer add --klipper` and `printer detect` (the old `klipper add` / `detect` do the same): the design, command line's lines."""
     moonraker.objects = json.loads((DATA / "SV08-MAX" / "objects.json").read_text())["objects"]
     moonraker.hostname = "SV08MAX"
     assert _detect_cli(moonraker, capsys, "printer", "add", "--klipper", "--name", "SV08 MAX", "--address", moonraker.host,

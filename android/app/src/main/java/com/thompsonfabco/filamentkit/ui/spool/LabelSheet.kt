@@ -64,7 +64,7 @@ object PrintTexts {
 }
 
 /**
- * The label sizes the phone offers (`size=` of `GET api/spools/{id}/label.svg`, 7.10, R85 of 22 Nov 01:05): the two roll
+ * The label sizes the phone offers (`size=` of `GET api/spools/{id}/label.svg`, 7.10): the two roll
  * sizes. Sheets of labels are printed from the Hub page or the web app.
  */
 internal enum class LabelSize(val wire: String, val title: String, val widthMm: Float, val heightMm: Float) {

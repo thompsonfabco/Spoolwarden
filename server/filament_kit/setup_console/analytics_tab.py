@@ -1,6 +1,6 @@
-"""The Analytics section (R84 section 5): filament used over the last months, from the printers' filament-used logs.
+"""The Analytics section: filament used over the last months, from the printers' filament-used logs.
 
-    GET  analytics?months=12&printer=<id>    as the kit route GET /api/analytics (R84 9.2): {months: [{month, grams, prints,
+    GET  analytics?months=12&printer=<id>    as the kit route GET /api/analytics: {months: [{month, grams, prints,
                                          unfinished_prints, unfinished_grams, logged_only_grams, no_weight_prints,
                                          by_printer: [{id, name, grams, prints}], by_material: [{material, grams}],
                                          top_material?}], insights: [{key, text}], notes: [text]}. `months` is 1 to 13
@@ -20,7 +20,7 @@ EMPTY = {"months": [], "insights": [], "notes": []}
 
 
 def read(months: int, printer: str | None) -> dict:
-    """The kit's analytics for `months` months (one printer when `printer`), in the shape of R84 9.2. Until the kit has
+    """The kit's analytics for `months` months (one printer when `printer`), in the shape the Hub page reads. Until the kit has
     its analytics module (HD3) the answer is the shape with nothing in it, which the page shows as "No usage yet"."""
     view = getattr(_analytics, "view", None)
     return view(months=months, printer=printer) if callable(view) else dict(EMPTY)

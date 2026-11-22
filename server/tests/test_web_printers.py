@@ -791,7 +791,7 @@ def test_service_worker_caches_the_shell_and_never_the_api():
     src = (Path(web_app.__file__).parent / "static" / "sw.js").read_text(encoding="utf-8")
     listed = re.search(r"const SHELL = \[(.*?)\];", src, re.S).group(1)
     assert "api" not in listed.replace("app.", "") and '"app.js"' in listed and "BASE" in listed
-    # no API path in the code (comments aside) but the texts of a language, kept for offline (R85 3.5; R574 HIGH 4)
+    # no API path in the code (comments aside) but the texts of a language, kept for offline
     assert re.findall(r'"[^"\n]*/api[^"\n]*"', re.sub(r"//[^\n]*", "", src)) == ['"/api/strings/"']
 
 
@@ -1030,7 +1030,7 @@ def test_add_edit_and_forget_go_to_the_kit_with_only_their_keys(managing):
 
 
 def test_scan_test_and_clear_pass_to_the_kit_with_only_their_keys(managing):
-    """EV6b (R83 10.3): the guided add's Klipper search and test, and Clear slot, are twins of the kit's routes."""
+    """EV6b: the guided add's Klipper search and test, and Clear slot, are twins of the kit's routes."""
     app, kit = managing
     with TestClient(app, base_url=ORIGIN, client=HOME) as c:
         c.post(P + "/scan", headers=H, json={"subnet": "10.9.9.0/24"})
@@ -1132,7 +1132,7 @@ def test_add_edit_and_forget_need_the_pages_origin_and_the_home_network(managing
 
 
 def test_at_the_public_address_printer_changes_are_off_by_default(env):
-    """Orchestrator ruling 2026-11-10: read-only at the web module's public address unless the owner turns it on."""
+    """Read-only at the web module's public address unless the owner turns it on."""
     kit = ManagingKit()
     with TestClient(make_app(env, kit), base_url=ORIGIN, client=HOME) as c:
         m = c.get(P + "/manage")
@@ -1170,7 +1170,7 @@ def test_the_printers_tab_has_manage_printers():
     for words in ('"common_add"', '"common_rename"', '"common_change"', '"common_replace"', '"common_forget"',
                   '"printers_forget"', '"common_add_klipper_printer"', '`${id}/edit`', '`${id}/forget`', 'pj("add", sent)'):
         assert words in text, words
-    # review R103's rules, as the kit enforces them: a new certificate comes with the code, an unpinned printer's new
+    # the review's rules, as the kit enforces them: a new certificate comes with the code, an unpinned printer's new
     # address with its code, a Klipper move with its key
     # (S3.5: the address change asks for the Access Code pinned or not, the user's staging decision of 2026-11-12)
     assert "edit({ unpin: true, access_code: c }" in text
@@ -1246,7 +1246,7 @@ def test_klipper_printers_get_no_remap_or_report_buttons():
 
 
 def test_review_r304_small_fixes_are_in_the_page():
-    """R304 LOW 1, 2, 4, 5, 6 and the two MED fixes: what the browser flows in test_web_app_audit.py do not reach."""
+    """What the browser flows in test_web_app_audit.py do not reach."""
     text = (STATIC / "printers.js").read_text(encoding="utf-8")
     assert "again: () => unloadSlot(sl, sp, button)" in text                   # 1: Try again runs the whole unload, sheet included
     assert text.count("g.camBtn.hidden = !g.camKind()") == 2                   # 2: no camera, no button, from the first paint
@@ -1272,7 +1272,7 @@ def test_a_failed_manual_map_poll_backs_off_and_keeps_polling():
 
 
 def test_confirmations_and_questions_are_sheets_not_native_dialogs():
-    """S3.5: the five confirmations and the seven questions of 04 12 are SW.ask sheets, opened through app.js's
+    """S3.5: the five confirmations and the seven questions of the design, web app are SW.ask sheets, opened through app.js's
     openHere (Back closes them); a secret is a secret field and the stored text comes from the catalogue."""
     src = (STATIC / "printers.js").read_text(encoding="utf-8")
     code = " ".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("//"))
@@ -1294,7 +1294,7 @@ def test_confirmations_and_questions_are_sheets_not_native_dialogs():
 
 def test_every_catalogue_key_is_written_once():
     """json.loads keeps the last of two equal keys, so a key added twice on two branches silently overrides the
-    other text (R304: printers_fix_unauthorized had two wordings after a rebase)."""
+    other text (printers_fix_unauthorized had two wordings after a rebase)."""
     import collections
     repo = Path(__file__).resolve().parents[2]
     pairs = json.loads((repo / "strings" / "en.json").read_text(encoding="utf-8"), object_pairs_hook=lambda kv: kv)
@@ -1303,7 +1303,7 @@ def test_every_catalogue_key_is_written_once():
 
 
 
-# ---------- Auto (R83 addition A6, AS3): the three routes, the printer's auto object and auto_possible ----------
+# ---------- Auto (A6, AS3): the three routes, the printer's auto object and auto_possible ----------
 AUTO_WAIT = {"spool_id": 9, "spool": {"id": 9, "name": "PLA Red", "material": "PLA", "color_hex": "C0392B"}, "state": "waiting", "text": "Waiting for 9.",
              "expires_at": "2026-11-18T01:30:00-05:00"}
 
@@ -1408,7 +1408,7 @@ def test_the_printer_page_has_load_a_spool_the_notice_and_automatic_first():
     app = (STATIC / "app.js").read_text(encoding="utf-8")
     for words in ("p.auto_possible", "const autoRow = pickRow(", 'aria-current", "true"', "plan(p, { label: \"auto\" })", "plan(p, sl)"):
         assert words in app, words
-    # R83 01:06 point 2: no step in front of the slot list, so no segmented control with a Continue that a named slot would need
+    # no step in front of the slot list, so no segmented control with a Continue that a named slot would need
     assert 'name: "spools-target"' not in app and "let chosen" not in app
 
 

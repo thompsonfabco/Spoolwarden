@@ -1,6 +1,6 @@
-"""R88 in the web app, run in Node without a browser: CO5 (the Checked out chip and list, the Home line, Return with its result and
-Undo; R88 1.6, 01:55, 02:00 point 5, 02:05; 04 5.4, 5.5) and VO4 (Settings > Weigh Station voice: Speak, Voice read only, Speaker, Speed,
-Volume, Test; R88 01:35 point 5, 01:50, 02:00 point 2; 04 9.2). The page's own functions (with their stub texts, `tt`) are cut out of
+"""The web app, run in Node without a browser: CO5 (the Checked out chip and list, the Home line, Return with its result and
+Undo; the design, web app) and VO4 (Settings > Weigh Station voice: Speak, Voice read only, Speaker, Speed,
+Volume, Test; the design, web app). The page's own functions (with their stub texts, `tt`) are cut out of
 app.js and given a small DOM, `api` and `SW`."""
 from __future__ import annotations
 
@@ -296,21 +296,21 @@ def _parts(js: str) -> dict:
 
 def _co(tmp_path):
     js = _app()
-    return _node(tmp_path, CO_HARNESS % {**_parts(js), "co": _cut(js, "// ----- Checked out (R88", "// ----- Weigh Station voice")})
+    return _node(tmp_path, CO_HARNESS % {**_parts(js), "co": _cut(js, "// ----- Checked out", "// ----- Weigh Station voice")})
 
 
 def _vo(tmp_path):
     js = _app()
-    return _node(tmp_path, VO_HARNESS % {**_parts(js), "vo": _cut(js, "// ----- Weigh Station voice", "// ----- the language (R85 3.7")})
+    return _node(tmp_path, VO_HARNESS % {**_parts(js), "vo": _cut(js, "// ----- Weigh Station voice", "// ----- the language")})
 
 
 # ---- CO5 ----
 
 def test_checked_out_is_shown_only_when_the_hubs_filters_name_it(tmp_path):
     out = _co(tmp_path)
-    assert out["gate"] == [False, False, True, False]                 # an answer without `filters` is an older Hub (R88 01:55 point 2)
+    assert out["gate"] == [False, False, True, False]                 # an answer without `filters` is an older Hub
     assert out["older"] == [True, False] and out["missing"] == [True, False]
-    assert out["zero"] == [False, "Checked out (0)"]                  # shown also at 0 (04 5.5)
+    assert out["zero"] == [False, "Checked out (0)"]                  # shown also at 0
     assert out["toggled"] == [True] and out["empty"] == "No spool is checked out."
     assert out["known"] is True                                       # an open sheet is told the gate may have changed
 
@@ -318,10 +318,10 @@ def test_checked_out_is_shown_only_when_the_hubs_filters_name_it(tmp_path):
 def test_the_rows_say_where_the_spool_is_its_home_and_since_when(tmp_path):
     out = _co(tmp_path)
     chip, listed = out["two"]
-    assert chip == "Checked out (5)" and out["noTotal"] == "Checked out (2)"   # the list's `total` (R88 02:30)
+    assert chip == "Checked out (5)" and out["noTotal"] == "Checked out (2)"   # the list's `total`
     assert "In Workshop X1 – AMS 1 slot 2" in listed and "Home: Shelf A" in listed and "since 2026-11-21 18:30" in listed
-    assert "Home: not recorded" in listed and listed.count("since ") == 1    # an entry without a time shows none (R88 1.2)
-    assert out["labels"] == ["Return to Shelf A", "Return"]           # R88 02:05 point 2
+    assert "Home: not recorded" in listed and listed.count("since ") == 1    # an entry without a time shows none
+    assert out["labels"] == ["Return to Shelf A", "Return"]
     assert out["homes"] == ["Home: Shelf A", "Home: not recorded", "Return to Shelf A", "Return"]
     assert out["since"] == ["2026-11-22 01:05", "", "", ""]
     assert out["opened"] == [7]
@@ -329,7 +329,7 @@ def test_the_rows_say_where_the_spool_is_its_home_and_since_when(tmp_path):
 
 def test_return_says_where_it_went_with_undo_and_the_hubs_refusal(tmp_path):
     out = _co(tmp_path)
-    assert out["results"] == ["Returned to Shelf A.", "Returned to Dry box 1.", "Returned.", "Returned."]   # R88 02:05 point 3
+    assert out["results"] == ["Returned to Shelf A.", "Returned to Dry box 1.", "Returned.", "Returned."]
     sent, toasts = out["returned"]
     assert sent[0] == "spools/7/return POST" and "spools?filter=checked_out GET" in sent[1:]      # at once; the count is read again
     assert toasts == [["Returned to Shelf A.", "ok", "common_undo"]]                              # Undo through the answer's event_id
@@ -353,17 +353,17 @@ def test_the_spool_sheet_has_the_home_line_change_home_and_return():
 
 
 def test_change_home_says_only_the_home_the_hubs_answer_gives(tmp_path):
-    """R622 MEDIUM 1: "Home is now <location>." only from the answer's `view.home`; an answer without it says nothing false."""
+    """The line "Home is now <location>." comes only from the answer's `view.home`; an answer without it says nothing false."""
     js = _app()
     out = _node(tmp_path, HOME_HARNESS % {**_parts(js), "home": _cut(js, "    async function setHome(l) {", "    async function sendBack(button) {")})
     assert out["took"] == ["Home is now Dry box 2.", "Dry box 2"]
     assert out["ignored"] == [None, None] and out["noView"] == [None, "Shelf A"]     # no line, and the home not made up
     assert out["refused"] == ["There is no such place.", "Shelf A"]                  # the Hub's refusal
-    assert out["busy"] is True                                                        # R622 LOW: a second press waits
+    assert out["busy"] is True                                                        # a second press waits
 
 
 def test_a_search_on_its_way_does_not_replace_the_checked_out_list(tmp_path):
-    """R622 LOW: pressing the chip makes a search answer still coming too late to draw."""
+    """Pressing the chip makes a search answer still coming too late to draw."""
     js = _app()
     out = _node(tmp_path, FIND_HARNESS % {**_parts(js), "find": _cut(js, "  function setCo(on) {", "  function rowButton(f, s) {")})
     assert out["draws"] == ["co"] and out["busy"] is False
@@ -371,7 +371,7 @@ def test_a_search_on_its_way_does_not_replace_the_checked_out_list(tmp_path):
 
 def test_the_checked_out_list_says_when_it_shows_one_page(tmp_path):
     out = _co(tmp_path)
-    assert "2 of 5 shown." in out["two"][1]                          # R622 LOW: the chip counts `total`, the list one page
+    assert "2 of 5 shown." in out["two"][1]                          # the chip counts `total`, the list one page
 
 
 # ---- VO4 ----
@@ -425,7 +425,7 @@ def test_the_voice_rows_line_follows_remote(tmp_path):
 
 
 def test_the_voice_panel_is_drawn_and_marked_while_the_hub_is_away(tmp_path):
-    """R622 MEDIUM 2 (04 9.2; R88 01:35 points 4 and 5)."""
+    """The design, web app points 4 and 5)."""
     out = _vo(tmp_path)
     a = out["awayLast"]
     assert a["hidden"] is False and a["asked"] == 0 and a["group"] is True       # at once, from the values last read

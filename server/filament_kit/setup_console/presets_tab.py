@@ -66,7 +66,7 @@ def routes(page) -> list[tuple]:
     from .. import cli
 
     def not_in_demo(fn):
-        """The presets are the slicers' (a PC fetches them): no write of this tab answers in the demo (R85 4.3)."""
+        """The presets are the slicers' (a PC fetches them): no write of this tab answers in the demo."""
         @functools.wraps(fn)
         async def stopped(request, body):
             if demo.is_on():

@@ -10,7 +10,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** RC5 (R85): the demo flag and language of `api/info` and `api/hub`, leaving the demo, the label drawing, `Accept-Language`. */
+/** RC5: the demo flag and language of `api/info` and `api/hub`, leaving the demo, the label drawing, `Accept-Language`. */
 class ApiRcFiveTest {
     private val hub = FakeHub()
     private val api = hub.api()

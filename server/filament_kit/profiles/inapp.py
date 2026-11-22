@@ -5,11 +5,11 @@ in the app (calibration, temps, ...) and is carried into the next build. A gener
 is gone from the app was deleted there and stays deleted until restored. Note lines the owner typed are kept below
 MARK.
 
-Edits last (ruling S27): each build records, per preset, the in-app values it carried (BUILD.json `inapp`). The
+Edits last: each build records, per preset, the in-app values it carried (BUILD.json `inapp`). The
 next build starts from the installed build's record, overridden/extended by diff(installed preset, live): a key the
 owner changed again takes the new live value; a key the owner changed to the newly generated value (set it back) is
 dropped from the record. A key only in the record is never dropped because the generated value happens to match
-it: a later build that generates another value still keeps the owner's. A half-finished install (ruling S28) is not the owner's doing: a live value equal
+it: a later build that generates another value still keeps the owner's. A half-finished install is not the owner's doing: a live value equal
 to that partial build's value is not an edit; that build's own record is used instead of the installed one's.
 
 IGNORE, norm, diff and is_reset must stay identical to pc-sync/fksync/inapp.py (a server test compares them).

@@ -128,7 +128,7 @@ internal fun HistoryListScreen(
     LaunchedEffect(s.history) {
         s.history?.let { onSummary(recentSummary(it, resources)) }
     }
-    // Download as CSV (R84 6.5): in the screen's menu once the list is here; the file goes to the system share sheet
+    // Download as CSV: in the screen's menu once the list is here; the file goes to the system share sheet
     val csv = s.csvFile
     val csvSubject = stringResource(R.string.nav_recently_added)
     LaunchedEffect(csv) {

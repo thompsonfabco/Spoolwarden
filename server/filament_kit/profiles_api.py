@@ -247,7 +247,7 @@ def _parents(material: str) -> dict:
 # ---------- routes ----------
 
 def _no_writes_in_demo(fn):
-    """The presets are the slicers' (a PC fetches them): in the demo no route that changes them answers (R85 4.3)."""
+    """The presets are the slicers' (a PC fetches them): in the demo no route that changes them answers."""
     @functools.wraps(fn)
     async def wrapper(request: Request):
         if request.method not in ("GET", "HEAD") and demo.is_on():

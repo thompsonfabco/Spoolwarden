@@ -1,4 +1,4 @@
-"""Palette tiles in a collection with no detail (design R67 point 5): a collection with no expand column (the features, the
+"""Palette tiles in a collection with no detail: a collection with no expand column (the features, the
 backups, the devices) shows its priority-2 fields in each tile, as Workbench cards do; one with a detail (the printers, the preset
 lines) keeps the first-priority fields only; Console, Workbench and Panes are not changed by it."""
 from __future__ import annotations

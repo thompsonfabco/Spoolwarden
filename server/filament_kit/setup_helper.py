@@ -100,7 +100,7 @@ JOB_PREFIX = "filament-kit-setup-job@"              # one instance per job: fila
 UPDATE_UNIT = "filament-kit-update.service"         # the timer's update; `sudo filament-kit update` at a terminal has no unit
 ACTIVE = ("activating", "active", "deactivating", "reloading")      # a oneshot is "activating" while it runs
 # The closed list of jobs: the `filament-kit` arguments each one runs.
-# The page asked the owner first, so the jobs that ask at a terminal (06 7) say yes: there is no terminal here.
+# The page asked the owner first, so the jobs that ask at a terminal say yes: there is no terminal here.
 JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update", "--yes"),
         "rollback": ("update", "--rollback", "--yes"),
         "check": ("update", "--check"), "station_pair": ("station", "pair", "--local"),
@@ -1200,7 +1200,7 @@ def handle(req) -> dict:
             raise Refused(400, "unknown request")
         if req["op"] not in NO_CODE_OPS:
             _access(req)
-        if req["op"] != "check" and demo.is_on():       # demo: nothing is changed through the root helper (R85 4.3)
+        if req["op"] != "check" and demo.is_on():       # demo: nothing is changed through the root helper
             raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         if req["op"] in LOCKED_OPS:
             with _job_lock():

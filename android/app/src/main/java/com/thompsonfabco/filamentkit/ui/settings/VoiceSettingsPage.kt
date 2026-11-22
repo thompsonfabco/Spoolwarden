@@ -59,7 +59,7 @@ internal class VoiceActions(
 )
 
 /**
- * Settings > Weigh Station voice (R88 2026-11-22 01:35, point 4): Speak, Voice (read-only), Speaker (only for a voice
+ * Settings > Weigh Station voice: Speak, Voice (read-only), Speaker (only for a voice
  * with several), Speed, Volume and Test. A value is saved when its control is let go; Test uses the values on the
  * screen. Offline the controls are disabled and the first says it needs the Hub.
  */

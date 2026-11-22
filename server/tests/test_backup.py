@@ -250,7 +250,7 @@ def test_restore_brings_every_file_and_the_database_back(kit, capsys):
     assert not list(kit.glob("*" + backup.OLD)) and not list(kit.glob("*" + backup.NEW))
     out = capsys.readouterr().out
     assert "Restored. The Hub is back." in out and "certificate" not in out
-    assert "files and the Spoolman database. Features: " in out         # the summary of 06 9.10, the Hub page's words
+    assert "files and the Spoolman database. Features: " in out         # the summary of the design, command line, the Hub page's words
     assert "This replaces the spools, settings, printers and pairings on this Hub." in out
     assert "The Hub restarts, and afterwards the setup code is the one from the backup." in out
     # what was here first is kept, as a zip a restore takes too
@@ -706,7 +706,7 @@ def test_the_apply_inside_a_restore_writes_no_step_lines_of_its_own(kit, monkeyp
 
 
 def test_a_second_steps_in_the_same_process_stays_quiet_and_k_stops_at_n(monkeypatch):
-    """02 8.4 rule 1: one N per job log, and K never passes N (drift J1, J2)."""
+    """The design, components: one N per job log, and K never passes N (drift J1, J2)."""
     from filament_kit import steps
     lines = []
     first = steps.Steps(2, out=lines.append)

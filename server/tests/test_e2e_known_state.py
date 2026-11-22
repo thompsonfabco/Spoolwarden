@@ -1,4 +1,4 @@
-"""tools/e2e/e2e.py's known state after scenario f (review R201): f leaves the --previous tag's build, whose version
+"""tools/e2e/e2e.py's known state after scenario f: f leaves the --previous tag's build, whose version
 can equal this checkout's; the next scenario reinstalls the known state, its own check passes, and the stale printer,
 pairing and spool of the old install are forgotten. Runs the runner's prepare() with the host stubbed (no install)."""
 from __future__ import annotations

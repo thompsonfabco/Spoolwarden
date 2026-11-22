@@ -91,7 +91,7 @@ internal fun updateNotice(u: UpdateUi): UpdateNoticeKind? = when {
     else -> null
 }
 
-/** Why a read failed, in 05 3.5's terms: the Hub's [message] as given, else [unexpected] (an answer not understood) or neither (no route). */
+/** Why a read failed, in the design, Android app's terms: the Hub's [message] as given, else [unexpected] (an answer not understood) or neither (no route). */
 internal class PrintersFailure(val message: String?, val unexpected: Boolean)
 
 /**
@@ -113,7 +113,7 @@ data class HomePrintersState(
     val loading: Boolean = false,
     val failed: Boolean = false,
     val message: String? = null,
-    /** The failure was an answer the app could not read (05 3.5), not a missing route. */
+    /** The failure was an answer the app could not read, not a missing route. */
     val unexpected: Boolean = false,
     /** When [printers] was read (epoch millis), for the offline notice. */
     val loadedAt: Long? = null,

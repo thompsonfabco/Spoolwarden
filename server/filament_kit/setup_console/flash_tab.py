@@ -78,7 +78,7 @@ def routes(page) -> list[tuple]:
                         headers={"X-Firmware-Version": got[1], "X-Content-Type-Options": "nosniff"})
 
     def not_in_demo() -> None:
-        """The demo flashes no device (R85 4.3), so it makes no Tag Reader token either."""
+        """The demo flashes no device, so it makes no Tag Reader token either."""
         if demo.is_on():
             raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
 

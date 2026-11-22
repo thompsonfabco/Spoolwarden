@@ -1,4 +1,4 @@
-"""VO2 (R88 section 2): the voice keys, handing Speak/Speaker/Speed/Volume to the Weigh Station, the logic of the kit
+"""VO2: the voice keys, handing Speak/Speaker/Speed/Volume to the Weigh Station, the logic of the kit
 routes, and the page route for Test. The station is a stub: `station_client.call` is replaced by a recorder."""
 from __future__ import annotations
 
@@ -362,7 +362,7 @@ def test_a_station_named_by_the_hubs_lan_name_or_address_is_not_remote(host, mon
     assert voice_tab.station_remote(_cfg("http://192.168.1.21:5003")) is True
 
 
-# ---- rework 2 (R602) ----
+# ---- rework 2 ----
 
 def test_a_broken_file_is_kept_aside_and_never_overwritten():
     f = _file()
@@ -374,7 +374,7 @@ def test_a_broken_file_is_kept_aside_and_never_overwritten():
     assert any("voice.xml" in p for p in statexml.problems())
 
 
-# ---- a passing read error is not a broken file (R626/R629) ----
+# ---- a passing read error is not a broken file ----
 
 def test_a_transient_read_error_leaves_a_good_file_in_place(monkeypatch):
     voice_state.save({"speed": 80}, _cfg())
@@ -454,7 +454,7 @@ def test_the_root_side_never_touches_voice_xml_it_asks_the_service():
             assert word not in text, (p.name, word)
 
 
-# ---- the sender attaches the pairing proof (R594 ruling) ----
+# ---- the sender attaches the pairing proof ----
 
 @pytest.fixture
 def wire(monkeypatch):
@@ -486,8 +486,8 @@ def test_the_voice_calls_carry_a_proof_the_station_accepts(wire, send):
 @pytest.mark.parametrize("send", [lambda: station_client.send_voice("http://h", {"speed": 90}),
                                   lambda: station_client.voice_test("http://h", {"speed": 90})])
 def test_the_voice_calls_need_the_proof_and_go_plain_only_to_a_station_with_no_certificate(wire, send):
-    """R88 01:50 point 2: a voice call needs the pairing proof, as the station's /settings does. Integration (R663): with the wave's
-    rule (R82 00:28 point 1, R559 01 #4) a station that told the Hub no certificate is called over plain HTTP for a change, carrying
+    """A voice call needs the pairing proof, as the station's /settings does. Integration: with the wave's
+    rule, a station that told the Hub no certificate is called over plain HTTP for a change, carrying
     the proof; so without a key nothing is sent at all, and without a certificate it is sent plain WITH the proof."""
     from filament_kit.station import page
     seen, key, mp = wire

@@ -1,4 +1,4 @@
-"""The Hub at a glance (R83 s5): the data behind `GET /api/hub`, one read-only answer for the apps' Hub screen.
+"""The Hub at a glance: the data behind `GET /api/hub`, one read-only answer for the apps' Hub screen.
 
     {name, version, newest: {version, checked_at}?, update_available, checks: [{group, state, text, fix?}],
      getting_started: {done, total, hidden, finished}, features: [{id, name, on}], catalog: {version?, checked_at?},
@@ -9,7 +9,7 @@ Everything is redacted as the Overview is for a locked page (`redact`): no addre
 check's text and fix are cleaned, the devices are names only. Looking costs no network call but the checks' own (the
 Overview's rows). A source that cannot be read leaves its part out or at its empty value: the answer never fails for
 one of them. The Getting started counts come from the caller (`getting_started`: the first-run panel's counts);
-without them the panel is hidden, which is what an unreadable panel means (R82 s4.6).
+without them the panel is hidden, which is what an unreadable panel means.
 """
 from __future__ import annotations
 
@@ -160,7 +160,7 @@ def devices(cfg: dict, this_device: str | None = None, hub_version: str | None =
     """Names, kind, version and last seen of what is paired, and the Tag Readers: no ids, no addresses.
 
     `paired` is `pairing.devices()` (each row may also carry `kind` and `version` where the pairing keeps them);
-    `readers` is `reader_tokens.readers()`. A row with no kind has the name alone. Out of date is R83 s9.4: a Weigh
+    `readers` is `reader_tokens.readers()`. A row with no kind has the name alone. Out of date means a Weigh
     Station or a Slicer Sync PC below the Hub's version; a Tag Reader below the firmware on offer; a phone only when
     the pairing says so (`out_of_date`)."""
     from . import pairing, reader_tokens

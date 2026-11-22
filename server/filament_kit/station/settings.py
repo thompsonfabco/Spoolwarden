@@ -1,4 +1,4 @@
-"""The station's own settings (R83 section 9 and 10.4): what its page changes, kept in `settings.xml` in the station's
+"""The station's own settings: what its page changes, kept in `settings.xml` in the station's
 state folder (`state.state_dir()`: the one folder its service user owns). They WIN over the values the installer wrote
 (the systemd drop-in `state.settings_from_env` reads) and "back to the installed values" (`Store.reset`) removes the
 file. Only values that differ from the installed ones are kept, so the file's presence is `settings_changed`.

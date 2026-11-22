@@ -1,5 +1,5 @@
 """Settings > Backups and restore on the Hub page: the backup password, "Encrypted" in the list and the restore dialog's password
-(DECISIONS R84 sections 7 and 9.3), in a real headless browser. The Hub side of those routes (HD4) is not built yet, so the page
+, in a real headless browser. The Hub side of those routes (HD4) is not built yet, so the page
 runs against a stub Hub in the page itself (fetch and XMLHttpRequest answer the routes of 9.3: backups/list, backups/password,
 backups/password/remove, restore/upload, restore/password, job); every other route is the Hub's real one. Also the group in all
 four looks at 1280 and on a phone (390 px). The same skip rules as the page audit: no Node 22 or no browser is a skip (a failure

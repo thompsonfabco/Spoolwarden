@@ -157,7 +157,7 @@ def test_export_printers_omits_secrets(isolated_state):
 
 
 def test_export_printers_keeps_owner_chosen_names_as_typed(isolated_state):
-    """R559 3: a name with a dash, or one word, is the owner's: only an address or the serial is left out."""
+    """A name with a dash, or one word, is the owner's: only an address or the serial is left out."""
     registry.add_klipper("Ender-3", "192.0.2.50", 7125)
     registry.add_klipper("Prusa-MK4", "192.0.2.52", 7125)
     registry.add_klipper("Voron", "station.local", 7125)
@@ -169,7 +169,7 @@ def test_export_printers_keeps_owner_chosen_names_as_typed(isolated_state):
 
 
 def test_export_printers_without_the_hubs_printers_reads_the_slots_from_spoolman(isolated_state, spoolman_url):
-    """R559 8: the command line's export (as root, no live printers) keeps the slot and spool columns: a slot's spool
+    """The command line's export (as root, no live printers) keeps the slot and spool columns: a slot's spool
     is the one Spoolman holds at its location, as in a printer's status."""
     registry.upsert(registry.Printer(serial="01P00A000000099", name="Workshop X1", ip="192.0.2.55", configured=True))
     registry.add_klipper("Voron", "voron.local", 7125)

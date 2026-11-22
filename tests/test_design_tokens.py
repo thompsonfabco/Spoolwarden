@@ -129,7 +129,7 @@ def _tile_part(css):
 
 
 def test_preview_tile_blocks_hold_colour_type_and_radius_only():
-    # 08 section 3.4: a tile block must not carry a size, elevation or motion token, or it could undo a phone block
+    # the design, platform mapping: a tile block must not carry a size, elevation or motion token, or it could undo a phone block
     themes = json.loads((TOKENS / "tokens.json").read_text(encoding="utf-8"))["themes"]
     tiles = _tile_part((TOKENS / "tokens.css").read_text(encoding="utf-8"))
     for name in themes:
@@ -324,7 +324,7 @@ def test_lowered_token_value_fails_in_the_message_form_of_aut_1(tmp_path):
 
 
 def test_lowered_added_pair_value_fails(tmp_path):
-    # a 07 3.2 pair that the first version did not check: the focus ring on a log block
+    # a the design, accessibility pair that the first version did not check: the focus ring on a log block
     data = json.loads((TOKENS / "tokens.json").read_text(encoding="utf-8"))
     data["themes"]["console"]["light"]["focus"] = data["themes"]["console"]["light"]["code"]
     bad = tmp_path / "tokens.json"

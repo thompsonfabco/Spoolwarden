@@ -1,4 +1,4 @@
-"""The event store (R80 section 1): files, ids, torn tails, conditions, cursor, wait, two processes, retention."""
+"""The event store: files, ids, torn tails, conditions, cursor, wait, two processes, retention."""
 import multiprocessing
 import os
 import stat
@@ -401,7 +401,7 @@ def test_a_link_at_a_month_file_is_not_read_through(store, tmp_path):
     assert store.read()["events"] == []
 
 
-# ---------------------------------------------------------------- R464 items 2 to 6
+# ----------------------------------------------------------------
 
 def test_replace_is_retried_while_a_reader_holds_the_file(store, monkeypatch):          # item 2
     monkeypatch.setattr(events, "RETRY_REPLACE", True)
@@ -428,7 +428,7 @@ def test_replace_that_never_works_is_a_clear_error_and_writes_nothing(store, mon
     assert store.read()["events"] == [] and not list(store.root.glob("*.tmp"))
 
 
-def test_without_the_retry_a_permission_error_is_raised_as_it_is(store, monkeypatch):         # item 2: POSIX unchanged
+def test_without_the_retry_a_permission_error_is_raised_as_it_is(store, monkeypatch):         # POSIX unchanged
     monkeypatch.setattr(events, "RETRY_REPLACE", False)
     calls = []
     monkeypatch.setattr(os, "replace", lambda a, b: calls.append(1) or (_ for _ in ()).throw(PermissionError(13, "x")))
@@ -570,7 +570,7 @@ def test_unchanged_months_are_not_parsed_again(store, monkeypatch):             
     assert seen == []
 
 
-# ---------------------------------------------------------------- R80 changes after R465 (E2, E4, E6) and the hard link
+# ---------------------------------------------------------------- Later changes (E2, E4, E6) and the hard link
 
 def test_since_at_reads_by_time(store):                                                       # E4 / point 1
     for d in (1, 5, 10, 20):

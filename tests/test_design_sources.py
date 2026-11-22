@@ -165,7 +165,7 @@ PROFILE_COMMENT = re.compile(r"/\*\s*profile:\s*([a-z-]+)=([a-z-]+)\s*\*/")
 RULE_HEAD = re.compile(r"([^{}]+)\{")
 DATA_LOOK = re.compile(r'^:root\[data-look="([a-z]+)"\]')
 
-# Kotlin groups whose fields are styles, not tokens: only the group is checked (08 3.4)
+# Kotlin groups whose fields are styles, not tokens: only the group is checked
 KOTLIN_STYLE_GROUPS = {"type": None}
 
 
@@ -248,7 +248,7 @@ def unknown_kotlin(text):
 
 
 def profile_group_errors(css):
-    """Each `/* profile: key=choice */` group is keyed on exactly the themes whose profile has that choice (08 9)."""
+    """Each `/* profile: key=choice */` group is keyed on exactly the themes whose profile has that choice."""
     errors = []
     marks = list(PROFILE_COMMENT.finditer(css))
     for i, m in enumerate(marks):
@@ -261,7 +261,7 @@ def profile_group_errors(css):
                 sel = sel.strip()
                 if sel and not sel.startswith("@"):
                     d = DATA_LOOK.match(sel)
-                    found.add(d.group(1) if d else DEFAULT_LOOK)    # no qualifier: the default theme (08 9)
+                    found.add(d.group(1) if d else DEFAULT_LOOK)    # no qualifier: the default theme
         expected = {n for n, t in THEMES if t["profile"].get(key) == choice}
         if choice not in PROFILE.get(key, ()):
             errors.append(f"{key}={choice}: not a profile choice")
@@ -326,7 +326,7 @@ def test_checks_fail_on_plants():
     assert profile_group_errors("/* profile: nav=bogus */\n.nav { a: b }")
 
 
-# Test 6 (08 section 11): the names of the two lists, checked in the sources, the sprite and the drawables.
+# Test 6: the names of the two lists, checked in the sources, the sprite and the drawables.
 ICON_NAMES = {
     "overview", "printer", "recent", "devices", "presets", "features", "settings", "flash", "updates", "logs",
     "lock", "lock-open", "shield", "sun", "moon", "half-circle",
@@ -338,7 +338,7 @@ SVG = "{http://www.w3.org/2000/svg}"
 DRAWABLES = Path("android/app/src/main/res/drawable")
 
 
-# What a path may set (08 section 11, "Drawing"): icons nothing (the symbol carries the stroke); status shapes either a
+# What a path may set (the design, platform mapping, "Drawing"): icons nothing (the symbol carries the stroke); status shapes either a
 # currentColor fill, or no fill with a currentColor stroke of width 2. The product mark may also fill in currentColor.
 SHAPES = {"path", "circle", "rect", "line", "polyline", "polygon", "ellipse"}
 GEOMETRY = {"d", "cx", "cy", "r", "rx", "ry", "x", "y", "width", "height", "x1", "y1", "x2", "y2", "points"}

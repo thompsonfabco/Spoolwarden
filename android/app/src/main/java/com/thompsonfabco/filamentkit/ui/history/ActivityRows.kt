@@ -30,7 +30,7 @@ internal fun activityWhen(event: ActivityEvent): String =
     listOfNotNull(hubTime(event.at)?.takeIf { it.isNotBlank() }, event.who.takeIf { it.isNotBlank() }).joinToString(DOT)
 
 /**
- * A list of what was done (R84 section 2): time and who, then what, the Hub's own sentence. A row the Hub still lets be
+ * A list of what was done: time and who, then what, the Hub's own sentence. A row the Hub still lets be
  * undone keeps **Undo**; [busy] is the event being undone. The section is left out when there are no [events] (an older
  * Hub sends none).
  */

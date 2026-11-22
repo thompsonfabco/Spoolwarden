@@ -1,4 +1,4 @@
-"""The Analytics section of the Hub page (R84 section 5, 9.2, 9.3), in a real headless browser against a stub of the kit's
+"""The Analytics section of the Hub page, in a real headless browser against a stub of the kit's
 analytics (HD3's module is not in this tree): the six insight sentences in their order (and none when the Hub has none), one
 SVG bar per month for twelve months with an empty one among them, the choice of printer, Show as table, the table per
 material for the chosen month, the honest notes, "No usage yet", the wait and the failure with Try again, in all four looks at
@@ -55,7 +55,7 @@ ALL = {
         row(6, 300.0, 2, top_material="ABS", by_material=[{"material": "ABS", "grams": 300.0}]),
         row(11, 90.0, 1, top_material="PLA", by_material=[{"material": "PLA", "grams": 90.0}]),
     ],
-    # sent in the wrong order on purpose: the page keeps the order of R84 5.2
+    # sent in the wrong order on purpose: the page keeps its own order
     "insights": [
         {"key": "spools_finished", "text": "You finished 3 spools this month."},
         {"key": "biggest_print", "text": "The biggest print this month was Benchy (210 g)."},
@@ -172,7 +172,7 @@ out.fieldWidths = [f.printer, f.month].map((e) => Math.round(e.getBoundingClient
 out.vw = document.documentElement.clientWidth;
 return out;
 """, width=width, look=look)
-    # R84 5.2: the six sentences in their order, whatever order the Hub sent them in
+    # the six sentences in their order, whatever order the Hub sent them in
     assert [k for k, _ in page["insights"]] == ["total", "favourite_material", "busiest_printer", "unfinished", "biggest_print", "spools_finished"]
     assert page["insights"][0][1] == "Filament used this month: 1.84 kg (last month 1.52 kg)."
     # twelve bars, oldest first, each an SVG the screen reader skips (the table is the text way), the empty month among them
@@ -183,7 +183,7 @@ return out;
     assert by[month(2)]["grams"] == "640 g" and by[month(5)]["grams"] == "0 g" and by[month(5)]["empty"] and by[month(5)]["level"] == "0"
     assert by[month(1)]["level"] == str(1520 / 1840) or abs(float(by[month(1)]["level"]) - 1520 / 1840) < 1e-9
     assert page["label"] == "Filament used per month in the last 12 months"
-    # R84 5.5: the Hub's two honest notes
+    # the Hub's two honest notes
     assert page["notes"] == ALL["notes"]
     assert page["titles"] == ["Highlights", "Filament used per month", "Filament used by material"]
     assert page["printers"] == [["", "All printers"], ["p1", "Workshop X1"], ["p2", "Garage Voron"]]

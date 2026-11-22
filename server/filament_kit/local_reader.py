@@ -28,10 +28,10 @@ The kit sends no order history, prices, comments or spool data. `local_intake.ur
 GPU tier wants a GPU the kit server usually lacks); an optional bearer token (`<etc>/local_intake_token`) protects
 that link, and it is sent on reads only, never logged.
 
-HTTPS (R82 section 2 point 6): a reader on another machine is to be at an https address. The Hub pins its certificate
+HTTPS: a reader on another machine is to be at an https address. The Hub pins its certificate
 at Test (`test`: trust on first use, the fingerprint in the result) and every call after that accepts only that
 certificate (a changed one: `LocalReaderError("cert_changed")`; Test again with `trust=True` takes the new one). The
-reader's own repository has to serve HTTPS first (R82 section 10 point 6; ruled 2026-11-17 21:12). While
+reader's own repository has to serve HTTPS first. While
 `ENFORCE_HTTPS` is False an `http://` address on another machine is accepted and used as today and `https_row` gives
 the one Checks row (state note, no fix). From the release that turns it on, saving such an address is refused
 (`check_url`), a stored one keeps working and its row becomes "needs a look" with a fix. Not a setting.
@@ -123,7 +123,7 @@ def _loopback(host: str | None) -> bool:
 
 
 def needs_https(url: str) -> bool:
-    """An `http://` address that is not this machine's own (127.0.0.1): what R82 refuses once the reader serves HTTPS."""
+    """An `http://` address that is not this machine's own (127.0.0.1): what is refused once the reader serves HTTPS."""
     u = urlparse(str(url or "").strip())
     return u.scheme == "http" and bool(u.hostname) and not _loopback(u.hostname)
 
@@ -226,7 +226,7 @@ REFUSALS = {"bad_request", "no_photos", "too_many_photos", "too_large", "bad_ima
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Never follow a redirect: the reader answers at the address the owner set, and a redirect followed with the
-    bearer token would hand it to another host (review R127 note 1). A 3xx is then an HTTP error like any other."""
+    bearer token would hand it to another host. A 3xx is then an HTTP error like any other."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None

@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The watching service (R80 section 4): while "Alerts on this phone" is on it keeps one waiting connection to the Hub
+ * The watching service: while "Alerts on this phone" is on it keeps one waiting connection to the Hub
  * and shows a notification per alert, with the app closed. It is a foreground service of type `specialUse` (no system
  * time limit, unlike `dataSync`) with the permanent notification Android requires. It builds its own pinned client
  * from the stored pairing, because the app's session lives in the activity.

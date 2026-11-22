@@ -585,7 +585,7 @@ def test_get_spool_gives_what_the_spool_screen_shows(sm, spoolman_fake_store):
     assert v == {"id": sid, "location": "Sealed stock", "remaining_g": 1000, "net_g": 1000, "tare_g": 213, "tag": None,
                  "state": "sealed", "filament_id": v["filament_id"], "vendor": "SUNLU", "name": "PETG Grey",
                  "material": "PETG", "color_hex": "8A8C8E", "lot": "L-42", "loaded": None, "low": False,
-                 "checked_out": False, "home": None, "checked_out_since": None}      # R88 CO: the checked-out trio
+                 "checked_out": False, "home": None, "checked_out_since": None}      # the checked-out trio
     c.post(f"/api/spools/{sid}/link", headers=auth(tok), json={"tag": UID, "dry_run": False})
     v = c.get(f"/api/spools/{sid}", headers=auth(tok)).json()["view"]
     assert v["tag"] == UID and v["state"] == "opened"

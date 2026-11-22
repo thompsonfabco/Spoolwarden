@@ -62,7 +62,7 @@ internal fun PairMessage.text(): String = when (this) {
     PairMessage.LocalNetwork -> stringResource(R.string.network_text)
 }
 
-/** A failure under a step's button: the notice line, or for a missing local network permission the panel of 05 3.3. */
+/** A failure under a step's button: the notice line, or for a missing local network permission the panel of the design, Android app. */
 @Composable
 internal fun PairErrorLine(message: PairMessage, access: LocalNetworkAccess?) {
     if (message == PairMessage.LocalNetwork && access != null) {

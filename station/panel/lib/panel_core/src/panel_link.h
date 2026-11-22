@@ -1,4 +1,4 @@
-// The panel's Wi-Fi link to the station service as a state machine (R88 4.3, ruled 2026-11-22 03:10 point 4): join the
+// The panel's Wi-Fi link to the station service as a state machine: join the
 // network, dial the station's TLS port, check the certificate's fingerprint BEFORE anything is sent, say
 // "HELLO intake-panel <version> esp32c3 <token>", then carry the panel's lines both ways and send "K" when idle.
 // No Arduino headers: every wait goes through LinkIo with its bound passed in, so the host tests (test/test_link)

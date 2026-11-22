@@ -1,4 +1,4 @@
-// Service worker: keeps the page shell for offline start (04 10.2) and shows the Hub's alerts (every alert type, R80 section 4)
+// Service worker: keeps the page shell for offline start and shows the Hub's alerts (every alert type)
 // when the server has web.push on. Served whether or not alerts are on. Never caches <app path>/api/ replies but the texts of a language.
 "use strict";
 const VERSION = "__VERSION__";   // the server writes its version here when it serves this file
@@ -18,7 +18,7 @@ self.addEventListener("activate", (event) => {
     .then(() => self.clients.claim()));
 });
 // the texts of the language in use (GET api/strings/<code>.js, the one api reply kept): the app opens offline in the language it
-// was last used in (R85 3.5; 04 10.2)
+// was last used in
 const STRINGS = BASE + "/api/strings/";
 const isStrings = (path) => path.startsWith(STRINGS) && /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?\.js$/.test(path.slice(STRINGS.length));
 self.addEventListener("fetch", (event) => {
@@ -34,9 +34,9 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("push", (event) => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch (e) { d = {}; }
-  // one notification per alert (R80 section 4): the Hub builds the title and the line, names the place that fixes it in `url`, and tags a
+  // one notification per alert: the Hub builds the title and the line, names the place that fixes it in `url`, and tags a
   // lasting condition by its key so it is shown once; an older Hub's print alert has the same fields
-  // every push ends in a notification (a subscription promises it, R80 20:48): an alert that is over arrives as a normal one with the SAME tag,
+  // every push ends in a notification (a subscription promises it): an alert that is over arrives as a normal one with the SAME tag,
   // `silent` and no `renotify`, which replaces the shown one; a payload this worker does not understand is a plain "Spoolwarden" that opens the app
   event.waitUntil(self.registration.showNotification(d.title || "Spoolwarden", { body: d.body || "", tag: d.tag || d.kind || "alert", data: { url: d.url || "./" },
     ...(d.silent === true ? { silent: true } : {}), ...(d.renotify === false ? { renotify: false } : {}) }));

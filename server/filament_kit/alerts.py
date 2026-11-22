@@ -1,9 +1,9 @@
-"""Alert rules and thresholds (R80 section 3), the Hub's disk measurement (section 6) and the running-low list (section 7).
+"""Alert rules and thresholds, the Hub's disk measurement (section 6) and the running-low list (section 7).
 
-`alerts.xml` lives in the Hub's STATE folder (R80 ruling of 01:12), written with the state folder's owner and mode
+`alerts.xml` lives in the Hub's STATE folder, written with the state folder's owner and mode
 and never through a symbolic link (the same atomic write as the event store). It holds the eight alert switches, the
 running-low threshold, the "only when it is the last spool" switch and the two storage limits; no per-device entries
-(R80 E4: a device keeps its own switch). A start never fails because of it: a file that cannot be read gives the
+(a device keeps its own switch). A start never fails because of it: a file that cannot be read gives the
 defaults, one that cannot be written keeps the new values in memory; `problem()` says which, for the Checks row.
 
 Every event is written whatever the switches say; `is_alert` tells whether an alert type that is on covers an event.
@@ -24,7 +24,7 @@ log = logging.getLogger("filament_kit.alerts")
 
 FILE = "alerts.xml"
 VERSION = "1"
-# (key, the event kinds the type covers, on at the start): the keys are fixed (R80 ruling of 00:25)
+# (key, the event kinds the type covers, on at the start): the keys are fixed
 TYPES = (("runout", ("print.runout",), True),
          ("paused", ("print.paused",), True),
          ("failed", ("print.failed",), True),
@@ -232,7 +232,7 @@ def type_of(kind: str) -> str | None:
 
 def is_alert(event: dict, settings: dict | None = None) -> bool:
     """Whether an alert type that is switched on covers `event` (a dict as the store returns it). A `storage.low`
-    with direction `down` (the disk fell from bad to warn) is never an alert (R80 E2); `spool.low` is an alert only
+    with direction `down` (the disk fell from bad to warn) is never an alert; `spool.low` is an alert only
     for the last spool of its filament when "only when last spool" is on."""
     s = settings or load()
     key = type_of(event.get("kind", ""))
@@ -246,7 +246,7 @@ def is_alert(event: dict, settings: dict | None = None) -> bool:
     return True
 
 
-# ---------------------------------------------------------------- the Hub's disk (R80 section 6)
+# ---------------------------------------------------------------- the Hub's disk
 
 def _existing(path: Path) -> Path:
     """`path`, or the nearest folder above it that exists (a backups folder not made yet lives on its parent's disk)."""
@@ -341,7 +341,7 @@ def storage_use(settings: dict | None = None) -> dict:
     return {"filesystems": filesystems(s), "items": items()}
 
 
-# ---------------------------------------------------------------- running low (R80 section 7)
+# ---------------------------------------------------------------- running low
 
 def running_low(spools: list[dict], settings: dict | None = None) -> dict:
     """`GET api/spools/low`'s content from Spoolman's spool list: {threshold_g, spools: [{id, filament, material,

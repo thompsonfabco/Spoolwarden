@@ -1,4 +1,4 @@
-"""RC1c, keep the old form (orchestrator ruling 2026-11-22): after a write through the new code, the JSON file that v0.6.2's
+"""RC1c, keep the old form: after a write through the new code, the JSON file that v0.6.2's
 Slicer Sync reads is there, current, and in the shape its writer made (store.py:164, sync.py:165/486/812, installer.py:242).
 Each test reads the file with v0.6.2's own reading code (copied here, with its line)."""
 import base64
@@ -147,7 +147,7 @@ def test_the_pair_aside_is_compact_json_like_v062_and_follows_the_waiting_mark(t
         assert _mode(d.pair_aside) == 0o600
 
 
-# ---------- deleted by an older Sync: the file is gone (R605 M1) ----------
+# ---------- deleted by an older Sync: the file is gone ----------
 
 def test_a_marker_that_an_older_sync_deleted_is_gone(tmp_path):
     d = _dirs(tmp_path)

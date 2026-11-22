@@ -19,7 +19,7 @@ may rename it). The images are `firmware/intake-panel.bin` (whole, at 0x0) and `
 - See: how many of the 30 starts reach "Wi-Fi: connected" and then link up; RSSI against the reference.
 - Pass: 30 of 30; RSSI within 6 dB of the reference at the same spot; no drop in 24 h (est).
 
-## B2. TLS handshake time and speech stutter (H8, H5; R88 prove-first 4)
+## B2. TLS handshake time and speech stutter (H8, H5)
 - Do: link up, then play speech phrases back to back for 10 minutes (volume 50) with the tag reader polling and the OLED
   updating; also reconnect 30 times (restart the station service) while a phrase plays. A bench build that prints a timestamp
   at the handshake start and end, the minimum free heap and the largest free block over serial is needed: the release
@@ -28,7 +28,7 @@ may rename it). The images are `firmware/intake-panel.bin` (whole, at 0x0) and `
 - Pass: handshake plus HELLO under 2 s (est; the station allows 5 s); no audible dropout in the steady run; no underrun
   from the handshake (the link task runs at the loop's priority, below the speech task); minimum free heap at least 40 KB (est).
 
-## B3. Update keeps the Wi-Fi set-up, a whole flash wipes it (R88 03:10 point 3, TO PROVE FIRST: one panel, both ways)
+## B3. Update keeps the Wi-Fi set-up, a whole flash wipes it (TO PROVE FIRST: one panel, both ways)
 - Do: panel on firmware 14, set up and linked. (a) Flash the program image only:
   `python -m esptool --chip esp32c3 --port <port> write-flash 0x10000 intake-panel-program.bin`. (b) Set up again, then flash
   the whole image: `... write-flash 0x0 intake-panel.bin`. Also do (a) and (b) through the station's own flash command
@@ -96,7 +96,7 @@ may rename it). The images are `firmware/intake-panel.bin` (whole, at 0x0) and `
 - See: (a) the panel shows "Refused: wrong token" and the station log shows one attempt every 30 s (plus the station's own 1 s
   delay). (b) the panel leaves Wi-Fi at once and the station uses USB; unplug USB and the panel returns to Wi-Fi within about 10 s.
   (c) the second panel retries every 2 s.
-- Pass: the 30 s, 2 s and USB behaviour as stated (R88 03:10 point 4); with USB plugged and the station talking, no Wi-Fi attempts.
+- Pass: the 30 s, 2 s and USB behaviour as stated; with USB plugged and the station talking, no Wi-Fi attempts.
 
 ## B10. The scale-less station over Wi-Fi, end to end
 - Do: the real station with no scale: scan a tag with the panel's reader (and a USB one), press yellow, long-press yellow, press red.

@@ -141,7 +141,7 @@ def test_a_filament_only_this_intake_uses_is_edited_in_place_and_undone(sm):
 
 
 def test_apply_to_some_of_an_intakes_spools_splits_them_off(sm):
-    """Review R124 finding 1: the record says what each spool is, and the others can get the same change later."""
+    """The record says what each spool is, and the others can get the same change later."""
     r, hid = add(sm, count=3)
     a, b, c = r.spool_ids
     rec = intake_history.apply(sm, hid, item=0, values={"color_hex": "FF0000"}, spool_ids=[c])
@@ -159,7 +159,7 @@ def test_apply_to_some_of_an_intakes_spools_splits_them_off(sm):
 
 
 def test_undo_never_edits_a_filament_that_became_shared(sm):
-    """Review R124 finding 2: an in-place edit, then another intake joins the filament; the undo gives this record's
+    """An in-place edit, then another intake joins the filament; the undo gives this record's
     spool a copy with the earlier values and leaves the other spool's filament alone."""
     r, hid = add(sm)
     fid = sm.get(f"spool/{r.spool_ids[0]}")["filament"]["id"]
@@ -174,7 +174,7 @@ def test_undo_never_edits_a_filament_that_became_shared(sm):
 
 
 def test_undo_leaves_a_spool_weight_the_revision_did_not_change(sm):
-    """Review R124 finding 3: a weight measured after the intake survives undoing a nozzle edit."""
+    """A weight measured after the intake survives undoing a nozzle edit."""
     r, hid = add(sm)
     sid = r.spool_ids[0]
     sm.patch(f"spool/{sid}", {"spool_weight": 250})
@@ -194,7 +194,7 @@ def test_a_tare_correction_is_undone_to_the_spools_own_weight(sm):
 
 
 def test_an_ai_answer_that_fails_the_checks_is_not_proposed(sm):
-    """Review R124 finding 4: the proposal passes the same checks as an edit by hand."""
+    """The proposal passes the same checks as an edit by hand."""
     _, hid = add(sm, read_id=read(sm)["read_id"])
     for change in ({"net": -5}, {"vendor": "x" * 150}):
         bad = copy.deepcopy(READ)
@@ -213,7 +213,7 @@ def test_a_proposal_must_be_text(sm):
 
 
 def test_the_add_tool_says_nothing_of_the_history_to_other_callers(sm):
-    """Review R124 finding 8: the MCP tool result carries `saved` / `tag` only for the kit's own page."""
+    """The MCP tool result carries `saved` / `tag` only for the kit's own page."""
     from filament_kit.web import mcp_tools
     tools = mcp_tools.Tools(sm)
     it = {k: v for k, v in ITEM.items() if k not in ("photos", "existing_filament_id", "estimates", "sealed_reason")}
@@ -439,7 +439,7 @@ def test_the_intake_station_save_is_recorded_with_its_photo(sm, monkeypatch):
     assert rec["saved"][0]["spool_ids"] == [r["spool_id"]]
 
 
-# ---------------------------------------------------------------- R85 section 1: records as XML
+# ---------------------------------------------------------------- records as XML
 
 def test_a_record_and_a_pending_read_are_xml_files(sm):
     out = read(sm)

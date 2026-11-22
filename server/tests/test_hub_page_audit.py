@@ -1,4 +1,4 @@
-"""AUT-5 on the Hub page (design 09 S1.11, 07 section 15): the page audit (tests/page_audit.js) in every section of the
+"""AUT-5 on the Hub page (step S1.11, the design, accessibility): the page audit (tests/page_audit.js) in every section of the
 Hub page (/setup), Console light and dark, at 1280 px and 320 px, through tests/aut5_run.mjs in a headless Chrome, Edge
 or Chromium already on the machine. The page is served with example data only (the example-data rules: "Workshop hub",
 Workshop X1, Garage Voron, Kitchen phone, rd-01) and the printers and Klipper modules on, with fakes for the managers.
@@ -492,7 +492,7 @@ def test_features_does_not_scroll_sideways_at_320_px_in_a_wide_font_with_a_long_
 
 
 # What a top-level `function` or `var` of a classic script would replace on `window` (a `const` or `let` of such a name is a
-# SyntaxError), and the names every object has: a section script must not declare one of these (R332: `function scrollTo`
+# SyntaxError), and the names every object has: a section script must not declare one of these (`function scrollTo`
 # turned off the page's own scrolling)
 BROWSER_NAMES = {
     "scrollTo", "scroll", "scrollBy", "open", "close", "print", "name", "status", "top", "parent", "self", "length", "focus", "blur",

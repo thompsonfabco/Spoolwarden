@@ -1,4 +1,4 @@
-"""The menus' one key map and its two variants (06 8.1, 8.2): the keys as a state machine, the numbered lines, the
+"""The menus' one key map and its two variants: the keys as a state machine, the numbered lines, the
 full-screen drawing and its footer prompts on a stand-in for curses, which variant starts when, and the real screen in a
 pty (Linux)."""
 from __future__ import annotations

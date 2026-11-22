@@ -145,7 +145,7 @@ private fun DraftTag(text: String, mono: Boolean = false) {
     )
 }
 
-/** A form group of the design (02 5.11, "panel"): `surface` ground, 1 dp `border`, `r` corners, no elevation. */
+/** A form group of the design (the design, components, "panel"): `surface` ground, 1 dp `border`, `r` corners, no elevation. */
 @Composable
 internal fun AddPanel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val colors = SpoolwardenTheme.colors

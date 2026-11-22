@@ -135,13 +135,13 @@ internal fun HomeScreen(
     localNetworkPanel: @Composable () -> Unit = {},
     /** The time the ages count from; null: the clock, read again every half minute. */
     nowMillis: Long? = null,
-    /** The alert banners (R80 section 5): at most two, then "<n> more alerts"; none by default. */
+    /** The alert banners: at most two, then "<n> more alerts"; none by default. */
     alertBanner: BannerState = BannerState.None,
     alertActions: AlertBannerActions = AlertBannerActions(),
     /** The Hub's running-low count: a line "<n> spools running low" that opens Spools with the filter on; 0 shows nothing. */
     lowCount: Int = 0,
     onOpenLow: () -> Unit = {},
-    /** "Getting started on the Hub: 4 of 8 done" (R83 5.4), a quiet line that opens the Hub screen; null shows nothing. */
+    /** "Getting started on the Hub: 4 of 8 done", a quiet line that opens the Hub screen; null shows nothing. */
     gettingStarted: String? = null,
     onOpenHub: () -> Unit = {},
     extra: @Composable () -> Unit = {},
@@ -445,7 +445,7 @@ private fun PrintersPanel(
         action = { SwButton(stringResource(R.string.home_printers_all), onOpenAll, kind = SwButtonKind.Quiet) },
     ) {
         when {
-            // nothing loaded: say why by state (05 3.2); the Hub notice at the top of Home already says it (05 3.4), and the local network notice stands in for the content (3.3)
+            // nothing loaded: say why by state; the Hub notice at the top of Home already says it, and the local network notice stands in for the content (3.3)
             list == null && (connection is Connection.CertChanged || connection == Connection.Unpaired) -> Unit
             list == null && connection == Connection.NeedsLocalNetwork -> Unit
             list == null && offline -> SwEmptyState(
@@ -487,7 +487,7 @@ private fun PrintersPanel(
     }
 }
 
-/** 05 3.5: the Hub's own message (shown as given), else no route or timeout, else an answer not understood. */
+/** the design, Android app: the Hub's own message (shown as given), else no route or timeout, else an answer not understood. */
 private fun failureText(state: HomePrintersState): Int =
     if (state.unexpected) R.string.common_hub_answer_unknown else R.string.common_hub_unreachable
 

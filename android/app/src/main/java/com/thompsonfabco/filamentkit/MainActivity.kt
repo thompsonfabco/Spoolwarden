@@ -328,7 +328,7 @@ class MainActivity : ComponentActivity() {
     private val app: AppViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // The system splash stays on the --bg ground until the stored pairing and appearance are read (05 2.1).
+        // The system splash stays on the --bg ground until the stored pairing and appearance are read.
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
         splash.setKeepOnScreenCondition { app.startup.value == null }
@@ -396,7 +396,7 @@ internal fun FilamentKitApp(
     val destination = entry?.destination
     val inPairing = destination.inPairing()
     val tab = destination.tab()
-    // Settings opened from the pairing graph's overflow: part of pairing (05 4): no bottom bar, no Hub chip, Back returns to the step
+    // Settings opened from the pairing graph's overflow: part of pairing: no bottom bar, no Hub chip, Back returns to the step
     val pairingBelow = runCatching { nav.getBackStackEntry<PairGraph>() }.isSuccess
     val settingsOverPairing = settingsOverPairing(inPairing, tab, pairingBelow)
 
@@ -457,7 +457,7 @@ internal fun FilamentKitApp(
     LaunchedEffect(lifecycle, config) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { AlertsLauncher.startIfNeeded(appContext) }
     }
-    // The Weigh Station voice (R88): read when the Hub answers, so the Settings list knows whether the group exists
+    // The Weigh Station voice: read when the Hub answers, so the Settings list knows whether the group exists
     LaunchedEffect(api, online) {
         if (!inPairing && api != null && online) app.voice.refresh()
     }
@@ -480,14 +480,14 @@ internal fun FilamentKitApp(
     var hubBefore by rememberSaveable { mutableStateOf<String?>(null) }
     // screens ask for the client at each call, so a trusted certificate or a re-pair reaches them with their state intact
     fun currentApi(): Api = app.session.api.value ?: throw ApiError.noHubPaired()
-    // The Hub at a glance (R83 5): one read per Api, shared by Home's Getting started line and the Hub screen
+    // The Hub at a glance: one read per Api, shared by Home's Getting started line and the Hub screen
     val hubVm: HubViewModel = viewModel(key = "hub-glance-${System.identityHashCode(api)}", factory = viewModelFactory {
         initializer { HubViewModel(load = { currentApi().hub() }) }
     })
     val hubUi by hubVm.state.collectAsStateWithLifecycle()
     // `api/hub` says it too (05-android-app 3.7)
     LaunchedEffect(hubUi.hub) { hubUi.hub?.let { demoOn = it.demo } }
-    // Scan a label and Print a label are absent until the Hub has the label routes (05 16)
+    // Scan a label and Print a label are absent until the Hub has the label routes
     val labelRoutes by produceState(false, api, online) {
         val a = api
         value = if (a == null || !online) value else try {
@@ -498,7 +498,7 @@ internal fun FilamentKitApp(
             false
         }
     }
-    // the check history table on the Hub screen (R84 4.3)
+    // the check history table on the Hub screen
     val healthVm: HealthViewModel = viewModel(key = "hub-health-${System.identityHashCode(api)}", factory = viewModelFactory {
         initializer { HealthViewModel(load = { days -> currentApi().health(days) }) }
     })
@@ -513,7 +513,7 @@ internal fun FilamentKitApp(
     val context = LocalContext.current
 
     // The user asked to pair again (a screen's button, or the Hub sheet). A 401 or a changed certificate on its own
-    // only changes the connection state (05 2.7): it never moves the user or clears a screen.
+    // only changes the connection state: it never moves the user or clears a screen.
     val pairAgainRequests by app.router.pairAgainRequests.collectAsStateWithLifecycle()
     LaunchedEffect(pairAgainRequests) {
         if (pairAgainRequests > app.handledPairRequests) {
@@ -548,7 +548,7 @@ internal fun FilamentKitApp(
         }
     }
 
-    // The pairing destinations follow the pairing steps (05 4); done leaves through finishPairing.
+    // The pairing destinations follow the pairing steps; done leaves through finishPairing.
     val pairOwner = if (inPairing) runCatching { nav.getBackStackEntry<PairGraph>() }.getOrNull() else null
     if (pairOwner != null) {
         PairRouteSync(
@@ -557,7 +557,7 @@ internal fun FilamentKitApp(
         )
     }
 
-    // A tag tap opens tag/{uid} on the stack of the selected tab (05 2.6), anywhere except pairing and the add steps that
+    // A tag tap opens tag/{uid} on the stack of the selected tab, anywhere except pairing and the add steps that
     // take taps themselves (photos, check). While a load is being written it waits: the toast says so and the tag opens
     // when the write ends.
     val tapsOn = destination != null && !inPairing && !settingsOverPairing && !destination.takesTagTaps()
@@ -601,7 +601,7 @@ internal fun FilamentKitApp(
     val openSettingsOverPairing: () -> Unit = { nav.navigate(SettingsGraph) { launchSingleTop = true } }
     val navVisible = !inPairing && !settingsOverPairing && destination != null && !(phone && imeVisible) &&
         destination?.hasRoute(SpoolsScanRoute::class) != true
-    // Panes on a phone (02 2.3, 08 9): the root page is the list of sections, choosing one drills in, and Back at that
+    // Panes on a phone: the root page is the list of sections, choosing one drills in, and Back at that
     // section's root returns to the list with focus on its row; a screen deeper in a section keeps its own Back
     val listNav = LocalNavStyle.current == NavStyle.List
     val drill = rememberSectionDrill()
@@ -630,7 +630,7 @@ internal fun FilamentKitApp(
         }
     }
 
-    // Where an alert's action goes (R80 17:00 ruling): the printer, the running-low list, else the Alerts list
+    // Where an alert's action goes: the printer, the running-low list, else the Alerts list
     fun openAlertTarget(target: AlertTarget) {
         when (target) {
             is AlertTarget.Printer -> {
@@ -644,7 +644,7 @@ internal fun FilamentKitApp(
                 tabTapped(Tab.Spools)
             }
             AlertTarget.AlertsList -> nav.navigate(AlertsRoute) { launchSingleTop = true }
-            // a link builds its tab's stack, root first, so Back behaves as if the person had navigated there (05 2.5)
+            // a link builds its tab's stack, root first, so Back behaves as if the person had navigated there
             is AlertTarget.Spool -> {
                 nav.selectTab(Tab.Spools)
                 nav.popBackStack<SpoolsRoute>(inclusive = false)
@@ -666,7 +666,7 @@ internal fun FilamentKitApp(
         openAlertTarget(target)
     }
 
-    // The spool screens and the tag screens (05 2.5, "Shared"): declared in the graph of every tab, so they open on the stack of
+    // The spool screens and the tag screens (the design, Android app, "Shared"): declared in the graph of every tab, so they open on the stack of
     // the tab that is selected and the bar keeps showing it.
     val sharedRoutes: NavGraphBuilder.() -> Unit = {
         composable<AlertsRoute> {
@@ -904,7 +904,7 @@ internal fun FilamentKitApp(
                 },
             )
         }
-        // a read or an add that ends while the person is elsewhere is answered with a snackbar (05 6.2, 6.5)
+        // a read or an add that ends while the person is elsewhere is answered with a snackbar
         val readDoneText = stringResource(R.string.add_photos_read_done)
         val readDoneAction = stringResource(R.string.common_check)
         val addedText = stringResource(R.string.add_done_title)
@@ -1235,7 +1235,7 @@ internal fun FilamentKitApp(
                                 pairScope.launch { toast.show(savedText) }
                             },
                             onPairAgain = app.router::pairAgain,
-                            // no pairing: the form and its typing stay, the Hub notice sits inline (05 2.7)
+                            // no pairing: the form and its typing stay, the Hub notice sits inline
                             paired = api != null,
                         )
                     }
@@ -1424,7 +1424,7 @@ internal fun FilamentKitApp(
                                 val said = if (confirmed) context.getString(R.string.spool_result_loaded, name, route.slot)
                                 else context.getString(R.string.spool_load_unconfirmed)
                                 val kind = if (confirmed) null else NoticeKind.Warn
-                                // a load the Hub can undo (R84 3.3): Undo in the toast, held 10 s or the phone's recommended time
+                                // a load the Hub can undo: Undo in the toast, held 10 s or the phone's recommended time
                                 pairScope.launch {
                                     if (undo == null) {
                                         toast.show(said, kind = kind)
@@ -1673,7 +1673,7 @@ internal fun NavController.leaveSettingsForPairing(): Boolean {
 /** The place the top bar names (05-android-app 2.2): the screen, not the product. */
 @Composable
 private fun placeTitle(destination: NavDestination?, entry: NavBackStackEntry?, storedCertificate: Boolean): String {
-    // the thing's name: the spool's, or the tag's (05 2.2)
+    // the thing's name: the spool's, or the tag's
     when {
         destination?.hasRoute(SpoolRoute::class) == true -> {
             val id = entry!!.toRoute<SpoolRoute>().id

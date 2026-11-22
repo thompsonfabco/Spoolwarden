@@ -1,11 +1,11 @@
-// Printers (04 6): the list of printers with the ones found on the network (#printers), and one printer (#printers/<id>):
+// Printers: the list of printers with the ones found on the network (#printers), and one printer (#printers/<id>):
 // status in words (live stream), controls, camera, slots with Load and Unload, Filament used with Put it back, slot mapping
 // with Map by loading filament, Printer settings; adding a printer. Loaded before app.js (which calls printersTab() when
 // the printers module is on). Everything from the Hub goes in through textContent / element properties, never innerHTML.
 "use strict";
 function printersTab() {
   const API = BASE + "/api/printers";
-  const KEY = "spoolwarden.printer";                  // the printer opened last (04 2.4)
+  const KEY = "spoolwarden.printer";                  // the printer opened last
   const HEX = /^[0-9A-Fa-f]{6}$/;
   const t = SW.t;
   const enc = encodeURIComponent;
@@ -14,7 +14,7 @@ function printersTab() {
   const snaps = new Map();                            // printer id -> its last {printer, status} (list cards)
   let current = null, addedId = null;                 // the printer on show; the one just added (its line says so)
   let listAt = null, listTimer = 0, stateTimer = 0, listLoad = null;
-  let autoOpened = false, autoTried = false;          // tablets: the printer opened last is expanded when the list opens without an address for one (04 6.1)
+  let autoOpened = false, autoTried = false;          // tablets: the printer opened last is expanded when the list opens without an address for one
   let pageLoad = null;                                // the skeleton of a printer page whose lists are not read yet
   let page = null;                                    // the open printer's nodes and state, made by buildPage()
 
@@ -27,7 +27,7 @@ function printersTab() {
   const nameOf = (id) => { const p = known(id) || meta(id); return (p && p.name) || id; };
   const timeLeft = (m) => (m > 0 ? (m >= 60 ? t("printer_time_hours", { hours: Math.floor(m / 60), minutes: m % 60 }) : t("printer_time_minutes", { minutes: m })) : "");
   const SHAPE = { run: "s-half", warn: "s-triangle", ok: "s-filled", bad: "s-octagon", neutral: "s-hollow", info: "s-diamond" };
-  // a state as a sentence that starts with its shape (04 3.3): never colour alone
+  // a state as a sentence that starts with its shape: never colour alone
   const sentence = (kind, text) => h("p", { class: "pstate", "data-state": kind }, SW.shape(SHAPE[kind]), h("span", { class: "pstate__text" }, text));
   const JOB = { RUNNING: ["printer_job_printing", "run"], PAUSE: ["printer_job_paused", "warn"], PREPARE: ["printer_job_preparing", "run"],
     FINISH: ["printer_job_finished", "ok"], FAILED: ["printer_job_failed", "bad"], IDLE: ["printer_job_idle", "neutral"], SLICING: ["printer_job_slicing", "run"] };
@@ -37,7 +37,7 @@ function printersTab() {
   const FIX = { offline: "printers_fix_offline", not_configured: "printers_fix_not_configured", wrong_code: "printers_fix_wrong_code",
     unauthorized: "printers_fix_unauthorized", needs_developer_mode: "printers_fix_developer_mode", cert_changed: "printers_fix_cert_changed",
     klippy_not_ready: "printers_fix_klippy_not_ready" };
-  // the badge and what is said under it for a printer's `state` (02 7.1, printer states): the same words in every interface
+  // the badge and what is said under it for a printer's `state` (the design, components, printer states): the same words in every interface
   function connection(p) {
     const s = p.state;
     if (s === "connecting") return { badge: h("span", { class: "status" }, SW.spinner(), t("common_connecting")) };
@@ -57,7 +57,7 @@ function printersTab() {
   const hexOf = (sl) => (HEX.test(sl.color_hex || "") ? "#" + sl.color_hex.toUpperCase() : "");
   const slotName = (sl) => (sl.spool ? sl.spool.name : sl.type || (sl.present === false ? t("common_empty") : sl.reading ? t("common_reading") : t("printer_slot_unknown")));
   const grams = (sl) => (sl.spool && sl.spool.remaining_weight != null ? Math.round(sl.spool.remaining_weight) : null);
-  // the slot as one sentence for a screen reader (the swatches are hidden): "A1 Polymaker PolyTerra PLA #2B2B2E, 620 g left" (04 6.1)
+  // the slot as one sentence for a screen reader (the swatches are hidden): "A1 Polymaker PolyTerra PLA #2B2B2E, 620 g left"
   function slotSr(sl) {
     if (sl.present === false) return t("printers_slot_sr_empty", { slot: sl.label });
     const g = grams(sl), name = slotName(sl), hex = hexOf(sl);
@@ -88,7 +88,7 @@ function printersTab() {
   const keyField = (o) => SW.field({ type: "secret", label: t("common_moonraker_key"), ...o });
 
   // ----- the page: a list, and one printer under it (on phones instead of it) -----
-  const listLine = resultLine();      // a refresh that fails keeps the cards and says how old they are (04 3.5)
+  const listLine = resultLine();      // a refresh that fails keeps the cards and says how old they are
   const cards = h("ul", { class: "pcards", "aria-label": t("nav_printers") });
   const foundBox = h("div");
   const countBox = h("p", { class: "printers__count" });
@@ -119,7 +119,7 @@ function printersTab() {
   };
   const wantList = () => active && !document.hidden && (!current || !SW.phone());
 
-  // ----- the list (04 6.1) -----
+  // ----- the list -----
   async function loadAll() {
     const [l, m] = await Promise.all([pj(""), pj("manage")]);
     printers = l.printers; manageList = m.printers; changes = m.changes; listAt = Date.now();
@@ -144,7 +144,7 @@ function printersTab() {
     }
     retitle(); schedule();
   }
-  // the 5 s list read and the 10 s state reads run while the list is on show and the page is visible (04 6.1)
+  // the 5 s list read and the 10 s state reads run while the list is on show and the page is visible
   function schedule() {
     clearTimeout(listTimer); clearTimeout(stateTimer);
     if (!wantList() || !listAt) return;
@@ -209,7 +209,7 @@ function printersTab() {
     layout();
   }
 
-  // ----- adding a printer (04 6.9, 12.2); a change is asked for in a sheet, its refusal shows inside it -----
+  // ----- adding a printer; a change is asked for in a sheet, its refusal shows inside it -----
   async function change(o, send, after) {
     let r = null, done = "";
     const ok = await sheetAsk({ kind: "entry", busy: t("common_saving"), ...o, run: async (v) => {
@@ -225,7 +225,7 @@ function printersTab() {
     if (addedId) location.hash = "#printers/" + enc(addedId);
   }
 
-  // ----- adding a printer, guided (R82 section 5, R83 section 5): which printer (the found list first), its details, the test and the add,
+  // ----- adding a printer, guided: which printer (the found list first), its details, the test and the add,
   // then "Map its slots now?". One sheet; Back keeps what was typed. The texts below are in the catalogue when EV2 lands (the keys file
   // lists them); until then the English here is shown. -----
   const GUIDED = {
@@ -257,7 +257,7 @@ function printersTab() {
     const f = GUIDED[key];
     return f == null ? key : vars ? f.replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : f;
   }
-  // After a load, unload or clear the toast offers Undo when the Hub can put the spool's last action back (R84 3); else it is the plain toast
+  // After a load, unload or clear the toast offers Undo when the Hub can put the spool's last action back; else it is the plain toast
   function undoToast(spoolId, text, eventId) {
     const h2 = window.SW_HISTORY;
     return (h2 && spoolId != null ? h2.offerUndo(spoolId, text, () => { if (page) pollStates(); }, eventId) : Promise.resolve(false)).then((offered) => { if (!offered) SW.toast(text); });
@@ -291,7 +291,7 @@ function printersTab() {
           ...k.filter((p) => !p.configured).map((p) => row(p.name || p.host, `${p.host}:${p.port}`, () => useKlipper(p)))];
         body.replaceChildren(h("h3", { class: "pguided__heading" }, tg("printer_guided_found")),
           rows.length ? h("ul", { class: "pfound" }, rows) : h("p", { class: "muted" }, st.scan === "running" ? tg("printer_guided_looking") : tg("printer_guided_none")),
-          // no family choice (R87 00:55; 04 6.9): a printer that was not found is typed, under the list, always shown, in this order
+          // no family choice: a printer that was not found is typed, under the list, always shown, in this order
           h("div", { class: "pguided__choice" }, SW.btn(tg("printer_guided_type_bambu"), { action: "type-bambu", run: () => typeBambu() }),
             SW.btn(tg("printer_guided_type_klipper"), { action: "type-klipper", run: () => typeKlipper() })));
         foot.replaceChildren(cancel);
@@ -338,7 +338,7 @@ function printersTab() {
       if (bad.length) bad[0]._control.focus();
       return bad.length > 0;
     }
-    // the test route answers 200 {reachable: false} for a printer that does not answer (R87 1); any other failure (a Hub without the
+    // the test route answers 200 {reachable: false} for a printer that does not answer; any other failure (a Hub without the
     // route yet, a request that did not get through) is not the printer's answer, so the add goes on and says its own result
     async function klipperTest(v) {
       try {
@@ -363,7 +363,7 @@ function printersTab() {
           }
         }
         clear(line);
-        // a Bambu Lab printer is added by the address typed (R87 2): the Hub checks it and the Access Code and reads the serial from the
+        // a Bambu Lab printer is added by the address typed: the Hub checks it and the Access Code and reads the serial from the
         // printer; a found row's serial goes along when the address is still the one it was found at
         const sent = bambu ? { address: v(f.bAddr), access_code: v(f.bCode), ...(v(f.bName) ? { name: v(f.bName) } : {}),
             ...(st.serial && v(f.bAddr) === st.foundAt ? { serial: st.serial } : {}) }
@@ -397,7 +397,7 @@ function printersTab() {
     return dlg;
   }
 
-  // ----- one printer (04 6.2): its nodes are made again for every printer opened -----
+  // ----- one printer: its nodes are made again for every printer opened -----
   const group = (titleKey, ...kids) => {
     const hid = SW.uid("ph"), title = h("h2", { class: "group__title", id: hid }, t(titleKey));
     const body = h("div", { class: "group__body" }, ...kids), head = h("header", { class: "group__head" }, title);
@@ -472,7 +472,7 @@ function printersTab() {
     page = null;
     if (!keepId) { current = null; pageView.replaceChildren(); layout(); retitle(); }
   }
-  // where the printer's page sits: under its card on tablets, in place of the list on phones (04 2.3)
+  // where the printer's page sits: under its card on tablets, in place of the list on phones
   function layout() {
     const wide = !SW.phone(), open = !!current;
     pageView.hidden = !open;
@@ -492,7 +492,7 @@ function printersTab() {
     retitle(); schedule();
   }
 
-  // ----- live status (04 6.3): the printer's stream; closed when the screen is left or hidden -----
+  // ----- live status: the printer's stream; closed when the screen is left or hidden -----
   function stream() {
     const g = page;
     stopStream();
@@ -529,10 +529,10 @@ function printersTab() {
       ...(addedId === g.id && !isUp(p) ? [sentence("ok", t("printers_added_connecting"))] : []));
     if (addedId === g.id && isUp(p)) addedId = null;
     g.up = isUp(p);
-    g.loadAny.hidden = !g.up;                           // Load a spool is in the header whenever the printer is connected (R83 addition 4)
+    g.loadAny.hidden = !g.up;                           // Load a spool is in the header whenever the printer is connected
     if (!g.camOn) g.camBtn.hidden = !g.camKind();       // the list may learn of a camera later
   }
-  // ----- Auto (R83 addition, contract A6): the waiting notice with Stop waiting, and the choice when two slots were loaded -----
+  // ----- Auto (contract A6): the waiting notice with Stop waiting, and the choice when two slots were loaded -----
   const autoSpool = (a) => { const s = (a && a.spool) || {}, sid = (a && a.spool_id) ?? s.id; return `${s.vendor || ""} ${s.name || ""}`.trim() || (sid != null ? t("spool_title", { id: sid }) : tg("auto_the_spool")); };
   function paintAuto(p, auto) {
     const g = page;
@@ -551,7 +551,7 @@ function printersTab() {
     kids.push(h("div", { class: "pauto__buttons" }, needsHub(SW.btn(tg("auto_stop"), { cls: "btn--ghost", action: "auto-stop", run: () => autoStop(spool, line) }))), line);
     g.autoBox.replaceChildren(...kids);
   }
-  async function autoStop(spool, line) {                // no question: stopping loses nothing (R83 addition 01:06)
+  async function autoStop(spool, line) {                // no question: stopping loses nothing
     const g = page;
     await act(line, t("common_working"), async () => {
       await pj(`${enc(g.id)}/auto/cancel`, {});
@@ -588,8 +588,8 @@ function printersTab() {
     g.notes.replaceChildren(...(s.notes || []).map((n) => h("p", { class: "muted" }, n)));
   }
 
-  // ----- controls and camera (04 6.4) -----
-  // what each command is called, and the sentence that says it was done (04 3.2)
+  // ----- controls and camera -----
+  // what each command is called, and the sentence that says it was done
   const COMMANDS = { pause: ["printer_pause", "printer_result_paused"], resume: ["printer_resume", "printer_resumed_line"],
     stop: ["printer_stop", "printer_stopped_line"], light_on: ["printer_light_on", "printer_light_on_line"],
     light_off: ["printer_light_off", "printer_result_light_off"] };
@@ -666,7 +666,7 @@ function printersTab() {
       SW.btn(t("common_try_again"), { action: "try-again", run: () => camera(true) })));
   }
 
-  // ----- slots, load and unload (04 6.5; the kit's slot routes, the same refusals as the Android app) -----
+  // ----- slots, load and unload (the design, web app; the kit's slot routes, the same refusals as the Android app) -----
   function slotLine(label) {
     const g = page;
     if (!g.slotLines.has(label)) g.slotLines.set(label, resultLine());
@@ -850,7 +850,7 @@ function printersTab() {
     } finally { g.slotBusy = false; }
   }
 
-  // Clear slot (R83 section 3): "the Hub forgets which spool is in this slot", offered on every slot. The dry run says what would happen
+  // Clear slot: "the Hub forgets which spool is in this slot", offered on every slot. The dry run says what would happen
   // (a spool goes back, a waiting assignment ends); a sheet asks; the real call answers what was done.
   async function clearSlot(sl, button) {
     const g = page, label = sl.label, line = slotLine(label);
@@ -862,7 +862,7 @@ function printersTab() {
       if (!plan) return;
       const sp = plan.spool, name = sp ? ((sp.vendor || sp.name) ? `${sp.vendor || ""} ${sp.name || ""}`.trim() : t("spool_title", { id: sp.id })) : "";
       const mv = [plan.moved_back].flat()[0], back = mv && typeof mv === "object" ? mv.location : mv;      // the contract says a place; the unload route's list of {id, location} is read too
-      // on a Bambu Lab printer only the Hub's record changes; the Hub's answer carries the ruled sentence in `text` (R83 20:33), in the plan and in the result
+      // on a Bambu Lab printer only the Hub's record changes; the Hub's answer carries the ruled sentence in `text`, in the plan and in the result
       const still = (r) => (r && r.text) || (r && r.printer_cleared === false && (known(g.id) || {}).family !== "klipper" ? tg("printer_clear_still_shows") : "");
       const text = [tg("printer_clear_body"), sp ? (back ? tg("printer_clear_goes_back", { name, location: back }) : tg("printer_clear_goes_back_noplace", { name })) : "", still(plan)].filter(Boolean).join(" ");
       const r = await sheetAsk({ kind: "confirm", title: tg("printer_clear_title", { slot: label }), text, opener: button, confirm: tg("printer_clear_action"),
@@ -874,7 +874,7 @@ function printersTab() {
     } finally { g.slotBusy = false; }
   }
 
-  // ----- Filament used (04 6.6) -----
+  // ----- Filament used -----
   const stamp = (at) => (at || "").replace("T", " ").slice(0, 16);
   async function loadUsage() {
     const g = page;
@@ -882,7 +882,7 @@ function printersTab() {
     await fill(g.usageBox, t("printer_group_used"), async () => {
       const bar = h("div", { class: "pused__bar" }, SW.btn(tg(g.byMonth ? "printer_used_show_list" : "printer_used_by_month"), { cls: "btn--ghost", action: "usage-by-month", run: () => { g.byMonth = !g.byMonth; loadUsage(); } }),
         window.SW_HISTORY ? window.SW_HISTORY.downloadLink("usage", tg("printer_used_download"), `printer=${enc(g.id)}`) : null);
-      if (g.byMonth) {                                   // R84 5.7: the months as a table (R84 9.5: {months: [{month, grams, prints, unfinished_prints, top_material?}]})
+      if (g.byMonth) {                                   // the months as a table ({months: [{month, grams, prints, unfinished_prints, top_material?}]})
         const r = await pj(`${enc(g.id)}/usage?by=month`);
         if (page !== g) return null;
         const months = r.months || [];
@@ -919,7 +919,7 @@ function printersTab() {
     loadUsage();
   }
 
-  // ----- Slot mapping (04 6.7) -----
+  // ----- Slot mapping -----
   const mapPath = (g, what) => `${enc(g.id)}/${what}`;
   function mapNodes(g, m) {
     const running = m.state === "running";
@@ -943,7 +943,7 @@ function printersTab() {
       m.report_wanted ? h("p", { class: "muted" }, m.report_why || t("printers_map_report_wanted")) : null,
       h("div", { class: "printer__buttons" }, mapBtn, byLoad, report)];
   }
-  // poll: the 2 s refresh while a mapping runs; a poll that fails keeps the map and says how old it is (04 3.5)
+  // poll: the 2 s refresh while a mapping runs; a poll that fails keeps the map and says how old it is
   async function loadMap(poll) {
     const g = page;
     if (!g) return;
@@ -966,7 +966,7 @@ function printersTab() {
     try { const kids = await draw(); if (kids && page === g) { g.mapBox.replaceChildren(...kids); paintFilled(); } }
     catch (e) { if (page === g) { stale(g.mapLine, g.mapAt ?? Date.now()); again(); } }
   }
-  // one filled button on the printer (04 6.2): Resume while paused; else Map slots while not mapped; else Collect a report when it would help
+  // one filled button on the printer: Resume while paused; else Map slots while not mapped; else Collect a report when it would help
   function paintFilled() {
     const g = page;
     if (!g || !g.mapBtns) return;
@@ -996,7 +996,7 @@ function printersTab() {
     }, { button });
   }
 
-  // ----- Map by loading filament (04 6.7.1): a sheet; the owner loads each slot, the printer says which one it sees (the
+  // ----- Map by loading filament: a sheet; the owner loads each slot, the printer says which one it sees (the
   // kit's session, shared with the Hub page and the Android app; nothing is sent to the printer) -----
   function manualStop() { if (page && page.manual) { clearTimeout(page.manual.timer); page.manual = null; } }
   const mpath = (id, what) => `${enc(id)}/manual-map${what ? "/" + what : ""}`;
@@ -1035,7 +1035,7 @@ function printersTab() {
       const was = JSON.stringify(m.v);
       try { m.v = await pj(mpath(m.id)); m.okAt = Date.now(); } catch (e) {
         if (m !== g.manual) return;
-        // a Wi-Fi blip: the session is still open on the Hub, so keep asking, slower each time; what is shown stays, with how old it is (04 3.5)
+        // a Wi-Fi blip: the session is still open on the Hub, so keep asking, slower each time; what is shown stays, with how old it is
         if (++m.fails >= 8) { body.replaceChildren(); foot.replaceChildren(); failed(line, e, () => dlg.close()); g.manual = null; return; }
         stale(line, m.okAt);
         m.timer = setTimeout(tick, Math.min(2000 * 2 ** m.fails, 20000));
@@ -1090,7 +1090,7 @@ function printersTab() {
     }
   }
 
-  // ----- Printer settings (04 6.8): from the Hub's own printer list; every change in a sheet (12.2) -----
+  // ----- Printer settings: from the Hub's own printer list; every change in a sheet (12.2) -----
   const settingsRow = (label, value, ...buttons) => h("div", { class: "kv__row" }, h("span", { class: "kv__key" }, label), h("div", { class: "kv__value" }, value, ...buttons));
   const sbtn = (key, setting, run) => needsHub(SW.btn(t(key), { action: "change", name: t("printer_set_button_name", { action: t(key), setting }), run }));
   // After a change the sheet has closed: the lists are read again and the group says what happened.
@@ -1167,7 +1167,7 @@ function printersTab() {
 }
 
 
-// ----- Print alerts on this phone (04 9.2): the group of the Settings sheet; the Hub's push/key, push/subscribe,
+// ----- Print alerts on this phone: the group of the Settings sheet; the Hub's push/key, push/subscribe,
 // push/unsubscribe and push/test, as when it was on the Printers tab. Called by app.js only when print alerts are offered. -----
 function alertsPanel(addToHome) {
   const ok = "serviceWorker" in navigator && "PushManager" in window;
@@ -1201,7 +1201,7 @@ function alertsPanel(addToHome) {
     else setState("off");
   }
   paint(false);
-  if (!ok) {                                                  // an iPhone in the browser: the way to a Home Screen app (04 10.1)
+  if (!ok) {                                                  // an iPhone in the browser: the way to a Home Screen app
     return h("div", { class: "alerts" }, line, addToHome ? SW.btn(SW.t("nav_more_home_screen"), { run: addToHome, action: "home" }) : null);
   }
   const makeToggle = (checked) => SW.toggle({ label: SW.t("settings_alerts_toggle"), checked,

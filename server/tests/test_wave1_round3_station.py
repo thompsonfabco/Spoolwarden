@@ -1,5 +1,5 @@
-"""Wave round 3, the Weigh Station: `page_from` in GET /settings and STATION_PAGE_FROM reaching the handler (review R559
-finding 12, the behaviour of 02.2), and the handler's refusal sentences from the catalogue (R559 finding 11, D13)."""
+"""Wave round 3, the Weigh Station: `page_from` in GET /settings and STATION_PAGE_FROM reaching the handler
+(the behaviour of 02.2), and the handler's refusal sentences from the catalogue (D13)."""
 from __future__ import annotations
 
 import json
@@ -108,18 +108,18 @@ def test_the_station_answers_a_wrong_ticket_and_a_body_that_is_not_an_object_in_
 
 
 def test_the_ruled_texts_of_round_3():
-    """R560 4, 7, 8, 9 and the LOW wording: the texts as the rulings give them."""
+    """The texts as the rulings give them."""
     c = CATALOGUE
     readers = "Tag Readers set up for this Hub must be set up again."
     assert readers not in c["settings_certificate_body"]              # the public certificate: readers do not check it
-    assert c["cli_certificate_made"] == "Made a new certificate. " + readers                   # R86 2026-11-21 22:35.1
+    assert c["cli_certificate_made"] == "Made a new certificate. " + readers
     assert c["station_page_page_from_subnets_note"] == "If this machine's network has changed, run: sudo {command} features apply"
     assert page.TEXTS["station_page_page_from_subnets_note"] == \
-        "If this machine's network has changed, run: sudo spoolwarden features apply"         # R83 2026-11-21 22:26
+        "If this machine's network has changed, run: sudo spoolwarden features apply"
     assert c["devices_station_allow_list_only"] == "This Weigh Station answers only the addresses on its allow-list."
-    assert c["cli_activity_empty_ever"] == "Nothing has been done yet."                       # R86 22:42.3c
-    assert "200" not in c["cli_activity_more"]                                                   # R86 22:35.4
-    for key in ("station_page_unreachable", "station_settings_remove_failed"):                  # R83 00:52: no bare "station"
+    assert c["cli_activity_empty_ever"] == "Nothing has been done yet."
+    assert "200" not in c["cli_activity_more"]
+    for key in ("station_page_unreachable", "station_settings_remove_failed"):                  # no bare "station"
         assert re.sub(r"Weigh Station", "", c[key]).lower().count("station") == 0, key
     assert "intake" not in c["station_page_step"].lower()
     for key in ("station_page_no_photo", "station_page_on", "station_page_off"):              # nothing shows them

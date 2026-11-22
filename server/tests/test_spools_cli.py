@@ -1,4 +1,4 @@
-"""R83 10.5: `spools`, `spool show|weigh|move|empty`, `catalog local|local remove|add --ask`, `devices show|set`, each
+"""`spools`, `spool show|weigh|move|empty`, `catalog local|local remove|add --ask`, `devices show|set`, each
 against a fake Hub built from the contract (hub_fakes.py): the human text, the --json document, the exit code, and
 what was sent (a dry run first, the real change only after a yes). Example names only."""
 from __future__ import annotations
@@ -436,7 +436,7 @@ def test_parsers_and_run(capsys):
     assert spools_cli.run(parse("spool", "show", "12"), FakeApi({"GET /api/spools/12": {"spool": {}, "view": spool_view(12)}})) == 0
 
 
-# ---------- R88: checked out, return, home ----------
+# ---------- checked out, return, home ----------
 
 SINCE = "2026-11-20T10:00:00Z"
 IN_SLOT = {"printer_id": "S1", "printer": "Workshop", "slot": "A2"}

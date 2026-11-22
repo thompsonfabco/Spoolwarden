@@ -1,4 +1,4 @@
-"""`spoolwarden alerts`, `events` and `spools low` (06 9.16 to 9.18) and the Alerts group of `config` (06 8.3).
+"""`spoolwarden alerts`, `events` and `spools low` and the Alerts group of `config`.
 
 They read and write what the Hub does, in process: the events are the store's files, the switches are alerts.xml (read
 without sudo, written as root with the Hub's owner and mode by the same code the Hub page's save uses), the running-low
@@ -267,7 +267,7 @@ def run_spools(args, sm_factory=None) -> int:
         output.out(say("cli_low_none", grams=grams))
         return 0
     output.out(say("cli_low_heading", count=len(rows), grams=grams))
-    warn = output.glyph("look")                 # `Last one` is marked with the warn glyph (06 6.2)
+    warn = output.glyph("look")                 # `Last one` is marked with the warn glyph
     table = [[r["id"], r["filament"], say("cli_low_left", grams=alerts_api.number(r["remaining_g"])),
               r["location"] or "",
               (f"{warn} " if warn else "") + say("cli_low_last") if r["last_one"]

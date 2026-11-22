@@ -1,4 +1,4 @@
-"""`spoolwarden locations` (06 9.15), the Storage locations screen of `config` (8.3), the six old keys `config set`
+"""`spoolwarden locations`, the Storage locations screen of `config` (8.3), the six old keys `config set`
 refuses, and the installer's storage question (SL3). The changes go through `storage_api.save`, the Hub page's own path,
 so these tests pin what the command line adds to it: the words, the exit codes, the Error and Fix lines, the asking and
 the screens. Example names only."""
@@ -577,7 +577,7 @@ def test_the_installer_still_asks_use_the_default_storage_locations_and_n_opens_
     assert len(menus) == (1 if opened else 0)
 
 
-# ================================================================ one counting, one sentence (R463)
+# ================================================================ one counting, one sentence
 
 def test_the_remove_question_counts_spools_as_storage_used_does(capsys):
     """spools_at (the command) and spools_in (the menu) are Storage.used: containers hold spools by name, a renamed

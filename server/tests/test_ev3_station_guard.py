@@ -1,4 +1,4 @@
-"""EV3 request guard (R83, ruled 2026-11-18 01:10; station/guard.py, station/http.py): each route for each caller class, the
+"""EV3 request guard (station/guard.py, station/http.py): each route for each caller class, the
 429 of wrong tickets and its reset, the tickets, a cookie of another station, the shape of every refusal."""
 from __future__ import annotations
 
@@ -259,7 +259,7 @@ def test_the_allow_list_outranks_the_ranges():
     assert guard.caller_class("203.0.113.9", set()) == guard.OUTSIDE
 
 
-# ---- the page on an address of the allow-list: data only while its session lasts (review R537, LOW 1)
+# ---- the page on an address of the allow-list: data only while its session lasts
 
 def test_the_page_on_an_allow_listed_address_is_refused_once_its_session_has_ended(stations):
     s = stations({"127.0.0.1"}, "l")

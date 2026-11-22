@@ -1,4 +1,4 @@
-/* The live printer view of the Printers section (R83 section 2 and 3). The view is its own container: the width it has, not the window's,
+/* The live printer view of the Printers section. The view is its own container: the width it has, not the window's,
    decides the layout, so it holds in the Panes look beside a list and on a phone alike. */
 .plive { container: plive / inline-size; display: grid; gap: var(--s3); min-width: 0; }
 .plive > * { min-width: 0; }

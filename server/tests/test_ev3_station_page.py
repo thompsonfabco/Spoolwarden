@@ -18,7 +18,7 @@ from filament_kit.station import http as station_http
 from filament_kit.station import guard, page, settings
 
 TOKEN = "T0ken_for_the_station_pairing_0123456789"
-OPEN_FROM_HUB = "Open this page from the Hub: Devices, this Weigh Station, Open this device's page."   # R83, 2026-11-18 00:52
+OPEN_FROM_HUB = "Open this page from the Hub: Devices, this Weigh Station, Open this device's page."
 
 
 class Clock:
@@ -381,7 +381,7 @@ def test_the_page_says_to_open_it_from_the_hub_and_every_text_is_a_constant():
     assert "station_page_open_from_hub" in static_texts()["station.js"]
     used = set(re.findall(r'T\["(station_page_[a-z_]+)"\]', static_texts()["station.js"]))
     assert used <= set(page.TEXTS) and "station_page_open_from_hub" in used
-    # the page's own texts, and the words for the station's step and scale ids that its status rows show (R560 M13)
+    # the page's own texts, and the words for the station's step and scale ids that its status rows show
     assert all(k.startswith(("station_page_", "station_step_", "station_scale_")) and v for k, v in page.TEXTS.items())
 
 

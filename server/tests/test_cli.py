@@ -700,7 +700,7 @@ def test_unreadable_config_says_run_with_sudo(argv, monkeypatch, capsys):
 
 
 def test_label_reader_off_shows_only_records_kept_and_says_where_to_switch_it_on(monkeypatch, capsys):
-    """R1: AI is optional; with both readers off the group says so and keeps only Records kept (06 8.3)."""
+    """R1: AI is optional; with both readers off the group says so and keeps only Records kept."""
     cfg = config.load()
     cfg["modules"] = {n: n in modules.MODES["server"] for n in modules.MODULES}
     config.save(cfg)

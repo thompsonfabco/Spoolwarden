@@ -49,7 +49,7 @@ PY39_PINS = ["requests<2.33", "gunicorn==23.0.0"]   # nfc2klipper's pins need Py
 SPOOLMAN_URL = re.compile(r"https?://[^\s\"'`$;&|<>()\\]+")      # one line of moonraker.conf: no spaces, no shell
 SERVICE = re.compile(r"[A-Za-z0-9_.-]{1,64}")            # a manifest service entry: a plain unit name, nothing else
 SERVICE_FILES = {"lasttag": ("lasttag/lasttag.py", "lasttag/allow")}   # files a kept service still needs
-LASTTAG_PORT = 5002                  # an existing lasttag keeps it; a new install may take 443 (R82 section 2 point 5)
+LASTTAG_PORT = 5002                  # an existing lasttag keeps it; a new install may take 443
 LASTTAG_HTTPS_PORT = 443
 LASTTAG_CAPS = "CapabilityBoundingSet=CAP_NET_BIND_SERVICE\nAmbientCapabilities=CAP_NET_BIND_SERVICE\n"
 EMPTY = {"files": [], "include": False, "services": [], "asvc": [], "moonraker": [], "nfc": None}

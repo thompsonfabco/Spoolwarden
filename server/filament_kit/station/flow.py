@@ -88,7 +88,7 @@ def computer_scale() -> bool:
 def has_scale(computer) -> bool:
     """Is there a scale at all: the computer's (`computer`, from computer_scale), else the panel's, which the panel
     service keeps in st.state["panel_scale"] ({"grams", "status", "unit"} as "scale", or None) while a panel sends `W`
-    lines (R88 4.2). The computer's scale wins when both exist."""
+    lines. The computer's scale wins when both exist."""
     return computer or st.state.get("panel_scale") is not None
 
 
@@ -122,13 +122,13 @@ def lookup(seq, nfc_id):
     d = r.get("display") or []
     if status == 200 and r.get("known"):
         sp = r.get("spool") or {}
-        back = sp.get("checked_out") is True  # an older Hub sends no `checked_out`: the plain flow (R88 1.8)
+        back = sp.get("checked_out") is True  # an older Hub sends no `checked_out`: the plain flow
         if back:  # the Hub's display is [name, "Home: <home>"]; built from the spool when it is missing
             d = d[:2] if len(d) >= 2 else [sp.get("name") or "", "Home: " + (sp.get("home") or "not recorded")]
         if go("weigh", seq, spool=sp, display=d, returning=back):
             speech.say("Checked out spool. Press yellow to weigh it, or hold yellow to skip weighing." if back
                        else "Known spool. Put it on the scale.")
-    elif status == 200 and not has_scale(computer_scale()):  # nothing could weigh a new spool: the phone can (R88 4.2)
+    elif status == 200 and not has_scale(computer_scale()):  # nothing could weigh a new spool: the phone can
         if go("phone", seq, display=["No scale here"]):
             speech.say("No scale here. Use the phone.")
     elif status == 200:
@@ -181,7 +181,7 @@ def save(seq):
         # the filament exactly as recognize gave it (its `item`); the server takes "filament" or "item"
         body.update({"spool_id": sp["id"]} if sp.get("id") else {"filament": flow["filament"]})
         back = bool(flow.get("returning"))
-        if back:  # weigh it, then send it back (R88 1.5)
+        if back:  # weigh it, then send it back
             body["return"] = True
     status, r = api().save(body)
     d = r.get("display") or []
@@ -220,7 +220,7 @@ def returned_display(sp, r):
 
 def returned_said(r, d):
     """What the voice says after a return: the Hub's `speak`, else "Returned to <place>." from the answer's location (or
-    its "to <place>" row); plain "Returned." when the answer names no place (R88 02:05)."""
+    its "to <place>" row); plain "Returned." when the answer names no place."""
     if r.get("speak"):
         return r["speak"]
     where = r.get("location") or next((x[3:] for x in d[1:3] if x.startswith("to ")), "")
@@ -355,7 +355,7 @@ def lamp_default(step) -> str:
 
 
 def lamp_modes(step, choice=None):
-    """(yellow, red) lamp modes for `step` when the owner chose `choice` for it on the station's page (R83 section 9: one
+    """(yellow, red) lamp modes for `step` when the owner chose `choice` for it on the station's page (one
     lamp per step of the intake). The table's own pattern stays (a blink is still a blink); only which lamp shows it
     changes: with one lamp chosen that lamp takes the step's pattern (the yellow lamp's, else the red's), "both" gives each
     lamp its own pattern (or the shared one where the table leaves it dark), "off" none. No choice: the table."""

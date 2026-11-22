@@ -1,4 +1,4 @@
-/* Analytics (R84 5): insights, filament used per month as bars or a table, a table per material for one month */
+/* Analytics: insights, filament used per month as bars or a table, a table per material for one month */
 .an { display: grid; gap: var(--s3); }
 .an__main { display: grid; gap: var(--s3); }
 .an__gate:empty { display: none; }

@@ -137,7 +137,7 @@ def test_station_pair_command(server, monkeypatch):
     assert api.paired and api.ips[0] == "127.0.0.1"
     assert api.tag_lookup(UID)[0] == 200
     answers = iter([link, "n"])
-    assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 5          # a no: Nothing changed (06 7)
+    assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 5          # a no: Nothing changed
 
 
 def _local_pair(server, monkeypatch, on=("server", "station")):
@@ -646,7 +646,7 @@ def test_station_pair_from_the_command_line_with_no_input(monkeypatch, capsys, s
     one whose descriptor is gone (seen under sudo)."""
     _as_root(monkeypatch)
     monkeypatch.setattr(sys, "stdin", stdin)
-    assert cli.main(["station", "pair"]) == 2          # no terminal to ask on (06 7)
+    assert cli.main(["station", "pair"]) == 2          # no terminal to ask on
     assert "terminal" in capsys.readouterr().err
     assert _nothing_saved()
 
@@ -1017,7 +1017,7 @@ def test_the_screen_shows_the_code_and_the_idle_hint(monkeypatch):
 
 
 def test_return_spool_posts_the_uid_and_spool_to_the_return_route(monkeypatch):
-    """CO3: the station's return call (R88 1.7); a 409 `not_checked_out` comes back as the Hub's answer."""
+    """CO3: the station's return call; a 409 `not_checked_out` comes back as the Hub's answer."""
     api = server_api.ServerApi.from_link(
         server_api.parse_link(f"fkit://pair?h=kit.example.com&p=8710&t={'t' * 43}&fp={'ab' * 32}&ip=192.0.2.5"))
     sent = []

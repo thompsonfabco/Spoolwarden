@@ -11,7 +11,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
- * One location as the Location field and the "Move to" sheet list it (ruling R79, 05-android-app 6.3 and 7.4): its
+ * One location as the Location field and the "Move to" sheet list it (05-android-app 6.3 and 7.4): its
  * [name], how full it is as supporting text ([howFull], null when the Hub did not say) and [full]. A full location
  * stays choosable.
  */
@@ -34,7 +34,7 @@ fun StorageLocation.howFullText(): AddText? {
         return if (left <= 0) AddText.of(R.string.storage_full) else AddText.of(R.string.storage_free, left)
     }
     val n = used ?: return null
-    // every bulk limit counts, the default overflow's and the sealed location's too (R79 C1)
+    // every bulk limit counts, the default overflow's and the sealed location's too
     val cap = limit
     return when {
         cap == null -> AddText.plural(R.plurals.storage_used_plain, n, n)

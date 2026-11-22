@@ -1,4 +1,4 @@
-"""The System commands of the command line (06 9.8 to 9.15, 10, 3): config show and set, label-reader, catalog, backup,
+"""The System commands of the command line: config show and set, label-reader, catalog, backup,
 web, remote, setup-code, certificate, spoolman, update, uninstall, logs, add, spool, help and the grouped top-level help."""
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def modules_on(*names, **settings):
     config.save(cfg)
 
 
-# ---------- config show and config set (06 9.8) ----------
+# ---------- config show and config set ----------
 
 def test_config_show_prints_every_group_in_the_menus_order_and_secrets_as_set_or_not_set(capsys):
     modules_on("spoolman", "server", "ai_intake")
@@ -181,7 +181,7 @@ def test_a_json_menu_points_at_config_show(capsys):
     assert rc == 2 and "config show --json" in err
 
 
-# ---------- label-reader (06 9.9) ----------
+# ---------- label-reader ----------
 
 def test_label_reader_status_with_no_engine_says_how_to_turn_one_on(capsys):
     modules_on("spoolman", "server")
@@ -258,7 +258,7 @@ def test_a_cloud_read_says_how_many_of_the_days_reads_it_used(capsys, monkeypatc
     assert f"Note: this used 1 of today's {config.load()['reads_per_day']} reads." in err
 
 
-# ---------- catalog (06 9.11) ----------
+# ---------- catalog ----------
 
 def test_catalog_status_says_when_it_is_not_downloaded_with_the_fix(capsys, monkeypatch):
     monkeypatch.setattr(library, "status", lambda: {"version": 0, "source": "none", "local": 0, "url": "https://x.example/l",
@@ -313,7 +313,7 @@ def test_catalog_adopt_says_what_it_took_over(capsys, monkeypatch, tmp_path):
     assert rc == 0 and words(out).startswith("Took over the catalog in ") and words(out).endswith("0 local additions.")
 
 
-# ---------- backup (06 9.10) ----------
+# ---------- backup ----------
 
 def _entry(name, kind, at=1700000000.0, size=4812 * 1024):
     return backup.Entry(name, name, size, at, kind)
@@ -354,7 +354,7 @@ def test_restore_done_is_a_done_row(capsys):
     assert re.search(r"done +Restored\. The Hub is back\.", capsys.readouterr().out)
 
 
-# ---------- web, remote, setup-code, certificate, spoolman (06 9.12) ----------
+# ---------- web, remote, setup-code, certificate, spoolman ----------
 
 def test_remote_with_the_feature_off_says_so_for_both_commands(capsys):
     modules_on("spoolman", "server")
@@ -403,7 +403,7 @@ def test_setup_code_revoke_trusted_says_how_many_and_what_each_needs(capsys, mon
 def test_certificate_makes_one_once_and_prints_the_fingerprint_in_groups(capsys):
     rc, out, _ = run(capsys, ["certificate"])
     lines = out.splitlines()
-    assert rc == 0 and lines[:3] == ["Made a new certificate.", "Tag Readers set up for this Hub must be set up again.", "Fingerprint:"] and len(lines) == 5     # R86 22:35.1
+    assert rc == 0 and lines[:3] == ["Made a new certificate.", "Tag Readers set up for this Hub must be set up again.", "Fingerprint:"] and len(lines) == 5
     assert all(len(g) == 4 for line in lines[3:] for g in line.split()) and len(lines[3].split()) == 8
     rc, again, _ = run(capsys, ["certificate"])
     assert again.splitlines()[0] == "Certificate present." and again.splitlines()[1:] == lines[2:]       # no Tag Reader line: nothing was made
@@ -468,7 +468,7 @@ def test_web_passphrase_ends_with_one_short_line(capsys, monkeypatch):
     assert (rc, out) == (0, "Passphrase saved.\n")
 
 
-# ---------- update and uninstall (06 9.13) ----------
+# ---------- update and uninstall ----------
 
 def test_the_removal_runs_with_its_lines_indented_and_reports_its_last_line(capsys):
     script = [sys.executable, "-c", "print('stopping'); print('removing files'); raise SystemExit(0)"]
@@ -495,7 +495,7 @@ def test_uninstall_ends_with_one_sentence_or_a_failed_row_naming_the_last_line(c
     assert rc == 1 and "The removal stopped: cannot stop the service." in out and "failed" in out
 
 
-# ---------- logs (06 9.14) ----------
+# ---------- logs ----------
 
 def _units(monkeypatch, text="", truncated=False):
     monkeypatch.setattr(setup_helper, "journal_units", lambda cfg: ["filament-kit-web.service", "filament-kit.service"])
@@ -546,7 +546,7 @@ def test_logs_need_root_and_the_json_has_the_hubs_shape(capsys, monkeypatch):
     assert run(capsys, ["logs"])[0] == 3
 
 
-# ---------- add and spool (06 10) ----------
+# ---------- add and spool ----------
 
 def test_add_and_spool_say_where_with_the_address(capsys):
     rc, out, _ = run(capsys, ["add"])
@@ -568,7 +568,7 @@ def test_add_and_spool_json_is_the_pointer_document(capsys):
         assert got["available"] is False and got["where"] == "web app" and got["url"].endswith("/intake")
 
 
-# ---------- help (06 3) ----------
+# ---------- help ----------
 
 def test_no_command_prints_the_grouped_help_that_help_and_dash_h_print(capsys):
     rc, bare, _ = run(capsys, [])
@@ -651,7 +651,7 @@ def test_aut9_the_new_commands_hold_80_columns_no_escape_ascii_and_json(argv, ca
     rc, out, err = run(capsys, argv)
     assert rc in (0, 1), err
     long = [x for x in (out + err).splitlines() if len(x) > 79]
-    assert all(" " not in x.strip() for x in long), long              # only an address or a path stays whole (06 6.3)
+    assert all(" " not in x.strip() for x in long), long              # only an address or a path stays whole
     assert "\x1b" not in out + err                                        # piped: no colour
     rc, plain, _ = run(capsys, ["--plain", *argv])
     assert plain.isascii(), [c for c in plain if not c.isascii()]
@@ -659,7 +659,7 @@ def test_aut9_the_new_commands_hold_80_columns_no_escape_ascii_and_json(argv, ca
     assert isinstance(json.loads(js), dict)
 
 
-# ---------- the rework of S5.8 (brief 69) ----------
+# ---------- the rework of S5.8 ----------
 
 REAL_AUDIT = cli._hub_audit
 
@@ -870,7 +870,7 @@ def test_history_cli_commands_are_wired(capsys, monkeypatch):
     assert rc == 0 and out.startswith("Hub report written:")
     assert run(capsys, ["backup", "password", "--show"])[1] == "Backup password is not set.\n"
     assert run(capsys, ["backup", "password"])[1].endswith("Backup password set. Every backup is now encrypted.\n")
-    assert run(capsys, ["backup", "password", "--show"])[1] == "correct horse battery\n"     # 06 9.10: the password
+    assert run(capsys, ["backup", "password", "--show"])[1] == "correct horse battery\n"     # the design, command line: the password
     monkeypatch.setattr(output, "terminal", lambda *a, **k: True)                          # --remove asks first (7)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
     assert run(capsys, ["backup", "password", "--remove"])[1].endswith("Removed the backup password.\n")

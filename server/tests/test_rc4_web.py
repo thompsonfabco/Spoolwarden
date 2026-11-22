@@ -1,4 +1,4 @@
-"""RC4 (R85 sections 3 to 5, R87 2 and 3): the web app's language, demo banner, print page and label, the push language and the Bambu Lab
+"""RC4: the web app's language, demo banner, print page and label, the push language and the Bambu Lab
 add by address. No network, no Hub: the kit API is a fake that records what it was asked."""
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ class RcKit(ManagingKit):
         if path == "/api/demo/leave":
             self._check()
             self.calls.append(("POST", path, body))
-            if not self.demo:                                           # as the Hub's route (R85 22:45.1): 409 when the demo is off
+            if not self.demo:                                           # as the Hub's route: 409 when the demo is off
                 raise SlotError("The demo is not on.", code="not_in_demo", http=409)
             self.demo = False
             return {"demo": False}
@@ -77,13 +77,13 @@ def test_the_page_follows_the_phones_language_when_the_hub_has_the_pack(env):
     kit = RcKit()
     r = page(env, kit, {"Accept-Language": "de-DE,de;q=0.9,en;q=0.5"})
     assert "<html lang=de " in r.text and "/intake/api/strings/de.js'" in r.text
-    # English first, the language after it (its texts replace English when they load): R574 HIGH 4 changed this from "no English"
+    # English first, the language after it (its texts replace English when they load)
     assert r.text.index("/intake/shared/strings.js'") < r.text.index("/intake/api/strings/de.js'") < r.text.index("/intake/shared/components.js'")
 
 
 def test_a_non_english_page_keeps_a_working_catalogue_when_the_hub_goes_down(env):
-    """R574 HIGH 4: the page chose German while the Hub answered; with the Hub down its German script answers 502, and the page
-    still loads the English catalogue before it, so no screen shows bare keys (R85 3.5)."""
+    """The page chose German while the Hub answered; with the Hub down its German script answers 502, and the page
+    still loads the English catalogue before it, so no screen shows bare keys."""
     kit = RcKit()
     c = signed(make_app(env, kit))
     h = {"Accept-Language": "de"}
@@ -153,7 +153,7 @@ def test_leave_demo_keeps_the_hubs_refusal(env):
 
 
 def test_leaving_drops_the_banner_a_page_load_cached_while_the_hub_was_leaving(env):
-    """R574 LOW: a page load during the leave read the Hub while the demo was still on; the reload after Leave demo has no banner."""
+    """A page load during the leave read the Hub while the demo was still on; the reload after Leave demo has no banner."""
     kit = RcKit()
     kit.demo = True
     c = signed(make_app(env, kit))
@@ -182,7 +182,7 @@ def test_the_languages_and_their_texts_come_from_the_hub(env):
         assert c.get("/intake/api/strings/" + bad).status_code == 404, bad
 
 
-FIVE = ("62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25")      # R85 00:50 point 6
+FIVE = ("62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25")
 BAD_SIZE = "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25."
 
 
@@ -195,9 +195,9 @@ def test_a_label_is_the_hubs_svg_at_one_of_the_five_sizes(env):
     for size in FIVE:
         assert c.get(f"/intake/api/spools/214/label.svg?size={size}").status_code == 200, size
         assert asked(kit, f"/api/spools/214/label.svg?size={size}")
-    for bad in ("sheet24", "a4", "A4-63X34"):                          # sheet24 never shipped and is dropped (00:50 point 1)
+    for bad in ("sheet24", "a4", "A4-63X34"):                          # sheet24 never shipped and is dropped
         r = c.get(f"/intake/api/spools/214/label.svg?size={bad}")
-        assert r.status_code == 400 and r.json() == {"error": "bad_request", "message": BAD_SIZE}, bad      # the twins' shape (R574 5)
+        assert r.status_code == 400 and r.json() == {"error": "bad_request", "message": BAD_SIZE}, bad      # the twins' shape
     assert signed(make_app(env, kit), AWAY).get("/intake/api/spools/214/label.svg").status_code == 403
 
 
@@ -221,14 +221,14 @@ def test_the_print_page(env, monkeypatch):
     r = c.get("/intake/labels?ids=3,14&size=50x30")
     assert r.status_code == 200 and "data-ids='3,14'" in r.text and "data-size='50x30'" in r.text
     assert "/intake/labels.js'" in r.text and "labels__print" in r.text
-    # the line about the printed address names the Hub's home address the codes hold (R85 5.5; R574 12), not the page's origin
+    # the line about the printed address names the Hub's home address the codes hold, not the page's origin
     assert "data-address='https://workshop.local'" in r.text
     assert "/intake/labels/page.css?size=50x30'" in r.text and "data-demo" not in r.text
     assert c.get("/intake/labels?ids=3").text.count("data-size='62x29'") == 1
     for size in FIVE:
         assert c.get(f"/intake/labels?ids=3&size={size}").status_code == 200, size
     for q in ("ids=", "ids=a", "ids=1,,2", "ids=1&size=a4", "ids=1&size=sheet24", "", "ids=" + ",".join(["1"] * 101),
-              "ids=0", "ids=3,0"):                                     # whole numbers of 1 or more, as the refusal says (R574 LOW)
+              "ids=0", "ids=3,0"):                                     # whole numbers of 1 or more, as the refusal says
         assert c.get("/intake/labels?" + q).status_code == 400, q
     assert c.get("/intake/labels?ids=0").text.startswith("Give the spool numbers")
     assert c.get("/intake/labels?ids=1&size=sheet24").text == BAD_SIZE
@@ -237,11 +237,11 @@ def test_the_print_page(env, monkeypatch):
     assert js.status_code == 200 and b"label.svg" in js.content and b"window.print()" in js.content
     kit.demo = True
     demo = signed(make_app(env, kit)).get("/intake/labels?ids=3").text
-    assert "data-demo='1'" in demo                                       # the demo banner on the print page too (R85 4.5)
+    assert "data-demo='1'" in demo                                       # the demo banner on the print page too
 
 
 def test_the_print_page_states_its_paper(env):
-    """R85 00:50 point 5: a sheet's paper is stated with margin 0; a roll prints each label on a page of the label's size."""
+    """A sheet's paper is stated with margin 0; a roll prints each label on a page of the label's size."""
     c = signed(make_app(env, RcKit()))
     want = {"62x29": "62mm 29mm", "50x30": "50mm 30mm", "a4-63x34": "A4", "a4-70x37": "A4", "letter-66x25": "letter"}
     for size, paper in want.items():
@@ -259,7 +259,7 @@ def _rule(css: str, selector: str) -> dict:
 
 
 def test_a_sheet_lays_its_labels_by_the_tables_margins_and_pitches():
-    """02 7.13's table (R85 00:50 point 2): left and top margin, pitch across and down, label size, 3 across, page size, no padding
+    """The design, components's table: left and top margin, pitch across and down, label size, 3 across, page size, no padding
     of the page's own at print; the print page's script offers the five sizes in a select with the line for a sheet."""
     from pathlib import Path
     static = Path(__file__).resolve().parents[1] / "filament_kit" / "web" / "static"
@@ -303,7 +303,7 @@ def test_a_subscription_keeps_the_phones_language(tmp_path):
 
 
 class LangEventKit:
-    """GET api/events as the Hub answers it, and with `lang` the same event in that language (R85 3.8); `fail` languages raise."""
+    """GET api/events as the Hub answers it, and with `lang` the same event in that language; `fail` languages raise."""
 
     def __init__(self, events, fail=()):
         self.events, self.fail, self.asked = list(events), set(fail), []
@@ -321,7 +321,7 @@ class LangEventKit:
 
 
 def test_an_alert_reaches_each_phone_in_its_own_language(tmp_path):
-    """R574 MED 6: the stored language is used: the feed asks the Hub for the event in each subscription's language, once per language,
+    """The stored language is used: the feed asks the Hub for the event in each subscription's language, once per language,
     and a phone whose language the Hub cannot give gets the Hub's own words."""
     store = push.Store(tmp_path / "push.xml")
     for n, lang in (("a", "de"), ("b", "de"), ("c", None), ("d", "ru")):
@@ -371,12 +371,12 @@ def test_the_scripts_hold_the_new_places():
                   'action: "print-label"', "/labels?ids=", 'api("share-corrections")',
                   'api("label-reader/corrections")', '"#recent/corrections"', "function loadCorr(", "window.SW_LANG"):
         assert words in text, words
-    # one label at a time in the web app; Print labels for several is the Hub page's (R85 22:45.6; R574 MED 10)
+    # one label at a time in the web app; Print labels for several is the Hub page's
     assert 'action: "print-labels"' not in text and "labels_button_many" not in text
 
 
 def test_the_activity_twin_refuses_in_the_twins_shape(env):
-    """R663: a bad `newest`, `limit` or since+newest is {error: code, message: sentence}, not {error: sentence}."""
+    """A bad `newest`, `limit` or since+newest is {error: code, message: sentence}, not {error: sentence}."""
     c = signed(make_app(env, RcKit()))
     for q in ("newest=abc", "newest=0", "newest=5&since=3", "limit=ten"):
         r = c.get("/intake/api/activity?" + q)

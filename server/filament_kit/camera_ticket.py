@@ -1,4 +1,4 @@
-"""The camera ticket and the camera session (R83 ruled 20:58 and 22:10).
+"""The camera ticket and the camera session.
 
 An image request cannot carry the setup code, so the Hub page asks `POST printers/{id}/camera/ticket` with the code and
 gets `{ticket, expires_in: 60}`. The FIRST camera request that carries `?ticket=` (the MJPEG stream, or the HLS

@@ -1,4 +1,4 @@
-"""Queueing corrections for the Share corrections setting (plan 2026-11-14-2200 section 5, V1.3; design 03 6.x, 10.5.2).
+"""Queueing corrections for the Share corrections setting (plan 2026-11-14-2200 section 5, V1.3; the design, Hub page.x, 10.5.2).
 
 When `label_reader.share_corrections` is on and the reader on this Hub keeps a correction queue (API 1.1), a record
 whose saved values differ from what the label reader read is queued on the reader: the record's stored photos, the
@@ -11,7 +11,7 @@ edit or an accepted suggestion) and `undo`. All three come to `sync`, which make
 values: queue what differs, delete the entry of an item that no longer differs. It runs in a background thread and
 never raises into the save.
 
-The record keeps `share.xml` beside its record (so retention removes it with the record; R85 section 1: it was
+The record keeps `share.xml` beside its record (so retention removes it with the record: it was
 `share.json`, which is read when there is no XML yet and moved once, by profiles/statexml.py):
     {"entries": {key: reader entry id | None}, "failed": {"reason": str, "at": iso} | None}
 and `state(rid)` is what a record's reply shows: {"state": "waiting" | "not_queued" | "none", "reason": str | None,

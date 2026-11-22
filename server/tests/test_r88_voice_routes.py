@@ -1,4 +1,4 @@
-"""R88 voice routes, the web twins, hello's voice and the command line (the VO routes step).
+"""Voice routes, the web twins, hello's voice and the command line (the VO routes step).
 
 The Weigh Station in these tests is a stub (`station_client.call` is replaced by a recorder)."""
 from __future__ import annotations

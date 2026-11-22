@@ -79,7 +79,7 @@ class EventsLoop(
     }
 
     companion object {
-        /** The longest the Hub waits (R80 E4: at most 55 s). */
+        /** The longest the Hub waits (at most 55 s). */
         const val WAIT_S = 55
         const val UNAVAILABLE_WAIT_MS = 5 * 60_000L
         const val MIN_ROUND_MS = 1_000L

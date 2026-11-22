@@ -1,7 +1,7 @@
 """Checks of the shared component files of design step S0.11 (the design, build order):
 web-shared/components.css and web-shared/components.js, and the additions components-jobs.css, components-media.css,
 components-media.js and components-lock.js (the Hub page's lock chip and unlock dialog), and alerts.css and alerts.js (the alert banner host,
-the Alerts list, the events poller and the notification helper; R80 EA5).
+the Alerts list, the events poller and the notification helper).
 
 The size limits of foundations 12 rule 7, every class the script uses is drawn by the stylesheet, every catalogue key
 the script names is in strings/en.json, and the page audit (AUT-5, tests/page_audit.js) is a script that parses. The
@@ -35,7 +35,7 @@ RUNNER = ROOT / "tests" / "aut5_run.mjs"
 SAMPLE = ROOT / "tests" / "components-sample.html"
 CATALOGUE = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))
 
-# foundations 12 rule 7: the core stylesheet "under 60 KB" (raised from 40 for the look profile groups, R62) and the script "under 60 KB", uncompressed, and each addition "at most 30 KB"; read as
+# foundations 12 rule 7: the core stylesheet "under 60 KB" (raised from 40 for the look profile groups) and the script "under 60 KB", uncompressed, and each addition "at most 30 KB"; read as
 # thousands of bytes (the stricter reading)
 LIMITS = {CSS: 60_000, JS: 64_000, **{a: 30_000 for a in ADDITIONS + [MEDIA_JS, LOCK_JS, ALERTS_JS]}}
 
@@ -77,7 +77,7 @@ def test_size_limits(path):
     assert size < LIMITS[path], f"{path.name} is {size} bytes; the limit is {LIMITS[path]}"
 
 
-# 01 4.3, 02 1.2: hairlines and marks use --hairline and --nav-mark, never a bare 1px or 3px
+# hairlines and marks use --hairline and --nav-mark, never a bare 1px or 3px
 BARE_MARK = re.compile(r"(?<![\w.-])[13]px\b")
 
 
@@ -169,8 +169,8 @@ class _Quiet(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-# 09 S0.11 "Check": AUT-5 on the sample page at 1280 px and 320 px (touch), light and dark; every view has no finding.
-# One runner for every page (09 S1.11): tests/aut5_run.mjs, with no allow-list here.
+# S0.11 "Check": AUT-5 on the sample page at 1280 px and 320 px (touch), light and dark; every view has no finding.
+# One runner for every page (S1.11): tests/aut5_run.mjs, with no allow-list here.
 def test_page_audit_on_the_sample():
     node = _node()
     if not node:

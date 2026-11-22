@@ -1,5 +1,5 @@
 /* recently added (S2.7) */
-/* the list: photo, filament, added, state, spool, confidence, open (02 6.1; the spool column goes below 1025 px) */
+/* the list: photo, filament, added, state, spool, confidence, open (the design, components; the spool column goes below 1025 px) */
 .coll--recent { grid-template-columns: auto minmax(0, 2.4fr) minmax(0, 1.2fr) max-content minmax(0, 1fr) minmax(0, 1.8fr) auto; }
 @media (max-width: 1024px) {
   .coll--recent { grid-template-columns: auto minmax(0, 2fr) minmax(0, 1.2fr) max-content minmax(0, 1.6fr) auto; }
@@ -42,7 +42,7 @@
   .kv--groups { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 600px) {
-  /* Save changes stays in reach while the form is long (03 6.1) */
+  /* Save changes stays in reach while the form is long */
   .recent__foot { position: sticky; bottom: var(--tab); padding: var(--s3) 0; border-top: var(--hairline) solid var(--border); background: var(--surface); }
   .changes__item { grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); }
   .changes__key { grid-column: 1 / -1; }
@@ -50,7 +50,7 @@
 .changes__list, .changes--compact, .revisions__list { list-style: none; margin: 0; padding: 0; }
 .revisions__item + .revisions__item { border-top: var(--hairline) solid var(--border); }
 .revisions__item p { margin: 0; }
-/* the photo viewer (02 7.6) */
+/* the photo viewer */
 .recent__viewer { display: grid; place-items: center; min-height: calc(var(--s7) * 4); background: var(--surface-2); border-radius: var(--r); }
 .recent__viewer-img { max-width: 100%; max-height: calc(100vh - var(--s7) * 5); object-fit: contain; }
 .recent__viewer-error { display: none; padding: var(--s4); }

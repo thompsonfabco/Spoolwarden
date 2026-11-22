@@ -1,5 +1,5 @@
 """AF2 (b) and (e): the Hub's pinned calls to a Weigh Station, the refusal on a changed certificate, and an older
-station (plain HTTP, no fingerprint said) that keeps working until it is updated (R82 section 2 points 3 and 4)."""
+station (plain HTTP, no fingerprint said) that keeps working until it is updated."""
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer

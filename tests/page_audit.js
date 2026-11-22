@@ -5,8 +5,8 @@
 // for every view, theme and appearance, at 1280 px and 320 px wide.
 (() => {
   "use strict";
-  const LANDMARK_NAV = ["Sections", "Settings groups", "Breadcrumb", "More sections", "Pages"];   // SR-3, 02 6.1
-  // FRM-4: the attributes of 07 9.1 by field name; a field whose name is not listed is not checked here
+  const LANDMARK_NAV = ["Sections", "Settings groups", "Breadcrumb", "More sections", "Pages"];   // SR-3, the design, components
+  // FRM-4: the attributes of the design, accessibility by field name; a field whose name is not listed is not checked here
   const FIELDS = {
     code: { type: "password", inputmode: "numeric", autocomplete: "off" },
     access_code: { type: "password", autocomplete: "off", autocapitalize: "off", spellcheck: "false" },

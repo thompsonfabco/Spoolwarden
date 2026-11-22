@@ -1,5 +1,4 @@
-"""Devices with their kind, version and out-of-date sentence, and a device's detail the Hub page draws itself (R83 section 9,
-10.2 and the rulings of 2026-11-17 21:18 and 21:22). Under /setup/api:
+"""Devices with their kind, version and out-of-date sentence, and a device's detail the Hub page draws itself. Under /setup/api:
 
     GET  devices                    {devices: [{id, name, kind, version?, newest?, out_of_date, advice?, paired?, last_seen?,
                                     reachable?, built_in, page}]}: the pairings and the Tag Reader tokens (kind "reader")
@@ -11,8 +10,7 @@
 
 The Hub never serves a device's HTML, script or style. What it takes from a station is data: JSON only, at most 256 KiB, 5
 seconds, a redirect is an error, only the address stored for that pairing. Every text from a station reaches the page as text.
-The kind and version of a pairing come from the pairing record once it holds them (`kind`, `version`; the client header of
-R83 section 9.2); until then a row has no kind, or "station" when it is a Weigh Station pairing.
+The kind and version of a pairing come from the pairing record once it holds them (`kind`, `version`); until then a row has no kind, or "station" when it is a Weigh Station pairing.
 
 The station's side (EV3): GET /state (its `photo` object reduced to a bool by `station_client.read_state`),
 GET /settings, POST /settings, GET /photo, and POST /ticket -> {ticket, expires_in: 60}; the station's page hands
@@ -71,7 +69,7 @@ def _offer(kind: str) -> str | None:
 
 
 def _advice(kind: str, version: str, newest: str) -> str:
-    """The row's out-of-date sentence (R83 section 9.4); the page words it from the same fields."""
+    """The row's out-of-date sentence; the page words it from the same fields."""
     return {"station": f"Out of date ({version}; the Hub is {newest}). On that machine: sudo spoolwarden update",
             "pc": f"Out of date ({version}). Install the current Slicer Sync on that PC.",
             "phone": "Out of date. The app offers the update when it is opened.",
@@ -132,7 +130,7 @@ def rows() -> list[dict]:
                "built_in": built_in, "page": kind == "station"}
         if d["id"] in reach:
             row["reachable"] = reach[d["id"]]
-        if kind == "station":       # R88 4.5: how its panel is connected
+        if kind == "station":       # how its panel is connected
             panel = station_client.station_panel(_station_url(cfg))      # the station's own /state; nothing when it is silent
             if panel:
                 row["panel"] = panel_setup.TEXT_DEVICES_WIFI if panel == "wifi" else panel_setup.TEXT_DEVICES_USB
@@ -232,7 +230,7 @@ def routes(page) -> list[tuple]:
                 return out
             settings_list, dropped = clean_settings(got.get("settings"))
             out["settings"] = settings_list
-            if got.get("page_from") in PAGE_FROM:      # who may open its page (R83 2026-11-18 01:14 point 1); the page
+            if got.get("page_from") in PAGE_FROM:      # who may open its page; the page
                 out["page_from"] = got["page_from"]     # says devices_station_allow_list_only under the link for `allowed`
             if dropped:
                 out["settings_dropped"] = True

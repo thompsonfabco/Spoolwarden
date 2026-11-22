@@ -1,4 +1,4 @@
-// Browser walk of the Hub page's Flash a device section (design 09 S2.16), driven by server/tests/test_hub_page_audit.py: opens
+// Browser walk of the Hub page's Flash a device section (step S2.16), driven by server/tests/test_hub_page_audit.py: opens
 // the page in a headless Chrome, Edge or Chromium already on the machine, with a fake Web Serial board and a fake esptool-js (the page's
 // own provisioning code runs against them), and prints { checks: [{ ok, what }], audit: [{ state, findings }] } as JSON. Every state
 // it reaches is also audited with tests/page_audit.js. Test-only: never shipped, never run on a Hub.

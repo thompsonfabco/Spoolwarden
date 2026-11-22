@@ -1,4 +1,4 @@
-// The Hub page's "Flash a device" section (03 11). Loaded after setup.js; everything from the server goes in through
+// The Hub page's "Flash a device" section. Loaded after setup.js; everything from the server goes in through
 // textContent, and its words are the catalogue's (flash_*). Two ways to write the Hub's own firmware (it comes with the Hub,
 // never from the internet) to an ESP32-C3:
 //  - into a board plugged into this computer: the browser writes it over Web Serial with esptool-js (esptool.bundle.js,
@@ -166,7 +166,7 @@ async function provisionOverSerial(info, settings, step) {
   return { ok: true };
 }
 
-// ----- the write's step list (02 8.2, 8.3; 03 11.3): kept here, so a redraw of the section shows it again -----
+// ----- the write's step list: kept here, so a redraw of the section shows it again -----
 const flashJobTitle = (name) => { const t = SW.t("job_title_" + name); return t === "job_title_" + name ? SW.t("job_title_other") : t; };
 function flashStepList(dev) {
   const keys = FLASH_DEVICES[dev].steps, run = flashRun && flashRun.id === dev ? flashRun : null;

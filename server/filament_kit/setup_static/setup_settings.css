@@ -80,7 +80,7 @@
   :root[data-look="panes"] .settings[data-open]:has(.coll__row--detail:not([hidden])) .settings__back { display: inline-flex; justify-self: start; }
 }
 /* devices (S2.9) */
-/* the section is two columns from a wide tablet up: Paired devices across, then the cards in pairs (03 7.1) */
+/* the section is two columns from a wide tablet up: Paired devices across, then the cards in pairs */
 @media (min-width: 1025px) {
   .page[data-section="devices"] > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s4); align-items: stretch; }   /* a pair is as tall as its taller card: no gap under the shorter one */
   .page[data-section="devices"] > div:last-child > :first-child { grid-column: 1 / -1; }
@@ -95,7 +95,7 @@
 .devices__web > .code { flex: 1 1 calc(var(--s7) * 4); min-width: 0; }
 .devices__web > img.qr { flex: none; }
 @media (max-width: 600px) { .devices__web > img.qr { margin-inline: auto; } }
-/* the collections' columns (02 6.1); the third-priority column goes on a tablet, every cell stays in a phone's card */
+/* the collections' columns; the third-priority column goes on a tablet, every cell stays in a phone's card */
 .coll--paired { grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.2fr) max-content; }
 .coll--readers { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.2fr) max-content; }
 .coll--trusted { grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 1.2fr) max-content; }
@@ -107,7 +107,7 @@
   .coll--paired, .coll--readers, .coll--trusted { grid-template-columns: none; }
 }
 .coll__item .coll__sub { margin-top: var(--s1); }
-/* the pairing dialog (03 7.2): its parts stack, and a long link scrolls inside its own block */
+/* the pairing dialog: its parts stack, and a long link scrolls inside its own block */
 .pairing { display: grid; gap: var(--s3); min-width: 0; }
 .pairing > * { min-width: 0; margin: 0; }
 .pairing p { margin: 0; }
@@ -116,7 +116,7 @@
 .pairing__print { overflow-wrap: anywhere; font-size: var(--fs-m); }
 .pairing__wait { display: flex; align-items: center; gap: var(--s2); }
 .pairing .code__text { max-height: calc(var(--s7) * 3); }
-/* Storage locations (R79; 03 10.4): the list of places in fill order, the Add and Edit form, and the panel of where a new spool goes */
+/* Storage locations (the design, Hub page): the list of places in fill order, the Add and Edit form, and the panel of where a new spool goes */
 .coll--storage { grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.6fr) max-content; }
 /* a tablet's table has no room for four columns of text and four buttons: the buttons go on a line of their own */
 @media (min-width: 601px) and (max-width: 1024px) {
@@ -166,7 +166,7 @@
 @media (max-width: 600px) {
   .settings__cat-grid { grid-template-columns: 1fr; }
 }
-/* Settings > Weigh Station voice (R88 2.1): the sliders show their value beside the track, the Test button sits with its result */
+/* Settings > Weigh Station voice: the sliders show their value beside the track, the Test button sits with its result */
 .voice__slider .field__box { display: flex; align-items: center; gap: var(--s3); }
 .voice__slider .field__control { flex: 1 1 auto; min-width: 0; padding: 0; }
 .voice__slider .field__unit { position: static; flex: none; min-width: calc(var(--s7) - var(--s1)); text-align: right; }

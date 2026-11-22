@@ -1,4 +1,4 @@
-// The live printer view of the Printers section (DECISIONS R83 section 2 and 3, the 20:58 ruling point 3): what an open printer shows in
+// The live printer view of the Printers section: what an open printer shows in
 // its Detail region. Loaded after setup.js; everything from the Hub goes in through textContent. It exports ONE function, printerLive(p, ctx),
 // which returns the view's element; the printer detail puts it in its region. The view asks `printers/{serial}/live` every 2 s while it
 // is on the page and the tab is visible, and stops by itself when it leaves the page. Looking (state, slots, usage) needs nothing; the
@@ -54,7 +54,7 @@ function printerLive(p, ctx = {}) {
   const camBox = hx("div", { class: "plive__cam", hidden: true });
   const autoNotice = hx("div", { class: "result result--block plive__autonotice", role: "status" });
   const units = plE("div", "plive__units"), usageBox = plE("div", "plive__log"), usageMsg = hx("p", { class: "result", role: "status" });
-  // Download as CSV (R84 6): GET export/usage.csv for this printer, unlocked as a file leaves the Hub
+  // Download as CSV: GET export/usage.csv for this printer, unlocked as a file leaves the Hub
   async function downloadUsage() {
     const r = await fetch(`/setup/api/export/usage.csv?printer=${enc(p.serial)}`, { credentials: "same-origin", headers: { "X-Setup-Code": theCode() } });
     if (!r.ok) { let d = {}; try { d = await r.json(); } catch { /* not JSON */ } throw hubError(r.status, d); }
@@ -146,7 +146,7 @@ function printerLive(p, ctx = {}) {
     controls.replaceChildren(...row);
   }
   const post = (what, body) => call(path(what), { ...body, code: theCode() });
-  // ----- Undo (R84 3): the answer names its event; the toast says what happened and offers Undo for 10 seconds; none named: no Undo -----
+  // ----- Undo: the answer names its event; the toast says what happened and offers Undo for 10 seconds; none named: no Undo -----
   const eventId = (r) => {
     const e = r && r.event;
     if (e && e.id != null) return e.undo && e.undo.possible === false ? null : e.id;

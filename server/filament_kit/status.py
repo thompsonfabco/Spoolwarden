@@ -27,7 +27,7 @@ class Row:
     text: str
     fix: str = ""
     action: str = ""        # what the console can do about it, by its own name ("" = nothing)
-    group: str = ""         # the heading the Overview files it under (06 section 13); `print_rows` does not print it
+    group: str = ""         # the heading the Overview files it under; `print_rows` does not print it
     key: str = ""           # who the row is, the same whether it is OK or needs a look: `<group>.<name>`, unique in a run
 
 
@@ -37,9 +37,9 @@ def _in(group: str, source: Iterable[Row]) -> Iterator[Row]:
         yield r if r.group else replace(r, group=group)
 
 
-# The headings of the Hub page's Overview, in its order (06 section 9.1); a row's group is one of these
+# The headings of the Hub page's Overview, in its order; a row's group is one of these
 GROUPS = ("Hub", "Spoolman", "Label Reader", "Weigh Station", "Devices", "Printers", "Slicer presets", "Filament Catalog")
-_WORDS = {OK: "OK", FAIL: "needs a look", INFO: "note"}      # 06 6.1: the code's values as the words people read
+_WORDS = {OK: "OK", FAIL: "needs a look", INFO: "note"}      # the design, command line: the code's values as the words people read
 
 
 def _grouped(rows: list[Row]) -> list[tuple[str, list[Row]]]:
@@ -52,7 +52,7 @@ def _grouped(rows: list[Row]) -> list[tuple[str, list[Row]]]:
 
 def _fours(text: str) -> str:
     """A long run of hex digits (a certificate fingerprint) in groups of four, which can be read aloud and wrapped
-    (CLI-9, 06 9.4); nothing else is touched."""
+    (CLI-9, the design, command line); nothing else is touched."""
     return re.sub(r"[0-9A-Fa-f]{32,}", lambda m: " ".join(m[0][i:i + 4] for i in range(0, len(m[0]), 4)), text)
 
 
@@ -103,7 +103,7 @@ def _needing_a_look(rows: list[Row]) -> list[Row]:
 
 
 def print_rows(rows: Iterable[Row], *, summary: bool = False, extra: dict | None = None) -> bool:
-    """The rows as the command line shows them (06 9.1): a heading per group, then a glyph, the state word and the text
+    """The rows as the command line shows them: a heading per group, then a glyph, the state word and the text
     of each row, a needs-a-look row followed by its `Fix:` line. Detail rows are aligned with the text. True when none
     needs a look. `--json`: the document `{"rows": [...], "summary": {...}}` instead; `--quiet`: only the rows that need
     a look, and no summary line."""
@@ -152,12 +152,12 @@ def _station_rows(url: str) -> Iterator[Row]:
         yield Row(INFO, "Weigh Station reader not seen", key="weigh-station.reader")
     if not state.get("scale") and not state.get("last_weight"):
         yield Row(INFO, "Weigh Station scale not seen", key="weigh-station.scale")
-    from .station import panel_setup      # R88 4.5: how the panel is connected (Devices), a panel that is not there (Weigh Station)
+    from .station import panel_setup      # how the panel is connected (Devices), a panel that is not there (Weigh Station)
     yield from panel_setup.panel_rows(config.load(), state, has_station=True)      # these rows carry their own groups
 
 
 def satellite_rows(cfg: dict | None = None) -> Iterator[Row]:
-    """The rows about the satellites' HTTPS (R82 section 2 points 4 and 5; 06 9.1), filed under Devices: a Weigh Station
+    """The rows about the satellites' HTTPS (the design, command line), filed under Devices: a Weigh Station
     that is not on HTTPS or whose certificate is not the pinned one, and a tag source that answers only on plain HTTP or
     whose certificate changed. None of the calls raises."""
     yield from _in("Devices", _satellite_rows(cfg if cfg is not None else config.load()))
@@ -186,7 +186,7 @@ def _satellite_rows(cfg: dict) -> Iterator[Row]:
     addr_say = address_texts.say
     url = (cfg.get("station") or {}).get("url")
     seen = station_client.station_https(url) if url else None
-    # R82 ruled 2026-11-18 00:28: a station on this machine is called as it answers (pinned HTTPS once it has given its
+    # a station on this machine is called as it answers (pinned HTTPS once it has given its
     # fingerprint, plain HTTP before) and the not-on-HTTPS row is never shown for it; the changed-certificate row is
     if seen == "plain" and not _loopback(url):
         address = _address_of(url)
@@ -491,7 +491,7 @@ def low_spools(cfg: dict | None = None) -> int | None:
 
 
 def alerts_rows(cfg: dict | None = None) -> Iterator[Row]:
-    """The Hub group's rows of events and alerts (R80 sections 6, 7): the Hub's disk ("Storage: 41 GB free of 117 GB
+    """The Hub group's rows of events and alerts: the Hub's disk ("Storage: 41 GB free of 117 GB
     (65 % used)", needs a look past a limit, fix "Show storage use"), the note "Running low: <n> spools" (none when
     nothing is low), and one row when alerts.xml could not be read or saved. The same rows are the Overview's."""
     from . import alerts, alerts_api
@@ -527,7 +527,7 @@ def _oauth_state(old: Path) -> dict:
 
 
 def numbers(cfg: dict | None = None) -> dict:
-    """What `status --json` carries beside the rows (06 9.1): `storage` is the answer of GET api/storage-use,
+    """What `status --json` carries beside the rows: `storage` is the answer of GET api/storage-use,
     `running_low` the number of spools running low (null when the events cannot be read)."""
     from . import alerts_api
     return {"storage": alerts_api.storage_view(), "running_low": low_spools(cfg)}
@@ -542,14 +542,14 @@ def _local_reader_rows(cfg: dict | None = None) -> Iterator[Row]:
     from . import getting_started, intake, local_reader
     cfg = cfg if cfg is not None else config.load()
     https = local_reader.https_row(cfg)
-    if https:                       # a reader on another machine at an http address (R82 s2 p6, ruled 21:12)
+    if https:                       # a reader on another machine at an http address
         yield Row(FAIL if https["state"] == "needs_a_look" else INFO, https["text"],
                   https["fix"] or "", key="label-reader.https")
     if demo.is_on():
         yield Row(INFO, demo.NOT_IN_DEMO, key="label-reader.local")      # no reader is asked in the demo
         return
     h = local_reader.health(cfg)
-    if not h["ok"] and getting_started.reader_install_pending(cfg):     # R82 s6 p5: switched on, nothing installed here
+    if not h["ok"] and getting_started.reader_install_pending(cfg):     # switched on, nothing installed here
         _addr_say = address_texts.say
         yield Row(FAIL, _addr_say("reader_not_installed"), output.fill(
             getting_started.COMMANDS["reader"], command=address_texts.COMMAND), key="label-reader.not-installed")

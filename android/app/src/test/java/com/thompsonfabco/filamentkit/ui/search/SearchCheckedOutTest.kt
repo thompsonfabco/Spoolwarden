@@ -27,7 +27,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** The Checked out filter and the Return action of Spools (R88 section 1.6). */
+/** The Checked out filter and the Return action of Spools. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchCheckedOutTest {
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())

@@ -230,7 +230,7 @@ function create(o) {
     } finally { SW.idle(whole); }
   }
 
-  // ----- the Hub is not answering (03 3.7) -----
+  // ----- the Hub is not answering -----
   const probe = async () => { try { await o.state(); } catch (e) { /* still down */ } };
   function down() {
     const host = o.banners && o.banners();

@@ -1,4 +1,4 @@
-"""The Slicer Sync's own state files as XML (R85 section 1, step RC1c): config, state, the install marker, the pairing
+"""The Slicer Sync's own state files as XML (step RC1c): config, state, the install marker, the pairing
 kept aside, and the build marker files (BUILD, KEPT) of an installed build.
 
 The codec is the Hub's (`filament_kit/profiles/statexml.py`): the two write the same bytes for the same data, and a

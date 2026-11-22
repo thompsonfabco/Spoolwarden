@@ -246,7 +246,7 @@ class Api(
         return call(req.get()).jsonObject["spools"]?.jsonArray.orEmpty().map { it.jsonObject }
     }
 
-    // ---- events and alerts (R80 section 8, E4) ----
+    // ---- events and alerts ----
 
     /**
      * `GET api/events`: waits up to `q.waitS` seconds (at most 55) for an event after the cursor, so the call's timeout is
@@ -263,7 +263,7 @@ class Api(
         return AlertParsing.events(call(req.get(), if (q.waitS > 0) q.waitS + EVENTS_EXTRA_S else null))
     }
 
-    // ---- history and data (R84 section 9) ----
+    // ---- history and data ----
 
     /**
      * `GET api/events?activity=1`: what was done, newest first, with each event's `undo`. [subject] is `spool:<id>`;
@@ -333,7 +333,7 @@ class Api(
 
     suspend fun lowSpools(): LowSpools = AlertParsing.lowSpools(call(request("api", "spools", "low").get()))
 
-    /** The Weigh Station's voice (R88); a Hub without it answers 404, and `station: false` means no Weigh Station. */
+    /** The Weigh Station's voice; a Hub without it answers 404, and `station: false` means no Weigh Station. */
     suspend fun voice(): VoiceSettings = VoiceParsing.settings(call(request("api", "voice").get()))
 
     /** Saves the given keys of `speech`, `speaker`, `speed` and `volume`; the answer is the values now in force. */
@@ -580,7 +580,7 @@ class Api(
     }
 
     /**
-     * Clears a slot: the Hub forgets which spool is in it (R83 section 3). [dryRun] says what would happen and changes
+     * Clears a slot: the Hub forgets which spool is in it. [dryRun] says what would happen and changes
      * nothing. Offered on every slot, whether a spool is recorded there or not.
      */
     suspend fun clearSlot(printerId: String, label: String, dryRun: Boolean): ClearResult {
@@ -695,7 +695,7 @@ class Api(
     suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult =
         decode(call(request("api", "library", "local").post(entry.toBody())))
 
-    // ---- phase 3: the Hub at a glance, the owner's own catalog entries, spools (R83 section 10.1) ----
+    // ---- phase 3: the Hub at a glance, the owner's own catalog entries, spools ----
 
     /** `GET api/hub`; null when the Hub has no such call (an older Hub, 404), so the feature is hidden. */
     suspend fun hub(): HubAnswer? = try {
@@ -779,13 +779,13 @@ class Api(
     }
 
     /**
-     * `POST api/spools/{id}/return` (R88 1.7): sends a checked-out spool to its home. 409 `not_checked_out` and the
+     * `POST api/spools/{id}/return`: sends a checked-out spool to its home. 409 `not_checked_out` and the
      * other refusals are an [ApiError] whose message is the Hub's; 404 is a Hub without the route.
      */
     suspend fun returnSpool(spoolId: Int): JsonObject =
         spool(call(request("api", "spools", spoolId.toString(), "return").post(ByteArray(0).toRequestBody(null))))
 
-    /** `PATCH api/spools/{id}` with `home` (R88 1.7); 409 `not_checked_out`, 400 an unknown location. */
+    /** `PATCH api/spools/{id}` with `home`; 409 `not_checked_out`, 400 an unknown location. */
     suspend fun setHome(spoolId: Int, home: String): JsonObject =
         spool(call(request("api", "spools", spoolId.toString()).patch(buildJsonObject { put("home", home) }.toBody())))
 
@@ -895,7 +895,7 @@ class Api(
         else -> "http_$status"
     }
 
-    /** The answer's `spool`, with its phone-shaped `view` (where R88's checked-out fields are) kept beside it when there is one. */
+    /** The answer's `spool`, with its phone-shaped `view` (where the checked-out fields are) kept beside it when there is one. */
     private fun spool(body: JsonElement): JsonObject {
         val spool = body.jsonObject["spool"]?.jsonObject ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a spool")
         val view = body.jsonObject["view"] as? JsonObject ?: return spool

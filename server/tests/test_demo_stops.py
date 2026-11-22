@@ -1,4 +1,4 @@
-"""RC6b / RC7: the stops of R85 4.3 that live in the modules that reach outside, and the wiring: while the demo is on
+"""RC6b / RC7: the stops that live in the modules that reach outside, and the wiring: while the demo is on
 no connection is made, no release is fetched, no backup is made or restored, the root helper changes nothing, a Tag
 Reader gets no firmware or token, and what the Hub records lands in the demo's folder."""
 from __future__ import annotations
@@ -224,7 +224,7 @@ def test_the_catalog_download_stops_in_the_demo(env):
 
 
 def test_usage_lands_in_the_demos_folder_and_not_in_the_real_state(env):
-    """R587 M1: the pretend printers' usage (the log, the monthly files, the slot map) never lands in <state>/printers."""
+    """The pretend printers' usage (the log, the monthly files, the slot map) never lands in <state>/printers."""
     from filament_kit.bridge import usage
     on()
     usage.append("00M00A000000001", {"job": "j1", "grams": 5.0, "spool_id": 1, "slot": "A1", "observe": False})
@@ -236,7 +236,7 @@ def test_usage_lands_in_the_demos_folder_and_not_in_the_real_state(env):
 
 
 def test_the_demos_event_ids_continue_above_the_real_log_and_the_real_log_above_the_demo(env):
-    """R587 M3: a cursor taken in the real log (or in the demo) never skips the events after a demo start (or leave)."""
+    """A cursor taken in the real log (or in the demo) never skips the events after a demo start (or leave)."""
     who = {"type": "hub", "name": "Hub"}
     real = [events.write("print.started", {"type": "printer", "id": "p1", "name": "P"}, who, {"job": f"j{i}"})
             for i in range(5)]
@@ -251,7 +251,7 @@ def test_the_demos_event_ids_continue_above_the_real_log_and_the_real_log_above_
 
 
 def test_a_demo_print_goes_through_the_real_tracker_and_the_switch_and_leaves_nothing_behind(env):
-    """R587 M1 / R609: the Tracker wired to the demo's Switch (as `main()` wires it) sees the pretend X1's print end; the
+    """The Tracker wired to the demo's Switch (as `main()` wires it) sees the pretend X1's print end; the
     demo records it itself, so no file lands under the real state folder and no `no_mapping` entry piles up."""
     from filament_kit.bridge import usage
     from filament_kit.demo import printers as demo_printers
@@ -271,7 +271,7 @@ def test_a_demo_print_goes_through_the_real_tracker_and_the_switch_and_leaves_no
 
 
 def test_the_slot_snapshot_lands_in_the_demos_folder_and_not_in_the_real_state(env):
-    """R609 N2: what the slot test must put back is kept in the demo's folder, so leaving the demo leaves no pending restore."""
+    """What the slot test must put back is kept in the demo's folder, so leaving the demo leaves no pending restore."""
     from filament_kit.bridge import snapshot
     pid = "00M00A000000001"
     on()

@@ -1,4 +1,4 @@
-"""RC1c (R85 section 1): the slicer-preset state and the build marker files as XML, on the Hub.
+"""RC1c: the slicer-preset state and the build marker files as XML, on the Hub.
 
 The codec, the file moves (JSON read once and written as XML, XML wins, an unreadable XML file is never written over),
 the build zip in either form, and the state a build leaves behind.

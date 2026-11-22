@@ -168,7 +168,7 @@ def test_a_share_json_is_private():
     assert stat.S_IMODE(os.stat(share_queue._path(RID)).st_mode) == 0o600
 
 
-# ---------- a JSON that v0.6.2 changed or deleted wins over the XML, and the next save keeps it (R610 F1) ----------
+# ---------- a JSON that v0.6.2 changed or deleted wins over the XML, and the next save keeps it ----------
 
 def test_a_catalog_pointer_and_hold_changed_and_deleted_by_v062_win_and_the_next_save_keeps_them():
     d = library._dir()

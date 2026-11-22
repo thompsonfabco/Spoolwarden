@@ -1,4 +1,4 @@
-"""The theme picker on the web (design 09 S6.2, 02 3.4, 03 10.2, 04 9.2), in a real headless browser: theme-init.js applies the
+"""The theme picker on the web (the design, components, Hub page and web app), in a real headless browser: theme-init.js applies the
 device's stored look (or the Hub's default) and sets the two theme-color metas to that look's surface, on the Hub page and in
 the web app; the Appearance group (Hub Settings) and the web app's Settings sheet hold the picker with the tiles built so far
 (Console, Workbench and Palette), Console selected; a device that has not chosen stays on the Hub's default (Console unless the Hub says otherwise). The AUT-5 audit of

@@ -1,4 +1,4 @@
-"""S5.9: the command is `spoolwarden` (06 section 2). `filament-kit` is a small wrapper that prints one Note line on
+"""S5.9: the command is `spoolwarden`. `filament-kit` is a small wrapper that prints one Note line on
 standard error and runs `spoolwarden` with the same arguments, standard input, standard output and exit code."""
 import os
 import re
@@ -81,7 +81,7 @@ def _env(tmp_path: Path) -> dict:
 
 @needs_bash
 def test_aut9_through_each_name_plain_help_holds_80_columns_and_no_escapes(tmp_path):
-    """AUT-9 (07 CLI-1, CLI-2, CLI-10): `--plain` help has no ESC or CR and no line over 79 characters, under both
+    """AUT-9: `--plain` help has no ESC or CR and no line over 79 characters, under both
     names; the output is the same, and the old name adds only the Note on standard error."""
     tools = _stub_over_the_program(tmp_path)
     got = {}

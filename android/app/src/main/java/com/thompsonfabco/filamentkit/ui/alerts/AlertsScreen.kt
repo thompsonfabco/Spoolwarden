@@ -28,7 +28,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
 /**
- * The Alerts list (R80 section 5), opened from "<n> more alerts" and Settings > Alerts > Recent alerts: the raised
+ * The Alerts list, opened from "<n> more alerts" and Settings > Alerts > Recent alerts: the raised
  * conditions first, then the alert events of the last 7 days, newest first, each with its icon (the notice's shape),
  * title, sentence, time and its action. A place the app has no screen for has no button here: this is that screen.
  */

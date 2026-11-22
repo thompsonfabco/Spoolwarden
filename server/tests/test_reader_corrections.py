@@ -57,7 +57,7 @@ def test_the_list_passes_the_entries_through_with_count_size_opt_in_and_capabili
     out = r.json()
     assert [e["id"] for e in out["entries"]] == [a, b]
     assert out["entries"][0]["corrected"] == {"vendor": "Polymaker"}
-    assert "record" not in out["entries"][0] and out["entries"][0]["photos"] == 0     # "r1" is no kept record (R87)
+    assert "record" not in out["entries"][0] and out["entries"][0]["photos"] == 0     # "r1" is no kept record
     assert out["count"] == 2 and out["opt_in"] is True and out["bytes"] == round(out["bundle_mb"] * 1048576)
     assert out["capabilities"]["feedback"] is True and out["capabilities"]["known_from"] == "health"
 
@@ -360,7 +360,7 @@ def test_the_web_app_says_when_the_reader_is_off_and_the_public_page_has_no_rout
     assert _web("https://example.test/f").get("/intake/api/label-reader/corrections").status_code in (404, 405)
 
 
-# ---------- review R365: the command line, the lock, a missing count, a conflict ----------
+# ---------- the command line, the lock, a missing count, a conflict ----------
 
 def test_the_list_and_package_work_while_the_page_is_locked_out_and_writes_do_not(hub):
     from filament_kit import setup_code

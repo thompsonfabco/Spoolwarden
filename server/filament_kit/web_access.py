@@ -9,8 +9,8 @@ its reach. It gets exactly what it uses, as POSIX ACLs (acl.py) on named files a
                   (kit_token), the Web Push keys and subscriptions, its failed label reads kept for retry
                   (failed/, FK_FAILED_DIR in its unit); copied here once from /var/lib/filament-kit/web/
                   (migrate; the originals stay there, as they were, for `update --rollback` to 0.3.0)
-  settings        /etc/filament-kit: pass (x); config.xml, config.json (kept in both forms for one release, R85
-                  section 1), web_passphrase and anthropic_key: read (r); every root writer of these keeps the
+  settings        /etc/filament-kit: pass (x); config.xml, config.json (kept in both forms for one release),
+                  web_passphrase and anthropic_key: read (r); every root writer of these keeps the
                   grant (config.save, cli.write_passphrase, cli.write_key)
   kit state       /var/lib/filament-kit: pass (x); web/ (reader_tokens, 644): read; profiles/, library/,
                   library-local/, reader-fw/: read, also what is made there later (default ACLs);
@@ -355,8 +355,8 @@ def _settings() -> dict:
 
 def _revoke_old_slot_token(web_uid: int) -> None:
     """The old standalone scanner's slot token (`slot_service.token_file`, still named in the settings on an install
-    that used it): the web unit was granted read on it and no longer reads it, so the grant is taken back (review
-    R181 note 2). The file itself, the owner's, is left alone."""
+    that used it): the web unit was granted read on it and no longer reads it, so the grant is taken back.
+    The file itself, the owner's, is left alone."""
     try:
         svc = _settings().get("slot_service")
     except (OSError, ValueError):

@@ -67,7 +67,7 @@ internal val AddProfileTitle: Int get() = R.string.catalog_title
 @Serializable data object PrintersRoute
 /** [askMap]: the printer opens with the Hub's "Map the slots of ...?" question open (the add-printer map offer). */
 @Serializable data class PrinterRoute(val id: String, val askMap: Boolean = false)
-/** Where a button of the add-printer map offer goes (05 9.12 step 4): Map slots asks first as 9.7, Later just opens. */
+/** Where a button of the add-printer map offer goes (the design, Android app step 4): Map slots asks first as 9.7, Later just opens. */
 fun mapOfferRoute(id: String, mapNow: Boolean) = PrinterRoute(id, askMap = mapNow)
 @Serializable data class PrinterMapRoute(val id: String)
 @Serializable data class PrinterSettingsRoute(val id: String, val replaceCode: Boolean = false)
@@ -134,7 +134,7 @@ fun tabTap(current: Tab?, tapped: Tab, atRoot: Boolean): TabTap = when {
 /**
  * The top bar's back arrow (05-android-app 2.2): on every screen except the five roots and the first pairing screen
  * ([atPairStart]: `pair` or its network access step). Pairing opened over the main graph has one there too, because
- * Back returns to the screen it was opened from; the later pairing steps always have one (05 4).
+ * Back returns to the screen it was opened from; the later pairing steps always have one.
  */
 fun showsBackArrow(atTabRoot: Boolean, inPairing: Boolean, pairingOverMain: Boolean, atPairStart: Boolean = true): Boolean =
     !atTabRoot && (!inPairing || pairingOverMain || !atPairStart)

@@ -204,7 +204,7 @@ fun PrinterScreen(
             )
         }
     }
-    // an unload or a clear the Hub may undo: a toast says what happened, with Undo for 10 seconds (R84 3.3)
+    // an unload or a clear the Hub may undo: a toast says what happened, with Undo for 10 seconds
     val toast = LocalToast.current
     val toastScope = rememberCoroutineScope()
     val undoLabel = stringResource(R.string.common_undo)
@@ -707,7 +707,7 @@ private fun SlotSheet(
     }
 }
 
-/** Clear slot is offered on every slot, with or without a spool recorded (R83 section 3.1). */
+/** Clear slot is offered on every slot, with or without a spool recorded. */
 @Composable
 private fun ClearButton(onClear: () -> Unit, state: PrinterUiState, slot: AmsSlot) {
     SwButton(

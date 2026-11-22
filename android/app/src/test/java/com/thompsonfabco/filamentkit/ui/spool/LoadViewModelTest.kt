@@ -281,7 +281,7 @@ class LoadViewModelTest {
         assertFalse(gate.writing.value)
     }
 
-    // 05 7.6 withholds "Try again" after a refusal (failedWrite), not Load: a refusal changed nothing, so Load sends again
+    // the design, Android app withholds "Try again" after a refusal (failedWrite), not Load: a refusal changed nothing, so Load sends again
     @Test fun aRefusedLoadIsMarkedAsAWriteFailureAndLoadSendsItAgainOnlyWhenPressed() = runTest(dispatcher) {
         val vm = LoadPreviewViewModel(spool, "X1A", "A2", backend)
         advanceUntilIdle()

@@ -1,4 +1,4 @@
-"""AF4 in the Features section of the Hub page (design 03 sections 9.4, 9.5, 4.2): Label Reader: On this Hub lead-in in
+"""AF4 in the Features section of the Hub page (the design, Hub page): Label Reader: On this Hub lead-in in
 the preview drawer, Remote access port-443 conflict refusal with #settings/network link, "Not installed yet" row action,
 and apply completion / leave-early / failure lead-in behavior. Uses tests/page_drive.mjs and test_hub_page_audit.hub_app."""
 from __future__ import annotations

@@ -561,7 +561,7 @@ class AddViewModel(
                     if (id != null) runRead { api.retry(id) } else read()
                 }
                 val err = describe(e)
-                // a read needs the Hub: the photos stay, and the words say so (05 6.2)
+                // a read needs the Hub: the photos stay, and the words say so
                 showError(if ((e as? ApiError)?.code == "offline") err.copy(message = AddText.of(R.string.add_read_offline)) else err)
             }
         }

@@ -1,4 +1,4 @@
-"""The Printers section of the Hub page (design 09 S2.4, 03 section 5): the page audit of the collection, an open row and both
+"""The Printers section of the Hub page (step S2.4, the design, Hub page): the page audit of the collection, an open row and both
 drawers (AUT-5, through tests/aut5_run.mjs), and the section pressed in a real headless browser through tests/page_drive.mjs:
 mapping progress and Stop that stay, addresses and serials that follow the lock, drawers in every look, and nothing typed left
 behind. The page is served with the data of test_hub_page_audit.py plus printers in each state. The same skip rules as the
@@ -449,7 +449,7 @@ def _printers_run(url: str, view: str, ready: str, wide: bool):
 
 @pytest.mark.parametrize("wide", [False, True])
 def test_the_add_a_printer_drawer_with_a_field_error_passes_the_audit(monkeypatch, printers_hub, wide):
-    """03 5.6: the drawer from its address, Locked then Unlocked by the test, an empty address refused at the field and a Hub refusal at its field."""
+    """The design, Hub page: the drawer from its address, Locked then Unlocked by the test, an empty address refused at the field and a Hub refusal at its field."""
     monkeypatch.setattr(pairing, "short_hostname", lambda: "runnervm8axu0")
     url, _ = printers_hub
     _printers_run(url, "#printers/add", ADD_DRAWER, wide)
@@ -532,7 +532,7 @@ return { addLabel, addHash, mapTitle: text(confirm), mapHash: location.hash, map
 
 
 def test_adding_a_bambu_and_a_klipper_printer_sends_one_add_each_and_opens_the_new_row(printers_hub, tmp_path):
-    """03 5.6: the path and body of each add, a double press that sends one, the drawer gone with nothing typed left in the page, and the
+    """The design, Hub page: the path and body of each add, a double press that sends one, the drawer gone with nothing typed left in the page, and the
     new row open with its message; the second opening makes no id twice."""
     url, _ = printers_hub
     page = _drive(url, tmp_path, ADD_PRE + """
@@ -686,7 +686,7 @@ return { before, requests, files };
 
 
 def test_cancel_with_typed_values_asks_first_and_the_busy_drawer_says_wait(printers_hub, tmp_path):
-    """03 5.6: Cancel with typed values asks to leave first (Stay keeps them; Leave sends nothing and leaves no secret in the page);
+    """The design, Hub page: Cancel with typed values asks to leave first (Stay keeps them; Leave sends nothing and leaves no secret in the page);
     Cancel while the Hub answers an add warns and keeps the drawer."""
     url, _ = printers_hub
     page = _drive(url, tmp_path, ADD_PRE + """

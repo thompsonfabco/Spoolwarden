@@ -1,8 +1,8 @@
-"""Workbench on the web (design 09 S6.4, 02 1.3, 08 9 and test 4 of 08), in a real headless browser where it matters: the three
+"""Workbench on the web (the design, components and platform mapping), in a real headless browser where it matters: the three
 profile groups `nav=sidebar`, `collection=cards` and `detail=card` of components.css are keyed on Workbench only (Console's groups
 do not mention it, Workbench's do not hold an unqualified rule); the Hub page shows Workbench (sidebar on a wide
 screen, the rail on a tablet, the bottom bar on a phone, cards in a grid) and the web app its colours and navigation
-(the rail on a wide screen, 04 2.3) and Console is the same after a visit to Workbench;
+(the rail on a wide screen, the design, web app) and Console is the same after a visit to Workbench;
 the picker offers the Workbench tile in both interfaces; and AUT-5 passes on both in Workbench, light and dark, at 320, 768 and
 1280 px. The same skip rules as the page audit: no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
@@ -61,7 +61,7 @@ def test_the_card_width_is_18rem_so_cards_grow_with_the_text_size():
         assert ".coll__row--result>.coll__cell" not in cards                     # the card's own cell rule already sets that padding
 
 
-# the sidebar is the Hub page's (04 2.3: the web app keeps its tablet layout above 1024 px): the web app's body carries data-ai
+# the sidebar is the Hub page's (the design, web app: the web app keeps its tablet layout above 1024 px): the web app's body carries data-ai
 APP_NAV = """
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(look, what) { for (let i = 0; i < 300; i++) { const v = look(); if (v) return v; await sleep(100); } throw new Error("waited for " + what); }
@@ -86,7 +86,7 @@ def test_the_hub_page_gets_the_sidebar_at_1280_px_in_workbench(hub, tmp_path):
     assert page["console"]["dir"] == "column" and page["hubPage"] is True
 
 
-# Recently added: the chevron cell (`go`) is for rows only (02 6.1), so a card does not show it
+# Recently added: the chevron cell (`go`) is for rows only, so a card does not show it
 GO = """
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(look, what) { for (let i = 0; i < 300; i++) { const v = look(); if (v) return v; await sleep(100); } throw new Error("waited for " + what); }

@@ -1,11 +1,11 @@
 """`spoolwarden klipper add-on` and the Klipper halves of the `printer` commands (spec 2026-11-03-klipper-printers
-§6, §7; 06 9.2).
+§6, §7; the design, command line).
 
     klipper add-on                          print the verified command that installs this version's Klipper add-on
     printer detect                          `detect_printer` below; cli.py asks and names the printer (`printer add
                                             --klipper` and `scan` run the Hub's own routes, cli.py).
                                             The old `klipper add|scan|detect|set|api-key|pack` are aliases: `run` hands
-                                            them to the printer commands (06 4)
+                                            them to the printer commands
 
 All read-only towards the printer except what the running server does later. Kept in its own module so cli.py only
 hooks it in (`add_parser`, `run`).
@@ -147,7 +147,7 @@ ADD_ON_INTRO = ("Installs the spool macros and filament-kit's Moonraker settings
 
 
 def pack(cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> int:
-    """`klipper add-on` (06 9.2): the Hub page's sentence and the add-on's install command, pinned to this kit's version
+    """`klipper add-on`: the Hub page's sentence and the add-on's install command, pinned to this kit's version
     and to the add-on's SHA-256 from the release's signed SHA256SUMS, each command on its own unbroken line. Prints no
     command at all when that hash cannot be had."""
     version = updates.current_version()
@@ -166,7 +166,7 @@ def pack(cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> 
 
 
 def dash(value: str) -> str:
-    """The value of an option that takes a secret (06 8.7): only `-`, and the secret comes on standard input. One
+    """The value of an option that takes a secret: only `-`, and the secret comes on standard input. One
     typed on the command line would show to the other users of the machine."""
     if value != "-":
         raise argparse.ArgumentTypeError("a secret is never given on the command line: give - and type it on "
@@ -178,7 +178,7 @@ def add_parser(sub) -> None:
     kp = sub.add_parser("klipper", help="the Klipper add-on (the old spellings of the printer commands still work)")
     ks = kp.add_subparsers(dest="klipper_cmd", required=True)
     ks.add_parser("add-on", help="print the command that installs the Klipper add-on on a printer")
-    ks.add_parser("pack", help=argparse.SUPPRESS)       # the old spellings of 06 4 (`printer add --klipper`, ...)
+    ks.add_parser("pack", help=argparse.SUPPRESS)       # the old spellings of the design, command line (`printer add --klipper`, ...)
     a = ks.add_parser("add", help=argparse.SUPPRESS)
     a.add_argument("name")
     a.add_argument("host", help="host name (a *.home.arpa or .local name is best) or address")
@@ -256,7 +256,7 @@ def _slots_text(d: dict) -> str:
 
 
 def _describe(p: registry.Printer, added: dict | None = None) -> int:
-    """What `printer add --klipper` shows after the result line (06 9.2): what the printer says it is, indented, each
+    """What `printer add --klipper` shows after the result line: what the printer says it is, indented, each
     reason a line further in. `--json`: that answer, inside `added` (what `add` did). A printer that does not answer is
     a note: it is saved, and the Hub keeps trying."""
     with output.wait(f"Asking {registry.display_name(p)}…"):
@@ -271,7 +271,7 @@ def _describe(p: registry.Printer, added: dict | None = None) -> int:
 
 
 def detect_printer(p: registry.Printer) -> int:
-    """`printer detect` (06 9.2): ask the printer again what it is (read only): one result line, the reasons under it,
+    """`printer detect`: ask the printer again what it is (read only): one result line, the reasons under it,
     the Spoolman warning of the Hub as a note."""
     with output.wait(f"Asking {registry.display_name(p)}…"):
         d = detect(p)
@@ -287,7 +287,7 @@ def detect_printer(p: registry.Printer) -> int:
     return 0
 
 
-# ---------- the printer commands that call the Hub (R83 10.5): slots, usage, watch ----------
+# ---------- the printer commands that call the Hub: slots, usage, watch ----------
 # `api` is the kit API client (cli._server_api()), None when no Hub answers; `printer` is {"serial", "name"} (cli.py
 # resolves the name the person typed). Every changing command asks for a dry run, shows it, asks, and then does it.
 # The CLI_* constants are catalogue keys in capitals (see spools_cli.py).
@@ -360,7 +360,7 @@ def _q(name: str) -> str:
 
 
 def cmd_auto_stop(api, printer: dict) -> int:
-    """`printer load <name> auto --stop`: ends the waiting at once, with no question (06 9.2)."""
+    """`printer load <name> auto --stop`: ends the waiting at once, with no question."""
     if api is None:
         return spools_cli.down()
     from .web.slots import SlotError
@@ -382,7 +382,7 @@ def cmd_printer_slot(api, printer: dict, action: str, slot: str, spool=None, yes
     if not _SLOT.fullmatch(slot or ""):
         output.error(CLI_SLOT_BAD.format(value=slot), output.fill(CLI_SLOT_BAD_FIX, command=spools_cli.COMMAND))
         return output.USAGE
-    slot = "auto" if slot.lower() == "auto" else slot       # the word is compared without regard to case (R83)
+    slot = "auto" if slot.lower() == "auto" else slot       # the word is compared without regard to case
     if stop:
         if action != "load" or slot != "auto":
             output.error(CLI_SLOT_AUTO_STOP_ONLY, output.fill(CLI_SLOT_AUTO_STOP_FIX, command=spools_cli.COMMAND))
@@ -606,7 +606,7 @@ def run_printer(args, api, printer: dict) -> int:
 
 
 def run(args) -> int:
-    """The old spellings (06 4): each does what its new spelling does."""
+    """The old spellings: each does what its new spelling does."""
     from . import cli
     c = args.klipper_cmd
     if c in ("pack", "add-on"):

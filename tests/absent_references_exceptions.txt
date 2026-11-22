@@ -1,0 +1,25 @@
+android/app/src/test/java/com/thompsonfabco/filamentkit/drafts/DraftStoreTest.kt | assertTrue("Still sealed starts on (05 6.2)", d.sealed) | 1 | a message in a test assertion
+android/app/src/test/java/com/thompsonfabco/filamentkit/nav/DestinationsTest.kt | assertFalse("on Preview the tap opens the tag (05 2.6)", nav.currentDestination.takesTagTaps()) | 1 | a message in a test assertion
+android/app/src/test/java/com/thompsonfabco/filamentkit/nav/DestinationsTest.kt | assertTrue("on Pick a spool the tap is the pick (05 9.6)", nav.currentDestination.takesTagTaps()) | 1 | a message in a test assertion
+android/app/src/test/java/com/thompsonfabco/filamentkit/nav/TagTapsTest.kt | assertEquals("Preview and Done do not take it (05 2.6)", TagTapped.Opened, tap("04:b2").what) | 1 | a message in a test assertion
+android/app/src/test/java/com/thompsonfabco/filamentkit/ui/PaletteLayoutTest.kt | assertEquals("08 14: Android has no rounded system font, the default family stands in", FontFamily.Default, tokens.type.sans) | 1 | a message in a test assertion
+android/app/src/test/java/com/thompsonfabco/filamentkit/ui/history/RefuterProbeTest.kt | assertNotNull("typing kept (05 2.7)", vm.state.value.edit) | 1 | a message in a test assertion
+server/tests/test_demo_sealed.py | "DELETE /api/pair": "pairing works in the demo (R85 4.3): test_pairing_in_the_demo_touches_only_the_pairing_files", | 1 | data: dictionary values the test compares
+server/tests/test_demo_sealed.py | "POST /api/pair": "pairing works in the demo (R85 4.3): test_pairing_in_the_demo_touches_only_the_pairing_files", | 1 | data: dictionary values the test compares
+server/tests/test_demo_sealed.py | "POST /setup/api/pair": "pairing works in the demo (R85 4.3): test_pairing_in_the_demo_touches_only_the_pairing_files", | 1 | data: dictionary values the test compares
+server/tests/test_hub_logs_activity.py | out.pageMenus = $$('button[aria-label="More actions for this page"]').length;       // one page menu (03 3.8), no second one | 1 | script source inside a Python string
+server/tests/test_hub_printers.py | // Table redraw for a lock change (R83 22:10.3): the running live view is carried over by serial, neither stopped nor made again | 1 | script source inside a Python string
+server/tests/test_hub_settings.py | // Storage locations: the list is edited as a whole (R79); a move is a change, and one Save sends the list (setup_storage.js) | 1 | script source inside a Python string
+server/tests/test_hub_storage_locations.py | // R79 C2: ticking overflow while "Any material" is chosen moves to "Nothing"; "Any material" is then off and says why | 1 | script source inside a Python string
+server/tests/test_hub_storage_locations.py | // the default overflow cannot be switched off; a plain one can; a limit on it is allowed (R79 C1) and ends the notice | 1 | script source inside a Python string
+server/tests/test_rc4_co5_vo4.py | // R622 2: the Hub away with values read before: the panel at once from them, every control marked, nothing sent | 1 | script source inside a Python string
+server/tests/test_rc4_co5_vo4.py | // R88 04:20: the Voice row's line follows `remote` | 1 | script source inside a Python string
+server/tests/test_rc4_co5_vo4.py | // the one answer shape of R88 04:15: {station, remote, speech, voice, speaker, speaker_range, speed, volume} | 1 | script source inside a Python string
+server/tests/test_rc4_web_page.py | // R574 13 (re-review): an entry exactly as the reader fake answers it, its record no longer kept: its own thumbnail and its time | 1 | script source inside a Python string
+server/tests/test_storage_api.py | assert placement.resolve(st, "Box 02", storage.counts_of({})) == "Box 02 01"       # the set named "Box 02" | 1 | data: a container's name
+server/tests/test_web_app_audit.py | // a desktop Chrome that finds the app installable offers its own prompt: the row then reads "Install app" (04 10.1) | 1 | script source inside a Python string
+server/tests/test_web_app_audit.py | await until('the words of 04 3.6 and Try again', () => text('.spools__find').includes('The Hub hit an error it did not expect.') && button('Try again', $('.spools__find'))); | 1 | a label text the page is checked for
+tests/page_audit.js | if (f.type === "number") add("field attribute differs from 07 9.1", f, "type=number is not used"); | 1 | a text the test compares
+tests/page_audit.js | if (got !== v) add("field attribute differs from 07 9.1", f, `${f.name}: ${k}="${got}", wants "${v}"`); | 1 | a text the test compares
+tests/test_design_components.py | "aria-busy", "role=status", "cell", "07 9.1", "44 x 44", "horizontal page scroll", "zoom"): | 1 | a text the test compares
+tests/test_design_lints.py | assert not found, "a field with an empty label (07 AUT-4):\n" + "\n".join(f"{f}:{ln}: {w}" for (f, w), lns in found.items() for ln in lns) | 1 | a message in a test assertion

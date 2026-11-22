@@ -201,7 +201,7 @@ def test_issue_runs_certbot_standalone_with_hooks(monkeypatch, capsys):
     seen = capsys.readouterr()
     assert "port 80" in seen.err and "Certificate issued for fk.example.org." in seen.out  # the owner opens it; we only say so
     assert not FORBIDDEN.search(text)
-    # the public certificate is not the one Tag Readers check (R86 2026-11-21 22:35.1): no set-up-again sentence here
+    # the public certificate is not the one Tag Readers check: no set-up-again sentence here
     assert "Tag Readers" not in seen.out + seen.err
 
 

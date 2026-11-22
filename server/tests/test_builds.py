@@ -369,7 +369,7 @@ def test_profiles_package_exports():
     assert profiles.preset_for is profiles.index.preset_for
 
 
-# ---------- fix round 1 (ruling S24) ----------
+# ---------- fix round 1 ----------
 
 @pytest.mark.parametrize("files", [
     {"base/" + "a" * 300 + ".json": "{}"},                       # a part over 255 bytes

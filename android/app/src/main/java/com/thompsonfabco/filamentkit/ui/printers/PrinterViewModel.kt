@@ -72,7 +72,7 @@ interface PrinterBackend : ActivityBackend {
     suspend fun command(id: String, action: String): CommandResult
     suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult
 
-    /** Clear slot (R83 section 3); a backend without it answers like an older Hub (404). */
+    /** Clear slot; a backend without it answers like an older Hub (404). */
     suspend fun clearSlot(id: String, label: String, dryRun: Boolean): ClearResult =
         throw ApiError(404, "not_found", PrinterTexts.CLEAR_UPDATE_HUB)
 
@@ -318,14 +318,14 @@ data class PrinterUiState(
     val unloading: Boolean = false,
     /** The last unload's or clear's result, or why it failed. */
     val slotNote: Note? = null,
-    /** A second sentence of the result in [slotNote]: the waiting spool that is waiting no more (R83 section 3). */
+    /** A second sentence of the result in [slotNote]: the waiting spool that is waiting no more. */
     val slotAlso: String? = null,
     val clearAsk: ClearAsk? = null,
     /** The clear itself is being written: the question stays open and cannot be left. */
     val clearing: Boolean = false,
-    /** What the last unload or clear offers to undo on the Hub (R84 3.3); the screen shows its toast and calls [PrinterViewModel.offerShown]. */
+    /** What the last unload or clear offers to undo on the Hub; the screen shows its toast and calls [PrinterViewModel.offerShown]. */
     val undoOffer: UndoOffer? = null,
-    /** "Filament used" shows its months (R84 5.7) instead of the last 7 days. */
+    /** "Filament used" shows its months instead of the last 7 days. */
     val monthsOn: Boolean = false,
     /** The months the Hub sent, newest first; null until they are read, or when the Hub has no such view ([monthsOlderHub]). */
     val months: List<UsageMonth>? = null,
@@ -467,7 +467,7 @@ class PrinterViewModel(
         }
     }
 
-    // --- clear slot (R83 section 3): on every slot; the Hub forgets the spool recorded there ---
+    // --- clear slot: on every slot; the Hub forgets the spool recorded there ---
 
     /** Asks what clearing [slot] would do (dry run), then opens the question. An older Hub (404) is told to update. */
     fun askClear(slot: AmsSlot) {
@@ -515,7 +515,7 @@ class PrinterViewModel(
         }
     }
 
-    // --- Auto (R83 addition, A4): Stop waiting, and the choice when two slots were loaded ---
+    // --- Auto (A4): Stop waiting, and the choice when two slots were loaded ---
 
     /** Stop waiting. A 409 `not_waiting` means it already ended: the printer is only read again. */
     fun stopWaiting() {
@@ -553,7 +553,7 @@ class PrinterViewModel(
         }
     }
 
-    // --- Undo on the Hub (R84 3) ---
+    // --- Undo on the Hub ---
 
     private fun offerUndo(subjects: List<String>, kind: String) {
         if (subjects.isEmpty()) return
@@ -576,7 +576,7 @@ class PrinterViewModel(
         return outcome
     }
 
-    // --- Filament used: by month and as CSV (R84 5.7, 6.5) ---
+    // --- Filament used: by month and as CSV ---
 
     /** Switches "Filament used" between the last 7 days and the months; the months are read the first time. */
     fun showMonths(on: Boolean) {

@@ -1,10 +1,10 @@
-// The Updates section (03 12).
+// The Updates section.
 // Loaded after setup.js; everything from the server goes in through textContent, as there.
 "use strict";
 
 let updateCodes = 0;
 
-// the Hub's job that is running now (state.apply), as its title: Update and Roll back wait for it (03 12.4)
+// the Hub's job that is running now (state.apply), as its title: Update and Roll back wait for it
 const runningJob = () => {
   const a = S && S.apply;
   if (!a || !a.running) return null;
@@ -16,7 +16,7 @@ const runningJob = () => {
 // a row of the Version list: the key, then the value (text, or nodes)
 const versionRow = (key, ...value) => h("div", { class: "kv__row" }, h("dt", { class: "kv__key", textContent: SW.t(key) }), h("dd", { class: "kv__value" }, ...value));
 
-// a command in a code block with Copy (02 7.7), `caption` says where to run it
+// a command in a code block with Copy, `caption` says where to run it
 function updatesCode(text, caption) {
   const id = "updates-code-" + ++updateCodes;
   return h("figure", { class: "code" },
@@ -26,7 +26,7 @@ function updatesCode(text, caption) {
 }
 
 // Update and Roll back are refused by the Hub (`why`), or wait for the job that is running; the button stays in place, said and
-// described, as a disabled button must be (02 4.1)
+// described, as a disabled button must be
 function held(button, why, line) {
   const job = runningJob();
   if (job) { SW.disable(button, SW.t("common_wait_for_job", { job_title: job })); return; }
@@ -79,7 +79,7 @@ function updatesTab() {
     if (update) held(update, u.update_refused, refused);
     if (roll) held(roll, u.rollback_refused, rollRefused);
     const notesId = SW.uid("updates-notes");
-    if (page.dataset.section === "updates") pageHead(null, h("div", { class: "page-head__actions" }, check, update));      // the section header (03 12.1); not once another section is open
+    if (page.dataset.section === "updates") pageHead(null, h("div", { class: "page-head__actions" }, check, update));      // the section header; not once another section is open
     fill(out,
       refused, box,
       h("div", { class: "updates__cards" },

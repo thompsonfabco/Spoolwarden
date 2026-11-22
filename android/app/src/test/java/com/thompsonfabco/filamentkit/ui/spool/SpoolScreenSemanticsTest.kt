@@ -59,7 +59,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * AUT-8 (07-accessibility 15) for Spools and the spool screens of S4.8 (05 7): Spools, Spool with its sheets and
+ * AUT-8 (07-accessibility 15) for Spools and the spool screens of S4.8: Spools, Spool with its sheets and
  * dialog, Tag, Link to a sealed spool, and the three steps of Load into a printer, drawn under the top bar that names
  * them, in light and dark at font scale 1 and 2. Data is fake (example spools, printers and tags).
  */
@@ -662,7 +662,7 @@ class SpoolScreenSemanticsTest {
         assertEquals(SpoolResult.LoadedUnconfirmed("Workshop X1", "A2"), vm.state.value.finished)
     }
 
-    // ---- 05 3.2 states on the S4.8 screens ----
+    // ---- the design, Android app states on the S4.8 screens ----
 
     @Test fun spoolsOfflineKeepsTheResultsUnderTheOfflineNotice() {
         val vm = SearchViewModel { _, _ -> results }
@@ -729,7 +729,7 @@ class SpoolScreenSemanticsTest {
         auditAllFour(listOf("Offline. Showing what was loaded"))
     }
 
-    // ---- 05 7.8 tag already in use ----
+    // ---- the design, Android app tag already in use ----
 
     @Test fun aSpoolWithATagOfItsOwnOffersTheReplaceButton() {
         SpoolCache.clear()

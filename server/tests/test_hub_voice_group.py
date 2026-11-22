@@ -1,4 +1,4 @@
-"""Settings > Weigh Station voice on the Hub page (DECISIONS R88 2.1 to 2.4 and the 02:00 ruling, step VO3), in a real headless browser:
+"""Settings > Weigh Station voice on the Hub page (step VO3), in a real headless browser:
 the rows Speak, Voice, Speaker, Speed, Volume and Test; no Save button, each row applies as it is changed (a slider when it is let go);
 the Speaker row for the many-speaker voice only; the line under Voice; the four results of Test; a refused change going back; and a
 Weigh Station on another computer. The group is built by setup_voice.js, registered in setup_page.SHELL_SCRIPTS and the Voice row of SET_GROUPS. The Hub's side (VO2) is a stub here: the page's `api`

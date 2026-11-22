@@ -1,4 +1,4 @@
-"""The Storage locations group of the Settings tab (R79 section 3 and 4): one list, saved whole.
+"""The Storage locations group of the Settings tab: one list, saved whole.
 
     GET  settings/storage                the saved list as GET api/storage gives it (locations with how full, the order a
                                          new spool goes by material, notices), no code

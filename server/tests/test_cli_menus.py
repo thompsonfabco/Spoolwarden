@@ -1,5 +1,5 @@
-"""S5.4: the `config` menu (06 8.3), the Printers screen (8.4), the Features checklist (8.5) and the prompts (8.7), driven
-with typed lines in the numbered variant (`--numbered`, `--plain`) and exits (06 6.7). The full-screen variant is
+"""S5.4: the `config` menu, the Printers screen (8.4), the Features checklist (8.5) and the prompts (8.7), driven
+with typed lines in the numbered variant (`--numbered`, `--plain`) and exits. The full-screen variant is
 tested in test_menu_ui.py."""
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def test_a_group_screen_is_headed_by_its_place_and_ends_with_the_actions_that_ar
     assert "Restore: sudo spoolwarden restore <zip>" in out
     assert "Settings > Network and addresses" in out and "Firewall rules: spoolwarden remote firewall" in out
     assert "Settings > Filament Catalog" in out and "Update now: sudo spoolwarden catalog update" in out
-    assert "Catalog token: sudo spoolwarden catalog token" in out        # the token is a command, not a menu item (06 8.3)
+    assert "Catalog token: sudo spoolwarden catalog token" in out        # the token is a command, not a menu item
 
 
 def test_a_staged_change_is_saved_with_s_and_the_group_shows_what_is_stored(capsys, monkeypatch):
@@ -741,7 +741,7 @@ def test_features_without_root_is_not_applied(monkeypatch, capsys):
     assert "administrator rights" in capsys.readouterr().err
 
 
-# ---------- brief 49: apply Spoolman, piped secrets, honest save, Features fresh, add questions ----------
+# ---------- apply Spoolman, piped secrets, honest save, Features fresh, add questions ----------
 
 def test_a_saved_spoolman_address_is_applied_like_the_hubs(monkeypatch):
     cfg = config.load()

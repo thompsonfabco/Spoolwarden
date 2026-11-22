@@ -106,7 +106,7 @@ PICK='print(next((str(a).strip() for a in allow if str(a).strip() not in ("127.0
 if [ -z "$SERVER_ADDR" ] && ! [ -t 0 ] && { [ "$MODE" = station ] || [ "$MODE" = custom ]; } \
         && { [ -f "$SAVED_DIR/config.xml" ] || [ -f "$SAVED_DIR/config.json" ]; }; then
     SAVED_ADDR=""
-    # The settings are read by the Hub's own Python (config.xml or config.json, whichever the program reads: R85 1.6).
+    # The settings are read by the Hub's own Python (config.xml or config.json, whichever the program reads).
     if [ -x "$VENV/bin/python" ]; then
         SAVED_ADDR=$(FK_ETC="$SAVED_DIR" "$VENV/bin/python" -I -c "
 from filament_kit import config
@@ -247,7 +247,7 @@ if [ -n "$LEGACY_LIB" ]; then
 fi
 install -m 755 "$RES/backup.sh" "$OPT/backup.sh"
 install -m 755 "$RES/spoolwarden-cli.sh" /usr/local/bin/spoolwarden
-# The old name: a small wrapper that prints one note on standard error and runs `spoolwarden` (06 section 2).
+# The old name: a small wrapper that prints one note on standard error and runs `spoolwarden`.
 install -m 755 "$RES/filament-kit-wrapper.sh" /usr/local/bin/filament-kit
 # Units, the avahi file and the Spoolman script: `modules apply` installs them from here.
 # Everything but the Piper voices (60-80 MB each; `modules apply` checks their hashes): kept across upgrades.
@@ -296,7 +296,7 @@ fi
 # First install at a terminal: ask. --mode: set it, on any install. Upgrade without --mode: no
 # questions, the modules stay as they are (a config without modules is the server mode).
 AI_INTAKE=""
-# The first question (R82 section 3): finish in the browser. Yes: the Hub with the usual choices and nothing more asked.
+# The first question: finish in the browser. Yes: the Hub with the usual choices and nothing more asked.
 # An explicit flag (--mode, --modules, --set, --server, --restore) already says what to install: the flags win, nothing is asked.
 if [ -z "$MODE" ] && [ -z "$CUSTOM" ] && [ -z "$SETS" ] && [ -z "$SERVER_ADDR" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
     if [ "$GUIDED_DEFAULT" = y ]; then guided_hint="[Y/n]"; else guided_hint="[y/N]"; fi
@@ -402,7 +402,7 @@ fi
 if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ]; then
     MODE=server  # non-interactive first install
 fi
-# ---------- the port (R82 section 1 point 3): first install only; an update never moves a Hub ----------
+# ---------- the port: first install only; an update never moves a Hub ----------
 # python prints "<kind> <port>": kind free (443 and no question), taken, unsure (the test could not tell: ask) or remote
 # (Remote access's nginx owns 443). A python that fails leaves the port unwritten: the code's 8710.
 pick_port() {          # $1 name ("Hub", "Weigh Station"), $2 kind, $3 offered port; prints the port to use
@@ -504,7 +504,7 @@ print("Install mode: " + mode)
         chmod 640 "$ETC/$cf"
     done
 fi
-# the first-run file (R82 section 4): the Getting started panel shows on a new Hub, with the steps asked here marked
+# the first-run file: the Getting started panel shows on a new Hub, with the steps asked here marked
 if [ "$FIRST_INSTALL" -eq 1 ] && [ "$HUB_HERE" -eq 1 ]; then
     # shellcheck disable=SC2086
     "$VENV/bin/python" -I -m filament_kit.firstrun new $ASKED || echo "note: the Getting started list could not be prepared"

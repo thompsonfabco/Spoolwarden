@@ -278,7 +278,7 @@ function ask(o) {
     const values = () => fields.map((f) => f._control.value);
     // what was typed, the typed word aside: closing asks first when it changed, except in a one-field entry (9.1)
     const kept = () => fields.filter((f) => f !== word).map((f) => f._control.value).join("\n"), first = kept();
-    // a wrong typed word: the button stays focusable, aria-disabled with its reason (07 SR-22)
+    // a wrong typed word: the button stays focusable, aria-disabled with its reason
     const wrong = () => word && word._control.value.trim() !== o.word, sync = () => disable(go, wrong() ? typed : null);
     if (word) { go._refused = () => word._control.focus(); on(word._control, "input", sync); sync(); }
     const ro = (on) => { for (const f of fields) f._control.readOnly = on; };
@@ -366,7 +366,7 @@ function setAppearance(v) {
   }
   return kept;
 }
-// in System mode the metas follow the phone's own light/dark switch (08 13); a chosen appearance gives the same colour
+// in System mode the metas follow the phone's own light/dark switch; a chosen appearance gives the same colour
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintMetas);
 function setLook(look) {
   attr(root, "data-look", look);
@@ -478,7 +478,7 @@ function field(o) {
     : kind === "textarea" ? h("textarea", { rows: 3 }) : h("input", { type: kind === "secret" ? "password" : kind === "number" ? "text" : kind });
   Object.assign(control, { className: "field__control" + (o.mono ? " mono" : ""), id });
   if (o.name) control.name = o.name;
-  // a field that is not optional is aria-required (07 FRM-3)
+  // a field that is not optional is aria-required
   const a = Object.assign(kind === "select" || kind === "file" ? {} : { autocomplete: "off" }, o.optional || o.disabled || kind === "search" ? {} : { "aria-required": "true" },
     kind === "number" ? { inputmode: o.decimal ? "decimal" : "numeric" } : kind === "search" ? { inputmode: "search", enterkeyhint: "search" } : {}, o.attrs);
   for (const [k, v] of Object.entries(a)) control.setAttribute(k, v);
@@ -668,7 +668,7 @@ function formGroup(form, o = {}) {
     }
     return guard(o.title || labelOf(keys[0]), () => send(keys));
   };
-  // changed keys only, one at a time (02 12): plain, then applies (after each job), then restarts
+  // changed keys only, one at a time: plain, then applies (after each job), then restarts
   async function send(keys) {
     const order = ["", "applies", "restarts"].flatMap((fx) => keys.filter((k) => effect(k) === fx));
     const cur = read(), saved = [], names = (ks) => ks.map(labelOf).join(", ");
@@ -729,7 +729,7 @@ on(window, "hashchange", (e) => {
 }, true);
 on(window, "beforeunload", (e) => { if (dirtyGroups().length) { e.preventDefault(); e.returnValue = ""; } });
 
-// ----- collection (6.1): sort, expand, live patch; markup as 02 6.1 -----
+// ----- collection (6.1): sort, expand, live patch; markup as the design, components -----
 // renumber(row, hide): shows or hides a result or detail row
 function renumber(row, hide) { row.hidden = hide; const c = row.closest(".coll"); if (c && c._number) c._number(); }
 // collection(el, {name, sort, result, total, first}): paged when total (all pages' items) is given, first = items

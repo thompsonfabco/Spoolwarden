@@ -110,7 +110,7 @@ def test_access_code_replaces_it_clears_the_pin_and_waits():
 
 
 def test_an_address_change_keeps_the_pin():
-    """R103: the stored Access Code only ever goes to the printer whose certificate is pinned."""
+    """The stored Access Code only ever goes to the printer whose certificate is pinned."""
     _bambu()
     c, b, _ = _client()
     r = c.patch(f"/api/printers/{SERIAL}", json={"address": "10.0.0.9"})
@@ -208,7 +208,7 @@ def test_klipper_address_port_and_key():
 
 @pytest.mark.parametrize("body", [{"address": "10.0.1.22"}, {"port": 7200}])
 def test_a_klipper_printer_with_a_stored_key_moves_only_with_the_key(body):
-    """R103: Moonraker has no pin; the stored key would go to whatever answers at the new address."""
+    """Moonraker has no pin; the stored key would go to whatever answers at the new address."""
     pid = _klipper()
     registry.set_api_key(pid, "storedKEY1")
     before = registry.load()[pid]
@@ -308,7 +308,7 @@ def _web_client(name, changes=None):
 
 @pytest.mark.parametrize("changes", [None, False])
 def test_the_web_modules_token_may_not_change_printers_while_the_switch_is_off(changes):
-    """Review R111 note 1: the kit holds the switch too, so a web module that skipped its own check gets 403."""
+    """The kit holds the switch too, so a web module that skipped its own check gets 403."""
     _bambu()
     c = _web_client("web unit", changes)
     for r in (c.patch(f"/api/printers/{SERIAL}", json={"name": "x"}), c.delete(f"/api/printers/{SERIAL}"),

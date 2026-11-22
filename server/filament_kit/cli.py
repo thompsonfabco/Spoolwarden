@@ -113,7 +113,7 @@ def cmd_status(client_factory, station_pairing: str | None = None) -> int:
     if not (output.json_mode() or output.quiet()):
         output.out(status_rows.header_line())
         output.out()
-        if started:                         # 06 9.1: while steps remain and the list is not hidden
+        if started:                         # the design, command line: while steps remain and the list is not hidden
             block = address_cli.started_lines(started)
             if block:
                 output.out_lines(block + [""])
@@ -163,7 +163,7 @@ PAIR_POLL = 1.0         # seconds between looks for the device while `pair` wait
 
 
 def _wait_for_device(device_id: str | None, expires: float, who: str, cmd: str) -> int:
-    """06 9.4: wait until the device has paired or the code runs out. Ctrl-C stops the wait; the code stays valid."""
+    """The design, command line: wait until the device has paired or the code runs out. Ctrl-C stops the wait; the code stays valid."""
     if device_id is None:               # the pairing is gone already (nothing to watch)
         return 0
     until = time.strftime("%H:%M", time.localtime(expires))
@@ -187,7 +187,7 @@ def _wait_for_device(device_id: str | None, expires: float, who: str, cmd: str) 
 
 def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, home_assistant: bool = False,
              text: bool = False, wait: bool = True) -> int:
-    """`pair` (06 9.4): what the Hub page's pairing dialog shows, in its order (the QR code for a phone, the instruction,
+    """`pair`: what the Hub page's pairing dialog shows, in its order (the QR code for a phone, the instruction,
     the pairing code, the certificate fingerprint, the expiry), then waits for the device. `--json` ends after the document."""
     cmd = "sudo spoolwarden pair" + (
         " --slicer-sync" if slicer_sync else " --weigh-station" if weigh_station else " --home-assistant" if home_assistant else ""
@@ -214,7 +214,7 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, home_assist
     if output.json_mode():
         output.emit({"ok": True, "code": pr.code, "link": pr.qr, "fingerprint": fp, "expires": _iso(pr.expires)})
         return 0
-    text = text or output.plain()       # --plain: no QR code (06 6.2)
+    text = text or output.plain()       # --plain: no QR code
     if slicer_sync or weigh_station or home_assistant:
         # no QR scanner there: the link is pasted (printed by design, never logged)
         output.out("Paste this link into the Slicer Sync when it asks:" if slicer_sync else
@@ -234,7 +234,7 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, home_assist
     output.out_lines(_fingerprint_lines(fp))
     output.out(f"Expires at {time.strftime('%H:%M', time.localtime(pr.expires))} "
                f"(in {max(1, -(-int(pr.expires - time.time()) // 60))} min).")
-    if not wait:                        # 06 9.4 (R68): the code, then when it stops working; no waiting line
+    if not wait:                        # the design, command line: the code, then when it stops working; no waiting line
         output.out(f"The code works until {time.strftime('%H:%M', time.localtime(pr.expires))}.")
         return 0
     return _wait_for_device(_pending_device(pr.token), pr.expires,
@@ -347,7 +347,7 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run, yes: bool = False, on
             output.error("no blank display board found on USB.", "plug the display in with a data cable, then run this "
                          "again (a board that already runs the display firmware does not need flashing).")
             return 1
-        if yes and len(ports) > 1:      # --yes answers for one named board, never for a pick among several (06 7)
+        if yes and len(ports) > 1:      # --yes answers for one named board, never for a pick among several
             output.error("more than one board could be the intake panel: " + ", ".join(ports) + "; nothing was written.",
                          "name the board with --port, for example --port " + ports[0] + ".")
             return output.USAGE
@@ -435,7 +435,7 @@ _BACKUP_KIND = {"made": "made here", "pre-restore": "before a restore", "daily":
 
 def cmd_backup(action: str, out: str | None, days: int | None = None, *,
                remove: bool = False, show: bool = False, yes: bool = False) -> int:
-    """`backup create`, `list`, `keep <days>` and `password` (06 9.10); the same helper functions the Hub page's routes use."""
+    """`backup create`, `list`, `keep <days>` and `password`; the same helper functions the Hub page's routes use."""
     from . import backup, setup_helper
     if not _is_root():
         return output.need_sudo(_sudo_command(f"sudo spoolwarden backup {action}" + (f" {days}" if days else "")))
@@ -531,7 +531,7 @@ def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = Fal
             kw = {"yes": yes, "ask": ask, "out": say, "step": steps.Steps(backup.restore_steps()).next,
                   "password_file": Path(password_file) if password_file else None, "actor": _cli_actor()}
             rc = backup.restore(path, **kw)
-        if rc == 0:                     # R82 s4 p6: a restored Hub starts with Getting started hidden
+        if rc == 0:                     # a restored Hub starts with Getting started hidden
             firstrun.hide_after_restore()
         return rc
     finally:
@@ -556,7 +556,7 @@ def _open_panel_port(panel, station_state):
 
 
 def cmd_station_panel_wifi(off: bool = False, ask=input, secret=None, run=subprocess.run, address: str | None = None) -> int:
-    """`weigh-station panel-wifi [--off]` (R88 4.4): set the panel up to reach the station over Wi-Fi, or (--off) go back to
+    """`weigh-station panel-wifi [--off]`: set the panel up to reach the station over Wi-Fi, or (--off) go back to
     the USB cable. The station holds the panel's USB port, so it is stopped first and started again at the end; the panel
     is told over USB through panel_setup's plain functions, whose sentences are printed as they are (they never hold the
     password). The change is then applied (the drop-in, the station's restart)."""
@@ -636,7 +636,7 @@ def cmd_station_panel_wifi(off: bool = False, ask=input, secret=None, run=subpro
 
 
 def cmd_station_pairing_state(old_spelling: bool = False) -> int:
-    """`weigh-station pairing-state` (06 9.7): `paired with 192.0.2.10:8710`, `not paired` or `not checked yet`; its `--json`
+    """`weigh-station pairing-state`: `paired with 192.0.2.10:8710`, `not paired` or `not checked yet`; its `--json`
     `state` keeps `paired`, `unpaired`, `unchecked`. The old spelling `station pairing-state` still prints the one line
     the root wrapper passes on to `status` (install/spoolwarden-cli.sh reads that text until it reads the `--json`)."""
     from .station import server_api
@@ -657,7 +657,7 @@ def _fmt_time(t) -> str:
 
 
 def _iso(t) -> str | None:
-    """A time for `--json`: ISO 8601 with the offset (06 6.8); text is kept as it is; no time is None."""
+    """A time for `--json`: ISO 8601 with the offset; text is kept as it is; no time is None."""
     if isinstance(t, str):
         return t
     if isinstance(t, bool) or not isinstance(t, (int, float)) or not t:
@@ -666,14 +666,14 @@ def _iso(t) -> str | None:
 
 
 def _confirm(question: str, doing: str, *, yes: bool, word: str | None = None, ask=None) -> int | None:
-    """06 7: None to go on, else the exit code (5 after no, 2 with no terminal and no --yes, which names the command
+    """The design, command line: None to go on, else the exit code (5 after no, 2 with no terminal and no --yes, which names the command
     again with --yes)."""
     return output.confirm(question, yes=yes, doing=doing, rerun=_sudo_command("sudo spoolwarden <command>") + " --yes",
                           word=word, ask=ask)
 
 
 def cmd_devices(yes: bool = False, forget: str | None = None) -> int:
-    """`devices` (06 9.4): the paired devices, as the Hub page lists them; `devices forget <device>` unpairs one."""
+    """`devices`: the paired devices, as the Hub page lists them; `devices forget <device>` unpairs one."""
     if forget is not None:
         return _devices_forget(forget, yes)
     from .web.slots import CLI_DEVICE, INTAKE_DEVICE
@@ -697,7 +697,7 @@ def cmd_devices(yes: bool = False, forget: str | None = None) -> int:
 
 
 def _device_named(arg: str, rows: list[dict], unclaimed: list[dict]) -> dict | None:
-    """06 5: an exact id, else an exact name, else the start of exactly one name; ignoring case. A pairing nobody has
+    """The design, command line: an exact id, else an exact name, else the start of exactly one name; ignoring case. A pairing nobody has
     claimed yet (`unpair <id>` always removed one) is found by its exact id only. None after the error (exit 2)."""
     a = arg.strip().lower()
     hit = [r for r in rows + unclaimed if r["id"].lower() == a] if a else []
@@ -747,7 +747,7 @@ def _ask(prompt: str) -> str | None:
 
 
 def _secret(prompt: str) -> str:
-    """`secret_input.ask` inside the menus: the end of input ends the session (exit 5, 06 8.2)."""
+    """`secret_input.ask` inside the menus: the end of input ends the session (exit 5, the design, command line)."""
     try:
         return secret_input.ask(prompt)
     except EOFError:
@@ -844,7 +844,7 @@ def _storage_menu(cfg: dict) -> None:
                          "change them later with: sudo spoolwarden locations")
 
 
-# ---------- config: the settings menu (06 8.3) ----------
+# ---------- config: the settings menu ----------
 
 class _Ended(Exception):
     """The input ended (Ctrl-D, the end of piped input) while a screen waited for an answer."""
@@ -867,22 +867,22 @@ _ENGINES = (("auto", "Automatic: On this Hub first, Cloud (Claude) when it is un
 _TIERS = (("auto", "Automatic"), ("cpu", "Processor (CPU)"), ("gpu", "Graphics card (GPU)"))
 _VOICES = (("auto", "Piper (natural; a 60-80 MB download)"), ("espeak", "espeak-ng (robotic; no download)"))
 _SETUP_WORDS = {"server": "Hub", "station": "Weigh Station", "all-in-one": "Hub with Weigh Station", "custom": "Custom"}
-# The setup sentence of `features setup` (06 9.6) and the new words for the three setups (N27).
+# The setup sentence of `features setup` and the new words for the three setups (N27).
 _SETUP_SENTENCE = {"server": "Hub", "station": "Weigh Station only", "all-in-one": "Hub with Weigh Station"}
 FEATURES_ROW = 12          # the number the main list gives Features: the texts that point at it say so
 _APPLY_KEYS = ("station.tts", "web.public_url", "station.url", "spoolman_url")     # saving these applies (modules apply)
 
 
 class _Item:
-    """One setting of the menu: its label, the kind of answer and the key `config set` knows it by (06 8.3)."""
+    """One setting of the menu: its label, the kind of answer and the key `config set` knows it by."""
 
     def __init__(self, id, label, kind, key, *, choices=(), sep="", low=0, high=0, words="", restarts=False,
                  keep_spaces=False, alert="", voice=""):
         self.id, self.label, self.kind, self.key = id, label, kind, key
         self.choices, self.sep, self.low, self.high, self.words = choices, sep, low, high, words
         self.restarts, self.keep_spaces = restarts, keep_spaces
-        self.alert = alert           # an Alerts item: the type key, or the field of the alert rules (06 8.3, 9.17)
-        self.voice = voice           # a Weigh Station voice item, kept by the Hub's service (R88 01:50)
+        self.alert = alert           # an Alerts item: the type key, or the field of the alert rules
+        self.voice = voice           # a Weigh Station voice item, kept by the Hub's service
 
 
 _ITEMS = {i.id: i for i in (
@@ -922,7 +922,7 @@ _ITEMS = {i.id: i for i in (
     _Item("voice_volume", "Volume", "int", None, low=0, high=100, words="from 0 to 100", voice="volume"),
 )}
 
-# the groups, in the Hub page's order (03 10.1): id, title
+# the groups, in the Hub page's order: id, title
 _GROUPS = (("appearance", "Appearance"), ("general", "General"), ("storage", "Storage locations"), ("alerts", "Alerts"),
            ("reader", "Label Reader"), ("backups", "Backups and restore"), ("network", "Network and addresses"),
            ("passphrase", "Web passphrase"), ("catalog", "Filament Catalog"), ("voice", "Weigh Station voice"))
@@ -969,7 +969,7 @@ def _set_path(cfg: dict, key: str, value) -> None:
 
 
 class _ConfigMenu:
-    """`config`: the Hub's settings, changed in a list of groups, collected, then saved together with `s` (06 8.3)."""
+    """`config`: the Hub's settings, changed in a list of groups, collected, then saved together with `s`."""
 
     def __init__(self, cfg: dict, ui):
         self.cfg = cfg                        # the settings as stored when the menu opened (or were last saved)
@@ -1412,7 +1412,7 @@ class _ConfigMenu:
 
     # ----- saving
     def save(self) -> None:
-        """Every staged change at once, all or nothing (06 8.3). The Hub's rules: each value checked first, the
+        """Every staged change at once, all or nothing. The Hub's rules: each value checked first, the
         settings written together, one restart and one apply for the group."""
         ui = self.ui
         if not self.staged:
@@ -1582,7 +1582,7 @@ def _history_use() -> dict:
 
 
 def cmd_config(sm_factory=None) -> int:
-    """`config`: the settings menu (06 8.3). A menu needs a terminal, or `--numbered` with its answers on standard input."""
+    """`config`: the settings menu. A menu needs a terminal, or `--numbered` with its answers on standard input."""
     if not output.numbered() and not menu_ui._stdin_tty():
         output.error("config is a menu, and there is no terminal to ask on.",
                      "run it again with --numbered, giving the answers on standard input.")
@@ -1610,9 +1610,9 @@ def cmd_config(sm_factory=None) -> int:
         output.out(line)
     return rc
 
-# ---------- config show and config set (06 9.8) ----------
+# ---------- config show and config set ----------
 
-_KEY_ALIASES = {"backups.keep_days": "backup.keep_days"}      # 06 8.3 writes the key this way; the file holds backup.keep_days
+_KEY_ALIASES = {"backups.keep_days": "backup.keep_days"}      # the design, command line writes the key this way; the file holds backup.keep_days
 _SECRET_WHERE = {"apikey": "Label Reader", "passphrase": "Web passphrase"}
 
 
@@ -1699,7 +1699,7 @@ def _storage_show_lines(rows: list, sm_factory) -> list[str]:
             for r in view["locations"]]
 
 
-# the keys of the five storage settings (and the list of locations) before the list: `config set` refuses them (06 8.3)
+# the keys of the five storage settings (and the list of locations) before the list: `config set` refuses them
 _OLD_STORAGE_KEYS = ("locations", "placement.pla_location", "placement.box_prefix", "placement.box_count",
                      "placement.overflow", "placement.sealed_location")
 
@@ -1816,7 +1816,7 @@ _THEME_WORDS = {"console": "dense and technical; the default", "workbench": "cal
 
 
 def cmd_config_theme(raw: str | None) -> int:
-    """`config theme [<theme>]` (06 9.8): the Hub's theme for new devices, shown (no rights needed) or set (root, as
+    """`config theme [<theme>]`: the Hub's theme for new devices, shown (no rights needed) or set (root, as
     `config set` needs). The name in any case; a device that chose its own theme keeps it."""
     def line(value: str) -> str:
         return f"Theme for new devices: {value.capitalize()} ({_THEME_WORDS[value]})."
@@ -1855,10 +1855,10 @@ def cmd_config_theme(raw: str | None) -> int:
     return 0
 
 
-# ---------- logs and the pointer commands (06 9.14, 10) ----------
+# ---------- logs and the pointer commands ----------
 
 def cmd_logs(service: str | None, lines: int = 100) -> int:
-    """`logs [<service>] [--lines 50|100|200]` (06 9.14): the end of a service's journal, as the Hub page's Logs tab reads
+    """`logs [<service>] [--lines 50|100|200]`: the end of a service's journal, as the Hub page's Logs tab reads
     it (setup_helper's journal op), whole: addresses and serials are not hidden here."""
     from . import setup_helper
     if not _no_systemd() and not _is_root():
@@ -1897,14 +1897,14 @@ def cmd_logs(service: str | None, lines: int = 100) -> int:
 
 
 def _intake_url() -> str:
-    """The web app's address on this Hub, for the lines that say where something is (06 10)."""
+    """The web app's address on this Hub, for the lines that say where something is."""
     ips = pairing.local_ips()
     host = ips[0] if ips else f"{pairing.short_hostname()}.local"
     return f"https://{host}{hubport.url_port(config.load().get('port', 8710))}/intake"
 
 
 def _pointer(where: str, sentence: str, url: str) -> int:
-    """06 10: one line saying where a thing the command line cannot do is, the address on the next line when the two do
+    """The design, command line: one line saying where a thing the command line cannot do is, the address on the next line when the two do
     not fit together; exit 0. `--json`: {"available": false, "where", "url"}."""
     output.emit({"available": False, "where": where, "url": url})
     if len(sentence) + 1 + len(url) <= output.width() - 1:
@@ -1922,7 +1922,7 @@ def cmd_add() -> int:
     return _pointer("web app", "Add spools in the web app, app or Weigh Station:", _intake_url())
 
 
-# ---------- the Printers screen (06 8.4) ----------
+# ---------- the Printers screen ----------
 
 _BAMBU_KEYS = (("c", "collect a report"), ("t", "test connection"), ("m", "map slots"),
                ("b", "map by loading filament"), ("v", "saved reports"), ("r", "rename"), ("e", "change address"),
@@ -2253,7 +2253,7 @@ def _printer_test(p) -> None:
         output.out(f"{output.state('connected')} {name} answers at {p.ip}.")
 
 
-# ---------- the Features checklist (06 8.5) ----------
+# ---------- the Features checklist ----------
 
 _FEATURE_ASKS = {
     "web.public_url": ("{who} needs the address people use.",
@@ -2451,7 +2451,7 @@ def _features_screen(ui, cfg: dict, on=None, raw_apply=None, fresh=False) -> tup
 
 
 def _need_terminal(what: str) -> int | None:
-    """06 6.7: a menu with no terminal to ask on (and no `--numbered`): exit 2 after its Error and Fix."""
+    """The design, command line: a menu with no terminal to ask on (and no `--numbered`): exit 2 after its Error and Fix."""
     if output.numbered() or menu_ui._stdin_tty():
         return None
     output.error(f"{what} is a menu, and there is no terminal to ask on.",
@@ -2517,7 +2517,7 @@ def cmd_modules_menu(raw: bool) -> int:
             return output.CANCELLED
         if state != "applied":
             return 1
-    except KeyboardInterrupt:                   # the capture stays empty; the word goes to the terminal (06 6.7)
+    except KeyboardInterrupt:                   # the capture stays empty; the word goes to the terminal
         output.out("Stopped.")
         return output.INTERRUPTED
     finally:
@@ -2528,7 +2528,7 @@ def cmd_modules_menu(raw: bool) -> int:
     return 0
 
 
-# ---------- recent: Recently added (06 9.3) ----------
+# ---------- recent: Recently added ----------
 # The Hub page's own history code does the work (intake_history, the functions setup_console/intake_tab calls too).
 
 # [field, the Hub page's label, its group], in the order of a group's rows
@@ -2540,7 +2540,7 @@ _REC_FIELDS = (("vendor", "Brand", "Identity"), ("name", "Name", "Identity"), ("
                ("price_per_kg", "Price per kg", "Other"), ("line", "Line", "Other"))
 _REC_LABEL = {f: label for f, label, _ in _REC_FIELDS}
 _REC_GROUPS = ("Identity", "Weights", "Temperatures", "Other")
-# the keys of `recent edit` (06 9.3) and the other spellings of each; `color-hex` and the underscored names worked before
+# the keys of `recent edit` and the other spellings of each; `color-hex` and the underscored names worked before
 _REC_KEYS = {"brand": "vendor", "vendor": "vendor", "name": "name", "material": "material", "colour": "color_hex",
              "color": "color_hex", "color-hex": "color_hex", "net-weight": "net", "net": "net",
              "empty-spool-weight": "tare", "spool-weight": "tare", "tare": "tare", "density": "density",
@@ -2553,7 +2553,7 @@ _REC_FROM = {"phone": "phone photo", "web": "web app", "station": "Weigh Station
 _REC_FROM_SENTENCE = {"phone photo": "from a phone photo", "web app": "from the web app",
                       "Weigh Station": "from the Weigh Station", "by hand": "added by hand",
                       "command line": "from the command line"}
-# a read confidence below high: its word (06 6.1), the glyph meaning of the word and its colour
+# a read confidence below high: its word, the glyph meaning of the word and its colour
 _REC_LEVELS = {"low": ("low: check this", "error", "bad"), "medium": ("medium", "look", "warn"),
                "not_on_label": ("not on label", "off", "muted")}
 _REC_EDIT_NOTHING = "nothing to change"       # intake_history.apply's refusal of values equal to the current ones
@@ -2620,7 +2620,7 @@ def _history_error(e, rid: str | None = None) -> int:
 
 
 def cmd_recent(show_from: bool = False) -> int:
-    """`recent` (06 9.3): a summary line, then the records newest first."""
+    """`recent`: a summary line, then the records newest first."""
     from . import intake, intake_history
     ai = intake.reading_on(config.load())
     d = intake_history.list_records(ai)
@@ -2684,7 +2684,7 @@ def _rec_changes(rv: dict) -> list[dict]:
 
 
 def _rec_item_lines(r: dict, s: dict) -> list[str]:
-    """One item's fields in groups, a confidence mark only where it is not high (06 9.3)."""
+    """One item's fields in groups, a confidence mark only where it is not high."""
     reading, changed = _rec_reading(r, s["item"]), _rec_changed(r)
     shown = {f: _rec_value(f, s["values"].get(f)) for f, _, _ in _REC_FIELDS}
     room = min(max(len(v) for v in shown.values()), 30)
@@ -2774,7 +2774,7 @@ def cmd_recent_show(rid: str, photos: bool = False) -> int:
 
 
 def _rec_filament_sentences(rv: dict, *, undone: bool = False) -> list[str]:
-    """The Hub's sentences about the filament a change moved the spools to or emptied (03 6.4)."""
+    """The Hub's sentences about the filament a change moved the spools to or emptied."""
     fl = rv.get("filaments") or {}
     out = []
     if not undone and fl.get("to") is not None and fl.get("to") != fl.get("from"):
@@ -2958,7 +2958,7 @@ def cmd_recent_undo(rid: str) -> int:
 
 
 def cmd_cert(renew: bool = False, yes: bool = False) -> int:
-    """`certificate [--renew]` (06 9.12): make the Hub's certificate when there is none (or renew on `--renew`), print its fingerprint."""
+    """`certificate [--renew]`: make the Hub's certificate when there is none (or renew on `--renew`), print its fingerprint."""
     cert = config.paths().etc / "cert.pem"
     if renew:
         if not _no_systemd() and not _is_root():
@@ -2997,7 +2997,7 @@ def cmd_cert(renew: bool = False, yes: bool = False) -> int:
 
 
 def cmd_ensure_fields() -> int:
-    """`spoolman fields` (06 9.12)."""
+    """`spoolman fields`."""
     try:
         created = Spoolman(config.load()["spoolman_url"]).ensure_fields()
     except SpoolmanError as e:
@@ -3010,7 +3010,7 @@ def cmd_ensure_fields() -> int:
 
 
 def cmd_spoolman_address(url: str | None) -> int:
-    """`spoolman address [<url>]` (06 9.12): show the Spoolman in use, or check an address and save it the way the Hub's
+    """`spoolman address [<url>]`: show the Spoolman in use, or check an address and save it the way the Hub's
     Settings > General does (it must answer first; the kit applies the change)."""
     cfg = config.load()
     if url is None:
@@ -3069,7 +3069,7 @@ def _err_line(text: str) -> None:
 
 
 def _input_ended() -> int:
-    """The end of input at a secret prompt of a command: nothing was changed (06 8.2)."""
+    """The end of input at a secret prompt of a command: nothing was changed."""
     output.out("Input ended.")
     return 5
 
@@ -3239,7 +3239,7 @@ def _stdin_lines():
 
 
 def _manual_status(q: dict) -> str:
-    """One position's row at the end of Map by loading filament (06 8.6): its state word, then the detail."""
+    """One position's row at the end of Map by loading filament: its state word, then the detail."""
     st = q.get("status")
     if st == "confirmed":
         nozzle = f", {q['nozzle']} nozzle" if q.get("nozzle") else ""
@@ -3325,7 +3325,7 @@ def _manual_map_via_server(api, serial: str, lines=None) -> int:
     """`printer map --manual`: Map by loading filament in the terminal, on the running server's session (the same one
     the setup page, the phone web app and the Android app show; one session per printer). The owner loads each
     position; the printer reports what it sees; the owner answers here. Nothing is sent to the printer. The Hub's own
-    sentences are printed as they come; the command line adds only the answer line (06 8.6)."""
+    sentences are printed as they come; the command line adds only the answer line."""
     import queue
     from .web.slots import SlotError
     base = f"/api/printers/{serial}/manual-map"
@@ -3551,7 +3551,7 @@ def _report_said(r: dict) -> int:
 
 
 def cmd_printer_unpin(serial: str, yes: bool = False, access_code: str | None = None) -> int:
-    """`printer forget-certificate <printer>` (once `printer unpin`): asks for the Access Code, as the API does (R103), and
+    """`printer forget-certificate <printer>` (once `printer unpin`): asks for the Access Code, as the API does, and
     saves it with the cleared pin. `--access-code -` gives it on standard input."""
     p = registry.load().get(serial)
     if p is None:
@@ -3587,11 +3587,11 @@ def cmd_printer_unpin(serial: str, yes: bool = False, access_code: str | None = 
     return 0
 
 
-# ---------- printer commands (06 5, 9.2) ----------
+# ---------- printer commands ----------
 # The Hub page's own printer code does the work: setup_page.SetupPage's printer routes and setup_console/printers_tab,
 # run in this process with no setup code and no HTTP (these commands run as the Hub's own user). What that code asks
 # the Hub's connection manager for (a printer's state, its slots) the running Hub answers through its API; with no
-# Hub running every state is "unknown" (06 9.2).
+# Hub running every state is "unknown".
 
 def _families() -> frozenset:
     """The printer families whose module is on, as the running Hub serves them (api.py): nothing here acts on the others."""
@@ -3696,7 +3696,7 @@ _STATE_WORD = {"connected": "connected", "unknown_model": "connected", "offline"
 
 
 def _state_word(row: dict) -> str:
-    """The status word of a printer (06 6.1): what the Hub says, or that it is only found."""
+    """The status word of a printer: what the Hub says, or that it is only found."""
     return "found, not added" if not row["configured"] else _STATE_WORD.get(row["state"], "needs a look")
 
 
@@ -3713,7 +3713,7 @@ def _address_of(row: dict) -> str:
 
 
 def _printer_match(arg: str, rows: list[dict]) -> dict | None:
-    """06 5: an exact serial or id, else an exact name, else the start of exactly one name; ignoring case."""
+    """The design, command line: an exact serial or id, else an exact name, else the start of exactly one name; ignoring case."""
     a = arg.strip().lower()
     if not a:
         return None
@@ -3726,7 +3726,7 @@ def _printer_match(arg: str, rows: list[dict]) -> dict | None:
 
 
 def _printer_named(arg: str, *, found: bool = False, found_verb: str = "use") -> dict | None:
-    """The printer `arg` names (06 5), or None after the error (the caller then exits with 2). `found`: a printer a scan
+    """The printer `arg` names, or None after the error (the caller then exits with 2). `found`: a printer a scan
     found but nobody added may be named (`show`, `test`, `use`, `dismiss`); any other command says to run
     `printer <found_verb>` first. Names come from the registry alone: no Hub is asked."""
     rows = _Hub().rows()
@@ -3768,7 +3768,7 @@ def _prompted(given, prompt: str):
 
 
 def _secret_answer(given: str | None, prompt: str, flag: str, doing: str) -> str | None:
-    """A secret (06 8.7): `-` reads one line of standard input, else it is asked, hidden. The text (maybe empty), or None
+    """A secret: `-` reads one line of standard input, else it is asked, hidden. The text (maybe empty), or None
     after the error (nothing to ask on, or --json, which does not ask)."""
     if given == "-":
         try:
@@ -3874,7 +3874,7 @@ def cmd_printer_show(arg: str) -> int:
         return 0
     slots = hub.slots(row["serial"]) if _state_word(row) == "connected" else None
     auto = (hub.view(row["serial"]) or {}).get("auto")
-    if auto:                                # an Auto assignment (06 9.2): the notice, or the slots to choose from
+    if auto:                                # an Auto assignment: the notice, or the slots to choose from
         output.out()
         if auto.get("state") == "choose" and auto.get("slots"):
             choices = list(auto["slots"])
@@ -3910,7 +3910,7 @@ _addr_say = address_texts.say
 
 
 def _found_printers(klipper: bool) -> tuple[str, int] | None:
-    """`printer add`, the found list (R82 s5 p1, 06 9.2): at a terminal with no address given, the Klipper printers the
+    """`printer add`, the found list (the design, command line): at a terminal with no address given, the Klipper printers the
     Hub's search finds (`POST /printers/scan`), one per line to pick by number; Enter types an address instead. A Bambu
     Lab printer cannot be listed (the Hub does not hear them announce), so that case says so. (address, port) of the
     pick, or None."""
@@ -3943,7 +3943,7 @@ def _found_printers(klipper: bool) -> tuple[str, int] | None:
 
 
 def _klipper_test(host: str, port: int, key: str) -> bool:
-    """The test before a Klipper printer is saved (R82 s5 p3): the Hub asks the printer for its info. This is the
+    """The test before a Klipper printer is saved: the Hub asks the printer for its info. This is the
     existing probe (`Moonraker.info`) run from the command line's own process: the kit route `POST /api/printers/test`
     (EV1 part B) is not there yet."""
     from .bridge.klipper.moonraker import Moonraker, MoonrakerError
@@ -3955,7 +3955,7 @@ def _klipper_test(host: str, port: int, key: str) -> bool:
 
 
 def _map_offer(serial: str | None, manager_factory) -> int:
-    """`Map its slots now? [Y/n]` after an add at a terminal (R82 s5 p4): yes runs `printer map` (a Klipper printer's is
+    """`Map its slots now? [Y/n]` after an add at a terminal: yes runs `printer map` (a Klipper printer's is
     the one by loading), no says how to do it later."""
     p = registry.load().get(serial) if serial else None
     if p is None or not output.terminal():
@@ -3971,8 +3971,8 @@ def _map_offer(serial: str | None, manager_factory) -> int:
 def cmd_printer_add(*, klipper: bool = False, address: str | None = None, port: int | None = None,
                     name: str | None = None, serial: str | None = None, access_code: str | None = None,
                     api_key: str | None = None, manager_factory=None) -> int:
-    """`printer add` (06 9.2, R82 s5): the guided order, and flags answer their questions and skip them: the found list
-    (at a terminal, with no address given), the details (06 8.7), the test (a Klipper printer is asked before anything
+    """`printer add` (the design, command line): the guided order, and flags answer their questions and skip them: the found list
+    (at a terminal, with no address given), the details, the test (a Klipper printer is asked before anything
     is saved; when it does not answer `Add anyway? [y/N]`, which `--yes` does not answer), then `Map its slots now?`. A
     Bambu Lab printer is added by the Hub page's own route, which reads its certificate and fails with the Hub's text."""
     if address is None and output.terminal():
@@ -4087,7 +4087,7 @@ def cmd_printer_dismiss(arg: str, yes: bool = False) -> int:
 
 
 def _drop_auto(hub: "_Hub", serial: str) -> None:
-    """A forgotten printer's Auto assignment ends with it (R83 A6, as `DELETE /api/printers/<id>` does it). The
+    """A forgotten printer's Auto assignment ends with it (as `DELETE /api/printers/<id>` does it). The
     assignment is held by the running Hub, so it is asked to stop it; with no Hub running there is none to stop."""
     if not hub.up:
         return
@@ -4247,7 +4247,7 @@ def cmd_printer_scan(subnet: str | None = None) -> int:
 
 def _klipper_add(name: str | None, host: str, port: int, key: str) -> int:
     """`printer add --klipper`: the Hub's own route (`POST /printers/klipper`), so a printer a scan found is put into use
-    as the Hub page does; then what the printer says it is (06 9.2)."""
+    as the Hub page does; then what the printer says it is."""
     hub = _hub()
     r, rc = hub.call(hub.route("/printers/klipper"), None, {"host": host, "port": port, "name": name or "", "api_key": key})
     if rc is not None:
@@ -4261,7 +4261,7 @@ def _klipper_add(name: str | None, host: str, port: int, key: str) -> int:
 
 
 def _scan(subnet: str | None) -> int:
-    """`printer scan` (06 9.2): the Hub's own route (`POST /printers/scan`: a private IPv4 network, at most a /24); one
+    """`printer scan`: the Hub's own route (`POST /printers/scan`: a private IPv4 network, at most a /24); one
     line per printer found, and each is recorded (not added) so `printer use` can name it."""
     hub = _hub()
     from .setup_console import printers_tab
@@ -4310,7 +4310,7 @@ def cmd_printer_reports(arg: str) -> int:
 
 
 def cmd_printer_live(arg: str) -> int:
-    """06 10: the camera and the controls need a screen; say where they are."""
+    """The design, command line: the camera and the controls need a screen; say where they are."""
     if _printer_named(arg) is None:
         return output.USAGE
     ips = pairing.local_ips()
@@ -4322,7 +4322,7 @@ def cmd_printer_live(arg: str) -> int:
 
 
 def _config_unreadable() -> int | None:
-    """None when config.json reads; else the Error (06 6.5) and its exit code: the Hub page cannot list printers without it."""
+    """None when config.json reads; else the Error and its exit code: the Hub page cannot list printers without it."""
     try:
         config.load()
     except ValueError as e:
@@ -4378,7 +4378,7 @@ def _dispatch_printer(a, manager_factory) -> int:
 
 
 def cmd_printer_menu() -> int:
-    """`printer menu`: the Printers screen of `config` (06 8.4), on its own."""
+    """`printer menu`: the Printers screen of `config`, on its own."""
     if not output.numbered() and not menu_ui._stdin_tty():
         output.error("printer menu is a menu, and there is no terminal to ask on.",
                      "run it again with --numbered, giving the answers on standard input.")
@@ -4405,7 +4405,7 @@ _CATALOG_SOURCE = {"updated": "signed release", "bundled": "bundled with this ve
 
 
 def cmd_library_status() -> int:
-    """`catalog status` (06 9.11): the version, where it comes from, the last check and what was skipped."""
+    """`catalog status`: the version, where it comes from, the last check and what was skipped."""
     st = library.status()
     if output.json_mode():
         from .setup_console import library_tab
@@ -4433,13 +4433,13 @@ def cmd_library_status() -> int:
 
 
 def _failed_row(text: str, fix: str = "") -> int:
-    """`× failed  <text>` (06 6.1), the way a command's job ends when it did not work."""
+    """`× failed  <text>`, the way a command's job ends when it did not work."""
     output.out_lines(output.status_row("failed", text, fix))
     return output.FAILED
 
 
 def cmd_library_update(scheduled: bool) -> int:
-    """`catalog update [--scheduled]` (06 9.11)."""
+    """`catalog update [--scheduled]`."""
     cfg = config.load()
     try:
         if scheduled:
@@ -4481,7 +4481,7 @@ def cmd_library_update(scheduled: bool) -> int:
 
 
 def cmd_library_adopt(folder: str) -> int:
-    """`catalog adopt <folder>` (06 9.11)."""
+    """`catalog adopt <folder>`."""
     try:
         library.adopt(Path(folder))
     except library.LibraryError as e:
@@ -4493,7 +4493,7 @@ def cmd_library_adopt(folder: str) -> int:
 
 
 def cmd_library_rollback(yes: bool = False) -> int:
-    """`catalog rollback` (06 7, 9.11)."""
+    """`catalog rollback`."""
     stop = _confirm("Go back to the previous Filament Catalog? The version before the last update comes back. Your own "
                     "entries are kept.", "going back to the previous Filament Catalog", yes=yes)
     if stop is not None:
@@ -4516,7 +4516,7 @@ def cmd_library_rollback(yes: bool = False) -> int:
 
 
 def cmd_library_add(source: str) -> int:
-    """`catalog add <file | ->` (06 9.11)."""
+    """`catalog add <file | ->`."""
     limit = library.LOCAL_LIMIT
     try:
         if source == "-":
@@ -4545,7 +4545,7 @@ def cmd_library_add(source: str) -> int:
 
 
 def cmd_library_token(remove: bool, yes: bool = False) -> int:
-    """`catalog token [--remove]` (06 9.11, 8.7): set, replace or remove the token the Filament Catalog downloads with."""
+    """`catalog token [--remove]`: set, replace or remove the token the Filament Catalog downloads with."""
     if not _no_systemd() and not _is_root():
         return output.need_sudo(_sudo_command("sudo spoolwarden catalog token" + (" --remove" if remove else "")))
     if remove:
@@ -4587,7 +4587,7 @@ def cmd_library_token(remove: bool, yes: bool = False) -> int:
     return 0
 
 
-# ---------- presets (06 9.5; `profiles` is the old spelling) ----------
+# ---------- presets (the design, command line; `profiles` is the old spelling) ----------
 
 def _default_spoolman() -> Spoolman:
     return Spoolman(config.load()["spoolman_url"])
@@ -4688,7 +4688,7 @@ def cmd_profiles_status() -> int:
     """`presets status`: the Hub page's reply (`--json`) as lines in the page's order."""
     from .setup_console import presets_tab
     v = presets_tab._view()
-    if not v["on"] and not _presets_on():               # an error says so, with exit 1, as text and as --json (06 6.8)
+    if not v["on"] and not _presets_on():               # an error says so, with exit 1, as text and as --json
         return 1
     if v["on"] and v["lines_error"]:
         output.error(v["lines_error"])
@@ -5074,7 +5074,7 @@ def _tty_confirm(text: str) -> bool:
     return bool(ans) and ans.strip().lower() in ("y", "yes")
 
 
-# The Features' keys (06 9.6, in the order of that table) and the old module names they stand for. The old names stay
+# The Features' keys (the design, command line, in the order of that table) and the old module names they stand for. The old names stay
 # accepted everywhere a key is, and are what the code and the stored settings use.
 _FEATURE_KEYS = {"spoolman": "spoolman", "hub": "server", "label-reader": "ai_intake",
                  "label-reader-local": "local_intake", "printers": "printers", "klipper": "klipper",
@@ -5100,7 +5100,7 @@ def _feature_needs(name: str) -> str:
 
 
 def cmd_modules_list() -> int:
-    """`features` (06 9.6): the setup and every Feature, as the Hub page's Features collection lists them."""
+    """`features`: the setup and every Feature, as the Hub page's Features collection lists them."""
     on = modules.enabled(config.load())
     output.emit({"modules": [{"name": n, "key": _KEY_OF[n], "title": m.title, "description": m.description,
                               "needs": modules.needs_of(n), "optional_ai": m.optional_ai, "on": n in on}
@@ -5157,7 +5157,7 @@ def _server_addr_error(addr: str) -> str | None:
 
 
 def _features_report(cfg: dict, before, explicit, notes=(), *, plan_shown: bool = False) -> int:
-    """`features on|off|setup` after its questions (06 9.6): the plan, the apply, then `Features applied: …` or
+    """`features on|off|setup` after its questions: the plan, the apply, then `Features applied: …` or
     `Unchanged.`"""
     after = modules.enabled(cfg)
     plan, short = _feature_plan(before, after, explicit)
@@ -5212,7 +5212,7 @@ def cmd_modules_set(mode: str, server: str | None = None) -> int:
 
 
 def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None, yes: bool = False) -> int:
-    """`features on|off <feature>` (06 9.6): the `Also turn on|off …?` questions, one for each other Feature, then the
+    """`features on|off <feature>`: the `Also turn on|off …?` questions, one for each other Feature, then the
     plan, the setting prompts, the apply and `Features applied: …`."""
     if not _require_root():
         return output.NEEDS_SUDO
@@ -5372,7 +5372,7 @@ def _kept_release() -> tuple[str, Path] | None:
 
 
 def _confirm_update(cfg: dict, *, rollback: bool, yes: bool) -> int | None:
-    """06 7 for `update` and `update --rollback`: asked once there is something to install, with its version. Nobody
+    """The design, command line for `update` and `update --rollback`: asked once there is something to install, with its version. Nobody
     to ask (no terminal, no --yes) stops only then: without root, with an up-to-date kit, no kept version or a release
     that cannot be read the command says so itself, as it does at a terminal."""
     from . import release, updates
@@ -5397,7 +5397,7 @@ def _confirm_update(cfg: dict, *, rollback: bool, yes: bool) -> int | None:
 
 
 def _run_removal(cmd: list[str], stdin_file: Path | None) -> tuple[int, str]:
-    """Run the removal script, its lines dim and indented below the wait line as they arrive (06 6.6, 9.13); (its exit
+    """Run the removal script, its lines dim and indented below the wait line as they arrive; (its exit
     code, its last non-empty line)."""
     last = ""
     with output.wait("Removing the kit…", programs=True):
@@ -5417,8 +5417,8 @@ def _run_removal(cmd: list[str], stdin_file: Path | None) -> tuple[int, str]:
 
 
 def cmd_uninstall(purge: bool, run=None, yes: bool = False) -> int:
-    """`uninstall [--purge]` (06 9.13): run uninstall.sh of the kept release (/opt/filament-kit/releases/<version>/),
-    unpacked outside /opt, which it removes. The question and, for --purge, the typed word are asked here (06 7);
+    """`uninstall [--purge]`: run uninstall.sh of the kept release (/opt/filament-kit/releases/<version>/),
+    unpacked outside /opt, which it removes. The question and, for --purge, the typed word are asked here;
     uninstall.sh asks its own for `./uninstall.sh --purge` too, which this answers with the word it was just given."""
     from . import release, updates
     if not _no_systemd() and not _is_root():
@@ -5565,7 +5565,7 @@ def _refuse_panel_board(port: str, explicit: bool, found, run=None) -> int | Non
 
 
 def _wifi_password(a, ask_secret) -> str | None:
-    """The reader's Wi-Fi password (06 8.7): `--password -` reads one line of standard input, else it is asked twice,
+    """The reader's Wi-Fi password: `--password -` reads one line of standard input, else it is asked twice,
     hidden. None after the error (nothing was changed)."""
     if getattr(a, "password", None) == "-":
         try:
@@ -5639,7 +5639,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
         _err_line("there are several ESP32 boards on this server's USB: pick the Printer Station's port on the "
                   "setup page; nothing was changed")
         return 1
-    elif yes:       # --yes answers for one named board, never for a pick among several (06 7)
+    elif yes:       # --yes answers for one named board, never for a pick among several
         output.error("there are several ESP32 boards on this server's USB: " + ", ".join(r.port for r in found)
                      + "; nothing was written.", "name the reader's board with --port, for example --port "
                      + found[0].port + ".")
@@ -6110,7 +6110,7 @@ def _label_reader_row_lines(rows) -> list[str]:
 
 
 def cmd_local_intake_status() -> int:
-    """`label-reader status` (06 9.9): the engine order, then the Label Reader group of `status`."""
+    """`label-reader status`: the engine order, then the Label Reader group of `status`."""
     from . import intake
     cfg = config.load()
     order = intake.reader_order(cfg)
@@ -6256,7 +6256,7 @@ def cmd_local_intake_share(value: str | None = None, delete_waiting: bool = Fals
     `on` / `off`: check what the page checks (on needs the reader installed here), delete the waiting corrections
     first when `delete_waiting` is given with `off`, save the setting, set the reader. `--status`: the setting and
     the reader's actual state, no root. Without either: set the reader to the saved value (the page's job).
-    `--json` (06 6.8) is the global switch: the document is `output.emit`'s."""
+    `--json` is the global switch: the document is `output.emit`'s."""
     from . import local_reader, share_corrections as sc
 
     def failed(what: str, **doc) -> int:
@@ -6333,7 +6333,7 @@ def _corrections_failed(e) -> int:
 
 def cmd_local_intake_corrections_list() -> int:
     """The corrections waiting to be shared (the setup page's Corrections waiting): count, size and one line each.
-    `--json` (06 6.8) is the global switch: the document is the route's answer."""
+    `--json` is the global switch: the document is the route's answer."""
     from . import reader_corrections
     if not _require_root():
         return output.NEEDS_SUDO
@@ -6478,7 +6478,7 @@ def _read_item_lines(it: dict) -> list[str]:
 
 
 def cmd_local_intake_test(photos: list[str], engine: str | None = None, yes: bool = False) -> int:
-    """`label-reader test <photo>... [--engine cloud|local]` (06 9.9): read photos with the chosen engine, or the engine
+    """`label-reader test <photo>... [--engine cloud|local]`: read photos with the chosen engine, or the engine
     order, and print the fields with how sure it was. Nothing is added and no record is made."""
     from . import intake
     cfg = config.load()
@@ -6538,9 +6538,9 @@ def cmd_local_intake_test(photos: list[str], engine: str | None = None, yes: boo
     return 0
 
 
-# ---------- help (06 3, 4) ----------
+# ---------- help ----------
 
-# The groups of the top-level help (06 3.1), then every command (06 3.2) and the old spellings (06 4). `help
+# The groups of the top-level help, then every command and the old spellings. `help
 # --markdown` is the guide's command table; a test holds it to the design's table. Commands that are not in this
 # program (migrate-ops, migrate-scanner, label-reader corrections) are not listed.
 _HELP_GROUPS = [('Everyday',
@@ -6743,7 +6743,7 @@ _ALIASES = [('pair --pc', 'pair --slicer-sync'),
  ('status --station-pairing` (hidden)', 'status --weigh-station-pairing` (hidden)')]
 
 def _top_help() -> str:
-    """06 3.1: the groups in the Hub page's order, what each command is for, and the switches every command takes."""
+    """The design, command line: the groups in the Hub page's order, what each command is for, and the switches every command takes."""
     lines = ["Spoolwarden on this Hub. Commands marked (sudo) in their own help need sudo.",
              "Usage: spoolwarden <command> [options]    More: spoolwarden <command> -h", ""]
     for group, items in _HELP_GROUPS:
@@ -6768,14 +6768,14 @@ def _hub_place(cell: str) -> str:
 
 
 def _markdown_table() -> str:
-    """`help --markdown`: the command table of 06 3.2 as the user guide holds it."""
+    """`help --markdown`: the command table of the design, command line as the user guide holds it."""
     rows = [("Command", "What it does", "Hub page place"), ("---", "---", "---"),
             *[(c, w, _hub_place(p)) for c, w, p in _COMMAND_TABLE]]
     return "\n".join("| " + " | ".join(r) + " |" for r in rows) + "\n"
 
 
 def _help(args, ap, sub) -> int:
-    """`help [<command> | aliases | --markdown]` (06 3.2)."""
+    """`help [<command> | aliases | --markdown]`."""
     if args.markdown:
         output.emit({"markdown": _markdown_table()})
         sys.stdout.write(_markdown_table())
@@ -6804,7 +6804,7 @@ def _print_help(text: str) -> int:
 
 
 def _add_catalog(sub, name: str, *, alias: bool) -> None:
-    """`catalog` and its old spelling `library` (06 9.11, 4): the same subcommands; `token` is the new one's."""
+    """`catalog` and its old spelling `library`: the same subcommands; `token` is the new one's."""
     lb = sub.add_parser(name, help="the Filament Catalog: status, update, roll back, add" if not alias
                         else "the old spelling of catalog")
     lsub = lb.add_subparsers(dest="library_cmd", required=True)
@@ -6834,7 +6834,7 @@ def _sudo_command(fallback: str) -> str:
 def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
     """The CLI. A root-only file (/etc/filament-kit/config.json and the like) read as another user is one error line
     saying to run it with sudo, not a traceback (C-M7). `--color`, `--plain` and `--no-progress` are taken out first
-    (06 6.2, 6.6: every command accepts them); Ctrl-C ends with `Stopped.` and exit code 130."""
+    (the design, command line: every command accepts them); Ctrl-C ends with `Stopped.` and exit code 130."""
     args, switches = output.extract_switches(list(sys.argv[1:] if argv is None else argv))
     output.reset()
     output.configure(**switches)
@@ -6863,7 +6863,7 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
 
 
 def _add_locations(sub) -> None:
-    """`locations` (06 9.15): the storage list and its changes."""
+    """`locations`: the storage list and its changes."""
     lc = sub.add_parser("locations", help="the storage locations in fill order; add, edit, move, remove (root)")
     lcs = lc.add_subparsers(dest="loc_cmd")
     lcs.add_parser("list", help="the storage locations in fill order (also what locations alone shows)")
@@ -6907,19 +6907,19 @@ def _add_yes(parser, help: str = "answer yes to the question this command asks (
 
 
 class _Parser(argparse.ArgumentParser):
-    """A wrong command or option is an error in the words of 06 6.5 (exit code 2), not argparse's own."""
+    """A wrong command or option is an error in the words of the design, command line (exit code 2), not argparse's own."""
 
     def error(self, message: str):
         output.error(message, f"see what it takes with: {self.prog} -h")
         raise SystemExit(output.USAGE)
 
     def format_help(self) -> str:
-        """The top-level help is the grouped text of 06 3.1 (the old spellings are not in it)."""
+        """The top-level help is the grouped text of the design, command line (the old spellings are not in it)."""
         return _top_help() if getattr(self, "grouped_help", False) else super().format_help()
 
 
 def _add_recent(sub, name: str, help: str, *, alias: bool) -> None:
-    """`recent` and its old spelling `intake`: the same subcommands (06 9.3). `recent` alone is `recent history`."""
+    """`recent` and its old spelling `intake`: the same subcommands. `recent` alone is `recent history`."""
     rp = sub.add_parser(name, help=help)
     if not alias:
         rp.add_argument("--from", dest="show_from", action="store_true", help="add the FROM column on a wide terminal")
@@ -6945,7 +6945,7 @@ def _add_recent(sub, name: str, help: str, *, alias: bool) -> None:
 
 
 def _add_weigh_station(sub, name: str, *, alias: bool) -> None:
-    """`weigh-station` and its old spelling `station` (06 9.7, 4): the same subcommands, `flash-panel` for `flash-display`."""
+    """`weigh-station` and its old spelling `station`: the same subcommands, `flash-panel` for `flash-display`."""
     stp = sub.add_parser(name, help="the Weigh Station on this computer: pair it, write its display, ask its pairing" if not alias
                          else "the old spelling of weigh-station")
     stp_sub = stp.add_subparsers(dest="station_cmd", required=True)
@@ -6965,7 +6965,7 @@ def _add_weigh_station(sub, name: str, *, alias: bool) -> None:
 
 
 def _add_presets(sub, name: str, *, alias: bool) -> None:
-    """`presets` and its old spelling `profiles` (06 9.5, 4). `profiles apply-updates` is `presets updates` with
+    """`presets` and its old spelling `profiles`. `profiles apply-updates` is `presets updates` with
     --dry-run and `presets accept-updates` without."""
     text = "the generated Bambu Studio and Orca Slicer presets: build, status, lines, parents, updates"
     pf = sub.add_parser(name, help=text if not alias else "the old spelling of presets", description=text)
@@ -7001,7 +7001,7 @@ def _add_presets(sub, name: str, *, alias: bool) -> None:
 
 
 def _add_features(sub, name: str, *, alias: bool) -> None:
-    """`features` and its old spelling `modules` (06 9.6, 4): `enable` is `on`, `disable` is `off`, `set` is `setup`."""
+    """`features` and its old spelling `modules`: `enable` is `on`, `disable` is `off`, `set` is `setup`."""
     HUB = dict(dest="server", metavar="ADDRESS", help="the Hub's address (IP address or name), for a Weigh Station "
                                                     "with no Hub on this machine")
     ft = sub.add_parser(name, help="the switchable parts of the kit: list, switch on or off, set up, apply" if not alias
@@ -7029,7 +7029,7 @@ def _add_features(sub, name: str, *, alias: bool) -> None:
 
 
 def _add_tag_reader(sub, name: str, *, alias: bool) -> None:
-    """`tag-reader` and its old spelling `reader` (06 9.7, 4): `tokens` is `list`, `token` is `new-token`, `setup` is
+    """`tag-reader` and its old spelling `reader`: `tokens` is `list`, `token` is `new-token`, `setup` is
     `flash`."""
     rd = sub.add_parser(name, help="the Tag Reader tokens and the reader's firmware: make, list, revoke, flash" if not alias
                         else "the old spelling of tag-reader")
@@ -7327,11 +7327,11 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
     history_cli.add_parser(sub)       # activity, undo, usage, export, import, report (HD2)
     args = ap.parse_args(argv)
-    if args.cmd is None:                        # no command: the top-level help (06 3.1)
+    if args.cmd is None:                        # no command: the top-level help
         return _print_help(ap.format_help())
     if args.cmd == "help":
         return _help(args, ap, sub)
-    if args.cmd == "intake":                    # the old spellings are the same commands (06 4)
+    if args.cmd == "intake":                    # the old spellings are the same commands
         args.cmd = "recent"
     elif args.cmd == "unpair":
         args.cmd, args.devices_cmd = "devices", "forget" if args.device else "list"
@@ -7354,18 +7354,18 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         if refused is not None:
             return refused
     before = event_sink.sink()
-    if _is_root() or _no_systemd():          # as root the command line writes the Hub's events itself (R80 E1)
+    if _is_root() or _no_systemd():          # as root the command line writes the Hub's events itself
         event_sink.set_sink(event_sink.StoreSink())
     try:
         with event_sink.acting(_cli_actor(args)), output.muted() if _reports_results(args) else contextlib.nullcontext():
             return _dispatch(args, client_factory=client_factory, manager_factory=manager_factory,
-                             sm_factory=sm_factory)         # what the command line changes is done by `cli` (R84 1.2)
+                             sm_factory=sm_factory)         # what the command line changes is done by `cli`
     finally:
         event_sink.set_sink(before)
 
 
 def _cli_actor(args=None) -> str:
-    """Honor FILAMENT_KIT_ACTOR when a Hub-page job or scheduled timer runs a CLI command (D8, R84 1.2)."""
+    """Honor FILAMENT_KIT_ACTOR when a Hub-page job or scheduled timer runs a CLI command (D8)."""
     if args is not None and getattr(args, "scheduled", False):
         return "hub"
     actor = os.environ.get("FILAMENT_KIT_ACTOR", "")
@@ -7373,7 +7373,7 @@ def _cli_actor(args=None) -> str:
 
 
 def _old_spelling(args) -> None:
-    """06 4: the old groups and subcommands are the same commands as the new ones (silently, 06 2)."""
+    """The design, command line: the old groups and subcommands are the same commands as the new ones (silently, the design, command line)."""
     if args.cmd == "station":
         args.cmd, args.old_spelling = "weigh-station", True
         if args.station_cmd == "flash-panel":
@@ -7403,7 +7403,7 @@ def _sub_of(a) -> str | None:
 
 
 def _json_refusal(a) -> int | None:
-    """06 6.8: the menus take no `--json`, and a command that needs typed answers has nothing to ask them on. The exit
+    """The design, command line: the menus take no `--json`, and a command that needs typed answers has nothing to ask them on. The exit
     code (2) when this is one of them, after its Error and Fix."""
     c, sub = a.cmd, _sub_of(a)
     if c == "config" and sub is None:
@@ -7431,7 +7431,7 @@ def _json_refusal(a) -> int | None:
     return None
 
 
-# `--quiet`: the commands whose standard output is only results (06 6.8 drops them). Every other command prints what it
+# `--quiet`: the commands whose standard output is only results (the design, command line drops them). Every other command prints what it
 # exists to print there (a list, a detail, an answer, a link or token) or is a screen, and stays as it is.
 _RESULTS_ONLY = {("locations", "add"), ("locations", "edit"), ("locations", "move"), ("locations", "remove"),
                  ("locations", "default-overflow"), ("locations", "sealed"), ("weigh-station", "flash-display"),

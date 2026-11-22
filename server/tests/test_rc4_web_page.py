@@ -1,6 +1,6 @@
-"""RC4's page scripts run in Node without a browser (review R574): Leave demo that fails, Remove on Corrections waiting, the not-queued
+"""RC4's page scripts run in Node without a browser: Leave demo that fails, Remove on Corrections waiting, the not-queued
 cards and their reasons, the thumbnails the page's policy lets through, Try again when the reader does not answer, the Corrections link,
-the Add spools line of 04 7.5, the push subscription sent again in the language the page is in, the Klipper test's answer, and the
+the Add spools line of the design, web app, the push subscription sent again in the language the page is in, the Klipper test's answer, and the
 service worker keeping a language's texts. The page's own functions are cut out of the scripts and given stubs for the DOM, `api` and `SW`."""
 from __future__ import annotations
 
@@ -350,9 +350,9 @@ def test_the_push_subscription_is_sent_again_in_the_language_the_page_is_in(tmp_
 def test_a_klipper_printer_that_does_not_answer_is_not_added_without_asking(tmp_path):
     pj = (STATIC / "printers.js").read_text(encoding="utf-8")
     out = _node(tmp_path, KLIPPER_HARNESS % {"klipper": _cut(pj, "    async function klipperTest(v) {", "    async function submit(force) {")})
-    assert out == [False, True, True, True]                         # {reachable: false} is the printer's answer (R87 1)
+    assert out == [False, True, True, True]                         # {reachable: false} is the printer's answer
     which = _cut(pj, '      if (step === "which") {', '      } else if (step === "details") {')
-    assert "family-bambu" not in which and "family-klipper" not in which       # no family choice (R87 00:55)
+    assert "family-bambu" not in which and "family-klipper" not in which       # no family choice
     assert which.index('"type-bambu"') < which.index('"type-klipper"')          # the two buttons, Bambu Lab first
     assert "printer_guided_type_bambu: \"Type a Bambu Lab printer's address\"" in pj
     assert "printer_guided_type_klipper: \"Type a Klipper printer's address\"" in pj
@@ -366,7 +366,7 @@ def test_the_service_worker_keeps_a_languages_texts_for_offline(tmp_path):
 
 
 def test_the_corrections_page_reads_the_entry_the_reader_sends(tmp_path):
-    """R574 13 (re-review): the reader's entry, as the fake answers GET /v1/feedback and the Hub passes it on, carries
+    """The reader's entry, as the fake answers GET /v1/feedback and the Hub passes it on, carries
     `thumbnail_b64` and `created_at`; the card shows that thumbnail (as a blob, the page's policy) and that time."""
     import base64
 
@@ -384,7 +384,7 @@ def test_the_corrections_page_reads_the_entry_the_reader_sends(tmp_path):
 
 
 def test_the_print_pages_leave_demo_and_spool_reads(tmp_path):
-    """R574 LOWs (re-review): only 409 not_in_demo is "already off"; a spool is read once for all its draws."""
+    """Re-review: only 409 not_in_demo is "already off"; a spool is read once for all its draws."""
     lj = (STATIC / "labels.js").read_text(encoding="utf-8")
     out = _node(tmp_path, LABELS_HARNESS % {
         "leave": _cut(lj, "      const r = await fetch(`${base}/api/demo/leave`", "    } });\n    if (done)"),
@@ -395,7 +395,7 @@ def test_the_print_pages_leave_demo_and_spool_reads(tmp_path):
 
 
 def test_type_a_klipper_address_after_back_starts_empty(tmp_path):
-    """R574 LOW (re-review): a found row's values do not follow into "Type a Klipper printer's address"; what was typed stays."""
+    """Re-review: a found row's values do not follow into "Type a Klipper printer's address"; what was typed stays."""
     pj = (STATIC / "printers.js").read_text(encoding="utf-8")
     out = _node(tmp_path, GUIDED_HARNESS % {"guided": _cut(pj, "    function pickFamily(fam)", "    function invalid(fields) {")})
     assert out["cleared"] == ["", "7125", ""]

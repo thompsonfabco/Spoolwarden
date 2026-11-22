@@ -65,7 +65,7 @@ from .. import shared_files  # noqa: E402
 from ..profiles import statexml  # noqa: E402
 from . import pages  # noqa: E402
 
-# the web app's refusal page (04 11.1): its own files only, no form
+# the web app's refusal page: its own files only, no form
 REFUSAL_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
 
@@ -350,7 +350,7 @@ def _shared() -> dict:
 
 def _page(paras: list[str] | str, status: int = 200, *, path: str = "/login", heading: str | None = None,
           form: str = "") -> HTMLResponse:
-    """The sign-in page (04 11.2) on the web app's stylesheet: the mark, an optional heading, plain-text paragraphs
+    """The sign-in page on the web app's stylesheet: the mark, an optional heading, plain-text paragraphs
     and the form's markup. Text is escaped here; `form` is markup built by login()."""
     files = _shared()
     cat = pages.catalogue(files)
@@ -364,7 +364,7 @@ def _page(paras: list[str] | str, status: int = 200, *, path: str = "/login", he
 
 
 def _form(rid: str, error: str | None = None) -> str:
-    """The passphrase form (04 11.2): the field with its Show button (signin.js wires it) and the Allow button."""
+    """The passphrase form: the field with its Show button (signin.js wires it) and the Allow button."""
     label, e = _say("signin_passphrase"), html.escape
     err = f"<p class=field__error id=pass-error>{e(error)}</p>" if error else ""
     return (f"<form method=post class=standalone__form><input type=hidden name=req value='{e(rid)}'>"

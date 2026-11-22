@@ -520,7 +520,7 @@ def test_an_older_hub_without_speak_is_spoken_from_the_display_lines(rig):
     assert rig.said[-1] == "Recognised Elegoo PLA Galaxy Blue. Put it on the scale."
 
 
-# --- CO3: a checked-out spool opens the weigh step in returning mode (R88 1.5) ---------------------------------------------
+# --- CO3: a checked-out spool opens the weigh step in returning mode ---------------------------------------------
 
 OUT = "4:cc:dd"
 OUT_SPOOL = {**SPOOL, "checked_out": True, "home": "Rack 1", "slot": "H2D - AMS 1"}
@@ -624,7 +624,7 @@ def test_the_return_says_the_hubs_speak_text_when_there_is_one(rig):
 
 
 def test_the_place_the_rules_chose_is_said(rig):
-    """R88 02:05: a spool with no home is placed by the rules; the answer's location is what the voice says."""
+    """A spool with no home is placed by the rules; the answer's location is what the voice says."""
     checked_out(rig, home=None, location="Box 2")
     nfc.on_tag(OUT)
     panel.on_line(b"L H")
@@ -664,7 +664,7 @@ def test_not_checked_out_shows_the_hubs_sentence_and_stays_on_the_step(rig):
 
 
 def test_an_older_hub_runs_the_plain_flow(rig):
-    """R88 1.8: no `checked_out` in the answer, so nothing changes."""
+    """No `checked_out` in the answer, so nothing changes."""
     nfc.on_tag(LINKED)
     assert flow.flow["returning"] is False and rig.row(0) == "Spool #123" and rig.row(3) == "Scale, then yellow"
     panel.on_line(b"L H")  # a long press at weigh stays a refusal, as before
@@ -693,7 +693,7 @@ def test_a_late_return_after_a_new_scan_is_dropped(rig):
     assert rig.step() == "weigh" and flow.flow["returning"] is False and flow.flow["spool"]["id"] == 123
 
 
-# ---------- a Weigh Station without a scale (R88 4.2, WL3) ----------
+# ---------- a Weigh Station without a scale ----------
 
 def no_computer_scale(monkeypatch):
     monkeypatch.setattr(station_scale, "find_scale", lambda: None)

@@ -101,7 +101,7 @@ def test_a_literal_address_is_never_looked_up():
     ("192.168.1.40", True), ("10.0.0.7", True), ("172.31.0.9", True), ("127.0.0.1", True), ("fe80::1", True), ("fd00::7", True),
     ("192.0.2.40", False), ("100.64.7.7", False), ("169.254.7.7", False), ("2001:db8::1", False), ("203.0.113.9", False)])
 def test_an_address_the_unit_doesnt_reach_is_kept_with_a_note(host, reach):
-    """Review R31: the server's unit allows the home networks only (a test keeps SERVICE_REACH equal to it). A printer
+    """The server's unit allows the home networks only (a test keeps SERVICE_REACH equal to it). A printer
     elsewhere is saved all the same (the owner's choice), with a note saying why it will show offline and what allows it."""
     kept, problem, note = hostaddr.inspect(host)
     assert kept == host and problem is None
@@ -206,7 +206,7 @@ def test_changing_the_address_keeps_the_pin(both, manager):
 
 
 def test_a_new_address_with_the_access_code_saves_both_like_the_api(both, manager, kl):
-    """03 15: the page's Change address dialog sends the Access Code for a Bambu Lab printer; the Hub saves it with the
+    """The design, Hub page: the page's Change address dialog sends the Access Code for a Bambu Lab printer; the Hub saves it with the
     address and drops the old pin, as PATCH /api/printers does. A Klipper printer has no Access Code."""
     _bambu()
     registry.pin(SERIAL, "ab" * 32)
@@ -348,7 +348,7 @@ def test_adding_what_a_scan_found_puts_that_entry_into_use(both, manager):
 
 
 def test_a_scan_knows_a_printer_added_by_name(both, kl, manager, scanned):
-    """Review R31: `kl` is at printer.example.com, which resolves to 192.0.2.77 here; a scan finding 192.0.2.77 reports
+    """`kl` is at printer.example.com, which resolves to 192.0.2.77 here; a scan finding 192.0.2.77 reports
     that printer, and adds no second entry for it."""
     scanned.found = [("192.0.2.77", 7125)]
     r = post(client(both), "printers/scan", {})
@@ -578,7 +578,7 @@ def test_the_add_form_asks_a_klipper_printer_for_no_access_code():
 
 
 def test_a_running_mapping_is_followed_again_after_a_reload(mapped):
-    """Review R31: the row says when this server's Mapper runs a job for the printer, and the page follows it (progress
+    """The row says when this server's Mapper runs a job for the printer, and the page follows it (progress
     and Stop) as it draws, not only from the Map slots click; a refused start also joins a job that is running."""
     app, fake = mapped
     fake.running_for = set()
@@ -725,7 +725,7 @@ def test_the_row_says_when_a_report_would_help(mapped):
 
 
 def test_the_states_read_says_which_bambu_printers_hold_a_slot_map(both, kl):
-    """03 5.2: the Connection column says "Slots mapped" for a printer whose map the Hub holds. The read stays light (a file
+    """The design, Hub page: the Connection column says "Slots mapped" for a printer whose map the Hub holds. The read stays light (a file
     check, no connection) and a Klipper printer has no such field."""
     from filament_kit.bridge import ams
     _bambu()
@@ -738,7 +738,7 @@ def test_the_states_read_says_which_bambu_printers_hold_a_slot_map(both, kl):
 
 
 def test_every_action_of_a_printer_row_is_still_in_the_script():
-    """S2.4 kept every action of the old cards (03 14.4): each one is reachable from the expansion and the row's menu."""
+    """S2.4 kept every action of the old cards: each one is reachable from the expansion and the row's menu."""
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
     acts = text.split("function actionsOf(p, box)")[1].split("\n}\n")[0]
     for key in ("common_connect", "printers_detect", "printers_map_loading", "printers_map_slots", "common_rename", "printers_change_address",
@@ -750,7 +750,7 @@ def test_every_action_of_a_printer_row_is_still_in_the_script():
 
 
 def test_every_action_of_the_add_scan_and_add_on_cards_is_still_in_the_script():
-    """S2.5 kept what the old cards did (03 14.4): add (Bambu Lab and Klipper), scan with its subnet, Use this printer, the
+    """S2.5 kept what the old cards did: add (Bambu Lab and Klipper), scan with its subnet, Use this printer, the
     commands with Copy, the unavailable text, and the old cards are gone."""
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
     for call in ('api(path, { ...body, code: theCode() })', 'api("printers/scan", { subnet: typed, code: theCode() })', 'api("printers/pack", {})',

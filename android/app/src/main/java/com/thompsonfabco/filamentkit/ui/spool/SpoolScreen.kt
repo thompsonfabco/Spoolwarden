@@ -75,7 +75,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * The spool screen (05 7.2): who it is, what is left, the last change, the actions and the details. Update weight and
+ * The spool screen: who it is, what is left, the last change, the actions and the details. Update weight and
  * Move are sheets over it, Mark empty a dialog. [online] false disables the actions with the reason under the first;
  * [printersOn] false (the Feature is off on the Hub) leaves Load into a printer out.
  */
@@ -100,7 +100,7 @@ fun SpoolScreen(
     val undo = stringResource(R.string.common_undo)
     val context = LocalContext.current
     val offerText = ui.result?.let { spoolResultToastText(it) }
-    // an action the Hub may undo: a toast says what happened, with Undo for 10 seconds (R84 3.3); an older Hub has no
+    // an action the Hub may undo: a toast says what happened, with Undo for 10 seconds; an older Hub has no
     // Undo, so a move keeps its own (back to where it was)
     LaunchedEffect(offer) {
         if (offer == null || offerText == null) return@LaunchedEffect
@@ -118,7 +118,7 @@ fun SpoolScreen(
         }
     }
 
-    // a Return (R88 1.6): the toast says where the spool went, with Undo through the activity
+    // a Return: the toast says where the spool went, with Undo through the activity
     val returned = ui.returnToast
     LaunchedEffect(returned) {
         if (returned == null) return@LaunchedEffect
@@ -141,7 +141,7 @@ fun SpoolScreen(
         ) {
             HubNoticeOf(ui.failure, onPairAgain)
             val spool = ui.spool
-            // the states every Hub screen has (05 3.2): the progress line, the error card with Try again, offline
+            // the states every Hub screen has: the progress line, the error card with Try again, offline
             ScreenState(
                 loaded = spool != null,
                 loading = ui.loading,
@@ -296,7 +296,7 @@ private fun Actions(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalArrangement = Arrangement.spacedBy(space.s2)) {
             if (printersOn) SwButton(stringResource(R.string.spool_load), onLoad, enabled = enabled)
             SwButton(stringResource(R.string.spool_move), vm::openMove, enabled = enabled)
-            // checked out (R88 1.6): back to its home, asking nothing; Home can be changed
+            // checked out: back to its home, asking nothing; Home can be changed
             ui.spool?.takeIf { CheckedOutRules.offered(it) && CheckedOutRules.canReturn(it) }?.let {
                 SwButton(CheckedOutTexts.returnTo(it.home), vm::returnToHome, enabled = enabled, busy = ui.returning)
             }
@@ -356,7 +356,7 @@ private fun Details(spool: SpoolSummary) {
     }
 }
 
-/** Update weight (05 7.3): type what the scale shows, see what the Hub makes of it, then save. */
+/** Update weight: type what the scale shows, see what the Hub makes of it, then save. */
 @Composable
 private fun WeightSheet(vm: SpoolViewModel, w: WeightUi, now: Double?, onPairAgain: () -> Unit) {
     val space = SpoolwardenTheme.space
@@ -429,7 +429,7 @@ private fun WeightSheet(vm: SpoolViewModel, w: WeightUi, now: Double?, onPairAga
     }
 }
 
-/** Move to (05 7.4): the Hub's locations as radio rows; a tap saves at once. */
+/** Move to: the Hub's locations as radio rows; a tap saves at once. */
 @Composable
 private fun MoveSheet(vm: SpoolViewModel, m: MoveUi, current: String?, onPairAgain: () -> Unit) {
     val colors = SpoolwardenTheme.colors
@@ -473,7 +473,7 @@ private fun MoveSheet(vm: SpoolViewModel, m: MoveUi, current: String?, onPairAga
     }
 }
 
-/** Home (R88 1.6): the storage locations as radio rows; a tap saves at once, and a refusal shows in its own words. */
+/** Home: the storage locations as radio rows; a tap saves at once, and a refusal shows in its own words. */
 @Composable
 private fun HomeSheet(vm: SpoolViewModel, h: HomeUi, current: String?, onPairAgain: () -> Unit) {
     val colors = SpoolwardenTheme.colors

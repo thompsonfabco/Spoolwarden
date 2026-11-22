@@ -46,7 +46,7 @@ from .slots import SlotError
 log = logging.getLogger(__name__)
 
 MAX_HINT = 2000
-EXPORT_MAX = 20 * 1024 * 1024        # a CSV passed on to a phone (R84 9.4): larger is refused, not cut
+EXPORT_MAX = 20 * 1024 * 1024        # a CSV passed on to a phone: larger is refused, not cut
 STATIC = Path(__file__).parent / "static"
 
 HEADERS = {
@@ -231,7 +231,7 @@ class IntakeApp:
         return path in {f"/intake/shared/{n}" for n in pages.PUBLIC_SHARED} | {f"/intake/{n}" for n in pages.PUBLIC_OWN}
 
     def _refusal(self, request: Request, reason: str | None = None) -> HTMLResponse:
-        """The refusal page (04 11.1), status 403: outside the home network, or `reason` for a refused address."""
+        """The refusal page, status 403: outside the home network, or `reason` for a refused address."""
         client = request.client.host if request.client else ""
         return HTMLResponse(pages.refusal(self.shared, self.base, client, reason=reason), 403, headers=HEADERS)
 
@@ -246,8 +246,8 @@ class IntakeApp:
             ("/intake", self.page, ["GET"]), ("/intake/app.js", self.asset, ["GET"]),
             ("/intake/app.css", self.asset, ["GET"]), ("/intake/printers.js", self.asset, ["GET"]),
             ("/intake/labels.js", self.asset, ["GET"]),
-            ("/intake/labels", self.labels_page, ["GET"]),            # the print page (R85 5.3; 04 5.4)
-            ("/intake/labels/page.css", self.labels_paper, ["GET"]),  # its paper, per size (R85 00:50 point 5)
+            ("/intake/labels", self.labels_page, ["GET"]),            # the print page
+            ("/intake/labels/page.css", self.labels_paper, ["GET"]),  # its paper, per size
             ("/intake/sw.js", self.api(self.service_worker), ["GET"]),   # S3.14: scope is the app; Printers tab or not
             ("/intake/signin.js", self.asset, ["GET"]),   # the sign-in page's Show button (auth.py, web unit)
             ("/intake/shared/{name}", self.shared_asset, ["GET"]),
@@ -267,13 +267,13 @@ class IntakeApp:
             ("/intake/api/spools/{id:int}", self.api(self.spool_edit), ["POST"]),
             ("/intake/api/spools/{id:int}/return", self.api(self.spool_return), ["POST"]),
             ("/intake/api/storage", self.api(self.storage_get), ["GET"]),
-            # the twins of the Hub's events and alerts routes (R80 section 8): answered by the Hub, through this app's channel
+            # the twins of the Hub's events and alerts routes: answered by the Hub, through this app's channel
             ("/intake/api/events", self.api(self.events_twin), ["GET"]),
             ("/intake/api/alerts", self.api(self.alerts_twin), ["GET"]),
             ("/intake/api/spools/low", self.api(self.spools_low_twin), ["GET"]),
             ("/intake/api/storage-use", self.api(self.storage_use_twin), ["GET"]),
             ("/intake/api/share-corrections", self.api(self.share_corrections_twin), ["GET"]),
-            # history and data (R84 9.4): the activity list, Undo, the health history, analytics and the three downloads of a phone
+            # history and data: the activity list, Undo, the health history, analytics and the three downloads of a phone
             ("/intake/api/activity", self.api(self.activity_twin), ["GET"]),
             ("/intake/api/events/{event}/undo", self.api(self.undo_twin), ["POST"]),
             ("/intake/api/health", self.api(self.health_twin), ["GET"]),
@@ -287,12 +287,12 @@ class IntakeApp:
             ("/intake/api/updates", self.api(self.updates), ["GET"]),
             ("/intake/api/updates_accept", self.api(self.updates_accept), ["POST"]),
             ("/intake/api/restore_deleted", self.api(self.restore_deleted), ["POST"]),
-            # the Hub at a glance and the owner's own catalog entries (R83 10.3): each passes the kit route on unchanged
+            # the Hub at a glance and the owner's own catalog entries: each passes the kit route on unchanged
             ("/intake/api/hub", self.api(self.hub_get), ["GET"]),
             ("/intake/api/voice", self.api(self.voice_get), ["GET"]),
             ("/intake/api/voice", self.api(self.voice_patch), ["PATCH"]),
             ("/intake/api/voice/test", self.api(self.voice_test), ["POST"]),
-            # languages, labels and the demo (R85 sections 3 to 5): each passes the kit route on unchanged
+            # languages, labels and the demo: each passes the kit route on unchanged
             ("/intake/api/languages", self.api(self.languages_twin), ["GET"]),
             ("/intake/api/strings/{name}", self.api(self.strings_twin), ["GET"]),
             ("/intake/api/spools/{id:int}/label.svg", self.api(self.label_twin), ["GET"]),
@@ -419,14 +419,14 @@ class IntakeApp:
             f"<meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-title content='{name}'>"
             "<meta name=apple-mobile-web-app-status-bar-style content=default>"
             f"<title>{name}</title>"
-            # 08 13: manifest and icon, then the appearance script before any stylesheet, then tokens, components, own
+            # the design, platform mapping: manifest and icon, then the appearance script before any stylesheet, then tokens, components, own
             f"<link rel=manifest href='{b}/manifest-light.webmanifest'><link rel=apple-touch-icon href='{b}/icon.png'>"
             f"<script src='{b}/shared/theme-init.js'></script>"
             f"<link rel=stylesheet href='{b}/shared/tokens.css'><link rel=stylesheet href='{b}/shared/components.css'>"
             f"<link rel=stylesheet href='{b}/app.css'>"
             # S3.3: the catalogue and the shared script load before the page's own scripts (the shell turns the title into
             # "<Page title> · <Hub name>")
-            + body + ((pages.strings_scripts(self.base, strings_src)       # English first, then the language in use (R85 3.5)
+            + body + ((pages.strings_scripts(self.base, strings_src)       # English first, then the language in use
                        + f"<script src='{b}/shared/components.js'></script>"
                        + ("" if not self.printers else f"<script src='{b}/printers.js'></script>")
                        + f"<script src='{b}/app.js'></script>") if app else ""),
@@ -464,15 +464,15 @@ class IntakeApp:
                 "presets": "1" if "presets" in modules.enabled(cfg) else "0",
                 "spool-edit": "1"}   # the spool read and edit routes below (S3.9)
         if self._demo_on():
-            data["demo"] = "1"       # the banner of 02 8.8 on every screen (R85 4.5)
+            data["demo"] = "1"       # the banner of the design, components on every screen
         if not data["hub-page"]:
             del data["hub-page"]
         attrs = " ".join(f"data-{k}='{html.escape(v, quote=True)}'" for k, v in data.items())
         return f"<body {attrs}>{shared_files.sprite_inline(self.shared)}<div id=app></div></body>"
 
-    # ---------- the page's language and the demo (R85 3.7, 4.5) ----------
+    # ---------- the page's language and the demo ----------
     LANG_CODE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?")
-    LABEL_SIZES = ("62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25")     # R85 00:50 point 6
+    LABEL_SIZES = ("62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25")
     LABEL_IDS = re.compile(r"[1-9]\d{0,8}(?:,[1-9]\d{0,8}){0,99}")          # whole numbers of 1 or more, as the refusal says
     # RC4's sentences the string catalogue does not hold yet (the keys file names them for RC9); the catalogue's own text wins (D13)
     STUB_TEXTS = {"labels_bad_size": "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25.",
@@ -539,7 +539,7 @@ class IntakeApp:
         return None if lang == "en" else f"{self.base}/api/strings/{lang}.js"
 
     def _demo_on(self) -> bool:
-        data = self._cached_kit("hub", "/api/hub", 10)      # the Hub's own object carries `demo` (R85 4.7); the web token may read it
+        data = self._cached_kit("hub", "/api/hub", 10)      # the Hub's own object carries `demo`; the web token may read it
         return isinstance(data, dict) and data.get("demo") is True
 
     async def page(self, request: Request):
@@ -570,7 +570,7 @@ class IntakeApp:
         return self._html(body, lang=lang)
 
     async def labels_paper(self, request: Request):
-        """The print page's paper for the chosen size (R85 00:50 point 5): `@page { size: A4; margin: 0 }` and the like."""
+        """The print page's paper for the chosen size: `@page { size: A4; margin: 0 }` and the like."""
         size = request.query_params.get("size", "62x29")
         if size not in self.LABEL_SIZES:
             return self._refuse("bad_request", "labels_bad_size")
@@ -615,7 +615,7 @@ class IntakeApp:
                                      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox"})
 
     async def demo_leave(self, request: Request):
-        """Leave the demo (R85 4.6): the Hub's answer, {demo: false}; 409 not_in_demo when it was already off."""
+        """Leave the demo: the Hub's answer, {demo: false}; 409 not_in_demo when it was already off."""
         await self._body(request)
         self._kit_cache.pop("hub", None)
         try:
@@ -624,7 +624,7 @@ class IntakeApp:
             return self._kit_refusal(e)
         finally:
             # dropped again once the Hub answered: a page load that read the Hub while it was leaving must not keep the banner
-            # for the reload that follows (R574 LOW)
+            # for the reload that follows
             self._kit_cache.pop("hub", None)
 
     async def asset(self, request: Request):
@@ -875,7 +875,7 @@ class IntakeApp:
         for key in ("empty", "dry_run"):
             if b.get(key) is not None and not isinstance(b[key], bool):
                 raise Problem(f"{key} must be true or false", key)
-        home = b.get("home")        # the home of a checked-out spool (R88 1.7): a listed storage location
+        home = b.get("home")        # the home of a checked-out spool: a listed storage location
         if home is not None and (not isinstance(home, str) or not home.strip()):
             raise Problem("home must be text", "home")
 
@@ -931,7 +931,7 @@ class IntakeApp:
 
     @staticmethod
     def _kit_refusal(e) -> JSONResponse:
-        """The Hub's refusal, or its silence, as the kit answers one: {error: code, message: sentence} (R83 addition 2026-11-18 01:06)."""
+        """The Hub's refusal, or its silence, as the kit answers one: {error: code, message: sentence}."""
         st = e.http
         answered = isinstance(st, int) and 400 <= st < 600 and st != 401
         extra = {"field": e.field} if getattr(e, "field", None) else {}
@@ -967,10 +967,10 @@ class IntakeApp:
     async def share_corrections_twin(self, request: Request):
         return await self._hub_get("/api/intake/share-corrections")
 
-    # ----- history and data (R84 9.4): each passes one Hub route on, with the parameters that route has and no others -----
+    # ----- history and data: each passes one Hub route on, with the parameters that route has and no others -----
     ACTIVITY_PARAMS = ("subject", "actor", "kinds", "since", "limit", "newest")
     EVENT_ID = re.compile(r"[A-Za-z0-9_.:-]{1,64}")
-    EXPORT_SETS = {"usage": "usage.csv", "recent": "recent.csv", "spoolman-spools": "spoolman-spools.csv"}   # the sets a phone may download (R84 9.2)
+    EXPORT_SETS = {"usage": "usage.csv", "recent": "recent.csv", "spoolman-spools": "spoolman-spools.csv"}   # the sets a phone may download
 
     @staticmethod
     def _bad(text: str) -> JSONResponse:
@@ -1057,8 +1057,8 @@ class IntakeApp:
     async def hub_get(self, request: Request):
         return await self._hub_get("/api/hub")
 
-    # the Weigh Station's voice (R88): each passes the kit route on. The kit lets this unit's token change it, and that token
-    # is the same on the public address, so the change and the test are refused there, here (R88 01:35.3)
+    # the Weigh Station's voice: each passes the kit route on. The kit lets this unit's token change it, and that token
+    # is the same on the public address, so the change and the test are refused there, here
     VOICE_API = "/api/voice"
 
     async def voice_get(self, request: Request):

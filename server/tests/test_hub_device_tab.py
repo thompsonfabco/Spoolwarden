@@ -1,6 +1,5 @@
 """The Devices section's kind, version, out of date and Open, a device's detail the Hub page draws itself with the station's
-settings, and "Open this device's page" (R83 section 9, 10.2 and the rulings of 2026-11-17 21:18 and 21:22;
-setup_console/device_tab.py). Nothing a station sends is served by the Hub: the checks on what it takes are pinned here.
+settings, and "Open this device's page" (setup_console/device_tab.py). Nothing a station sends is served by the Hub: the checks on what it takes are pinned here.
 
 The Hub's other parts (a pairing's kind and version, the reader's build) are stubbed on device_tab for the row table,
 while station calls run end-to-end through `station_client` over pinned TLS with `X-Station-Proof` against a TLS stub
@@ -590,7 +589,7 @@ def test_the_rows_open_and_the_station_settings_work_in_every_look_at_both_width
 
 
 
-# ---------------------------------------------------------------- review R497: one deadline, no proxy, odd keys and ids
+# ---------------------------------------------------------------- one deadline, no proxy, odd keys and ids
 import socket
 import time
 
@@ -740,8 +739,8 @@ return { sent: sentTo("device/d3/settings") };
 
 
 def test_a_station_without_a_certificate_has_its_settings_changed_with_the_proof_but_no_ticket_over_http(env_hub, tmp_path, monkeypatch):
-    """R559 01 #4 + D14: a Weigh Station that told the Hub no certificate (not updated, or it could not make one) is called over
-    plain HTTP for a settings change (R82 2026-11-18 00:28 point 1), which carries the proof (R83 01:10). The Hub does NOT fetch a
+    """A Weigh Station that told the Hub no certificate (not updated, or it could not make one) is called over
+    plain HTTP for a settings change, which carries the proof. The Hub does NOT fetch a
     page ticket over plain HTTP: it refuses with the not-pinned text and no ticket request leaves. The station is the real handler."""
     from http.server import ThreadingHTTPServer
     import http.client
@@ -784,7 +783,7 @@ def test_a_station_without_a_certificate_has_its_settings_changed_with_the_proof
 @pytest.mark.parametrize("look,width", [("console", 1280), ("panes", 390)])
 @pytest.mark.parametrize("panel,line", [("usb", "Panel: on USB"), ("wifi", "Panel: on Wi-Fi"), (None, None), ("ttyACM0", None)])
 def test_the_weigh_stations_detail_says_how_its_panel_is_connected(stub, hub_change, tmp_path, monkeypatch, look, width, panel, line):
-    """R88 4: the station's /state `panel` ("usb" | "wifi" | null) shows as "Panel: on USB" / "Panel: on Wi-Fi", null nothing. A value that is
+    """The station's /state `panel` ("usb" | "wifi" | null) shows as "Panel: on USB" / "Panel: on Wi-Fi", null nothing. A value that is
     neither (an older station's port) stays in the status list as it was."""
     monkeypatch.setitem(STATE, "panel", panel)
     _station_url(stub)

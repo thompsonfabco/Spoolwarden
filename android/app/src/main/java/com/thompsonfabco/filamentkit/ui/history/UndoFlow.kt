@@ -6,7 +6,7 @@ import com.thompsonfabco.filamentkit.net.UndoWhyNot
 import kotlinx.coroutines.CancellationException
 import kotlin.math.max
 
-/** The event kinds the Hub can undo (R84 3.1): the seven spool and slot actions. */
+/** The event kinds the Hub can undo: the seven spool and slot actions. */
 internal object UndoKinds {
     const val WEIGHED = "spool.weighed"
     const val MOVED = "spool.moved"
@@ -34,7 +34,7 @@ sealed interface UndoOutcome {
 
 /** The rules of the undo toast, pure so they are tested without a screen. */
 object UndoRules {
-    /** How long the toast is held (R84 3.3): 10 seconds. */
+    /** How long the toast is held: 10 seconds. */
     const val TOAST_MS = 10_000
 
     /** An event is looked for only when it is this young: the action just happened. */

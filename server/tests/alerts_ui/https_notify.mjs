@@ -1,4 +1,4 @@
-// Assumption 1 of DECISIONS R80 section 10 (EA5): a browser shows notifications for a page served with the Hub's own self-signed
+// Assumption (EA5): a browser shows notifications for a page served with the Hub's own self-signed
 // certificate once the person has accepted it. Test-only. A local HTTPS server takes the certificate of the Hub's make_cert; a
 // headless Chrome, Edge or Chromium opens it, shows the certificate warning, and the page is taken through it the way a person does
 // it (Advanced, Proceed) or with --ignore-certificate-errors. Headless has no permission prompt (it answers "denied"), so the

@@ -16,7 +16,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
-/** The tag screen (05 7.7): the lookup, then the spool it is linked to, or nothing. */
+/** The tag screen: the lookup, then the spool it is linked to, or nothing. */
 sealed interface TagUi {
     data object Looking : TagUi
 
@@ -49,7 +49,7 @@ class TagViewModel(private val uid: String, private val backend: SpoolBackend) :
     }
 }
 
-/** Find a sealed spool for a tag (05 7.8): [query] and the optional [weight], the sealed spools found. */
+/** Find a sealed spool for a tag: [query] and the optional [weight], the sealed spools found. */
 data class LinkFindUi(
     val query: String = "",
     val weight: String = "",
@@ -117,7 +117,7 @@ class LinkFindViewModel(
 
 enum class ConflictReason { TagOnOtherSpool, SpoolHasOtherTag }
 
-/** The link preview (05 7.8): a dry run, then the link; or the tag is already in use. */
+/** The link preview: a dry run, then the link; or the tag is already in use. */
 data class LinkPreviewUi(
     val checking: Boolean = true,
     val spool: SpoolSummary? = null,

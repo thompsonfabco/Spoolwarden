@@ -169,7 +169,7 @@ class _NoBrowser:
 
 def event_parts(sm, manager=None, klipper=None, mapper=None):
     """The event store as the sink in force, the printer watcher (listening to both families) and the 5-minute loop.
-    A spool's weight changed by the Hub is checked for running low at once (R80 section 7)."""
+    A spool's weight changed by the Hub is checked for running low at once."""
     event_sink.set_sink(event_sink.StoreSink())
     event_sink.set_weight_hook(lambda spoolman: watch.check_low(spoolman))
     busy = (lambda pid: bool(mapper.running(pid))) if hasattr(mapper, "running") else None

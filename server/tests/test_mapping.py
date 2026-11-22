@@ -406,7 +406,7 @@ def test_cli_map_refusals(stubs, capsys, fm, text):
 def test_cli_map_unknown_printer(stubs, capsys):
     made = []
     assert cli.main(["printer", "map", "NOPE"], manager_factory=lambda s: made.append(s)) == 2
-    assert "does not name one printer" in capsys.readouterr().err and made == []        # 06 5, 6.7
+    assert "does not name one printer" in capsys.readouterr().err and made == []        # the design, command line
 
 
 def test_cli_unpin_with_the_access_code_clears_the_pin(monkeypatch, capsys):
@@ -414,14 +414,14 @@ def test_cli_unpin_with_the_access_code_clears_the_pin(monkeypatch, capsys):
     monkeypatch.setattr(secret_input, "ask", lambda prompt: asked.append(prompt) or "24681357")
     assert registry.load()[SERIAL].cert_fp
     assert cli.main(["printer", "unpin", SERIAL, "--yes"]) == 0
-    assert asked == ["Access Code of Office H2D (on the printer: Settings > Network/LAN): "]       # 06 8.7
+    assert asked == ["Access Code of Office H2D (on the printer: Settings > Network/LAN): "]       # the design, command line
     assert registry.load()[SERIAL].cert_fp == ""
     assert registry.load()[SERIAL].access_code == "24681357"
     out = capsys.readouterr().out
     assert "Office H2D" in out and "24681357" not in out
 
 
-@pytest.mark.parametrize("typed,code", [("", 5), ("  ", 5), ("bad code!", 1)])        # 06 8.7: nothing typed is a cancel
+@pytest.mark.parametrize("typed,code", [("", 5), ("  ", 5), ("bad code!", 1)])        # the design, command line: nothing typed is a cancel
 def test_cli_unpin_without_a_usable_access_code_changes_nothing(monkeypatch, capsys, typed, code):
     monkeypatch.setattr(secret_input, "ask", lambda prompt: typed)
     assert cli.main(["printer", "unpin", SERIAL, "--yes"]) == code
@@ -444,7 +444,7 @@ def test_cli_unpin_refuses_a_klipper_printer(monkeypatch, capsys):
 def test_cli_unpin_refuses_a_printer_never_set_up(monkeypatch, capsys):
     monkeypatch.setattr(secret_input, "ask", lambda prompt: pytest.fail("asked for a code"))
     registry.upsert(registry.Printer("01P00A222222222", "Found", "", "10.0.0.6", "", False))
-    assert cli.main(["printer", "unpin", "01P00A222222222"]) == 2                       # 06 5, 6.7: found, not added
+    assert cli.main(["printer", "unpin", "01P00A222222222"]) == 2                       # the design, command line: found, not added
     assert "not added yet" in capsys.readouterr().err
     assert not registry.load()["01P00A222222222"].configured
 
@@ -453,7 +453,7 @@ def test_cli_unpin_without_a_terminal_changes_nothing(monkeypatch, capsys):
     def no_tty(prompt):
         raise EOFError
     monkeypatch.setattr(secret_input, "ask", no_tty)
-    assert cli.main(["printer", "unpin", SERIAL, "--yes"]) == 2                         # 06 6.7: no terminal to ask
+    assert cli.main(["printer", "unpin", SERIAL, "--yes"]) == 2                         # the design, command line: no terminal to ask
     assert "terminal" in capsys.readouterr().err
     assert registry.load()[SERIAL].cert_fp == "ab" * 32 and registry.load()[SERIAL].access_code == CODE
 
@@ -609,7 +609,7 @@ def test_every_reason_has_its_next_step_and_every_outcome_its_text():
 @pytest.mark.parametrize("abort,reason", [(slottest.OFFLINE, "offline"),
                                           ("The printer started a job (RUNNING); the slot test stopped.", "busy")])
 def test_a_slot_test_stopped_midway_carries_its_reason(stubs, abort, reason):
-    """R60: offline or busy during the test, not only before it."""
+    """Offline or busy during the test, not only before it."""
     stubs["st"] = SlotTestResult(problems=[abort, "A1: not confirmed (x)"], reason=reason)
     v = mapping.Mapper(FakeManager()).run(SERIAL)
     assert v["outcome"] == "failed" and v["reason"] == reason and v["next_step"] == mapping.NEXT_STEP[reason]
@@ -678,7 +678,7 @@ class AmsManager(FakeManager):
 
 
 def test_after_a_manual_map_the_next_step_names_what_is_left():
-    """The orchestrator's 16:53 item: not "Map the slots." but the positions the owner has not confirmed."""
+    """Not "Map the slots." but the positions the owner has not confirmed."""
     _owner_map(time.strftime("%Y-%m-%dT%H:%M:%S%z"))
     v = mapping.Mapper(AmsManager()).view(SERIAL)
     assert v["outcome"] == "not_confirmed"

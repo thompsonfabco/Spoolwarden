@@ -1,6 +1,6 @@
-// Spoolwarden shared alerts (DECISIONS R80 sections 3 to 5 and 8; docs/design/02-components.md 8.8): the alert banner host, the
+// Spoolwarden shared alerts: the alert banner host, the
 // Alerts list, the events poller and the browser-notification helper. Loaded after components.js (window.SW) and, with
-// alerts.css, by every interface that shows alerts. It adds window.SW_ALERTS. It reads GET api/events (R80 section 8) with
+// alerts.css, by every interface that shows alerts. It adds window.SW_ALERTS. It reads GET api/events with
 // SW.api; nothing here writes to the Hub. Texts: the `alert_*` keys of the string catalogue.
 (() => {
 "use strict";
@@ -27,7 +27,7 @@ const pick = (d, names) => { for (const n of names) if (d[n] != null && d[n] !==
 // ----- texts: the catalogue's own (strings/en.json holds every alert_* key) -----
 const tx = t;
 
-// ----- what an event says: title, sentence and the place that fixes it (R80 section 5's table) -----
+// ----- what an event says: title, sentence and the place that fixes it -----
 const num = (n) => (n == null || n === "" ? null : n);
 const size = (n) => {
   const v = typeof n === "string" && /^\d+(\.\d+)?$/.test(n.trim()) ? Number(n) : n;          // a stored value is text
@@ -91,7 +91,7 @@ function actionOf(e) {
   if (!PLACES[place]) return null;
   return { place, id: (e.action && e.action.id) || (e.subject && e.subject.id) || null, label: tx(PLACES[place]) };
 }
-// where an action goes: the Hub page's addresses (R80 section 8); an interface with other places passes `href` or `open`
+// where an action goes: the Hub page's addresses; an interface with other places passes `href` or `open`
 const HUB_HREF = { printer: "#printers", "storage-use": "#overview/storage-use", storage: "#overview/storage-use", "running-low": "#overview/running-low", devices: "#devices" };
 
 // ----- state -----

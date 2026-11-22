@@ -56,7 +56,7 @@ def test_it_pairs_as_its_own_device_and_sends_no_push(monkeypatch, env):  # noqa
     assert kit._device == api.INTAKE_DEVICE
 
 
-# ---------------------------------------------------------------- R91 review notes
+# ---------------------------------------------------------------- review notes
 
 def test_the_kits_own_pairing_is_built_in_and_not_revoked_from_the_page(app):
     from test_setup_page import post
@@ -88,7 +88,7 @@ def test_a_wrong_host_on_intake_says_how_to_add_a_name(app):
     r = c.get("/intake/api/vendors")                        # the API keeps its JSON answer
     assert r.status_code == 403 and "Names for this page" in r.json()["error"]
     assert r.json()["error"].startswith("Open the setup page") and "kit.local" not in r.json()["error"]   # F2
-    page = c.get("/intake")                                 # the page: the refusal page, "Not at this address" (04 11.1)
+    page = c.get("/intake")                                 # the page: the refusal page, "Not at this address"
     assert page.status_code == 403 and page.headers["content-type"].startswith("text/html")
     assert "<h1>Not at this address</h1>" in page.text and "Names for this page" in page.text
     assert "kit.local" not in page.text and "data-base" not in page.text      # no Hub data on the refusal page

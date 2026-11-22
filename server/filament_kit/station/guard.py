@@ -1,4 +1,4 @@
-"""The station's request guard (R83, ruled 2026-11-18 01:10). The systemd unit lets localhost, the private and link-local
+"""The station's request guard. The systemd unit lets localhost, the private and link-local
 ranges and the allow-list reach the program; the program decides, request by request, by the caller's address and cookie:
 
   caller                                        may ask

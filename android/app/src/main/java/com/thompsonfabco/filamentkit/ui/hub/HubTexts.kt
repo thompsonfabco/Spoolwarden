@@ -11,7 +11,7 @@ object HubTexts {
     const val TITLE = "The Hub at a glance"
     const val OPEN_SCREEN = "The Hub at a glance"
 
-    /** The group titles, in the order the screen shows them (R83 section 5.1). */
+    /** The group titles, in the order the screen shows them. */
     const val GROUP_STATUS = "Status"
     const val GROUP_GETTING_STARTED = "Getting started"
     const val GROUP_VERSION = "Version"
@@ -63,7 +63,7 @@ object HubTexts {
     /** The quiet line on Home that opens the Hub screen. */
     fun gettingStartedLine(done: Int, total: Int): String = "Getting started on the Hub: ${stepsDone(done, total)}"
 
-    /** The health history table under the Status group (R84 4.3): the table only, the strip is on the Hub page. */
+    /** The health history table under the Status group: the table only, the strip is on the Hub page. */
     const val HEALTH_TITLE = "Check history"
     const val HEALTH_SHOW_30 = "Show 30 days"
     const val HEALTH_SHOW_7 = "Show 7 days"
@@ -72,7 +72,7 @@ object HubTexts {
     /** The state word of a check that failed; the other two are the catalogue's OK and Needs a look (`status_ok`, `status_needs_look`). */
     const val STATE_BAD = "Needs fixing"
 
-    /** "No history before Nov 14, 2026." (R84 4.4): the table starts when the Hub's record did. */
+    /** "No history before Nov 14, 2026.": the table starts when the Hub's record did. */
     fun noHistoryBefore(date: String): String = "No history before $date."
 
     /** One row for a screen reader: "Nov 15, 04:10. Workshop X1: from OK to Needs fixing". */

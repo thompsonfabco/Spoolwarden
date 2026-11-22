@@ -1,4 +1,4 @@
-"""Palette sheets (design 09 S6.11, 02 6.2): Printers and Slicer presets open and close details through the shared
+"""Palette sheets (step S6.11, the design, components): Printers and Slicer presets open and close details through the shared
 opener, so Palette draws them in #detail-host (full-height sheet), focuses the title, returns focus to the row on
 close, keeps #printers/<id> working, and collapses non-current steps in .sheet--detail."""
 from __future__ import annotations

@@ -5,7 +5,7 @@ The state comes back as the station sent it: `{"tag": {...}, "scale": {...}|null
 for `backoff` seconds, so a dead station costs the app one quick 503 per call instead of a connect timeout (same
 policy as filament-mcp).
 
-HTTPS (R82 section 2): a station that has told the Hub its certificate (`pairing.station_info`: fingerprint, port,
+HTTPS: a station that has told the Hub its certificate (`pairing.station_info`: fingerprint, port,
 version, from its hello call) is called over HTTPS at that port and accepts only that certificate; a changed one is
 refused (`StationCertChanged`, with the Error and Fix texts below), never retried over plain HTTP. A station that sent
 no fingerprint (not updated yet) is called at its configured url as before. The same pinned connection and a small
@@ -42,7 +42,7 @@ TEXT_STATION_CERT_CHANGED = "The Weigh Station's certificate is not the one the 
 TEXT_STATION_CERT_FIX = ("Restart the Weigh Station so it tells the Hub its new certificate "
                          "(sudo systemctl restart filament-kit-station), or pair it again.")
 TEXT_STATION_NOT_HTTPS = "The Weigh Station {name} is not using HTTPS. Update it."
-# the row for a station that said it could not make its certificate (R82 section 2 point 4, "plain by necessity")
+# the row for a station that said it could not make its certificate ("plain by necessity")
 TEXT_STATION_NOT_HTTPS_AT = "The Weigh Station at {address} is not using HTTPS."
 TEXT_STATION_NOT_HTTPS_WHY = "The Weigh Station at {address} is not using HTTPS: it could not make its certificate ({reason})."
 # a pinned station that now answers only plain HTTP or with another certificate: the same Error and Fix, no downgrade
@@ -440,7 +440,7 @@ def station_https_row(url: str | None) -> str | None:
 
 
 
-# ---- the Hub's checked calls to the station's own routes (R83 section 10.4 and the rulings of 2026-11-17 21:18 and 21:22) ----
+# ---- the Hub's checked calls to the station's own routes ----
 # What the Hub takes from a station is data, checked: JSON only (`application/json`), at most 256 KiB, one 5 second deadline
 # for the whole call, a redirect is an error, only the stored host with the port and certificate of that pairing (never plain
 # HTTP). A change or a ticket carries the proof of the pairing (station/page.py: an HMAC with a key both sides derive from the
@@ -550,8 +550,8 @@ def _call(endpoint, method, path, body, cap=MAX_JSON, timeout=STATION_TIMEOUT):
         # D14: the page ticket is the way into the station's own page: the Hub never asks for one over plain HTTP, whatever the proof
         raise StationPinMissing(503, TEXT_STATION_NO_PIN)
     if purpose:
-        # the proof, not HTTPS, guards a change (R83 2026-11-18 01:10); a station that told the Hub no certificate is called over
-        # plain HTTP for it (R82 00:28 point 1; `station_endpoint` never goes plain for a pinned one)
+        # the proof, not HTTPS, guards a change; a station that told the Hub no certificate is called over
+        # plain HTTP for it (`station_endpoint` never goes plain for a pinned one)
         key = proof_key(pinned=fp is not None)
         if key is None:
             raise StationCallError(503, _say("station_call_cannot_prove"))
@@ -626,7 +626,7 @@ def change_settings(url: str | None, values: dict) -> tuple[list[dict], bool]:
 
 
 def send_voice(url: str | None, values: dict) -> None:
-    """`POST /voice` with `{speech, speaker, speed, volume}` (any subset; R88 2.5): the station keeps them in memory, with
+    """`POST /voice` with `{speech, speaker, speed, volume}` (any subset): the station keeps them in memory, with
     no restart. Raises StationCallError when it does not answer or refuses them."""
     call_json(url, "POST", "/voice", values)
 

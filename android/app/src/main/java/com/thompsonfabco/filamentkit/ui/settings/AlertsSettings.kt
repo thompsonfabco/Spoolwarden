@@ -49,7 +49,7 @@ internal class AlertsActions(
 private enum class Help { Notifications, LocalNetwork }
 
 /**
- * Alerts (R80 section 8): the switch "Alerts on this phone", Send a test alert, and Recent alerts. Turning it on asks
+ * Alerts: the switch "Alerts on this phone", Send a test alert, and Recent alerts. Turning it on asks
  * for Android's notification permission (API 33+) and the local network permission; when one is refused the switch
  * stays off and the help says what to allow.
  */

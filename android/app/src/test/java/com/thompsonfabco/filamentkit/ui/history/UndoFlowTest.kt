@@ -10,7 +10,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The undo toast's rules (R84 3.3 to 3.5): which event, how long, and what each answer says. */
+/** The undo toast's rules: which event, how long, and what each answer says. */
 class UndoFlowTest {
     private val now = 1_800_000_000_000L
 

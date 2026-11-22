@@ -1,5 +1,5 @@
-"""Storage locations (R79): the storage.xml model, the migration from the old keys, the placement rule, how full,
-and the rename job. (amended by design review R457, changes C1 to C5)."""
+"""Storage locations: the storage.xml model, the migration from the old keys, the placement rule, how full,
+and the rename job. (amended by the design review, changes C1 to C5)."""
 import copy
 import os
 import stat
@@ -605,7 +605,7 @@ def test_a_renamed_set_gets_the_prefix_of_its_new_name_even_if_it_had_another():
         storage.Rename("Storage box ", "Boxes ", True)]
 
 
-# ---- reasons overflow and overflow_none (R79, 22:06)
+# ---- reasons overflow and overflow_none
 
 def test_overflow_none_when_no_place_takes_the_material_and_overflow_when_the_candidates_are_full():
     st = base(Location("PLA rack", limit=1, fill=MATERIALS, materials=["PLA"]))
@@ -656,7 +656,7 @@ def test_containers_helper_lists_the_set_with_taken_and_the_prefix():
         {"name": "Storage box 03", "number": 3, "taken": False}]
 
 
-# ---- R460: the rename job runs from a recorded plan
+# ---- the rename job runs from a recorded plan
 
 class Boom(RuntimeError):
     pass
@@ -745,7 +745,7 @@ def test_the_plan_is_written_before_the_first_spool_changes(etc):
     assert seen[0]["spools"] == [[1, "A", "B"]] and inventory.pending_rename() is None
 
 
-# ---- R460: the first migration from the web unit
+# ---- the first migration from the web unit
 
 def test_current_never_writes_it_places_from_the_migrated_list(etc, state):
     config.save({"placement": {"box_count": 2}, "locations": ["Sealed stock", "Rack 1", "Overflow"]})
@@ -894,7 +894,7 @@ def test_a_restore_without_the_file_migrates_from_the_restored_config(etc, state
     assert (state / "storage.xml").exists()
 
 
-# ---- R460 ruling 22:30: a role name that is a container name
+# ---- a role name that is a container name
 
 @pytest.mark.parametrize("role", ["pla_location", "overflow", "sealed_location"])
 def test_a_role_place_named_like_a_container_stays_one_bulk_place_beside_the_set(role):

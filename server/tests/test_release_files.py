@@ -647,7 +647,7 @@ def test_station_upgrade_without_server_reuses_the_saved_address(tmp_path):
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
 def test_station_upgrade_with_a_damaged_config_xml_uses_config_json(tmp_path):
-    """R582 M3: an unreadable config.xml does not hide a good config.json from the station re-run."""
+    """An unreadable config.xml does not hide a good config.json from the station re-run."""
     etc = _saved_station_etc(tmp_path)
     (etc / "config.xml").write_bytes(b"<config")
     r = _install_no_tty(tmp_path, etc, "--mode", "station")
@@ -684,7 +684,7 @@ def _run_station_install(tmp_path, etc):
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
 def test_station_upgrade_reads_config_xml_with_the_hubs_python(tmp_path, monkeypatch):
-    """R582 M3 / R600 LOW: the address comes from the Hub's own Python run with -I ($VENV/bin/python), which reads the
+    """The address comes from the Hub's own Python run with -I ($VENV/bin/python), which reads the
     settings as the program does. config.xml holds kit.example.lan, and the config.json beside it (same hash) another
     one: only the Hub-Python path gives kit.example.lan; the plain-JSON fallback would say json.example.lan."""
     import hashlib
@@ -703,7 +703,7 @@ def test_station_upgrade_reads_config_xml_with_the_hubs_python(tmp_path, monkeyp
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
 def test_station_upgrade_takes_a_json_changed_after_a_rollback_with_the_hubs_python(tmp_path, monkeypatch):
-    """R582 M3: config.json was changed after config.xml was saved (an older release after a rollback): it wins."""
+    """Config.json was changed after config.xml was saved (an older release after a rollback): it wins."""
     import json
     from filament_kit import config
     etc = tmp_path / "etc"
@@ -890,7 +890,7 @@ def test_wrapper_reads_the_repair_version_from_state_xml_with_the_kits_python(tm
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
 def test_wrapper_repair_line_takes_a_state_json_changed_after_a_rollback(tmp_path, monkeypatch):
-    """R600 MEDIUM: a rollback writes previous=None, held=N; v0.6.2 then updates and writes only state.json
+    """A rollback writes previous=None, held=N; v0.6.2 then updates and writes only state.json
     (previous=0.6.2, failed=N) and stops halfway. The wrapper reads the state as updates.half_install does, so its repair
     line carries --version 0.6.2, and the two agree."""
     import json

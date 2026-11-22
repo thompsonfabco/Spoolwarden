@@ -342,7 +342,7 @@ def test_as_root_copies_are_the_web_users_and_the_originals_stay_the_kits(kit):
     assert stat.S_IMODE(os.lstat(old / "oauth.json").st_mode) == 0o600           # not widened
 
 
-# ---------------------------------------------------------------- the setup helper's sandbox (R79 review)
+# ---------------------------------------------------------------- the setup helper's sandbox
 
 UNIT = Path(__file__).resolve().parents[2] / "install" / "systemd" / "filament-kit-setup@.service"
 SANDBOX_KEYS = ("ProtectSystem", "ReadWritePaths", "PrivateTmp", "PrivateDevices", "PrivateNetwork", "NoNewPrivileges",
@@ -370,7 +370,7 @@ def test_the_helper_unit_may_write_where_a_restore_pins_the_upload():
 @pytest.mark.skipif(not ROOT or not shutil.which("systemd-run") or not os.path.isdir("/run/systemd/system"),
                     reason="root and a running systemd")
 def test_pin_upload_works_in_the_helper_units_own_sandbox(tmp_path, monkeypatch):
-    """R79 review, finding 1: pin_upload under the unit's sandbox (its ReadWritePaths mapped onto scratch folders of the
+    """Finding 1: pin_upload under the unit's sandbox (its ReadWritePaths mapped onto scratch folders of the
     same kind; ProtectHome relaxed to read-only only so this checkout and its Python can load)."""
     import secrets as _secrets
     from filament_kit import backup

@@ -1,9 +1,9 @@
-// The Settings section's Weigh Station voice group (DECISIONS R88 2.1 to 2.4, 02:00 ruling; 03 10.10): Speak, Voice, Speaker, Speed, Volume
+// The Settings section's Weigh Station voice group: Speak, Voice, Speaker, Speed, Volume
 // and Test. No Save button: each row applies as it is changed (a slider when it is let go). Loaded after setup_settings.js (setGroup,
 // sbox, offNote, paintList, setSeen, followApply) and setup.js. It is the pattern of
 // setup_alerts.js: voiceGroup(data) is the group's builder, and the group's row in SET_GROUPS names it. The data is the read of
 // settings/general for the Voice row only (`values` station.tts and station.voice, applied through the settings route) and
-// `station_on`. Speak, Speaker, Speed and Volume live in voice.xml (R88 01:50): the group reads them, `remote` and `voice` from
+// `station_on`. Speak, Speaker, Speed and Volume live in voice.xml: the group reads them, `remote` and `voice` from
 // the view read `G station/voice` (no code: looking needs nothing, so a locked page shows the values) and saves each changed
 // one with `P station/voice` (code); on a locked page a change or Test asks for the code in place, as every group does, and goes back if it is not given; a value out of range is refused by the Hub, and the control goes back. Test calls `P station/voice/test` (code) with the values as they stand in the form. Everything
 // from the Hub goes in through textContent.

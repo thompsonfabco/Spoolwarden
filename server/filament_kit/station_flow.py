@@ -27,7 +27,7 @@ from .station.page import catalogue_text as _t
 
 log = logging.getLogger(__name__)
 
-# the Weigh Station's texts for a checked-out spool (R88 1.5, 02:05): the string catalogue's, the English as the fallback
+# the Weigh Station's texts for a checked-out spool: the string catalogue's, the English as the fallback
 TEXT_RETURNED = _t("station_returned", "Returned")
 TEXT_HOME = _t("station_home", "Home: {home}")
 TEXT_HOME_NONE = _t("station_home_none", "not recorded")
@@ -93,7 +93,7 @@ def tag_info(sm, uid: str) -> dict:
     v = _spool_view(s)
     out = inventory.spool_view(s)
     # a checked-out spool (loaded into a printer, not yet returned) is coming back: the station weighs it and returns it,
-    # or returns it unweighed (R88 1.5); `slot` is the slot's label while the Hub still has the spool there
+    # or returns it unweighed; `slot` is the slot's label while the Hub still has the spool there
     v = {**v, "checked_out": out["checked_out"], "home": out["home"], "slot": (out["loaded"] or {}).get("slot")}
     speak = spoken.speak(v["name"] or "Spool", v["vendor"], spoken.material(v["material"]), mat=v["material"])
     if v["checked_out"]:
@@ -177,7 +177,7 @@ def _not_checked_out() -> FlowError:
 def returned_answer(name: str, out: dict, grams=None, dry: bool = False) -> dict:
     """What the station shows and says after a return: ["Returned", name, "to <location>", "<n> g left"] (a row only when it
     has something to say: the place the Hub's answer gives, the weight when it was weighed); `location` is None when the
-    rules place the spool nowhere (R88 02:05: then "Returned.")."""
+    rules place the spool nowhere (then "Returned.")."""
     where = (out.get("view") or {}).get("location") or None
     rows = [name or ""]
     if where:
@@ -216,7 +216,7 @@ def return_spool(sm, rules: dict, body: dict, returner=None) -> dict:
 
 def save(sm, rules: dict, body: dict, returner=None) -> dict:
     """The long press: update the tag's spool's weight, or add a new spool and link the tag. `return: true` (a checked-out
-    spool, R88 1.5) weighs it and then sends it back (409 not_checked_out, before anything is written, if it is not)."""
+    spool) weighs it and then sends it back (409 not_checked_out, before anything is written, if it is not)."""
     if not isinstance(body, dict):
         raise FlowError(400, "bad_request", "body must be an object", lines("Bad request"))
     uid = body.get("uid")
@@ -258,7 +258,7 @@ def save(sm, rules: dict, body: dict, returner=None) -> dict:
             # a sealed spool keeps its net weight (its bag weighs too), as when it was first saved. With `return` the weight is
             # only checked here (dry); the return writes it under its own lock, after its checked-out check and before its
             # event, so the return's Undo stays possible and a spool that stopped being checked out between the check above
-            # and the lock is refused with nothing written (R88 CO2 follow-up 2, R701)
+            # and the lock is refused with nothing written
             s = sm.get(f"spool/{sid}") if sealed_now else inventory.update_spool(sm, sid, gross=gross, dry=dry or bool(back))
         except ValueError as e:
             raise FlowError(422, "weight_out_of_range", str(e), lines("Weight too low", "check the scale")) from e

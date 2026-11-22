@@ -144,7 +144,7 @@ def test_cli_backup_password_json_refusal_and_yes_flag(monkeypatch, capsys):
 
 
 def test_the_automatic_preset_build_is_recorded_as_the_hub():
-    """R559 5 / R606: the build unit (started by its path unit, not by a person) runs `profiles build` with the actor `hub`; a person's
+    """The build unit (started by its path unit, not by a person) runs `profiles build` with the actor `hub`; a person's
     run keeps `cli`. The unit file is the real one; `_cli_actor` is the real function the dispatcher uses."""
     import argparse
     import os

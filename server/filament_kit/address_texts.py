@@ -1,10 +1,10 @@
-"""The texts of the address and first-run phase (R82, step AF5) that the server builds or that the client steps (Hub
+"""The texts of the address and first-run phase (step AF5) that the server builds or that the client steps (Hub
 page, apps) name by key: the Hub's port, Getting started, the guided printer, the Label Reader lead-in and the Checks
 rows of the satellites.
 
 `MESSAGES` holds every text under its key in strings/en.json, first letter included; the catalogue holds exactly these
-(test_af5_texts keeps them equal). The sentences of the installer stay literals in install/install.sh and apply.py (R82
-section 7). The texts of hubport.py, station_client.py, tagsources.py and local_reader.py (AF1, AF2) are kept equal to
+(test_af5_texts keeps them equal). The sentences of the installer stay literals in install/install.sh and apply.py.
+The texts of hubport.py, station_client.py, tagsources.py and local_reader.py (AF1, AF2) are kept equal to
 their catalogue keys by the same test (`MIRRORED`), so the Hub page and the apps name one key for each.
 
 {product} and {command} are the product's and the command's name (the catalogue holds app_name and command_name once);
@@ -17,7 +17,7 @@ from . import output
 PRODUCT, COMMAND = "Spoolwarden", "spoolwarden"
 
 MESSAGES: dict[str, str | dict] = {
-    # ---- the Hub's port: Settings > Network and addresses (03 10.7, 10.11), `port` (06 9.19)
+    # ---- the Hub's port: Settings > Network and addresses, `port`
     "port_row_label": "Hub port",
     "port_change": "Change port",
     "port_dialog_title": "Move the Hub to port {port}?",
@@ -44,7 +44,7 @@ MESSAGES: dict[str, str | dict] = {
     "port_remote_on_443": "Remote access is on and uses port 443, so the Hub cannot take it.",
     "port_remote_fix": "sudo {command} port 8710",
 
-    # ---- Getting started (R82 section 4; 03 4.2; 06 9.1): the panel on the Hub page, the block of `status`
+    # ---- Getting started: the panel on the Hub page, the block of `status`
     "start_title": "Getting started",
     "start_count": "{done} of {total} done",
     "start_line": "Getting started: {done} of {total} done",
@@ -106,7 +106,7 @@ MESSAGES: dict[str, str | dict] = {
     "cli_start_not_yet": "not yet",
     "cli_start_restore": "Moving from another computer? Restore its backup: sudo {command} restore <zip>",
 
-    # ---- Add a printer, guided (R82 section 5; 03 5.6; 06 9.2): the Hub page's drawer and `printer add`
+    # ---- Add a printer, guided: the Hub page's drawer and `printer add`
     "printer_guided_title": "Add a printer",
     "printer_guided_which": "Which printer?",
     "printer_guided_found": "Found on your network",
@@ -136,7 +136,7 @@ MESSAGES: dict[str, str | dict] = {
     "cli_printer_map_ask": "Map its slots now?",
     "cli_printer_map_later": "Map them later: sudo {command} printer map \"{name}\"",
 
-    # ---- the Label Reader lead-in (R82 section 6; 03 9.4, 4.2; 06 9.1, 9.6)
+    # ---- the Label Reader lead-in
     "features_reader_lead_in": "After this, install the reader in Settings > Label Reader (a download).",
     "features_reader_not_installed": "Not installed yet",
     "features_reader_finish": "Finish in Settings",
@@ -144,7 +144,7 @@ MESSAGES: dict[str, str | dict] = {
     "reader_not_installed": "The Label Reader is switched on but not installed.",
     "cli_next": "Next: {step}",
 
-    # ---- Checks rows of the satellites (R82 section 2 points 4 and 5, 06 9.1)
+    # ---- Checks rows of the satellites (the design, command line)
     "check_station_not_https": "The Weigh Station {name} is not using HTTPS. Update it.",
     "check_station_not_https_fix": "Update it: on that machine run sudo {command} update.",
     "check_station_not_https_at": "The Weigh Station at {address} is not using HTTPS.",
@@ -173,7 +173,7 @@ MESSAGES: dict[str, str | dict] = {
 # What the code of AF1 and AF2 holds under a catalogue key: {key: (module, constant)}. The catalogue holds these texts
 # once for the Hub page and the apps; test_af5_texts keeps each constant equal to its key (a `{command}` filled in, a
 # `{text!r}` as `'{text}'`). The Checks rows read these constants (one text source), and the constants hold the wording
-# of the design (amend-39, accepted by the ruling of 20:15), so the tag-source rows are here too.
+# of the design, so the tag-source rows are here too.
 MIRRORED = {
     "port_error_not_a_number": ("hubport", "TEXT_NOT_A_NUMBER"),
     "port_error_range": ("hubport", "TEXT_RANGE"),

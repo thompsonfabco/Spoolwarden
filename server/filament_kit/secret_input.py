@@ -4,7 +4,7 @@ At a terminal the line is read key by key with echo off (termios on Linux, msvcr
 never echoed, printed or logged. Without a terminal on standard input (a pipe, `--numbered` with piped answers) the
 next line of standard input is the answer, as for every other question: getpass would read /dev/tty and the piped
 answers would slip by one. With `--plain` nothing is echoed at all and the prompt ends with `(typing is not shown)`,
-so a screen reader does not say "star" for each key (07 CLI-8).
+so a screen reader does not say "star" for each key.
 """
 from __future__ import annotations
 

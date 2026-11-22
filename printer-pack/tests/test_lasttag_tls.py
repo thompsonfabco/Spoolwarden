@@ -1,6 +1,5 @@
 """The printer-side tag service (printer-pack/lasttag/lasttag.py) over HTTPS: the certificate it makes itself with the
-openssl program, the listener, and the plain-HTTP fallback when none can be made (R82 section 2 point 5, section 10
-point 5).
+openssl program, the listener, and the plain-HTTP fallback when none can be made.
 
 Run with the server's test environment: `server/.venv/Scripts/python -m pytest printer-pack/tests`.
 """

@@ -1,11 +1,10 @@
-"""Storage locations: the ordered list a new spool is put away by (ruling R79, the design, Hub page section 10.4).
+"""Storage locations: the ordered list a new spool is put away by (the design, Hub page section 10.4).
 
 The list lives in `storage.xml` in the Hub's STATE folder (/var/lib/filament-kit: the one folder the Hub may write;
 owner of the folder, mode 0644, so the web unit reads it with its pass on the folder; atomic write under the Hub's
 cross-process lock, never through a link). A Hub that has none builds it once, at its start (`migrate_at_start`), from
 the old config keys (`migrate`) and writes it; those keys then stay in config.json untouched and are no longer read.
-Storage never stops a start: a list that cannot be written or read is placed from memory and `checks_row` says so
-(ruling 2026-11-17 01:12). The command line (root) writes the same file with `save`. The placement rule itself is in
+Storage never stops a start: a list that cannot be written or read is placed from memory and `checks_row` says so The command line (root) writes the same file with `save`. The placement rule itself is in
 placement.py; the rename of the spools stored under a renamed location is `inventory.rename_locations`.
 """
 from __future__ import annotations
@@ -145,9 +144,8 @@ class Storage:
                 for n in range(1, (loc.count or 0) + 1)]
 
     def describe(self, taken) -> list[dict]:
-        """One dict per location in fill order, the rows of `GET api/storage` (R79 section 4 and the 22:10 contract
-        change): `containers` ([{name, number, taken}]) and `prefix` are null for Bulk storage; a client never builds a
-        container name itself. (R457 C4: no other field; the web app's "Automatic" line comes from the preview.)"""
+        """One dict per location in fill order, the rows of `GET api/storage`: `containers` ([{name, number, taken}]) and `prefix` are null for Bulk storage; a client never builds a
+        container name itself. (no other field; the web app's "Automatic" line comes from the preview.)"""
         return [{"id": x.id, "name": x.name, "type": x.type, "limit": x.limit, "count": x.count,
                  "used": self.used(x, taken), "free": self.free(x, taken), "fill": x.fill,
                  "materials": list(x.materials), "overflow": x.overflow, "default_overflow": x.default_overflow,
@@ -187,7 +185,7 @@ def _line(v) -> bool:
 
 
 def clashes(locations: list[Location]) -> set[tuple[str, str]]:
-    """The (name, prefix) pairs where a location's name is a container name of a set (R79 22:06 and 22:30)."""
+    """The (name, prefix) pairs where a location's name is a container name of a set."""
     return {(x.name.casefold(), st_.container_prefix()) for i, x in enumerate(locations)
             for j, st_ in enumerate(locations)
             if i != j and st_.type == CONTAINERS and isinstance(x.name, str) and is_container_name(st_, x.name)}
@@ -197,7 +195,7 @@ def validate(locations: list[Location], before: list[Location] | None = None, *,
              check_clashes: bool = True) -> list[Problem]:
     """What is wrong in the list. A name that is a container name of a set is refused only when it is NEW: a clash
     already in `before` (the saved list) survives edits of other fields; `check_clashes=False` (reading the file,
-    the migration) never refuses one, so an upgraded Hub can always place spools (R79 22:30)."""
+    the migration) never refuses one, so an upgraded Hub can always place spools."""
     known = clashes(before) if before else set()
     out: list[Problem] = []
     seen: dict[str, int] = {}
@@ -243,7 +241,7 @@ def validate(locations: list[Location], before: list[Location] | None = None, *,
                 "Use Nothing, only when you choose it, or name the materials.")
         if x.default_overflow and not x.overflow:
             bad("overflow", "The default overflow must be an overflow location.", "Switch overflow on.")
-    for i, x in enumerate(locations):          # a name that is a container's name, refused both ways (R79, 22:06)
+    for i, x in enumerate(locations):          # a name that is a container's name, refused both ways
         for j, st_ in enumerate(locations):
             if (check_clashes and i != j and st_.type == CONTAINERS and isinstance(x.name, str)
                     and is_container_name(st_, x.name)
@@ -602,7 +600,7 @@ def migrate_at_start() -> None:
                                  "from the old settings and tries again at the next change and the next start.")
 
 
-# ---------------------------------------------------------------- migration (R79 section 6)
+# ---------------------------------------------------------------- migration
 
 def _clean(v) -> str:
     text = "".join(c if c.isprintable() else " " for c in v) if isinstance(v, str) else ""
@@ -674,7 +672,7 @@ def migrate(cfg: dict) -> Storage:
     return st
 
 
-# ---------------------------------------------------------------- renames (R79 section 3, "Rename")
+# ---------------------------------------------------------------- renames ("Rename")
 
 @dataclass(frozen=True)
 class Rename:
@@ -706,7 +704,7 @@ def renames(before: Storage, after: Storage) -> list[Rename]:
 
 
 def follow_names(before: Storage, after: Storage) -> None:
-    """A renamed Individual containers location gets the prefix of its new name plus one space (R79 C3), so its
+    """A renamed Individual containers location gets the prefix of its new name plus one space, so its
     containers are renamed with it."""
     old = {x.id: x for x in before.locations if x.id}
     for x in after.locations:
@@ -720,7 +718,7 @@ DEFAULT_OVERFLOW_NOTE = ("The default overflow has no limit, so the other overfl
 
 
 def default_overflow_starves_others(st: Storage) -> bool:
-    """True when two or more overflow locations exist and the default overflow has no limit (R79 C1): the others
+    """True when two or more overflow locations exist and the default overflow has no limit: the others
     are never reached. The Hub page, `spoolwarden locations` and the config menu show DEFAULT_OVERFLOW_NOTE then."""
     over = [x for x in st.locations if x.overflow]
     return len(over) >= 2 and st.default_overflow().limit is None

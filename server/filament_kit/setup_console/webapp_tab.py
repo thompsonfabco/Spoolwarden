@@ -17,7 +17,7 @@ from .. import config, modules, pairing
 def _view(whole: bool) -> dict:
     cfg = config.load()
     from ..setup_page import qr_svg
-    # TODO(batch): use hubport (af1-installer-port 61279ec2, not in next yet); until then the 443 rule is here: no ":443" (R82 1.4)
+    # TODO(batch): use hubport (af1-installer-port 61279ec2, not in next yet); until then the 443 rule is here: no ":443"
     port = int(cfg.get("port", 8710))
     home = f"https://{pairing.short_hostname()}.local{'' if port == 443 else f':{port}'}/intake"     # the kit server's own
     public = str((cfg.get("web") or {}).get("public_url") or "").strip() if "web" in modules.enabled(cfg) else ""

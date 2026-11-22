@@ -1,4 +1,4 @@
-"""History, analytics, export/import, undo, and report CLI commands (docs/design 06 s9.22-9.26, 09 Stage 13 HD2)."""
+"""History, analytics, export/import, undo, and report CLI commands (the design, command line s9.22-9.26, 09 Stage 13 HD2)."""
 from __future__ import annotations
 
 import argparse
@@ -10,7 +10,7 @@ import urllib.parse
 from . import output
 from .spools_cli import confirmed, down, fail
 
-EVENTS_NEWEST = 50          # `activity` without --days shows this many of the newest (R86 22:35 point 4)
+EVENTS_NEWEST = 50          # `activity` without --days shows this many of the newest
 EVENTS_DAYS_MAX = 1000      # `activity --days <n>` shows up to this many, oldest first
 UNDO_LOOK = 50              # plain `undo` looks at this many of the newest command-line changes
 WHO_LOOK = 1000             # `--who <device name>` finds the name among this many of the newest events
@@ -117,7 +117,7 @@ def _resolve_who(api, who: str) -> tuple[str | None, list[str]]:
 # ---------- activity ----------
 
 def cmd_activity(api, *, spool: int | None = None, who: str | None = None, days: int | None = None) -> int:
-    """06 9.22 (R86 22:35 point 4): without `days` the newest 50 (`newest=50`), newest first; with `days` the events
+    """The design, command line: without `days` the newest 50 (`newest=50`), newest first; with `days` the events
     from that time on (`since_at`), up to 1000, oldest first. `--json` prints the Hub's answer as it came."""
     if api is None:
         return down()
@@ -186,7 +186,7 @@ def cmd_undo(api, sm_factory, *, event_id: int | None = None, yes: bool = False)
     from .web.slots import SlotError
     target = None
     if event_id is None:
-        try:        # `newest` alone: the Hub refuses it together with since_at (R86 D1); the 7 days are cut here
+        try:        # `newest` alone: the Hub refuses it together with since_at; the 7 days are cut here
             r = api.get("/api/events?" + urllib.parse.urlencode([
                 ("activity", "1"), ("actor", "cli"), ("newest", str(UNDO_LOOK)),
             ]))
@@ -395,7 +395,7 @@ def read_password_file(path: str) -> str:
 
 
 def _ask_new_password() -> tuple[str | None, int]:
-    """06 8.7: the new password, typed twice (both secret). (password, 0) or (None, exit code after the error)."""
+    """The design, command line: the new password, typed twice (both secret). (password, 0) or (None, exit code after the error)."""
     from . import backup, secret_input
     first = secret_input.ask(CLI_BACKUP_PW_NEW)
     if len(first) < backup.MIN_PASSWORD_LEN:
@@ -409,7 +409,7 @@ def _ask_new_password() -> tuple[str | None, int]:
 
 def run_backup_password(*, remove: bool = False, show: bool = False, password: str | None = None,
                         yes: bool = False) -> int:
-    """`backup password` (06 9.10, 7, 8.7): the helper's own functions, as `backup keep` calls them (the password file
+    """`backup password`: the helper's own functions, as `backup keep` calls them (the password file
     is root-only). Setting asks twice unless `password` is given; `--remove` asks first; `--show` prints the password
     (its JSON form is only `{"set": ...}`, a stored secret is never in JSON)."""
     from . import backup, setup_helper

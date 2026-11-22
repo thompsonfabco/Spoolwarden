@@ -62,7 +62,7 @@ MODULES: dict[str, Module] = {m.name: m for m in (
     _m("remote", "Remote access", "Public https name for the web UI (nginx, certbot)",
        depends=("web",), apt=("nginx", "certbot")),
     # orders needs Claude (ai_intake) even when the local reader is on: the order history goes only into Claude's
-    # prompt; the local reader never gets it (reader contract v1). The decision of 2026-11-12, after review R127.
+    # prompt; the local reader never gets it (reader contract v1). The decision of 2026-11-12.
     _m("orders", "Order history", "Order history file for the shop tools",
        depends=("ai_intake",), needs_text="order matching needs the Claude reader"),
     _m("updates", "Automatic updates", "Daily check for a new signed release; installs it and keeps the one before",
@@ -88,7 +88,7 @@ MODES: dict[str, frozenset[str]] = {
     "all-in-one": frozenset(MODULES) - OPT_IN,
 }
 
-# The setup names of the Hub page and the command line (design 06 section 9.6, N27) beside the old words; the old
+# The setup names of the Hub page and the command line (the design, command line, N27) beside the old words; the old
 # word stays the canonical one (what the code and every stored value use).
 MODE_ALIASES = {"hub": "server", "weigh-station": "station", "hub-with-weigh-station": "all-in-one"}
 
@@ -208,7 +208,7 @@ def validate(cfg: dict) -> None:
                 if dep not in on:
                     why = f" ({MODULES[n].needs_text})" if n == "orders" else ""
                     raise ModuleError(f"{n} needs {dep}{why}")
-    if "remote" in on and hubport.remote_conflict(cfg):       # R82 s1 point 6: refused before anything is changed
+    if "remote" in on and hubport.remote_conflict(cfg):       # refused before anything is changed
         raise ModuleError(f"{hubport.TEXT_REMOTE_REFUSAL_SHORT}; fix: {hubport.TEXT_REMOTE_FIX}")
     if needs_spoolman_url(on, cfg):
         raise ModuleError(

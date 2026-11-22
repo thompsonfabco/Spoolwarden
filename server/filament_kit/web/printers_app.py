@@ -20,18 +20,18 @@ The web process never talks to a printer. Everything goes to the kit server's ow
                                         dry_run: false), as the Android app does
     POST printers/{id}/slots/{label}/unload  {[dry_run]}: the slot's spool goes back to where it was (Spoolman
                                         only)
-    POST printers/{id}/slots/auto/load  {spool_id[, dry_run]}: Auto (R83 addition A6): no slot named, the Hub loads the spool
+    POST printers/{id}/slots/auto/load  {spool_id[, dry_run]}: Auto (A6): no slot named, the Hub loads the spool
                                         where one shows up; POST printers/{id}/auto/choose {slot} when two slots were loaded;
                                         POST printers/{id}/auto/cancel stops waiting
     GET  printers/tagged                the last tapped tag and its spool (the load picker's "last tap")
     GET  printers/manage                every printer the kit knows, set up or only seen on the network (no secrets)
     POST printers/scan                  the kit's Scan for Klipper printers: {found: [{id, host, port, name, configured}]}
-                                        (R83 10.3; the same change guard as add)
+                                        (the same change guard as add)
     POST printers/test                  {family: klipper, host[, port, api_key]}: does a Klipper printer answer there?
-                                        {reachable: bool} - nothing is saved (R87 1; the kit route is AP1's)
-    POST printers/{id}/slots/{label}/clear  {[dry_run]}: the Hub forgets the slot's spool (R83 10.1, EV1)
+                                        {reachable: bool} - nothing is saved (the kit route is AP1's)
+    POST printers/{id}/slots/{label}/clear  {[dry_run]}: the Hub forgets the slot's spool
     POST printers/add                   {serial, access_code[, name]} a Bambu printer the kit has seen, or
-                                        {address, access_code[, name, serial]} one typed (R87 2: the Hub checks the address
+                                        {address, access_code[, name, serial]} one typed (the Hub checks the address
                                         and the Access Code and reads the serial from the printer);
                                         {family: klipper, host[, port, name, api_key]} a Klipper printer
     POST printers/{id}/edit             {name?, address?, port?, access_code?, api_key?, unpin?}: the kit's PATCH
@@ -77,7 +77,7 @@ ENTRY = re.compile(r"[A-Za-z0-9_-]{1,64}")
 HLS_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}\.(ts|m3u8)")
 HLS_TYPES = {"m3u8": "application/vnd.apple.mpegurl", "ts": "video/mp2t"}
 MAX_SEGMENT = 16 * 1024 * 1024
-LIST_FIELDS = ("id", "name", "model", "family", "state", "camera", "summary", "auto_possible")      # auto_possible: Automatic can be chosen (R83 addition A6)
+LIST_FIELDS = ("id", "name", "model", "family", "state", "camera", "summary", "auto_possible")      # auto_possible: Automatic can be chosen (A6)
 # the kit path of each step, written out so test_web_token_scope sees every path this unit calls
 MANUAL_STEPS = {"start": "/api/printers/{serial}/manual-map/start", "confirm": "/api/printers/{serial}/manual-map/confirm",
                 "skip": "/api/printers/{serial}/manual-map/skip", "stop": "/api/printers/{serial}/manual-map/stop",
@@ -229,7 +229,7 @@ class PrintersApp:
             if not re.fullmatch(r"\d{1,3}(\.\d{1,2})?", days):
                 raise Problem("days must be a number")
             q.append(f"days={days}")
-        if by is not None:                  # R84 9.5: the entries grouped by month
+        if by is not None:                  # the entries grouped by month
             if by != "month":
                 raise Problem("by must be month")
             q.append("by=month")
@@ -291,7 +291,7 @@ class PrintersApp:
                                     {"spool_id": spool, "dry_run": dry})
 
     async def auto_load(self, request: Request):
-        """Auto (R83 addition A1, contract A6): a spool for the printer with no slot named; the Hub watches the slots and loads it where
+        """Auto (A1, contract A6): a spool for the printer with no slot named; the Hub watches the slots and loads it where
         one shows up. A dry run unless `dry_run: false`: {auto, watching, replaces?} then {auto, pending, expires_in, message}."""
         serial = self._serial(request)
         b = await self._body(request)
@@ -327,7 +327,7 @@ class PrintersApp:
         return await self._kit_call(self.kit.post, f"/api/printers/{serial}/slots/{label}/unload", {"dry_run": dry})
 
     async def slot_clear(self, request: Request):
-        """Clear slot (R83 section 3): the kit's own route, a dry run unless `dry_run: false`."""
+        """Clear slot: the kit's own route, a dry run unless `dry_run: false`."""
         serial, label = self._serial(request), self._label(request)
         dry = self._dry(await self._body(request))
         if not dry:
@@ -354,7 +354,7 @@ class PrintersApp:
 
     def changes_allowed(self) -> bool:
         """Printer changes (add, edit, forget): the page the kit server serves at home always; the web module's page
-        at its public address only when the owner turned it on (orchestrator ruling, 2026-11-10)."""
+        at its public address only when the owner turned it on."""
         if self.intake.origin is None:          # served by the kit server itself: home network only
             return True
         from .. import config
@@ -551,7 +551,7 @@ class PrintersApp:
             info = self.push.check_subscription(b.get("subscription"))
         except ValueError as e:
             raise Problem(str(e)) from None
-        info["lang"] = b.get("lang")             # the phone's language, for the words of its alerts (R85 3.8)
+        info["lang"] = b.get("lang")             # the phone's language, for the words of its alerts
         await anyio.to_thread.run_sync(self.push_store.add, info)
         return {"ok": True}
 

@@ -1,4 +1,4 @@
-"""Wave round 3 (review R560, lane B), the Hub page and station page scripts: static checks of the script text for the
+"""Wave round 3 the Hub page and station page scripts: static checks of the script text for the
 behaviour each finding asks for. The browser suites that drive these scripts are not run in this round."""
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def stub(text: str, key: str) -> str:
     return m.group(1)
 
 
-# ---- MEDIUM 5: the restore confirmation carries the Tag Reader and the password sentences (03 10.11)
+# ---- MEDIUM 5: the restore confirmation carries the Tag Reader and the password sentences
 
 def test_the_restore_confirm_says_the_tag_reader_and_the_password_sentences():
     src = js("setup_backup.js")
@@ -53,7 +53,7 @@ def test_trust_asks_first_and_shows_both_fingerprints():
     assert "fpRows(r)" in run
     rows = between(test, "const fpRows = ", "const show = ")
     assert '"settings_reader_cert_old", r.pinned' in rows and '"settings_reader_cert_new", r.fp' in rows
-    assert "btn--small" not in run                      # the default button, as 03 10.5 says
+    assert "btn--small" not in run                      # the default button, as the design, Hub page says
 
 
 def test_trust_texts_are_the_designs():
@@ -72,7 +72,7 @@ def test_trust_moves_the_focus_to_test_afterwards():
     assert '[data-action="test-reader"]' in run
 
 
-# ---- MEDIUM 10: Lock now and Unlock keep the embedded live view and its camera (R83 22:10.3)
+# ---- MEDIUM 10: Lock now and Unlock keep the embedded live view and its camera
 
 def test_a_lock_redraw_keeps_the_live_views():
     src = js("setup_printers.js")
@@ -88,7 +88,7 @@ def test_a_lock_redraw_keeps_the_live_views():
     assert "stopRowLives(keptLives);" in between(src, "function drawListNow(", "rowViews = new Map();")
 
 
-# ---- MEDIUM 11: a spool's events, the newest ten, newest first, in the Hub's words (03 16.3, D1)
+# ---- MEDIUM 11: a spool's events, the newest ten, newest first, in the Hub's words (the design, Hub page, D1)
 
 def test_a_spools_events_are_the_newest_ten_newest_first_in_the_hubs_words():
     src = js("setup_spools.js")
@@ -127,7 +127,7 @@ def test_enter_in_a_station_setting_does_not_reload_the_page():
     assert re.search(r'\$\("settings"\)\.addEventListener\("submit", function \(e\) \{ e\.preventDefault\(\);', src)
 
 
-# ---- R560 MEDIUM (refuter-01): Overview and Getting started
+# ---- Overview and Getting started
 
 def test_still_to_do_keeps_its_setup_code_row_while_getting_started_shows():
     src = js("setup_overview.js")
@@ -156,7 +156,7 @@ def test_getting_started_keeps_the_focus_and_announces_after_hide_show_and_keep(
     assert 'el("h2", { class: "start__title", tabindex: "-1"' in src
 
 
-# ---- R560 MEDIUM (refuter-01): the catalog Remove texts are R83 4.3's and the command line's
+# ---- the catalog Remove texts are the Hub page's and the command line's
 
 def test_catalog_remove_texts_match_the_command_line():
     src = js("setup_settings.js")

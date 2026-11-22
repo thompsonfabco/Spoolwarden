@@ -108,7 +108,7 @@ import java.io.File
 import com.thompsonfabco.filamentkit.ui.spool.SpoolTile
 
 /**
- * Spools (05 7.1). [searched] is the query the [results] answer, for "No spools match "petg"."; [busy] is a search
+ * Spools. [searched] is the query the [results] answer, for "No spools match "petg"."; [busy] is a search
  * running, while the results of the last one stay.
  */
 data class SearchUi(
@@ -120,7 +120,7 @@ data class SearchUi(
     val failure: HubFailure? = null,
     /** When the results were read (epoch millis), for the offline notice. */
     val loadedAt: Long? = null,
-    /** The "Running low" filter (R80 section 7): the list of spools at or under the Hub's threshold replaces the search. */
+    /** The "Running low" filter: the list of spools at or under the Hub's threshold replaces the search. */
     val lowOnly: Boolean = false,
     val low: List<LowSpool> = emptyList(),
     val lowLoaded: Boolean = false,
@@ -132,7 +132,7 @@ data class SearchUi(
     /** Why the download did not happen: the words for an older Hub or a full phone, or a failure the usual notices say. */
     val csvProblem: String? = null,
     val csvFailure: HubFailure? = null,
-    /** The "Checked out" filter (R88 section 1.6); the chip's count is the `total` of the answer. */
+    /** The "Checked out" filter; the chip's count is the `total` of the answer. */
     val checkedOnly: Boolean = false,
     val checked: List<SpoolSummary> = emptyList(),
     /** The chip's number (the list answer's `total`); null: the Hub does not apply the filter, so there is no chip. */
@@ -151,7 +151,7 @@ class SearchViewModel(
     private val loadLow: (suspend () -> List<LowSpool>)? = null,
     /** `api.spools(...).spoolmanUrl`; null: the Hub gives none, so there is no Open Spoolman item. */
     private val loadSpoolmanUrl: (suspend () -> String?)? = null,
-    /** `api.exportCsv("spoolman-spools", file)` (R84 6.5); null: no Download as CSV item. */
+    /** `api.exportCsv("spoolman-spools", file)`; null: no Download as CSV item. */
     private val exportCsv: (suspend (File) -> Unit)? = null,
     /** `api.spools("", "checked_out")`; null: no Checked out filter. */
     private val loadChecked: (suspend () -> SpoolsAnswer)? = null,
@@ -363,7 +363,7 @@ class SearchViewModel(
     }
 }
 
-/** Whether the phone can read tags, for the tag hint (05 7.1). */
+/** Whether the phone can read tags, for the tag hint. */
 enum class NfcState { Ready, Off, Missing }
 
 internal fun nfcStateOf(context: Context): NfcState {
@@ -399,7 +399,7 @@ internal fun openNfcSettings(context: Context) {
 }
 
 /**
- * The Spools screen (05 7.1): the search field, the Sealed only chip, the tag hint and the results. [onOpenSpool] opens
+ * The Spools screen: the search field, the Sealed only chip, the tag hint and the results. [onOpenSpool] opens
  * the spool screen with the row's summary. There is no search button: a search runs after a pause in typing and on
  * the keyboard's search key.
  */
@@ -430,7 +430,7 @@ fun SearchScreen(
         vm.forgetCheckedOut()
         vm.loadCheckedOut()
     }
-    // a Return: the toast says where the spool went, with Undo for 10 seconds when the Hub offers one (R88 1.6)
+    // a Return: the toast says where the spool went, with Undo for 10 seconds when the Hub offers one
     val toast = LocalToast.current
     val undoLabel = stringResource(R.string.common_undo)
     val returned = ui.returnToast
@@ -439,7 +439,7 @@ fun SearchScreen(
         vm.returnToastShown()
         toast?.showUndoable(returned.text, undoLabel, returned.event, undoHoldMs(context), vm::undoReturn)
     }
-    // Download as CSV (R84 6.5): the file goes to the system share sheet
+    // Download as CSV: the file goes to the system share sheet
     val csv = ui.csvFile
     val csvSubject = stringResource(R.string.nav_spools)
     LaunchedEffect(csv) {
@@ -452,7 +452,7 @@ fun SearchScreen(
             )
         }
     }
-    // Open Spoolman (R83 section 7) and Download as CSV: in the screen's menu; Open Spoolman only when the Hub gave the address
+    // Open Spoolman and Download as CSV: in the screen's menu; Open Spoolman only when the Hub gave the address
     val spoolmanUrl = ui.spoolmanUrl
     if (spoolmanUrl != null || vm.canExport) {
         ScreenTopBarActions {
@@ -538,10 +538,10 @@ fun SearchScreen(
                             when (chip) {
                                 SearchChip.SealedOnly ->
                                     ToggleChip(stringResource(R.string.spools_sealed_only), ui.sealedOnly) { vm.setSealedOnly(!ui.sealedOnly) }
-                                // spools with a remembered place (R88 1.6); no chip for a Hub without the filter
+                                // spools with a remembered place; no chip for a Hub without the filter
                                 SearchChip.CheckedOut ->
                                     ToggleChip(CheckedOutTexts.chip(ui.checkedCount ?: 0), ui.checkedOnly) { vm.setCheckedOnly(!ui.checkedOnly) }
-                                // the Hub's running-low list (R80 section 7); no chip for a Hub that has none
+                                // the Hub's running-low list; no chip for a Hub that has none
                                 SearchChip.RunningLow ->
                                     ToggleChip(stringResource(R.string.running_low_chip, lowCount ?: ui.low.size), ui.lowOnly) { vm.setLowOnly(!ui.lowOnly) }
                             }
@@ -572,7 +572,7 @@ fun SearchScreen(
                     if (ui.lowOnly) LowSpoolsList(ui, openOrToggle, online, onTryAgain = vm::loadLowSpools)
                     if (ui.checkedOnly) CheckedOutList(ui, openOrToggle, online, onReturn = vm::returnToHome, onPairAgain = onPairAgain, onTryAgain = vm::loadCheckedOut)
                     val searched = ui.searched
-                    // the states every Hub screen has (05 3.2): the progress line, the error card, offline
+                    // the states every Hub screen has: the progress line, the error card, offline
                     if (!ui.lowOnly && !ui.checkedOnly) ScreenState(
                         loaded = searched != null,
                         loading = ui.busy,
@@ -678,7 +678,7 @@ private fun TagHint(nfc: NfcState, onNfcSettings: () -> Unit) {
     }
 }
 
-/** A filter chip: the whole chip toggles, no check icon (08 10.3). */
+/** A filter chip: the whole chip toggles, no check icon. */
 @Composable
 private fun ToggleChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val colors = SpoolwardenTheme.colors
@@ -704,7 +704,7 @@ internal fun LowSpool.toSummary(): SpoolSummary = SpoolSummary(
     id = id, brand = "", name = filament, material = material, colorHex = color, location = location, remaining = remainingG,
 )
 
-/** The running-low list (R80 section 7): least filament first, each row with "Last one" or "<n> more in stock" under it. */
+/** The running-low list: least filament first, each row with "Last one" or "<n> more in stock" under it. */
 @Composable
 private fun LowSpoolsList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: Boolean, onTryAgain: () -> Unit) {
     val space = SpoolwardenTheme.space
@@ -739,7 +739,7 @@ private fun LowSpoolsList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: 
 }
 
 /**
- * The checked-out list (R88 1.6): each row says where the spool is, its home and since when, with "Return to <home>"
+ * The checked-out list: each row says where the spool is, its home and since when, with "Return to <home>"
  * under it. The Hub's refusal of a Return shows under the list in its own words.
  */
 @Composable

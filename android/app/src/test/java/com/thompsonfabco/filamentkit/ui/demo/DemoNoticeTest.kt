@@ -35,7 +35,7 @@ class DemoNoticeTest {
         assertFalse("pairing screens", demoNoticeShown(demo = true, paired = true, inPairing = true))
     }
 
-    /** 05 3.7: no screen of the app lacks the notice. The shell's one call is not guarded by any screen (the scanner of labels has it too). */
+    /** the design, Android app: no screen of the app lacks the notice. The shell's one call is not guarded by any screen (the scanner of labels has it too). */
     @Test fun theShellShowsTheNoticeOnEveryScreenButPairing() {
         val shell = java.io.File("src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt").readText()
         assertTrue(shell.contains("demoNoticeShown(demoOn, config.isPaired(), inPairing || settingsOverPairing)"))

@@ -253,7 +253,7 @@ def _is_root() -> bool:
 
 
 def issue(cfg: dict, *, run: Callable[[list[str]], None] | None = None) -> int:
-    """`spoolwarden remote get-certificate` (06 9.12; `remote issue` is its old spelling): certbot standalone for
+    """`spoolwarden remote get-certificate` (the design, command line; `remote issue` is its old spelling): certbot standalone for
     remote.hostname, with the kit's hooks."""
     from .modules import enabled
     if run is None:
@@ -288,7 +288,7 @@ def issue(cfg: dict, *, run: Callable[[list[str]], None] | None = None) -> int:
 
 
 def firewall(cfg: dict) -> int:
-    """`spoolwarden remote firewall` (06 9.12): the rules to add by hand; nothing is changed."""
+    """`spoolwarden remote firewall`: the rules to add by hand; nothing is changed."""
     from .modules import enabled
     if "remote" not in enabled(cfg):
         output.error("Remote access is off.", "turn it on first:", cmd="sudo spoolwarden features on remote")

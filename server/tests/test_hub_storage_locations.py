@@ -1,9 +1,9 @@
-"""Settings > Storage locations on the Hub page (DECISIONS R79 section 3, 03 10.4), in a real headless browser: the list of
+"""Settings > Storage locations on the Hub page, in a real headless browser: the list of
 locations in fill order with Add, Edit, Move up and down, Make default overflow, Sealed spools go here and Remove, the
-"Where a new spool goes" panel built from the unsaved list, one Save with the dirty mark, the field and dialog texts of R79
-section 5, and the list readable in all four looks at 1280, 1776, 1024, 768 and 390 px (no summary squeezed to a sliver or
+"Where a new spool goes" panel built from the unsaved list, one Save with the dirty mark, the field and dialog texts
+and the list readable in all four looks at 1280, 1776, 1024, 768 and 390 px (no summary squeezed to a sliver or
 wrapped past two lines, no sideways scrolling: the lesson of the Panes summary-width finding). The page runs against the Hub's
-real routes and storage.xml (R79 section 4 shapes) with spools in the fake Spoolman. The same skip rules as the page audit:
+real routes and storage.xml with spools in the fake Spoolman. The same skip rules as the page audit:
 no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
 
@@ -126,7 +126,7 @@ out.dirty = dirty();
     assert page["panelTitle"] == T("storage_panel_title")
     assert page["panel"] == ["PLA: Rack 1, then Overflow, then Dry shelf", "PETG: Rack 2, then Overflow, then Dry shelf", "ABS: Rack 2, then Overflow, then Dry shelf",
                              "Everything else: Storage box (containers), then Overflow, then Dry shelf"]
-    # R79 C1: two overflow places and no limit on the default: the notice says the other one is never reached
+    # two overflow places and no limit on the default: the notice says the other one is never reached
     assert page["notice"] == {"shown": True, "text": T("storage_notice_default_overflow_no_limit")} and page["converted"] is True
     assert page["save"] == T("settings_storage_save") and page["dirty"] == {"form": None, "link": False, "foot": False}
 
@@ -231,7 +231,7 @@ out.noticeAfter = shown($("#set-storage .banner[data-notice=\"default_overflow_n
     assert page["focus"] == T("settings_storage_edit_name", name="Dry box")
     assert page["dirtyAfterAdd"] == {"form": "dirty", "link": True, "foot": True} and page["summary"] == T("settings_state_storage", count=6)     # the summary is the saved list's
     assert page["panelAfterAdd"][-1] == "Everything else: Storage box (containers), then Overflow, then Dry shelf, then Dry box"
-    assert "PETG: Rack 2, then Dry box, then Overflow, then Dry shelf" in page["panelAfterAdd"]     # an overflow place that names a material is an own place (R79 C2)
+    assert "PETG: Rack 2, then Dry box, then Overflow, then Dry shelf" in page["panelAfterAdd"]     # an overflow place that names a material is an own place
     assert "pla+: Dry box, then Overflow, then Dry shelf" in page["panelAfterAdd"] and any(line.startswith("pla+: ") for line in page["panelAfterAdd"])
     assert page["editTitle"] == "Rack 2" and page["editButton"] == T("storage_save_location")
     assert page["typeFixed"] == [False, True] and page["typeFixedHint"] == [T("storage_error_type_fixed")]
@@ -564,7 +564,7 @@ out.widths = widths;
 
 @pytest.mark.parametrize("width", [1280, 1776])
 def test_the_list_keeps_a_readable_width_with_the_add_or_edit_form_open(hub, tmp_path, width):
-    """Review R462: in Panes the open editor sat beside Settings' own list and left the group 185 px (rows stacked as cards,
+    """In Panes the open editor sat beside Settings' own list and left the group 185 px (rows stacked as cards,
     buttons wrapped). With the form open every look keeps the group and its list wide, and the Edit button on one line."""
     seen = _drive_storage(hub, tmp_path, OPEN_WIDTH, width=width)["widths"]
     assert {(w["look"], w["what"]) for w in seen} == {(l, k) for l in ("console", "workbench", "palette", "panes") for k in ("add", "edit")}

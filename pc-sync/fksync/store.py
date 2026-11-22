@@ -35,7 +35,7 @@ class AppDirs:
         self.backups = self.base / "backups"
         self.orca_backups = self.base / "backups-orca"   # the Orca Slicer folder, same backup names
         self.installed = self.base / "installed"
-        self.partial = self.base / "partial"      # a build whose install stopped part-way (ruling S28)
+        self.partial = self.base / "partial"      # a build whose install stopped part-way
         self.state = self.base / "state.json"
         self.lock = self.base / "sync.lock"
         self.pair_aside = self.base / "pair-aside.json"  # the pairing in place while a new one is being proven

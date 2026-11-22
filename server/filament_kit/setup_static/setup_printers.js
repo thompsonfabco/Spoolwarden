@@ -1,6 +1,6 @@
-// The console's Printers section (03 5; 09 S2.4). Loaded after setup.js; everything from the server goes in through textContent, as there.
+// The console's Printers section (the design, Hub page; S2.4). Loaded after setup.js; everything from the server goes in through textContent, as there.
 // A Klipper printer has no Access Code and a Bambu printer no API key: each family's words and controls appear only with its module on.
-// The collection, its rows and the drawers are this file's, and so are the Add a printer drawer (03 5.6), the scan (5.4, 5.8) and the Klipper add-on card.
+// The collection, its rows and the drawers are this file's, and so are the Add a printer drawer, the scan (5.4, 5.8) and the Klipper add-on card.
 "use strict";
 
 const PRINTERS = "printers";       // the section's name in TABS; its catalogue keys start with it
@@ -17,7 +17,7 @@ const E = (tag, cls, ...kids) => {
 const line = (kind, shape, text) => E("div", "printers-line", E("span", "status status--" + kind, SW.shape(shape), text));
 const klipperOf = (p) => p.family === "klipper";
 const lockedNow = () => SW.lock.state === "locked";
-// what names a row in the page (data-id, ids, the lane choice): never the serial, which is hidden while Locked (03 2.1); the map stays in this script
+// what names a row in the page (data-id, ids, the lane choice): never the serial, which is hidden while Locked; the map stays in this script
 const rowKeys = new Map();
 const keyOf = (serial) => { if (!rowKeys.has(serial)) rowKeys.set(serial, "p" + (rowKeys.size + 1)); return rowKeys.get(serial); };
 const serialOfKey = (key) => { for (const [serial, k] of rowKeys) if (k === key) return serial; return null; };
@@ -29,7 +29,7 @@ const addressOf = (p) => (klipperOf(p) ? hostPort(p) : p.ip || "");
 const sentence = (s) => { const t = nice(s).trim(); return t ? t[0].toUpperCase() + t.slice(1) + "." : t; };
 const laneWord = (m) => SW.t(m === "auto" ? "printers_lane_auto" : m === "on" ? "status_on" : "status_off");
 
-// ----- what the section knows beyond the Hub's list: the last read of `printers/states` (03 2.7), by serial -----
+// ----- what the section knows beyond the Hub's list: the last read of `printers/states`, by serial -----
 let live = null;
 let pollTimer = 0;
 const expanded = new Set();        // the rows that are open: kept across the redraw a change brings
@@ -42,7 +42,7 @@ const slotsOf = (p) => (live && live[p.serial] && live[p.serial].slots ? live[p.
 const hexOf = (s) => (/^[0-9A-Fa-f]{6}$/.test(s.color_hex || "") ? "#" + s.color_hex : "");
 const slotName = (s) => (s.spool && s.spool.name) || s.type || "";
 
-// ----- the state of a printer: the badge and under it the sentence (02 7.1) -----
+// ----- the state of a printer: the badge and under it the sentence -----
 const FIX = { offline: "printers_fix_offline", wrong_code: "printers_fix_wrong_code", needs_developer_mode: "printers_fix_developer_mode",
   cert_changed: "printers_fix_cert_changed", unauthorized: "printers_fix_unauthorized", klippy_not_ready: "printers_fix_klippy" };
 function stateWord(p) {
@@ -84,7 +84,7 @@ function slotLines(p) {
     E("span", "slot-strip__use", s.active ? SW.t("slot_in_use") : ""))));
 }
 
-// ----- the result texts of a test (03 5.8): the Hub's sentence read back into the catalogue's; any other text is shown as sent -----
+// ----- the result texts of a test: the Hub's sentence read back into the catalogue's; any other text is shown as sent -----
 function testResult(p, r) {
   const t = String(r.text || ""), m = (re) => re.exec(t);
   let x, kind = r.reachable;
@@ -145,18 +145,18 @@ async function act(box, label, path, body, done) {
   });
   return out;
 }
-// a result with one button in it (03 8.6)
+// a result with one button in it
 function sayWith(box, kind, text, action) {
   box._said = [kind, text];
   return SW.result(box, kind, text, { action });
 }
 
-// ----- the dialogs of 03 5.5 -----
+// ----- the dialogs of the design, Hub page -----
 // `kind`: bambu or klipper (Forget printer), dismiss (a scanned Klipper printer not in use)
 function forgetPrinter(p, box, kind) {
   const o = kind === "dismiss" ? destroy("printers_dismiss_title", "printers_dismiss_body", "common_dismiss", { name: p.name })
     : destroy("printers_forget_title", "printers_forget_body_" + kind, "printers_forget", { name: p.name });
-  // the row leaves with it: its result is a toast (02 8.7)
+  // the row leaves with it: its result is a toast
   return asking(box, printerPath(p, "forget"), o, undefined,
     () => say(box, SW.t(kind === "dismiss" ? "printers_dismissed" : "printers_forgotten", { name: p.name }), true));
 }
@@ -164,7 +164,7 @@ const renamePrinter = (p, box) => asking(box, printerPath(p, "rename"), {
   kind: "entry", title: SW.t("printers_rename_title"), confirm: SW.t("common_rename"),
   fields: [entryField({ label: SW.t("common_field_name"), name: "name", value: p.name }, "common_error_name")],
 }, ([name]) => ({ name: name.trim() }));
-// Bambu Lab: 03 5.5 and 15: the new address takes the Access Code with it, as in the web app and the app
+// Bambu Lab: the design, Hub page: the new address takes the Access Code with it, as in the web app and the app
 function changeAddress(p, box) {
   const bambu = !klipperOf(p);
   let typed = "";
@@ -216,7 +216,7 @@ async function collectReport(p, box) {
   } finally { reporting.delete(p.serial); }
 }
 
-// ----- slot mapping: the server's own connection does it, and this follows it in the printer's message row (03 5.7) -----
+// ----- slot mapping: the server's own connection does it, and this follows it in the printer's message row -----
 const mapping = {};
 async function startMap(p, box) {
   if (!(await SW.ask({ title: SW.t("printers_map_title", { name: p.name }), text: SW.t("printers_map_body"), confirm: SW.t("printers_map_slots") }))) return;
@@ -274,7 +274,7 @@ function followMap(p, box) {
   tick();
 }
 
-// ----- the drawers (03 5.7): the detail region in a drawer dialog of its own, in every look (SW.openDetail leaves it in place under Panes,
+// ----- the drawers: the detail region in a drawer dialog of its own, in every look (SW.openDetail leaves it in place under Panes,
 // where a drawer has no place); the dialog is made for each opening and removed when it closes, so nothing typed in it stays in the page -----
 let drawer = null;                 // { kind, serial, region, body, running(), reload(), end() }
 function openDrawer(kind, p, title, body, foot, o = {}) {
@@ -315,7 +315,7 @@ function closeDrawerAsync() {
   if (!dlg) { drawer = null; return Promise.resolve(); }      // already gone with its dialog
   return new Promise((done) => { dlg.addEventListener("close", () => setTimeout(done), { once: true }); dlg.close(); });
 }
-// closing a running mapping asks first (03 5.7): the positions confirmed so far are kept
+// closing a running mapping asks first: the positions confirmed so far are kept
 async function requestClose() {
   const d = drawer;
   if (!d) return;
@@ -473,7 +473,7 @@ function openLoadDrawer(p, box, first) {
 // the section's own button in the message row after a failed mapping, and the menu, start the session
 const loadByHand = (p, box) => manualMap(p, box, true);
 
-// ----- the row's actions: one list for the buttons of the expansion and the overflow menu (03 5.3) -----
+// ----- the row's actions: one list for the buttons of the expansion and the overflow menu -----
 function actionsOf(p, box) {
   const klip = klipperOf(p), why = !klip && p.report_why;
   const act1 = [], change1 = [], remove1 = [];
@@ -514,7 +514,7 @@ const dangerButton = (a) => {
   return b;
 };
 
-// ----- the expansion of a row (03 5.3) -----
+// ----- the expansion of a row -----
 function kv(rows) {
   return X("dl", { class: "kv" }, rows.map(([key, value, o = {}]) => E("div", "kv__row", E("dt", "kv__key", key),
     E("dd", "kv__value", o.node ? o.node : value == null ? E("span", "muted", SW.t("common_empty")) : E("span", o.mono ? "mono" : null, value), o.badge || null))));
@@ -539,7 +539,7 @@ function facts(p, box) {
     [SW.t("common_field_access_code"), null, { node: E("span", null, p.configured ? SW.t("common_saved_hidden") : null), badge: p.configured ? null : SW.status("not_set") }],
     [SW.t("printers_fact_certificate"), SW.t(p.pinned ? "printers_cert_pinned_short" : "printers_cert_not_pinned_short")]]);
 }
-// the live views a redraw for Lock now or Unlock carries over by serial: a page that is locked again does not cut a running picture (R83 22:10.3)
+// the live views a redraw for Lock now or Unlock carries over by serial: a page that is locked again does not cut a running picture
 let keptLives = null;
 function stopRowLives(keep) {
   for (const [serial, v] of rowViews) {
@@ -606,7 +606,7 @@ function detailRegion(p, box, acts) {
   return region;
 }
 
-// ----- a printer's row: the main row, its message row and its expansion (03 5.2) -----
+// ----- a printer's row: the main row, its message row and its expansion -----
 function tagOf(p) { return S.printers.bambu && S.printers.klipper ? E("span", "printers-tag", SW.t(klipperOf(p) ? "common_klipper" : "common_bambu_lab")) : null; }
 function addressCell(p) {
   if (lockedNow()) return [E("span", "muted", SW.t("common_hidden_locked"))];
@@ -677,7 +677,7 @@ function printerItem(p) {
 }
 const menuItem = (a) => ({ label: a.label, danger: a.danger, run: () => a.run(null) });
 
-// a printer a scan found and nobody has put into use (03 5.2): Use this printer, Test connection, Dismiss
+// a printer a scan found and nobody has put into use: Use this printer, Test connection, Dismiss
 function foundItem(p) {
   const box = boxFor("printer:" + p.serial);
   const test = SW.btn([E("span", "printers-long", SW.t("printers_test")), E("span", "printers-short", SW.t("printers_test_short"))], { name: SW.t("printers_test_name", { name: p.name }), run: (e) => testConnection(p, box, e.currentTarget) });
@@ -697,7 +697,7 @@ function foundItem(p) {
   return X("div", { class: "coll__item", role: "rowgroup", "data-id": keyOf(p.serial), data: { state: "off" } }, row, note);
 }
 
-// ----- the collection (03 5.2) -----
+// ----- the collection -----
 const COLUMNS = [["expand", "common_details", 0, true], ["title", "printers_col_printer", 1], ["address", "common_address", 3], ["status", "common_field_state", 1],
   ["slots", "printers_col_slots", 1], ["connection", "printers_col_connection", 3], ["actions", "common_actions", 1, true]];
 function printerTable(found, configured) {
@@ -730,7 +730,7 @@ function printerTable(found, configured) {
   });
   return table;
 }
-// the document title of an open row (03 1.2): "<name> · <hub>"
+// the document title of an open row: "<name> · <hub>"
 function expandedTitle() {
   const a = addressNow(), p = a.id && !a.what && S.printers.list.find((x) => x.serial === a.id);
   return p ? p.name : null;
@@ -745,7 +745,7 @@ new MutationObserver(() => { if (titleOverride && tabNow() === PRINTERS && docum
   .observe(document.querySelector("title") || document.head, { childList: true, characterData: true, subtree: true });
 window.addEventListener("hashchange", () => { if (tabNow() !== PRINTERS) { stopRowLives(); titleOverride = null; if (addonOut) addonOut.replaceChildren(); } });
 
-// the header: what is there, and the ways to the rest (03 5.1)
+// the header: what is there, and the ways to the rest
 function printersMeta(list, found) {
   const on = list.filter((p) => p.configured), up = on.filter((p) => stateOf(p) === "connected").length;
   const parts = [E("span", null, SW.t("printers_meta_total", { count: on.length })),
@@ -845,7 +845,7 @@ function printersList() {
   later(readRegion(body, PRINTERS, () => api("printers/states"), (r) => paintLive(body, r)));
   return body;
 }
-// the states again every 10 s while the section is shown (03 2.7); a hidden tab waits and reads at once when it is shown
+// the states again every 10 s while the section is shown; a hidden tab waits and reads at once when it is shown
 function poll() {
   clearTimeout(pollTimer);
   if (tabNow() !== PRINTERS) return;
@@ -855,7 +855,7 @@ function poll() {
     poll();
   }, 10000);
 }
-// Lock now and Unlock draw the list again at once, keeping each live view and its picture: addresses and serials go away or come back (03 2.1). An address that names a printer
+// Lock now and Unlock draw the list again at once, keeping each live view and its picture: addresses and serials go away or come back. An address that names a printer
 // (#printers/<serial>) still opens its row while Locked, as the person typed it; the serial is never written into the page or the address by this script then
 document.addEventListener("sw:lock", () => {
   if (tabNow() !== PRINTERS || !listEl || !listEl.isConnected || !listEl._drawn || lockedNow() === drawnLocked) return;
@@ -867,12 +867,12 @@ document.addEventListener("visibilitychange", () => {
   poll();
 });
 
-// ----- Add a printer (03 5.6): a drawer at #printers/add; its fields are the field component's, so a refusal shows at the field it names -----
+// ----- Add a printer: a drawer at #printers/add; its fields are the field component's, so a refusal shows at the field it names -----
 const needed = (key) => (v) => (v.trim() ? null : SW.t(key));
 const portCheck = (v) => (/^\d+$/.test(v.trim()) && Number(v) >= 1 && Number(v) <= 65535 ? null : SW.t("common_error_port"));
 const secretAttrs = { autocapitalize: "off", spellcheck: "false" };
 const addressAttrs = { inputmode: "url", autocapitalize: "off", autocorrect: "off", spellcheck: "false" };
-// the Hub's refusals of an add, in the words of 03 5.6; any other text is shown as sent
+// the Hub's refusals of an add, in the words of the design, Hub page; any other text is shown as sent
 function addError(field, message) {
   let x;
   if ((x = /^the printer at (.+) names itself (.+), not (.+): check the address$/.exec(message))) return SW.t("printers_add_error_itself", { address: x[1], reported: x[2], expected: x[3] });
@@ -1050,7 +1050,7 @@ function openAddDrawer(opener) {
   show(0);
   return d;
 }
-// 03 5.6: leave the drawer at the new row and use its existing mapping action or focus Test connection.
+// the design, Hub page: leave the drawer at the new row and use its existing mapping action or focus Test connection.
 async function afterAdd(r, mapNow = false) {
   if (lockedNow()) history.replaceState(null, "", "#printers");
   else history.replaceState(null, "", `#printers/${encodeURIComponent(r.serial)}`);
@@ -1074,7 +1074,7 @@ async function afterAdd(r, mapNow = false) {
   if (test) test.focus({ preventScroll: true });
 }
 
-// ----- Find Klipper printers (03 5.4, 5.8): one scan; what it finds joins the list's found group -----
+// ----- Find Klipper printers: one scan; what it finds joins the list's found group -----
 function scanRefused(box, subnet, e) {
   const m = e.message, d = e.data || {};
   let x;
@@ -1141,12 +1141,12 @@ function addonBlock() {
   const show = SW.btn(SW.t("printers_addon_show"), { run: () => showCommands(box, show) });
   return card(SW.t("printers_addon_title"), E("p", "muted", SW.t("printers_addon_text")), E("div", "actions", show), box, addonOut || (addonOut = E("div", "printers-addon")));
 }
-// the two tool cards, side by side on a desktop (03 5.1); only with Klipper on
+// the two tool cards, side by side on a desktop; only with Klipper on
 function toolCards() {
   return S.printers.klipper ? E("div", "printers-tools", scanBlock(), addonBlock()) : null;
 }
 
-// only one family is on: the other one's words are not on the page, and one quiet line says so (03 5.9)
+// only one family is on: the other one's words are not on the page, and one quiet line says so
 function familyNote() {
   const P = S.printers;
   if (P.bambu && P.klipper) return null;
@@ -1156,7 +1156,7 @@ function familyNote() {
 function printersOff() {
   return switchedOff("printers");
 }
-// where the address points: a row open, a drawer on it (03 1.2); the address is read after the regions are in the page
+// where the address points: a row open, a drawer on it; the address is read after the regions are in the page
 async function followAddress() {
   const a = addressNow(), wantsMap = !a.id && a.what === "map";
   const p = wantsMap ? S.printers.list.find((x) => x.configured) : a.id && S.printers.list.find((x) => x.serial === a.id);

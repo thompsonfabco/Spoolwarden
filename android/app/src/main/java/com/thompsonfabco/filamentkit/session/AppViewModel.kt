@@ -76,7 +76,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    /** The switch "Alerts on this phone", the last event the watching service saw and the banners put away (R80 E4). */
+    /** The switch "Alerts on this phone", the last event the watching service saw and the banners put away. */
     val alertsStore = AlertsStore.create(app)
 
     /** The banners, the Alerts list and the running-low count while the app is open; the test alert shows as a notification. */
@@ -86,7 +86,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         hub = session.config.map { c -> c?.takeIf { it.isPaired() }?.fingerprint },
     )
 
-    /** The Weigh Station voice group (R88): its state, and the saves and the Test the Settings page asks for. */
+    /** The Weigh Station voice group: its state, and the saves and the Test the Settings page asks for. */
     internal val voice = VoiceModel(viewModelScope, { session.api.value }, router::report)
 
     private val _alertTap = MutableStateFlow<AlertTarget?>(null)

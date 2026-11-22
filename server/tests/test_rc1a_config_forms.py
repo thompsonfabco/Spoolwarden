@@ -1,4 +1,4 @@
-"""RC1a (R85 section 1.4-1.5): config.py reads config.xml first, falls back to config.json, and saves both forms."""
+"""RC1a: config.py reads config.xml first, falls back to config.json, and saves both forms."""
 import json
 import os
 import stat
@@ -218,7 +218,7 @@ def test_the_rollback_cleans_modules_in_both_forms(etc):
 
 
 def test_a_hold_set_through_the_state_is_seen_in_state_json(opt):
-    """R582 H2: the release `update --rollback` goes to reads only state.json; its timer must see the hold."""
+    """The release `update --rollback` goes to reads only state.json; its timer must see the hold."""
     from filament_kit import updates
     updates._write_state(previous=None, held="9.9.9")
     assert json.loads((opt / "state.json").read_text(encoding="utf-8")).get("held") == "9.9.9"
@@ -278,7 +278,7 @@ def test_config_json_is_v062s_shape_and_the_state_helper_sidecar_is_not_involved
 
 
 def test_a_damaged_state_xml_is_kept_aside_not_written_over(opt, monkeypatch):
-    """R582 M2: the read notes it, so the next write keeps the damaged file as state.xml.unreadable."""
+    """The read notes it, so the next write keeps the damaged file as state.xml.unreadable."""
     from filament_kit import updates
     monkeypatch.setattr(statexml, "_unreadable", {})
     (opt / "state.xml").write_bytes(b"<state")
@@ -291,7 +291,7 @@ def test_a_damaged_state_xml_is_kept_aside_not_written_over(opt, monkeypatch):
 
 
 def test_a_json_changed_after_a_rollback_wins_over_the_older_xml(etc):
-    """R582 H1: config.xml records the hash of the config.json it was saved with; another JSON is a newer one."""
+    """Config.xml records the hash of the config.json it was saved with; another JSON is a newer one."""
     config.save({"port": 1, "modules": {"server": True}})
     (etc / "config.json").write_text(json.dumps({"port": 2, "modules": {"server": True, "station": True}}),
                                      encoding="utf-8")                      # what an older release writes
@@ -310,7 +310,7 @@ def test_an_xml_without_a_hash_and_a_matching_hash_are_read_as_before(etc):
 
 
 def test_a_restored_config_xml_is_read_by_the_service():
-    """R582 M1: the restore policy and `modules apply` treat config.xml as they do config.json."""
+    """The restore policy and `modules apply` treat config.xml as they do config.json."""
     from filament_kit import backup
     it = backup.Item(root="etc/filament-kit", path="config.xml", kind="file", mode=0o666, owner="x", group="x")
     assert backup._policy(it) == ("root", "filament-kit", 0o640)
@@ -328,7 +328,7 @@ def test_install_sh_reads_and_owns_both_forms():
     t = _text("install/install.sh")
     assert 'config.xml" ] || [ -f "$ETC/config.json"' in t                  # the first-install test
     assert "for cf in config.xml config.json; do" in t and 'chmod 640 "$ETC/$cf"' in t
-    assert "config.load_raw()" in t and "ElementTree" not in t        # the Hub's Python reads the XML (R85 1.6)
+    assert "config.load_raw()" in t and "ElementTree" not in t        # the Hub's Python reads the XML
 
 
 def test_the_cli_script_reads_the_xml_state_then_the_json_one():

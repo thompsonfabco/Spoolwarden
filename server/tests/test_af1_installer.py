@@ -1,4 +1,4 @@
-"""AF1: install.sh's new parts (R82 sections 1 and 3): the first question, the port decision and its questions, the
+"""AF1: install.sh's new parts: the first question, the port decision and its questions, the
 port written at a first install, the first-run file; and apply's Guided Setup ending and addresses. The shell pieces are
 cut out of install.sh and run with bash (a pseudo-terminal where a terminal is the point); Linux only."""
 import io
@@ -80,7 +80,7 @@ def test_install_sh_is_valid_bash():
 
 # ---- the first question
 
-GUIDED_BLOCK = between("# The first question (R82 section 3)", '    ASKED="features"').rsplit("\nif [ -z", 1)[0] + "\n"
+GUIDED_BLOCK = between("# The first question:", '    ASKED="features"').rsplit("\nif [ -z", 1)[0] + "\n"
 
 
 def guided(answers: str, default: str = "y", first=1, pre: str = "") -> tuple[str, str]:

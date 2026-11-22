@@ -1,4 +1,4 @@
-"""The Updates section of the Hub page (03 12.1, 12.2) in a real headless browser: Check now and Update to <latest> are the
+"""The Updates section of the Hub page in a real headless browser: Check now and Update to <latest> are the
 section header's buttons (as Overview and Slicer presets have theirs), and the Features pointer in the Checking row is an
 inline text link. Served with the data of test_hub_page_audit.py. The same skip rules as the page audit."""
 from __future__ import annotations

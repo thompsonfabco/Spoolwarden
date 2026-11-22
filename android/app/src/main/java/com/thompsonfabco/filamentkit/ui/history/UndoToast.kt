@@ -63,7 +63,7 @@ internal fun undoOfferFor(spoolId: Int, result: SpoolResult, serial: Long): Undo
         is SpoolResult.WeightUpdated -> setOf(UndoKinds.WEIGHED)
         is SpoolResult.Moved -> setOf(UndoKinds.MOVED)
         SpoolResult.MarkedEmpty -> setOf(UndoKinds.EMPTIED)
-        // a tag link writes a kind the contract does not name (R84 12.3: it may not be undoable at all)
+        // a tag link writes a kind the contract does not name (it may not be undoable at all)
         SpoolResult.TagLinked, SpoolResult.TagMoved -> UndoKinds.ALL
         is SpoolResult.Loaded, is SpoolResult.LoadedUnconfirmed, is SpoolResult.Waiting -> setOf(UndoKinds.LOADED)
     }

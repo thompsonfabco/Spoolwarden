@@ -1,4 +1,4 @@
-"""The 5-minute loop: disk, low spools, the Weigh Station, Checks rows, retention (R80 sections 3, 6, 7, E2, E3)."""
+"""The 5-minute loop: disk, low spools, the Weigh Station, Checks rows, retention."""
 from collections import namedtuple
 from datetime import datetime, timezone
 

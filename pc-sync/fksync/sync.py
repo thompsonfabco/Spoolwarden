@@ -10,7 +10,7 @@
      Then the same build is installed again without the live-hash gate. If any differs, it was edited
      in Bambu Studio since: the marker is dropped and the normal path follows (upload, rebuild). The
      half-installed build is then kept as dirs.partial and named in every live upload
-     (`partial=<stamp>`, `state.json` `partial: {stamp, at}`) until an install succeeds (ruling S28):
+     (`partial=<stamp>`, `state.json` `partial: {stamp, at}`) until an install succeeds:
      its values in the live folder are not in-app edits, for the server nor for the installer.
   4. The user filament folder and system/BBL/filament are uploaded when their tree hash differs from
      the server's (zip limits are checked before anything is sent). An upload the server rejects
@@ -28,7 +28,7 @@
   6. No build -> `no_build` (a build is requested, at most every 15 min). The build already
      installed -> `up_to_date`, unless a generated preset was changed in Bambu Studio since that
      install (it differs from its dirs.installed copy by `inapp.diff`, or is gone); then a rebuild is
-     requested like below (rulings S29b, S31: Studio's own .info rewrites, bookkeeping keys and the
+     requested like below (Studio's own .info rewrites, bookkeeping keys and the
      owner's own presets never ask for one; they are only uploaded). A build made from other live presets -> a rebuild is requested
      (`rebuild_requested`), re-sent only after 15 min (`waiting` until then; `state.json`
      `requested: {live_hash, at}`). A build made from exactly these live presets -> download,

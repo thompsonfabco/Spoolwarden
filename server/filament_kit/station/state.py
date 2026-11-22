@@ -31,9 +31,9 @@ def panel_port_from_env() -> int:
         return 5004
 
 
-# the live voice values (R88 2.5): the ranges the station takes, and where each one sits in `settings`
+# the live voice values: the ranges the station takes, and where each one sits in `settings`
 VOICE_RANGES = {"speaker": (0, 903), "speed": (50, 200), "volume": (0, 100)}
-VOICE_SPEED_STEP = 10      # the speed goes in steps of 10 (R88 2.5): the station checks it again
+VOICE_SPEED_STEP = 10      # the speed goes in steps of 10: the station checks it again
 VOICE_KEYS = {"speech": "speech", "speaker": "voice_speaker", "speed": "voice_speed", "volume": "speaker_volume"}
 # the sentences of the voice routes' refusals (the string catalogue's, the English as the fallback: RC9 / RG1 add the keys)
 _t = _station_page.catalogue_text
@@ -70,12 +70,12 @@ def settings_from_env() -> dict:
         "panel_flash": os.environ.get("STATION_PANEL_FLASH", "1") != "0",
         # the panel is wired the other way round (yellow on D2/D6, red on D1/D5): swap the buttons and lamps
         "panel_swap": os.environ.get("STATION_PANEL_SWAP", "0") == "1",
-        # the panel's carrier (R88 4.3): usb (default) or wifi, which turns the TLS listener on `panel_port` on (WL4 writes both)
+        # the panel's carrier: usb (default) or wifi, which turns the TLS listener on `panel_port` on (WL4 writes both)
         "panel_link": "wifi" if os.environ.get("STATION_PANEL_LINK", "usb") == "wifi" else "usb",
         "panel_port": panel_port_from_env(),
         "speaker_volume": volume_from_env(),  # the C3 panel's speaker, percent
         # the voice's speaker number (Piper's many-speaker voice only) and speaking speed in percent: only the Hub sets
-        # these (`live`, R88 2.5), so no drop-in key reads them
+        # these (`live`), so no drop-in key reads them
         "voice_speaker": 0,
         "voice_speed": 100,
         # the intake flow: no progress this long and it goes back to idle; a recognition (local AI, then Claude)
@@ -207,7 +207,7 @@ def ensure_cert(folder: Path | None = None) -> tuple[Path, Path, str]:
 
 
 def panel_kind() -> str | None:
-    """How the panel is connected now: "usb", "wifi" (R88 4.3) or None when there is none."""
+    """How the panel is connected now: "usb", "wifi" or None when there is none."""
     ser = panel["ser"]
     return None if not ser else "wifi" if getattr(ser, "wifi", False) else "usb"
 

@@ -1,8 +1,8 @@
-// The Features section (03 9): the setup choice cards, the features collection and applying again; a change is shown in
+// The Features section: the setup choice cards, the features collection and applying again; a change is shown in
 // the preview drawer first. Loaded after setup.js; everything from the server goes in through textContent, as there.
 "use strict";
 
-// the setup names in the catalogue, in the order 03 9.1 gives them
+// the setup names in the catalogue, in the order the design, Hub page gives them
 const SETUPS = [["server", "server"], ["all-in-one", "all_in_one"], ["station", "station"]];
 const setupKey = (mode) => (SETUPS.find(([m]) => m === mode) || [mode, mode])[1];
 const setupName = (mode) => (mode === "custom" ? SW.t("features_setup_custom") : SW.t("features_setup_" + setupKey(mode)));

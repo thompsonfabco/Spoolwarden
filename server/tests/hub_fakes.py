@@ -1,5 +1,5 @@
-"""A fake Hub for the command-line tests of the spool, catalog, device and printer slot commands (R83 10.5): answers
-built from the contract's field lists (R83 section 10), no network. Example names only."""
+"""A fake Hub for the command-line tests of the spool, catalog, device and printer slot commands: answers
+built from the contract's field lists, no network. Example names only."""
 from __future__ import annotations
 
 import json
@@ -42,7 +42,7 @@ class FakeApi:
 
 
 class FakePage:
-    """`page(method, route, body=None)` as the Hub page's routes (R83 10.2) are called by the device commands."""
+    """`page(method, route, body=None)` as the Hub page's routes are called by the device commands."""
 
     def __init__(self, answers: dict):
         self.answers, self.calls = dict(answers), []
@@ -58,7 +58,7 @@ class FakePage:
 
 
 def spool_view(n: int = 12, **kw) -> dict:
-    """The spool view of R83 10 (`inventory.spool_view` plus `loaded` and `low`)."""
+    """The spool view of the Hub (`inventory.spool_view` plus `loaded` and `low`)."""
     view = {"id": n, "location": "Shelf A", "remaining_g": 640.0, "net_g": 1000.0, "tare_g": 180.0, "tag": None,
             "state": "opened", "filament_id": 3, "vendor": "Acme", "name": "PLA Red", "material": "PLA",
             "color_hex": "cc0000", "lot": None, "loaded": None, "low": False}

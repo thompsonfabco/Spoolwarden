@@ -1,4 +1,4 @@
-"""The Spools section of the Hub page (R83 sections 1 and 10.2): the spools as a list, one spool's facts, and the four
+"""The Spools section of the Hub page: the spools as a list, one spool's facts, and the four
 changes the page makes to one (weight, place, tag, empty), each as a dry run first.
 
     GET  spools {q, filter, offset, limit}   {spools: [spool view], total, offset, has_more, spoolman_url?}: the spools that
@@ -14,7 +14,7 @@ changes the page makes to one (weight, place, tag, empty), each as a dry run fir
     GET  spools/last-tag                 {tag: {uid, read_at, source}?}: the newest tag any reader knows. No code
     POST spools/{id}/link {code, tag, dry_run}   link the tag to the spool; answers {spool, before, dry}. 409 when the
                                          tag or the spool already has another one
-    POST spools/{id}/return {code}       send a checked-out spool back (R88): {spool, event, location}; 409 {error, code:
+    POST spools/{id}/return {code}       send a checked-out spool back: {spool, event, location}; 409 {error, code:
                                          "not_checked_out"} when it is not checked out
 
 The spool view is `inventory.spool_view` with `loaded` ({printer_id, printer, slot} or null) and `low` (an opened spool
@@ -40,7 +40,7 @@ NOT_CHECKED_OUT = "This spool is not checked out."
 
 
 def filters() -> list[str]:
-    """The filters this Hub applies: `checked_out` is one when the kit has the return (R88 CO1)."""
+    """The filters this Hub applies: `checked_out` is one when the kit has the return."""
     return [*FILTERS, "checked_out"] if hasattr(inventory, "return_spool") else list(FILTERS)
 SPOOLMAN_PORT = 7912
 LOOPBACK = {"", "localhost", "127.0.0.1", "::1"}
@@ -164,7 +164,7 @@ def routes(page) -> list[tuple]:
         for key in ("gross", "remaining"):
             if b.get(key) is not None and num(key) is None:
                 raise inventory.SpoolEditError(f"{key} must be a number of grams", key)
-        home = {"home": b["home"]} if b.get("home") is not None else {}        # the kit's home change (R88 CO1)
+        home = {"home": b["home"]} if b.get("home") is not None else {}        # the kit's home change
         out = inventory.edit_spool(client, spool_id, gross=num("gross"), remaining=num("remaining"), location=location,
                                    empty=bool(b.get("empty")), dry=b.get("dry_run") is not False, auto_location=bool(auto),
                                    locations=inventory.known_locations(client, rules.choosable()), rules=rules, **home)

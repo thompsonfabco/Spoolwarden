@@ -1,4 +1,4 @@
-"""Checked-out spools on the Hub page's Spools section (R88 section 1, points 6 and 7; CO4): the route (`filters`, `filter=checked_out`,
+"""Checked-out spools on the Hub page's Spools section: the route (`filters`, `filter=checked_out`,
 `POST spools/{id}/return`, the home change through `POST spools/{id}`) and the section in a real headless browser (the chip
 "Checked out (<n>)", the rows with the place, Home and since, Return and its Undo toast, the Home line with Change home, the empty
 state, and an older Hub that offers none of it), in the four looks at 1280 and 390 px.
@@ -213,7 +213,7 @@ await settle(() => !rows().length && $(".empty"), "the empty state");
 out.empty = text($(".empty"));
 out.finalChips = chips();
 """.replace("__A__", str(made["A"])).replace("__B__", str(made["B"])).replace("__C__", str(made["C"])).replace("__D__", str(made["D"])))
-    assert page["chips"] == [T("common_sealed"), T("spool_state_opened"), "In a printer", "Checked out (3)", "Running low"]    # design order: 03 16.2
+    assert page["chips"] == [T("common_sealed"), T("spool_state_opened"), "In a printer", "Checked out (3)", "Running low"]    # design order: the design, Hub page
     assert page["ids"] == [made["A"], made["B"], made["C"]] and page["count"] == "3 spools"
     assert "In Workshop X1 – AMS A1" in page["where"]["A"] and "Home: Rack 1" in page["where"]["A"] and "since 2026-11-20" in page["where"]["A"]
     assert "Home: Rack 2" in page["where"]["B"] and "since" not in page["where"]["B"]

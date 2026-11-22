@@ -1,4 +1,4 @@
-/* Spoolwarden shared components (02 2-10). Base = Console; profile groups at end (08 9). */
+/* Spoolwarden shared components. Base = Console; profile groups at end. */
 /* base */
 *,*::before,*::after{box-sizing:border-box}
 html{height:100%;-webkit-text-size-adjust:100%}
@@ -564,7 +564,7 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
   :root[data-look="palette"] .sheet--detail .detail__back{display:inline-flex}
 }
 /* profile: nav=list */
-/* tablet+: left pane; phone: root list (02 2.3) */
+/* tablet+: left pane; phone: root list */
 @media (min-width:601px){
   :root[data-look="panes"] .shell{grid-template-columns:min(var(--list-w),40%) minmax(0,1fr)}
 }
@@ -595,7 +595,7 @@ dialog>.detail .detail__body{grid-template-columns:minmax(0,1fr)}
   :root[data-look="panes"] .shell__main{padding-bottom:var(--s7)}
   :root[data-look="panes"] body[data-ai] .shell .nav__more{display:grid;grid-template-columns:auto minmax(0,1fr);width:100%;margin-top:var(--s4);border:var(--hairline) solid var(--border);border-radius:var(--r);background:var(--surface)}
 }
-/* a tablet keeps the light/dark switch on the top bar's one row (02 4.3) */
+/* a tablet keeps the light/dark switch on the top bar's one row */
 @media (min-width:601px) and (max-width:1024px){
   :root[data-look="panes"] .topbar{flex-wrap:nowrap}
   :root[data-look="panes"] .topbar__brand{flex:0 1 auto;min-width:0;overflow:hidden}

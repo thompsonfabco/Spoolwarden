@@ -1,4 +1,4 @@
-"""The Hub page's Logs section with Activity (R84 sections 2, 3.3, 8, 9.3), in a real headless browser: the choice Activity | Service
+"""The Hub page's Logs section with Activity, in a real headless browser: the choice Activity | Service
 logs, the Activity table (when, who, what, a link, Undo) with its two filters and Show more, Undo in the rows (done, refused, locked),
 Collect a Hub report (start, download), the service logs as they were (still behind the setup code), the empty state, and the table
 readable in all four looks at 1280 and 390 px. The Hub's routes for activity, undo and report are not in this tree yet (HD6), so a

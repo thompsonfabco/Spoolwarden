@@ -236,7 +236,7 @@ internal fun changesOf(predicted: JsonObject, corrected: JsonObject): List<Corre
 internal fun recordIdOf(key: String?): String? = key?.substringBefore('.')?.trim()?.ifEmpty { null }
 
 /**
- * A row of Corrections waiting. The Hub leaves `record` out when the record is gone (R87 3), so no record means gone:
+ * A row of Corrections waiting. The Hub leaves `record` out when the record is gone, so no record means gone:
  * [CorrectionRow.recordKept] is false and the row shows the thumbnail alone.
  */
 internal fun rowOf(e: CorrectionEntry): CorrectionRow {

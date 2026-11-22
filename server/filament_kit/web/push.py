@@ -1,5 +1,5 @@
 """Web Push for the phone web app. Imported only when `web.push` is true (default false); with it off no code in this
-module runs and the page shows no push control. It sends the Hub's alert events (R80): one notification per event, a
+module runs and the page shows no push control. It sends the Hub's alert events: one notification per event, a
 condition once while it lasts, and an alert that ends is replaced by the ending event's own quiet notification.
 
 Needs internet egress from the web unit to the browsers' push services (Apple / Google / Mozilla / Windows): the
@@ -34,7 +34,7 @@ REPLACE_TTL = 3600      # seconds a replacement (the notification of an ended al
 FEED_RETRY = 10.0       # seconds before asking again after the Hub did not answer
 TEST_EVERY = 30.0       # seconds between "test" alerts
 TEST_BUDGET = 20.0      # seconds the test alert may take in all, however many subscriptions
-REPLACED_BY_ENDING = ("print-paused", "device-down")   # the conditions whose ending is news (R80 20:48): not storage, not low
+REPLACED_BY_ENDING = ("print-paused", "device-down")   # the conditions whose ending is news: not storage, not low
 TAG_CONDITION, TAG_EVENT = "sw-condition-", "sw-event-"   # the notification tags alerts.js uses, so the page can tidy up
 NO_TOPIC: set[str] = set()   # push services (host) that refused the Topic header: it is left out for them from then on
 NOT_INSTALLED = "pywebpush is not installed on the server (pip install 'filament-kit[push]'); alerts cannot be sent"
@@ -144,7 +144,7 @@ class Store:
             k = sub["info"]["keys"]
             el = ET.SubElement(root, "sub", endpoint=events._text(ep), p256dh=events._text(k["p256dh"]),
                                auth=events._text(k["auth"]), created=f"{sub.get('created') or 0:.0f}")
-            if sub.get("lang"):                  # RC4: the language in use on that phone (R85 3.8)
+            if sub.get("lang"):                  # RC4: the language in use on that phone
                 el.set("lang", sub["lang"])
         data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
         f = self.path
@@ -277,7 +277,7 @@ def send_all(store: Store, title: str, body: str, tag: str, *, sender, url: str 
     subscriptions left after it are not tried, but the first one always is. `replace`: the notification of an ended
     alert: same tag, silent, no new alert sound (`renotify` false), a short TTL. Every push carries a Topic made from
     its tag; a service that answers 4xx to it gets the push once more without it and, when that is taken, is not sent
-    the Topic again. `texts(lang)`: the (title, body) in a phone's language (R85 3.8), asked once per language among the
+    the Topic again. `texts(lang)`: the (title, body) in a phone's language, asked once per language among the
     subscriptions that sent one; when it fails or gives nothing, those phones get `title` and `body`."""
     demo.stop()                 # no push in the demo: not even the subscriptions are read
     subs = store.subs()
@@ -394,7 +394,7 @@ class Feed(threading.Thread):
                  url=event_url(self.url.rstrip("/"), event), texts=lambda lang: self.texts_in(event, lang))
 
     def texts_in(self, event: dict, lang: str) -> tuple[str, str] | None:
-        """(title, body) of `event` in a phone's language: the same event asked of the Hub again with `lang` (R85 3.8: the Hub
+        """(title, body) of `event` in a phone's language: the same event asked of the Hub again with `lang` (the Hub
         writes its texts in the language asked, `?lang=<code>`). A Hub that does not translate yet answers its own words, and
         None (no such event in the answer) leaves the texts already built."""
         eid = event.get("id")

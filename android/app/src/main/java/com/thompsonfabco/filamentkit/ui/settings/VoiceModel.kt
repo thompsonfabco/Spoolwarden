@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * The Weigh Station voice group's state (R88 2026-11-22 01:35). One per app: the Settings list reads [state] to know
+ * The Weigh Station voice group's state. One per app: the Settings list reads [state] to know
  * whether the group exists, the group's page edits through it. [onProblem] takes a changed certificate and a revoked
  * token to the pairing screen, as every other call does. The result of Test or a refused save comes out of [said].
  */

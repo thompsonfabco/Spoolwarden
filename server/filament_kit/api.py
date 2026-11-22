@@ -82,7 +82,7 @@ def _to_response(e: Exception) -> JSONResponse:
         return _err(404 if e.code == "not_found" else 502, e.code, e.message, read_id=e.read_id)
     if isinstance(e, TagConflict):
         return _err(409, "tag_conflict", str(e), reason=e.reason, other_spool=e.other)
-    if isinstance(e, inventory.NotCheckedOut):      # a return, or a home change, of a spool that is not checked out (R88 1.7)
+    if isinstance(e, inventory.NotCheckedOut):      # a return, or a home change, of a spool that is not checked out
         return _err(409, "not_checked_out", str(e))
     if isinstance(e, AddFailed):
         return _err(502, "spoolman_error", str(e), partial_spool_ids=e.partial.spool_ids)
@@ -176,8 +176,8 @@ STATION_PREFIX = "/api/station/"  # all a `pair --station` token may call (and /
 WEB_ROUTES = (
     ("GET", "/api/printers"),
     ("POST", "/api/printers"),
-    ("POST", "/api/printers/scan"),     # R83 10.1: the web app's Add printer search
-    ("POST", "/api/printers/test"),     # R87 AP1: test a Klipper printer before adding (under printer_changes)
+    ("POST", "/api/printers/scan"),     # the web app's Add printer search
+    ("POST", "/api/printers/test"),     # test a Klipper printer before adding (under printer_changes)
     ("GET", "/api/printers/{id}"),
     ("PATCH", "/api/printers/{id}"),
     ("DELETE", "/api/printers/{id}"),
@@ -221,12 +221,12 @@ WEB_ROUTES = (
     ("GET", "/api/export/{set}.csv"),
     ("GET", "/api/hub"),
     ("GET", "/api/voice"),
-    ("POST", "/api/spools/{id}/return"),    # R88 CO2: the web app's Return (the spool-change rule: no printer switch)
+    ("POST", "/api/spools/{id}/return"),    # the web app's Return (the spool-change rule: no printer switch)
 )
 _WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
 HOME_WEB_ROUTES = (("PATCH", "/api/voice"), ("POST", "/api/voice/test"))
 WEB_ONLY_PREFIX = "/api/profiles/web/"  # the web unit's preset writes: no phone or PC calls them
-WEB_ONLY_PATHS = ("/api/events/web",)   # the web unit's hand-over of its spool events (R80 E1)
+WEB_ONLY_PATHS = ("/api/events/web",)   # the web unit's hand-over of its spool events
 
 VIEWER_ROUTES = (
     ("GET", "/api/info"),
@@ -288,7 +288,7 @@ def _is_intake_device(device: str) -> bool:
 
 def _actor_name(actor: dict, device: str) -> str:
     """The name of the device an event is written for, looked up when the first event is written (`event_sink.acting`).
-    The command line's own pairing (CLI_DEVICE, the one `spoolwarden` asks this server with) writes as `cli` (R84 1.2):
+    The command line's own pairing (CLI_DEVICE, the one `spoolwarden` asks this server with) writes as `cli`:
     the actor becomes {type: cli} here, before the event takes it."""
     name = _device_name(device)
     if name == CLI_DEVICE:
@@ -313,7 +313,7 @@ def _viewer_may(method: str, path: str) -> bool:
 # The printer writes a web token may make (add, edit, forget). The kit's own phone web app (the built-in pairing
 # INTAKE_DEVICE, home network only) always may; the web module's (its public address) only while the owner's switch
 # "Allow printer changes from the public address" (config web.printer_changes) is on. The web module checks the same
-# switch; this holds it even if that internet-facing process does not (review R111 note 1).
+# switch; this holds it even if that internet-facing process does not.
 _PRINTER_WRITE = re.compile(r"/api/printers(?:/[^/]+)?")
 PUBLIC_PRINTER_CHANGES_OFF = ("Printer changes from the public address are off. Turn on \"Allow printer changes from "
                               "the public address\" on the setup page (Settings, General), or use the page on the home "
@@ -357,7 +357,7 @@ def _authed(fn):
         if scope != "web" and (path.startswith(WEB_ONLY_PREFIX) or path in WEB_ONLY_PATHS):
             return _err(403, "forbidden", "this route is for the web unit only")
         request.state.device = device
-        # what this request changes is written as an event done by this device (R80 E1); only a change writes one
+        # what this request changes is written as an event done by this device; only a change writes one
         # the name is looked up when an event is written, not for every request (pairing.devices() reads a file)
         actor = {"type": "device", "id": device}
         if request.method not in ("GET", "HEAD", "OPTIONS"):
@@ -472,7 +472,7 @@ def _hardware_view() -> dict:
 
 
 PATCH_KEYS = frozenset({"name", "address", "port", "access_code", "api_key", "unpin"})
-# What a paired device may not do alone (review R103): make the server send a secret it holds to a host the device
+# What a paired device may not do alone: make the server send a secret it holds to a host the device
 # names. A Bambu address change keeps the certificate pin, so the stored Access Code only goes to the same printer.
 NEEDS_CODE_TO_UNPIN = ("trusting a new certificate needs the printer's Access Code in the same request "
                        "(access_code): the stored one is never sent to a certificate the kit hasn't seen")
@@ -743,7 +743,7 @@ def _printer_routes(printers) -> list[Route]:
                 raise BadRequest("unpin is for a Bambu printer", "unpin")
             if body["unpin"] is not True:
                 raise BadRequest("unpin must be true", "unpin")
-            if "access_code" not in body:      # R103: the stored code never goes to a certificate it hasn't seen
+            if "access_code" not in body:      # the stored code never goes to a certificate it hasn't seen
                 raise BadRequest(NEEDS_CODE_TO_UNPIN, "access_code")
             want["unpin"] = True
         if "api_key" in body:
@@ -773,7 +773,7 @@ def _printer_routes(printers) -> list[Route]:
                 other = registry.klipper_at(registry.load(), host, port)
                 if other is not None and other.serial != p.serial:
                     raise _Conflict(f"{registry.display_name(other)} is already at {host}:{port}")
-                # R103: Moonraker has no certificate pin, so a stored key would go to whatever answers there
+                # Moonraker has no certificate pin, so a stored key would go to whatever answers there
                 if p.api_key and "api_key" not in body:
                     raise BadRequest(NEEDS_KEY_TO_MOVE, "api_key")
             elif p.access_code and not p.cert_fp and "access_code" not in body:
@@ -1459,7 +1459,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     @_authed
     async def station_hello(request: Request):
         """`spoolwarden station pair` calls this once: the first authenticated call claims the station's token. The
-        station also tells the Hub about itself in the query (R82 section 2.3): `fp` (the SHA-256 of its certificate),
+        station also tells the Hub about itself in the query: `fp` (the SHA-256 of its certificate),
         `port` and `version`, or `port`, `version` and `plain` (why it has no certificate). The Hub keeps them with the
         station's pairing; a call with none of them (an older station) stores nothing and is still answered."""
         q = request.query_params
@@ -1535,7 +1535,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             remaining=_opt(body, "remaining", float), location=_opt(body, "location", str),
             empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, True), rules=rules(),
             home=_opt(body, "home", str)))
-        return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added (S3.9); `home` (R88): 409 not_checked_out
+        return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added (S3.9); `home`: 409 not_checked_out
 
     def returner(spool_id: int, *, grams: float | None = None, dry: bool = False, gross: float | None = None) -> dict:
         """`inventory.return_spool`, or the Klipper family's when the spool sits in one of its printers' slots (the
@@ -1555,7 +1555,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def spool_return(request: Request):
-        """`POST api/spools/{id}/return` (R88 1.7): a checked-out spool goes back to its home (the place the rules chose when
+        """`POST api/spools/{id}/return`: a checked-out spool goes back to its home (the place the rules chose when
         none was recorded) with no question and no body. `location` is where it went (None when the rules place it nowhere);
         `event_id` is its Undo. 409 not_checked_out otherwise."""
         sid = request.path_params["id"]
@@ -1577,7 +1577,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         offset, limit = inventory.page_args(request.query_params)
 
         def build() -> list[dict]:
-            try:                    # `filter`: sealed, opened, loaded, low or checked_out; the rows carry their `view` (R88 CO2)
+            try:                    # `filter`: sealed, opened, loaded, low or checked_out; the rows carry their `view`
                 return inventory.listing(sm, q, sealed, flt)
             except inventory.FilterError as e:
                 raise BadRequest(str(e), "filter") from None
@@ -1622,7 +1622,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def events_get(request: Request):
-        """The Hub's events (alerts_api.events_answer, R80 section 8): `since` (an id) or `since_at` (a time, UTC),
+        """The Hub's events (alerts_api.events_answer): `since` (an id) or `since_at` (a time, UTC),
         `wait` up to 55 s, `kinds` (prefixes, comma separated), `limit`, `alert=1` (only what an alert type that is
         on covers) and `client` (the Hub page's browser id, for its test alert)."""
         q = request.query_params
@@ -1656,7 +1656,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def events_web(request: Request):
-        """The web unit's own spool events, handed over (R80 E1): only `spool.*` kinds; the Hub gives the id, keeps the
+        """The web unit's own spool events, handed over: only `spool.*` kinds; the Hub gives the id, keeps the
         `at` and sets the actor (`device` for the phone web app, `connector` for the connector's tools)."""
         body = await _json(request)
         items = body.get("events")

@@ -1,4 +1,4 @@
-/* Alerts on the Hub page: the Running low card (03 4.2), the Storage use panel (03 4.2) and the Settings > Alerts group (03 10.13) */
+/* Alerts on the Hub page: the Running low card, the Storage use panel and the Settings > Alerts group */
 .overview__low:empty { display: none; }
 .low__list { list-style: none; margin: 0; padding: 0; display: grid; }
 .low__row { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) 0; border-top: var(--hairline) solid var(--border); min-width: 0; }

@@ -1,10 +1,10 @@
-// The Overview's two alert places (03 4.2): the Running low card with its "Running low" dialog (#overview/running-low) and the
+// The Overview's two alert places: the Running low card with its "Running low" dialog (#overview/running-low) and the
 // Storage row with its "Storage use" panel (#overview/storage-use). Loaded after setup_alertbar.js (its texts, axt). The Overview
 // calls ovLowCard() and ovStorageRows() / ovStorageFix(); the two addresses open by themselves (alertsPlace, below). Reads
 // only GET api/spools/low and GET api/storage-use; everything from the Hub goes in through textContent.
 "use strict";
 
-// ----- Running low (03 4.2): up to five rows in the card, every row in the dialog -----
+// ----- Running low: up to five rows in the card, every row in the dialog -----
 const LOW_CARD_ROWS = 5;
 const lowHex = (c) => (/^#?[0-9A-Fa-f]{6}$/.test(String(c || "")) ? "#" + String(c).replace("#", "") : null);
 function lowRow(s) {
@@ -20,7 +20,7 @@ function lowRow(s) {
         s.location ? h("span", { textContent: s.location }) : null)),
     stock);
 }
-// the Overview's card: nothing at all (an empty box) while the Hub has no spool low or no such route (03 4.3)
+// the Overview's card: nothing at all (an empty box) while the Hub has no spool low or no such route
 function ovLowCard() {
   const el = h("div", { class: "overview__low" });
   later(api("spools/low").then((d) => {
@@ -47,13 +47,13 @@ async function lowBody(region) {
   }
 }
 
-// ----- the Storage row and the panel (03 4.2): the row is the Hub's own check row (status key hub.storage, action storage_use) -----
+// ----- the Storage row and the panel: the row is the Hub's own check row (status key hub.storage, action storage_use) -----
 // the row's fix: opens the panel
 const ovStorageFix = () => h("div", { class: "actions" }, SW.btn(axt("alert_show_storage"), { action: "storage-show", run: (e) => openPlace("storage-use", e.currentTarget) }));
 
 // a link that closes the open dialog first (its address then opens the place)
 const axLink = (href, text, cls) => h("a", { href, class: cls, textContent: text, on: { click: (e) => { const d = e.currentTarget.closest("dialog"); if (d) d.close(); } } });
-// where to reduce an item (03 4.2): the Hub's item keys backups, photos, reader; events and logs have none
+// where to reduce an item: the Hub's item keys backups, photos, reader; events and logs have none
 function stuseWhere(it, keep) {
   const key = String(it.key || "");
   if (key === "backups") return axLink("#settings/backups", axt("storage_use_where_backups"), "btn");
@@ -91,7 +91,7 @@ function stuseFill(region) {
   return go();
 }
 
-// ----- the two addresses (03 1.2): #overview/storage-use and #overview/running-low open their dialog over Overview -----
+// ----- the two addresses: #overview/storage-use and #overview/running-low open their dialog over Overview -----
 // A place opens once; closing it puts the address back to #overview, and leaving the address (Back, another link) closes it. The
 // Storage use panel is a sheet on a phone. A button moves the address without a hash change, so the page behind is not drawn again.
 let axShown = null, axDlg = null;

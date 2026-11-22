@@ -27,7 +27,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** R87 (ruled 2026-11-22 00:55): the add guide has two address buttons, each naming its family, Bambu Lab first. */
+/** The add guide has two address buttons, each naming its family, Bambu Lab first. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w411dp-h800dp")
 class PrintersGuideButtonsTest {

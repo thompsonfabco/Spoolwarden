@@ -1,4 +1,4 @@
-"""The web twins of history and data (R84 9.4, HD8): the activity list, Undo, the health history, analytics and the three downloads of a
+"""The web twins of history and data: the activity list, Undo, the health history, analytics and the three downloads of a
 phone; the printers' usage by month. No network, no Hub: the kit API is a fake that records what it was asked."""
 from __future__ import annotations
 

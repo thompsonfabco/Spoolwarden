@@ -1,4 +1,4 @@
-"""Settings on the Hub page (design 09 S2.19, 03 section 10), in a real headless browser: nine groups in a fixed order with
+"""Settings on the Hub page (step S2.19, the design, Hub page), in a real headless browser: nine groups in a fixed order with
 the sub-navigation, one Save per group that sends its changed keys in one request (N2), the unsaved marks and the leave
 guard, the restart question, and on a phone the list of groups and one group at a time. The AUT-5 audit passes on every
 group at 320 and 1280 px, light and dark. The page is served with the data of test_hub_page_audit.py. The same skip rules
@@ -230,7 +230,7 @@ def test_the_audit_passes_on_the_groups_that_read_more_once_unlocked(hub_change,
 
 
 def test_a_second_submit_during_a_save_changes_nothing_and_the_save_reports_what_it_did(hub, monkeypatch, tmp_path):
-    """R332 HIGH 2: the second press used to empty the plan of the save under way, which then reported a saved group as failed."""
+    """The second press used to empty the plan of the save under way, which then reported a saved group as failed."""
     import time
     seen: list = []
     real = setup_helper.OPS["general_group"]
@@ -256,7 +256,7 @@ return { result: text($("#set-general .group__foot .result__text")), state: $("#
 
 
 def test_label_reader_sends_the_key_after_records_kept_and_a_secret_does_not_stay_once_accepted(hub, monkeypatch, tmp_path):
-    """R332 MED 1 and 2: a refused key does not turn the keys saved before it into 'not saved', and an accepted key leaves
+    """A refused key does not turn the keys saved before it into 'not saved', and an accepted key leaves
     the entry field even when a later key (the model, which restarts the Hub) is refused."""
     _switch_on("ai_intake", "local_intake")
     order: list = []

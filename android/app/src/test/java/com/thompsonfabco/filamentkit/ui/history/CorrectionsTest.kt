@@ -111,7 +111,7 @@ class CorrectionsTest {
     }
 
     @Test fun anEntryWithNoRecordIsOneWhoseRecordIsGone() {
-        // R87 3: the Hub leaves `record` out and sends `photos` 0 when the record is gone
+        // the Hub leaves `record` out and sends `photos` 0 when the record is gone
         val row = rowOf(entry("a", null).copy(photos = 0))
         assertEquals(false, row.recordKept)
         assertNull(row.record)

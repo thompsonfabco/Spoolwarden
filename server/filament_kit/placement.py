@@ -1,4 +1,4 @@
-"""Storage placement rules for new spools (ruling R79 section 2): one rule over the storage location list."""
+"""Storage placement rules for new spools: one rule over the storage location list."""
 from collections import Counter
 
 from . import storage
@@ -27,7 +27,7 @@ def sealed_name(rules) -> str:
 
 
 def resolve(st: Storage, location: str, counts: Counter) -> str:
-    """The text a spool's location becomes: the name of an Individual containers location (R79 section 4) means its
+    """The text a spool's location becomes: the name of an Individual containers location means its
     lowest free container; every other text (a bulk place, a container's own name, any text) stays as given."""
     loc = st.by_name(location)
     if loc is None or loc.type != CONTAINERS:

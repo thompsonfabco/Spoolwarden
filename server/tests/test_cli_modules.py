@@ -1,4 +1,4 @@
-"""spoolwarden modules list/set/enable/disable and the Features checklist (spec sections 3-4; 06 8.5)."""
+"""spoolwarden modules list/set/enable/disable and the Features checklist (spec sections 3-4; the design, command line)."""
 import io
 import re
 import sys
@@ -50,7 +50,7 @@ def test_features_lists_the_setup_and_every_feature_with_its_key_state_and_needs
     assert rows["Label Reader: Cloud (Claude)"][1:3] == ["label-reader", "● on"]          # an older install keeps it
     assert rows["Label Reader: On this Hub"][1:3] == ["label-reader-local", "○ off"]
     assert rows["Weigh Station"][1:3] == ["weigh-station", "○ off"]
-    assert [c[1] for c in cells] == list(cli._FEATURE_KEYS)                                     # the order of 06 9.6
+    assert [c[1] for c in cells] == list(cli._FEATURE_KEYS)                                     # the order of the design, command line
     assert out.rstrip().endswith("Uses AI: Label Reader: Cloud (Claude), Label Reader: On this Hub.")
 
 
@@ -89,7 +89,7 @@ def test_disable_with_dependents_noninteractive_fails(applied, capsys, monkeypat
 
 
 def test_json_stops_with_exit_2_where_it_would_ask(applied, capsys, monkeypatch):
-    # at a terminal this asks; --json never asks: exit 2, nothing changed (06 6.8)
+    # at a terminal this asks; --json never asks: exit 2, nothing changed
     _stdin(monkeypatch, "y\n", tty=True)
     assert cli.main(["modules", "disable", "server", "--json"]) == 2
     assert "needs a yes" in capsys.readouterr().out
@@ -234,7 +234,7 @@ def test_enable_at_a_terminal_refused_changes_nothing(applied, capsys, monkeypat
     config.save(modules.set_mode(config.load(), "station"))
     monkeypatch.setattr(cli.apply, "_tty", lambda: True)
     monkeypatch.setattr(cli, "_tty_confirm", lambda q: False)
-    assert cli.main(["modules", "enable", "printers"]) == 5          # a no: Nothing changed (06 7)
+    assert cli.main(["modules", "enable", "printers"]) == 5          # a no: Nothing changed
     assert capsys.readouterr().out.strip().endswith("Nothing changed.") and applied == []
     assert "server" not in modules.enabled(config.load())
 
@@ -356,7 +356,7 @@ def test_non_root_changes_nothing(applied, monkeypatch, capsys):
 
 
 def test_set_station_without_address_fails(applied, capsys):
-    assert cli.main(["modules", "set", "station"]) == 2             # no terminal, no address: stops first (06 6.7)
+    assert cli.main(["modules", "set", "station"]) == 2             # no terminal, no address: stops first
     err = capsys.readouterr().err
     assert "Fix:" in err and "--hub" in err
     assert "modules" not in config.load() and applied == []

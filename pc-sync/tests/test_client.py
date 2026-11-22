@@ -242,7 +242,7 @@ def test_a_typed_address_without_a_port_is_left_open_for_the_search():
 
 
 def test_every_call_names_this_program_and_its_version(certs):
-    """The Hub's Devices list shows the kind and version from this header (R83 10.1)."""
+    """The Hub's Devices list shows the kind and version from this header."""
     from fksync import __version__
     (cert, key, fp), _ = certs
     with TlsServer(cert, key, respond=HUB) as srv:

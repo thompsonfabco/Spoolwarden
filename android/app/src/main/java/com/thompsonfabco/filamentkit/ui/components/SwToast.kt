@@ -46,7 +46,7 @@ private class ToastVisuals(
  * in the order asked for; each is held [TOAST_MS], or [TOAST_WITH_ACTION_MS] with an action, from the moment it is
  * shown, by a timer that dismisses only that toast. A toast may ask for a longer hold ([show]'s `holdMs`), as the
  * Undo toast does for people whose accessibility settings give more time to act. While a touch-exploration service
- * (TalkBack) is on, a toast with an action has no timer: it stays until dismissed or its action is pressed (R84 3.5).
+ * (TalkBack) is on, a toast with an action has no timer: it stays until dismissed or its action is pressed.
  */
 internal class SwToastState(private val touchExploration: () -> Boolean = { false }) {
     internal val host = SnackbarHostState()

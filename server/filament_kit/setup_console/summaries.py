@@ -1,4 +1,4 @@
-"""The one-line live summary of each navigation section (03 3.2), for `G state`'s `summaries`.
+"""The one-line live summary of each navigation section, for `G state`'s `summaries`.
 
 A section with nothing to say (its feature is off, nothing there yet) has no entry's text: the value is None and the page
 shows no summary. The lines hold counts, versions and names of setups only, never an address, serial, code or token.
@@ -13,7 +13,7 @@ from .. import config, intake_history, modules, reader_flash, setup_helper, upda
 
 SECTIONS = ("overview", "printers", "recent", "devices", "presets", "features", "settings", "flash", "updates", "logs")
 SETUPS = {"server": "Hub", "all-in-one": "Hub with Weigh Station", "station": "Weigh Station only", "custom": "Custom"}
-SETTINGS_GROUPS = 9                     # 03 10: Appearance, General, Storage locations, Label Reader, Backups and restore, ...
+SETTINGS_GROUPS = 9                     # the design, Hub page: Appearance, General, Storage locations, Label Reader, Backups and restore, ...
 FLASH_NAMES = {"printer-station": "Tag Reader", "intake-panel": "Weigh Station display"}
 
 

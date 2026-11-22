@@ -11,7 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.ZoneOffset
 
-/** The Checked out rules (R88 section 1): the fields are read leniently, the row says where, the home and since when. */
+/** The Checked out rules: the fields are read leniently, the row says where, the home and since when. */
 class CheckedOutRulesTest {
     private fun row(id: Int, out: Boolean?, home: String? = null, since: String? = null, slot: Boolean = false, inView: Boolean = true): JsonObject {
         val fields = buildJsonObject {

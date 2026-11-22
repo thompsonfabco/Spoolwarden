@@ -1,4 +1,4 @@
-"""AUT-5 on the web app (design 09 S3.4, 07 section 15): the page audit (tests/page_audit.js) in every view, Console
+"""AUT-5 on the web app (step S3.4, the design, accessibility): the page audit (tests/page_audit.js) in every view, Console
 light and dark, at 1280 px and 320 px, through tests/aut5_run.mjs in a headless Chrome, Edge or Chromium already on
 the machine. Example data only (the example-data rules: "Workshop hub", invented filaments).
 
@@ -117,25 +117,25 @@ class ChangingKit(PrintersKit):
 
 
 class GuidedKit(ChangingKit):
-    """ChangingKit that also answers the guided add's search and test (a found Klipper printer; a test that fails) and Clear slot (EV6b, R83 10.1)."""
+    """ChangingKit that also answers the guided add's search and test (a found Klipper printer; a test that fails) and Clear slot (EV6b)."""
 
     def post(self, path, body):
         if path == "/api/printers/scan":
             return {"found": [{"id": "shelf-voron", "host": "192.0.2.90", "port": 7125, "name": "Shelf Voron", "configured": False}]}
         if path == "/api/printers/test":
-            return {"reachable": False}                 # the kit route's answer (R87 1)
+            return {"reachable": False}                 # the kit route's answer
         if path.endswith("/clear"):
             return {"slot": path.split("/")[-2], "spool": {"id": 7, "vendor": "Polymaker", "name": "PolyTerra PLA Charcoal Black"}, "moved_back": "Rack 1",
                     "waiting_ended": True, "printer_cleared": False, "dry_run": body["dry_run"],
-                    "text": "The printer still shows the old filament for this slot until a spool is loaded."}      # a Bambu Lab printer: the Hub's own sentence (R83 20:33)
+                    "text": "The printer still shows the old filament for this slot until a spool is loaded."}      # a Bambu Lab printer: the Hub's own sentence
         return super().post(path, body)
 
 
-# The Slicer presets screen in the states 04 8 draws: filaments waiting for a line (nothing in lines.json), waiting with a
+# The Slicer presets screen in the states the design, web app draws: filaments waiting for a line (nothing in lines.json), waiting with a
 # line of their brand to join (the "Add to the line" select), every filament covered (the empty state), and switched off.
 STATES = ("waiting", "waiting-with-a-line", "all-covered", "presets-off", "public-address")
 
-# Recently added (04 7): a record added from two photos, edited by hand twice with the second edit undone (a revision, and
+# Recently added: a record added from two photos, edited by hand twice with the second edit undone (a revision, and
 # one struck through), and one added at the Weigh Station with no photo; a seeded record also shows on the public address,
 # where the page shows the notice instead
 JPEG = bytes.fromhex("ffd8ffe000104a46494600010100000100010000ffdb004300ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
@@ -194,7 +194,7 @@ def _serving(param, tmp_path, monkeypatch, spoolman_url, history):
     sm = Spoolman(spoolman_url)
     sm.ensure_fields()
     hid = _history(sm) if history else None
-    if param == "public-address":       # the web unit's page: its address has a path, and it keeps no history (04 7.4)
+    if param == "public-address":       # the web unit's page: its address has a path, and it keeps no history
         site = IntakeApp(mcp_tools.Tools(sm), public_url="https://hub.example.test/f", lan_cidrs=["127.0.0.0/8"], push=False)
         app, path = Starlette(routes=[Mount("/f", routes=site.routes())]), "/f/intake"
     else:
@@ -365,7 +365,7 @@ def test_the_page_audit_passes_on_every_view(served_web):
 
 @pytest.mark.parametrize("look", ("console", "palette", "workbench", "panes"))
 def test_a_record_opens_with_its_fields_in_every_theme(served_web, request, look):
-    """R298: Palette (a sheet), Workbench (a card) and Panes show the record in a dialog or a pane; it must open there with
+    """Palette (a sheet), Workbench (a card) and Panes show the record in a dialog or a pane; it must open there with
     the 13 fields of its one saved item, as in Console where it opens in place, and without a page error."""
     if request.node.callspec.params["served_web"] != "waiting":
         pytest.skip("one data state is enough: the themes differ in markup, not in data")
@@ -416,7 +416,7 @@ def _flow(url: str, flow: str, width: int) -> dict:
 
 @pytest.mark.parametrize("flow, width", [("add-found", 375), ("add-klipper", 375), ("add-found", 768), ("add-klipper", 768)])
 def test_a_printer_just_added_opens_with_added(served_changing, flow, width):
-    """R304 MED 1: the add sheet's own Back lands before the address changes, so the page ends on the new printer (not back on #printers)."""
+    """The add sheet's own Back lands before the address changes, so the page ends on the new printer (not back on #printers)."""
     out = _flow(served_changing, flow, width)
     assert out["opened"] and out["cardsAfter"] == out["cardsBefore"] + 1, json.dumps(out)
     assert out["hash"].startswith("#printers/") and out["events"][-1] == "hashchange:" + out["hash"], json.dumps(out)
@@ -425,7 +425,7 @@ def test_a_printer_just_added_opens_with_added(served_changing, flow, width):
 
 @pytest.mark.parametrize("width", [375, 768])
 def test_forgetting_a_printer_closes_its_page(served_changing, width):
-    """R304 MED 2: at tablet width the open printer can sit at #printers with no id, so no hashchange closes it after Forget."""
+    """At tablet width the open printer can sit at #printers with no id, so no hashchange closes it after Forget."""
     out = _flow(served_changing, "forget", width)
     assert out["openBefore"] and not out["openAfter"] and not out["has404"], json.dumps(out)
     assert out["hash"] == "#printers" and "Workshop X1" not in out["cardsAfter"] and len(out["cardsAfter"]) == 2, json.dumps(out)
@@ -456,7 +456,7 @@ def test_the_allow_list_names_a_later_step_and_a_count_on_every_line(allow):
             assert check and where and count.isdigit() and int(count) > 0 and "rebuilt by S3." in reason, line
 
 
-# ---- Add spools (design 09 S3.8): every state of 04 4, driven in the page and audited -------------------------------------
+# ---- Add spools (step S3.8): every state of the design, web app, driven in the page and audited -------------------------------------
 # The Label Reader is not run here: the page's fetch answers `read` with a made-up reading (a small stand-in the state's
 # script puts in), everything else (find, vendors, preview, add) is the real Hub on a fake Spoolman. A state script throws
 # when the page is not in the state it names, then the runner audits that state at 1280 px and 320 px, light and dark.
@@ -1234,7 +1234,7 @@ def test_add_spools_with_the_label_reader_off_says_so_and_leads_with_by_hand(ser
     assert not json.loads(run.stdout).get("report"), run.stdout
 
 
-# ---- the runner's own checks fire (R261): a probe page with a wide view, a view that does not open, a page error ----
+# ---- the runner's own checks fire: a probe page with a wide view, a view that does not open, a page error ----
 
 PROBE = """<!doctype html><html lang=en><meta charset=utf-8>
 <meta name=viewport content='width=device-width,initial-scale=1'><title>Probe</title>
@@ -1300,7 +1300,7 @@ def test_an_allow_list_line_with_a_view_covers_that_view_only(probe, tmp_path):
     assert ("#gone", "view did not open") in {(r["view"], f["check"]) for r in json.loads(run.stdout)["report"] for f in r["findings"]}
 
 
-# ---- Spools (design 09 S3.10): every state of 04 5, driven in the page and audited ----------------------------------------
+# ---- Spools (step S3.10): every state of the design, web app, driven in the page and audited ----------------------------------------
 # The Hub is the real one on a fake Spoolman (find, spool read, weight, move, mark empty). What needs a tag on a reader, or a
 # printer, is answered by the state's script (the page's fetch is stood in for `tag`, `open`, `printers/...`). A state script
 # throws when the page is not in the state it names, then the runner audits that state at 1280 px and 320 px, light and dark.
@@ -1998,7 +1998,7 @@ def test_spools_pages_of_fifty_pass_the_audit(spools_hub_paged):
 
 
 def test_the_tag_poll_runs_only_while_the_screen_is_shown_and_the_page_is_visible(spools_hub):
-    """04 5.2: GET tag every 3 s; it stops when the page is hidden or the screen is left, and starts again at once."""
+    """The design, web app: GET tag every 3 s; it stops when the page is hidden or the screen is left, and starts again at once."""
     script = r"""
   const calls = []; stub(/^tag$/, () => { calls.push(Date.now()); return reply(TAG({})); });
   await until('a first poll', () => calls.length >= 1);

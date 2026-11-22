@@ -1,4 +1,4 @@
-"""The two halves of the panel's Wi-Fi link together (R88 section 4): `panel_setup` (WL4) writes the token, `panel_net`
+"""The two halves of the panel's Wi-Fi link together: `panel_setup` (WL4) writes the token, `panel_net`
 (WL1) reads it, and the Devices and Checks rows read what the station's /state says. The fake panel is WL1's."""
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def etc(tmp_path, monkeypatch):
 @pytest.fixture(autouse=True)
 def station_values_restored():
     """Module-level station values (the live voice values, ports, state, settings) are put back after each test here,
-    so nothing set in this file reaches test_station_panel.py (R641 follow-up 2)."""
+    so nothing set in this file reaches test_station_panel.py."""
     saved = [(d, dict(d)) for d in (st.live, st.ports, st.state, st.settings)]
     yield
     for d, was in saved:

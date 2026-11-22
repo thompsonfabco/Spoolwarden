@@ -1,5 +1,4 @@
-"""Map by loading filament: the owner's fallback when slot mapping fails (brief 2026-11-09 13:01; API in the handoff
-2026-11-09-1305-all-in-one-manual-slot-mapping-api.md, version 2: a position's id is its slot label).
+"""Map by loading filament: the owner's fallback when slot mapping fails (version 2: a position's id is its slot label).
 
 One session per printer, shared by the setup page and the app. The kit names one position at a time ("Load A2 to the
 nozzle, then wait."); the owner loads it on the printer; the kit watches what the printer reports as loaded

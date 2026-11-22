@@ -173,7 +173,7 @@ def test_a_repo_override_names_the_same_repo_in_the_url(env, srv, key, capsys):
 # ---------- pack_info (the web console's data; console-printers stage) and the CLI's output, pinned ----------
 
 def test_cli_output_is_06_9_2(env, srv, key, capsys):
-    """`klipper add-on` (06 9.2): the Hub page's sentence, a blank line, the commands, each on one unbroken line."""
+    """`klipper add-on`: the Hub page's sentence, a blank line, the commands, each on one unbroken line."""
     fr = srv.add("1.0.0", extra={PACK: PACK_BYTES})
     _keep(env, fr)
     rc, out, err = _run(env, NoNet(), capsys)

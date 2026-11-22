@@ -1,4 +1,4 @@
-"""EA6 phase A, the Overview's two alert places (03 4.2, 4.3): the Running low card and its "Running low" dialog
+"""EA6 phase A, the Overview's two alert places: the Running low card and its "Running low" dialog
 (#overview/running-low), and the Storage row with its "Storage use" panel (#overview/storage-use), in a real headless browser. The Hub is
 the stub of hub_alerts_stub.py (spools/low and storage-use are the server step's); the page is the real Hub page with the new modules
 loaded. The same skip rules as the page audit: no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""

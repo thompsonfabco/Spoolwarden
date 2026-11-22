@@ -47,7 +47,7 @@ internal val CARRIED_LANGUAGES: List<String> = listOf("en")
 /** Carried languages that are still marked machine-translated; they show it after their name. */
 internal val MACHINE_TRANSLATED_LANGUAGES: Set<String> = emptySet()
 
-/** Per-app language needs Android 13 (`LocaleManager`); on an older phone the Language setting is not shown (R85 section 3.9). */
+/** Per-app language needs Android 13 (`LocaleManager`); on an older phone the Language setting is not shown. */
 internal fun languageSettingShown(sdk: Int): Boolean = sdk >= Build.VERSION_CODES.TIRAMISU
 
 /** [code] named as that language names itself (`English`, `Deutsch`), with "(machine-translated)" when it still is. */

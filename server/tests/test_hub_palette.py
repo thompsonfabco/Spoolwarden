@@ -1,4 +1,4 @@
-"""Palette on the web (design 09 S6.6, 02 1.3, 08 9 and test 4 of 08), in a real headless browser where it matters: the three
+"""Palette on the web (the design, components and platform mapping), in a real headless browser where it matters: the three
 profile groups `nav=pills`, `collection=tiles` and `detail=sheet` of components.css are keyed on Palette only (Console's and
 Workbench's groups do not mention it, Palette's do not hold an unqualified rule or a Workbench one); the Hub page and the web app
 show Palette (pills under the top bar from tablet up, the bottom bar on a phone, tiles in a grid, the rounded system font, an open
@@ -100,8 +100,8 @@ def test_palette_shows_in_the_hub_page_at_three_widths_and_console_is_unchanged(
     _check_styles(*(_drive(hub, tmp_path, STYLES, width=w) for w in (1280, 768, 320)))
 
 
-# the rework items: the tablet top bar keeps the light/dark switch on one row (02 4.3), a detail opens in the sheet (not in its row, S6.11), the pill
-# row stays under the top bar while the page scrolls (02 2.3), and the active pill is not bolder than the others (02 2.3 table)
+# the rework items: the tablet top bar keeps the light/dark switch on one row, a detail opens in the sheet (not in its row, S6.11), the pill
+# row stays under the top bar while the page scrolls, and the active pill is not bolder than the others (the design, components table)
 REWORK = """
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(look, what) { for (let i = 0; i < 300; i++) { const v = look(); if (v) return v; await sleep(100); } throw new Error("waited for " + what); }

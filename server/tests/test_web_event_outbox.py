@@ -1,4 +1,4 @@
-"""The web unit's hand-over of spool events (R80 E1, EA4b): the outbox file, the sender against a fake Hub (resend after
+"""The web unit's hand-over of spool events: the outbox file, the sender against a fake Hub (resend after
 a failure, all-or-none batches, the bad item set aside, caps), a restart, and the phone web app's spool changes
 reaching the fake Hub through the app's own lifespan. No network, no real Hub."""
 from __future__ import annotations
@@ -342,7 +342,7 @@ def test_a_phone_request_does_not_wait_for_a_hub_that_is_down_and_the_change_is_
 
 
 def test_the_501st_item_drops_the_oldest_with_a_log_line(tmp_path, caplog):
-    assert eo.MAX_ITEMS == 500                                     # R80 E1
+    assert eo.MAX_ITEMS == 500
     box = eo.Outbox(tmp_path / "o.xml")
     with caplog.at_level(logging.WARNING):
         for i in range(501):
