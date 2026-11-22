@@ -31,6 +31,11 @@ class VoiceRulesTest {
         assertEquals(VoiceTexts.GROUP, "Weigh Station voice")
     }
 
+    @Test fun theVoiceLineSaysWhereTheVoiceIsChosen() {
+        assertEquals("Change the voice on the Hub page.", voiceHint(many))
+        assertEquals("Chosen on the Weigh Station's own computer: spoolwarden config.", voiceHint(many.copy(remote = true)))
+    }
+
     @Test fun theSpeakerRowNeedsARange() {
         assertTrue(speakerShown(many))
         assertFalse("a voice with one speaker", speakerShown(one))

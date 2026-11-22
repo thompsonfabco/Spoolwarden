@@ -13,6 +13,7 @@ object VoiceTexts {
     const val SPEAK = "Speak"
     const val VOICE = "Voice"
     const val VOICE_HINT = "Change the voice on the Hub page."
+    const val VOICE_HINT_REMOTE = "Chosen on the Weigh Station's own computer: spoolwarden config."
     const val SPEAKER = "Speaker"
     const val SPEED = "Speed"
     const val VOLUME = "Volume"

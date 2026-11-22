@@ -91,7 +91,7 @@ internal fun VoiceSettingsPage(ui: VoiceUi, actions: VoiceActions, modifier: Mod
                 actions.onSave(edit)
             }
             FieldRow(VoiceTexts.VOICE, saved.voice)
-            Text(VoiceTexts.VOICE_HINT, color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodyMedium)
+            Text(voiceHint(saved), color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodyMedium)
             if (speakerShown(saved)) {
                 val range = saved.speakerRange!!
                 Column(verticalArrangement = Arrangement.spacedBy(space.s1)) {
