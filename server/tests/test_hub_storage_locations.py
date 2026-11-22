@@ -396,7 +396,7 @@ out.saved = text($("#set-storage .group__foot .result__text"));
 out.after = { names: names(), dirty: dirty(), summary: text($('.settings__row[data-id="storage"] .settings__state')), rack: cells("PLA rack 1").full, spare: cells("Spare").full };
 // nothing changed: the form group says so
 $("#set-storage [type=submit]").click(); await sleep(300);
-out.nothing = text($("#set-storage .group__foot .result__text"));
+out.nothing = await until(() => { const r = text($("#set-storage .group__foot .result__text")); return r && r !== out.saved ? r : null; }, "Nothing changed");
 """)
     assert page["beforeUndo"]["names"] == ["Sealed stock", "Rack 1", "Rack 2", "Storage box (containers)", "Overflow", "Dry shelf"][:0] + ["Rack 1", "Sealed stock", "Rack 2", "Storage box (containers)", "Overflow", "Dry shelf"]
     assert page["beforeUndo"]["dirty"]["form"] == "dirty"
@@ -448,6 +448,7 @@ await submit(f);
 await until(() => !form(), "the editor to close");
 $("#set-storage [type=submit]").click();
 await until(() => form() && err(form(), "name"), "the refusal at the Name field");
+await until(() => text($("#set-storage .group__foot .result__text")), "the refusal line");
 out.refusal = err(form(), "name");
 out.title = text($(".detail__title", form()));
 out.result = text($("#set-storage .group__foot .result__text"));

@@ -178,7 +178,7 @@ await until(() => stopIn(rowOf("Workshop X1")), "the progress and Stop");
 const progress = text($(".coll__row--note .result[data-state=run]", rowOf("Workshop X1")));
 rowOf("Workshop X1").querySelector('[data-col="actions"] .actions button').click();         // Test connection
 const box = () => [...rowOf("Workshop X1").querySelectorAll(".coll__row--note .result")].pop();
-await until(() => box().dataset.state && box().dataset.state !== "run", "the test result");
+await until(() => box().dataset.state && box().dataset.state !== "run" && text(box()), "the test result");
 const result = { progress, test: text(box()), afterTest: !!stopIn(rowOf("Workshop X1")) };
 location.hash = "#overview";
 await until(() => !rowOf("Workshop X1"), "the other section");
@@ -555,6 +555,7 @@ $('[data-action="cancel"]', ask).click();
 await until(() => !open() && rowOf("Fresh P1"), "the drawer to close and the new row");
 await sleep(300);
 const row = rowOf("Fresh P1");
+await until(() => said("Fresh P1"), "its line");
 out.bambu = { posts: posts.slice(), expanded: row.querySelector(".coll__expand").getAttribute("aria-expanded"), said: said("Fresh P1"), hash: location.hash, left: leftOver() };
 posts.length = 0;
 order.length = 0;
@@ -571,6 +572,7 @@ go.click(); go.click();
 await later(region);
 await until(() => !open() && rowOf("Fresh Klipper"), "the drawer to close and the Klipper row");
 await sleep(300);
+await until(() => said("Fresh Klipper"), "its line");
 out.klipper = { posts: posts.slice(), probes, order, focused: document.activeElement.getAttribute("aria-label"),
   expanded: rowOf("Fresh Klipper").querySelector(".coll__expand").getAttribute("aria-expanded"), said: said("Fresh Klipper"), left: leftOver() };
 return out;
