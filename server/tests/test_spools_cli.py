@@ -434,3 +434,169 @@ def test_parsers_and_run(capsys):
     assert spools_cli.run(parse("spool", "empty", "12", "-y"), api) == 0
     assert "Spool 12 is marked empty." in capsys.readouterr().out
     assert spools_cli.run(parse("spool", "show", "12"), FakeApi({"GET /api/spools/12": {"spool": {}, "view": spool_view(12)}})) == 0
+
+
+# ---------- R88: checked out, return, home ----------
+
+SINCE = "2026-11-20T10:00:00Z"
+IN_SLOT = {"printer_id": "S1", "printer": "Workshop", "slot": "A2"}
+
+
+def out_view(n=12, **kw):
+    return spool_view(n, **{"location": "Workshop – AMS A2", "loaded": IN_SLOT, "checked_out": True, "home": "Rack 1",
+                            "checked_out_since": SINCE, **kw})
+
+
+def test_checked_out_list_rows_and_count_from_total(capsys):
+    a = out_view(12)
+    b = out_view(13, name="PETG Blue", home=None, checked_out_since=None)
+    answer = {**listing(a, b, filters=["sealed", "opened", "loaded", "low", "checked_out"]), "total": 5}
+    api = FakeApi({"GET /api/spools?filter=checked_out": answer})
+    assert spools_cli.cmd_spools(api, filter="checked_out") == 0
+    out = capsys.readouterr().out
+    assert "Acme PLA Red" in out and "In Workshop – A2" in out and "Home: Rack 1" in out
+    assert "since 2026-11-20 10:00" in out and "Home: not recorded" in out
+    assert out.count("since") == 1                                 # none for the older entry
+    assert out.rstrip().endswith("5 spools are checked out.")      # the answer's total, not the rows
+    assert api.calls == [("GET", "/api/spools?filter=checked_out", None)]
+
+
+def test_checked_out_list_one_and_empty(capsys):
+    api = FakeApi({"GET /api/spools?filter=checked_out": listing(out_view(12))})
+    assert spools_cli.cmd_spools(api, filter="checked_out") == 0
+    assert capsys.readouterr().out.rstrip().endswith("1 spool is checked out.")
+    api = FakeApi({"GET /api/spools?filter=checked_out": listing()})
+    assert spools_cli.cmd_spools(api, filter="checked_out") == 0
+    assert capsys.readouterr().out.strip() == "No spool is checked out."
+
+
+def test_checked_out_list_json_is_the_route_object():
+    answer = listing(out_view(12), filters=["checked_out"])
+    rc, doc = run_json(lambda: spools_cli.cmd_spools(FakeApi({"GET /api/spools?filter=checked_out": answer}),
+                                                      filter="checked_out"))
+    assert rc == 0 and doc == answer
+
+
+def returned(location="Rack 1"):
+    return lambda body: {"spool": {"id": 12, "location": location} if location else {"id": 12}, "event_id": 7}
+
+
+def return_api(view, answer):
+    return FakeApi({"GET /api/spools/12": {"spool": {}, "view": view}, "POST /api/spools/12/return": answer})
+
+
+def test_return_asks_with_the_home_then_posts(capsys, terminal):
+    api = return_api(out_view(12), returned())
+    asked = terminal("y")
+    assert spools_cli.cmd_spool_return(api, "12") == 0
+    out = capsys.readouterr().out
+    assert asked == ["Return to Rack 1? [y/N] "] and "Spool 12, Acme PLA Red. Home: Rack 1." in out
+    assert out.rstrip().endswith("Returned to Rack 1.")
+    assert api.calls == [("GET", "/api/spools/12", None), ("POST", "/api/spools/12/return", {})]
+
+
+def test_return_with_no_home_asks_plain_and_names_the_place_the_answer_gives(capsys, terminal):
+    api = return_api(out_view(12, home=None), returned("Storage box 1"))
+    asked = terminal("y")
+    assert spools_cli.cmd_spool_return(api, "12") == 0
+    out = capsys.readouterr().out
+    assert asked == ["Return? [y/N] "] and "Home: not recorded" in out and out.rstrip().endswith("Returned to Storage box 1.")
+
+
+def test_return_with_no_place_in_the_answer_is_just_returned(capsys):
+    api = return_api(out_view(12, home=None), returned(None))
+    assert spools_cli.cmd_spool_return(api, "12", yes=True) == 0
+    assert capsys.readouterr().out.rstrip().endswith("Returned.")
+
+
+def test_return_answered_no_posts_nothing(capsys, terminal):
+    api = return_api(out_view(12), returned())
+    terminal("n")
+    assert spools_cli.cmd_spool_return(api, "12") == output.CANCELLED
+    assert [m for m, _, _ in api.calls] == ["GET"]
+
+
+def test_return_yes_does_not_ask(capsys):
+    assert spools_cli.cmd_spool_return(return_api(out_view(12), returned()), "12", yes=True) == 0
+    assert "[y/N]" not in capsys.readouterr().out
+
+
+def test_return_json_never_asks_and_gives_the_answer():
+    api = return_api(out_view(12), returned())
+    rc, doc = run_json(lambda: spools_cli.cmd_spool_return(api, "12"))
+    assert rc == output.USAGE and doc["ok"] is False and [m for m, _, _ in api.calls] == ["GET"]
+    rc, doc = run_json(lambda: spools_cli.cmd_spool_return(api, "12", yes=True))
+    assert rc == 0 and doc == {"spool": {"id": 12, "location": "Rack 1"}, "event_id": 7}
+
+
+def test_return_of_a_spool_that_is_not_checked_out_is_refused_before_posting(capsys):
+    api = return_api(spool_view(12, checked_out=False, home=None), returned())
+    assert spools_cli.cmd_spool_return(api, "12", yes=True) == output.USAGE
+    assert "This spool is not checked out." in capsys.readouterr().err
+    assert [m for m, _, _ in api.calls] == ["GET"]
+
+
+def test_return_refused_by_the_hub_with_409(capsys):
+    api = return_api(out_view(12), SlotError("This spool is not checked out.", code="not_checked_out", http=409))
+    assert spools_cli.cmd_spool_return(api, "12", yes=True) == output.USAGE
+    err = capsys.readouterr().err
+    assert "This spool is not checked out." in err and "Traceback" not in err
+
+
+def test_return_bad_number_unknown_spool_and_no_hub(capsys):
+    assert spools_cli.cmd_spool_return(FakeApi(), "x") == output.USAGE
+    assert spools_cli.cmd_spool_return(FakeApi(), "99") == output.USAGE
+    assert "there is no spool 99." in capsys.readouterr().err
+    assert spools_cli.cmd_spool_return(None, "12") == output.HUB_DOWN
+
+
+def test_home_previews_asks_then_changes(capsys, terminal):
+    api = FakeApi({"PATCH /api/spools/12": edit(out_view(12), out_view(12, home="Overflow"))})
+    asked = terminal("y")
+    assert spools_cli.cmd_spool_home(api, "12", "Overflow") == 0
+    out = capsys.readouterr().out
+    assert asked == ["Change the home of spool 12 to Overflow? [y/N] "]
+    assert "home Rack 1, would be Overflow" in out and out.rstrip().endswith("Home is now Overflow.")
+    assert [b for _, _, b in api.calls] == [{"home": "Overflow", "dry_run": True}, {"home": "Overflow", "dry_run": False}]
+
+
+def test_home_from_not_recorded_and_json_and_yes(capsys):
+    api = FakeApi({"PATCH /api/spools/12": edit(out_view(12, home=None), out_view(12, home="Rack 1"))})
+    assert spools_cli.cmd_spool_home(api, "12", "Rack 1", yes=True) == 0
+    assert "home not recorded, would be Rack 1" in capsys.readouterr().out
+    rc, doc = run_json(lambda: spools_cli.cmd_spool_home(api, "12", "Rack 1"))
+    assert rc == output.USAGE and doc["ok"] is False
+    rc, doc = run_json(lambda: spools_cli.cmd_spool_home(api, "12", "Rack 1", yes=True))
+    assert rc == 0 and doc["view"]["home"] == "Rack 1" and doc["dry"] is False
+
+
+def test_home_unchanged_changes_nothing(capsys):
+    api = FakeApi({"PATCH /api/spools/12": edit(out_view(12), out_view(12))})
+    assert spools_cli.cmd_spool_home(api, "12", "Rack 1") == 0
+    assert "Home is already Rack 1." in capsys.readouterr().out and len(api.calls) == 1
+
+
+def test_home_refusals(capsys):
+    api = FakeApi({"PATCH /api/spools/12": SlotError("This spool is not checked out.", code="not_checked_out", http=409)})
+    assert spools_cli.cmd_spool_home(api, "12", "Rack 1", yes=True) == output.USAGE
+    assert "This spool is not checked out." in capsys.readouterr().err
+    api = FakeApi({"PATCH /api/spools/12": SlotError("'Nowhere' is not one of the Hub's storage locations",
+                                                       code="bad_request", http=400)})
+    assert spools_cli.cmd_spool_home(api, "12", "Nowhere", yes=True) == output.USAGE
+    assert "not one of the Hub's storage locations" in capsys.readouterr().err
+    assert [b["dry_run"] for _, _, b in api.calls] == [True]
+
+
+def test_r88_parsers_and_run(capsys):
+    assert parse("spools", "--checked-out").filter == "checked_out"
+    with pytest.raises(SystemExit):
+        parse("spools", "--checked-out", "--low")
+    r = parse("spool", "return", "12", "-y")
+    assert (r.spool_cmd, r.number, r.yes) == ("return", "12", True)
+    h = parse("spool", "home", "12", "Rack 1")
+    assert (h.spool_cmd, h.number, h.location, h.yes) == ("home", "12", "Rack 1", False)
+    assert spools_cli.run(parse("spools", "--checked-out"), FakeApi({"GET /api/spools?filter=checked_out": listing()})) == 0
+    assert spools_cli.run(parse("spool", "return", "12", "-y"), return_api(out_view(12), returned())) == 0
+    api = FakeApi({"PATCH /api/spools/12": edit(out_view(12), out_view(12, home="Overflow"))})
+    assert spools_cli.run(parse("spool", "home", "12", "Overflow", "-y"), api) == 0
+    assert "Home is now Overflow." in capsys.readouterr().out
