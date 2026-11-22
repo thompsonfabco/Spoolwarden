@@ -27,6 +27,7 @@ import defusedxml.ElementTree as DET
 from defusedxml import DefusedXmlException
 
 from . import config, locks, pairing
+from .profiles import statexml
 
 log = logging.getLogger("filament_kit.voice_state")
 
@@ -181,11 +182,30 @@ def _write(got: dict) -> None:
     pairing._write_atomic(f, _to_xml(got).encode("utf-8"), MODE, state_owned=True)
 
 
+def _set_aside() -> None:
+    """A voice.xml that is not valid (XML or schema) is kept as `voice.xml.unreadable` and noted (R85 1.4), never written
+    over. A symbolic link is not moved: `_write` refuses it. A passing read error (OSError: a lock, a permission blip)
+    does not move a good file: it is raised, `save` writes nothing and says False."""
+    f = _file()
+    try:
+        if stat.S_ISLNK(os.lstat(f).st_mode):
+            return
+        _read()
+    except FileNotFoundError:
+        return
+    except ValueError as e:
+        kept = f.with_name(f.name + ".unreadable")
+        os.replace(f, kept)
+        statexml.note_problem(kept, f"{f.name} could not be read and is kept aside ({e})")
+
+
 def save(new: dict, cfg: dict) -> bool:
-    """Write `new` (already checked, `check`) over what the file holds, the other values kept. False when the file could
-    not be written (a symbolic link, no room, no right); never raises. A broken file is replaced."""
+    """Write `new` (already checked, `check`) over what the file holds, the other values kept. A file that cannot be read
+    is kept aside as `voice.xml.unreadable` first, never overwritten. False when the file could not be written (a
+    symbolic link, no room, no right); never raises."""
     try:
         with _LOCK:
+            _set_aside()
             _write({**stored(cfg), **{f: v for f, v in new.items() if f in FIELDS}})
         return True
     except OSError as e:

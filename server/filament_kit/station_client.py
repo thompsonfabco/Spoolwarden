@@ -498,7 +498,8 @@ def _call(endpoint, method, path, body, cap=MAX_JSON, timeout=STATION_TIMEOUT):
     headers = {"Accept": "*/*"}
     if body is not None:
         headers["Content-Type"] = "application/json"
-    purpose = {("POST", "/ticket"): "ticket", ("POST", "/settings"): "settings"}.get((method, path))
+    purpose = {("POST", "/ticket"): "ticket", ("POST", "/settings"): "settings", ("POST", "/voice"): "voice",
+               ("POST", "/voice/test"): "voice"}.get((method, path))
     if purpose == "ticket" and fp is None:
         # D14: the page ticket is the way into the station's own page: the Hub never asks for one over plain HTTP, whatever the proof
         raise StationPinMissing(503, TEXT_STATION_NO_PIN)

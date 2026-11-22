@@ -13,6 +13,7 @@ from test_console_general import app  # noqa: F401
 from test_setup_page import client, env, post  # noqa: F401
 
 from filament_kit import config, setup_helper, station_client, voice_state
+from filament_kit.profiles import statexml
 from filament_kit.setup_console import voice_tab
 from filament_kit.setup_page import Refused
 from filament_kit.station_client import StationCallError
@@ -207,7 +208,8 @@ def test_get_voice_with_a_station():
     voice_state.save({"speaker": 5}, _cfg())
     got = voice_tab.get_voice(_cfg())
     assert got == {"station": True, "speech": True, "speaker": 5, "speed": 100, "volume": 50,
-                   "voice": "Piper, many speakers", "speaker_range": [0, 903]}
+                   "voice": "Piper, many speakers", "remote": False,
+                   "speaker_range": [0, 903]}
     assert voice_tab.get_voice(_cfg(voice="en_US-ljspeech-medium"))["speaker_range"] is None
     assert voice_tab.get_voice(_cfg(tts="espeak"))["speaker_range"] is None
 
@@ -318,7 +320,7 @@ def test_the_page_route_refuses_with_the_sentence(station, env, monkeypatch, ans
 # ---- the page route that saves ----
 
 def _save_route():
-    fn, = [f for p, f, m in voice_tab.routes(_Page()) if p == "/station/voice"]
+    fn, = [f for p, f, m in voice_tab.routes(_Page()) if p == "/station/voice" and m == "POST"]
     return fn
 
 
@@ -358,3 +360,227 @@ def test_a_station_named_by_the_hubs_lan_name_or_address_is_not_remote(host, mon
     monkeypatch.setattr(socket, "gethostbyname_ex", lambda n: (n, [], ["192.168.1.20"]))
     assert voice_tab.station_remote(_cfg("http://192.168.1.20:5003")) is False
     assert voice_tab.station_remote(_cfg("http://192.168.1.21:5003")) is True
+
+
+# ---- rework 2 (R602) ----
+
+def test_a_broken_file_is_kept_aside_and_never_overwritten():
+    f = _file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(b"<voice speed=1")
+    assert voice_state.save({"speed": 80}, _cfg()) is True
+    assert (f.parent / "voice.xml.unreadable").read_bytes() == b"<voice speed=1"
+    assert voice_state.stored(_cfg()) == {"speed": 80}
+    assert any("voice.xml" in p for p in statexml.problems())
+
+
+# ---- a passing read error is not a broken file (R626/R629) ----
+
+def test_a_transient_read_error_leaves_a_good_file_in_place(monkeypatch):
+    voice_state.save({"speed": 80}, _cfg())
+    f = _file()
+    good = f.read_bytes()
+    real = voice_state._read
+
+    def blip():
+        raise PermissionError(13, "a passing blip")
+    monkeypatch.setattr(voice_state, "_read", blip)
+    assert voice_state.stored(_cfg()) == {}                      # no value for that read
+    assert voice_state.save({"volume": 10}, _cfg()) is False     # nothing written over the good file
+    assert f.read_bytes() == good and not (f.parent / "voice.xml.unreadable").exists()
+    monkeypatch.setattr(voice_state, "_read", real)
+    assert voice_state.stored(_cfg()) == {"speed": 80}           # the next read succeeds
+
+
+def test_a_schema_broken_file_is_still_kept_aside():
+    f = _file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(b'<other speed="80"/>')
+    assert voice_state.save({"speed": 90}, _cfg()) is True
+    assert (f.parent / "voice.xml.unreadable").read_bytes() == b'<other speed="80"/>'
+    assert voice_state.stored(_cfg()) == {"speed": 90}
+
+
+def test_the_real_router_mounts_the_voice_routes_and_writes_voice_xml(app, station):  # noqa: F811
+    cfg = config.load()
+    cfg["station"]["url"] = "http://127.0.0.1:5003"
+    config.save(cfg)
+    r = post(client(app), "station/voice", {"speed": 120, "volume": 30})
+    assert r.status_code == 200 and r.json()["speed"] == 120
+    assert _file().exists() and voice_state.stored(config.load()) == {"speed": 120, "volume": 30}
+    assert [(c[1], c[2]) for c in station.calls] == [("POST", "/voice")]
+    assert post(client(app), "station/voice", {"speed": 55}).status_code == 400
+    assert post(client(app), "station/voice/test", {}).status_code == 200
+    assert post(client(app), "station/voice", {"speed": 120}, code="wrong").status_code in (401, 403)
+
+
+# ---- the kit routes: the service's entry for the apps and the command line ----
+
+def _kit_client(authed=lambda fn: fn):
+    from starlette.applications import Starlette
+    from starlette.testclient import TestClient
+    return TestClient(Starlette(routes=voice_tab.kit_routes(authed)))
+
+
+def test_the_kit_routes_save_in_the_service_and_refuse_with_code_message_field(station, env, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(config, "load", lambda: _cfg())
+    c = _kit_client()
+    r = c.patch("/api/voice", json={"speed": 90, "volume": 20})
+    assert r.status_code == 200 and r.json()["speed"] == 90 and voice_state.stored(_cfg()) == {"speed": 90, "volume": 20}
+    assert c.get("/api/voice").json()["volume"] == 20
+    bad = c.patch("/api/voice", json={"speed": 55})
+    assert bad.status_code == 400 and bad.json()["error"] == "bad_value" and bad.json()["field"] == "speed"
+    assert c.patch("/api/voice", content=b"[").status_code == 400
+    assert c.post("/api/voice/test", json={}).status_code == 200
+
+
+def test_the_kit_routes_go_through_the_callers_auth(env, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(config, "load", lambda: _cfg())
+    c = _kit_client(lambda fn: _no)
+    assert c.patch("/api/voice", json={"speed": 90}).status_code == 401 and not _file().exists()
+
+
+async def _no(request):
+    from starlette.responses import JSONResponse
+    return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+
+def test_the_root_side_never_touches_voice_xml_it_asks_the_service():
+    server = Path(voice_state.__file__).parent
+    for p in (server / "cli.py", server / "setup_helper.py", server / "apply.py", server / "updates.py",
+              server.parent.parent / "install" / "install.sh"):
+        text = p.read_text(encoding="utf-8")
+        for word in ("voice.xml", "voice_state", "voice_tab", "save_voice", "patch_voice"):
+            assert word not in text, (p.name, word)
+
+
+# ---- the sender attaches the pairing proof (R594 ruling) ----
+
+@pytest.fixture
+def wire(monkeypatch):
+    """The real `call` path with the network replaced: records the headers and the body of each call."""
+    from filament_kit.station import page
+    seen = []
+    key = page.token_key("a station token 0123456789")
+    monkeypatch.setattr(station_client, "station_endpoint", lambda url: ("127.0.0.1", 5003, "ab" * 32))
+    monkeypatch.setattr(station_client, "proof_key", lambda: key)
+
+    def bounded(host, port, fp, method, path, body=None, headers=None, cap=0, timeout=0, **kw):
+        seen.append((path, dict(headers or {}), body))
+        return 200, "application/json", b"{}"
+    monkeypatch.setattr(station_client, "bounded_call", bounded)
+    return seen, key, monkeypatch
+
+
+@pytest.mark.parametrize("send", [lambda: station_client.send_voice("http://h", {"speed": 90}),
+                                  lambda: station_client.voice_test("http://h", {"speed": 90})])
+def test_the_voice_calls_carry_a_proof_the_station_accepts(wire, send):
+    from filament_kit.station import page
+    seen, key, _ = wire
+    send()
+    path, headers, body = seen[0]
+    access = page.Access(lambda: key)
+    assert access.proof_ok("voice", headers.get(page.PROOF_HEADER), body)
+
+
+@pytest.mark.parametrize("send", [lambda: station_client.send_voice("http://h", {"speed": 90}),
+                                  lambda: station_client.voice_test("http://h", {"speed": 90})])
+def test_the_voice_calls_are_not_sent_without_a_key_or_a_certificate(wire, send):
+    seen, key, mp = wire
+    mp.setattr(station_client, "proof_key", lambda: None)
+    with pytest.raises(StationCallError):
+        send()
+    mp.setattr(station_client, "proof_key", lambda: key)
+    mp.setattr(station_client, "station_endpoint", lambda url: ("127.0.0.1", 5003, None))
+    with pytest.raises(StationCallError):
+        send()
+    assert seen == []
+
+
+def test_a_proof_made_for_other_values_or_another_key_is_not_good(wire):
+    from filament_kit.station import page
+    seen, key, _ = wire
+    station_client.send_voice("http://h", {"speed": 90})
+    _, headers, body = seen[0]
+    assert not page.Access(lambda: key).proof_ok("voice", headers[page.PROOF_HEADER], b'{"speed": 200}')
+    assert not page.Access(lambda: page.token_key("another token 0123456789")).proof_ok(
+        "voice", headers[page.PROOF_HEADER], body)
+
+
+@pytest.mark.parametrize("send", [lambda: station_client.send_voice("http://h", {"speed": 90}),
+                                  lambda: station_client.voice_test("http://h", {"speed": 90})])
+def test_the_sender_proof_passes_the_station_check_of_both_voice_routes(wire, send):
+    """Cross-check with the station's own verifier (station.page.Access.proof_ok). The station's routes on branch
+    vo1-station-voice (server/filament_kit/station/http.py:203, 10f2386c) accept a /voice or /voice/test call only when
+    `caller == guard.LISTED and proof is not None and access.proof_ok("voice", proof, raw)`, `raw` being the exact body
+    bytes; the same call is made here with the sender's proof. A proof of purpose "settings" is not good there."""
+    from filament_kit.station import page
+    seen, key, _ = wire
+    send()
+    path, headers, body = seen[0]
+    proof = headers.get(page.PROOF_HEADER)
+    assert proof is not None
+    assert not page.Access(lambda: key).proof_ok("settings", proof, body)
+    assert page.Access(lambda: key).proof_ok("voice", proof, body)
+
+
+# ---- the read answer the Hub page's group and the apps use ----
+
+def test_the_read_answer_has_the_four_values_remote_and_voice(monkeypatch):
+    monkeypatch.setattr(socket, "gethostname", lambda: "hubhost")
+    monkeypatch.setattr(socket, "getfqdn", lambda: "hubhost.lan")
+    monkeypatch.setattr(socket, "gethostbyname_ex", lambda n: (n, [], ["192.168.1.20"]))
+    local = voice_tab.get_voice(_cfg("http://127.0.0.1:5003"))
+    assert local["remote"] is False and local["voice"] == voice_tab.VOICE_MANY
+    assert {"speech", "speaker", "speed", "volume"} <= set(local)
+    far = voice_tab.get_voice(_cfg("http://192.168.1.99:5003", tts="espeak"))
+    assert far["remote"] is True and far["voice"] == voice_tab.VOICE_ESPEAK
+    assert voice_tab.get_voice(_cfg(""))  == {"station": False}
+
+
+def test_the_page_route_with_no_values_reads_the_answer(env, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(config, "load", lambda: _cfg())
+    got = anyio.run(_save_route(), None, {})
+    assert got["remote"] is False and got["voice"] == voice_tab.VOICE_MANY and got["speed"] == 100
+    assert not _file().exists()
+
+
+ANSWER_KEYS = {"station", "remote", "speech", "voice", "speaker", "speaker_range", "speed", "volume"}
+
+
+def test_the_view_read_answers_without_a_code_with_the_six_fields(app, station):  # noqa: F811
+    cfg = config.load()
+    cfg["station"]["url"] = "http://127.0.0.1:5003"
+    config.save(cfg)
+    r = client(app).get("/setup/api/station/voice")
+    assert r.status_code == 200
+    assert set(r.json()) == ANSWER_KEYS
+    assert r.json()["remote"] is False and r.json()["voice"] == voice_tab.VOICE_MANY and r.json()["speaker_range"] == [0, 903]
+    assert not _file().exists() and station.calls == []
+
+
+def test_a_change_through_post_still_needs_the_code(app, station):  # noqa: F811
+    cfg = config.load()
+    cfg["station"]["url"] = "http://127.0.0.1:5003"
+    config.save(cfg)
+    assert post(client(app), "station/voice", {"speed": 120}, code=None).status_code in (401, 403)
+    assert not _file().exists() and station.calls == []
+
+
+def test_every_answer_has_the_one_shape(app, station):  # noqa: F811
+    cfg = config.load()
+    cfg["station"]["url"] = "http://127.0.0.1:5003"
+    config.save(cfg)
+    assert set(client(app).get("/setup/api/station/voice").json()) == ANSWER_KEYS          # G, no code
+    assert set(post(client(app), "station/voice", {}).json()) == ANSWER_KEYS               # P, read form
+    assert set(post(client(app), "station/voice", {"speed": 120}).json()) == ANSWER_KEYS   # P, after a change
+    assert set(voice_tab.patch_voice({"speed": 130}, load=config.load)) == ANSWER_KEYS     # PATCH /api/voice
+    kit = _kit_client()
+    assert set(kit.get("/api/voice").json()) == ANSWER_KEYS
+    assert set(kit.patch("/api/voice", json={"volume": 20}).json()) == ANSWER_KEYS
+
+
+def test_the_speaker_range_is_null_for_a_one_speaker_voice_and_the_station_false_answer():
+    assert voice_tab.get_voice(_cfg(voice="en_US-ljspeech-medium"))["speaker_range"] is None
+    assert voice_tab.get_voice(_cfg())["speaker_range"] == [0, 903]
+    assert voice_tab.get_voice(_cfg(url=None)) == {"station": False}
