@@ -81,18 +81,18 @@ def test_the_list_says_when_the_reader_is_off_missing_old_or_silent(hub, env, fa
     data["health"] = {**data["health"], "api_version": "1.0"}
     data["health"].pop("capabilities", None)
     r = c.get(B)
-    assert r.status_code == 409 and r.json()["reason"] == "no_feedback" and "too old" in r.json()["error"]
+    assert r.status_code == 409 and r.json()["code"] == "no_feedback" and "too old" in r.json()["error"]
     # the module is off
     cfg["modules"]["local_intake"] = False
     config.save(cfg)
     r = c.get(B)
-    assert r.status_code == 409 and r.json()["reason"] == "no_reader"
+    assert r.status_code == 409 and r.json()["code"] == "no_reader"
     # nothing answers at the address
     cfg["modules"]["local_intake"] = True
     cfg["local_intake"] = {"url": "http://127.0.0.1:9"}
     config.save(cfg)
     r = c.get(B)
-    assert r.status_code == 503 and r.json()["reason"] == "unreachable" and "They are kept" in r.json()["error"]
+    assert r.status_code == 503 and r.json()["code"] == "unreachable" and "They are kept" in r.json()["error"]
 
 
 def test_a_reader_that_wants_a_token_is_refused_in_the_hubs_words(hub):
@@ -100,7 +100,7 @@ def test_a_reader_that_wants_a_token_is_refused_in_the_hubs_words(hub):
     data["token"] = "secret-token-1"
     data["health"] = {**data["health"], "auth_required": False}
     r = c.get(B)
-    assert r.status_code == 502 and r.json()["reason"] == "unauthorized" and "secret-token-1" not in r.text
+    assert r.status_code == 502 and r.json()["code"] == "unauthorized" and "secret-token-1" not in r.text
 
 
 # ---------- remove ----------
@@ -120,7 +120,7 @@ def test_remove_takes_one_out_and_needs_the_code(hub):
 def test_remove_of_one_that_is_gone_is_not_found(hub):
     c, _, _ = hub
     r = post(c, "label-reader/corrections/fb-99/remove")
-    assert r.status_code == 404 and r.json()["reason"] == "not_found"
+    assert r.status_code == 404 and r.json()["code"] == "not_found"
 
 
 def test_remove_all_takes_every_one_out_and_needs_the_code(hub):
@@ -170,12 +170,12 @@ def test_the_package_is_the_readers_exact_zip_as_an_attachment(hub):
 def test_the_package_of_nothing_is_refused_and_a_big_one_is_too_large(hub, monkeypatch):
     c, data, _ = hub
     r = c.get(B + "/package")
-    assert r.status_code == 409 and r.json()["reason"] == "empty"
+    assert r.status_code == 409 and r.json()["code"] == "empty"
     add(data, "r1")
     monkeypatch.setattr(local_reader, "BUNDLE_CAP", 10)
     monkeypatch.setattr(local_reader.feedback_bundle, "__defaults__", (10,))
     r = c.get(B + "/package")
-    assert r.status_code == 413 and r.json()["reason"] == "too_large" and "too big" in r.json()["error"]
+    assert r.status_code == 413 and r.json()["code"] == "too_large" and "too big" in r.json()["error"]
 
 
 # ---------- send (the job) ----------
@@ -196,7 +196,7 @@ def test_send_starts_the_job_and_needs_the_code(hub):
 def test_send_of_nothing_starts_no_job(hub):
     c, _, started = hub
     r = post(c, "label-reader/corrections/send")
-    assert r.status_code == 409 and r.json()["reason"] == "empty" and started == []
+    assert r.status_code == 409 and r.json()["code"] == "empty" and started == []
 
 
 def test_send_with_the_reader_absent_or_old_starts_no_job(hub):
@@ -204,7 +204,7 @@ def test_send_with_the_reader_absent_or_old_starts_no_job(hub):
     cfg = config.load()
     cfg["modules"]["local_intake"] = False
     config.save(cfg)
-    assert post(c, "label-reader/corrections/send").json()["reason"] == "no_reader"
+    assert post(c, "label-reader/corrections/send").json()["code"] == "no_reader"
     assert started == []
 
 
@@ -398,7 +398,7 @@ def test_a_conflict_is_the_hubs_own_refusal(hub):
     data["errors"].append((409, "conflict", None))
     data["errors"].append((409, "conflict", None))          # the health check does not use the queue: both go to list
     r = c.get(B)
-    assert r.status_code == 409 and r.json()["reason"] == "conflict" and "already has" in r.json()["error"]
+    assert r.status_code == 409 and r.json()["code"] == "conflict" and "already has" in r.json()["error"]
 
 
 def test_cli_list_remove_package(hub, capsys, tmp_path):
@@ -501,7 +501,7 @@ def test_try_again_needs_the_code_and_answers_the_records_new_state(hub):
 def test_try_again_of_a_record_that_is_gone_is_not_found(hub):
     c, _, _ = hub
     r = post(c, "label-reader/corrections/0123456789ab/retry")
-    assert r.status_code == 404 and r.json()["reason"] == "not_found"
+    assert r.status_code == 404 and r.json()["code"] == "not_found"
 
 
 def test_the_apps_api_has_no_try_again(phone):
