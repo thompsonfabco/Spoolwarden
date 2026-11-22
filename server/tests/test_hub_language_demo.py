@@ -176,7 +176,7 @@ out.options = [...pick().options].map((o) => [o.value, o.textContent]);
 out.hint = text($(".field__hint", pick().closest(".field")));
 out.initial = [pick().value, document.documentElement.lang, localStorage.getItem("spoolwarden.language")];
 pick().value = "de"; pick().dispatchEvent(new Event("change", { bubbles: true }));
-await sleep(200);
+await until(() => text($("#announcer")) === "Language: Deutsch.", "the announcement");
 out.said = [text($("#announcer")), text($(".result__text", pick().closest(".settings__choice"))) || ""];
 out.german = [document.documentElement.lang, localStorage.getItem("spoolwarden.language")];
 pick().value = ""; pick().dispatchEvent(new Event("change", { bubbles: true }));

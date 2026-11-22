@@ -1149,7 +1149,7 @@ hub.reply["POST printers/" + SERIAL + "/auto/choose"] = (rec) => {
   return [200, { slot: { label: rec.body.slot }, dry_run: false, confirmed: true, moved_back: [], problems: [], event: { id: "e1" } }];
 };
 mount();
-await until(() => $(".plive__autonotice[data-state='info']"), "waiting notice");
+await until(() => $(".plive__autonotice[data-state='info']") && text($(".plive__autonotice .result__text")), "waiting notice");
 out.waitingText = text($(".plive__autonotice .result__text"));
 out.waitingBtn = text($('[data-action="auto-cancel"]'));
 // Stop waiting acts at once with NO confirm dialog
@@ -1161,7 +1161,7 @@ await until(() => !$(".plive__autonotice").dataset.state, "notice cleared");
 
 // Choose state: warn notice with candidate slot buttons, then Undo 409 reads error and ignores message/text
 hub.live.status.auto = { spool_id: 8, spool: { id: 8, name: "Sunlu PETG Blue" }, state: "choose", slots: ["A2", "A3"] };
-await until(() => $(".plive__autonotice[data-state='warn']"), "choose notice", 3500);
+await until(() => $(".plive__autonotice[data-state='warn']") && text($(".plive__autonotice .result__text")), "choose notice", 3500);
 out.chooseText = text($(".plive__autonotice .result__text"));
 out.choiceBtns = $$('[data-action="auto-choose"]').map(text);
 if (typeof S !== "undefined" && S) S.history = { ...(S.history || {}), event_undo: true };
