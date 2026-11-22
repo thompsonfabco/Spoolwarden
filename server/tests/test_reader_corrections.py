@@ -549,6 +549,7 @@ def test_a_kept_record_is_found_under_either_file_name(hub):
     d = intake_history._dir(hid)
     add(data, hid)
     assert reader_corrections.waiting(config.load())["entries"][0]["record"] == hid
+    (d / "record.json").unlink()                                    # the copy kept for one release
     (d / "record.xml").rename(d / "record.json")                    # the name a record from before the move has
     assert reader_corrections.waiting(config.load())["entries"][0]["record"] == hid
     (d / "record.json").unlink()
