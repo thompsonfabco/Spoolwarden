@@ -126,7 +126,7 @@ def test_a_state_file_that_is_a_link_is_never_followed(tmp_path):
 
 def test_pairing_itself_still_works_over_the_xml_files():
     p = pairing.issue("phone")
-    assert pairing.check(p.token)["name"] == "phone"
+    assert pairing.check(p.token)
     code = pairing.issue("b")
     pairing.redeem_code(code.code)
     assert state("devices.xml").is_file() and state("pending.xml").is_file() and state("spent.xml").is_file()

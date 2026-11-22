@@ -387,9 +387,10 @@ def test_read_cap_is_replaced_atomically_again(kit):
     f = kit / "state" / "reads.json"
     cap = intake.ReadCap(f, 5)
     cap.take()
-    before = f.stat().st_ino
+    x = f.with_suffix(".xml")
+    before = x.stat().st_ino
     cap.take()
-    assert statexml.read_list(f) and (sys.platform == "win32" or f.stat().st_ino != before)
+    assert statexml.read_list(f) and (sys.platform == "win32" or x.stat().st_ino != before)
     assert not list(f.parent.glob("reads.xml.*tmp*"))
 
 
