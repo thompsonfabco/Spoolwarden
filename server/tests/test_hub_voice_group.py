@@ -248,31 +248,99 @@ out.withdrawn = JSON.stringify(calls).match(/station\.(speech|voice_speaker|voic
     assert page["withdrawn"] is None
 
 
-def test_while_the_page_is_locked_the_rows_show_read_only_without_a_note_and_are_editable_after_unlock(hub, tmp_path):
-    page = _drive_voice(hub, tmp_path, r"""
+LOCKED = r"""
 SW.setLock("locked");
-await until(() => $("#set-voice .voice__test") && !pickEl(), "the locked rows");
-await sleep(100);
+await sleep(150);
 const controls = () => [...document.querySelectorAll("#set-voice input, #set-voice select, #set-voice button")];
-out.locked = { rows: !!sw(), note: !!$("#set-voice .banner"),
-  voiceValue: [...document.querySelectorAll("#set-voice .field")].filter((f) => text($(".field__label", f)) === "Voice").map((f) => f.querySelector("input").value),
-  disabled: controls().every((c) => c.disabled), count: controls().length,
-  values: { speak: sw().checked, speed: sliders()[0].value, volume: sliders()[1].value } };
+const prompt = () => until(() => $('dialog[open] input[type="password"]'), "the unlock prompt");
+const giveCode = async (code) => { const f = await prompt(); f.value = code; $('[data-action="confirm"]', f.closest("dialog")).click(); };
+"""
+
+
+def test_while_the_page_is_locked_the_rows_are_enabled_show_the_values_and_ask_nothing_until_changed(hub, tmp_path):
+    page = _drive_voice(hub, tmp_path, LOCKED + r"""
+out.locked = { rows: !!sw(), note: !!$("#set-voice .banner"), dialog: !!$("dialog[open]"), enabled: controls().every((c) => !c.disabled), count: controls().length,
+  voice: pickEl().value, values: { speak: sw().checked, speed: sliders()[0].value, volume: sliders()[1].value } };
 out.html = grp().textContent.includes("shown once the page is unlocked");
-const before = reads.length;
-SW.setLock("unlocked", { code: "__CODE__" });
-await until(() => pickEl(), "the editable rows");
-await sleep(100);
-out.reads = reads.length - before;
-out.open = { disabled: controls().filter((c) => c.disabled).length, note: !!$("#set-voice .banner") };
-change(sliders()[0], "90");
-await until(() => calls.length === 1, "the speed save");
-out.calls = calls.slice();
+out.reads = reads.length;
+out.calls = calls.length;
 """)
-    assert page["locked"]["rows"] and page["locked"]["note"] is False
-    assert page["locked"]["voiceValue"] == ["Piper, many speakers"]
-    assert page["locked"]["disabled"] is True and page["locked"]["count"] >= 5
+    assert page["locked"]["rows"] and page["locked"]["note"] is False and page["locked"]["dialog"] is False
+    assert page["locked"]["enabled"] is True and page["locked"]["count"] >= 6
+    assert page["locked"]["voice"] == "many"
     assert page["locked"]["values"] == {"speak": True, "speed": "100", "volume": "50"}
-    assert page["html"] is False
-    assert page["reads"] == 1 and page["open"] == {"disabled": 0, "note": False}
-    assert page["calls"] == [["save", {"speed": 90}]]
+    assert page["html"] is False and page["reads"] >= 1 and page["calls"] == 0
+
+
+def test_while_locked_each_change_asks_for_the_code_in_place_and_saves_only_after_it_is_given(hub, tmp_path):
+    page = _drive_voice(hub, tmp_path, LOCKED + r"""
+const nth = async (n) => { await until(() => calls.length === n, "request " + n); await sleep(200); return calls[n - 1]; };
+const step = async (name, act, n) => {
+  act();
+  await prompt();
+  out[name] = { before: calls.length };
+  await giveCode("__CODE__");
+  out[name].call = await nth(n);
+  SW.setLock("locked");
+  await sleep(150);
+};
+await step("speed", () => change(sliders()[0], "90"), 1);
+await step("volume", () => change(sliders()[1], "20"), 2);
+await step("speaker", () => change(speakerEl(), "12"), 3);
+await step("speak", () => sw().click(), 4);
+await step("voice", () => change(pickEl(), "one"), 5);
+out.kept = { speed: sliders()[0].value, volume: sliders()[1].value, speaker: speakerEl().value, speak: sw().checked, voice: pickEl().value };
+""")
+    assert page["speed"] == {"before": 0, "call": ["save", {"speed": 90}]}
+    assert page["volume"] == {"before": 1, "call": ["save", {"volume": 20}]}
+    assert page["speaker"] == {"before": 2, "call": ["save", {"speaker": 12}]}
+    assert page["speak"] == {"before": 3, "call": ["save", {"speech": False}]}
+    assert page["voice"] == {"before": 4, "call": ["general", {"station.tts": "auto", "station.voice": "en_US-ljspeech-medium"}]}
+    assert page["kept"] == {"speed": "90", "volume": "20", "speaker": "12", "speak": False, "voice": "one"}
+
+
+def test_while_locked_a_wrong_code_sends_nothing_and_cancelling_puts_every_control_back(hub, tmp_path):
+    page = _drive_voice(hub, tmp_path, LOCKED + r"""
+const wrongThenCancel = async (name, act) => {
+  act();
+  await giveCode("00000000");
+  await until(() => $("dialog[open] .field__error"), "the refusal");
+await sleep(300);                                          // the dialog is busy until the check ends
+  out[name] = { error: text($("dialog[open] .field__error")), calls: calls.length };
+  $('dialog[open] [data-action="cancel"]').click();
+  await until(() => !$("dialog[open]"), "the prompt to close");
+  await sleep(150);
+};
+await wrongThenCancel("speed", () => change(sliders()[0], "60"));
+await wrongThenCancel("speaker", () => change(speakerEl(), "9"));
+await wrongThenCancel("speak", () => sw().click());
+await wrongThenCancel("voice", () => change(pickEl(), "espeak"));
+out.back = { speed: sliders()[0].value, readout: readout(sliders()[0]), speaker: speakerEl().value, speak: sw().checked, voice: pickEl().value, shown: shown(speakerEl()), calls: calls.length };
+""")
+    for name in ("speed", "speaker", "speak", "voice"):
+        assert page[name]["calls"] == 0 and page[name]["error"], page[name]
+    assert page["back"] == {"speed": "100", "readout": "100 %", "speaker": "0", "speak": True, "voice": "many", "shown": True, "calls": 0}
+
+
+def test_while_locked_test_asks_for_the_code_too_and_plays_with_the_values_after_it(hub, tmp_path):
+    page = _drive_voice(hub, tmp_path, LOCKED + r"""
+testBtn().click();
+await prompt();
+out.before = calls.length;
+await giveCode("__CODE__");
+await until(() => calls.length === 1 && resultText() === "Played on the Weigh Station.", "the test");
+out.calls = calls.slice();
+SW.setLock("locked");
+await sleep(150);
+testBtn().click();
+await giveCode("00000000");
+await until(() => $("dialog[open] .field__error"), "the refusal");
+await sleep(300);                                          // the dialog is busy until the check ends
+$('dialog[open] [data-action="cancel"]').click();
+await until(() => !$("dialog[open]"), "the prompt to close");
+await sleep(150);
+out.after = calls.length;
+""")
+    assert page["before"] == 0
+    assert page["calls"] == [["test", {"speaker": 0, "speed": 100, "volume": 50}]]
+    assert page["after"] == 1

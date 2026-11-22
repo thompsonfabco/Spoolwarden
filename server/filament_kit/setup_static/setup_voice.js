@@ -4,8 +4,8 @@
 // setup_alerts.js: voiceGroup(data) is the group's builder, and the group's row in SET_GROUPS names it. The data is the read of
 // settings/general for the Voice row only (`values` station.tts and station.voice, applied through the settings route) and
 // `station_on`. Speak, Speaker, Speed and Volume live in voice.xml (R88 01:50): the group reads them, `remote` and `voice` from
-// the view read `G station/voice` (no code: looking needs nothing, so a locked page shows the rows read-only) and saves each changed
-// one with `P station/voice` (code); a value out of range is refused by the Hub, and the control goes back. Test calls `P station/voice/test` (code) with the values as they stand in the form. Everything
+// the view read `G station/voice` (no code: looking needs nothing, so a locked page shows the values) and saves each changed
+// one with `P station/voice` (code); on a locked page a change or Test asks for the code in place, as every group does, and goes back if it is not given; a value out of range is refused by the Hub, and the control goes back. Test calls `P station/voice/test` (code) with the values as they stand in the form. Everything
 // from the Hub goes in through textContent.
 "use strict";
 
@@ -60,23 +60,23 @@ function voiceTestText(e) {
 }
 
 // ----- the group -----
-// The head and a body that fills itself from the view read `G station/voice`, locked or not; while Locked the rows are read-only
-// (disabled), and they are drawn again, editable, when the page is unlocked.
+// The head and a body that fills itself once from the view read `G station/voice`, locked or not; the controls stay enabled while
+// Locked: a change or Test asks for the code in place (needCode), then applies.
 function voiceGroup({ g }) {
   if (!g.station_on) return setGroup("voice", { desc: SW.t("settings_voice_desc"), body: [offNote("settings_voice_off")] });
   const body = h("div", { class: "voice__rows" });
   const el = setGroup("voice", { desc: SW.t("settings_voice_desc"), body: [body] });
-  whenOpen(body, (open) => api("station/voice").then((answer) => {
-    body.replaceChildren(...(answer.station === false ? [offNote("settings_voice_off")] : voiceRows(g.values || {}, answer, open)));
-  }));
+  later(api("station/voice").then((answer) => {
+    body.replaceChildren(...(answer.station === false ? [offNote("settings_voice_off")] : voiceRows(g.values || {}, answer)));
+  }).catch((e) => say(body, e.message, false)));
   return el;
 }
 
 // the rows, from the settings' Voice values (`v`) and the answer of `G station/voice`: speech, voice, speaker, speed, volume, remote;
-// `open` false: every control is disabled, and the Voice row is the name the answer gives
-function voiceRows(v, a, open) {
+// the Voice row shows the choice the settings values give, else the one the answer's voice name gives
+function voiceRows(v, a) {
   const remote = !!a.remote, box = sbox();
-  const saved = { choice: voiceChoiceOf(v), speaker: voiceNumber(a, "speaker", 0), speed: voiceNumber(a, "speed", 100), volume: voiceNumber(a, "volume", 50) };
+  const saved = { choice: voiceChoiceOf({ "station.voice": a.voice, ...v }), speaker: voiceNumber(a, "speaker", 0), speed: voiceNumber(a, "speed", 100), volume: voiceNumber(a, "volume", 50) };
   // one write of the Voice row through settings/general; `back` puts the control back when it was refused or the code was not given
   const put = (values, back, after) => needCode(async () => {
     working(box, SW.t("common_saving"));
@@ -111,7 +111,7 @@ function voiceRows(v, a, open) {
     } });
 
   // the Voice row: a select of three, or on a Weigh Station on another computer the line that says where it is chosen
-  const pick = remote ? null : !open ? SW.field({ row: true, type: "text", label: SW.t("settings_voice_label"), value: a.voice || "", hint: voT("settings_voice_restarts") }) : SW.field({ row: true, type: "select", label: SW.t("settings_voice_label"), value: saved.choice, hint: voT("settings_voice_restarts"),
+  const pick = remote ? null : SW.field({ row: true, type: "select", label: SW.t("settings_voice_label"), value: saved.choice, hint: voT("settings_voice_restarts"),
     options: VOICE_CHOICES.map(([value, key]) => ({ value, label: voT(key) })) });
   const remoteLine = remote ? h("p", { class: "voice__remote", textContent: voT("settings_voice_remote") }) : null;
 
@@ -132,12 +132,12 @@ function voiceRows(v, a, open) {
   const test = SW.btn(voT("settings_voice_test"), { action: "voice-test", run: () => press() });
   const rows = [speak, pick, remoteLine, speaker, speed, volume, h("div", { class: "voice__test" }, test, box)].filter(Boolean);
 
-  const nowChoice = () => (pick && open ? pick._control.value : saved.choice);
+  const nowChoice = () => (pick ? pick._control.value : saved.choice);
   const paint = () => { speaker.hidden = nowChoice() !== "many"; };
   paint();
 
   // each row applies when it changes; a refused one goes back to what was kept
-  if (pick && open) pick._control.addEventListener("change", () => {
+  if (pick) pick._control.addEventListener("change", () => {
     const value = pick._control.value, was = saved.choice;
     paint();
     put(VOICE_CHOICES.find((c) => c[0] === value)[2], () => { pick._control.value = was; paint(); }, () => { saved.choice = value; followApply(true); });
@@ -181,6 +181,5 @@ function voiceRows(v, a, open) {
       });
     } finally { testing = false; }
   }
-  if (!open) for (const r of rows) for (const c of [r, ...r.querySelectorAll("input, select, button")]) if ("disabled" in c) c.disabled = true;
   return rows;
 }
