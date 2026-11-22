@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import anyio
 
-from .. import config, getting_started, hubport, local_intake_install, local_reader, modules, redact, remote, setup_helper, share_corrections
+from .. import config, demo, getting_started, hubport, local_intake_install, local_reader, modules, redact, remote, setup_helper, share_corrections
 from ..spoolman import Spoolman, SpoolmanError
 from .texts import say
 
@@ -167,7 +167,14 @@ def routes(page) -> list[tuple]:
         page.audit(request, f"Hub port change to {port_num} started")
         return {"ok": True, "port": port_num, "job": "port_change"}
 
+    def not_in_demo() -> None:
+        """The demo asks no reader (R85 4.3): nothing is probed, no certificate pin is kept."""
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
+
     async def reader_health(request, body):
+        not_in_demo()
+
         def check() -> dict:
             cfg = config.load()
             if "local_intake" not in modules.enabled(cfg):
@@ -177,6 +184,7 @@ def routes(page) -> list[tuple]:
         return await anyio.to_thread.run_sync(check)
 
     async def reader_test(request, body):
+        not_in_demo()
         url = body.get("url")
         tier = body.get("tier", "auto")
         if not isinstance(url, str) or not isinstance(tier, str):

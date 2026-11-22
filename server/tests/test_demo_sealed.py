@@ -15,7 +15,7 @@ What is proved here and what is not (the hooks live in files other steps hold; s
   `Switch` over the real Bambu `Manager` and the real `KlipperFamily`, whose clients FAIL the test when made). Every fake
   that stands for the outside (Claude's client, the local reader, a printer's client, a push sender) records the call in
   `out.seen`, so a call that gets through is a leak of its own. What needs a stop in a file another builder holds is in
-  `HELD_ROUTE_LEAKS`, held exactly like the lists above.
+  `TEMPORARY_HELD_ROUTE_LEAKS`, held exactly like the lists above.
 """
 from __future__ import annotations
 
@@ -44,12 +44,13 @@ from filament_kit.bridge.klipper.manager import KlipperFamily
 from filament_kit.demo import printers
 from filament_kit.spoolman import Spoolman
 
-ON = frozenset({"server", "printers", "klipper"})
+ON = frozenset({"server", "printers", "klipper", "local_intake"})
 CODE = "12345678"
 HOSTNAME = "kit.local"
 BASE = f"https://{HOSTNAME}:8710"
 HOME = ("192.0.2.20", 50000)                  # on the Hub's own network, as the Hub page wants
 
+READER_URL = "http://192.0.2.77:8765"                     # the configured local reader: the Outside fake fails a connect to it
 PAIRING_ROUTES = ("/api/pair", "/api/pairing/redeem")     # pairing works in the demo (R85 4.3)
 STREAMS = ("/intake/api/printers/{id}/events",)           # a server-sent stream never ends: not walked
 
@@ -70,11 +71,15 @@ KLIPPER_ROUTE_LEAKS: dict[str, list[str]] = {
 # what the calls with a real body leave outside the demo's folder (the walk's empty bodies stop before they get there)
 LEAKS_WITH_BODY: dict[str, str] = {}
 
-# what still leaves the demo through a stop that belongs in a file another builder holds (api.py, cli.py, setup_page.py,
+# TEMPORARY, NAMED: the three leaks below wait for stops in files the Server builder holds (api.py printer_add and
+# printer_test, setup_page.py key_check; the hunks are in the RC6d report). The Server builder applies them, empties this
+# dict and then sets `demo.MOUNTABLE = True`; `test_the_demo_is_not_mountable_while_a_leak_list_is_not_empty` fails if the
+# demo is mountable while this or any other leak list here is not empty.
+# What still leaves the demo through a stop that belongs in a file another builder holds (api.py, cli.py, setup_page.py,
 # web/intake_app.py; the hunks are in the RC6d report). Per route, what a request with a real body reaches or writes. Such a
 # route is left out of the every-route walk and held by `test_routes_waiting_for_a_held_file_...`, exactly: when the stop
 # lands the route's entry must go (the test then fails until it does), so the dict can only shrink toward empty.
-HELD_ROUTE_LEAKS: dict[str, list[str]] = {
+TEMPORARY_HELD_ROUTE_LEAKS: dict[str, list[str]] = {
     "POST /setup/api/key/check": ["cloud claude models"],      # setup_page.py key_check, before self._gap()
     "POST /api/printers": ["connect 192.0.2.99", "lookup voron.example"],   # api.py printer_add: a Bambu address (setup_page.py
     #                                                                          bambu_add_by_address), and a Klipper one (discovery.add)
@@ -113,6 +118,7 @@ BODIES: dict[str, list[dict]] = {
     "POST /api/intake/read": [photo("photo")],
     "POST /api/intake/cap/refund": [{"json": {"ticket": "t"}}],
     "POST /intake/api/read": [photo("photos")],
+    "POST /setup/api/settings/local-intake/test": [j(url=READER_URL, tier="auto"), j(url="https://192.0.2.77:8765", tier="gpu", trust=True)],
 }
 FIRMWARE = ("printer-station.bin", "intake-panel.bin")      # GET /setup/api/firmware/{device}
 PRINTER_IDS = ("garage-voron", "mainsailos", "00M00A000000001")
@@ -137,6 +143,8 @@ def fk_env(tmp_path, monkeypatch):
     cfg = config.load()
     cfg["modules"] = {n: n in modules.MODES["server"] for n in modules.MODULES}
     cfg["modules"]["ai_intake"] = True                     # a label read (and the key check) would reach Claude
+    cfg["modules"]["local_intake"] = True                  # the local reader's health, Test and corrections would probe it:
+    cfg["local_intake"] = {**cfg.get("local_intake", {}), "url": READER_URL, "tier": "auto"}   # an address no socket may reach
     (tmp_path / "etc" / "anthropic_key").write_text("sk-ant-api03-test\n", encoding="utf-8")
     cfg["web"] = {**cfg["web"], "lan": ["192.0.2.0/24"]}
     config.save(cfg)
@@ -408,7 +416,7 @@ def test_every_route_in_the_demo(hub, tmp_path):
     leaks: dict[str, set] = {}
     walked = 0
     for method, path in routes_of(app):
-        if path in PAIRING_ROUTES or path in STREAMS or f"{method} {path}" in {**KLIPPER_ROUTE_LEAKS, **HELD_ROUTE_LEAKS}:
+        if path in PAIRING_ROUTES or path in STREAMS or f"{method} {path}" in {**KLIPPER_ROUTE_LEAKS, **TEMPORARY_HELD_ROUTE_LEAKS}:
             continue                                  # (the last two: held by the tests below, with their own lists)
         for url, kw in requests_for(method, path):
             try:
@@ -479,7 +487,7 @@ def test_map_slots_stops_in_the_demo(hub, tmp_path):
 
 
 def test_routes_waiting_for_a_held_file_leak_exactly_what_is_listed(hub, tmp_path):
-    """The routes whose stop belongs in a file another builder holds (`HELD_ROUTE_LEAKS`), and every per-printer kit route
+    """The routes whose stop belongs in a file another builder holds (`TEMPORARY_HELD_ROUTE_LEAKS`), and every per-printer kit route
     for each pretend printer (the two Klipper ones, then the Bambu one) with a body that gets past the checks: what they
     reach or write outside the demo's folder is held exactly, so the dict can only shrink when the stop lands."""
     c, out, _ = hub
@@ -487,7 +495,7 @@ def test_routes_waiting_for_a_held_file_leak_exactly_what_is_listed(hub, tmp_pat
     seen_by: list[str] = []                      # which request reached what (the message of a failure)
     for method, path in routes_of(c.app):
         key = f"{method} {path}"
-        sends = requests_for(method, path) if key in HELD_ROUTE_LEAKS else []
+        sends = requests_for(method, path) if key in TEMPORARY_HELD_ROUTE_LEAKS else []
         if path.startswith("/api/printers") and method in WRITES:
             sends += [(sample_path(path).replace("00M00A000000001", pid), {"json": body})
                       for pid in PRINTER_IDS for body in (KIT_BODY, {**KIT_BODY, "family": "klipper"})]
@@ -499,7 +507,73 @@ def test_routes_waiting_for_a_held_file_leak_exactly_what_is_listed(hub, tmp_pat
             if got:
                 found.setdefault(key, set()).update(got)
             seen_by.append(f"{method} {url} {sorted(kw.get('json', {}))[:3]} -> {out.last.status_code} {out.last.text[:60]}: {sorted(got)}")
-    assert {k: sorted(v) for k, v in found.items()} == {k: sorted(v) for k, v in HELD_ROUTE_LEAKS.items()}, "\n".join(seen_by)
+    assert {k: sorted(v) for k, v in found.items()} == {k: sorted(v) for k, v in TEMPORARY_HELD_ROUTE_LEAKS.items()}, "\n".join(seen_by)
+
+
+def leak_lists() -> dict[str, object]:
+    return {"LEAKS": LEAKS, "LEAKS_WITH_BODY": LEAKS_WITH_BODY, "KLIPPER_ROUTE_LEAKS": KLIPPER_ROUTE_LEAKS,
+            "TEMPORARY_HELD_ROUTE_LEAKS": TEMPORARY_HELD_ROUTE_LEAKS}
+
+
+def not_mountable_yet(mountable: bool, lists: dict[str, object]) -> list[str]:
+    """What stands in the way of a demo that is mountable: the names of the leak lists that are not empty."""
+    return [name for name, v in lists.items() if v] if mountable else []
+
+
+def test_the_demo_is_not_mountable_while_a_leak_list_is_not_empty():
+    """The seal is not complete while any leak list here is not empty (R85 assumption 5): `demo.MOUNTABLE` (what RC9's
+    mount consults) stays False until they are all empty, and whoever flips it with a list left fails this test."""
+    assert not_mountable_yet(demo.MOUNTABLE, leak_lists()) == [], "empty the leak lists before demo.MOUNTABLE = True"
+
+
+def test_the_mount_guard_fails_a_mountable_demo_with_a_list_left(monkeypatch):
+    monkeypatch.setattr(demo, "MOUNTABLE", True)
+    assert not_mountable_yet(demo.MOUNTABLE, {"A": {}, "B": {"POST /x": ["connect"]}}) == ["B"]       # flipped, one list left
+    assert not_mountable_yet(demo.MOUNTABLE, {"A": {}, "B": []}) == []                                  # flipped, all empty
+    assert not_mountable_yet(False, {"B": {"POST /x": ["connect"]}}) == []                             # not mountable: fine
+    if any(leak_lists().values()):               # the real lists, as they stand: a flip now is caught
+        with pytest.raises(AssertionError):
+            assert not_mountable_yet(demo.MOUNTABLE, leak_lists()) == [], "flipped with a leak list left"
+
+
+def test_manual_map_on_the_pretend_printers_is_a_refusal_never_a_500(hub, tmp_path):
+    """The kit manual-map routes for a pretend Klipper printer (its family had no `manual`: AttributeError, 500) and a
+    pretend Bambu one answer with a manual-map refusal or an answer, and nothing real is touched."""
+    c, out, _ = hub
+    before = snapshot(tmp_path)
+    steps = [("GET", ""), ("POST", "/start"), ("POST", "/confirm"), ("POST", "/skip"), ("POST", "/stop"), ("POST", "/offer")]
+    for pid in PRINTER_IDS + ("03000A000000002",):
+        for method, tail in steps:
+            r = c.request(method, f"/api/printers/{pid}/manual-map{tail}", json={} if method == "POST" else None)
+            assert r.status_code < 500, f"{method} {pid}{tail} -> {r.status_code} {r.text[:80]}"
+            if pid in ("garage-voron", "mainsailos"):       # a Klipper printer: the demo's stop, as a manual-map refusal
+                assert r.status_code == 409 and r.json()["error"] == demo.NOT_IN_DEMO_CODE, (pid, tail, r.text)
+    assert snapshot(tmp_path) == before and [k for k in out.seen if not INSIDE.match(k)] == [] and out.wrote == []
+
+
+def test_the_local_reader_is_never_probed_in_the_demo(hub, tmp_path):
+    """Settings > Label Reader's health and Test, the corrections waiting at the reader, and the status row all stop with
+    the demo's sentence: nothing connects to the configured reader (a connect to it is a leak in `out.seen`), no
+    certificate pin is kept (that is a write)."""
+    c, out, _ = hub
+    asks = [("GET", "/setup/api/settings/local-intake", {}),
+            ("POST", "/setup/api/settings/local-intake/test", j(url=READER_URL, tier="auto")),
+            ("POST", "/setup/api/settings/local-intake/test", j(url="https://192.0.2.77:8765", tier="auto", trust=True)),
+            ("GET", "/setup/api/label-reader/corrections", {}),
+            ("GET", "/setup/api/label-reader/corrections/package", {}),
+            ("POST", "/setup/api/label-reader/corrections/remove-all", j()),
+            ("POST", "/setup/api/label-reader/corrections/send", j()),
+            ("POST", "/setup/api/label-reader/corrections/7/remove", j()),
+            ("POST", "/setup/api/label-reader/corrections/7/retry", j()),
+            ("GET", "/api/label-reader/corrections", {}),
+            ("POST", "/api/label-reader/corrections/7/remove", {})]
+    for method, url, kw in asks:
+        assert probe(c, out, tmp_path, method, url, **kw) == set(), (method, url, out.last.status_code, out.last.text[:80])
+        assert out.last.status_code == 409, (method, url, out.last.status_code, out.last.text[:80])
+        body = out.last.json()
+        assert demo.NOT_IN_DEMO in (body.get("error"), body.get("message")), (method, url, body)
+    rows = list(status.local_reader_rows(config.load()))
+    assert [r.text for r in rows if r.text == demo.NOT_IN_DEMO] == [demo.NOT_IN_DEMO] and not any("answering" in r.text for r in rows) and [k for k in out.seen if not INSIDE.match(k)] == []
 
 
 def test_the_label_reader_stops_in_the_demo(hub, tmp_path):
