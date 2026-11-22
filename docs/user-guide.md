@@ -383,6 +383,7 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link Slicer Sync / Link a Weigh Station |
 | `weigh-station pair [--local]` | Run on the Weigh Station: pair it with the Hub | Pair the Weigh Station on this Hub |
 | `weigh-station flash-display` | Write the Weigh Station display firmware over USB | Flash a device |
+| `weigh-station voice-test` | Play the voice test sentence on the Weigh Station | Settings > Weigh Station voice |
 | `weigh-station panel-wifi [--off] [--address ADDRESS]` | Set the display panel up to reach the Weigh Station over Wi-Fi, or with `--off` back to the USB cable (root) | (none) |
 | `weigh-station pairing-state` | Paired, not paired or not checked yet | (none) |
 | `tag-reader list` | Tag Reader tokens | Devices, Tag Readers |
@@ -404,7 +405,7 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `features units` | The service files the features need, one per line | (none) |
 | `config [--numbered]` | The settings menu | Settings |
 | `config show` | All settings, in menu order | Settings |
-| `config set <key> <value>` | Change one setting (not the storage locations: they are a list, see `locations`) | Settings, one field |
+| `config set <key> <value>` | Change one setting | Settings, one field |
 | `config theme [<theme>]` | Show or set the theme for new devices | Settings > Appearance > Theme for new devices |
 | `locations` (same as `locations list`) | The storage locations in fill order | Settings > Storage locations |
 | `locations add <name> [--type bulk\|containers] [--limit N] [--count N] [--takes any\|none\|MATERIALS] [--overflow]` | Add a location | Add a location |
@@ -435,6 +436,7 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `remote firewall` | Print the firewall rules (changes nothing) | Show the firewall rules |
 | `remote get-certificate` | Get the public certificate now | Get the certificate |
 | `setup-code [--new] [--revoke-trusted]` | Hub page address and setup code | Setup code, Trusted computers |
+| `port [<number>]` | Show the Hub's port, or move the Hub to another | Settings > Network and addresses, Hub port |
 | `certificate` | Make the Hub's certificate if missing; print its fingerprint | (none) |
 | `spoolman fields` | Make Spoolwarden's extra fields in Spoolman | Overview, Make the fields |
 | `spoolman address [<url>]` | Show or change the Spoolman in use (checked before saving) | Settings > General, Spoolman address |
@@ -443,6 +445,26 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `logs [<service>] [--lines 50\|100\|200]` | The end of a service's log | Logs |
 | `add` | Prints where spools are added | (none) |
 | `help [<command> \| aliases \| --markdown]` | Help; `--markdown` prints the command table for the user guide | (none) |
+| `activity [--spool N] [--who WHO] [--days N]` | Show what was done on the Hub | Logs |
+| `undo [<event id>] [-y]` | Undo a spool or slot change (root; asks) | (none) |
+| `usage [--by month] [--printer PRINTER]` | Show filament used by printers | (none) |
+| `export <dataset> [--out FILE] [--days N] [--printer PRINTER]` | Export Hub data as CSV (root) | Spools |
+| `import spools\|locations <file> [-y]` | Import spools or locations from CSV (root; asks) | Spools |
+| `report [--out FILE]` | Collect a redacted Hub report (root) | Logs |
+| `status --history [--days 7\|30]` | Show check changes in the last 7 or 30 days | (none) |
+| `pair --home-assistant [--text] [--no-wait]` | Pair Home Assistant (viewer role): print the code and link | (none) |
+| `local-intake status` | Does the local reader answer, which tiers it can use, the reader order | (none) |
+| `local-intake install [--tier auto\|cpu\|gpu] [--version VERSION] [--planned] [-y]` | Install or upgrade the local reader from its signed release on this machine (root; sizes are shown first) | (none) |
+| `local-intake share-corrections [on\|off] [--delete-waiting] [--status]` | Share corrections: `on` or `off` sets it (root); no word sets the reader to the saved value; `--status` shows both | (none) |
+| `local-intake token [--remove]` | Set the local reader's bearer token (root; asked hidden, never shown), or remove it | (none) |
+| `local-intake plan` | What installing the latest reader release needs, per tier (saved when run as root) | (none) |
+| `local-intake remove [-y]` | Uninstall the local reader from this machine and switch the local reader off (root; its settings are kept) | (none) |
+| `local-intake test <photo>...` | Read photos with the local reader only and print the result (nothing saved) | (none) |
+| `label-reader corrections [list]` | The corrections waiting to be shared (root) | (none) |
+| `label-reader corrections remove <id>...` | Take corrections out of the list; nothing is sent (root) | (none) |
+| `label-reader corrections retry <record>...` | Queue the corrections of records again that `list` shows as not waiting (root) | (none) |
+| `label-reader corrections package <file>` | Save the exact zip that `send` would send, to look at it first (root) | (none) |
+| `label-reader corrections send` | Ask the Label Reader to send the corrections waiting (it does the upload) (root) | (none) |
 
 ### Notes on some commands
 
