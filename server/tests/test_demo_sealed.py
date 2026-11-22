@@ -8,7 +8,8 @@ What is proved here and what is not (the hooks live in files other steps hold; s
   pretend printers (no connection, no certificate, no Access Code), the demo's own folder holds what the demo writes.
 - MISSING today: `LEAKS` below lists, per route, what still gets out or lands outside the demo's folder in this tree. The
   test holds that list EXACTLY: a stop that lands makes its route fall out of the list, and the test then fails until
-  the list is cut, so the list can only shrink toward empty. When it is empty the assumption is proved.
+  the list is cut, so the list can only shrink toward empty. It is empty since RC6c (the catalog, the registry, the
+  per-printer and profiles folders follow the demo); a new leak fails the walk.
 """
 from __future__ import annotations
 
@@ -19,7 +20,6 @@ import os
 import re
 import socket
 import subprocess
-import sys
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -44,18 +44,7 @@ STREAMS = ("/intake/api/printers/{id}/events",)           # a server-sent stream
 
 # what still leaves the demo or lands outside its folder in this tree, with the step that adds the stop. Filled from
 # the first runs on the test boxes.
-LEAKS: dict[str, str] = {
-    # what the Hub records, in the real state folder (each must use demo.where(...))
-    **{f"write state/library{rest}": "library.py (RC1d): the Filament Catalog's copy" for rest in (
-        "", "/current.json", "/versions", "/versions/2-20261101T000000Z")},
-    "write state/printers": "bridge/mapping.py (RC1e): the per-printer folder",
-    "write state/printers/<id>": "same",
-    "write state/profiles": "profiles/builds.py (RC1c): `_dir()` (a read of the system presets takes the lock in it)",
-}
-
-if sys.platform == "win32":      # the walk does not reach these two writes on Windows (seen on testbox-windows; not looked into)
-    for _k in ("write state/printers", "write state/printers/<id>", "write state/profiles"):
-        del LEAKS[_k]
+LEAKS: dict[str, str] = {}
 
 # what the calls with a real body leave outside the demo's folder (the walk's empty bodies stop before they get there)
 LEAKS_WITH_BODY: dict[str, str] = {}
