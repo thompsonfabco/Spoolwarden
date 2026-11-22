@@ -28,6 +28,8 @@ def state(name):
 
 @pytest.fixture(autouse=True)
 def clean_problems():
+    config.paths().state.mkdir(parents=True, exist_ok=True)
+    pairing.make_cert("kit", [], config.paths().etc)
     statexml._unreadable.clear()
     yield
     statexml._unreadable.clear()

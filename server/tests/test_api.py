@@ -400,10 +400,10 @@ def test_read_spoolman_down_503_refunds_cap(sm, dead_port):
     # retry of a kept read: a Spoolman outage gives the read back too
     fake.raises = anthropic.APIConnectionError(request=httpx.Request("POST", "https://x"))
     read_id = read(c, tok, [("a.jpg", JPEG)]).json()["read_id"]
-    assert len(json.loads(reads.read_text())) == 2
+    assert len(statexml.read_list(reads)) == 2
     r = c_dead.post(f"/api/intake/retry/{read_id}", headers=auth(tok))
     assert r.status_code == 503 and r.json()["error"] == "spoolman_unreachable"
-    assert len(json.loads(reads.read_text())) == 2
+    assert len(statexml.read_list(reads)) == 2
 
 
 def test_filaments_and_vendors_for_a_manual_add(sm):

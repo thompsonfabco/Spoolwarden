@@ -361,7 +361,7 @@ def test_keep_does_not_follow_a_planted_link(kit, monkeypatch, tmp_path):
     target.write_text("{}", encoding="utf-8")
     d = tmp_path / "failed" / "r1"
     d.mkdir(parents=True)
-    (d / "meta.json").symlink_to(target)
+    (d / "meta.xml").symlink_to(target)
     with pytest.raises(OSError):
         intake._keep("r1", [b"jpeg"], "hint", None)
     assert target.read_text(encoding="utf-8") == "{}"
