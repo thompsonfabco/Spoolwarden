@@ -1,0 +1,2 @@
+server/filament_kit/web/static/app.css | 50mm | 1 | the printed width of a 50 x 30 mm label: the print page shows it at its real size (R85 5.2)
+server/filament_kit/web/static/app.css | 62mm | 1 | the printed width of a 62 x 29 mm label: the print page shows it at its real size (R85 5.2)

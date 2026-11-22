@@ -287,7 +287,10 @@ function historyTab() {
   const missing = h("div");                                   // "no longer kept" for an address that names a record the Hub dropped
   let listAt = 0;                                             // when the list last came from the Hub
   const list = hubGroup(h("div"), () => listAt);
-  const el = h("section", { class: "hidden" }, intro, missing, list);
+  const corrLink = h("p", { class: "recent__corr", hidden: true });        // "Share corrections is on · 3 waiting" (7.1, 7.5)
+  const corr = h("section", { class: "corr", hidden: true });              // Corrections waiting (7.5)
+  const el = h("section", { class: "hidden" }, intro, corrLink, missing, list, corr);
+  let shareOn = false;                                        // Share corrections is on at the Hub (the twin of GET intake/share-corrections)
   const hp = (id, what) => `history/${encodeURIComponent(id)}${what ? "/" + what : ""}`;
   const photo = (id, n) => `${BASE}/api/${hp(id, "photos/" + n)}`;
   let records = [], reader = false, keep = 0;                 // the list as the Hub last gave it; whether the Label Reader is on
@@ -301,10 +304,99 @@ function historyTab() {
       const d = await api("history");
       listAt = Date.now();
       records = d.records; reader = !!d.ai; keep = d.keep;
+      loadShare();
       intro.textContent = SW.t("recent_intro", { count: d.keep, size: SW.t("recent_size_mb", { value: (d.photo_bytes / 1048576).toFixed(1) }) });
       return records.length ? table() : SW.empty({ icon: "recent", title: SW.t("recent_empty_title"), text: SW.t("recent_empty_text") });
     });
   }
+  // ----- share corrections (7.5): the link under the intro, the lines at Save and Accept, and the page of what waits -----
+  async function loadShare() {
+    let d = null;
+    try { d = await api("share-corrections"); } catch (e) { d = null; }   // a Hub without the twin: sharing is not offered here
+    shareOn = !!(d && d.actual);
+    const n = Number(d && d.count) || 0;
+    if (!d || !(shareOn || n > 0)) { corrLink.hidden = true; corrLink.replaceChildren(); return; }
+    corrLink.replaceChildren(h("a", { href: "#recent/corrections", textContent: tt(shareOn ? "corr_link_on" : "corr_link_waiting", { count: n }) }));
+    corrLink.hidden = false;
+  }
+  const shareNote = () => (shareOn ? h("p", { class: "muted corr__note" }, SW.icon("info", "icon--s"), " ", tt("corr_save_on")) : null);
+  // after Save changes or Accept: what became of the correction, from the record (the Hub queues it in the background)
+  function shareAfter(id, slotSay, base) {
+    if (!shareOn) return;
+    setTimeout(async () => {
+      try {
+        const d = await api(hp(id)), st = d && d.share;
+        if (!st) return;
+        const more = st.state === "waiting" ? tt("corr_saved_waiting") : st.state === "not_queued" ? tt("corr_not_taken", { reason: st.reason || "" })
+          : (d.photos === 0 ? tt("corr_no_photo") : "");
+        if (more) slotSay(st.state === "not_queued" ? "warn" : "ok", `${base} ${more}`);
+      } catch (e) { /* the save stands; the line is only news */ }
+    }, 2500);
+  }
+  const corrFields = (e) => {
+    const was = e.predicted || {}, now = e.corrected || {};
+    return Object.keys(now).filter((k) => JSON.stringify(now[k]) !== JSON.stringify(was[k])).map((k) => tt("corr_field_line",
+      { field: recLabel(k), was: was[k] == null || was[k] === "" ? "—" : String(was[k]), now: now[k] == null || now[k] === "" ? "—" : String(now[k]) }));
+  };
+  function corrCard(e, kept) {
+    const c = e.corrected || {}, name = [c.vendor || c.brand, c.name].filter(Boolean).join(" ") || String(e.id);
+    const rec = e.record && kept.has(e.record) ? e.record : null;
+    const thumb = typeof e.thumbnail === "string" && e.thumbnail ? (/^(data:|https?:|\/)/.test(e.thumbnail) ? e.thumbnail : `data:image/jpeg;base64,${e.thumbnail}`) : null;
+    const img = rec && e.photos ? photo(rec, 1) : thumb;
+    const when = e.at || e.time || e.created;
+    const line = h("p", { class: "result", role: "status" });
+    const rm = needsHub(SW.btn(tt("corr_remove"), { action: "remove-correction", label: tt("corr_remove_named", { name }), run: (ev) =>
+      act(line, SW.t("common_working"), async () => {
+        await api(`label-reader/corrections/${encodeURIComponent(e.id)}/remove`, { body: {} });
+        card.querySelectorAll(".corr__fields, .corr__note-line, .corr__photos").forEach((x) => x.remove());
+        ev.currentTarget.remove();
+        return tt("corr_removed");
+      }, { button: ev.currentTarget }) }));
+    if (rm.setAttribute) rm.setAttribute("aria-label", tt("corr_remove_named", { name }));
+    const card = h("li", { class: "corr__card" },
+      img ? h("span", { class: "thumb" }, h("img", { class: "thumb__img", alt: "", src: img, loading: "lazy" }),
+        e.photos > 1 ? h("span", { class: "thumb__count mono", "aria-hidden": "true", textContent: String(e.photos) }) : null)
+        : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s")),
+      h("div", { class: "corr__body" },
+        rec ? h("a", { href: "#recent/" + rec, textContent: name }) : h("span", { textContent: name }),
+        e.record && !rec ? h("p", { class: "muted", textContent: tt("corr_record_gone") }) : null,
+        h("p", { class: "muted" }, when ? h("time", { class: "mono", textContent: typeof when === "number" ? recWhen(new Date(when * 1000).toISOString()) : recWhen(when) }) : "",
+          when ? " · " : "", tt(e.source === "cloud" ? "corr_cloud" : "corr_on_hub")),
+        e.record && !rec || (e.record && rec && !e.photos) ? h("p", { class: "muted corr__photos", textContent: tt("corr_photos_gone") }) : null,
+        h("ul", { class: "corr__fields" }, ...corrFields(e).map((t) => h("li", { textContent: t }))),
+        e.note ? h("p", { class: "corr__note-line", textContent: tt("corr_note", { note: e.note }) }) : null,
+        h("div", {}, rm), line));
+    return card;
+  }
+  async function loadCorr() {
+    const back = h("p", {}, SW.btn(tt("corr_back"), { action: "back", run: () => { location.hash = "#recent"; } }));
+    const body = h("div");
+    corr.replaceChildren(back, h("h2", { class: "corr__title", tabindex: "-1", textContent: tt("corr_title") }), body);
+    await fill(body, tt("corr_title"), async () => {
+      let d;
+      try { d = await api("label-reader/corrections"); }
+      catch (err) {
+        if (err instanceof SW.HubError && [err.data?.code, err.data?.reason].includes("unreachable")) return h("div", {}, note("warn", tt("corr_reader_down")));
+        throw err;
+      }
+      const entries = Array.isArray(d.entries) ? d.entries : [], n = Number(d.count) || entries.length;
+      const kept = new Set(records.map((r) => r.id));
+      const hubLink = HUB_PAGE ? h("p", {}, h("a", { class: "btn", href: HUB_PAGE }, SW.t("common_open_hub_page"))) : null;
+      const foot = [h("p", { class: "muted", textContent: tt("corr_foot") }), hubLink];
+      if (!entries.length) return h("div", {}, SW.empty({ icon: "info", title: tt("corr_empty_title"), text: tt("corr_empty_text") }), ...foot);
+      return h("div", {}, h("p", { class: "muted", textContent: tt("corr_head", { count: n, size: SW.t("recent_size_mb", { value: ((Number(d.bytes) || 0) / 1048576).toFixed(1) }) }) }),
+        h("p", { class: "muted", textContent: tt(d.opt_in === false ? "corr_off_left" : "corr_intro") }),
+        h("ul", { class: "corr__list" }, ...entries.map((e) => corrCard(e, kept))), ...foot);
+    });
+    corr.querySelector(".corr__title").focus({ preventScroll: true });
+  }
+  function showCorr(on) {
+    intro.hidden = list.hidden = missing.hidden = on;
+    corrLink.hidden = on || !corrLink.firstChild;
+    corr.hidden = !on;
+    if (on) loadCorr(); else corr.replaceChildren();
+  }
+
   function table() {
     const col = (name, label, hidden) => h("div", { class: "coll__cell", role: "columnheader", "data-col": name }, h("span", { class: hidden ? "sr" : "", textContent: label }));
     const box = h("div", { class: "coll coll--recent", role: "table", "aria-label": SW.t("nav_recently_added") },
@@ -380,7 +472,8 @@ function historyTab() {
       h("p", { class: "page-head__meta" }, h("time", { class: "mono", datetime: r.at, textContent: recWhen(r.at) }),
         h("span", { textContent: recSource(r) }), h("span", { class: "mono", textContent: recSpools(r.spools.map((s) => s.spool_id)) })));
     reg._body = h("div");
-    reg.append(reg._body);
+    reg.append(r.spools.length ? h("p", { class: "recent__print" }, SW.btn(tt("labels_button_many"), { cls: "btn--ghost", action: "print-labels", run: () =>
+      window.open(`${BASE}/labels?ids=${r.spools.map((s) => s.spool_id).join(",")}&size=62x29`, "_blank", "noopener") })) : null, reg._body);
     return reg;
   }
   // the edit forms of the list with unsaved values; reloading the list drops them, so it asks first (the shell's guard, 6.1)
@@ -485,7 +578,7 @@ function historyTab() {
       h("div", { class: "group__head" }, h("div", {}, ...spoolsHead(s))),
       h("div", { class: "group__body" }, ...REC_GROUPS.map(([gk, label]) => h("div", { class: "detail__section" },
         h("h4", { class: "detail__heading", textContent: SW.t(label) }), ...REC_FIELDS.filter((f) => f.group === gk).map(field)))),
-      h("div", { class: "group__foot" }, res, cancel, save));
+      h("div", { class: "group__foot" }, shareNote(), res, cancel, save));
     // only the changed fields are sent, in one request, so one save is one revision: this handler runs before the shared group's own
     form.addEventListener("submit", (e) => { e.preventDefault(); e.stopImmediatePropagation(); store(); });
     slot.g = SW.formGroup(form, { title });
@@ -511,7 +604,9 @@ function historyTab() {
         const rev = r.revisions[r.revisions.length - 1] || {}, names = recChanges(rev).map((x) => recLabel(x.field));
         slot.g = null;
         applied(c, r, slot);
-        slot.say("ok", [SW.t("recent_saved", { count: names.length, fields: names.join(", ") }), ...recFilaments("apply", rev)].filter(Boolean).join(" "));
+        const said = [SW.t("recent_saved", { count: names.length, fields: names.join(", ") }), ...recFilaments("apply", rev)].filter(Boolean).join(" ");
+        slot.say("ok", said);
+        shareAfter(c.id, (kind, text) => slot.say(kind, text), said);
         return null;
       }
     }
@@ -557,7 +652,9 @@ function historyTab() {
         const rev = r.revisions[r.revisions.length - 1] || {};
         prop.replaceChildren();
         applied(c, r);
-        return [SW.t("changes_accepted", { count: p.changes.length, number: rev.n }), ...recFilaments("apply", rev)].filter(Boolean).join(" ");
+        const said = [SW.t("changes_accepted", { count: p.changes.length, number: rev.n }), ...recFilaments("apply", rev)].filter(Boolean).join(" ");
+        shareAfter(c.id, (kind, text) => SW.result(res, kind, text), said);
+        return said;
       }, { button: e.currentTarget }) }));
     const discard = SW.btn(SW.t("common_discard"), { action: "discard", run: () => {
       prop.replaceChildren();
@@ -573,6 +670,7 @@ function historyTab() {
         h("span", { class: "changes__new mono" }, sr("changes_becomes"), recShow(k, p.after[k]))))),
       p.no_photo ? h("p", { class: "muted", textContent: SW.t("recent_ask_no_photo") }) : null,
       h("p", { class: "changes__note", textContent: SW.t("changes_note") }),
+      shareNote(),
       h("div", { class: "actions" }, discard, accept));
   }
 
@@ -646,6 +744,14 @@ function historyTab() {
   }
   async function go(rest) {
     missing.replaceChildren();
+    if (rest === "corrections") {                             // Corrections waiting: a page under Recently added, no record open
+      const was = addr && item(addr);
+      addr = "";
+      if (was && !was._reg.hidden) await SW.closeDetail(was._reg);
+      showCorr(true);
+      return;
+    }
+    if (!corr.hidden) showCorr(false);
     if (!rest) {                                              // back to the list: the record the address named closes
       const was = addr && item(addr);
       addr = "";
@@ -825,6 +931,7 @@ function settingsBody(wide) {
   return [h("div", { class: "settings" },
     group(SW.t("appearance_title"), appearanceControl({ wide: true, name: null }), h("p", { class: "muted" }, SW.t("settings_saved_on_phone")), live()),
     group(SW.t("appearance_theme_title"), SW.themePicker(), h("p", { class: "muted" }, SW.t("settings_theme_help")), live()),
+    languageGroup(group),
     alertsGroup(group),
     group(SW.t("settings_this_hub"), HUB ? h("p", { class: "settings__hub" }, HUB) : null,
       h("p", { class: "settings__address" }, location.origin + location.pathname), hubPageLink()),
@@ -938,6 +1045,28 @@ function navigation() {
 function tt(key, vars) {
   const STUB = {
     settings_alerts_recent: "Recent alerts",
+    settings_language_title: "Language", language_automatic: "Automatic", language_machine: "machine-translated",
+    language_saved: "Saved on this device: {choice}.",
+    language_help: "Automatic uses this phone's language if the Hub has it, otherwise the Hub's language.",
+    demo_banner: "Demo data. Nothing here is real.", demo_leave: "Leave demo", demo_leave_title: "Leave the demo?",
+    demo_leave_text: "Everything in it is deleted.",
+    labels_button_one: "Print a label", labels_button_many: "Print labels",
+    corr_link_on: "Share corrections is on · {count} waiting", corr_link_waiting: "Corrections waiting · {count}",
+    corr_title: "Corrections waiting", corr_back: "Recently added", corr_head: "{count} waiting · {size}",
+    corr_intro: "Nothing is sent until Send now is pressed on the Hub page. Remove any you do not want to share.",
+    corr_off_left: "Share corrections is off, so no new corrections are added. These are still waiting.",
+    corr_photos_gone: "The photos of this correction are no longer on the Hub.", corr_record_gone: "This record is no longer kept.",
+    corr_on_hub: "On this Hub", corr_cloud: "Cloud (Claude)", corr_field_line: "{field}: {was} → {now}", corr_note: "Note: {note}",
+    corr_not_waiting: "Not waiting: the reader did not take this correction. {reason}",
+    corr_remove: "Remove", corr_remove_named: "Remove the correction for {name}",
+    corr_removed: "Removed. The record in Recently added is unchanged.",
+    corr_foot: "Sending is done on the Hub page, under Settings > Label Reader.",
+    corr_empty_title: "No corrections waiting", corr_empty_text: "Corrections you make in Recently added, or while adding spools, appear here.",
+    corr_reader_down: "The reader does not answer, so the corrections waiting cannot be shown. They are kept.",
+    corr_failed: "Could not read the corrections waiting.",
+    corr_save_on: "Share corrections is on: this correction will wait on the Hub to be shared.",
+    corr_saved_waiting: "This correction is waiting to be shared.", corr_no_photo: "Not shared: no photo was kept for this record.",
+    corr_not_taken: "Saved. The correction is not waiting to be shared: {reason}.",
     history_recent_title: "Recent changes", history_none: "Nothing has changed on this spool yet.", history_undone: "(put back)", history_by: "by {who}",
     history_undo_put_back: "Put back.", history_undo_changed_since: "This changed again since, so it cannot be undone.",
     history_undo_too_old: "This is too old to be undone.", history_undo_already_undone: "This was already put back.",
@@ -980,6 +1109,9 @@ function tt(key, vars) {
 }
 const alertHost = h("div", { class: "alert-host" });
 page.prepend(alertHost);
+if (document.body.dataset.demo === "1") {                   // R85 4.5: every screen shows it, above the alert banners, with no Dismiss
+  page.prepend(SW.banner({ kind: "info", text: tt("demo_banner"), actions: [SW.btn(tt("demo_leave"), { action: "leave-demo", run: (e) => leaveDemo(e.currentTarget) })] }));
+}
 // where an alert's action goes in this app (null: no button): the printer and the running-low list are here; storage use and Devices
 // are Hub page places and are left out on an address that has no Hub page link (R80 section 11)
 function alertHref(a) {
@@ -1140,6 +1272,60 @@ function historyGroup() {
     group(tt("downloads_title"), h("p", { class: "downloads__row" }, downloadLink("spoolman-spools", tt("download_spoolman_spools")), " ", downloadLink("recent", tt("download_recent"))))];
 }
 window.SW_HISTORY = { offerUndo, undoEvent, downloadLink };           // printers.js uses these
+window.SW_LANG = { code: () => document.documentElement.lang || "en" };   // printers.js sends it with the push subscription
+
+// ----- the language (R85 3.7; 04 9.2) and leaving the demo (R85 4.6) -----
+// The choice is kept on the phone (`localStorage` spoolwarden.language) and in a cookie of the same name, because the Hub chooses the
+// texts the page loads with (Automatic is the phone's language when the Hub has that pack, else the Hub's).
+const LANG_KEY = "spoolwarden.language", LANG_COOKIE = "spoolwarden_lang";
+function langChoice() { try { return localStorage.getItem(LANG_KEY) || "auto"; } catch { return "auto"; } }
+function setLangChoice(v) {
+  try { if (v === "auto") localStorage.removeItem(LANG_KEY); else localStorage.setItem(LANG_KEY, v); } catch { /* the cookie still carries it */ }
+  document.cookie = `${LANG_COOKIE}=${encodeURIComponent(v)}; path=${BASE}; max-age=31536000; samesite=strict; secure`;
+}
+async function resendPush(code) {                           // a phone switched to another language sends its subscription again
+  try {
+    const reg = await navigator.serviceWorker.getRegistration(BASE);
+    const sub = reg && await reg.pushManager.getSubscription();
+    if (sub) await api("printers/push/subscribe", { method: "POST", body: { subscription: sub.toJSON(), lang: code } });
+  } catch { /* the subscription keeps its old language until the next time */ }
+}
+function languageGroup(group) {
+  const live = h("p", { class: "result", role: "status" });
+  const sel = SW.field({ type: "select", label: tt("settings_language_title"), options: [{ value: "auto", label: tt("language_automatic") }], value: langChoice() });
+  sel.querySelector(".field__label").classList.add("sr");   // the group's own heading says it
+  const saved = h("p", { class: "muted" });
+  const paint = () => { const o = sel._control.selectedOptions[0]; saved.textContent = tt("language_saved", { choice: o ? o.textContent : tt("language_automatic") }); };
+  (async () => {
+    try {
+      const d = await api("languages"), rows = (d.languages || []).filter((l) => l && l.installed && typeof l.code === "string");
+      const label = (l) => (l.reviewed === false ? `${l.name || l.code} (${tt("language_machine")})` : l.name || l.code);
+      if (!rows.some((l) => l.code === "en")) rows.unshift({ code: "en", name: "English" });
+      sel._control.append(...rows.map((l) => new Option(label(l), l.code)));
+      sel._control.value = [...sel._control.options].some((o) => o.value === langChoice()) ? langChoice() : "auto";
+    } catch (e) { /* no language list (an older Hub): Automatic is all there is */ }
+    paint();
+  })();
+  paint();
+  sel._control.addEventListener("change", async () => {
+    const v = sel._control.value;
+    setLangChoice(v);
+    await resendPush(v === "auto" ? (document.documentElement.lang || "en") : v);
+    location.reload();                                      // the page loads the texts of the language and draws itself again
+  });
+  return group(tt("settings_language_title"), sel, h("p", { class: "muted" }, tt("language_help")), saved, live);
+}
+if (langChoice() !== "auto") setLangChoice(langChoice());   // the cookie follows the key (another tab, or a cleared cookie)
+async function leaveDemo(opener) {
+  const done = await SW.ask({ kind: "destructive", title: tt("demo_leave_title"), text: tt("demo_leave_text"), confirm: tt("demo_leave"), opener, run: async () => {
+    try { await api("demo/leave", { body: {} }); return true; }
+    catch (err) {
+      if (err instanceof SW.HubError && err.status === 409 && [err.data?.error, err.data?.code].includes("not_in_demo")) return true;   // already off: the banner goes
+      throw Object.assign(err, { text: () => says(err) });
+    }
+  } });
+  if (done) location.reload();
+}
 
 // The own entries of the Filament Catalog (R83 4): one form (Brand, Name, Material; the rest under "More (optional)") and the list with Remove.
 const CATALOG_MATERIALS = ["PLA", "PLA+", "PETG", "ABS", "ASA", "TPU", "PC", "PA", "PA-CF", "PVA", "HIPS"];   // the fallback until the Hub lists the materials it knows
@@ -2420,6 +2606,8 @@ function openTab() {
     const moveBtn = needsHub(SW.btn(SW.t("spool_move"), {}));
     const loadBtn = needsHub(SW.btn(SW.t("spool_load"), { run: () => pickPrinter() }));
     const emptyBtn = needsHub(SW.btn(SW.t("spool_mark_empty"), { cls: "btn--danger", run: (e) => markEmpty(e.currentTarget) }));
+    // the print page opens in a new tab: the size choice, the Hub's label, Print (04 5.4); it changes nothing, so it asks for nothing
+    const printBtn = SW.btn(tt("labels_button_one"), { action: "print-label", run: () => window.open(`${BASE}/labels?ids=${id}&size=62x29`, "_blank", "noopener") });
     function paintActions() {
       const empty = gone(), why = SW.t("spool_sheet_reason_empty");
       disabled(previewBtn, holdWhy()); link(linkKey);            // an empty spool is not opened
@@ -2595,9 +2783,9 @@ function openTab() {
       }
       send(true);                                              // the plan first: nothing is sent until Load
     }
-    const other = EDIT || PRINTERS ? part(SW.t("spool_sheet_other_actions"),
-      h("div", { class: "spools__buttons" }, EDIT ? weightBtn : null, EDIT ? moveBtn : null, PRINTERS ? loadBtn : null), weightForm, loadBox,
-      EDIT ? h("div", { class: "spools__danger" }, emptyBtn) : null, actAns) : null;
+    const other = part(SW.t("spool_sheet_other_actions"),
+      h("div", { class: "spools__buttons" }, EDIT ? weightBtn : null, EDIT ? moveBtn : null, printBtn, PRINTERS ? loadBtn : null), weightForm, loadBox,
+      EDIT ? h("div", { class: "spools__danger" }, emptyBtn) : null, actAns);
     if (other) other.hidden = true;                            // until the spool is read: its state decides which actions can be pressed
     const hist = historyBox(id), historyPart = part(tt("history_recent_title"), hist.box);
     historyPart.hidden = true; loadHistory = async () => { historyPart.hidden = !(await hist.load()); };

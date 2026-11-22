@@ -30,8 +30,10 @@ The web process never talks to a printer. Everything goes to the kit server's ow
     POST printers/test                  {family: klipper, host[, port, api_key]}: does a Klipper printer answer there?
                                         {ok: bool, text?} - nothing is saved (R82 5.3; the kit route is EV1's)
     POST printers/{id}/slots/{label}/clear  {[dry_run]}: the Hub forgets the slot's spool (R83 10.1, EV1)
-    POST printers/add                   {serial, access_code[, name]} a Bambu printer the kit has seen;
-                                        {family: klipper, host[, port, name]} a Klipper printer
+    POST printers/add                   {serial, access_code[, name]} a Bambu printer the kit has seen, or
+                                        {address, access_code[, name, serial]} one typed (R87 2: the Hub checks the address
+                                        and the Access Code and reads the serial from the printer);
+                                        {family: klipper, host[, port, name, api_key]} a Klipper printer
     POST printers/{id}/edit             {name?, address?, port?, access_code?, api_key?, unpin?}: the kit's PATCH
     POST printers/{id}/forget           the kit's DELETE: the printer is forgotten
                                         add/edit/forget: always when the kit server itself serves the page (at
@@ -82,7 +84,7 @@ MANUAL_STEPS = {"start": "/api/printers/{serial}/manual-map/start", "confirm": "
 MANUAL_KEYS = ("session", "position", "reported", "nozzle", "by_hand", "share")
 MANAGE_FIELDS = ("id", "name", "model", "model_name", "family", "ip", "host", "configured", "state", "pinned")
 EDIT_KEYS = ("name", "address", "port", "access_code", "api_key", "unpin")
-ADD_KEYS = ("family", "serial", "access_code", "name", "host", "port")
+ADD_KEYS = ("family", "serial", "access_code", "name", "host", "port", "address", "api_key")
 PUBLIC_CHANGES_OFF = ("Printer changes from the public address are off. Open this page on the home network, or turn "
                       "on \"Allow printer changes from the public address\" on the Hub page (Settings, General).")
 TAGGED_FIELDS = ("id", "vendor", "name", "location", "remaining_g")
@@ -536,6 +538,7 @@ class PrintersApp:
             info = self.push.check_subscription(b.get("subscription"))
         except ValueError as e:
             raise Problem(str(e)) from None
+        info["lang"] = b.get("lang")             # the phone's language, for the words of its alerts (R85 3.8)
         await anyio.to_thread.run_sync(self.push_store.add, info)
         return {"ok": True}
 

@@ -56,6 +56,22 @@ def brand(files: dict[str, bytes], cat: dict[str, str]) -> str:
             f"<span>{html.escape(cat.get('app_name', ''))}</span></p>")
 
 
+def labels_body(prefix: str, ids: str, size: str, strings_src: str | None, files: dict[str, bytes]) -> str:
+    """The print page's body (R85 5.3): its own script (`labels.js`) draws the size choice and the labels from the Hub's
+    `spools/<id>/label.svg`; the print rules in app.css hide everything but the labels. `ids` and `size` are checked by the
+    caller."""
+    p = html.escape(prefix, quote=True)
+    src = html.escape(strings_src or f"{prefix}/shared/strings.js", quote=True)
+    return (f"<body><main class=labels data-ids='{html.escape(ids, quote=True)}' data-size='{html.escape(size, quote=True)}'>"
+            "<header class=labels__chrome><h1 class=labels__title></h1>"
+            "<div class=labels__sizes role=group></div></header>"
+            "<div class=labels__sheet></div>"
+            "<footer class=labels__chrome><p class=labels__note></p><p class=labels__error role=alert hidden></p>"
+            "<button class='btn btn--primary labels__print' type=button></button></footer></main>"
+            f"<script src='{src}'></script><script src='{p}/shared/components.js'></script>"
+            f"<script src='{p}/labels.js'></script></body>")
+
+
 def refusal(files: dict[str, bytes], prefix: str, client: str, *, reason: str | None = None) -> str:
     """The refusal page (04 11.1). Without `reason`: outside the home network, with the IPv6 hint when the request came
     over IPv6. With `reason` (the Hub's refusal of the address the page was opened at): "Not at this address"."""

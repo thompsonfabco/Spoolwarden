@@ -447,3 +447,32 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .hubglance__links { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s4); }
 .catalog__entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
 .spools__spoolman { margin: 0 0 var(--s2); }
+
+/* The print page (R85 5.3): the labels the Hub draws, at their printed size; printing hides everything but the labels */
+.labels { display: grid; gap: var(--s4); padding: var(--s4); }
+.labels__chrome { display: grid; gap: var(--s3); }
+.labels__title { margin: 0; font-size: var(--fs-b); font-weight: var(--fw-title); line-height: var(--lh-title); }
+.labels__sheet { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s3); }
+.labels__img { display: block; border: var(--hairline) solid var(--border); }
+.labels__img--62x29 { width: 62mm; }
+.labels__img--50x30 { width: 50mm; }
+.labels__img--sheet24 { width: 100%; }
+.labels__error[hidden] { display: none; }
+@media print {
+  .labels { padding: 0; }
+  .labels__chrome { display: none; }
+  .labels__sheet { gap: 0; }
+  .labels__img { border: 0; }
+}
+
+/* Share corrections (04 7.5): the link under the intro, the lines at Save and Accept, the page of what waits */
+.recent__corr { margin: 0 0 var(--s3); }
+.recent__corr[hidden], .corr[hidden] { display: none; }
+.recent__print { margin: 0 0 var(--s3); }
+.corr__note { flex: 1 1 100%; margin: 0; font-size: var(--fs-m); }
+.corr__title { margin: 0 0 var(--s2); font-size: var(--fs-b); font-weight: var(--fw-title); line-height: var(--lh-title); }
+.corr__list { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s3); }
+.corr__card { display: flex; gap: var(--s3); align-items: flex-start; padding: var(--s3); border: var(--hairline) solid var(--border); border-radius: var(--r); }
+.corr__body { min-width: 0; display: grid; gap: var(--s1); overflow-wrap: anywhere; }
+.corr__body p, .corr__fields { margin: 0; }
+.corr__fields { padding: 0; list-style: none; display: grid; gap: var(--s1); font-size: var(--fs-m); }

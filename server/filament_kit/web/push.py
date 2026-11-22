@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -90,7 +91,8 @@ class Store:
                     created = float(el.get("created") or 0)
                 except ValueError:
                     created = 0.0
-                subs[ep] = {"info": {"endpoint": ep, "keys": {"p256dh": p256dh, "auth": auth}}, "created": created}
+                subs[ep] = {"info": {"endpoint": ep, "keys": {"p256dh": p256dh, "auth": auth}}, "created": created,
+                            "lang": language_ok(el.get("lang"))}
         return subs
 
     def _read_legacy(self) -> dict:
@@ -139,8 +141,10 @@ class Store:
         root = ET.Element("push", version="1")
         for ep, sub in subs.items():
             k = sub["info"]["keys"]
-            ET.SubElement(root, "sub", endpoint=events._text(ep), p256dh=events._text(k["p256dh"]),
-                          auth=events._text(k["auth"]), created=f"{sub.get('created') or 0:.0f}")
+            el = ET.SubElement(root, "sub", endpoint=events._text(ep), p256dh=events._text(k["p256dh"]),
+                               auth=events._text(k["auth"]), created=f"{sub.get('created') or 0:.0f}")
+            if sub.get("lang"):                  # RC4: the language in use on that phone (R85 3.8)
+                el.set("lang", sub["lang"])
         data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
         f = self.path
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -183,8 +187,13 @@ class Store:
             if info["endpoint"] not in d and len(d) >= MAX_SUBS:
                 raise ValueError(f"too many subscribed phones ({MAX_SUBS}); unsubscribe one first")
             d[info["endpoint"]] = {"info": {"endpoint": info["endpoint"], "keys": info["keys"]},
-                                   "created": time.time()}
+                                   "created": time.time(), "lang": language_ok(info.get("lang"))}
             self._save(d)
+
+    def language_of(self, endpoint: str) -> str | None:
+        """The language code the phone sent with its subscription (None: it sent none)."""
+        with self.lock:
+            return (self._load().get(endpoint) or {}).get("lang") or None
 
     def remove(self, *endpoints: str) -> None:
         with self.lock:
@@ -192,6 +201,14 @@ class Store:
             for ep in endpoints:
                 d.pop(ep, None)
             self._save(d)
+
+
+LANGUAGE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?")
+
+
+def language_ok(code) -> str | None:
+    """A language code as the Hub names them (`en`, `de`, `pt-BR`), or None."""
+    return code if isinstance(code, str) and LANGUAGE.fullmatch(code) else None
 
 
 def check_subscription(sub) -> dict:
