@@ -396,8 +396,8 @@ def test_rtsp_relay_sends_nothing_to_a_changed_leaf(tmp_path):
             c.sendall(b"OPTIONS rtsp://127.0.0.1/streaming/live/1 RTSP/1.0\r\nCSeq: 1\r\n\r\n")
             try:
                 assert c.recv(4096) == b""                     # the relay hangs up ...
-            except ConnectionResetError:                       # ... (Windows: with a reset)
-                pass
+            except (ConnectionResetError, ConnectionAbortedError):   # ... (Windows: with a reset, or under load an abort, 10053:
+                pass                                                 # the relay closes with the request unread; no bytes either way)
         assert wait_until(lambda: srv.received, 5)
     finally:
         relay.stop()
