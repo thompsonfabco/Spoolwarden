@@ -57,4 +57,34 @@ jobs:
           done
           echo "::warning::the dependencies could not be downloaded in advance; the next step resolves them again"
           exit 0
-      - run: ./gradlew testDebugUnitTest assembleDebug
+      # Robolectric downloads the android-all runtime jar of every SDK level the tests use at TEST time, into ~/.m2 (outside Gradle's cache, so
+      # the cache above does not cover it); one of them failed a run on a Maven Central error. Cache that folder ...
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-android-all-${{ runner.os }}-${{ hashFiles('android/gradle/libs.versions.toml', 'android/app/src/test/**/robolectric.properties') }}
+          restore-keys: robolectric-android-all-${{ runner.os }}-
+      # ... and fill it here, retried: one test class per SDK level (each distinct @Config(sdk = [...]) in the tests, and a class without
+      # @Config for Robolectric's default level), run by Gradle itself, so the layout is Robolectric's own. Warns and goes on if all tries fail.
+      - name: Download the Robolectric runtime
+        run: |
+          src=app/src/test/java
+          tests=()
+          add() { if [ -n "$1" ]; then tests+=(--tests "*.$(basename "${1%.*}")"); fi; }
+          while IFS= read -r sdk; do
+            add "$(grep -rlF -- "$sdk" "$src" | head -n 1)"
+          done < <(grep -rhoE 'sdk = \[[^]]*\]' "$src" | sort -u)
+          add "$(grep -rLF '@Config(' $(grep -rlE 'RunWith\((Robolectric|AndroidJUnit4)' "$src") | head -n 1)"
+          echo "warm-up classes: ${tests[*]}"
+          [ "${#tests[@]}" -gt 0 ] || exit 0
+          for attempt in 1 2 3; do
+            # --no-build-cache --rerun: the tests must really run here, a cached result downloads nothing
+            ./gradlew testDebugUnitTest --no-build-cache --rerun "${tests[@]}" && exit 0
+            echo "::warning::Robolectric runtime download failed (attempt $attempt of 3)"
+            [ "$attempt" -lt 3 ] && sleep $((attempt * 60))
+          done
+          echo "::warning::the Robolectric runtime could not be downloaded in advance; the tests try again themselves"
+          exit 0
+      # --no-build-cache: the Gradle cache restored above also holds Gradle's build cache, which hands back old test results
+      # (":app:testDebugUnitTest FROM-CACHE") and runs no test at all
+      - run: ./gradlew testDebugUnitTest assembleDebug --no-build-cache
