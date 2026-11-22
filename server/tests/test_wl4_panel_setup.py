@@ -351,3 +351,29 @@ def test_a_settings_rewrite_keeps_the_allow_lines(env):
            [l for l in again.splitlines() if l.startswith("IPAddressAllow=")]
     ps.disable(None)
     assert "STATION_PANEL_LINK=usb" in apply.station_dropin(config.load(), ["127.0.0.1"])
+
+
+# ---- R641 follow-ups: the reader skips every line that is not OK or ERR; errors after the panel's OK; CRLF end to end ----
+
+def test_w_k_and_air_lines_before_the_answer_are_skipped(env):
+    panel = Panel()
+    panel.reply = ["W 812.5 1", "K", "AIR 21.5 40 1013", "OK", "K", "W 0.0 0", "OK"]
+    ps.enable(panel, **GOOD)
+    assert len(panel.lines) == 2 and panel.reply == [] and ps.stored_token()
+
+
+def test_any_other_line_is_skipped_and_an_err_still_wins(env):
+    panel = Panel()
+    panel.reply = ["W 1 1", "something new", "K", "ERR bad", "OK"]
+    with pytest.raises(ps.PanelSetupError) as e:
+        ps.enable(panel, **GOOD)
+    assert str(e.value) == "The panel did not accept the Wi-Fi settings." and panel.reply == ["OK"]
+    assert ps.stored_token() is None and config.load()["station"]["panel_link"] == "usb"
+
+
+def test_a_flood_of_other_lines_ends_in_the_timeout_refusal(env):
+    panel = Panel("K")                               # never OK or ERR: bounded, then the timeout sentence
+    with pytest.raises(ps.PanelSetupError) as e:
+        ps.enable(panel, **GOOD)
+    assert str(e.value) == "The panel did not answer in time." and len(panel.lines) == 1
+    assert ps.stored_token() is None and config.load()["station"]["panel_link"] == "usb"

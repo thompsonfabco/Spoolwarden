@@ -33,9 +33,7 @@ REPLY_OK = "OK"
 REPLY_ERR = "ERR"
 MIN_FIRMWARE = 14                         # the first panel firmware with Wi-Fi (13, the shipped one, is USB-only)
 MAX_ADDRESS = 64                          # characters; the panel's line holds 256 and answers `ERR long`, never truncates
-MAX_UNASKED = 50                          # unasked lines (AIR, P, ...) skipped while waiting for OK or ERR
-# the panel's own lines that may arrive between a set-up line and its answer
-UNASKED = re.compile(r"(AIR|P|L|TAG|NFC|HELLO)(?![A-Za-z0-9])")
+MAX_UNASKED = 50                          # lines that are neither OK nor ERR (AIR, P, W, K, ...) skipped while waiting for the answer
 
 TOKEN_FILE = "panel_link.xml"             # in the station's state folder: {token, created}; 0600, the station user's
 
@@ -115,8 +113,9 @@ def check_version(version: str | None) -> None:
 
 
 def _answer(send: Callable[[str | None], str], line: str | None) -> None:
-    """Send `line` (None sends nothing, it only reads) and read until the panel says OK or ERR, skipping its unasked
-    lines. `send` returns the next line, "" when none came in 5 s. No sentence repeats a line or a reply."""
+    """Send `line` (None sends nothing, it only reads) and read until the panel says OK or ERR, skipping every other line
+    it sends on its own (AIR, buttons, W, K, ...), at most MAX_UNASKED of them. `send` returns the next line, "" when none
+    came in 5 s. No sentence repeats a line or a reply."""
     for _ in range(MAX_UNASKED):
         try:
             reply = (send(line) or "").strip()
@@ -127,8 +126,8 @@ def _answer(send: Callable[[str | None], str], line: str | None) -> None:
             raise PanelSetupError(TEXT_TIMEOUT)
         if reply.split(None, 1)[0] == REPLY_OK:
             return
-        if not UNASKED.match(reply):
-            raise PanelSetupError(TEXT_NOT_ACCEPTED)        # ERR <reason>, or a line that is not the panel's
+        if reply.split(None, 1)[0] == REPLY_ERR:
+            raise PanelSetupError(TEXT_NOT_ACCEPTED)        # ERR <reason>: the reason is never shown
     raise PanelSetupError(TEXT_TIMEOUT)
 
 
