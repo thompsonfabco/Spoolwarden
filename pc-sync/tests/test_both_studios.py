@@ -110,7 +110,7 @@ def test_install_goes_into_the_primary_and_each_secondary(two):
     for f in (stable, beta):
         assert _bs(f, NEW) == _p(NEW)
     sd = _sec(dirs)
-    assert statexml.read(sd.installed / \"BUILD.json\")["stamp"] == STAMP
+    assert statexml.read(sd.installed / "BUILD.json")["stamp"] == STAMP
     assert len(list(sd.backups.iterdir())) == 1 and len(list(dirs.backups.iterdir())) == 1
     assert not statexml.exists(sync.marker_path(sd))
     rec = sync.load_state(sd)
@@ -395,7 +395,7 @@ def test_a_primary_change_is_that_folders_first_sync(two):
     assert "installed" not in st and not dirs.installed.exists()         # Beta's snapshot is not stable's
     # Beta's record moved into its own secondary record, with its snapshot and backup
     sd = _sec(dirs)
-    assert statexml.read(sd.installed / \"BUILD.json\")["stamp"] == STAMP
+    assert statexml.read(sd.installed / "BUILD.json")["stamp"] == STAMP
     assert sync.load_state(sd)["installed"]["stamp"] == STAMP and list(sd.backups.iterdir())
     assert "Bambu Studio folder changed from BambuStudioBeta" in _log(dirs)
     # stable is never written by a build made from Beta's live presets

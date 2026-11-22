@@ -158,7 +158,7 @@ def test_build_for_other_live_hash_rebuild_then_waiting(env):
                                                  "presets": 1, "problems": 0}))
     assert _run(c, folders, dirs) == "rebuild_requested"
     assert c.calls.count(("rebuild", live)) == 1
-    assert json.loads(dirs.state.read_text())["requested"] == {"live_hash": live, "at": T0}
+    assert sync.load_state(dirs)["requested"] == {"live_hash": live, "at": T0}
     assert _run(c, folders, dirs, now=T0 + 14 * 60) == "waiting"
     assert c.calls.count(("rebuild", live)) == 1
     assert _run(c, folders, dirs, now=T0 + 15 * 60 + 1) == "rebuild_requested"
@@ -184,7 +184,7 @@ def test_matching_build_installs_reuploads_and_reports(env):
     assert json.loads((dirs.installed / "BUILD.json").read_text())["stamp"] == STAMP
     assert len(list(dirs.backups.iterdir())) == 1
     assert not statexml.exists(sync.marker_path(dirs))
-    state = json.loads(dirs.state.read_text())
+    state = sync.load_state(dirs)
     assert state["last"]["outcome"] == "installed"
     assert f"installed build {STAMP}" in _log(dirs)
     # next run: the server has the re-uploaded live tree and the install recorded
@@ -220,7 +220,7 @@ def test_stale_presets_logged_one_line(env):
     assert _run(c, folders, dirs, install=fake_install) == "installed"
     lines = [ln for ln in _log(dirs).splitlines() if "Old A" in ln]
     assert len(lines) == 1 and "Old B" in lines[0] and "delete" in lines[0].lower()
-    assert json.loads(dirs.state.read_text())["stale"] == ["Old A", "Old B"]
+    assert sync.load_state(dirs)["stale"] == ["Old A", "Old B"]
 
 
 @pytest.mark.parametrize("code,outcome", [("untrusted_gcode", "refused"), ("stale_build", "refused"),
@@ -354,7 +354,7 @@ def test_resume_refused_when_a_new_preset_was_edited_after_the_crash(env):
     assert not [x for x in c.calls if x[0] == "installed"]
     assert "edited" in _log(dirs)
     # ruling S28: the half-installed build is kept as dirs.partial and named in every live upload until an install
-    assert json.loads(dirs.state.read_text())["partial"]["stamp"] == STAMP
+    assert sync.load_state(dirs)["partial"]["stamp"] == STAMP
     assert json.loads((dirs.partial / "BUILD.json").read_text())["stamp"] == STAMP
     assert (dirs.partial / "base" / f"{new_name}.json").is_file()
     target.write_text(json.dumps(dict(edited, nozzle_temperature=["246"])), encoding="utf-8")
@@ -369,7 +369,7 @@ def test_resume_refused_when_a_new_preset_was_edited_after_the_crash(env):
     c.zip = _build_zip(stamp=stamp2, live_hash=here, presets=rebuilt)
     c.calls.clear()
     assert _run(c, folders, dirs, now=T0 + 3000) == "installed"
-    assert "partial" not in json.loads(dirs.state.read_text()) and not dirs.partial.exists()
+    assert "partial" not in sync.load_state(dirs) and not dirs.partial.exists()
     uploads = [x for x in c.calls if x[0] == "upload"]
     assert uploads == [("upload", "live", folders.user_id)]
 
@@ -402,13 +402,13 @@ def test_live_upload_owed_after_an_install_is_sent_even_when_the_hashes_match(en
     with pytest.raises(client.Offline):
         _run(c, folders, dirs)
     assert ("installed", STAMP) in c.calls
-    assert json.loads(dirs.state.read_text())["live_owed"] is True
+    assert sync.load_state(dirs)["live_owed"] is True
     c.fail.clear()
     c.st["live_hash"] = _hashes(folders)[0]                  # equal hashes: no upload would be "needed"
     c.calls.clear()
     assert _run(c, folders, dirs, now=T0 + 600) == "uploaded"
     assert ("upload", "live", folders.user_id) in c.calls
-    assert "live_owed" not in json.loads(dirs.state.read_text())
+    assert "live_owed" not in sync.load_state(dirs)
     c.calls.clear()
     assert _run(c, folders, dirs, now=T0 + 1200) == "up_to_date"
     assert not [x for x in c.calls if x[0] == "upload"]
@@ -461,7 +461,7 @@ def test_rejected_upload_backs_off_6h_for_the_same_hash(env):
     c = FakeClient(st)
     c.fail["upload"] = client.ApiError(413, "too_large", "live zip over 32 MiB")
     assert _run(c, folders, dirs) == "no_build"
-    rec = json.loads(dirs.state.read_text())["rejected"]["live"]
+    rec = sync.load_state(dirs)["rejected"]["live"]
     assert rec == {"kind": "live", "hash": _hashes(folders)[0], "at": T0,
                    "error": "413 too_large: live zip over 32 MiB"}
     assert "413" in _log(dirs)
@@ -482,7 +482,7 @@ def test_rejected_upload_backs_off_6h_for_the_same_hash(env):
     (folders.user_filament / "base" / "Extra2.json").write_text("{}", encoding="utf-8")
     _run(c, folders, dirs, now=T0 + sync.UPLOAD_BACKOFF + 120)
     assert n() == 4
-    assert "live" not in json.loads(dirs.state.read_text()).get("rejected", {})
+    assert "live" not in sync.load_state(dirs).get("rejected", {})
 
 
 def test_upload_backoff_is_6_hours():
