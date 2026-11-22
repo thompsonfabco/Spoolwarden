@@ -9,9 +9,9 @@ its reach. It gets exactly what it uses, as POSIX ACLs (acl.py) on named files a
                   (kit_token), the Web Push keys and subscriptions, its failed label reads kept for retry
                   (failed/, FK_FAILED_DIR in its unit); copied here once from /var/lib/filament-kit/web/
                   (migrate; the originals stay there, as they were, for `update --rollback` to 0.3.0)
-  settings        /etc/filament-kit: pass (x); config.json, web_passphrase and anthropic_key: read (r); every
-                  root writer of these keeps the grant
-                  (config.save, cli.write_passphrase, cli.write_key)
+  settings        /etc/filament-kit: pass (x); config.xml, config.json (kept in both forms for one release, R85
+                  section 1), web_passphrase and anthropic_key: read (r); every root writer of these keeps the
+                  grant (config.save, cli.write_passphrase, cli.write_key)
   kit state       /var/lib/filament-kit: pass (x); web/ (reader_tokens, 644): read; profiles/, library/,
                   library-local/, reader-fw/: read, also what is made there later (default ACLs);
                   storage.xml (the storage locations, 644, written by the Hub or by root's `spoolwarden locations`): read through
@@ -30,6 +30,7 @@ state folder (printers.xml and printers.json with Access Codes, devices.json, pe
 nothing in /etc beyond the files above."""
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -38,6 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import acl, config, nofollow, pairing
+from .profiles import statexml
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +50,7 @@ LOCK_FILES = ("inventory.lock", "profiles/lines.lock", "profiles/live.lock", "pr
               "profiles/build.lock")
 RW_TREES = ()                              # no folder of the kit is writable by the web user
 RO_TREES = ("profiles", "library", "library-local", "reader-fw")
-ETC_FILES = ("config.json", "web_passphrase", "anthropic_key")
+ETC_FILES = ("config.xml", "config.json", "web_passphrase", "anthropic_key")
 WEB_ROLE = pairing.WEB_ROLE                # devices.json "role" of the web unit's pairing (the web-only routes)
 
 
@@ -332,12 +334,30 @@ def grant(web_uid: int, kit_uid: int) -> list[str]:
     return done
 
 
+def _settings() -> dict:
+    """The settings file as it stands: config.xml when it reads, else config.json (the form a release before the
+    XML one wrote, kept for one release). Read only, never moved: this runs as root in /etc, where statexml.read's
+    move would make a state-owned 0644 file. OSError / ValueError when neither form holds an object."""
+    f = config.paths().etc / "config.json"
+    xp = statexml.xml_path(f)
+    try:
+        return statexml.loads(xp.read_bytes(), statexml.tag_of(f))
+    except FileNotFoundError:
+        pass
+    except (OSError, statexml.StateXmlError) as e:
+        log.warning("%s cannot be read (%s); reading %s", xp, e, f.name)
+    data = json.loads(f.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{f} does not hold an object")
+    return data
+
+
 def _revoke_old_slot_token(web_uid: int) -> None:
-    """The old standalone scanner's slot token (`slot_service.token_file`, still named in config.json on an install
+    """The old standalone scanner's slot token (`slot_service.token_file`, still named in the settings on an install
     that used it): the web unit was granted read on it and no longer reads it, so the grant is taken back (review
     R181 note 2). The file itself, the owner's, is left alone."""
     try:
-        svc = config.load().get("slot_service")
+        svc = _settings().get("slot_service")
     except (OSError, ValueError):
         return
     token = svc.get("token_file") if isinstance(svc, dict) else None
