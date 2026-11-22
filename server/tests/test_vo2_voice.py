@@ -104,7 +104,7 @@ def test_a_group_save_hands_over_once(app, station):  # noqa: F811
     cfg = config.load()
     cfg["station"]["url"] = "http://127.0.0.1:5003"
     config.save(cfg)
-    r = post(client(app), "settings/general-group", {"values": {"station.voice_speed": 80, "station.speaker_volume": 20}})
+    r = post(client(app), "settings/general", {"values": {"station.voice_speed": 80, "station.speaker_volume": 20}})
     assert r.status_code == 200
     assert len(station.calls) == 1 and station.calls[0][3]["speed"] == 80 and station.calls[0][3]["volume"] == 20
 
@@ -159,8 +159,9 @@ def test_a_remote_station_gets_the_values_and_the_voice_row_says_where_it_is_cho
 
 
 @pytest.mark.parametrize("url", ["http://127.0.0.1:5003", "http://localhost:5003", "https://[::1]:5003",
-                                 f"http://{socket.gethostname()}:5003"])
-def test_a_local_station_keeps_its_voice_row(url):
+                                 "http://Hubhost:5003"])
+def test_a_local_station_keeps_its_voice_row(url, monkeypatch):
+    monkeypatch.setattr(socket, "gethostname", lambda: "hubhost")
     row = voice_tab.voice_row(_cfg(url))
     assert row["editable"] is True and row["text"] is None and row["value"] == "Piper, many speakers"
 
