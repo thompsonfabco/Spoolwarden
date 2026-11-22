@@ -381,8 +381,7 @@ def _prose(text: str) -> str:
 # Where the old name `filament-kit` stays in a document, apart from the exceptions above (prose) and URLs: a path, an
 # asset, a unit, the program `filament-kit-sync` or the package (`filament-kit[push]`) is one word with something joined
 # to it; the bare name only on a line listed here, each about the old command or quoting a text the code still prints.
-OLD_NAME_DOCS = PLAIN_NAME_DOCS + ("docs/maintainer.md", "docs/testing-e2e.md", "docs/android-e2e.md", "THIRD-PARTY.md",
-                                   "release-notes/next.md")
+OLD_NAME_DOCS = PLAIN_NAME_DOCS + ("THIRD-PARTY.md", "release-notes/next.md")
 OLD_NAME_JOINED = re.compile(r"[/\_]|filament-kit-|filament-kit\.(?:apk|service|timer)\b|filament-kit\[|-filament-kit")
 OLD_NAME_LINES = [
     ("README.md", "Spoolwarden was called filament-kit", "the one sentence about the old name"),

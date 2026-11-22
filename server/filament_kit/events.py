@@ -1,4 +1,4 @@
-"""The event store (ruling R80 section 1, docs/design 03): one place where the Hub writes what happens.
+"""The event store (ruling R80 section 1, the design, Hub page): one place where the Hub writes what happens.
 
 Layout under `<state>/events/`:
   <yyyy-mm>.xml    one file per month, one <event> per event, APPENDED without rewriting the file. The root element

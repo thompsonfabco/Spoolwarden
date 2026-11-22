@@ -1,6 +1,6 @@
 name: e2e
 
-# The installer's end-to-end run (docs/testing-e2e.md). By hand, on the commit to be tagged: after a tag the release is public.
+# The installer's end-to-end run. By hand, on the commit to be tagged: after a tag the release is public.
 on:
   workflow_dispatch:
     inputs:

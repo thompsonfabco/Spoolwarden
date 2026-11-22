@@ -1,5 +1,5 @@
 /* The web app, on the shared tokens and components (theme-init.js, tokens.css and components.css load first;
-   04-web-app.md). Only the rules of today's markup are here; every colour, size and duration is a token. Light or dark
+   the design, web app). Only the rules of today's markup are here; every colour, size and duration is a token. Light or dark
    follows the phone (tokens.css) unless a choice is stored (theme-init.js). */
 main:not(.shell__main) { width: 100%; max-width: var(--column-max); margin: 0 auto;
        padding: 0 max(var(--s4), env(safe-area-inset-right)) calc(var(--s5) + env(safe-area-inset-bottom))

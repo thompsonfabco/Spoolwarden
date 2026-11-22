@@ -1,4 +1,4 @@
-"""Storage locations: the ordered list a new spool is put away by (ruling R79, docs/design 03 section 10.4).
+"""Storage locations: the ordered list a new spool is put away by (ruling R79, the design, Hub page section 10.4).
 
 The list lives in `storage.xml` in the Hub's STATE folder (/var/lib/filament-kit: the one folder the Hub may write;
 owner of the folder, mode 0644, so the web unit reads it with its pass on the folder; atomic write under the Hub's

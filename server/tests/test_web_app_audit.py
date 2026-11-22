@@ -1,6 +1,6 @@
 """AUT-5 on the web app (design 09 S3.4, 07 section 15): the page audit (tests/page_audit.js) in every view, Console
 light and dark, at 1280 px and 320 px, through tests/aut5_run.mjs in a headless Chrome, Edge or Chromium already on
-the machine. Example data only (mockups/CONTENT-SPEC.md: "Workshop hub", invented filaments).
+the machine. Example data only (the example-data rules: "Workshop hub", invented filaments).
 
 Findings of today's markup that a later step rebuilds are listed in tests/allowlists/aut5/; a line nothing matches
 fails the run. Skipped when Node 22+ or a Chromium-family browser is missing (the runner exits 2 for "no browser")."""

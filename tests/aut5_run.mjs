@@ -1,4 +1,4 @@
-// AUT-5 runner (docs/design/07-accessibility.md section 15): opens each view of a page in a headless Chromium-family
+// AUT-5 runner (the design, accessibility section 15): opens each view of a page in a headless Chromium-family
 // browser (Chrome, Edge or Chromium already on the machine; nothing is downloaded), at each width and appearance, runs
 // tests/page_audit.js in it and prints the findings as JSON. Test-only: never shipped, never run on a Hub.
 //

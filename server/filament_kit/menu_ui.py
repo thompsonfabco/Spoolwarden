@@ -1,4 +1,4 @@
-"""Menus, checklists and their prompts: one key map, two variants (docs/design/06-command-line.md 8.1 and 8.2).
+"""Menus, checklists and their prompts: one key map, two variants (the design, command line 8.1 and 8.2).
 
 A screen is data (`Screen`, its `Row`s); what a key or a typed line means is the same in both variants (`Keys`,
 `parse_line`): numbers choose items, letters choose actions, `s` saves or applies, `q` (or Esc) leaves, `?` lists the

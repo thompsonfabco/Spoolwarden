@@ -1,5 +1,5 @@
-// The component sample (tests/components-sample.html): every component of docs/design/02-components.md sections 2 to
-// 10 in its states, built with the shared script and the fake data of mockups/CONTENT-SPEC.md. The Hub is faked: any
+// The component sample (tests/components-sample.html): every component of the design, components sections 2 to
+// 10 in its states, built with the shared script and the fake data of the example-data rules. The Hub is faked: any
 // eight digits unlock (00000000 is refused), and the writes answer after a short wait. ?view=loading adds the
 // loading states (their regions stay aria-busy on purpose).
 (() => {

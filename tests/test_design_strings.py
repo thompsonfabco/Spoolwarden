@@ -1,4 +1,4 @@
-"""Tests 7 (words) and 8 (theme names agree) of docs/design/08-platform-mapping.md 3.4.
+"""Tests 7 (words) and 8 (theme names agree) of the design, platform mapping 3.4.
 
 strings/en.json is the source; strings/strings.js and res/values/strings.xml are generated from it by
 tokens/build_tokens.py. Test 7 reads both generated files back (undoing the escaping and the placeholder numbering) and

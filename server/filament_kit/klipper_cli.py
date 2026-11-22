@@ -56,7 +56,7 @@ def _signed_table(version: str, cfg: dict, fetcher: release.Fetcher | None) -> d
             return release.verify_sums(sums.read_bytes(), sig.read_bytes())
         except ReleaseError as e:
             raise ReleaseError(f"the kept release in {kept}: {e}") from None
-    # `updates.api` (a test server, docs/testing-e2e.md) changes only where the hash is fetched; the printed URL
+    # `updates.api` (a test server) changes only where the hash is fetched; the printed URL
     # always points at GitHub, so with a test server the printer's check fails and nothing runs.
     f = fetcher or updates.default_fetcher(cfg)
     rel = f.release(updates.settings(cfg)["repo"], version=version)
