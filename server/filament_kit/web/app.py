@@ -10,7 +10,8 @@
       /reader/...               the Printer Station reader API (LAN only, reader token; reader.py)
 
 The whole app is wrapped in `auth.lan_only`, so /authorize, /login, /intake and /reader answer the LAN only. Wrong
-passphrases at /login count in its Lockout. State: `FK_STATE/web/oauth.json`; the passphrase hash
+passphrases at /login count in its Lockout. State: `FK_STATE/web/oauth.xml` (oauth.json of an
+older release is read once); the passphrase hash
 `FK_ETC/web_passphrase` (set with `filament-kit web passphrase`).
 """
 from __future__ import annotations
@@ -49,7 +50,8 @@ def passphrase_file() -> Path:
 
 
 def oauth_file() -> Path:
-    """In the web unit's own state folder (/var/lib/filament-kit-web; apply's web_state moved it there)."""
+    """In the web unit's own state folder (/var/lib/filament-kit-web; apply's web_state moved it there). The JSON name:
+    `auth.Store` keeps the data in the XML file beside it (oauth.xml)."""
     return config.paths().web / "oauth.json"
 
 
