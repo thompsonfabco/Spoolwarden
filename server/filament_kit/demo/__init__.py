@@ -26,6 +26,7 @@ MARKER = "demo.xml"
 VERSION = "1"
 NOT_EMPTY = "The demo is for an empty Hub. This Hub has real data."
 NOT_IN_DEMO = "Not in the demo."
+CANNOT_TELL = "Cannot tell whether this Hub is empty: Spoolman cannot be reached. Start Spoolman, then try again."
 NO_CAMERA = "No camera in the demo."
 NOT_IN_DEMO_CODE = "in_demo"            # the code of a stop (409); "not_in_demo" is the leave route's: the demo is off
 SAMPLE = Path(__file__).with_name("sample.xml")
@@ -46,6 +47,15 @@ class NotEmpty(DemoError):
 
     def __init__(self):
         super().__init__(NOT_EMPTY)
+
+
+class CannotTell(DemoError):
+    """Spoolman does not answer, so whether the Hub holds spools is not known: the demo does not start (R85 4.2)."""
+
+    code = "cannot_tell_if_empty"
+
+    def __init__(self):
+        super().__init__(CANNOT_TELL)
 
 
 class NotInDemo(DemoError):
@@ -124,9 +134,9 @@ def _now(now: datetime | None) -> str:
 
 
 def real_data(spoolman=None, registry_load=None) -> str | None:
-    """Why the Hub is not empty ("spools" or "printers"), None when it has no spool and no printer. The count is of the
-    real data: a Spoolman that cannot be reached holds nothing the demo could touch; one that answers with an error
-    is not known to be empty. A found printer nobody added is not a printer yet."""
+    """Why the Hub is not empty ("spools" or "printers"), None when it has no spool and no printer. A Spoolman that
+    cannot be reached is not an empty Hub: `CannotTell`, as is one that answers with an error it is not known to be
+    empty ("spools"). A found printer nobody added is not a printer yet."""
     from ..bridge import registry
     from ..spoolman import Spoolman, SpoolmanError
     try:
@@ -141,6 +151,7 @@ def real_data(spoolman=None, registry_load=None) -> str | None:
     except SpoolmanError as e:
         if e.status is not None:
             return "spools"
+        raise CannotTell() from None
     return None
 
 

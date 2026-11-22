@@ -141,8 +141,19 @@ def test_only_on_an_empty_hub(env, spoolman, printers_, why):
 def test_a_found_printer_or_no_spoolman_does_not_count(env):
     found = {"S1": registry.Printer("S1", configured=False)}
     assert demo.real_data(Empty(), lambda: found) is None
-    assert demo.real_data(Broken(None), lambda: {}) is None          # Spoolman not there at all: nothing real
-    assert demo.start(spoolman=Broken(None), registry_load=lambda: found) == {"demo": True}
+    assert demo.start(spoolman=Empty(), registry_load=lambda: found) == {"demo": True}
+
+
+def test_an_unreachable_spoolman_is_not_an_empty_hub(env, monkeypatch, capsys):
+    with pytest.raises(demo.CannotTell) as e:
+        demo.real_data(Broken(None), lambda: {})
+    assert e.value.code == "cannot_tell_if_empty" and e.value.message == demo.CANNOT_TELL
+    with pytest.raises(demo.CannotTell):
+        demo.start(spoolman=Broken(None), registry_load=lambda: {})
+    assert not demo.is_on() and not (env / "state" / "demo").exists()
+    monkeypatch.setattr(demo, "real_data", lambda *a: (_ for _ in ()).throw(demo.CannotTell()))
+    assert routes.post_demo({"on": True}) == (409, {"error": demo.CANNOT_TELL, "code": "cannot_tell_if_empty"})
+    assert demo_cli.run_demo(Args("on")) == 1 and f"Error: {demo.CANNOT_TELL}" in capsys.readouterr().err
 
 
 def test_the_real_registry_is_read_when_none_is_given(env):
