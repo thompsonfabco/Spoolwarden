@@ -657,6 +657,7 @@ internal fun FilamentKitApp(
                 onPairAgain = app.router::pairAgain,
                 online = online,
                 printersOn = info?.printersOn != false,
+                checkedOutSupported = alertsUi.checkedOutCount != null,
             )
         }
 
@@ -1198,7 +1199,7 @@ internal fun FilamentKitApp(
                                     loadLow = { currentApi().lowSpools().spools },
                                     loadSpoolmanUrl = { currentApi().spools("", null).spoolmanUrl },
                                     exportCsv = { file -> currentApi().exportCsv("spoolman-spools", file) },
-                                    loadChecked = { currentApi().spools("", SpoolFilter.CHECKED_OUT).spools },
+                                    loadChecked = { currentApi().spools("", SpoolFilter.CHECKED_OUT) },
                                     returnSpool = { id -> currentApi().returnSpool(id) },
                                     undoFlow = UndoFlow(SpoolBackend.of(::currentApi)),
                                 ) { q, sealedOnly ->
@@ -1222,6 +1223,7 @@ internal fun FilamentKitApp(
                             onPairAgain = app.router::pairAgain,
                             online = online,
                             lowCount = alertsUi.lowCount,
+                            checkedOutCount = alertsUi.checkedOutCount,
                             spoolDetail = { spool, embedded, _ ->
                                 val spoolVm: SpoolViewModel = viewModel(
                                     key = "spool-${spool.id}",
@@ -1239,6 +1241,7 @@ internal fun FilamentKitApp(
                                     onPairAgain = app.router::pairAgain,
                                     online = online,
                                     printersOn = info?.printersOn != false,
+                                    checkedOutSupported = alertsUi.checkedOutCount != null,
                                     embedded = embedded,
                                 )
                             },

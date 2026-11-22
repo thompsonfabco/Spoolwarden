@@ -63,6 +63,8 @@ data class MoveUi(
 /** The Home sheet (R88 1.6): the storage locations to choose the spool's home from; [locations] null while they load. */
 data class HomeUi(
     val locations: List<String>? = null,
+    /** The same locations with how full each is; names only from an older Hub. */
+    val storage: StorageAnswer? = null,
     val savingTo: String? = null,
     val failure: HubFailure? = null,
 )
@@ -388,8 +390,8 @@ class SpoolViewModel(
 
     private fun loadHomeLocations() {
         run(onFailure = { f -> _state.update { it.copy(home = it.home?.copy(failure = f)) } }) {
-            val names = backend.storage().names
-            _state.update { it.copy(home = it.home?.copy(locations = names, failure = null)) }
+            val found = backend.storage()
+            _state.update { it.copy(home = it.home?.copy(locations = found.names, storage = found, failure = null)) }
         }
     }
 
@@ -410,7 +412,12 @@ class SpoolViewModel(
         _state.update { it.copy(home = h.copy(savingTo = location, failure = null)) }
         run(onFailure = { f -> _state.update { it.copy(home = it.home?.copy(savingTo = null, failure = f)) } }) {
             val updated = backend.setHome(id, location).toSpoolSummary()
-            _state.update { it.copy(spool = shown(updated), home = null, loadedAt = now(), failure = it.failure.afterSuccess()) }
+            _state.update {
+                it.copy(
+                    spool = shown(updated), home = null, loadedAt = now(), failure = it.failure.afterSuccess(),
+                    returnToast = ReturnToast(CheckedOutTexts.homeNow(location), null),
+                )
+            }
             loadActivity()
         }
     }

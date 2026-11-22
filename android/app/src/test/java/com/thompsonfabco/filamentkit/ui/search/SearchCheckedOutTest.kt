@@ -2,6 +2,7 @@ package com.thompsonfabco.filamentkit.ui.search
 
 import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.SpoolsAnswer
 import com.thompsonfabco.filamentkit.net.UndoAnswer
 import com.thompsonfabco.filamentkit.net.UndoState
 import com.thompsonfabco.filamentkit.ui.history.ActivityBackend
@@ -43,6 +44,7 @@ class SearchCheckedOutTest {
     }
 
     private var rows: List<JsonObject> = listOf(spool(1, true), spool(2, true, "Dry box 1"))
+    private var filters: List<String>? = listOf("sealed", "checked_out")
     private var loadError: Exception? = null
     private var returnError: Exception? = null
     private val returned = mutableListOf<Int>()
@@ -55,7 +57,7 @@ class SearchCheckedOutTest {
     }
 
     private fun vm() = SearchViewModel(
-        loadChecked = { loadError?.let { throw it }; rows },
+        loadChecked = { loadError?.let { throw it }; SpoolsAnswer(rows, null, filters) },
         returnSpool = { id -> returnError?.let { throw it }; returned += id; spool(id, false) },
         undoFlow = UndoFlow(backend, now = { 1_000L }),
     ) { _, _ -> emptyList() }
@@ -63,35 +65,34 @@ class SearchCheckedOutTest {
     private fun event(id: Long, kind: String = "spool.returned") =
         ActivityEvent(id, "", 900L, kind, "Pixel", "", "spool:1", UndoState(true, null, null), false, null)
 
-    @Test fun theChipCountsTheCheckedOutSpools() {
+    @Test fun theFilterListsTheCheckedOutSpools() {
         val vm = vm()
-        vm.loadCheckedOut()
-        assertEquals(2, vm.state.value.checkedCount)
+        vm.setCheckedOnly(true)
+        assertEquals(listOf(1, 2), vm.state.value.checked.map { it.id })
     }
 
-    @Test fun aHubThatIgnoredTheFilterHasNoChip() {
-        rows = listOf(spool(1, null), spool(2, null))
+    @Test fun aHubWithoutTheFiltersFieldTurnsTheFilterOffAndShowsNothing() {
+        filters = null
         val vm = vm()
-        vm.loadCheckedOut()
-        assertNull(vm.state.value.checkedCount)
+        vm.setCheckedOnly(true)
+        assertFalse(vm.state.value.checkedOnly)
+        assertTrue(vm.state.value.checked.isEmpty())
+        assertFalse(vm.state.value.checkedLoaded)
     }
 
     @Test fun aHubWithoutTheRouteHidesTheChipAndATurnedOnFilterGoesOff() {
         val vm = vm()
-        vm.loadCheckedOut()
         vm.setCheckedOnly(true)
         loadError = ApiError(404, "not_found", "Not found")
         vm.loadCheckedOut()
-        assertNull(vm.state.value.checkedCount)
         assertFalse(vm.state.value.checkedOnly)
         assertNull(vm.state.value.failure)
     }
 
-    @Test fun anEmptyAnswerIsAHubThatHasTheFilterWithNothingCheckedOut() {
+    @Test fun aHubThatNamesTheFilterWithNothingCheckedOutShowsTheEmptyList() {
         rows = emptyList()
         val vm = vm()
         vm.setCheckedOnly(true)
-        assertEquals(0, vm.state.value.checkedCount)
         assertTrue(vm.state.value.checkedLoaded)
         assertTrue(vm.state.value.checked.isEmpty())
     }
@@ -113,7 +114,6 @@ class SearchCheckedOutTest {
         vm.returnToHome(vm.state.value.checked.first { it.id == 1 })
         assertEquals(listOf(1), returned)
         assertEquals(listOf(2), vm.state.value.checked.map { it.id })
-        assertEquals(1, vm.state.value.checkedCount)
         assertEquals("Returned to Shelf B.", vm.state.value.returnToast!!.text)
         assertEquals(8L, vm.state.value.returnToast!!.event!!.id)
         assertNull(vm.state.value.returningId)
@@ -152,7 +152,7 @@ class SearchCheckedOutTest {
     }
 
     @Test fun withoutAReturnCallNothingHappens() {
-        val vm = SearchViewModel(loadChecked = { rows }) { _, _ -> emptyList() }
+        val vm = SearchViewModel(loadChecked = { SpoolsAnswer(rows, null, filters) }) { _, _ -> emptyList() }
         vm.setCheckedOnly(true)
         vm.returnToHome(vm.state.value.checked.first())
         assertTrue(returned.isEmpty())

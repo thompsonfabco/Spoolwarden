@@ -119,6 +119,8 @@ class SpoolCheckedOutTest {
         assertEquals("home:214:Dry box 1", calls.last())
         assertNull(vm.state.value.home)
         assertEquals("Dry box 1", vm.state.value.spool!!.home)
+        assertEquals("Home is now Dry box 1.", vm.state.value.returnToast!!.text)
+        assertNull(vm.state.value.returnToast!!.event)
     }
 
     @Test fun choosingTheCurrentHomeOnlyClosesTheSheet() = runTest(dispatcher) {

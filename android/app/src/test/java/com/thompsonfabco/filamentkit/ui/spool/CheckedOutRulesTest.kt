@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.spool
 
+import com.thompsonfabco.filamentkit.net.SpoolsAnswer
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -36,10 +37,20 @@ class CheckedOutRulesTest {
         assertFalse(row(1, null).toSpoolSummary().checkedOut)
     }
 
-    @Test fun aHubWithoutTheFilterIsRecognisedByRowsWithoutTheFields() {
-        assertFalse("older Hub ignored the filter and sent every spool", CheckedOutRules.supported(listOf(row(1, null), row(2, null))))
-        assertTrue(CheckedOutRules.supported(listOf(row(1, true, "Shelf B"))))
-        assertTrue("none checked out is an empty answer from a Hub that has the filter", CheckedOutRules.supported(emptyList()))
+    private fun answer(filters: List<String>?, vararg rows: JsonObject) = SpoolsAnswer(rows.toList(), null, filters)
+
+    @Test fun theHubKnowsTheFilterOnlyWhenItsAnswerNamesIt() {
+        assertTrue(CheckedOutRules.supported(listOf("sealed", "checked_out")))
+        assertFalse("no filters field: an older Hub", CheckedOutRules.supported(null))
+        assertFalse(CheckedOutRules.supported(listOf("sealed", "low")))
+        assertFalse("an empty list is no support", CheckedOutRules.supported(emptyList()))
+    }
+
+    @Test fun theCountNeedsTheFilterEvenWithRowsThatCarryTheFields() {
+        assertEquals(1, CheckedOutRules.count(answer(listOf("checked_out"), row(1, true), row(2, false))))
+        assertEquals("zero spools is still support", 0, CheckedOutRules.count(answer(listOf("checked_out"))))
+        assertNull(CheckedOutRules.count(answer(null, row(1, true))))
+        assertNull(CheckedOutRules.count(answer(emptyList())))
     }
 
     @Test fun onlyCheckedOutRowsAreListed() {
@@ -70,6 +81,7 @@ class CheckedOutRulesTest {
         assertEquals("Return", CheckedOutTexts.returnTo(null))
         assertEquals("Returned to Shelf B.", CheckedOutTexts.returned("Shelf B"))
         assertEquals("Checked out (3)", CheckedOutTexts.chip(3))
+        assertEquals("Home is now Dry box 1.", CheckedOutTexts.homeNow("Dry box 1"))
     }
 
     @Test fun theDetailShowsHomeOnlyWhileCheckedOut() {

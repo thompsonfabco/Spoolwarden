@@ -1,6 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.spool
 
 import com.thompsonfabco.filamentkit.net.ActivityEvent
+import com.thompsonfabco.filamentkit.net.SpoolsAnswer
 import com.thompsonfabco.filamentkit.ui.history.RecentValues
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -24,6 +25,7 @@ object CheckedOutTexts {
     fun home(home: String) = "Home: $home"
     fun since(time: String) = "since $time"
     fun returnTo(home: String?) = if (home.isNullOrBlank()) RETURN else "Return to $home"
+    fun homeNow(location: String) = "Home is now $location."
     fun returned(home: String?) = if (home.isNullOrBlank()) "Returned." else "Returned to $home."
 }
 
@@ -50,11 +52,14 @@ object CheckedOutRules {
     /** The kind of event a Return writes; undone as an unload is (the Hub's record only). */
     const val RETURNED_KIND = "spool.returned"
 
-    /**
-     * Whether the Hub has the filter. An older Hub ignores `filter=checked_out` and answers every spool without the
-     * fields, so a non-empty answer in which a row lacks `checked_out` means no routes; an empty one is a Hub that has them.
-     */
-    fun supported(rows: List<JsonObject>): Boolean = rows.all { it.checkedOutInfo() != null }
+    /** The filter name in a list answer's `filters`. */
+    const val FILTER = "checked_out"
+
+    /** Whether the Hub applies the filter: its list answer names `checked_out` in `filters`; no `filters` is an older Hub (R88 01:55). */
+    fun supported(filters: List<String>?): Boolean = filters?.contains(FILTER) == true
+
+    /** The checked-out count from a list answer for `filter=checked_out`; null for a Hub that does not apply the filter. */
+    fun count(answer: SpoolsAnswer): Int? = if (supported(answer.filters)) rows(answer.spools).size else null
 
     /** The rows that are checked out, as the list shows them (a Hub that ignored the filter is not trusted to have cut it). */
     fun rows(rows: List<JsonObject>): List<SpoolSummary> =

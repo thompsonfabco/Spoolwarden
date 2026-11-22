@@ -2,6 +2,8 @@ package com.thompsonfabco.filamentkit.alerts
 
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.SpoolFilter
+import com.thompsonfabco.filamentkit.ui.spool.CheckedOutRules
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +29,8 @@ data class AlertsUi(
     val dismissed: Map<String, Dismissed> = emptyMap(),
     /** How many spools are running low; null while unknown or when the Hub cannot say. */
     val lowCount: Int? = null,
+    /** How many spools are checked out (R88); null while unknown or when the Hub does not apply the `checked_out` filter. */
+    val checkedOutCount: Int? = null,
     val loadedAt: Long? = null,
 ) {
     companion object {
@@ -92,6 +96,15 @@ class AlertsFeed(
             throw e
         } catch (e: ApiError) {
             if (e.status == 404) _state.update { it.copy(lowCount = null) }
+        } catch (_: Exception) {
+        }
+        try {
+            val count = CheckedOutRules.count(a.spools("", SpoolFilter.CHECKED_OUT))
+            _state.update { it.copy(checkedOutCount = count) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: ApiError) {
+            if (e.status == 404 || e.status == 400) _state.update { it.copy(checkedOutCount = null) }
         } catch (_: Exception) {
         }
     }
