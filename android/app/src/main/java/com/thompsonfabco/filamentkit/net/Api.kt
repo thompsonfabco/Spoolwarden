@@ -6,6 +6,7 @@ import com.thompsonfabco.filamentkit.alerts.AlertsConfig
 import com.thompsonfabco.filamentkit.alerts.EventsAnswer
 import com.thompsonfabco.filamentkit.alerts.EventsQuery
 import com.thompsonfabco.filamentkit.alerts.LowSpools
+import com.thompsonfabco.filamentkit.ui.settings.acceptLanguage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -62,11 +63,15 @@ class Api(
     /** The app's version, sent on every call as `X-Spoolwarden-Client: android/<version>` so the Hub can list it in Devices. */
     private val clientVersion: String = BuildConfig.VERSION_NAME,
     /** The language in use, sent on every call as `Accept-Language` so the texts the Hub writes come in it (05-android-app 12.2). */
-    private val language: () -> String = { Locale.getDefault().toLanguageTag() },
+    private val language: (() -> String)? = null,
 ) {
+    /** The Hub's own language from its latest `api/info` or `api/hub`: what Automatic falls back to ([acceptLanguage]). */
+    @Volatile private var hubLanguage: String? = null
+
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun info(): ServerInfo = decode(call(request("api", "info", auth = false).get()))
+    suspend fun info(): ServerInfo =
+        decode<ServerInfo>(call(request("api", "info", auth = false).get())).also { it.language?.let { l -> hubLanguage = l } }
 
     suspend fun pair(code: String): String {
         val body = buildJsonObject { put("code", code) }
@@ -596,7 +601,7 @@ class Api(
 
     /** `GET api/hub`; null when the Hub has no such call (an older Hub, 404), so the feature is hidden. */
     suspend fun hub(): HubAnswer? = try {
-        KitWire.hub(call(request("api", "hub").get()))
+        KitWire.hub(call(request("api", "hub").get())).also { it.language?.let { l -> hubLanguage = l } }
     } catch (e: ApiError) {
         if (e.status == 404) null else throw e
     }
@@ -606,14 +611,39 @@ class Api(
      * 409 `not_in_demo` when the demo is already off ([ApiError.code]).
      */
     suspend fun leaveDemo(): Boolean =
-        (call(request("api", "demo", "leave").post(JsonObject(emptyMap()).toBody())) as? JsonObject)
-            ?.get("demo")?.jsonPrimitive?.booleanOrNull ?: false
+        ((call(request("api", "demo", "leave").post(JsonObject(emptyMap()).toBody())) as? JsonObject)
+            ?.get("demo") as? JsonPrimitive)?.booleanOrNull ?: false
+
+    @Volatile private var labelRoutesKnown: Boolean? = null
+
+    /**
+     * Whether the Hub has the label routes (`GET api/spools/{id}/label.svg`, `GET /s/{id}`): Scan a label and Print a label
+     * are absent until it has (05-android-app 16). Asked once per [Api] with a spool number no Hub has: a Hub that has the
+     * route refuses it with its own `message`; one without it answers a 404 that is not the Hub's (INFERENCE, no Hub
+     * with the route exists yet). A call that cannot tell (offline, 5xx) throws and nothing is remembered.
+     */
+    suspend fun labelRoutes(): Boolean {
+        labelRoutesKnown?.let { return it }
+        return try {
+            labelSvg(0, "62x29")
+            true
+        } catch (e: ApiError) {
+            if (e.status == 404 && e.notFromHub) false
+            else if (e.status in 400..499) true
+            else throw e
+        }.also { labelRoutesKnown = it }
+    }
 
     /** The label of spool [id] at [size] (`62x29`, `50x30`, `a4-63x34`, `a4-70x37` or `letter-66x25`) as the Hub draws it: SVG text. 404 `not_found`. */
     suspend fun labelSvg(id: Int, size: String): ByteArray = withContext(Dispatchers.IO) {
         val request = request("api", "spools", id.toString(), "label.svg") { addQueryParameter("size", size) }.get().build()
         execute(request, null).use { resp ->
-            if (!resp.isSuccessful) throw errorFor(resp.code, resp.body.string(), request.header("Authorization"))
+            if (!resp.isSuccessful) {
+                val error = errorFor(resp.code, resp.body.string(), request.header("Authorization"))
+                // a 404 that is not the Hub's own, for a spool that may well exist: the Hub has no label routes
+                if (error.status == 404 && error.notFromHub && id > 0) labelRoutesKnown = false
+                throw error
+            }
             try {
                 resp.body.bytes()
             } catch (e: IOException) {
@@ -664,7 +694,7 @@ class Api(
             query?.invoke(this)
         }.build()
         val b = Request.Builder().url(url).header(CLIENT_HEADER, "android/$clientVersion")
-            .header("Accept-Language", language())
+            .header("Accept-Language", language?.invoke() ?: acceptLanguage(Locale.getDefault().toLanguageTag(), hubLanguage))
         if (auth) token()?.let { b.header("Authorization", "Bearer $it") }
         return b
     }

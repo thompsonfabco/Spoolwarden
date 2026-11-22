@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -137,7 +138,6 @@ import com.thompsonfabco.filamentkit.nav.TagRoute
 import com.thompsonfabco.filamentkit.nav.SpoolsGraph
 import com.thompsonfabco.filamentkit.nav.SpoolsScanRoute
 import com.thompsonfabco.filamentkit.ui.spool.LabelSource
-import com.thompsonfabco.filamentkit.ui.spool.hubAddress
 import com.thompsonfabco.filamentkit.ui.pair.LabelLookup
 import com.thompsonfabco.filamentkit.ui.pair.LabelScan
 import com.thompsonfabco.filamentkit.ui.pair.labelSpoolNumber
@@ -423,7 +423,6 @@ internal fun FilamentKitApp(
     RememberHubLook(info?.look, app::rememberHubLook)
     // The demo notice (05-android-app 3.7): what the Hub last said, kept while it is out of reach; gone once left
     var demoOn by remember { mutableStateOf(false) }
-    var demoLeft by remember(info) { mutableStateOf(false) }
     LaunchedEffect(info) { info?.let { demoOn = it.demo } }
     val labelPhotos = showLabelPhotos(info)
     val version = versionLine(BuildConfig.VERSION_NAME, config.isPaired(), info?.version)
@@ -472,6 +471,19 @@ internal fun FilamentKitApp(
         initializer { HubViewModel(load = { currentApi().hub() }) }
     })
     val hubUi by hubVm.state.collectAsStateWithLifecycle()
+    // `api/hub` says it too (05-android-app 3.7)
+    LaunchedEffect(hubUi.hub) { hubUi.hub?.let { demoOn = it.demo } }
+    // Scan a label and Print a label are absent until the Hub has the label routes (05 16)
+    val labelRoutes by produceState(false, api, online) {
+        val a = api
+        value = if (a == null || !online) value else try {
+            a.labelRoutes()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        }
+    }
     // the check history table on the Hub screen (R84 4.3)
     val healthVm: HealthViewModel = viewModel(key = "hub-health-${System.identityHashCode(api)}", factory = viewModelFactory {
         initializer { HealthViewModel(load = { days -> currentApi().health(days) }) }
@@ -669,7 +681,7 @@ internal fun FilamentKitApp(
                 onPairAgain = app.router::pairAgain,
                 online = online,
                 printersOn = info?.printersOn != false,
-                label = LabelSource({ size -> currentApi().labelSvg(route.id, size) }, { hubAddress(app.session.baseUrl()) }),
+                label = if (labelRoutes) LabelSource({ size -> currentApi().labelSvg(route.id, size) }) else null,
             )
         }
 
@@ -922,8 +934,12 @@ internal fun FilamentKitApp(
                         // on the list page only the list's own actions show, not the screen's under it
                         if (!sectionPage) topBarActions.content?.invoke(this)
                     }
-                    if (!scanning && demoNoticeShown(demoOn, config.isPaired(), inPairing || settingsOverPairing, demoLeft)) {
-                        DemoNotice(leave = { api?.leaveDemo() ?: throw ApiError.noHubPaired() }, onGone = { demoLeft = true })
+                    if (demoNoticeShown(demoOn, config.isPaired(), inPairing || settingsOverPairing)) {
+                        DemoNotice(
+                            leave = { api?.leaveDemo() ?: throw ApiError.noHubPaired() }, onGone = { demoOn = false },
+                            // the full-screen scanner has no top bar: the notice clears the status bar itself
+                            modifier = if (scanning) Modifier.statusBarsPadding() else Modifier,
+                        )
                     }
                     SwPills(
                         tab, navVisible && !scanning, tabTapped, settingsUpdate = update.available != null,
@@ -1209,23 +1225,31 @@ internal fun FilamentKitApp(
                         }
                         var notice by remember { mutableStateOf<String?>(null) }
                         var rescan by remember { mutableIntStateOf(0) }
+                        var scanReads by remember { mutableIntStateOf(0) }
                         val scanScope = rememberCoroutineScope()
                         val leave = { nav.currentDestination?.hasRoute(SpoolsScanRoute::class) == true }
                         QrScanner(
                             onResult = { text ->
                                 val id = labelSpoolNumber(text)
                                 if (id != null && leave()) scanScope.launch {
+                                    val read = ++scanReads
                                     notice = null
                                     when (val found = lookupLabelSpool { currentApi().spoolById(id) }) {
                                         LabelLookup.Found -> if (leave()) nav.navigate(SpoolRoute(id)) {
                                             popUpTo<SpoolsScanRoute> { inclusive = true }
                                         }
                                         else -> {
-                                            notice = (found as? LabelLookup.Failed)?.text ?: LabelScan.NOT_FOUND_TEXT
+                                            val shown = when (found) {
+                                                is LabelLookup.Failed -> found.text.ifBlank { appContext.getString(R.string.common_hub_answer_unknown) }
+                                                LabelLookup.CertificateChanged -> appContext.getString(R.string.common_cert_changed_notice)
+                                                else -> LabelScan.NOT_FOUND_TEXT
+                                            }
+                                            notice = shown
                                             delay(LabelScan.RESCAN_MS)
                                             rescan++
                                             delay(LabelScan.NOTICE_MS - LabelScan.RESCAN_MS)
-                                            notice = null
+                                            // a newer notice of a later read is not cleared early
+                                            if (notice == shown && scanReads == read) notice = null
                                         }
                                     }
                                 }
@@ -1266,7 +1290,7 @@ internal fun FilamentKitApp(
                             },
                             onPairAgain = app.router::pairAgain,
                             online = online,
-                            onScanLabel = { nav.navigate(SpoolsScanRoute) { launchSingleTop = true } },
+                            onScanLabel = if (labelRoutes) ({ nav.navigate(SpoolsScanRoute) { launchSingleTop = true } }) else null,
                             lowCount = alertsUi.lowCount,
                             spoolDetail = { spool, embedded, _ ->
                                 val spoolVm: SpoolViewModel = viewModel(
@@ -1286,7 +1310,7 @@ internal fun FilamentKitApp(
                                     online = online,
                                     printersOn = info?.printersOn != false,
                                     embedded = embedded,
-                                    label = LabelSource({ size -> currentApi().labelSvg(spool.id, size) }, { hubAddress(app.session.baseUrl()) }),
+                                    label = if (labelRoutes) LabelSource({ size -> currentApi().labelSvg(spool.id, size) }) else null,
                                 )
                             },
                         )

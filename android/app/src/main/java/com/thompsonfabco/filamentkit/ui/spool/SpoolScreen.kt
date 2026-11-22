@@ -282,11 +282,11 @@ private fun Actions(
             Box {
                 SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { menu = true })
                 SwMenu(menu, { menu = false }) {
+                    if (onPrint != null) SwMenuItem(PrintTexts.MENU, { menu = false; onPrint() }, enabled = online)
                     SwMenuItem(
                         stringResource(R.string.spool_mark_empty), { menu = false; vm.askMarkEmpty() },
                         enabled = enabled && ui.spool?.state != SpoolState.Empty,
                     )
-                    if (onPrint != null) SwMenuItem(PrintTexts.MENU, { menu = false; onPrint() }, enabled = online)
                     SwMenuItem(stringResource(R.string.common_refresh), { menu = false; vm.refresh() }, enabled = online)
                 }
             }

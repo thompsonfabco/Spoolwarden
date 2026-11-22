@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -27,12 +28,29 @@ import org.robolectric.annotation.Config
 class DemoNoticeTest {
     @get:Rule val rule = createComposeRule()
 
-    @Test fun theNoticeShowsOnlyInDemoOncePairedOutsidePairingAndNotAfterLeaving() {
-        assertTrue(demoNoticeShown(demo = true, paired = true, inPairing = false, left = false))
-        assertFalse("not in demo", demoNoticeShown(demo = false, paired = true, inPairing = false, left = false))
-        assertFalse("not paired", demoNoticeShown(demo = true, paired = false, inPairing = false, left = false))
-        assertFalse("pairing screens", demoNoticeShown(demo = true, paired = true, inPairing = true, left = false))
-        assertFalse("left", demoNoticeShown(demo = true, paired = true, inPairing = false, left = true))
+    @Test fun theNoticeShowsOnlyInDemoOncePairedAndOutsidePairing() {
+        assertTrue(demoNoticeShown(demo = true, paired = true, inPairing = false))
+        assertFalse("not in demo", demoNoticeShown(demo = false, paired = true, inPairing = false))
+        assertFalse("not paired", demoNoticeShown(demo = true, paired = false, inPairing = false))
+        assertFalse("pairing screens", demoNoticeShown(demo = true, paired = true, inPairing = true))
+    }
+
+    /** 05 3.7: no screen of the app lacks the notice. The shell's one call is not guarded by any screen (the scanner of labels has it too). */
+    @Test fun theShellShowsTheNoticeOnEveryScreenButPairing() {
+        val shell = java.io.File("src/main/java/com/thompsonfabco/filamentkit/MainActivity.kt").readText()
+        assertTrue(shell.contains("demoNoticeShown(demoOn, config.isPaired(), inPairing || settingsOverPairing)"))
+        assertFalse(Regex("""if \(!?scanning\s*&&[^\n]*demoNoticeShown""").containsMatchIn(shell))
+        assertTrue("clears when left, not when the phone goes offline", shell.contains("onGone = { demoOn = false }"))
+        assertFalse(shell.contains("demoLeft"))
+    }
+
+    @Test fun aChangedCertificateIsToldNotThrown() = runBlocking {
+        assertEquals(LeaveOutcome.CertificateChanged, leaveDemo { throw FingerprintMismatch("aa", "bb") })
+    }
+
+    @Test fun anyOtherFailureIsToldNotThrown() = runBlocking {
+        assertEquals(LeaveOutcome.Refused("boom"), leaveDemo { throw IllegalStateException("boom") })
+        assertEquals(LeaveOutcome.Refused(""), leaveDemo { throw java.io.IOException() })
     }
 
     @Test fun leavingGoneWhenTheHubSaysDemoIsOff() = runBlocking {
@@ -81,6 +99,23 @@ class DemoNoticeTest {
         rule.waitForIdle()
         assertEquals(0, calls)
         rule.onAllNodesWithText("Leave the demo?").assertCountEquals(0)
+    }
+
+    @Test fun aChangedCertificateShowsTheCertificateNoticeInTheDialog() {
+        rule.setContent { Themed { DemoNotice(leave = { throw FingerprintMismatch("aa", "bb") }, onGone = {}) } }
+        rule.onNodeWithText("Leave demo").performClick()
+        rule.onAllNodesWithText("Leave demo")[1].performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("The Hub's certificate has changed. This phone stopped talking to it to stay safe.").assertExists()
+    }
+
+    @Test fun theNoticeIsPlainContentNotALiveRegion() {
+        rule.setContent { Themed { DemoNotice(leave = { false }, onGone = {}) } }
+        rule.onNodeWithText("Demo data. Nothing here is real.")
+        val live = rule.onAllNodes(
+            androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.LiveRegion),
+        )
+        live.assertCountEquals(0)
     }
 
     @Test fun aRefusalShowsTheHubsTextInTheDialog() {

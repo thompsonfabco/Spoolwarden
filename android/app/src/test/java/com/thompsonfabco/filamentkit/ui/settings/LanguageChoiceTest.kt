@@ -63,6 +63,14 @@ class LanguageChoiceTest {
         assertEquals(CARRIED_LANGUAGES, names)
     }
 
+    @Test fun theLanguageSentIsThePhonesWhenCarriedElseTheHubs() {
+        assertEquals("en-GB", acceptLanguage("en-GB", "de"))
+        assertEquals("de", acceptLanguage("fr-FR", "de"))
+        assertEquals("fr-FR", acceptLanguage("fr-FR", null))
+        assertEquals("fr-FR", acceptLanguage("fr-FR", " "))
+        assertEquals("de-AT", acceptLanguage("de-AT", "en", carried = listOf("en", "de")))
+    }
+
     @Composable
     private fun Themed(content: @Composable () -> Unit) = SpoolwardenTheme(Look.Console, Appearance.Light) { content() }
 

@@ -67,6 +67,14 @@ internal fun chosenLanguage(tags: String?, carried: List<String> = CARRIED_LANGU
         ?: carried.firstOrNull { it.equals(Locale.forLanguageTag(first).language, ignoreCase = true) }
 }
 
+/**
+ * The `Accept-Language` the app sends: the phone's own language ([phoneTag], what the app is drawn in, per-app choice
+ * included) when the app carries it, otherwise the Hub's ([hubLanguage]; the phone's when the Hub gave none), so a screen is
+ * never in two languages (05-android-app 12.2, "Automatic").
+ */
+internal fun acceptLanguage(phoneTag: String, hubLanguage: String?, carried: List<String> = CARRIED_LANGUAGES): String =
+    if (chosenLanguage(phoneTag, carried) != null) phoneTag else hubLanguage?.takeIf { it.isNotBlank() } ?: phoneTag
+
 /** The tags to hand to Android for a choice: null (Automatic) is the empty list, which gives the language back to the system. */
 internal fun languageTags(choice: String?): String = choice.orEmpty()
 

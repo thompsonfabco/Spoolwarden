@@ -64,6 +64,57 @@ class ApiRcFiveTest {
         assertEquals(404, e.status)
     }
 
+    @Test fun theLabelRoutesAreThereWhenTheHubRefusesTheProbeWithItsOwnMessage() = runBlocking {
+        hub.handler = { _ -> 404 to """{"error": "not_found", "message": "No such spool."}""" }
+        assertTrue(api.labelRoutes())
+        assertTrue("remembered", api.labelRoutes())
+        assertEquals(1, hub.requests.size)
+        assertEquals("/api/spools/0/label.svg", hub.requests[0].url.encodedPath)
+    }
+
+    @Test fun aBare404MeansTheHubHasNoLabelRoutes() = runBlocking {
+        hub.handler = { _ -> 404 to """{"detail": "Not Found"}""" }
+        assertFalse(api.labelRoutes())
+        assertFalse("remembered", api.labelRoutes())
+        assertEquals(1, hub.requests.size)
+    }
+
+    @Test fun aProbeThatCannotTellIsNotRemembered() = runBlocking {
+        hub.handler = { _ -> 503 to "" }
+        assertThrows(ApiError::class.java) { runBlocking { api.labelRoutes() } }
+        hub.handler = { _ -> 200 to "<svg/>" }
+        assertTrue(api.labelRoutes())
+    }
+
+    @Test fun aBare404ForARealSpoolTellsTheHubLacksTheRoutes() = runBlocking {
+        hub.handler = { _ -> 404 to "" }
+        assertThrows(ApiError::class.java) { runBlocking { api.labelSvg(214, "62x29") } }
+        hub.handler = { _ -> 200 to "<svg/>" }
+        assertFalse(api.labelRoutes())
+    }
+
+    @Test fun automaticFollowsTheHubsLanguageWhenThePhonesIsNotCarried() = runBlocking {
+        val before = java.util.Locale.getDefault()
+        try {
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("fr-FR"))
+            hub.handler = { _ -> 200 to """{"name": "H", "version": "1", "api": 1, "language": "de"}""" }
+            api.info()
+            api.hub()
+            assertEquals("the first call has no Hub language yet", "fr-FR", hub.requests[0].header("Accept-Language"))
+            assertEquals("de", hub.requests[1].header("Accept-Language"))
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("en-GB"))
+            api.hub()
+            assertEquals("a carried language of the phone wins", "en-GB", hub.requests[2].header("Accept-Language"))
+        } finally {
+            java.util.Locale.setDefault(before)
+        }
+    }
+
+    @Test fun leaveDemoWithANonBooleanDemoIsStillAnAnswer() = runBlocking {
+        hub.handler = { _ -> 200 to """{"demo": {"x": 1}}""" }
+        assertFalse(api.leaveDemo())
+    }
+
     @Test fun everyCallCarriesTheLanguageInUse() = runBlocking {
         hub.handler = { _ -> 200 to """{"name": "H", "version": "1", "api": 1}""" }
         val german = hub.api(language = "de")

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -55,6 +56,11 @@ class LabelScanTest {
         assertEquals(LabelLookup.NotFound, lookupLabelSpool { throw ApiError(404, "not_found", "No such spool.") })
         assertEquals(LabelLookup.Failed("down"), lookupLabelSpool { throw ApiError(0, "offline", "down") })
         assertEquals(LabelLookup.Failed("Nope."), lookupLabelSpool { throw ApiError(403, "forbidden", "Nope.") })
+    }
+
+    @Test fun aChangedCertificateAndAnyOtherFailureAreToldNotThrown() = runBlocking {
+        assertEquals(LabelLookup.CertificateChanged, lookupLabelSpool { throw FingerprintMismatch("aa", "bb") })
+        assertEquals(LabelLookup.Failed("boom"), lookupLabelSpool { throw IllegalStateException("boom") })
     }
 
     private fun frame(state: ScannerState, labelMode: Boolean, notice: String? = null) {

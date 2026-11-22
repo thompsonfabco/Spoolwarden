@@ -1,6 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import kotlinx.coroutines.CancellationException
 
 /**
@@ -39,15 +40,23 @@ fun labelSpoolNumber(text: String): Int? =
 internal sealed interface LabelLookup {
     data object Found : LabelLookup
     data object NotFound : LabelLookup
+    data object CertificateChanged : LabelLookup
     data class Failed(val text: String) : LabelLookup
 }
 
-/** Asks the Hub for the spool ([ask] is `GET api/spools/{id}`): a 404 is a number the Hub does not know. */
+/**
+ * Asks the Hub for the spool ([ask] is `GET api/spools/{id}`): a 404 is a number the Hub does not know; a changed certificate
+ * and any other failure are told, never thrown.
+ */
 internal suspend fun lookupLabelSpool(ask: suspend () -> Unit): LabelLookup = try {
     ask()
     LabelLookup.Found
 } catch (e: CancellationException) {
     throw e
+} catch (e: FingerprintMismatch) {
+    LabelLookup.CertificateChanged
 } catch (e: ApiError) {
     if (e.status == 404) LabelLookup.NotFound else LabelLookup.Failed(e.message)
+} catch (e: Exception) {
+    LabelLookup.Failed(e.message.orEmpty())
 }
