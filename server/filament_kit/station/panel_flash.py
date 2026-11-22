@@ -3,9 +3,9 @@
 Two images ship beside each other (station/panel/firmware/, installed to resources/panel/): the WHOLE image
 (bootloader, partition table, boot_app0 and program, written at address 0) and the PROGRAM image (the program alone,
 written at 0x10000). The whole image also covers the NVS partition at 0x9000, where a wireless panel keeps its Wi-Fi
-set-up, so it is only written to a panel that has nothing to lose or whose flash layout changed: one on firmware 12
+set-up, so it is only written to a panel that has nothing to lose or whose flash layout changed: one on firmware 13
 or older, an empty one (no readable version), or one older than a firmware that changed the layout (LAYOUT_BREAKS).
-A panel on firmware 13 or later whose layout is the bundled one gets the program image only, and keeps its Wi-Fi."""
+A panel on firmware 14 or later whose layout is the bundled one gets the program image only, and keeps its Wi-Fi."""
 from __future__ import annotations
 
 import logging
@@ -25,7 +25,7 @@ WHOLE_IMAGE = "intake-panel.bin"            # merged image, address 0 (the file 
 PROGRAM_IMAGE = "intake-panel-program.bin"  # firmware.bin alone, beside the whole image
 WHOLE_ADDRESS = "0x0"
 PROGRAM_ADDRESS = "0x10000"                 # app0 in the default partition table
-WIFI_FIRST_VERSION = 13                     # the first firmware that stores Wi-Fi settings (12 is the USB-only one)
+WIFI_FIRST_VERSION = 14                     # the first firmware that stores Wi-Fi settings (13 and older are USB-only)
 LAYOUT_BREAKS: tuple[int, ...] = ()         # firmware versions that CHANGED the flash layout (partition table, offsets,
 #                                             NVS place); a panel older than one of them needs the whole image
 
@@ -48,7 +48,7 @@ def _number(v):
 
 
 def program_only(have, want) -> bool:
-    """The panel (version have) can take the program image alone: it is on firmware 13 or later and no firmware
+    """The panel (version have) can take the program image alone: it is on firmware 14 or later and no firmware
     after it, up to the bundled one (want), changed the flash layout. An empty or unreadable version never can."""
     h, w = _number(have), _number(want)
     if h is None or w is None or h < WIFI_FIRST_VERSION:
