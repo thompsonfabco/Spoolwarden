@@ -193,15 +193,20 @@ def cmd_undo(api, sm_factory, *, event_id: int | None = None, yes: bool = False)
         except SlotError as e:
             return fail(e)
         cutoff = _since_at(7)
-        # the newest command-line change that can still be undone: not a compensating event, an undone one, a spool
-        # added or an update (06 9.23, the Hub's rule in 03 2.9)
-        evs = [e for e in reversed(r.get("events") or [])
-               if (e.get("undo") or {}).get("possible") and str(e.get("at") or "") >= cutoff]
+        # D15: plain `undo` is for the NEWEST change of this command line and never skips to an older one: when that one is already
+        # undone (a compensating event of an earlier undo is the newest, too) or cannot be undone, it says so and names `activity`
+        evs = [e for e in reversed(r.get("events") or []) if str(e.get("at") or "") >= cutoff]
         if not evs:
             output.emit({"ok": False, "none": True})
             output.out(CLI_UNDO_NONE)
             return 0
         target = evs[0]
+        if not (target.get("undo") or {}).get("possible"):
+            from .station.page import say as catalogue_say
+            text = catalogue_say("cli_undo_newest_cannot")
+            output.emit({"ok": False, "newest_cannot_be_undone": True, "id": target.get("id"), "text": text})
+            output.out(text)
+            return 0
         event_id = target["id"]
     else:
         try:

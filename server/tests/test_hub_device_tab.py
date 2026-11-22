@@ -737,14 +737,17 @@ return { sent: sentTo("device/d3/settings") };
     assert page["sent"] == [{"length": "b", "item": "b", "code": CODE}]
 
 
-def test_a_station_without_a_certificate_has_its_settings_changed_and_gives_a_ticket_with_the_proof(env_hub, tmp_path):
-    """R559 01 #4: a Weigh Station that told the Hub no certificate (not updated, or it could not make one) is called over
-    plain HTTP (R82 2026-11-18 00:28 point 1), and its change and its ticket carry the proof, which is what guards them
-    (R83 01:10): neither is refused for the missing pin. The station is the real handler."""
+def test_a_station_without_a_certificate_has_its_settings_changed_with_the_proof_but_no_ticket_over_http(env_hub, tmp_path, monkeypatch):
+    """R559 01 #4 + D14: a Weigh Station that told the Hub no certificate (not updated, or it could not make one) is called over
+    plain HTTP for a settings change (R82 2026-11-18 00:28 point 1), which carries the proof (R83 01:10). The Hub does NOT fetch a
+    page ticket over plain HTTP: it refuses with the not-pinned text and no ticket request leaves. The station is the real handler."""
     from http.server import ThreadingHTTPServer
     import http.client
     from filament_kit.station import settings as station_settings
     c, st = env_hub
+    sent = []
+    real_call = station_client.bounded_call
+    monkeypatch.setattr(station_client, "bounded_call", lambda host, port, fp, method, path, *a, **k: sent.append((fp, method, path)) or real_call(host, port, fp, method, path, *a, **k))
     store = station_settings.Store(tmp_path / "settings.xml", {"beep": True, "speech": True, "tts": "auto",
                                                                "speaker_volume": 50, "panel_swap": False}, {})
     access = station_page.Access(lambda: station_page.token_key(TOKEN))
@@ -761,16 +764,12 @@ def test_a_station_without_a_certificate_has_its_settings_changed_and_gives_a_ti
         assert r.status_code == 200, r.text
         assert next(s for s in r.json()["settings"] if s["id"] == "beep")["value"] is False
         assert store.listing()[0] == {**store.listing()[0], "id": "beep", "value": False}
-        opened = SP.post(c, "device/d3/open")
-        assert opened.status_code == 200, opened.text
-        base, _, ticket = opened.json()["address"].partition("#ticket=")
-        assert base == f"http://{SP.HOSTNAME}:{srv.server_port}/" and ticket
-        conn = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=5)
-        try:
-            conn.request("POST", "/session", body=json.dumps({"ticket": ticket}), headers={"Content-Type": "application/json"})
-            assert conn.getresponse().status == 200            # the station took the ticket the Hub was given
-        finally:
-            conn.close()
+        assert (None, "POST", "/settings") in sent                 # the change went over plain HTTP, with the proof
+        sent.clear()
+        opened = SP.post(c, "device/d3/open")                      # D14: no page ticket over plain HTTP
+        assert opened.status_code == 503, opened.text
+        assert station_client.TEXT_STATION_NO_PIN in opened.text
+        assert not [x for x in sent if x[2] == "/ticket"], sent    # no ticket request left, over http or any other way
         # a pinned station is still never called plain: with a certificate told, the same plain listener is refused
         _pair_station(st, fp="ab" * 32, port=srv.server_port)
         assert SP.post(c, "device/d3/settings", {"beep": True}).status_code == 502
