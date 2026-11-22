@@ -81,6 +81,8 @@ def on_scale(line: bytes):
     except (IndexError, KeyError, ValueError):
         log.warning("button panel: ignoring W line %r", line[:40])
         return
+    with st.lock:   # what the panel itself says, whichever scale the station uses (WL3 reads it)
+        st.state["panel_scale"] = {"grams": round(grams, 1), "status": "settled" if settled else "unsettled", "unit": "g"}
     if scale.find_scale():  # the computer's own scale wins
         st.panel_scale["on"] = False
         return
@@ -97,6 +99,7 @@ def on_scale(line: bytes):
 def forget_panel_scale():
     """The panel went away: a scale reading it sent is no longer a reading."""
     with st.lock:
+        st.state["panel_scale"] = None
         if st.panel_scale["on"]:
             st.state.update(scale=None, scale_at=None)
             st.panel_scale["on"] = False

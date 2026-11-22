@@ -82,3 +82,34 @@ def test_off_removes_the_token_and_the_panel_is_refused():
 def test_the_state_folder_takes_a_drive_path_and_still_splits_a_list(monkeypatch, value, folder):
     monkeypatch.setenv("STATE_DIRECTORY", value)
     assert str(st.state_dir()) == str(type(st.state_dir())(folder))
+
+
+# ---- state["panel_scale"]: what the panel's W lines said (for the flow, WL3) ----
+
+def test_panel_scale_is_none_until_the_panel_sends_a_w_line():
+    assert st.state["panel_scale"] is None
+    p = connect()
+    assert st.state["panel_scale"] is None
+
+
+def test_a_w_line_sets_panel_scale_and_a_drop_clears_it():
+    from test_wl1_panel_link import wait
+    p = connect()
+    p.send("W 812.5 1")
+    assert wait(lambda: st.state["panel_scale"] is not None)
+    assert st.state["panel_scale"] == {"grams": 812.5, "status": "settled", "unit": "g"}
+    p.send("W 790.0 0")
+    assert wait(lambda: st.state["panel_scale"]["status"] == "unsettled")
+    assert st.state["panel_scale"] == {"grams": 790.0, "status": "unsettled", "unit": "g"}
+    p.close()
+    assert wait(lambda: link() is None and st.state["panel_scale"] is None, timeout=10)
+
+
+@pytest.mark.parametrize("line", [b"W", b"W 5", b"W abc 1", b"W 12 2", b"W 12 1 9", b"W nan 1", b"W 99999999 1"])
+def test_a_malformed_w_line_leaves_panel_scale_alone(line):
+    from filament_kit.station import panel
+    panel.on_line(line)
+    assert st.state["panel_scale"] is None
+    panel.on_line(b"W 20.0 1")
+    panel.on_line(line)
+    assert st.state["panel_scale"] == {"grams": 20.0, "status": "settled", "unit": "g"}

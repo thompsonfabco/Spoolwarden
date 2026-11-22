@@ -119,7 +119,8 @@ MIN_GRAMS = 20  # an empty pan reads 0; anything under this isn't a spool
 lock = threading.Lock()
 state = {"tag": None, "tag_at": None, "scale": None, "scale_at": None, "last": None, "last_at": None,
          "held": None, "held_at": None, "blink_until": 0, "air": None, "air_at": None,
-         "photo": None, "photo_at": None}
+         "photo": None, "photo_at": None,
+         "panel_scale": None}  # the panel's last `W` line: {"grams": float, "status": "settled"|"unsettled", "unit": "g"} or None
 # the intake flow (flow.py): its step, attempt number, the linked spool or recognised filament, the server's display
 # lines for the step and the station's own message
 flow = {"step": "idle", "seq": 0, "spool": None, "filament": None, "display": [], "message": "", "at": 0.0}
