@@ -63,9 +63,7 @@ LEAKS: dict[str, str] = {}
 # 409 "Not in the demo." (`code=demo.NOT_IN_DEMO_CODE`) before `_moonraker_test` and before `tlspin.leaf_fp`. A route
 # listed here is held by `test_firmware_download_and_the_per_printer_routes_with_bodies_stay_inside` and left out of the
 # every-route walk; empty when the stop lands (the walk then covers it).
-KLIPPER_ROUTE_LEAKS: dict[str, list[str]] = {
-    "POST /setup/api/printers/{serial}/test": ["connect voron.example", "connect 192.0.2.57", "connect 192.0.2.40"],
-}
+KLIPPER_ROUTE_LEAKS: dict[str, list[str]] = {}
 
 # what the calls with a real body leave outside the demo's folder (the walk's empty bodies stop before they get there)
 LEAKS_WITH_BODY: dict[str, str] = {}
@@ -74,12 +72,7 @@ LEAKS_WITH_BODY: dict[str, str] = {}
 # web/intake_app.py; the hunks are in the RC6d report). Per route, what a request with a real body reaches or writes. Such a
 # route is left out of the every-route walk and held by `test_routes_waiting_for_a_held_file_...`, exactly: when the stop
 # lands the route's entry must go (the test then fails until it does), so the dict can only shrink toward empty.
-HELD_ROUTE_LEAKS: dict[str, list[str]] = {
-    "POST /setup/api/key/check": ["cloud claude models"],      # setup_page.py key_check, before self._gap()
-    "POST /api/printers": ["connect 192.0.2.99", "lookup voron.example"],   # api.py printer_add: a Bambu address (setup_page.py
-    #                                                                          bambu_add_by_address), and a Klipper one (discovery.add)
-    "POST /api/printers/test": ["connect 192.0.2.99"],         # api.py printer_test (a Klipper address): the Moonraker probe
-}
+HELD_ROUTE_LEAKS: dict[str, list[str]] = {}
 
 JPEG = bytes([0xFF, 0xD8, 0xFF, 0xE0]) + bytes(64)                  # a photo as far as the Hub checks one
 ZIP = b"PK" + bytes([3, 4]) + bytes(64)                             # an upload as far as the page checks one
