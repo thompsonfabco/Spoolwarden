@@ -738,12 +738,14 @@ class Tracker:
         wait(fs, timeout)
 
     def _on_report(self, serial: str, report: dict, first: bool) -> None:
-        if self._stopped or demo.is_on():       # the pretend printers' prints are recorded by the demo itself
+        if self._stopped:
             return
         gs = report.get('gcode_state')
         if not isinstance(gs, str):
             return
         with self._lock:
+            if demo.is_on():            # the demo records its prints itself (checked under the lock: reports keep their order)
+                return
             w = self._watch.setdefault(serial, _Watch())
             prev, w.prev = w.prev, gs
             if gs in ACTIVE:
