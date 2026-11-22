@@ -372,17 +372,29 @@ def _same(a, b) -> bool:
     return a == b
 
 
+_GONE = object()      # `_newer_json`: the older release deleted the JSON form, so the file is none
+
+
 def _newer_json(path: Path, xml_data, t: str, is_list: bool, keep_version: bool, mode: int | None, state_owned: bool,
                 old_name):
     """The data of a JSON form that changed after this code last wrote it (an older release after a rollback), or None.
     It wins once: the XML form is written from it and its hash recorded. Nothing recorded, an unreadable JSON, or one
-    that holds what the XML form holds: the XML form wins. A store that cannot be rewritten still returns the data."""
+    that holds what the XML form holds: the XML form wins. A recorded hash with the JSON gone means an older release
+    deleted the file (the way it says "none"): the XML form is set aside (`quarantine`), the hash cleared and `_GONE`
+    returned. A store that cannot be rewritten still returns the data."""
     jp = _json_path(path, old_name)
     want = _recorded(jp)
     if want is None:
         return None
     try:
         raw = jp.read_bytes()
+    except FileNotFoundError:
+        quarantine(path)
+        try:
+            _sha_path(jp).unlink()
+        except OSError:
+            pass
+        return _GONE
     except OSError:
         return None
     if _sha(raw) == want:
@@ -426,6 +438,8 @@ def _read(path: Path, tag: str | None, keep_version: bool, is_list: bool, mode: 
             clear_problem(xp)
             if keep_old_form:
                 newer = _newer_json(path, out, t, is_list, keep_version, mode, state_owned, old_name)
+                if newer is _GONE:
+                    return None
                 if newer is not None:
                     return newer
             return out

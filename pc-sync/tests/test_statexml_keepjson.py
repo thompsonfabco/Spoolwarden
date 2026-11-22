@@ -209,3 +209,16 @@ def test_unlink_takes_the_hash_too(tmp_path):
     statexml.write(d / "a.json", {"n": 1})
     statexml.unlink(d / "a.json")
     assert list(d.iterdir()) == []
+
+
+def test_a_json_an_older_release_deleted_takes_the_xml_with_it(tmp_path):
+    p = tmp_path / "pair-aside.json"
+    statexml.write(p, {"n": 1})
+    p.unlink()                                      # the older release said "none" by deleting the JSON
+    assert statexml.read(p) is None
+    assert not (tmp_path / "pair-aside.xml").exists()
+    assert (tmp_path / "pair-aside.xml.unreadable").is_file()          # kept for the user
+    assert not (tmp_path / "pair-aside.json.sha256").exists()
+    assert statexml.read(p) is None
+    statexml.write(p, {"n": 2})
+    assert statexml.read(p) == {"n": 2}
