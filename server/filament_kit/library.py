@@ -328,11 +328,6 @@ def _read_json(path: Path):
         return None
 
 
-def _write_json(path: Path, obj) -> None:
-    make_state_dir(path.parent)
-    _write_atomic(path, (json.dumps(obj, indent=2) + "\n").encode("utf-8"), 0o644, state_owned=True)
-
-
 def _read_state(name: str):
     """library/<name> (current.json, previous.json, last_check.json, rolled_back.json) as its XML form; a file that
     only exists as JSON is read and moved to XML (R85 section 1)."""
