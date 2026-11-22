@@ -761,6 +761,17 @@ class Api(
         return KitWire.spools(call(req.get()))
     }
 
+    /**
+     * `POST api/spools/{id}/return` (R88 1.7): sends a checked-out spool to its home. 409 `not_checked_out` and the
+     * other refusals are an [ApiError] whose message is the Hub's; 404 is a Hub without the route.
+     */
+    suspend fun returnSpool(spoolId: Int): JsonObject =
+        spool(call(request("api", "spools", spoolId.toString(), "return").post(ByteArray(0).toRequestBody(null))))
+
+    /** `PATCH api/spools/{id}` with `home` (R88 1.7); 409 `not_checked_out`, 400 an unknown location. */
+    suspend fun setHome(spoolId: Int, home: String): JsonObject =
+        spool(call(request("api", "spools", spoolId.toString()).patch(buildJsonObject { put("home", home) }.toBody())))
+
     // ---- end printers --------------------------------------------------------------------------------------
 
     // --- plumbing ---
@@ -867,8 +878,12 @@ class Api(
         else -> "http_$status"
     }
 
-    private fun spool(body: JsonElement): JsonObject =
-        body.jsonObject["spool"]?.jsonObject ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a spool")
+    /** The answer's `spool`, with its phone-shaped `view` (where R88's checked-out fields are) kept beside it when there is one. */
+    private fun spool(body: JsonElement): JsonObject {
+        val spool = body.jsonObject["spool"]?.jsonObject ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a spool")
+        val view = body.jsonObject["view"] as? JsonObject ?: return spool
+        return if (spool.containsKey("view")) spool else JsonObject(spool + ("view" to view))
+    }
 
     private inline fun <reified T> decode(body: JsonElement): T = json.decodeFromJsonElement(body)
 

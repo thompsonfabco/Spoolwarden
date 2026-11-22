@@ -1137,7 +1137,8 @@ data class LocalLibrary(val entries: List<LocalEntry>, val materials: List<Strin
 data class EntryProblem(val field: String, val text: String)
 
 /** `GET /api/spools` with its `spoolman_url` (absent when Spoolman cannot be reached from where the phone is). */
-data class SpoolsAnswer(val spools: List<JsonObject>, val spoolmanUrl: String?)
+/** [filters] is the top-level `filters` list (R88: the filter names this Hub applies); null when absent, which is an older Hub. */
+data class SpoolsAnswer(val spools: List<JsonObject>, val spoolmanUrl: String?, val filters: List<String>? = null)
 
 /** Where a spool is loaded: the `loaded` field of the spool view. */
 data class SpoolLoaded(val printerId: String, val printer: String, val slot: String)
@@ -1148,6 +1149,7 @@ object SpoolFilter {
     const val OPENED = "opened"
     const val LOADED = "loaded"
     const val LOW = "low"
+    const val CHECKED_OUT = "checked_out"
 }
 
 object KitWire {
@@ -1237,6 +1239,7 @@ object KitWire {
         return SpoolsAnswer(
             spools = (o["spools"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject },
             spoolmanUrl = o.str("spoolman_url")?.takeIf { it.isNotBlank() },
+            filters = (o["filters"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
         )
     }
 

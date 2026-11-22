@@ -1,1 +1,2 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/search/SearchScreen.kt | spool:${} | not text: a route, JSON field or wire value of checked-out spools (CO6, R88 1.7)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/search/SearchScreen.kt | spoolman-spools | not text: a Hub export set name of history and data (HD9b)

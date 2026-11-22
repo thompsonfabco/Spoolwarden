@@ -87,6 +87,8 @@ fun SpoolScreen(
     modifier: Modifier = Modifier,
     online: Boolean = true,
     printersOn: Boolean = true,
+    /** The Hub applies the `checked_out` filter (R88): the Home line, Return and Change home show only then. */
+    checkedOutSupported: Boolean = false,
     embedded: Boolean = false,
     /** Where the label drawing comes from (Print a label, 7.10); null: the overflow has no such item. */
     label: LabelSource? = null,
@@ -118,6 +120,14 @@ fun SpoolScreen(
         }
     }
 
+    // a Return (R88 1.6): the toast says where the spool went, with Undo through the activity
+    val returned = ui.returnToast
+    LaunchedEffect(returned) {
+        if (returned == null) return@LaunchedEffect
+        vm.returnToastShown()
+        toast?.showUndoable(returned.text, undo, returned.event, undoHoldMs(context), vm::undoOnHub)
+    }
+
     val scrollModifier = if (embedded) {
         modifier.fillMaxWidth().padding(space.s4)
     } else {
@@ -145,8 +155,16 @@ fun SpoolScreen(
                 if (spool != null) {
                     Header(spool, ui.openedByTag)
                     Remaining(spool)
+                    if (checkedOutSupported) CheckedOutRules.homeLine(spool)?.let { line ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically) {
+                            Text(line, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            if (CheckedOutRules.canChangeHome(spool)) {
+                                SwButton(CheckedOutTexts.CHANGE_HOME, vm::openHome, kind = SwButtonKind.Quiet, enabled = online && !ui.writing)
+                            }
+                        }
+                    }
                     ui.result?.let { ResultLine(it) }
-                    Actions(vm, ui, online, printersOn, onLoad, onPrint = if (label != null) ({ printing = true }) else null)
+                    Actions(vm, ui, online, printersOn, checkedOutSupported, onLoad, onPrint = if (label != null) ({ printing = true }) else null)
                     Details(spool)
                     ActivityList(
                         ui.activity, ui.undoing, enabled = online && !ui.writing,
@@ -164,6 +182,7 @@ fun SpoolScreen(
     if (printing && label != null && printable != null) PrintLabelSheet(printable, label) { printing = false }
     ui.weight?.let { WeightSheet(vm, it, ui.spool?.remaining, onPairAgain) }
     ui.move?.let { MoveSheet(vm, it, ui.spool?.location, onPairAgain) }
+    ui.home?.let { HomeSheet(vm, it, ui.spool?.home, onPairAgain) }
     if (ui.confirmEmpty) {
         val spool = ui.spool
         SwDialog(
@@ -265,7 +284,7 @@ private const val PERCENT_FULL = 100f
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Actions(
-    vm: SpoolViewModel, ui: SpoolUi, online: Boolean, printersOn: Boolean, onLoad: () -> Unit, onPrint: (() -> Unit)? = null,
+    vm: SpoolViewModel, ui: SpoolUi, online: Boolean, printersOn: Boolean, checkedOutSupported: Boolean, onLoad: () -> Unit, onPrint: (() -> Unit)? = null,
 ) {
     val space = SpoolwardenTheme.space
     val enabled = online && !ui.writing
@@ -279,6 +298,10 @@ private fun Actions(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalArrangement = Arrangement.spacedBy(space.s2)) {
             if (printersOn) SwButton(stringResource(R.string.spool_load), onLoad, enabled = enabled)
             SwButton(stringResource(R.string.spool_move), vm::openMove, enabled = enabled)
+            // checked out (R88 1.6): back to its home, asking nothing; Home can be changed
+            ui.spool?.takeIf { checkedOutSupported && CheckedOutRules.canReturn(it) }?.let {
+                SwButton(CheckedOutTexts.returnTo(it.home), vm::returnToHome, enabled = enabled, busy = ui.returning)
+            }
             Box {
                 SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { menu = true })
                 SwMenu(menu, { menu = false }) {
@@ -439,6 +462,48 @@ private fun MoveSheet(vm: SpoolViewModel, m: MoveUi, current: String?, onPairAga
                             Column(Modifier.weight(1f).padding(vertical = space.s2)) {
                                 Text(name, style = MaterialTheme.typography.bodyLarge)
                                 val lines = row.moveLines(here, moving = m.movingTo == name)
+                                if (lines.isNotEmpty()) {
+                                    val context = LocalContext.current
+                                    Text(lines.joinToString(" · ") { it.resolve(context) }, style = MaterialTheme.typography.bodySmall, color = colors.muted)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Home (R88 1.6): the storage locations as radio rows; a tap saves at once, and a refusal shows in its own words. */
+@Composable
+private fun HomeSheet(vm: SpoolViewModel, h: HomeUi, current: String?, onPairAgain: () -> Unit) {
+    val colors = SpoolwardenTheme.colors
+    val space = SpoolwardenTheme.space
+    SwSheet(onDismiss = vm::closeHome, gesturesEnabled = h.savingTo == null) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = space.s4).padding(bottom = space.s4), verticalArrangement = Arrangement.spacedBy(space.s2)) {
+            Text(CheckedOutTexts.HOME, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+            h.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = vm::retryHome) }
+            val locations = h.locations
+            when {
+                locations == null -> if (h.failure == null) SwSkeletonRows(SKELETON_ROWS)
+                locations.isEmpty() -> Text(stringResource(R.string.spool_move_none), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+                else -> Column(Modifier.verticalScroll(rememberScrollState())) {
+                    val rows = h.storage?.rows() ?: locations.map { LocationRow(it, null, false) }
+                    rows.forEach { row ->
+                        val name = row.name
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row)
+                                .selectable(selected = name == current, enabled = h.savingTo == null, role = Role.RadioButton) { vm.setHome(name) },
+                            horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = name == current, onClick = null,
+                                colors = RadioButtonDefaults.colors(selectedColor = colors.accentText, unselectedColor = colors.borderStrong),
+                            )
+                            Column(Modifier.weight(1f).padding(vertical = space.s2)) {
+                                Text(name, style = MaterialTheme.typography.bodyLarge)
+                                val lines = row.moveLines(name == current, moving = h.savingTo == name)
                                 if (lines.isNotEmpty()) {
                                     val context = LocalContext.current
                                     Text(lines.joinToString(" · ") { it.resolve(context) }, style = MaterialTheme.typography.bodySmall, color = colors.muted)

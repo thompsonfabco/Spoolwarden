@@ -60,6 +60,15 @@ data class MoveUi(
     val lastTry: String? = null,
 )
 
+/** The Home sheet (R88 1.6): the storage locations to choose the spool's home from; [locations] null while they load. */
+data class HomeUi(
+    val locations: List<String>? = null,
+    /** The same locations with how full each is; names only from an older Hub. */
+    val storage: StorageAnswer? = null,
+    val savingTo: String? = null,
+    val failure: HubFailure? = null,
+)
+
 /** The toast of a move, with what Undo moves back to. */
 data class MoveToast(val location: String, val previous: String?)
 
@@ -94,9 +103,13 @@ data class SpoolUi(
     val activity: List<ActivityEvent> = emptyList(),
     /** The event whose Undo is being asked of the Hub. */
     val undoing: Long? = null,
+    /** Checked out (R88 1.6): the Home sheet, a Return on its way, and the toast the screen shows once for a finished one. */
+    val home: HomeUi? = null,
+    val returning: Boolean = false,
+    val returnToast: ReturnToast? = null,
 ) {
     /** A write is in flight: Back, the scrim and Cancel wait for its answer. */
-    val writing: Boolean get() = weight?.saving == true || move?.movingTo != null || emptying
+    val writing: Boolean get() = weight?.saving == true || move?.movingTo != null || emptying || returning || home?.savingTo != null
 }
 
 class SpoolViewModel(
@@ -342,6 +355,76 @@ class SpoolViewModel(
     fun closeMove() {
         if (_state.value.move?.movingTo != null) return
         _state.update { it.copy(move = null) }
+    }
+
+    // --- Checked out: Return and Home (R88 1.6) ---
+
+    /** "Return to <home>": asks nothing; the toast offers Undo through the activity. A refusal says the Hub's own words. */
+    fun returnToHome() {
+        val s = _state.value
+        val spool = s.spool?.takeIf { CheckedOutRules.canReturn(it) } ?: return
+        if (s.writing) return
+        _state.update { it.copy(returning = true, failure = null) }
+        run(onFailure = { f -> _state.update { it.copy(returning = false, failure = f, retry = Retry.Refresh) } }) {
+            val updated = backend.returnSpool(id).toSpoolSummary()
+            val event = undoFlow.find(UndoOffer(listOf("spool:$id"), setOf(CheckedOutRules.RETURNED_KIND)))
+            _state.update {
+                it.copy(
+                    spool = shown(updated), returning = false, loadedAt = now(), result = null, failure = it.failure.afterSuccess(),
+                    returnToast = ReturnToast(CheckedOutTexts.returned(updated.location), event),
+                )
+            }
+            loadActivity()
+        }
+    }
+
+    /** The screen took the toast. */
+    fun returnToastShown() {
+        _state.update { it.copy(returnToast = null) }
+    }
+
+    fun openHome() {
+        _state.update { it.copy(home = HomeUi()) }
+        loadHomeLocations()
+    }
+
+    private fun loadHomeLocations() {
+        run(onFailure = { f -> _state.update { it.copy(home = it.home?.copy(failure = f)) } }) {
+            val found = backend.storage()
+            _state.update { it.copy(home = it.home?.copy(locations = found.names, storage = found, failure = null)) }
+        }
+    }
+
+    fun retryHome() {
+        _state.update { it.copy(home = it.home?.copy(failure = null)) }
+        loadHomeLocations()
+    }
+
+    /** Saves the chosen home at once; the current home only closes the sheet. A refusal (409, 400) shows in the sheet. */
+    fun setHome(location: String) {
+        val s = _state.value
+        val h = s.home ?: return
+        if (h.savingTo != null) return
+        if (location == s.spool?.home) {
+            _state.update { it.copy(home = null) }
+            return
+        }
+        _state.update { it.copy(home = h.copy(savingTo = location, failure = null)) }
+        run(onFailure = { f -> _state.update { it.copy(home = it.home?.copy(savingTo = null, failure = f)) } }) {
+            val updated = backend.setHome(id, location).toSpoolSummary()
+            _state.update {
+                it.copy(
+                    spool = shown(updated), home = null, loadedAt = now(), failure = it.failure.afterSuccess(),
+                    returnToast = ReturnToast(CheckedOutTexts.homeNow(location), null),
+                )
+            }
+            loadActivity()
+        }
+    }
+
+    fun closeHome() {
+        if (_state.value.home?.savingTo != null) return
+        _state.update { it.copy(home = null) }
     }
 
     // --- Mark empty ---
