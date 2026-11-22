@@ -3,6 +3,8 @@
 The station runs the flow (its buttons, lamps, display, camera and scale are local); these calls are stateless.
 Every answer carries `display`: ready-made lines for the station's screen (a title of TITLE_WIDTH characters and
 up to two lines of DISPLAY_WIDTH; the station keeps its last rows for its own hints and the temperature line).
+The tag, recognise and save answers also carry `speak`: the first two lines' words with the material spelled for the
+voice (spoken.py); the station says it when it is there, else the display lines.
 
 Recognition: `intake.read_labels` with the server's readers (`intake.reader_order`): the local reader
 (local_intake) and Claude (ai_intake), by default the local one first and Claude when it is unsure or fails; with
@@ -20,7 +22,7 @@ import logging
 import textwrap
 import unicodedata
 
-from . import intake, inventory, tags
+from . import intake, inventory, spoken, tags
 
 log = logging.getLogger(__name__)
 
@@ -74,10 +76,12 @@ def tag_info(sm, uid: str) -> dict:
     uid = tags.normalize_uid(uid)
     s = inventory.by_tag(sm, uid)
     if s is None:
-        return {"known": False, "uid": uid, "display": lines("New Tag Scanned")}
+        return {"known": False, "uid": uid, "display": lines("New Tag Scanned"),
+                "speak": spoken.speak("New Tag Scanned")}
     v = _spool_view(s)
     left = f"{v['remaining_g']:.0f} g left" if isinstance(v["remaining_g"], (int, float)) else ""
     return {"known": True, "uid": uid, "spool": v,
+            "speak": spoken.speak(v["name"] or "Spool", v["vendor"], spoken.material(v["material"]), mat=v["material"]),
             "display": lines(v["name"] or "Spool", f"{v['vendor'] or ''} {v['material'] or ''}".strip(),
                              f"{left} {v['location'] or ''}".strip())}
 
@@ -121,6 +125,8 @@ def recognize(sm, cfg: dict, image: bytes, claude=None, cap=None, device=None) -
                                                   else item.get("sealed"), "?")
     mark = "?" if conf == "low" else ""
     return {"source": source, "item": item, "confidence": conf, "questions": out.get("questions") or [],
+            "speak": spoken.speak(f"{item.get('name', '')}{mark}", f"{item.get('vendor', '')}{mark}",
+                                  spoken.material(item.get("material")), mat=item.get("material")),
             "display": lines(f"{item.get('name', '')}{mark}", f"{item.get('vendor', '')}{mark} {item.get('material', '')}",
                              state)}
 
@@ -180,7 +186,7 @@ def save(sm, rules: dict, body: dict) -> dict:
             raise FlowError(422, "weight_out_of_range", str(e), lines("Weight too low", "check the scale")) from e
         v = _spool_view(s)
         return {"spool_id": sid, "created": False, "dry": dry, "remaining_g": v["remaining_g"],
-                "location": v["location"],
+                "location": v["location"], "speak": spoken.speak("Saved" if not dry else "Would save", v["name"], mat=v["material"]),
                 "display": lines("Saved" if not dry else "Would save", v["name"] or "",
                                  f"{v['remaining_g']:.0f} g left {v['location'] or ''}".strip())}
     item = body.get("item") if body.get("item") is not None else body.get("filament")  # the panel sends "filament"
@@ -211,12 +217,13 @@ def save(sm, rules: dict, body: dict) -> dict:
         raise FlowError(422, "invalid", str(e), lines("Can't save:", str(e))) from e
     if dry:
         return {"spool_id": None, "created": True, "dry": True, "sealed": sealed, "lines": r.lines,
+                "speak": spoken.speak("Would save", f"{it['vendor']} {it['name']}", mat=it.get("material")),
                 "display": lines("Would save", f"{it['vendor']} {it['name']}", "sealed" if sealed else "opened")}
     from . import intake_history
     intake_history.record_save(r.saved, source="station", device="intake station", read_id=item.get("read_id"),
                                tag=uid, weight=gross)
     v = _spool_view(sm.get(f"spool/{r.spool_ids[0]}"))
     return {"spool_id": v["id"], "created": True, "dry": False, "sealed": sealed, "remaining_g": v["remaining_g"],
-            "location": v["location"],
+            "location": v["location"], "speak": spoken.speak("Saved", v["name"], mat=v["material"]),
             "display": lines("Saved", v["name"] or "",
                              f"{'sealed' if sealed else format(v['remaining_g'], '.0f') + ' g left'} {v['location'] or ''}".strip())}
