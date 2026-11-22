@@ -12,6 +12,7 @@ The release after next deletes the JSON files.
 from __future__ import annotations
 
 import contextlib
+import errno
 import json
 import math
 import os
@@ -136,6 +137,17 @@ def dumps(tag: str, obj: dict, *, version: int | None = None) -> bytes:
     return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + body).encode("utf-8")
 
 
+def dumps_list(tag: str, items: list, *, version: int | None = None) -> bytes:
+    """A top-level JSON list as the XML form: the root has `as="list"` and one `<item>` per entry."""
+    if not isinstance(items, (list, tuple)):
+        raise StateXmlError("a list file holds a list")
+    ver = FORMAT if version is None else version
+    head = f"<{tag} version=\"{ver}\" as=\"list\""
+    kids = "".join(_element("item", x, "  ") for x in items)
+    body = f"{head}>\n{kids}</{tag}>\n" if kids else f"{head}/>\n"
+    return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + body).encode("utf-8")
+
+
 # ---------- reading ----------
 
 def _literal(v: str):
@@ -178,8 +190,8 @@ def _record(el) -> dict:
     return out
 
 
-def loads(data: bytes, tag: str, *, keep_version: bool = False) -> dict:
-    """The object in an XML form file; StateXmlError when it is not one (too large, not well-formed, wrong root)."""
+def _parse_root(data: bytes, tag: str):
+    """(root element, its version text) of an XML form file; StateXmlError when it is not one."""
     if len(data) > MAX_BYTES:
         raise StateXmlError(f"larger than {MAX_BYTES} bytes")
     try:
@@ -191,6 +203,12 @@ def loads(data: bytes, tag: str, *, keep_version: bool = False) -> dict:
     v = root.get("version", "")
     if not re.fullmatch(r"\d{1,6}", v or "1"):
         raise StateXmlError(f"version {v!r} is not a number")
+    return root, v
+
+
+def loads(data: bytes, tag: str, *, keep_version: bool = False) -> dict:
+    """The object in an XML form file; StateXmlError when it is not one (too large, not well-formed, wrong root)."""
+    root, v = _parse_root(data, tag)
     try:
         out = _slot(root) if root.get("as") == "map" else _record(root)
     except (ValueError, TypeError) as e:
@@ -198,6 +216,17 @@ def loads(data: bytes, tag: str, *, keep_version: bool = False) -> dict:
     if keep_version and v:
         out = {"version": int(v), **out}
     return out
+
+
+def loads_list(data: bytes, tag: str) -> list:
+    """The list in an XML form list file; StateXmlError when it is not one."""
+    root, _ = _parse_root(data, tag)
+    if root.get("as") != "list":
+        raise StateXmlError("not a list file")
+    try:
+        return [_slot(c) for c in root if c.tag == "item"]
+    except (ValueError, TypeError) as e:
+        raise StateXmlError(f"a value is not what its type says ({e})") from None
 
 
 # ---------- the files ----------
@@ -247,6 +276,18 @@ def atomic_write(path: Path, data: bytes, mode: int = 0o600) -> None:
         raise
 
 
+_DEFAULT_MODE = 0o600
+_NO_WRITE = {errno.EACCES, errno.EPERM, errno.EROFS}
+
+
+def _put(path: Path, data: bytes, mode: int, state_owned: bool) -> None:      # state_owned is the Hub's: unused here
+    atomic_write(path, data, mode)
+
+
+def _mkdir(path: Path) -> None:
+    Path(path).mkdir(parents=True, exist_ok=True)
+
+
 def _plain(path: Path):
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -255,57 +296,125 @@ def _plain(path: Path):
     return data if isinstance(data, dict) else None
 
 
-def read(path: Path, *, keep_version: bool = False) -> dict | None:
-    """The data of state file `path` (given by its JSON name): the XML form when there is one and it can be read, else
-    the JSON form (moved to XML on the way); None when neither holds an object."""
-    path = Path(path)
+def _plain_list(path: Path):
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+    return data if isinstance(data, list) else None
+
+
+def quarantine(path: Path) -> bool:
+    """Keep the XML form of `path` (its JSON name, or the XML name) as `<name>.xml.unreadable` so the next write does
+    not destroy it, and forget its problem. True when there was a file to keep."""
     xp = xml_path(path)
     try:
-        raw = xp.read_bytes()
+        os.replace(xp, xp.with_name(xp.name + ".unreadable"))
     except OSError:
+        return False
+    clear_problem(xp)
+    return True
+
+
+def _read(path: Path, tag: str | None, keep_version: bool, is_list: bool, mode: int | None, state_owned: bool):
+    path = Path(path)
+    xp = xml_path(path)
+    t = tag or tag_of(path)
+    try:
+        raw = xp.read_bytes()
+    except FileNotFoundError:
         raw = None
-    if raw is not None:
+    except OSError as e:
+        note_problem(xp, f"cannot read: {e.strerror or e}")
+        raw = None
+    else:
         try:
-            return loads(raw, tag_of(path), keep_version=keep_version)
-        except StateXmlError:
-            pass                                # an unreadable XML file is never written over: see write()
-    old = _plain(path)
+            out = loads_list(raw, t) if is_list else loads(raw, t, keep_version=keep_version)
+            clear_problem(xp)
+            return out
+        except StateXmlError as e:
+            note_problem(xp, str(e))
+    old = _plain_list(path) if is_list else _plain(path)
     if old is not None and raw is None:
-        migrate(path, old)
+        _move(path, old, t, mode, state_owned)
     return old
 
 
-def migrate(path: Path, obj: dict, mode: int = 0o600) -> None:
-    """Write `obj` as `path`'s XML form only when there is none yet (a reader must never write over what a writer saved
-    a moment before). A failing move changes nothing."""
+def read(path: Path, *, keep_version: bool = False, tag: str | None = None, mode: int | None = None,
+         state_owned: bool = True) -> dict | None:
+    """The data of state file `path` (given by its JSON name), or None when there is none or neither form holds an
+    object. The XML form wins; a JSON-only file is moved to XML on the way (with `mode` and owner as given: the default
+    mode of the copy, the state's owner). `tag` is the root element when it is not the file stem (a month-named file).
+    A store that cannot be rewritten (a read by a user with no write permission) reads the old form, records nothing
+    and raises nothing."""
+    return _read(path, tag, keep_version, False, mode, state_owned)
+
+
+def read_list(path: Path, *, tag: str | None = None, mode: int | None = None, state_owned: bool = True) -> list | None:
+    """Like `read` for a file that holds a JSON list (reads.json, devices.json): None when neither form holds a list."""
+    return _read(path, tag, False, True, mode, state_owned)
+
+
+def _move(path: Path, data, tag: str, mode: int | None, state_owned: bool) -> None:
     xp = xml_path(path)
     moving = xp.with_name(xp.name + ".moving")
     try:
         if xp.exists():
             return
-        atomic_write(moving, dumps(tag_of(path), obj), mode)
+        _put(moving, dumps_list(tag, data) if isinstance(data, list) else dumps(tag, data),
+             _DEFAULT_MODE if mode is None else mode, state_owned)
         try:
             os.link(moving, xp)
         except FileExistsError:
             pass
-    except (OSError, StateXmlError, TypeError, ValueError):
-        pass
+    except (OSError, StateXmlError, TypeError, ValueError) as e:
+        if not (isinstance(e, OSError) and e.errno in _NO_WRITE):      # no write permission is not a failure
+            note_problem(path, f"could not be converted: {e}")
     finally:
-        with contextlib.suppress(OSError):
+        try:
             moving.unlink()
+        except OSError:
+            pass
 
 
-def write(path: Path, obj: dict, mode: int = 0o600) -> None:
-    """Save `obj` as state file `path`'s XML form. An XML file that cannot be read is kept as `<name>.xml.unreadable`."""
+def migrate(path: Path, obj: dict, mode: int | None = None, *, tag: str | None = None, state_owned: bool = True) -> None:
+    """Write `obj` (what the JSON file `path` holds) as its XML form, only when there is none yet: a reader that moves
+    a file must never write over what a writer saved a moment before. A failing move changes nothing (the JSON form
+    is read until the next save writes the XML form); no write permission is not recorded as a problem."""
+    _move(Path(path), obj, tag or tag_of(path), mode, state_owned)
+
+
+def migrate_list(path: Path, items: list, mode: int | None = None, *, tag: str | None = None,
+                 state_owned: bool = True) -> None:
+    """Like `migrate` for a file that holds a JSON list."""
+    _move(Path(path), list(items), tag or tag_of(path), mode, state_owned)
+
+
+def _save(path: Path, data, tag: str | None, mode: int | None, state_owned: bool, is_list: bool) -> None:
     path = Path(path)
     xp = xml_path(path)
-    if xp.exists():
+    t = tag or tag_of(path)
+    if xp.exists():                                 # never overwrite what could not be read
         try:
-            loads(xp.read_bytes(), tag_of(path), keep_version=True)
+            loads_list(xp.read_bytes(), t) if is_list else loads(xp.read_bytes(), t, keep_version=True)
         except (OSError, StateXmlError):
-            with contextlib.suppress(OSError):
-                os.replace(xp, xp.with_name(xp.name + ".unreadable"))
-    atomic_write(xp, dumps(tag_of(path), obj), mode)
+            quarantine(path)
+    _mkdir(xp.parent)
+    _put(xp, dumps_list(t, data) if is_list else dumps(t, data), _DEFAULT_MODE if mode is None else mode, state_owned)
+    clear_problem(xp)
+    clear_problem(path)
+
+
+def write(path: Path, obj: dict, mode: int | None = None, *, tag: str | None = None, state_owned: bool = True) -> None:
+    """Save `obj` as state file `path`'s XML form (the JSON form is left as it was at the move). An XML file that cannot
+    be read is kept as `<name>.xml.unreadable`. `mode` and `state_owned` as `read`."""
+    _save(path, obj, tag, mode, state_owned, False)
+
+
+def write_list(path: Path, items: list, mode: int | None = None, *, tag: str | None = None,
+               state_owned: bool = True) -> None:
+    """Like `write` for a file that holds a JSON list."""
+    _save(path, list(items), tag, mode, state_owned, True)
 
 
 def write_both(path: Path, obj: dict, mode: int = 0o600) -> None:
