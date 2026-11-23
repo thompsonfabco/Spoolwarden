@@ -214,6 +214,38 @@ def test_corrections_list_and_package_need_no_sudo_and_status_config_show_share_
     assert any("Delete the 2 corrections still waiting?" in s for s in menu.ui.said)
 
 
+def test_share_corrections_uses_singular_for_one_waiting(monkeypatch, tmp_path, capsys):
+    from filament_kit import share_corrections as sc
+    monkeypatch.setenv("FK_CONFIG", str(tmp_path / "cfg"))
+    cfg = config.load()
+    cfg.setdefault("modules", {})["local_intake"] = True
+    cfg.setdefault("label_reader", {})["share_corrections"] = True
+    config.save(cfg)
+    monkeypatch.setattr(sc, "state", lambda _cfg: {"saved": True, "actual": True, "reason": None, "differs": False, "count": 1})
+    monkeypatch.setattr(sc, "apply", lambda _cfg, say=None: {"want": False, "changed": True})
+
+    class _FakeUi:
+        def __init__(self):
+            self.said = []
+        def say(self, msg):
+            self.said.append(msg)
+        def error(self, msg):
+            self.said.append(msg)
+        def yesno(self, q):
+            self.said.append(q)
+            return False
+        def suspended(self):
+            import contextlib
+            return contextlib.nullcontext()
+
+    menu = cli._ConfigMenu(cfg, _FakeUi())
+    menu.edit(cli._ITEMS["share_corrections"])
+    assert any("Delete the 1 correction still waiting?" in s for s in menu.ui.said)
+    menu.save()
+    out, _ = capsys.readouterr()
+    assert "1 correction kept." in out
+
+
 # ---------- e: _COMMAND_TABLE & help --markdown ----------
 
 def test_help_markdown_includes_a3_and_previously_missing_commands(capsys):
