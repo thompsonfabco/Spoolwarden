@@ -193,7 +193,7 @@ def _serving(param, tmp_path, monkeypatch, spoolman_url, history):
         lines.save(ls)
     sm = Spoolman(spoolman_url)
     sm.ensure_fields()
-    hid = _history(sm) if history else None
+    hid = (history(sm) if callable(history) else _history(sm)) if history else None
     if param == "public-address":       # the web unit's page: its address has a path, and it keeps no history
         site = IntakeApp(mcp_tools.Tools(sm), public_url="https://hub.example.test/f", lan_cidrs=["127.0.0.0/8"], push=False)
         app, path = Starlette(routes=[Mount("/f", routes=site.routes())]), "/f/intake"
@@ -2075,14 +2075,14 @@ return seen;
 """
 
 
-def _drive(url: str, tmp_path, script: str, width: int, scheme: str, shot: str | None = None, init_js: str = "") -> dict:
+def _drive(url: str, tmp_path, script: str, width: int, scheme: str, shot: str | None = None, init_js: str = "", block_install: bool = True) -> dict:
     node = _node()
     if not node:
         _missing("the page driver needs Node 22 or later")
     file = tmp_path / "drive.js"
     file.write_text(HOME_PRELUDE + script, encoding="utf-8")
     init = tmp_path / "init.js"       # the browser's own install offer is not taken, so the sheet is what the row opens
-    init.write_text("addEventListener('beforeinstallprompt', (e) => e.stopImmediatePropagation(), true);" + init_js, encoding="utf-8")
+    init.write_text(("addEventListener('beforeinstallprompt', (e) => e.stopImmediatePropagation(), true);" if block_install else "") + init_js, encoding="utf-8")
     cmd = [node, str(DRIVER), "--url", url + "#add", "--script", str(file), "--width", str(width), "--scheme", scheme, "--init", str(init)]
     if SHOTS and shot:
         Path(SHOTS).mkdir(parents=True, exist_ok=True)
@@ -2177,3 +2177,206 @@ def test_clear_slot_is_on_every_slot_asks_what_goes_back_and_says_what_was_done(
     assert "Slot A1 cleared." in out["line"] and "not waiting any more" in out["line"], json.dumps(out)
 
 
+# ----- C1: Recently added's "To check" filter and confidence lines, the install label that follows the browser's offer, and the
+# warning badge on Printers (the design, web app 2.1, 7.1 and 10.1; components 7.2) -----
+CONF_NAMES = {"check": "Polymaker PolyTerra PLA Charcoal Black", "high": "Bambu Lab PETG HF Orange",
+              "hand": "Prusament PLA Galaxy Silver", "low": "Prusament PETG Blue", "cloud": "Overture PLA Matte White"}
+
+
+def _confidence_history(with_check: bool):
+    """Records that carry read confidence: one with a Medium field and one that is not on the label (and, with `with_check`, one
+    with two Low fields, and one read by the Cloud reader, which rates nothing, with a Medium field), one read with every field
+    High, and one typed by hand (no reading)."""
+    def seed(sm):
+        engine = {"reader": "local", "model": "example-model", "tier": "standard"}
+        everything = ("vendor", "name", "material", "color_hex", "net")
+
+        def add(read_id, item, levels, source="phone", rated=True):
+            if levels is not None:
+                intake_history.stash_read(read_id, [JPEG], {"items": [{**item, "confidence_levels": levels}], "engine": engine,
+                                                           "confidence_rated": rated}, "", None)
+            made = inventory.add_and_link(sm, [dict(item)], RULES, False, None)
+            return intake_history.record_save(made.saved, source=source, read_id=read_id if levels is not None else None)
+        one = {**ITEM, "count": 1}
+        if with_check:
+            add("c-low", {**one, "vendor": "Prusament", "name": "PETG Blue", "material": "PETG", "color_hex": "2E6FF2"},
+                {**{k: "high" for k in everything}, "material": "low", "net": "low"})
+            add("c-cloud", {**one, "vendor": "Overture", "name": "PLA Matte White", "color_hex": "F2F2F2"},
+                {**{k: "high" for k in everything}, "color_hex": "medium"}, rated=False)
+        add("c-medium", one, {**{k: "high" for k in everything}, "color_hex": "medium", "price_per_kg": "not_on_label"} if with_check
+            else {k: "high" for k in everything})
+        high = {**one, "vendor": "Bambu Lab", "name": "PETG HF Orange", "material": "PETG", "color_hex": "F2762E"}
+        add("c-high", high, {k: "high" for k in everything})
+        hand = {**one, "vendor": "Prusament", "name": "PLA Galaxy Silver", "color_hex": "8D9199"}
+        return add(None, hand, None, source="station")
+    return seed
+
+
+def _served_confidence(with_check, tmp_path, monkeypatch, spoolman_url):
+    yield from _serving("waiting", tmp_path, monkeypatch, spoolman_url, _confidence_history(with_check))
+
+
+@pytest.fixture(params=("with-check", "without-check"))
+def served_confidence(request, tmp_path, monkeypatch, spoolman_url):
+    """The web app with records that carry read confidence: some to check, or none to check: .url, .views, .hid."""
+    yield from _served_confidence(request.param == "with-check", tmp_path, monkeypatch, spoolman_url)
+
+
+@pytest.mark.parametrize("width", [375, 820])
+def test_recent_with_confidence_passes_the_audit_at_phone_and_tablet_width(served_confidence, width):
+    run = _run("--url", served_confidence.url, "--views", "#recent", "--widths", str(width))
+    assert run.returncode == 0, run.stdout + run.stderr
+    out = json.loads(run.stdout)
+    assert out["views"] == 1 * 1 * 2 and out["failing"] == 0      # one view, one width, light and dark
+
+
+# The list as the page draws it: the filter's words, each record's confidence line, and what the filter shows. __WAIT__: the lines
+# are made 30 ms after their rows (components.js), so a run that expects lines waits for the first one before it reads any.
+RECENT_FILTER = """
+location.hash = "#recent";
+await until(() => $(".coll--recent .coll__item"), "the list");
+__WAIT__
+const items = () => [...document.querySelectorAll(".coll--recent .coll__item")];
+const title = (i) => text($(".coll__title", i));
+const shown = () => items().filter((i) => !i.hidden).map(title);
+const out = { options: [...document.querySelectorAll(".coll__toolbar .segmented__option")].map(text), lines: {}, all: shown() };
+for (const i of items()) out.lines[title(i)] = text($(".recent__confidence", i));
+const choose = (word) => [...document.querySelectorAll(".coll__toolbar .segmented__option")].find((l) => text(l).startsWith(word));
+if (choose("To check")) {
+  choose("To check").click();
+  out.check = shown(); out.checkedRadio = $(".coll__toolbar .segmented__input:checked").value;
+  const gone = items().find((i) => i.hidden);
+  if (gone) {                                    // the address names a record the filter hides: the list shows all again
+    const id = gone.dataset.id;
+    location.hash = "#recent/" + id;
+    await until(() => { const n = $(`.coll__item[data-id="${id}"]`); return n && !n.hidden; }, "the record the address names to show");
+    out.afterAddress = shown(); out.radioAfterAddress = $(".coll__toolbar .segmented__input:checked").value;
+  }
+  choose("All").click();
+  out.back = shown();
+}
+return out;
+"""
+WAIT_LINES = 'await until(() => $(".recent__confidence"), "a confidence line");'
+# a Hub that does not report read confidence: its list carries no `confidence` (the web app then shows no filter and no line)
+NO_CONFIDENCE = """
+{
+  const real = window.fetch;
+  window.fetch = (u, o) => (/\\/api\\/history(\\?|$)/.test(String(u)) ? real(u, o).then(async (r) => {
+    const d = await r.json(); for (const x of d.records || []) { delete x.confidence; delete x.confidence_rated; }
+    return new Response(JSON.stringify(d), { status: r.status, headers: { "content-type": "application/json" } });
+  }) : real(u, o));
+}
+"""
+
+
+@pytest.mark.parametrize("width", [375, 820])
+def test_the_to_check_filter_and_the_confidence_lines_of_recent(served_confidence, tmp_path, width):
+    out = _drive(served_confidence.url, tmp_path, RECENT_FILTER.replace("__WAIT__", WAIT_LINES), width, "light", "recent-confidence")
+    names = CONF_NAMES
+    if "To check 0" not in out["options"]:                       # with records to check
+        assert out["options"] == ["All 5", "To check 3"], json.dumps(out)
+        assert out["lines"] == {names["check"]: "Medium: Colour · Not on the label: Price per kg", names["high"]: "High",
+                                names["low"]: "Low: check Material, Net weight", names["hand"]: None,
+                                names["cloud"]: "Not rated · Medium: Colour"}, json.dumps(out)
+        assert sorted(out["check"]) == sorted([names["check"], names["low"], names["cloud"]]) and out["checkedRadio"] == "check", json.dumps(out)
+        assert out["afterAddress"] == out["all"] and out["radioAfterAddress"] == "all", json.dumps(out)
+    else:                                                    # none to check: the filter is there, and shows nothing
+        assert out["options"] == ["All 3", "To check 0"], json.dumps(out)
+        assert out["lines"] == {names["check"]: "High", names["high"]: "High", names["hand"]: None}, json.dumps(out)
+        assert out["check"] == [] and out["checkedRadio"] == "check", json.dumps(out)
+    assert len(out["all"]) == len(out["lines"]) and out["back"] == out["all"], json.dumps(out)
+
+
+@pytest.mark.parametrize("served_web", ["waiting"], indirect=True)
+def test_a_hub_that_reports_no_confidence_gets_no_filter_and_no_line(served_web, tmp_path):
+    script = RECENT_FILTER.replace("__WAIT__", "await sleep(500);")
+    out = _drive(served_web.url, tmp_path, script, 375, "light", None, NO_CONFIDENCE)
+    assert out["options"] == [] and set(out["lines"].values()) == {None} and len(out["all"]) == 2, json.dumps(out)
+
+
+# The install label: the browser's offer comes after the page has drawn. The page driver blocks the browser's own offer unless
+# asked not to (block_install=False); the script sends the event itself.
+ONLY_MINE = "addEventListener('beforeinstallprompt', (e) => { if (!e.mine) e.stopImmediatePropagation(); }, true);"     # the test's own offer only
+INSTALL_LIVE = """
+const label = () => (innerWidth <= 600 ? text($(".more__name", $(".more [data-install]"))) : text($("[data-install-label]")));
+if (innerWidth <= 600) { $(".nav__more").click(); await until(() => $(".more [data-install]"), "the More sheet"); }
+else { location.hash = "#settings"; await until(() => $("[data-install-label]"), "the Settings page"); }
+const out = { before: label() };
+const offer = new Event("beforeinstallprompt", { cancelable: true }); offer.mine = true;
+window.dispatchEvent(offer);
+await until(() => label() === "Install app", "the label to change");
+out.offered = label();
+window.dispatchEvent(new Event("appinstalled"));
+await until(() => !$("[data-install]") && !$("[data-install-label]"), "the install buttons to go");
+out.gone = true;
+return out;
+"""
+
+
+@pytest.mark.parametrize("served_web", ["waiting"], indirect=True)
+@pytest.mark.parametrize("width", [375, 1280])
+def test_the_install_label_changes_when_the_browser_offers_and_the_buttons_go_when_installed(served_web, tmp_path, width):
+    out = _drive(served_web.url, tmp_path, INSTALL_LIVE, width, "light", None, ONLY_MINE, block_install=False)
+    assert out == {"before": "Add to Home Screen", "offered": "Install app", "gone": True}, json.dumps(out)
+
+
+# The warning badge on Printers: a printer with an alert, or one whose state needs a look (a refused key), shows it; calm ones do not.
+class CalmKit(PrintersKit):
+    def __init__(self):
+        super().__init__()
+        self.status["hms"] = []
+
+
+class RefusedKit(CalmKit):
+    def get(self, path):
+        out = super().get(path)
+        if path == "/api/printers":
+            out["printers"][1]["state"] = "unauthorized"        # the Klipper printer's key was refused
+        return out
+
+
+KITS = {"alert": PrintersKit, "refused": RefusedKit, "calm": CalmKit}
+
+
+@pytest.fixture(params=tuple(KITS))
+def served_look(request, tmp_path, monkeypatch, spoolman_url):
+    running = _serve_printers(tmp_path, monkeypatch, spoolman_url, KITS[request.param])
+    try:
+        yield SimpleNamespace(url=running.url + "/intake", kind=request.param)
+    finally:
+        running.stop()
+
+
+# every answer of a printer's state is counted: a calm Hub is read for its alerts before the script says "no badge"
+COUNT_STATES = """
+window.__states = 0;
+{
+  const real = window.fetch;
+  window.fetch = (u, o) => (/\\/api\\/printers\\/[^/?]+\\/state/.test(String(u)) ? real(u, o).finally(() => { window.__states++; }) : real(u, o));
+}
+"""
+PRINTERS_BADGE = """
+const nav = () => $('.nav__item[href="#printers"]');
+await until(() => window.__states >= 2 || (nav() && nav().querySelector(".nav__badge--warn")), "the Printers badge to be decided");
+await sleep(300);
+const badge = nav().querySelector(".nav__badge--warn");
+return { badge: !!badge, name: nav().getAttribute("aria-label"), hidden: badge ? badge.getAttribute("aria-hidden") : null,
+         shape: badge ? !!badge.querySelector("svg") : null, add: !!$('.nav__item[href="#add"]') };
+"""
+
+
+@pytest.mark.parametrize("width", [375, 1280])
+def test_the_printers_destination_shows_a_warning_badge_when_a_printer_needs_a_look(served_look, tmp_path, width):
+    out = _drive(served_look.url, tmp_path, PRINTERS_BADGE, width, "light", None, COUNT_STATES)
+    if served_look.kind == "calm":
+        assert out["badge"] is False and out["name"] is None, json.dumps(out)
+    else:
+        assert out["badge"] and out["name"] == "Printers, needs a look" and out["hidden"] == "true" and out["shape"], json.dumps(out)
+
+
+@pytest.mark.parametrize("width", [375, 820])
+def test_the_page_audit_passes_with_the_printers_badge_showing(served_printers, width):
+    run = _run("--url", served_printers, "--views", "#add,#printers", "--widths", str(width), "--settle", "1500")
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert json.loads(run.stdout)["failing"] == 0
