@@ -72,7 +72,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 if [ -n "$RESTORE" ]; then
-    [ -f "$RESTORE" ] || die "$RESTORE: no such file (give the backup .zip or .enc from the setup page or spoolwarden backup create)"
+    [ -f "$RESTORE" ] || die "$RESTORE: no such file (give the backup .zip or .enc from the Hub page or spoolwarden backup create)"
     RESTORE="$(cd "$(dirname "$RESTORE")" && pwd)/$(basename "$RESTORE")"
 fi
 if [ -n "$PASSWORD_FILE" ]; then
@@ -87,7 +87,7 @@ case "$MODE" in            # the Hub's setup names are the old words under new n
 esac
 case "$MODE" in
     "" | server | station | all-in-one) ;;
-    *) die "unknown mode '$MODE' (use server, station or all-in-one; to choose single modules use --modules a,b,c)" ;;
+    *) die "unknown mode '$MODE' (use server, station or all-in-one; to choose single features use --modules a,b,c)" ;;
 esac
 if [ -n "$CUSTOM" ]; then
     [ -z "$MODE" ] || die "use --mode or --modules, not both"
@@ -95,7 +95,7 @@ if [ -n "$CUSTOM" ]; then
     CUSTOM=",$CUSTOM"          # names are checked and what they need is added just before the address check
 fi
 if [ -n "$SETS" ]; then
-    [ "$MODE" = custom ] || die "--set goes with --modules (a custom module list)"
+    [ "$MODE" = custom ] || die "--set goes with --modules (a custom feature list)"
     FLAG_ADDR=$(printf '%s\n' "$SETS" | sed -n 's/^set station\.allow=//p' | head -n 1)
     [ -z "$SERVER_ADDR" ] && SERVER_ADDR="$FLAG_ADDR"
 fi
@@ -137,7 +137,7 @@ $PICK" "$SAVED_DIR/config.json" 2>/dev/null) || SAVED_ADDR=""
 fi
 # Checked before anything is installed: a station without the server's address would answer nobody.
 if [ "$MODE" = station ] && [ -z "$SERVER_ADDR" ] && ! [ -t 0 ]; then
-    die "station mode needs the kit server's address: run again with --server <name-or-IP>"
+    die "station mode needs the Hub's address: run again with --server <name-or-IP>"
 fi
 
 # Files sit next to this script in the release tarball (install/...), or in the
@@ -320,8 +320,8 @@ fi
 if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
     ASKED="features"
     say "Install mode"
-    echo "  server      kit server with Spoolman, printers, presets and backup (AI label reading and library on request)"
-    echo "  station     only the USB scale and NFC reader, for a kit server on another machine"
+    echo "  server      Hub with Spoolman, printers, presets and backup (AI label reading and library on request)"
+    echo "  station     only the USB scale and NFC reader, for a Hub on another machine"
     echo "  all-in-one  server and station on this machine"
     echo "  custom      choose each module"
     choice=""
@@ -338,7 +338,7 @@ if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
         # stdout is captured here; the numbered list without a usable terminal); prompts on the terminal, the
         # choice on stdout
         # First line: the modules, comma separated. Then one `set <key>=<value>` per setting the menu asked for.
-        MENU_OUT=$("$VENV/bin/filament-kit" modules menu --raw) || die "no modules chosen; run the install command again: $AGAIN"
+        MENU_OUT=$("$VENV/bin/filament-kit" modules menu --raw) || die "no features chosen; run the install command again: $AGAIN"
         CUSTOM=",$(printf '%s
 ' "$MENU_OUT" | head -n 1)"
         SETS=$(printf '%s
@@ -394,7 +394,7 @@ case "$MODE" in
         ;;
 esac
 if [ "$NEED_ADDR" -eq 1 ] && [ -z "$SERVER_ADDR" ]; then
-    [ -t 0 ] || die "station mode needs the kit server's address: run again with --server <name-or-IP>"
+    [ -t 0 ] || die "station mode needs the Hub's address: run again with --server <name-or-IP>"
     while :; do
         SERVER_ADDR=""
         read -r -p "Server address (name or IP): " SERVER_ADDR || true

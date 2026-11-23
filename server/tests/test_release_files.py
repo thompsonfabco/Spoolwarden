@@ -333,7 +333,7 @@ def _install_sh(*args):
 def test_install_station_without_terminal_or_server_fails_early():
     r = _install_sh("--mode", "station")
     assert r.returncode == 1
-    assert "station mode needs the kit server's address: run again with --server <name-or-IP>" in r.stderr
+    assert "station mode needs the Hub's address: run again with --server <name-or-IP>" in r.stderr
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
@@ -457,7 +457,7 @@ def test_install_modules_station_alone_still_needs_address_without_terminal(tmp_
     script = ('die() { echo "error: $*" >&2; exit 1; }\nbad_addr() { return 1; }\n'
               'MODE=custom\nCUSTOM=",station"\nSERVER_ADDR=""\n' + part)
     r = _run_part(script, venv, env, tmp_path)
-    assert r.returncode == 1 and "needs the kit server's address" in r.stderr
+    assert r.returncode == 1 and "needs the Hub's address" in r.stderr
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
@@ -482,7 +482,7 @@ def test_install_mode_custom_is_rejected():
      "CUSTOM=,web,server SETS=set web.public_url=https://a.example.com/f|set orders.file=/o=1.json ADDR="),
     ('printf "station\\nset station.allow=srv.example.lan\\n"', 0,
      "CUSTOM=,station SETS=set station.allow=srv.example.lan ADDR=srv.example.lan"),
-    ("exit 1", 1, "no modules chosen"),
+    ("exit 1", 1, "no features chosen"),
 ])
 def test_install_menu_wrapper_cancel_and_choice(tmp_path, body, rc, expect):
     venv, env = _stub_venv(tmp_path, body)
@@ -637,12 +637,12 @@ def test_station_upgrade_without_server_reuses_the_saved_address(tmp_path):
     of dying for it. It then stops at the root check here, past the address check."""
     etc = _saved_station_etc(tmp_path)
     r = _install_no_tty(tmp_path, etc, "--mode", "station")
-    assert "needs the kit server's address" not in r.stderr, r.stderr
+    assert "needs the Hub's address" not in r.stderr, r.stderr
     assert SAVED_NOTE in r.stderr
     assert r.returncode == 1 and "run as root" in r.stderr, r.stderr
     etc = _saved_station_etc(tmp_path, allow=("127.0.0.1",))
     r = _install_no_tty(tmp_path, etc, "--mode", "station")
-    assert "station mode needs the kit server's address" in r.stderr     # only a local address saved: still asks
+    assert "station mode needs the Hub's address" in r.stderr     # only a local address saved: still asks
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
@@ -651,7 +651,7 @@ def test_station_upgrade_with_a_damaged_config_xml_uses_config_json(tmp_path):
     etc = _saved_station_etc(tmp_path)
     (etc / "config.xml").write_bytes(b"<config")
     r = _install_no_tty(tmp_path, etc, "--mode", "station")
-    assert SAVED_NOTE in r.stderr and "needs the kit server's address" not in r.stderr, r.stderr
+    assert SAVED_NOTE in r.stderr and "needs the Hub's address" not in r.stderr, r.stderr
 
 
 def _hub_python(path):

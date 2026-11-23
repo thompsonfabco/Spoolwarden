@@ -123,3 +123,14 @@ def test_the_line_is_printed_once_at_the_end_and_decided_before_the_new_command_
     assert text.count("renamed_note\n") + text.count("renamed_note;") == 1
     assert text.index("if from_old_name /usr/local/bin") < text.index('install -m 755 "$RES/spoolwarden-cli.sh"')
     assert text.index('if [ "$OLD_NAME" -eq 1 ]; then renamed_note; fi') < text.index("exec /usr/local/bin/spoolwarden modules apply")
+
+
+def test_the_installer_and_backup_messages_use_the_ruled_names():
+    """What a person reads at the terminal or on the page: the Hub, the Hub page, features (E1, second part)."""
+    for rel in ("install/install.sh", "server/filament_kit/backup.py"):
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        for line in text.splitlines():
+            if line.lstrip().startswith("#") or not re.search(r'\b(?:echo|die|out|BackupError|raise)\b', line):
+                continue
+            assert not re.search(r"kit server|setup page|single modules|module list|no modules chosen|a kit\b|the kit\b|"
+                                 r"filament-kit \{|Start the kit", line), f"{rel}: {line.strip()}"
