@@ -84,7 +84,8 @@ import com.thompsonfabco.filamentkit.ui.history.showUndoable
 import com.thompsonfabco.filamentkit.ui.history.shareCsv
 import com.thompsonfabco.filamentkit.ui.printers.Say
 import com.thompsonfabco.filamentkit.ui.spool.CheckedOutRules
-import com.thompsonfabco.filamentkit.ui.spool.CheckedOutTexts
+import com.thompsonfabco.filamentkit.ui.spool.CheckedOutSay
+import com.thompsonfabco.filamentkit.ui.printers.resolve
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
 import com.thompsonfabco.filamentkit.ui.spool.HubFailureNotice
 import com.thompsonfabco.filamentkit.ui.spool.HubNoticeOf
@@ -330,7 +331,7 @@ class SearchViewModel(
                     val left = s.checked.filter { it.id != spool.id }
                     s.copy(
                         returningId = null, checked = left, checkedCount = s.checkedCount?.let { n -> maxOf(n - 1, 0) },
-                        returnToast = ReturnToast(CheckedOutTexts.returned(where), event),
+                        returnToast = ReturnToast(CheckedOutSay.returned(where), event),
                     )
                 }
             } catch (e: CancellationException) {
@@ -438,7 +439,7 @@ fun SearchScreen(
     LaunchedEffect(returned) {
         if (returned == null) return@LaunchedEffect
         vm.returnToastShown()
-        toast?.showUndoable(returned.text, undoLabel, returned.event, context, vm::undoReturn)
+        toast?.showUndoable(returned.text.resolve(context), undoLabel, returned.event, context, vm::undoReturn)
     }
     // Download as CSV: the file goes to the system share sheet
     val csv = ui.csvFile
@@ -541,7 +542,7 @@ fun SearchScreen(
                                     ToggleChip(stringResource(R.string.spools_sealed_only), ui.sealedOnly) { vm.setSealedOnly(!ui.sealedOnly) }
                                 // spools with a remembered place; no chip for a Hub without the filter
                                 SearchChip.CheckedOut ->
-                                    ToggleChip(CheckedOutTexts.chip(ui.checkedCount ?: 0), ui.checkedOnly) { vm.setCheckedOnly(!ui.checkedOnly) }
+                                    ToggleChip(stringResource(R.string.spools_chip_checked_out, ui.checkedCount ?: 0), ui.checkedOnly) { vm.setCheckedOnly(!ui.checkedOnly) }
                                 // the Hub's running-low list; no chip for a Hub that has none
                                 SearchChip.RunningLow ->
                                     ToggleChip(stringResource(R.string.running_low_chip, lowCount ?: ui.low.size), ui.lowOnly) { vm.setLowOnly(!ui.lowOnly) }
@@ -751,7 +752,7 @@ private fun CheckedOutList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online:
         loaded = ui.checkedLoaded,
         loading = ui.busy,
         isEmpty = ui.checkedLoaded && ui.checked.isEmpty(),
-        empty = { Text(CheckedOutTexts.EMPTY, style = MaterialTheme.typography.bodyLarge) },
+        empty = { Text(stringResource(R.string.spools_empty_checked_out), style = MaterialTheme.typography.bodyLarge) },
         error = ui.failure?.let { hubFailureText(it) },
         onTryAgain = onTryAgain,
         offline = !online,
@@ -763,10 +764,11 @@ private fun CheckedOutList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online:
                 Column {
                     SpoolRow(spool, onClick = { onOpen(spool) })
                     CheckedOutRules.lines(spool).forEach {
-                        Text(it, color = colors.muted, style = MaterialTheme.typography.bodySmall)
+                        Text(com.thompsonfabco.filamentkit.ui.printers.sayText(it), color = colors.muted, style = MaterialTheme.typography.bodySmall)
                     }
                     SwButton(
-                        CheckedOutTexts.returnTo(spool.home), { onReturn(spool) },
+                        spool.home?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.spools_return_to, it) } ?: stringResource(R.string.spools_return),
+                        { onReturn(spool) },
                         kind = SwButtonKind.Quiet, enabled = ui.returningId == null, busy = ui.returningId == spool.id,
                     )
                 }

@@ -1,33 +1,22 @@
 package com.thompsonfabco.filamentkit.ui.spool
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.SpoolsAnswer
 import com.thompsonfabco.filamentkit.ui.history.RecentValues
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 
-/**
- * The texts of "Checked out" that are not in the string catalogue yet. Only the catalogue step opens
- * `strings/en.json`; each text has a proposed key in the CO6 report and moves there with it.
- */
-object CheckedOutTexts {
-    const val CHIP = "Checked out"
-    const val EMPTY = "No spool is checked out."
-    const val RETURN = "Return"
-    const val HOME = "Home"
-    const val CHANGE_HOME = "Change home"
-    const val HOME_NOT_RECORDED = "Home: not recorded"
+/** Catalogue texts for "Checked out" (rows, Return, Home). */
+object CheckedOutSay {
+    fun returned(location: String?): Say =
+        if (location.isNullOrBlank()) Say.Words(R.string.spools_returned) else Say.Words(R.string.spools_returned_to, listOf(location))
 
-    fun chip(count: Int) = "$CHIP ($count)"
-    fun inPlace(place: String) = "In $place"
-    fun home(home: String) = "Home: $home"
-    fun since(time: String) = "since $time"
-    fun returnTo(home: String?) = if (home.isNullOrBlank()) RETURN else "Return to $home"
-    fun homeNow(location: String) = "Home is now $location."
-    fun returned(location: String?) = if (location.isNullOrBlank()) "Returned." else "Returned to $location."
+    fun homeNow(location: String): Say = Say.Words(R.string.spools_home_done, listOf(location))
 }
 
 /** What the Hub says of a spool's remembered place (`checked_out`, `home`, `checked_out_since`). */
@@ -46,7 +35,7 @@ fun JsonObject.checkedOutInfo(): CheckedOutInfo? {
 }
 
 /** The toast of a Return: [text], with Undo when the Hub offers one ([event], found after the return). */
-data class ReturnToast(val text: String, val event: ActivityEvent?)
+data class ReturnToast(val text: Say, val event: ActivityEvent?)
 
 /** The pure rules of the Checked out filter, the rows and Return. */
 object CheckedOutRules {
@@ -70,13 +59,13 @@ object CheckedOutRules {
         rows.map { it.toSpoolSummary() }.filter { it.checkedOut }
 
     /** "In <printer> – <slot>" when the Hub gave the slot, else "In <location>"; null when it gave neither. */
-    fun place(s: SpoolSummary): String? = (s.inSlot ?: s.location)?.let(CheckedOutTexts::inPlace)
+    fun place(s: SpoolSummary): Say? = (s.inSlot ?: s.location)?.let { Say.Words(R.string.spools_in_place, listOf(it)) }
 
     /** The lines under a row's name, in order: where it is, its home, since when. */
-    fun lines(s: SpoolSummary, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): List<String> = listOfNotNull(
+    fun lines(s: SpoolSummary, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): List<Say> = listOfNotNull(
         place(s),
-        s.home?.let(CheckedOutTexts::home),
-        s.checkedOutSince?.let { CheckedOutTexts.since(RecentValues.time(it, zone)) },
+        s.home?.let { Say.Words(R.string.spools_home, listOf(it)) },
+        s.checkedOutSince?.let { Say.Words(R.string.spools_since, listOf(RecentValues.time(it, zone))) },
     )
 
     /**
@@ -90,8 +79,8 @@ object CheckedOutRules {
     fun canReturn(s: SpoolSummary): Boolean = s.checkedOut
 
     /** The line of the spool's detail while it is checked out ("Home: not recorded" without a home); null when it is not. */
-    fun homeLine(s: SpoolSummary): String? =
-        if (!s.checkedOut) null else s.home?.let(CheckedOutTexts::home) ?: CheckedOutTexts.HOME_NOT_RECORDED
+    fun homeLine(s: SpoolSummary): Say? =
+        if (!s.checkedOut) null else s.home?.let { Say.Words(R.string.spools_home, listOf(it)) } ?: Say.Words(R.string.spools_home_none)
 
     /** Home can be changed while the spool is checked out. */
     fun canChangeHome(s: SpoolSummary): Boolean = s.checkedOut
