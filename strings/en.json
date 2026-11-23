@@ -4553,5 +4553,15 @@
   "settings_language_machine_translated": "(machine-translated)",
   "spool_weight_hint_empty": "Type the weight with the spool to update it.",
   "spool_weight_hint_invalid": "Type a weight in grams, more than 0.",
-  "spool_tare_invalid": "Empty spool weight must be more than 0 g"
+  "spool_tare_invalid": "Empty spool weight must be more than 0 g",
+  "label_print_button": "Print",
+  "label_print_size": "Size",
+  "label_size_small": "62 x 29 mm",
+  "label_size_medium": "50 x 30 mm",
+  "label_print_sheets_note": "Sheets of labels are printed from the Hub page or the web app.",
+  "label_print_address_note": "The code holds this Hub's home address. If the Hub is renamed or moves to another port, old labels still open in this app's scanner but not from a phone's camera.",
+  "label_print_error": "Could not draw the label.",
+  "label_print_error_reason": "Could not draw the label. {reason}",
+  "label_print_preview": "Label of spool {id}: {name}, {material}",
+  "label_print_preview_left": "Label of spool {id}: {name}, {material}, {grams} g"
 }

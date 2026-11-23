@@ -70,6 +70,8 @@ import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
 import com.thompsonfabco.filamentkit.ui.history.ActivityList
 import com.thompsonfabco.filamentkit.ui.history.showUndoable
 import com.thompsonfabco.filamentkit.ui.history.spoolResultToastText
+import com.thompsonfabco.filamentkit.ui.printers.resolve
+import com.thompsonfabco.filamentkit.ui.printers.sayText
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -123,7 +125,7 @@ fun SpoolScreen(
     LaunchedEffect(returned) {
         if (returned == null) return@LaunchedEffect
         vm.returnToastShown()
-        toast?.showUndoable(returned.text, undo, returned.event, context, vm::undoOnHub)
+        toast?.showUndoable(returned.text.resolve(context), undo, returned.event, context, vm::undoOnHub)
     }
 
     val scrollModifier = if (embedded) {
@@ -155,9 +157,9 @@ fun SpoolScreen(
                     Remaining(spool)
                     if (CheckedOutRules.offered(spool)) CheckedOutRules.homeLine(spool)?.let { line ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically) {
-                            Text(line, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            Text(sayText(line), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                             if (CheckedOutRules.canChangeHome(spool)) {
-                                SwButton(CheckedOutTexts.CHANGE_HOME, vm::openHome, kind = SwButtonKind.Quiet, enabled = online && !ui.writing)
+                                SwButton(stringResource(R.string.spools_change_home), vm::openHome, kind = SwButtonKind.Quiet, enabled = online && !ui.writing)
                             }
                         }
                     }
@@ -298,12 +300,14 @@ private fun Actions(
             SwButton(stringResource(R.string.spool_move), vm::openMove, enabled = enabled)
             // checked out: back to its home, asking nothing; Home can be changed
             ui.spool?.takeIf { CheckedOutRules.offered(it) && CheckedOutRules.canReturn(it) }?.let {
-                SwButton(CheckedOutTexts.returnTo(it.home), vm::returnToHome, enabled = enabled, busy = ui.returning)
+                val returnLabel = it.home?.takeIf { h -> h.isNotBlank() }?.let { h -> stringResource(R.string.spools_return_to, h) }
+                    ?: stringResource(R.string.spools_return)
+                SwButton(returnLabel, vm::returnToHome, enabled = enabled, busy = ui.returning)
             }
             Box {
                 SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { menu = true })
                 SwMenu(menu, { menu = false }) {
-                    if (onPrint != null) SwMenuItem(PrintTexts.MENU, { menu = false; onPrint() }, enabled = online)
+                    if (onPrint != null) SwMenuItem(stringResource(R.string.spools_print_label), { menu = false; onPrint() }, enabled = online)
                     SwMenuItem(
                         stringResource(R.string.spool_mark_empty), { menu = false; vm.askMarkEmpty() },
                         enabled = enabled && ui.spool?.state != SpoolState.Empty,
@@ -480,7 +484,7 @@ private fun HomeSheet(vm: SpoolViewModel, h: HomeUi, current: String?, onPairAga
     val space = SpoolwardenTheme.space
     SwSheet(onDismiss = vm::closeHome, gesturesEnabled = h.savingTo == null) {
         Column(Modifier.fillMaxWidth().padding(horizontal = space.s4).padding(bottom = space.s4), verticalArrangement = Arrangement.spacedBy(space.s2)) {
-            Text(CheckedOutTexts.HOME, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.spools_home_title), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
             h.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = vm::retryHome) }
             val locations = h.locations
             when {

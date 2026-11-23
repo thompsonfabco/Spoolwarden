@@ -5857,4 +5857,17 @@
     <string name="spool_weight_hint_empty">Type the weight with the spool to update it.</string>
     <string name="spool_weight_hint_invalid">Type a weight in grams, more than 0.</string>
     <string name="spool_tare_invalid">Empty spool weight must be more than 0 g</string>
+    <string name="label_print_button">Print</string>
+    <string name="label_print_size">Size</string>
+    <string name="label_size_small">62 x 29 mm</string>
+    <string name="label_size_medium">50 x 30 mm</string>
+    <string name="label_print_sheets_note">Sheets of labels are printed from the Hub page or the web app.</string>
+    <string name="label_print_address_note">The code holds this Hub\'s home address. If the Hub is renamed or moves to another port, old labels still open in this app\'s scanner but not from a phone\'s camera.</string>
+    <string name="label_print_error">Could not draw the label.</string>
+    <!-- 1=reason -->
+    <string name="label_print_error_reason">Could not draw the label. %1$s</string>
+    <!-- 1=id 2=name 3=material -->
+    <string name="label_print_preview">Label of spool %1$s: %2$s, %3$s</string>
+    <!-- 1=id 2=name 3=material 4=grams -->
+    <string name="label_print_preview_left">Label of spool %1$s: %2$s, %3$s, %4$s g</string>
 </resources>

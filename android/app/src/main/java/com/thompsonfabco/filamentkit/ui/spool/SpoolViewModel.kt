@@ -372,7 +372,7 @@ class SpoolViewModel(
             _state.update {
                 it.copy(
                     spool = shown(updated), returning = false, loadedAt = now(), result = null, failure = it.failure.afterSuccess(),
-                    returnToast = ReturnToast(CheckedOutTexts.returned(updated.location), event),
+                    returnToast = ReturnToast(CheckedOutSay.returned(updated.location), event),
                 )
             }
             loadActivity()
@@ -416,7 +416,7 @@ class SpoolViewModel(
             _state.update {
                 it.copy(
                     spool = shown(updated), home = null, loadedAt = now(), failure = it.failure.afterSuccess(),
-                    returnToast = ReturnToast(CheckedOutTexts.homeNow(location), null),
+                    returnToast = ReturnToast(CheckedOutSay.homeNow(location), null),
                 )
             }
             loadActivity()

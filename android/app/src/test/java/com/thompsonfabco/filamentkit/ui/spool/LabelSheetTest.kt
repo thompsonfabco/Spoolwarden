@@ -31,12 +31,14 @@ class LabelSheetTest {
     private val spool = SpoolSummary(214, "Polymaker", "PolyTerra PLA Charcoal Black", "PLA", "#333333", "Shelf B", 620.0)
 
     @Test fun thePhoneOffersTheTwoRollSizesAndNoSheetSize() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
         assertEquals(listOf("62x29", "50x30"), LabelSize.entries.map { it.wire })
-        assertEquals(listOf("62 x 29 mm", "50 x 30 mm"), LabelSize.entries.map { it.title })
+        assertEquals(listOf("62 x 29 mm", "50 x 30 mm"), LabelSize.entries.map { context.getString(it.titleRes) })
     }
 
     @Test fun aLabelIsPrintedAtItsOwnSizeInThousandthsOfAnInch() {
-        fun mils(size: LabelSize) = labelMedia(size).let { it.widthMils to it.heightMils }
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        fun mils(size: LabelSize) = labelMedia(context, size).let { it.widthMils to it.heightMils }
         assertEquals(2441 to 1142, mils(LabelSize.Small))
         assertEquals(1969 to 1181, mils(LabelSize.Medium))
     }
@@ -60,10 +62,11 @@ class LabelSheetTest {
     }
 
     @Test fun theTextsAreWholeSentences() {
-        assertEquals("Could not draw the label.", PrintTexts.couldNot(""))
-        assertEquals("Could not draw the label. No such spool.", PrintTexts.couldNot("No such spool."))
-        assertEquals("Label of spool 7: A, PLA, 620 g", PrintTexts.preview(7, "A", "PLA", "620"))
-        assertEquals("Label of spool 7: A, PLA", PrintTexts.preview(7, "A", "PLA", null))
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        assertEquals("Could not draw the label.", context.getString(com.thompsonfabco.filamentkit.R.string.label_print_error))
+        assertEquals("Could not draw the label. No such spool.", context.getString(com.thompsonfabco.filamentkit.R.string.label_print_error_reason, "No such spool."))
+        assertEquals("Label of spool 7: A, PLA, 620 g", context.getString(com.thompsonfabco.filamentkit.R.string.label_print_preview_left, 7, "A", "PLA", "620"))
+        assertEquals("Label of spool 7: A, PLA", context.getString(com.thompsonfabco.filamentkit.R.string.label_print_preview, 7, "A", "PLA"))
     }
 
     private fun show(source: LabelSource) = rule.setContent {
