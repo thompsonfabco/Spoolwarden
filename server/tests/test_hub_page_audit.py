@@ -576,3 +576,29 @@ def test_overview_passes_the_audit_locked_with_a_failing_check(hub, monkeypatch)
     monkeypatch.setattr(cli.Spoolman, "missing_fields", lambda self: ["spoolwarden_example"])
     run = _run("--url", hub, "--views", "#overview", "--ready", OVERVIEW_FAILING)
     assert run.returncode == 0, run.stdout + run.stderr
+
+
+API_TIMEOUT_CHECK = """(async () => {
+  const realST = window.setTimeout;
+  const realFetch = window.fetch;
+  let seenSignal = null;
+  window.setTimeout = (fn, ms, ...a) => (ms === 30000 ? realST(fn, 1, ...a) : realST(fn, ms, ...a));
+  window.fetch = (u, o) => {
+    if (!String(u).includes("/setup/api/ping-timeout-test")) return realFetch(u, o);
+    seenSignal = o && o.signal;
+    return new Promise((_, rej) => {
+      if (o && o.signal) o.signal.addEventListener("abort", () => rej(new DOMException("Aborted", "AbortError")));
+    });
+  };
+  let err = null;
+  try { await api("ping-timeout-test"); } catch (e) { err = e; }
+  if (!seenSignal) throw new Error("api() did not pass AbortSignal to fetch");
+  if (!err || !err.timeout || err.message !== "The Hub did not answer in 30 s.") {
+    throw new Error("unexpected timeout error: " + (err && err.message));
+  }
+})()"""
+
+
+def test_hub_api_times_out_after_30s_with_common_timeout_sentence(hub):
+    run = _run("--url", hub, "--views", "#overview", "--ready", API_TIMEOUT_CHECK)
+    assert run.returncode == 0, run.stdout + run.stderr
