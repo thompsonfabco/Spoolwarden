@@ -460,7 +460,7 @@ fun SearchScreen(
             Box {
                 SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { open = true })
                 SwMenu(open, { open = false }) {
-                    if (spoolmanUrl != null) SwMenuItem(SearchTexts.OPEN_SPOOLMAN, { open = false; openInBrowser(context, spoolmanUrl) })
+                    if (spoolmanUrl != null) SwMenuItem(stringResource(R.string.spools_open_spoolman), { open = false; openInBrowser(context, spoolmanUrl) })
                     if (vm.canExport) SwMenuItem(
                         if (ui.csvBusy) HistoryTexts.DOWNLOADING else HistoryTexts.DOWNLOAD_CSV,
                         {
