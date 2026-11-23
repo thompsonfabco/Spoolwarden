@@ -20,6 +20,6 @@ class CatalogWordsTest {
         assertEquals("Remove SUNLU PLA+ from your own entries? Slicer presets are rebuilt.", context.getString(R.string.catalog_remove_question, line))
         assertEquals("Remove SUNLU PLA+?", context.getString(R.string.catalog_remove_title, line))
         assertEquals("Remove SUNLU PLA+", context.getString(R.string.catalog_remove_entry, line))
-        assertEquals("Added Nov 14, 2026", context.getString(R.string.catalog_entry_added, "Nov 14, 2026"))
+        assertEquals("Added Nov 14, 2026", context.getString(R.string.app_catalog_entry_added, "Nov 14, 2026"))
     }
 }
