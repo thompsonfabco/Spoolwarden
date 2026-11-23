@@ -621,6 +621,126 @@ The location field of the add screen starts at **Automatic**; after **Check** (w
 under it says where the spools would go and why. **Move** on a spool offers the same list. The list itself is edited on
 the Hub page or the command line, not in the apps.
 
+## Checked-out spools
+
+A spool is **checked out** from the moment the Hub records it in a printer's slot until it is returned. The Hub remembers
+two things about it: its **Home**, the place it was in before (for example `Rack 1`), and since when it has been out.
+**Return** sends it back to its home in one press and offers **Undo**; **Change home** changes where it will go back to.
+The list of checked-out spools is on the Hub page, in the web app, in the app (Android) and at a Terminal. The Weigh
+Station returns a spool too, when you scan its tag.
+
+### When a spool is checked out
+
+- Loading a spool into a printer's slot checks it out (**Load into slot** on the Hub page, the same in the web app and
+  the app (Android)). On a Klipper printer it also happens when the printer shows a new spool in a slot by itself (a tag
+  tap, the touchscreen, a macro or a lane change): the Hub records it as if you had loaded it.
+- The home is the place the spool was in just before the load. A spool that came from no place is checked out as well,
+  with **Home: not recorded**. A spool moved from one slot to another keeps the home and the time it already had.
+- It stays checked out until it is returned. **Unload slot** and **Clear slot** on the Hub page send it back the same
+  way, and so does loading another spool into the slot.
+- **Return** is for a spool you took out of the printer by hand.
+- Moving it with **Move** does not return it: only its place changes, and it stays checked out with its home.
+
+### What Return does
+
+- **With a home:** the spool goes to its home, whether or not that place is full (a limit only steers the automatic
+  choice).
+- **With no home recorded:** the Hub places it as it places an opened spool you add without a place (see
+  [Where a new spool goes](#where-a-new-spool-goes)). When the storage rules have no place for it, the spool is left with
+  no location and the result says **Returned.** without a place.
+- **A Klipper printer's slot:** the Hub's record changes first and the printer never stops it. If the spool is recorded
+  in one of that printer's slots, the printer answers and is not printing, the Hub also tells it to clear the slot, as
+  **Clear slot** does. If the printer does not answer, or is printing, only the Hub's record changes, and no screen says
+  that the printer was not told. Either way the Hub does not load the spool back into the slot while the printer still
+  shows it there.
+- **A Bambu Lab printer's slot:** only the Hub's record changes. The printer's own slot setting is left as it is.
+- **Undo** puts the spool back in the slot, checked out again with its home and its time. It works for 7 days after the
+  return, until the spool or its slot changes again; after that the Hub says **This changed again since, so it cannot be
+  undone.**, **This is older than 7 days, so it cannot be undone.** or **This was already undone.** After an undo of a
+  return the Hub adds **The printer still shows what it was set to.**
+- **Change home** changes the remembered place only. The place has to be one of the storage locations; choosing a
+  location of Individual containers means its lowest free container. It writes nothing that Undo can take back: change
+  it again instead.
+
+### The Hub page
+
+Open **Spools**. The chip **Checked out (3)** shows the list of checked-out spools (the number counts them; it reads
+just **Checked out** until the count has come). It sits between **In a printer** and **Running low**. A row shows, under
+the spool's name, **In** and the place it is recorded at (the printer and its slot) while it is in a slot, **Home: Rack
+1** (or **Home: not recorded**), **since 2026-11-20 14:05** in the browser's time, and the button **Return to Rack 1**
+(just **Return** when no home is recorded). With nothing out the list says **No spool is checked out.**
+
+**Return** asks nothing but needs the setup code, or a trusted computer, like every change on the page. It answers with
+a message, **Returned to Rack 1.** (**Returned.** with no place), that has **Undo** for 10 seconds. After that, undo it
+in **Logs**: choose **Activity**, and the return is a line (**Returned <spool> from <slot> to <location>.**) with its own
+**Undo**, offered for 7 days.
+
+Open a checked-out spool for its details: under **State** there is **Home: Rack 1** and the button **Change home**. It
+opens a sheet, **Home**, with the storage locations (each as `Rack 1: 7 of 20 in use`); pick one and press **Save**. It
+answers **Home is now Rack 2.** and needs the setup code or a trusted computer.
+
+### A phone with the web app
+
+In **Spools**, the chip **Checked out (3)** (shown even at 0) replaces the search with the list. Each row shows the
+spool, **In <printer> – <slot>**, **Home: Rack 1** or **Home: not recorded**, **since 2026-11-20 14:05** in the phone's
+time, and a button **Return to Rack 1** (**Return** with no home) beside it. A press returns the spool at once and shows
+**Returned to Rack 1.** with **Undo** for 10 seconds; the web app has no other place for Undo. When more spools are out
+than one page holds, the list says how many are shown (**20 of 31 shown.**).
+
+Tap a row to open the spool. Under its summary the sheet has the same **Home** line, **Change home** (a menu of the
+storage locations; the one you choose is saved at once, and the line says **Home is now Rack 2.**) and **Return**. None
+of it asks for a setup code, and it works at the web app's public address too.
+
+### A phone with the app (Android)
+
+In **Spools**, the chip **Checked out (3)** comes after **Sealed only** and before **Running low**. A row shows **In
+<printer> – <slot>**, **Home: Rack 1**, **since** and the time, and **Return to Rack 1** (**Return** with no home). The
+spool's own screen shows the **Home** line with **Change home** (a sheet named **Home**: a tap on a location saves it at
+once, and a message says **Home is now Rack 2.**) and the button **Return to Rack 1**. A return answers **Returned to
+Rack 1.** with **Undo** for 10 seconds (longer if Android's own setting for more time to act asks for it). The activity
+list on the spool's screen keeps an **Undo** on the return for 7 days. An empty list says **No spool is checked out.**
+Changing a home cannot be undone.
+
+### The command line
+
+`spoolwarden spools --checked-out` lists them, one row each (**No**, **Filament**, **Where**, **Home**, **Since**), then
+`3 spools are checked out.` (`1 spool is checked out.`; `No spool is checked out.` when none). **Where** reads `In
+<printer> – <slot>` for a spool the Hub has in a slot. **Since** is the time the Hub recorded, in UTC.
+
+```bash
+spoolwarden spool return 12
+spoolwarden spool home 12 "Rack 2"
+```
+
+`spool return 12` asks nothing. It prints `Returned to Rack 1.` (`Returned.` with no place) and the line to undo it,
+`To undo it: sudo spoolwarden undo 345`; `sudo spoolwarden undo` with that number puts it back, within the 7 days
+above. `spool home 12 "Rack 2"` shows `Spool 12, <name>: home Rack 1, would be Rack 2.`, asks `Change the home of spool 12
+to Rack 2?` and prints `Home is now Rack 2.`; `-y` answers yes for a script, and `Home is already Rack 2.` means
+nothing changed. For a spool that is not checked out both say `This spool is not checked out.` The rows are in the
+[command table](#everyday-commands).
+
+### At the Weigh Station
+
+Scan the tag of a checked-out spool. The display reads **Returning**, the spool's name, **Home: Rack 1** (or **Home: not
+recorded**), **Yellow: weigh it** and **Hold: skip weighing**, and the Weigh Station says "Checked out spool. Press
+yellow to weigh it, or hold yellow to skip weighing."
+
+- **A short press of yellow weighs it.** Put the spool on the scale, wait until the reading has settled (over 20 g) and
+  press yellow: the display shows the weight, the name and the home with **Hold yellow: save**, and the Weigh Station
+  says, for example, "1042 grams. Hold yellow to save." A short press again weighs it again. **Hold yellow** (0.8 s)
+  then saves the weight on the spool and returns it.
+- **Holding yellow at once** returns it without weighing, and the spool's weight stays as it was.
+- Either way the display then reads **Returned**, the name and **to Rack 1** (and **1042 g left** after a weighing), and
+  the Weigh Station says "Returned to Rack 1." ("Returned." when it names no place). The return can be undone like any
+  other.
+- **Red** starts over and returns nothing; it says "Cancelled." Scanning another tag starts over too.
+- With no scale at all, a short press says "No scale here." and a hold still returns the spool. If the Hub says the spool
+  is no longer checked out, the display shows **Not checked out**.
+
+The Weigh Station shows only the one spool you scanned, never a list of checked-out spools; the list is in the places
+above. A Weigh Station that talks to an older Hub, one that does not say whether a spool is checked out, handles the
+tag as any known spool.
+
 ## Alerts
 
 The Hub writes down what happens: a print starts, pauses, runs out of filament, fails or finishes, a printer reports an
@@ -1109,10 +1229,12 @@ the `station` Feature, on the Hub computer (Hub with Weigh Station) or on a seco
 - Optional: the **button panel** (Hold and Discard buttons, lamps, an OLED, a buzzer and a speaker, on an ESP32-C3 Super Mini). How
   to build it: the [Weigh Station display guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/intake-panel). What the Weigh Station does with it:
   [station/PANEL.md](../station/PANEL.md).
-- Optional, with the panel: **the panel over Wi-Fi** instead of the USB cable. It is off until you turn it on: plug the
-  panel into the Weigh Station's computer by USB once and run `sudo spoolwarden weigh-station panel-wifi` (it asks for
-  the Wi-Fi name and password); the panel then only needs power. `sudo spoolwarden weigh-station panel-wifi --off`
-  goes back to the cable.
+- Optional, with the panel: **the panel over Wi-Fi** instead of the USB cable (panel firmware 14 or later). It is off
+  until you turn it on: plug the panel into the Weigh Station's computer by USB once and run
+  `sudo spoolwarden weigh-station panel-wifi` (it asks for the Wi-Fi name and password); the panel then only needs
+  power. `sudo spoolwarden weigh-station panel-wifi --off` goes back to the cable. What it needs, what the panel shows
+  and how the link is secured: [The panel over Wi-Fi](../station/PANEL.md#the-panel-over-wi-fi). It has not been tried
+  on a real panel yet ([known gaps](known-gaps.md#weigh-station)).
 - Optional: a speaker (USB or the computer's headphone socket) for the scan beep when there is no panel.
 - Optional, with the panel: a **BME280** sensor for room temperature and humidity, a small speaker on the panel
   (it says things like "1042 grams. Hold yellow to save.") and a **USB webcam** that takes a picture of the spool when you press
@@ -1150,13 +1272,7 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   the panel isn't on (`NFC_DEVICE=auto`). With no panel, the reader gets the first USB serial port.
 - A scan beeps on the panel's buzzer, or, without a panel, through a USB speaker or the headphone socket
   (`STATION_BEEP`).
-- **The speaking voice.** The Weigh Station speaks with the Piper voice `en_US-libritts_r-medium` (speaker 0), downloaded
-  when the Weigh Station is installed (60 to 80 MB, checked against a pinned hash). If the download fails or the file
-  does not match, the install carries on with a warning and espeak-ng speaks. To use espeak-ng on purpose (no
-  download), choose **Weigh Station voice** in `sudo spoolwarden config`. The voice is licensed **CC BY 4.0**
-  (LibriTTS-R; credit in [THIRD-PARTY.md](../THIRD-PARTY.md#speech-voice)). To use the public-domain
-  `en_US-ljspeech-medium` voice instead, set `station.voice` to it in `/etc/filament-kit/config.json` and run
-  `sudo spoolwarden features apply`.
+- **The speaking voice** is chosen and adjusted under [Voice settings](#voice-settings).
 - With the panel, Hold and Discard also speak (`"speech"`), and Hold takes a picture with the webcam
   (`"camera"`). `curl -k https://127.0.0.1:5003/state` then shows `"air"` (the BME280 reading) and `"photo"`, and the
   picture itself is at `/photo`. The Weigh Station only answers GET requests, and only the addresses it allows.
@@ -1166,6 +1282,7 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   USB camera, a device such as `"/dev/video0"`, or `"off"`), `"panel_flash"` (`true` or `false`, see the
   next point), `"panel_swap"` (`true` or `false`, see the point after that) and `"speaker_volume"` (0 to 100,
   default 50: how loud the C3 panel speaks; environment `STATION_SPEAKER_VOLUME`). After a change, run `sudo spoolwarden features apply`.
+  `"speech"` and `"speaker_volume"` are only where **Speak** and **Volume** in [Voice settings](#voice-settings) start.
 - **Panel firmware updates itself.** The Weigh Station carries the display's firmware. When it finds a panel running
   another version, it writes the bundled one to it over USB (once per version) and then uses it. If that does
   not work, the panel keeps running as it is. Set `"panel_flash": false` to never touch the panel's firmware.
@@ -1180,6 +1297,65 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   `sudo spoolwarden features apply`. The default is `false`. This needs firmware 9 or later. A C3 panel already runs
   firmware 10 or later. An ESP8266 panel on older firmware has to be reflashed by hand, because the Weigh Station never reflashes
   it; until then yellow can't do a long press, so it can't save.
+
+### Voice settings
+
+The Weigh Station says what it is doing, for example "1042 grams. Hold yellow to save." Six controls shape how:
+
+| Control | What it does | Range | Starts at |
+| --- | --- | --- | --- |
+| **Speak** | Switches speaking on or off. Off, it says nothing (the beeps stay). | on or off | the `"speech"` setting, on |
+| **Voice** | **Piper, many speakers** (`en_US-libritts_r-medium`), **Piper, one clear speaker** (`en_US-ljspeech-medium`) or **espeak-ng, robotic, no download**. | the three | Piper, many speakers |
+| **Speaker** | Which of the many voices of **Piper, many speakers** speaks. The other two voices have none, so no Speaker control. | 0 to 903 (904 speakers) | 0 |
+| **Speed** | How fast it speaks, in percent. | 50 to 200, multiples of 10 | 100 |
+| **Volume** | How loud the C3 panel's speaker is. It does not reach an older ESP8266 panel, or speech through the computer's audio output. | 0 to 100 | the `"speaker_volume"` setting, 50 |
+| **Test** | Says "This is the Weigh Station. P L A, 812 grams." with the values on the screen, saved or not. It saves nothing. | | |
+
+Each of Speak, Speaker, Speed and Volume applies the moment you change it (a slider when you let go of it) and the Weigh
+Station keeps it without restarting; there is no Save. A Weigh Station that does not answer does not stop the save: it
+gets the values when it next starts. Changing the **Voice** restarts the Weigh Station. **Test** is refused while the
+Weigh Station is in the middle of a spool (**The Weigh Station is in use. Try again when it is idle.**), when speaking is
+off (**Speaking is switched off.**) and when it does not answer (**The Weigh Station did not answer.**); when it works it
+says **Played on the Weigh Station.**
+
+**Where each interface can change them.**
+
+| Interface | Where | What it changes | What it only shows |
+| --- | --- | --- | --- |
+| The Hub page | **Settings**, **Weigh Station voice** | all six; **Speaker** only with **Piper, many speakers** | on a Weigh Station on another computer the **Voice** row says **Chosen on the Weigh Station's own computer: spoolwarden config.** |
+| A phone with the web app | **Settings**, **Weigh Station voice** | Speak, Speaker, Speed, Volume, Test | **Voice: Piper, many speakers**, with **Change the voice on the Hub page.** |
+| A phone with the app (Android) | **Settings**, **Weigh Station voice** | Speak, Speaker, Speed, Volume, Test | **Voice**, with **Change the voice on the Hub page.** |
+| The command line | `sudo spoolwarden config`, **Weigh Station voice**; `sudo spoolwarden weigh-station voice-test` | Voice (two choices), Speak, Speaker, Speed, Volume; Test | |
+
+- **The Hub page** needs the setup code, or a trusted computer, for each change and for **Test**. With the Weigh
+  Station off on this Hub, the group says **The Weigh Station is switched off on this machine.**
+- **The web app** changes them on the home network. At the web app's public address the group is read only and says
+  **Change this at home.** Neither the web app nor the app asks for a setup code. Both show the group only on a Hub
+  that has a Weigh Station, and the app's controls are disabled while the phone cannot reach the Hub.
+- **The command line** checks each value before it sends it and refuses one out of range, for example
+  `volume must be a whole number from 0 to 100.` **Voice** there offers **Piper (natural; a 60-80 MB download)** and
+  **espeak-ng (robotic; no download)**; the one clear speaker is chosen on the Hub page.
+  `sudo spoolwarden weigh-station voice-test` plays the test sentence and prints `Played on the Weigh Station.` These
+  commands go through the running Hub, so when it is not running they say
+  `The Hub is not running, so the voice cannot be changed or tested.`
+- The Voice setting is `station.voice` and `station.tts` in `/etc/filament-kit/config.json`; to set the one clear
+  speaker by hand, set `station.voice` to `en_US-ljspeech-medium` and run `sudo spoolwarden features apply`. Speak,
+  Speaker, Speed and Volume are kept by the Hub in a file of their own and are not settings in that file.
+
+**The voice and its download.** The Weigh Station speaks with the Piper voice `en_US-libritts_r-medium`, downloaded when
+the Weigh Station is installed (60 to 80 MB, checked against a pinned hash). If the download fails or the file does not
+match, the install carries on with a warning and espeak-ng speaks. espeak-ng also speaks whenever the voice's file is
+missing.
+The voice is licensed **CC BY 4.0** (LibriTTS-R; credit in [THIRD-PARTY.md](../THIRD-PARTY.md#speech-voice)); the
+other Piper voice, `en_US-ljspeech-medium`, is public domain.
+
+**Materials are spelled out.** The screen shows "PLA", and the Weigh Station says "P L A". Each part of a material that is
+two to five capital letters is said letter by letter, except `HIPS` and `PEEK`, which are said as words. A part with any
+lower-case letter ("Silk", "Nylon") is a word, digits stay digits, `+` is said "plus", and `-` and `/` are a pause.
+Examples: `PLA` is "P L A", `PA6-CF` is "P A 6, C F", `PLA+` is "P L A plus", `PLA/PETG` is "P L A, P E T G", and
+`Silk PLA` is "Silk P L A". Only the material is treated this way: a maker's name in capitals such as SUNLU is said as
+written, but a word of the filament's name that repeats the material (the "PLA" of "PLA Galaxy Blue", material `PLA+`) is
+spelled too.
 
 ### Is it working?
 
