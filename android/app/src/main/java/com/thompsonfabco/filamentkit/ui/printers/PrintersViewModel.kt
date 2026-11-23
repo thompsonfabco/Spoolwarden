@@ -41,7 +41,7 @@ sealed interface Problem {
     data object NoLongerPaired : Problem
     data object CertificateChanged : Problem
 
-    /** An Auto load the Hub refused with no sentence of its own: the ruled words. */
+    /** An Auto load the Hub refused with no sentence of its own: the default words. */
     data object AutoRefused : Problem
 }
 

@@ -165,7 +165,7 @@ sealed interface HubFailure {
     data object Unexpected : HubFailure
     data object SpoolmanDown : HubFailure
 
-    /** An Auto load the Hub refused with no sentence of its own: the ruled words. */
+    /** An Auto load the Hub refused with no sentence of its own: the default words. */
     data object AutoRefused : HubFailure
     data class Message(val text: String) : HubFailure
 
