@@ -247,3 +247,50 @@ def test_help_markdown_includes_a3_and_previously_missing_commands(capsys):
     for r in md.splitlines():
         if r.startswith("| `label-reader corrections [list]` |") or r.startswith("| `label-reader corrections package <file>` |"):
             assert "(root)" not in r
+
+
+def test_every_parser_command_appears_in_help_command_table(capsys):
+    import argparse
+    import re
+    assert cli.main(["help", "--markdown"]) == 0
+    md, _ = capsys.readouterr()
+    assert "| `backup password [--remove \\| --show]` |" in md and "| `certificate --renew` |" in md
+    ap, _ = cli._build_parser()
+    old_top = {"cert", "ensure-fields", "intake", "klipper", "library", "modules", "profiles", "reader", "station",
+               "sync", "unpair"}
+    aliases = {a for a, _ in cli._ALIASES} | old_top
+
+    def leaves(p, prefix=()):
+        subs = [a for a in p._actions if isinstance(a, argparse._SubParsersAction)]
+        if not subs:
+            yield prefix
+            return
+        if not subs[0].required and prefix:
+            yield prefix
+        for name, child in subs[0].choices.items():
+            if name == "help" or child is None:
+                continue
+            if not subs[0].required and name in ("list", "history"):
+                continue
+            cmd = " ".join(prefix + (name,))
+            if cmd in aliases:
+                continue
+            yield from leaves(child, prefix + (name,))
+
+    def table_matches(s: str, tc: str) -> bool:
+        words = s.split()
+        norm = tc.replace("\\|", "|").replace("[", "").replace("]", "").split()
+        if len(norm) < len(words):
+            return False
+        return all(w == n or w in n.split("|") for w, n in zip(words, norm))
+
+    table_spans = [re.sub(r"\s+", " ", sp) for row in cli._COMMAND_TABLE for sp in re.findall(r"`([^`]+)`", row[0])]
+    missing = []
+    for lf in leaves(ap):
+        s = " ".join(lf)
+        if s in aliases or s.startswith("help"):
+            continue
+        if not any(table_matches(s, tc) for tc in table_spans):
+            missing.append(s)
+    assert missing == [], f"parser commands missing from _COMMAND_TABLE: {missing}"
+    assert "certificate --renew" in table_spans

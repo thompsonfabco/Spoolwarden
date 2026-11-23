@@ -455,7 +455,8 @@ def test_checked_out_list_rows_and_count_from_total(capsys):
     assert spools_cli.cmd_spools(api, filter="checked_out") == 0
     out = capsys.readouterr().out
     assert "Acme PLA Red" in out and "In Workshop – A2" in out and "Home: Rack 1" in out
-    assert "since 2026-11-20 10:00" in out and "Home: not recorded" in out
+    expected_since = __import__("datetime").datetime.fromisoformat(SINCE.replace("Z", "+00:00")).astimezone().strftime("%Y-%m-%d %H:%M")
+    assert f"since {expected_since}" in out and "Home: not recorded" in out
     assert out.count("since") == 1                                 # none for the older entry
     assert out.rstrip().endswith("5 spools are checked out.")      # the answer's total, not the rows
     assert api.calls == [("GET", "/api/spools?filter=checked_out", None)]
@@ -597,3 +598,13 @@ def test_r88_parsers_and_run(capsys):
     api = FakeApi({"PATCH /api/spools/12": edit(out_view(12), out_view(12, home="Overflow"))})
     assert spools_cli.run(parse("spool", "home", "12", "Overflow", "-y"), api) == 0
     assert "Home is now Overflow." in capsys.readouterr().out
+
+
+def test_checked_out_since_is_printed_in_local_time_like_other_cli_times(capsys):
+    import datetime
+    ts = "2026-11-20T14:05:00+02:00"
+    expected = datetime.datetime.fromisoformat(ts).astimezone().strftime("%Y-%m-%d %H:%M")
+    assert spools_cli.run(parse("spools", "--checked-out"),
+                          FakeApi({"GET /api/spools?filter=checked_out": listing(out_view(12, checked_out_since=ts))})) == 0
+    out = capsys.readouterr().out
+    assert f"since {expected}" in out

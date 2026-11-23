@@ -5686,4 +5686,5 @@
     <string name="spools_home_done">Home is now %1$s.</string>
     <!-- 1=reason -->
     <string name="spools_home_failed">Could not change the home: %1$s</string>
+    <string name="cli_panel_wifi_off_no_usb">No panel was on USB, so the panel itself still holds its Wi-Fi settings and will keep them until it is connected by USB and set again.</string>
 </resources>

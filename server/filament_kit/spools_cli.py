@@ -27,6 +27,7 @@ into strings/en.json with its name lower-cased. `catalogue_texts()` lists them, 
 from __future__ import annotations
 
 import argparse
+import datetime
 import sys
 import urllib.parse
 
@@ -121,6 +122,10 @@ CLI_DEVICE_KIND_WEB = "Web app"
 CLI_DEVICE_KIND_READER = "Tag Reader"
 CLI_DEVICE_KIND_BUILTIN = "built in"
 CLI_DEVICE_VERSION_UNKNOWN = "Version not known"
+CLI_PANEL_WIFI_OFF_NO_USB = (
+    "No panel was on USB, so the panel itself still holds its Wi-Fi settings and will keep them until it is "
+    "connected by USB and set again."
+)
 
 _KINDS = {"phone": CLI_DEVICE_KIND_PHONE, "pc": CLI_DEVICE_KIND_PC, "station": CLI_DEVICE_KIND_STATION,
           "web": CLI_DEVICE_KIND_WEB, "reader": CLI_DEVICE_KIND_READER, "builtin": CLI_DEVICE_KIND_BUILTIN}
@@ -231,6 +236,17 @@ def home_cell(view: dict) -> str:
     return CLI_SPOOL_HOME.format(place=view.get("home") or CLI_SPOOL_HOME_NOT_RECORDED)
 
 
+def _when(t) -> str:
+    """A time of the Hub's own view (ISO text) as local `2026-11-12 07:30`."""
+    s = str(t)
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        return datetime.datetime.fromisoformat(s).astimezone().strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return str(t)
+
+
 def _checked_out_list(r: dict, rows: list) -> int:
     """The Checked out list: where each spool is, its home, since when; the count is the answer's `total`."""
     if not rows:
@@ -243,7 +259,7 @@ def _checked_out_list(r: dict, rows: list) -> int:
                  else v.get("location") or CLI_SPOOL_NOT_PLACED)
         since = v.get("checked_out_since")
         cells.append([v.get("id"), spool_name(v), place, home_cell(v),
-                      CLI_SPOOL_SINCE.format(value=str(since)[:16].replace("T", " ")) if since else ""])
+                      CLI_SPOOL_SINCE.format(value=_when(since)) if since else ""])
     output.out_lines(output.table(["No", "Filament", "Where", "Home", "Since"], cells, long=1, right=(0,)))
     output.out()
     n = r.get("total", len(rows))

@@ -593,7 +593,9 @@ def cmd_station_panel_wifi(off: bool = False, ask=input, secret=None, run=subpro
                 done = panel_setup.disable(send if ser else None)
                 output.emit({"ok": True, **done})
                 output.out_lines(output.status_row("done", "The panel is back on the USB cable."))
-                if ser and not done["panel_forgotten"]:
+                if not ser:
+                    output.out(spools_cli.CLI_PANEL_WIFI_OFF_NO_USB)
+                elif not done["panel_forgotten"]:
                     output.out("The panel did not confirm that it forgot its Wi-Fi settings; its token is gone, so it can "
                                "no longer connect.")
             else:
@@ -6792,6 +6794,9 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`backup create [--out DIR]`', 'Back up now', '{settings_backups_now}'),
  ('`backup list`', 'Backups on this Hub', '{settings_backups_list}'),
  ('`backup keep <days>`', 'Keep nightly backups for N days', '{settings_backups_keep}'),
+ ('`backup password [--remove \\| --show]`',
+  'Set the backup password (typed twice), remove it (asks) or print it; new backups are encrypted while one is set (root)',
+  '{settings_backups_password_set} / {settings_backups_password_change} / {settings_backups_password_remove}'),
  ('`restore <zip> \\| --uploaded`', 'Restore (asks for the typed word)', '{settings_restore_heading}'),
  ('`web status`', 'Access from outside: rows as in `status`', '{nav_settings} > {settings_group_network}'),
  ('`web passphrase`', 'Set or replace the web passphrase', '{settings_group_passphrase}'),
@@ -6800,6 +6805,9 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`setup-code [--new] [--revoke-trusted]`', 'Hub page address and setup code', '{unlock_field_label}, {devices_trusted_title}'),
  ('`port [<number>]`', "Show the Hub's port, or move the Hub to another", '{nav_settings} > {settings_group_network}, {port_row_label}'),
  ('`certificate`', "Make the Hub's certificate if missing; print its fingerprint", '(none)'),
+ ('`certificate --renew`',
+  'Make a new certificate for this Hub: every paired phone, PC and Weigh Station must trust it again or be paired again (root; asks)',
+  '(none)'),
  ('`spoolman fields`', "Make Spoolwarden's extra fields in Spoolman", '{nav_overview}, {overview_make_fields}'),
  ('`spoolman address [<url>]`',
   'Show or change the Spoolman in use (checked before saving)',
@@ -7229,7 +7237,7 @@ def _dispatch_recent(args) -> int:
     return cmd_recent_undo(args.record)
 
 
-def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
+def _build_parser():
     ap = _Parser(prog="spoolwarden")
     ap.grouped_help = True
     ap.add_argument("--version", action="version", version=f"Spoolwarden {__version__}", help=argparse.SUPPRESS)
@@ -7486,6 +7494,11 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_yes(sc)
     klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
     history_cli.add_parser(sub)       # activity, undo, usage, export, import, report (HD2)
+    return ap, sub
+
+
+def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
+    ap, sub = _build_parser()
     args = ap.parse_args(argv)
     if args.cmd is None:                        # no command: the top-level help
         return _print_help(ap.format_help())
