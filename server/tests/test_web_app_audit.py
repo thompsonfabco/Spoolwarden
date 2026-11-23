@@ -2554,3 +2554,80 @@ def test_the_by_month_button_reads_last_7_days_while_the_months_show(served_mont
 def test_the_page_audit_passes_on_a_printer_showing_by_month(served_months, tmp_path, width):
     out = _used(served_months, tmp_path, USED_AUDITED, width)
     assert out["findings"] == [], json.dumps(out)
+
+
+def test_web_app_proxy_502_and_30s_timeout_mark_offline_and_use_common_timeout(served_months, tmp_path):
+    script = """
+    const realFetch = window.fetch.bind(window);
+    const realST = window.setTimeout.bind(window);
+    const poll = async (fn, msg) => {
+      const end = Date.now() + 10000;
+      while (Date.now() < end) { if (fn()) return; await sleep(50); }
+      throw new Error(msg + " :: " + document.body.innerText.slice(0, 400));
+    };
+    let mode = "502";
+    window.fetch = (u, o) => {
+      if (String(u).includes("/api/vendors")) {
+        if (mode === "502") return Promise.resolve(new Response("<html>502 Bad Gateway</html>", { status: 502 }));
+        if (mode === "timeout") return new Promise((_, rej) => {
+          if (o && o.signal) o.signal.addEventListener("abort", () => rej(new DOMException("Aborted", "AbortError")));
+        });
+      }
+      return realFetch(u, o);
+    };
+    let e502 = null;
+    try { await api("vendors"); } catch (e) { e502 = e; }
+    await poll(() => document.querySelector(".offline-banner"), "502 offline banner");
+    const msg502 = says(e502);
+    mode = "timeout";
+    window.setTimeout = (fn, ms, ...a) => (ms === 30000 ? realST(fn, 1, ...a) : realST(fn, ms, ...a));
+    let eTo = null;
+    try { await api("vendors"); } catch (e) { eTo = e; }
+    const msgTo = says(eTo);
+    return {
+      e502: { unreachable: !!e502?.unreachable, status: e502?.status, msg: msg502, banner: !!document.querySelector(".offline-banner") },
+      eTo: { timeout: !!eTo?.timeout, unreachable: !!eTo?.unreachable, msg: msgTo },
+    };
+    """
+    out = _drive(served_months, tmp_path, script, 375, "light", None, FREEZE_JS, block_install=True, timeout=150)
+    assert out["e502"]["unreachable"] and out["e502"]["status"] == 502 and out["e502"]["banner"], json.dumps(out)
+    assert "Cannot reach the Hub" in out["e502"]["msg"], json.dumps(out)
+    assert out["eTo"]["timeout"] and out["eTo"]["unreachable"], json.dumps(out)
+    assert out["eTo"]["msg"] == "The Hub did not answer in 30 s.", json.dumps(out)
+
+
+def test_web_app_return_printer_notified_false_and_history_thumbnails_use_thumb_query(served_months, tmp_path):
+    script = """
+    const realFetch = window.fetch.bind(window);
+    const poll = async (fn, msg) => {
+      const end = Date.now() + 10000;
+      while (Date.now() < end) { if (fn()) return; await sleep(50); }
+      throw new Error(msg + " :: " + document.body.innerText.slice(0, 400));
+    };
+    const hdr = { "Content-Type": "application/json" };
+    window.fetch = (u, o) => {
+      const s = String(u);
+      if (s.includes("/api/spools/7/return")) {
+        return Promise.resolve(new Response(JSON.stringify({
+          spool: { id: 7, location: "Rack 1", view: { location: "Rack 1" } },
+          printer_notified: false,
+        }), { status: 200, headers: hdr }));
+      }
+      if (s.includes("/api/history")) {
+        return Promise.resolve(new Response(JSON.stringify({
+          records: [{ id: "rec-1", at: "2026-11-22T12:00:00Z", photos: 1,
+                      spools: [{ vendor: "SUNLU", name: "PLA Black", material: "PLA", color_hex: "111111" }] }],
+          keep: 20, photo_bytes: 1024,
+        }), { status: 200, headers: hdr }));
+      }
+      return realFetch(u, o);
+    };
+    const ret = await returnSpool(7);
+    document.querySelector('a[href="#recent"]').click();
+    await poll(() => document.querySelector(".thumb__img"), "history thumb img");
+    const thumbSrc = document.querySelector(".thumb__img").getAttribute("src");
+    return { text: ret.text, thumbSrc };
+    """
+    out = _drive(served_months, tmp_path, script, 375, "light", None, FREEZE_JS, block_install=True, timeout=150)
+    assert "The printer could not be told to clear its slot." in out["text"], json.dumps(out)
+    assert out["thumbSrc"].endswith("/photos/1?thumb=1"), json.dumps(out)
