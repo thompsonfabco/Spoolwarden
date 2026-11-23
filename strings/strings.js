@@ -4047,4 +4047,5 @@ window.SW_TEXT = Object.freeze({
   "spools_home_save": "Save",
   "spools_home_done": "Home is now {location}.",
   "spools_home_failed": "Could not change the home: {reason}",
+  "cli_panel_wifi_off_no_usb": "No panel was on USB, so the panel itself still holds its Wi-Fi settings and will keep them until it is connected by USB and set again.",
 });

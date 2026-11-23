@@ -579,3 +579,25 @@ def test_the_command_lines_requests_find_every_field_they_read(c, sm):
     # 400 for an unknown location carries the Hub's message
     bad = c.patch(f"/api/spools/{t['id']}", json={"home": "Nowhere", "dry_run": True})
     assert bad.status_code == 400 and isinstance(bad.json()["message"], str) and bad.json()["message"]
+
+
+def test_move_to_non_printer_ends_checked_out_and_undo_restores_it_while_move_to_printer_keeps_it(c, sm, store):  # noqa: F811
+    from filament_kit import undo
+    s = _out(sm, home="Rack 1", name="MoveOut")
+    dry = c.patch(f"/api/spools/{s['id']}", json={"location": "Rack 2", "dry_run": True}).json()
+    assert dry["view"]["checked_out"] is False and dry["view"]["home"] is None and dry["view"]["checked_out_since"] is None
+    done = c.patch(f"/api/spools/{s['id']}", json={"location": "Rack 2", "dry_run": False}).json()
+    assert done["view"]["checked_out"] is False and done["view"]["home"] is None and done["view"]["checked_out_since"] is None
+    assert done["spool"]["location"] == "Rack 2" and inventory.prev_entry(sm.get(f"spool/{s['id']}")) == ("", None)
+    ret_ev = [e for e in store.all_events() if e["kind"] == "spool.returned"]
+    assert len(ret_ev) == 1 and ret_ev[0]["data"]["after_location"] == "Rack 2" and ret_ev[0]["data"]["before_home"] == "Rack 1"
+    assert not [e for e in store.all_events() if e["kind"] == "spool.moved"]
+    u = undo.undo_event(ret_ev[0]["id"], sm, store=store)
+    assert u["undone"] is True
+    restored = sm.get(f"spool/{s['id']}")
+    assert restored["location"] == SLOT and inventory.prev_entry(restored) == ("Rack 1", SINCE)
+    p = _out(sm, home="Rack 1", name="MoveInPrinter")
+    other_slot = SLOT.replace("A2", "A3")
+    moved = c.patch(f"/api/spools/{p['id']}", json={"location": other_slot, "dry_run": False}).json()
+    assert moved["view"]["checked_out"] is True and moved["view"]["home"] == "Rack 1" and moved["view"]["checked_out_since"] == SINCE
+    assert [e for e in store.all_events() if e["kind"] == "spool.moved"]
