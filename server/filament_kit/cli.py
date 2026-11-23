@@ -1114,7 +1114,8 @@ class _ConfigMenu:
                 else:
                     count = sc.state(self.cfg).get("count") or 0
                     if count > 0:
-                        yes = ui.yesno(output.fill(_cli_text("cli_config_share_corrections_delete_ask"), count=count))
+                        key = "cli_config_share_corrections_delete_ask" if count != 1 else "cli_config_share_corrections_delete_ask_one"
+                        yes = ui.yesno(output.fill(_cli_text(key), count=count))
                         if yes is None:
                             raise _Ended
                         self._delete_waiting = bool(yes)
@@ -1547,7 +1548,8 @@ class _ConfigMenu:
                         except (sc.DeleteFailed, local_reader.LocalReaderError) as e:
                             ui.error(str(e))
                     elif waiting_n > 0:
-                        output.out(output.fill(_cli_text("cli_config_share_corrections_kept"), count=waiting_n))
+                        key = "cli_config_share_corrections_kept" if waiting_n != 1 else "cli_config_share_corrections_kept_one"
+                        output.out(output.fill(_cli_text(key), count=waiting_n))
                 try:
                     sc.apply(new, say=output.out)
                 except sc.ShareError as e:
