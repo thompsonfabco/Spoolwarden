@@ -5801,4 +5801,6 @@
     <string name="catalog_remove_title">Remove %1$s?</string>
     <!-- 1=entry -->
     <string name="catalog_remove_question">Remove %1$s from your own entries? Slicer presets are rebuilt.</string>
+    <string name="voice_hint_remote">Chosen on the Weigh Station\'s own computer: spoolwarden config.</string>
+    <string name="voice_save_failed">The change was not saved.</string>
 </resources>

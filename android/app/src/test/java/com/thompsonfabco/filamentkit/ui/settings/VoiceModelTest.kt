@@ -1,11 +1,13 @@
 package com.thompsonfabco.filamentkit.ui.settings
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.pinnedClient
 import com.thompsonfabco.filamentkit.net.fingerprint
 import com.thompsonfabco.filamentkit.net.ipUrl
 import com.thompsonfabco.filamentkit.net.serverCert
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,7 +37,7 @@ class VoiceModelTest {
     private val api = Api(pinnedClient(cert.fingerprint()), { server.ipUrl("/").toString().trimEnd('/') }, { "tok" })
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     private val problems = CopyOnWriteArrayList<Throwable>()
-    private val said = CopyOnWriteArrayList<String>()
+    private val said = CopyOnWriteArrayList<Say>()
     private var current: Api? = api
     private val model = VoiceModel(scope, { current }, { problems += it })
 
@@ -123,7 +125,7 @@ class VoiceModelTest {
         json("""{"error":"bad_value","message":"Speed is 50 to 200.","field":"speed"}""", code = 400)
         model.save(VoiceEdit.of(model.state.value.settings!!).copy(speed = 500))
         settle { said.isNotEmpty() }
-        assertEquals(listOf("Speed is 50 to 200."), said)
+        assertEquals(listOf<Say>(Say.FromHub("Speed is 50 to 200.")), said)
         assertEquals(1, model.state.value.revision)
         assertEquals(100, model.state.value.settings!!.speed)
     }
@@ -135,7 +137,7 @@ class VoiceModelTest {
         json("{}")
         model.test(VoiceEdit.of(model.state.value.settings!!).copy(speaker = 9, volume = 80))
         settle { said.isNotEmpty() }
-        assertEquals(listOf(VoiceTexts.TEST_PLAYED), said)
+        assertEquals(listOf<Say>(Say.Words(R.string.settings_voice_test_ok)), said)
         assertFalse(model.state.value.testing)
         server.takeRequest()
         val t = server.takeRequest()
@@ -158,7 +160,11 @@ class VoiceModelTest {
         model.test(edit)
         settle { said.size == 3 }
         assertEquals(
-            listOf(VoiceTexts.TEST_BUSY, VoiceTexts.TEST_OFF, VoiceTexts.TEST_NO_ANSWER),
+            listOf<Say>(
+                Say.FromHub("The Weigh Station is in use. Try again when it is idle."),
+                Say.FromHub("Speaking is switched off."),
+                Say.FromHub("The Weigh Station did not answer."),
+            ),
             said,
         )
         assertFalse(model.state.value.testing)

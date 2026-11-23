@@ -4127,4 +4127,6 @@ window.SW_TEXT = Object.freeze({
   "catalog_remove_entry": "Remove {entry}",
   "catalog_remove_title": "Remove {entry}?",
   "catalog_remove_question": "Remove {entry} from your own entries? Slicer presets are rebuilt.",
+  "voice_hint_remote": "Chosen on the Weigh Station's own computer: spoolwarden config.",
+  "voice_save_failed": "The change was not saved.",
 });
