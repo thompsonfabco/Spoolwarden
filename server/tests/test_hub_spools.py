@@ -403,3 +403,25 @@ def test_a_hub_that_names_no_filters_shows_the_four_chips_and_no_checked_out(hub
 out.chips = $$(".spools-chip").map(text);
 """)
     assert page["chips"] == [T("common_sealed"), T("spool_state_opened"), "In a printer", "Running low"]
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_import_csv_on_spools(hub, stock, tmp_path, width):
+    page = _go(hub, tmp_path, r"""
+await unlock();
+await until(() => $(".spools-more"), "spools more button");
+$(".spools-more").click();
+await until(() => $('[data-action="import-csv"]'), "spools csv menu");
+$('[data-action="import-csv"]').click();
+await until(() => $("#csv-import-spools input[type=file]"), "spools import drawer");
+const spIn = $("#csv-import-spools input[type=file]");
+const spDt = new DataTransfer();
+spDt.items.add(new File(["vendor,name,material,net\nPolymaker,PolyLite PLA,PLA,1000\n"], "spools.csv", { type: "text/csv" }));
+spIn.files = spDt.files;
+spIn.dispatchEvent(new Event("change", { bubbles: true }));
+await until(() => $("#csv-import-spools tbody tr") && !$("#csv-import-spools .btn--primary").disabled, "spools preview row");
+out.spPreview = text($("#csv-import-spools tbody"));
+$("#csv-import-spools .btn--primary").click();
+await until(() => !$("#csv-import-spools"), "spools drawer closed");
+""", width=width)
+    assert "Polymaker" in page["spPreview"]

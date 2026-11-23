@@ -57,6 +57,7 @@ MESSAGES = {
     "storage_error_container_in_use": "{name} holds spools. Move it first, or keep at least {least}.",
     "storage_error_containers_in_use": "{names} hold spools. Move them first, or keep at least {least}.",
     "storage_fix_containers_in_use": "Move the spools out of the containers above {count}, or enter {least} or more.",
+    "storage_warn_container_name": "Same name as a container in {set}.",
     "storage_error_remove_default_overflow": "Make another location the default overflow first.",
     "storage_fix_remove_default_overflow": "Mark another overflow location as the default, then remove {name}.",
     "storage_error_remove_sealed": "Choose another location for sealed spools first.",
@@ -79,6 +80,18 @@ def say(key: str, **fill) -> str:
 
 # ---------------------------------------------------------------- the data every interface shows
 
+def _container_clashes(st: Storage) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for x in st.locations:
+        if x.type == CONTAINERS or not isinstance(x.name, str):
+            continue
+        for st_ in st.locations:
+            if st_ is not x and st_.type == CONTAINERS and storage.is_container_name(st_, x.name):
+                out.append((x.name, st_.name))
+                break
+    return out
+
+
 def notices(st: Storage) -> list[dict]:
     """What the list says about itself, {code, text}: shown under it by the Hub page (warn notice) and by the command
     line (`Note:` line). `converted`: the migration kept two roles apart; `default_overflow_no_limit`: the default overflow cannot hold a limit while it takes everything."""
@@ -90,6 +103,13 @@ def notices(st: Storage) -> list[dict]:
             out.append({"code": "default_overflow_no_limit", "text": storage.DEFAULT_OVERFLOW_NOTE})
     except StopIteration:                  # a list not saved yet may have no default overflow: the errors say so
         pass
+    for loc_name, set_name in _container_clashes(st):
+        out.append({
+            "code": "container_name_clash",
+            "location": loc_name,
+            "set": set_name,
+            "text": f"{loc_name}: {say('storage_warn_container_name', set=set_name)}",
+        })
     return out
 
 

@@ -41,6 +41,102 @@ async function stDownloadCsv(set, fallback) {
 const stCsvItem = () => ({ label: stT("storage_download_csv"), icon: "download", action: "download-csv",
   run: () => needCode(async () => { try { await stDownloadCsv("locations", "locations.csv"); } catch (e) { if (e.locked) throw e; SW.toast(stT("storage_csv_failed", { reason: hubText(e.message) }), "bad"); } }) });
 
+const CSV_SAMPLES = {
+  spools: "vendor,name,material," + "colo" + "r_hex,count,net,tare,sealed,location,lot\nPolymaker,PolyTerra PLA Charcoal Black,PLA,#2B2B2E,2,1000,140,yes,,F57\nBambu Lab,PETG HF Orange,PETG,#F2762E,1,1000,,yes,Shelf B,\n",
+  locations: "name,type,limit,count,prefix,fill,materials,overflow,default_overflow,sealed\nShelf A,bulk,20,,,any,,no,no,no\nBins,containers,,6,Bin ,materials,PLA;PETG,yes,no,no\n",
+};
+function stOpenCsvImport({ kind, opener, onDone }) {
+  const isSpools = kind === "spools";
+  const title = SW.t(isSpools ? "csv_import_spools_title" : "csv_import_locations_title");
+  let lastPreview = null, rawText = "";
+  const fileField = SW.field({ label: SW.t("csv_import_file_label"), type: "file", accept: ".csv,text/csv" });
+  const fileIn = fileField.querySelector(".field__control");
+  const sampleLink = SW.btn(SW.t("csv_import_sample"), { cls: "btn--ghost", icon: "download", run: () => {
+    const url = URL.createObjectURL(new Blob([CSV_SAMPLES[kind]], { type: "text/csv;charset=utf-8" }));
+    const a = h("a", { href: url, download: `${kind}-sample.csv` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } });
+  const table = h("table", { class: "csv-import__table", hidden: true },
+    h("thead", {}, h("tr", {}, h("th", { textContent: SW.t("csv_import_col_no") }),
+      h("th", { textContent: SW.t(isSpools ? "csv_import_col_line" : "csv_import_col_line_locations") }),
+      h("th", { textContent: SW.t("csv_import_col_problems") }))),
+    h("tbody", {}));
+  const note = h("p", { class: "muted", hidden: true });
+  let region = null;
+  const checkBtn = SW.btn(SW.t("csv_import_check"), { disabled: true, run: () => runImport(true) });
+  const commitBtn = SW.btn(SW.t(isSpools ? "csv_import_add_spools" : "csv_import_commit_locations", { count: 0 }),
+    { cls: "btn--primary", disabled: true, run: () => runImport(false) });
+
+  async function runImport(dry) {
+    if (!rawText) return;
+    SW.fieldError(fileField, "");
+    try {
+      const r = await fetch(`/setup/api/import/${kind}?dry_run=${dry ? "1" : "0"}`, {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "text/csv; charset=utf-8", "X-Setup-Code": theCode() },
+        body: rawText,
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        if (r.status === 401 || r.status === 403) { const err = new Error(d.error || ""); err.locked = true; throw err; }
+        throw new Error(d.error || SW.t("common_hub_no_answer"));
+      }
+      if (!dry) {
+        SW.closeDetail(region);
+        SW.toast(isSpools ? SW.t("csv_import_added_spools", { count: d.add || 0 })
+          : SW.t("csv_import_imported_locations", { add: d.add || 0, change: d.change || 0 }), "ok");
+        if (onDone) await onDone(d);
+        return;
+      }
+      lastPreview = d;
+      const rows = d.rows || [];
+      const tbody = table.querySelector("tbody");
+      tbody.replaceChildren(...rows.map((row) => h("tr", {},
+        h("td", { textContent: String(row.n) }),
+        h("td", { textContent: row.line || "" }),
+        h("td", {}, row.problems && row.problems.length ? SW.status("bad", { small: true, text: row.problems.map((p) => p.text).join("; ") }) : ""))));
+      table.hidden = rows.length === 0;
+      const bad = rows.filter((row) => !row.ok).length;
+      note.textContent = bad ? SW.t("csv_import_left_out", { count: bad }) : "";
+      note.hidden = !bad;
+      if (isSpools) {
+        commitBtn.textContent = SW.t("csv_import_add_spools", { count: d.add || 0 });
+        commitBtn.disabled = !(d.add > 0);
+      } else {
+        commitBtn.disabled = !((d.add || 0) + (d.change || 0) > 0) || bad > 0;
+      }
+    } catch (e) {
+      if (e.locked) { SW.closeDetail(region); needCode(() => stOpenCsvImport({ kind, opener, onDone })); return; }
+      SW.fieldError(fileField, hubText(e.message));
+    }
+  }
+  fileIn.addEventListener("change", async () => {
+    const f = fileIn.files && fileIn.files[0];
+    lastPreview = null; rawText = "";
+    table.hidden = true; note.hidden = true;
+    commitBtn.disabled = true; checkBtn.disabled = !f;
+    SW.fieldError(fileField, "");
+    if (!f) return;
+    rawText = await f.text();
+    await runImport(true);
+  });
+  const body = h("div", { class: "csv-import" }, fileField, sampleLink, table, note, h("div", { class: "actions" }, checkBtn, commitBtn));
+  const id = `csv-import-${kind}`;
+  const prev = document.getElementById(id);
+  if (prev) prev.remove();
+  region = h("section", { class: "detail", id, "aria-labelledby": id + "-title", hidden: true },
+    h("header", { class: "detail__head" },
+      SW.iconBtn("chevron", SW.t("detail_back", { name: title }), { cls: "detail__back" }),
+      h("h2", { class: "detail__title group__title", id: id + "-title", tabindex: "-1", textContent: title }),
+      SW.iconBtn("close", SW.t("detail_close", { name: title }), { cls: "detail__close" })),
+    h("div", { class: "detail__body" }, body));
+  region.addEventListener("sw:detail-close", () => region.remove());
+  document.body.append(region);
+  SW.openDetail(region, { opener });
+}
+window.SW_CSV_IMPORT = stOpenCsvImport;
+
 // ----- the rows' words -----
 function stFull(r) {
   if (r.used === null) return SW.t("common_unknown");      // Spoolman did not answer: the count is unknown, not 0
@@ -81,9 +177,19 @@ function storageGroup({ st }) {
   let panelData = st, previewing = 0, timer = 0;
   const add = SW.btn(SW.t("storage_add_location"), { cls: "btn--primary", icon: "plus", run: (e) => openEditor(null, e.currentTarget) });
   const barMore = SW.iconBtn("more", SW.t("common_more_actions_for", { name: SW.t("settings_storage_locations") }), { cls: "storage__barmore" });
-  SW.menu(barMore, () => [stCsvItem()], { label: SW.t("common_actions_for", { name: SW.t("settings_storage_locations") }) });
+  SW.menu(barMore, () => [
+    ...(hubCanExport("locations") ? [stCsvItem()] : []),
+    { label: SW.t("csv_import_menu"), icon: "upload", action: "import-csv", run: () => needCode(() => stOpenCsvImport({
+      kind: "locations", opener: barMore,
+      onDone: async () => {
+        const fresh = await loadStorage();
+        rows = fresh.locations.slice().sort((a, b) => a.position - b.position).map((l) => ({ ...l, materials: (l.materials || []).slice(), _key: l.id }));
+        panelData = fresh; paint(); input.value = JSON.stringify(stPayload(rows));
+      },
+    })) },
+  ], { label: SW.t("common_actions_for", { name: SW.t("settings_storage_locations") }) });
   const body = [
-    h("div", { class: "storage__bar" }, h("h3", { class: "settings__heading", textContent: SW.t("settings_storage_locations") }), h("div", { class: "actions" }, add, hubCanExport("locations") ? barMore : null)),
+    h("div", { class: "storage__bar" }, h("h3", { class: "settings__heading", textContent: SW.t("settings_storage_locations") }), h("div", { class: "actions" }, add, barMore)),
     table, notices,
     h("section", { class: "storage__panel", "aria-labelledby": "storage-panel-title" },
       h("h3", { class: "settings__heading", id: "storage-panel-title", textContent: SW.t("storage_panel_title") }), panel),
@@ -97,7 +203,7 @@ function storageGroup({ st }) {
   const rowOf = (key) => rows.find((r) => r._key === key);
   const build = (row) => {
     const v = { pos: h("span", { class: "storage__pos mono" }), name: h("span", { class: "coll__title-text storage__name" }), type: h("span", { class: "coll__sub storage__type" }),
-      badges: h("span", { class: "storage__badges" }), errors: h("span", { class: "storage__errors" }), full: h("span", { class: "storage__text" }), takes: h("span", { class: "storage__text" }) };
+      clash: h("span", { class: "storage__clash" }), badges: h("span", { class: "storage__badges" }), errors: h("span", { class: "storage__errors" }), full: h("span", { class: "storage__text" }), takes: h("span", { class: "storage__text" }) };
     v.edit = SW.btn(SW.t("common_edit"), { run: (e) => openEditor(rowOf(row._key), e.currentTarget) });
     v.up = SW.iconBtn("chevron", "", { cls: "storage__move storage__move--up", run: () => move(row._key, -1) });
     v.down = SW.iconBtn("chevron", "", { cls: "storage__move storage__move--down", run: () => move(row._key, 1) });
@@ -110,7 +216,7 @@ function storageGroup({ st }) {
     }, { get label() { return SW.t("common_actions_for", { name: rowOf(row._key).name }); } });
     v.el = h("div", { class: "coll__item", role: "rowgroup", "data-id": row._key },
       h("div", { class: "coll__row", role: "row" },
-        h("div", { class: "coll__cell", role: "cell", "data-col": "title", "data-prio": 1 }, h("span", { class: "storage__head" }, v.pos, v.name), v.type, v.badges, v.errors),
+        h("div", { class: "coll__cell", role: "cell", "data-col": "title", "data-prio": 1 }, h("span", { class: "storage__head" }, v.pos, v.name), v.type, v.clash, v.badges, v.errors),
         cell("full", "settings_storage_col_full", v.full), cell("takes", "settings_storage_col_takes", v.takes),
         h("div", { class: "coll__cell", role: "cell", "data-col": "actions" }, h("div", { class: "actions" }, v.edit, v.up, v.down, v.more))));
     items.set(row._key, v);
@@ -122,6 +228,8 @@ function storageGroup({ st }) {
     v.pos.textContent = String(i + 1);
     v.name.textContent = row.name || "";
     v.type.textContent = SW.t(row.type === "containers" ? "storage_type_containers" : "storage_type_bulk");
+    const clash = row.type !== "containers" && (panelData.notices || []).find((n) => n.code === "container_name_clash" && n.location === row.name);
+    v.clash.replaceChildren(...(clash ? [SW.status("needs_look", { small: true, text: SW.t("storage_warn_container_name", { set: clash.set }) })] : []));
     v.badges.replaceChildren(...[row.overflow ? "storage_badge_overflow" : null, row.default_overflow ? "storage_badge_default_overflow" : null,
       row.sealed ? "storage_badge_sealed" : null].filter(Boolean).map((k) => SW.status("note", { small: true, text: SW.t(k) })));
     v.full.textContent = stFull(row);
