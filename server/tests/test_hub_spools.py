@@ -133,17 +133,22 @@ out.field = { label: text($(".spools-toolbar .field__label")), hint: text($(".sp
 // the four chips that filter on the list's own state, each alone (the fifth, Checked out, has its own tests)
 out.chip = {};
 for (const f of ["sealed", "opened", "loaded", "low"]) {
+  const before = JSON.stringify(ids());
   chip(f).click();
-  await sleep(700);
+  await settle(() => chip(f).getAttribute("aria-pressed") === "true" && JSON.stringify(ids()) !== before, "chip " + f);
   out.chip[f] = state();
 }
-chip("low").click(); await sleep(500);                  // the chip that is on, pressed again, is off
+const beforeOff = JSON.stringify(ids());
+chip("low").click();
+await settle(() => chip("low").getAttribute("aria-pressed") !== "true" && JSON.stringify(ids()) !== beforeOff, "low off");
 out.low_off = state();
 // search: words match brand, name, material, place, number and tag
 const q = {};
 for (const w of ["sealed stock", "ams a1", "4:a1", "rack 2", "polymaker pla"]) { await type(w); q[w] = state(); }
 out.q = q;
-chip("low").click(); await sleep(600);
+const beforeQlow = JSON.stringify(ids());
+chip("low").click();
+await settle(() => chip("low").getAttribute("aria-pressed") === "true" && JSON.stringify(ids()) !== beforeQlow, "q low");
 out.qlow = state();                                   // "polymaker pla" and low
 await type("rack 2");
 out.rack2low = state();
