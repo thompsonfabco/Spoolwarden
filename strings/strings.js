@@ -2952,6 +2952,7 @@ window.SW_TEXT = Object.freeze({
   "storage_remove_title": "Remove {name}?",
   "storage_remove_body": { "one": "{count} spool is recorded there. It keeps that location until you move it; it is no longer offered for new spools.", "other": "{count} spools are recorded there. They keep that location until you move them; it is no longer offered for new spools." },
   "storage_remove_body_none": "No spools are recorded there.",
+  "storage_remove_body_unknown": "Spool count is unknown right now. Any spools there keep that location until you move them; it is no longer offered for new spools.",
   "storage_notice_converted": "Storage locations were converted. Check them.",
   "storage_check_not_saved": "Storage locations could not be saved ({reason}).",
   "storage_check_not_read": "Storage locations could not be read ({reason}).",

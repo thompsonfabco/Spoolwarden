@@ -248,11 +248,17 @@ function storageGroup({ st }) {
     const join = SW.t("storage_panel_join");
     panel.replaceChildren(...[...(panelData.order_by_material || []).map((m) => SW.t("storage_panel_line", { material: m.material, places: m.locations.join(join) })),
       SW.t("storage_panel_line", { material: SW.t("storage_panel_everything_else"), places: (panelData.everything_else || []).join(join) })].map((t1) => h("li", { textContent: t1 })));
-    notices.replaceChildren(...(panelData.notices || []).filter((n) => STORAGE_NOTICES[n.code]).map((n) => {
+    const list = (panelData.notices || []).filter((n) => STORAGE_NOTICES[n.code]).map((n) => {
       const b = SW.banner({ kind: STORAGE_NOTICES[n.code][0], inline: true, text: SW.t(STORAGE_NOTICES[n.code][1]) });
       b.dataset.notice = n.code;
       return b;
-    }));
+    });
+    if (panelData.counts_unavailable) {
+      const b = SW.banner({ kind: "warn", inline: true, text: SW.t("common_spoolman_unreachable") });
+      b.dataset.notice = "spoolman_unreachable";
+      list.push(b);
+    }
+    notices.replaceChildren(...list);
   };
   const preview = () => {
     clearTimeout(timer);
@@ -297,10 +303,11 @@ function storageGroup({ st }) {
     SW.announce(row.name + ": " + SW.t(flag === "sealed" ? "storage_badge_sealed" : "storage_badge_default_overflow"));
   }
   async function remove(row, opener) {
-    const refusal = row.default_overflow ? SW.t("storage_error_remove_default_overflow") : row.sealed ? SW.t("storage_error_remove_sealed") : null, n = row.used || 0;
+    const refusal = row.default_overflow ? SW.t("storage_error_remove_default_overflow") : row.sealed ? SW.t("storage_error_remove_sealed") : null, n = row.used;
     if (document.querySelector(`#storage-detail-${CSS.escape(row._key)}`) && !(await SW.closeDetail(document.querySelector(`#storage-detail-${CSS.escape(row._key)}`), { focus: false }))) return;
+    const body = n === null || n === undefined ? SW.t("storage_remove_body_unknown") : n ? SW.t("storage_remove_body", { count: n }) : SW.t("storage_remove_body_none");
     const ok = await SW.ask({ kind: "destructive", title: SW.t("storage_remove_title", { name: row.name }), opener,
-      text: n ? SW.t("storage_remove_body", { count: n }) : SW.t("storage_remove_body_none"), confirm: SW.t("common_remove"),
+      text: body, confirm: SW.t("common_remove"),
       run: refusal ? async (_, { result }) => { SW.result(result, "bad", refusal); return false; } : undefined });
     if (!ok) return;
     const i = rows.indexOf(row);

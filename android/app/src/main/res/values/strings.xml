@@ -4138,6 +4138,7 @@
         <item quantity="other">%1$d spools are recorded there. They keep that location until you move them; it is no longer offered for new spools.</item>
     </plurals>
     <string name="storage_remove_body_none">No spools are recorded there.</string>
+    <string name="storage_remove_body_unknown">Spool count is unknown right now. Any spools there keep that location until you move them; it is no longer offered for new spools.</string>
     <string name="storage_notice_converted">Storage locations were converted. Check them.</string>
     <!-- 1=reason -->
     <string name="storage_check_not_saved">Storage locations could not be saved (%1$s).</string>
