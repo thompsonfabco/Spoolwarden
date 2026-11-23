@@ -1,11 +1,13 @@
 package com.thompsonfabco.filamentkit.ui.spool
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.UndoAnswer
 import com.thompsonfabco.filamentkit.net.UndoState
 import com.thompsonfabco.filamentkit.ui.history.UndoKinds
 import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
 import com.thompsonfabco.filamentkit.ui.history.undoOfferFor
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -104,7 +106,7 @@ class SpoolUndoOfferTest {
         backend.events = listOf(event(31, UndoKinds.EMPTIED))
         val e = vm.findUndo(vm.state.value.undoOffer!!)!!
         assertEquals(31L, e.id)
-        assertEquals(UndoOutcome.Done("Put back."), vm.undoOnHub(e))
+        assertEquals(UndoOutcome.Done(Say.Words(R.string.spools_put_back)), vm.undoOnHub(e))
         advanceUntilIdle()
         assertEquals(listOf(31L), backend.undone)
         assertNull(vm.state.value.result)
@@ -149,7 +151,7 @@ class SpoolUndoOfferTest {
         advanceUntilIdle()
         val outcome = vm.undoRow(vm.state.value.activity.single())
         advanceUntilIdle()
-        assertEquals(UndoOutcome.Done("Put back."), outcome)
+        assertEquals(UndoOutcome.Done(Say.Words(R.string.spools_put_back)), outcome)
         assertEquals(listOf(7L), backend.undone)
         assertNull(vm.state.value.undoing)
     }

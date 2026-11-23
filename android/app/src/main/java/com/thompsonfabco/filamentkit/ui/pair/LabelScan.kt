@@ -9,18 +9,7 @@ import kotlinx.coroutines.CancellationException
  * not know), [rescan] counts up to start scanning again after a read that did not end it.
  */
 class LabelScan(val notice: String? = null, val rescan: Int = 0) {
-    /**
-     * The texts of Scan a label that are not in the string catalogue yet. Only the texts owner opens `strings/en.json`;
-     * each text has a proposed key in the RC5 report and moves there with it.
-     */
     companion object {
-        const val SCAN_BUTTON = "Scan a label"
-        const val HINT = "Point the camera at the spool's label"
-        const val DENIED = "The camera is needed to scan a spool's label. You can allow it in the phone's app settings."
-        const val FAILED = "The camera could not start, so the label can't be scanned."
-        const val NOT_LABEL_TEXT = "This is not a Spoolwarden spool label."
-        const val NOT_FOUND_TEXT = "This label's spool was not found on this Hub."
-
         /** How long a notice stays over the preview, and how long after a read that found nothing the camera reads again. */
         const val NOTICE_MS = 3_000L
         const val RESCAN_MS = 1_500L

@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.search
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.SpoolsAnswer
@@ -8,6 +9,7 @@ import com.thompsonfabco.filamentkit.net.UndoState
 import com.thompsonfabco.filamentkit.ui.history.ActivityBackend
 import com.thompsonfabco.filamentkit.ui.history.UndoFlow
 import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -155,7 +157,7 @@ class SearchCheckedOutTest {
         vm.returnToHome(vm.state.value.checked.first { it.id == 1 })
         assertEquals(listOf(1), returned)
         assertEquals(listOf(2), vm.state.value.checked.map { it.id })
-        assertEquals("Returned to Shelf B.", vm.state.value.returnToast!!.text)
+        assertEquals(Say.Words(R.string.spools_returned_to, listOf("Shelf B")), vm.state.value.returnToast!!.text)
         assertEquals(8L, vm.state.value.returnToast!!.event!!.id)
         assertNull(vm.state.value.returningId)
     }
@@ -165,10 +167,10 @@ class SearchCheckedOutTest {
         vm.setCheckedOnly(true)
         returnedAt = "Dry box 1"
         vm.returnToHome(vm.state.value.checked.first { it.id == 1 })
-        assertEquals("Returned to Dry box 1.", vm.state.value.returnToast!!.text)
+        assertEquals(Say.Words(R.string.spools_returned_to, listOf("Dry box 1")), vm.state.value.returnToast!!.text)
         returnedAt = null
         vm.returnToHome(vm.state.value.checked.first { it.id == 2 })
-        assertEquals("Returned.", vm.state.value.returnToast!!.text)
+        assertEquals(Say.Words(R.string.spools_returned), vm.state.value.returnToast!!.text)
     }
 
     @Test fun anOlderEventKindOffersNoUndo() {

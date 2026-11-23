@@ -1,8 +1,10 @@
 package com.thompsonfabco.filamentkit.ui.settings
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -27,10 +29,10 @@ internal class VoiceModel(
     private val _state = MutableStateFlow(VoiceUi())
     val state: StateFlow<VoiceUi> = _state.asStateFlow()
 
-    private val _said = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    private val _said = MutableSharedFlow<Say>(extraBufferCapacity = 4)
 
     /** A sentence for a snackbar: the result of Test, or why a save did not take. */
-    val said: SharedFlow<String> = _said.asSharedFlow()
+    val said: SharedFlow<Say> = _said.asSharedFlow()
 
     /** Reads the Hub's voice: no such route (404) is no group; unreachable keeps the last answer, marked offline. */
     fun refresh() {
@@ -87,7 +89,7 @@ internal class VoiceModel(
         scope.launch {
             try {
                 a.testVoice(req.speaker, req.speed, req.volume)
-                _said.tryEmit(VoiceTexts.TEST_PLAYED)
+                _said.tryEmit(Say.Words(R.string.settings_voice_test_ok))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {
@@ -99,7 +101,7 @@ internal class VoiceModel(
             } catch (e: FingerprintMismatch) {
                 onProblem(e)
             } catch (_: Exception) {
-                _said.tryEmit(VoiceTexts.TEST_NO_ANSWER)
+                _said.tryEmit(Say.Words(R.string.settings_voice_test_no_answer))
             } finally {
                 _state.update { it.copy(testing = false) }
             }
@@ -110,10 +112,10 @@ internal class VoiceModel(
     private fun notSaved(e: ApiError?) {
         _state.update { it.copy(offline = it.offline || e?.isOffline() == true, revision = it.revision + 1) }
         when {
-            e == null -> _said.tryEmit(VoiceTexts.SAVE_FAILED)
+            e == null -> _said.tryEmit(Say.Words(R.string.voice_save_failed))
             e.isOffline() -> Unit
             e.code == "unauthorized" -> onProblem(e)
-            else -> _said.tryEmit(if (e.notFromHub) VoiceTexts.SAVE_FAILED else e.message)
+            else -> _said.tryEmit(if (e.notFromHub) Say.Words(R.string.voice_save_failed) else Say.FromHub(e.message))
         }
     }
 }

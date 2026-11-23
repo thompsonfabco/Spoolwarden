@@ -5831,4 +5831,213 @@
         <item quantity="one">Deletes %1$d correction waiting to be shared. Send it first in Settings > Label Reader, or go on.</item>
         <item quantity="other">Deletes %1$d corrections waiting to be shared. Send them first in Settings > Label Reader, or go on.</item>
     </plurals>
+    <string name="hub_glance_title">The Hub at a glance</string>
+    <string name="hub_glance_open">The Hub at a glance</string>
+    <string name="hub_change_on_page">Change this on the Hub page.</string>
+    <string name="hub_newest">Newest</string>
+    <string name="hub_update_available">Update available</string>
+    <string name="hub_last_backup">Last backup</string>
+    <string name="hub_engine">Engine</string>
+    <string name="hub_key">Key</string>
+    <string name="hub_not_known">Not known</string>
+    <!-- 1=time -->
+    <string name="hub_device_last_seen">last seen %1$s</string>
+    <!-- 1=name -->
+    <string name="hub_device_this">%1$s (this device)</string>
+    <string name="hub_out_of_date">Out of date</string>
+    <string name="hub_kind_builtin">Built-in</string>
+    <string name="hub_unavailable">This Hub cannot show this yet. Update the Hub to see it here.</string>
+    <!-- 1=done 2=total -->
+    <string name="hub_getting_started_line">Getting started on the Hub: %1$s of %2$s done</string>
+    <string name="hub_health_title">Check history</string>
+    <string name="hub_health_show_30">Show 30 days</string>
+    <string name="hub_health_show_7">Show 7 days</string>
+    <string name="hub_health_no_changes">No checks changed in this time.</string>
+    <string name="hub_health_state_bad">Needs fixing</string>
+    <!-- 1=date -->
+    <string name="hub_no_history_before">No history before %1$s.</string>
+    <!-- 1=time 2=check 3=from 4=to -->
+    <string name="hub_health_row_spoken">%1$s. %2$s: from %3$s to %4$s</string>
+    <string name="corrections_title">Corrections waiting</string>
+    <string name="corrections_line_on">Share corrections is on</string>
+    <!-- 1=count -->
+    <string name="corrections_line_on_count">Share corrections is on · %1$d waiting</string>
+    <string name="corrections_line_will_wait">Share corrections is on: this correction will wait on the Hub to be shared.</string>
+    <string name="corrections_line_check">Share corrections is on: fields you change here will wait on the Hub to be shared once the spools are added.</string>
+    <string name="corrections_line_waiting">This correction is waiting to be shared.</string>
+    <string name="corrections_line_no_photo">Not shared: no photo was kept for this record.</string>
+    <!-- 1=reason -->
+    <string name="corrections_line_not_waiting">Saved. The correction is not waiting to be shared: %1$s.</string>
+    <!-- 1=count 2=megabytes -->
+    <string name="corrections_head">%1$d waiting · %2$s MB</string>
+    <string name="corrections_head_text">Nothing is sent until Send now is pressed on the Hub page. Remove any you do not want to share.</string>
+    <string name="corrections_head_off">Share corrections is off, so no new corrections are added. These are still waiting.</string>
+    <string name="corrections_foot">Sending is done on the Hub page, under Settings > Label Reader.</string>
+    <string name="corrections_empty_title">No corrections waiting</string>
+    <string name="corrections_empty_text">Corrections you make in Recently added, or while adding spools, appear here.</string>
+    <string name="corrections_reader_down">The reader does not answer, so the corrections waiting cannot be shown. They are kept.</string>
+    <string name="corrections_unnamed">A correction</string>
+    <!-- 1=time 2=engine -->
+    <string name="corrections_row_meta">%1$s · %2$s</string>
+    <!-- 1=field 2=read 3=now -->
+    <string name="corrections_change">%1$s: %2$s → %3$s</string>
+    <!-- 1=note -->
+    <string name="corrections_note">Note: %1$s</string>
+    <!-- 1=reason -->
+    <string name="corrections_not_waiting">Not waiting: the reader did not take this correction. %1$s</string>
+    <string name="corrections_no_record">This record is no longer kept.</string>
+    <string name="corrections_no_photos">The photos of this correction are no longer on the Hub.</string>
+    <string name="corrections_removing">Removing…</string>
+    <string name="corrections_removed">Removed. The record in Recently added is unchanged.</string>
+    <!-- 1=field 2=read 3=now -->
+    <string name="corrections_a11y_change">%1$s, %2$s, becomes %3$s</string>
+    <!-- 1=name -->
+    <string name="corrections_a11y_remove">Remove the correction for %1$s</string>
+    <!-- 1=name 2=time 3=count -->
+    <plurals name="corrections_a11y_row">
+        <item quantity="one">%1$s, corrected %2$s, %3$d change</item>
+        <item quantity="other">%1$s, corrected %2$s, %3$d changes</item>
+    </plurals>
+    <!-- 1=name 2=time 3=engine 4=count -->
+    <plurals name="corrections_a11y_row_engine">
+        <item quantity="one">%1$s, corrected %2$s, read by %3$s, %4$d change</item>
+        <item quantity="other">%1$s, corrected %2$s, read by %3$s, %4$d changes</item>
+    </plurals>
+    <!-- 1=name -->
+    <string name="corrections_a11y_removing">Removing the correction for %1$s</string>
+    <!-- 1=name 2=count -->
+    <string name="corrections_a11y_photos">Photos of the correction for %1$s: %2$d</string>
+    <!-- 1=note -->
+    <string name="history_put_back_note">Put back. %1$s</string>
+    <string name="history_undo_update_hub">Update the Hub to use Undo.</string>
+    <string name="history_undo_failed">Nothing was undone. Try again.</string>
+    <string name="history_activity_title">Recent activity</string>
+    <string name="history_by_month">By month</string>
+    <string name="history_downloading">Downloading…</string>
+    <string name="history_no_months">No months to show yet.</string>
+    <string name="history_months_update_hub">Update the Hub to see filament used by month.</string>
+    <string name="history_csv_update_hub">Update the Hub to download this file.</string>
+    <string name="history_csv_not_saved">The file could not be saved on this phone. Is there enough free space?</string>
+    <!-- 1=count -->
+    <plurals name="history_prints">
+        <item quantity="one">%1$d print</item>
+        <item quantity="other">%1$d prints</item>
+    </plurals>
+    <!-- 1=count -->
+    <string name="history_unfinished">%1$d did not finish</string>
+    <!-- 1=material -->
+    <string name="history_most_used">Most used: %1$s</string>
+    <string name="catalog_field_name">Name *</string>
+    <string name="catalog_field_other_material">Other material *</string>
+    <string name="catalog_nozzle_from">Nozzle temperature from (°C)</string>
+    <string name="catalog_nozzle_to">Nozzle temperature to (°C)</string>
+    <string name="catalog_bed_from">Bed temperature from (°C)</string>
+    <string name="catalog_bed_to">Bed temperature to (°C)</string>
+    <string name="catalog_fill_name">Fill in Brand, Name and Material.</string>
+    <string name="catalog_hide_entries">Hide custom entries</string>
+    <string name="catalog_entries_empty">You have not added any entries of your own yet.</string>
+    <string name="catalog_entries_loading">Loading your entries…</string>
+    <string name="catalog_entries_update_hub">Update the Hub to see your own entries.</string>
+    <!-- 1=date -->
+    <string name="catalog_entry_added">Added %1$s</string>
+    <!-- 1=entry -->
+    <string name="catalog_remove_entry">Remove %1$s</string>
+    <!-- 1=entry -->
+    <string name="catalog_remove_title">Remove %1$s?</string>
+    <!-- 1=entry -->
+    <string name="catalog_remove_question">Remove %1$s from your own entries? Slicer presets are rebuilt.</string>
+    <string name="voice_hint_remote">Chosen on the Weigh Station\'s own computer: spoolwarden config.</string>
+    <string name="voice_save_failed">The change was not saved.</string>
+    <string name="spool_load_auto_waiting">Waiting for the spool to be loaded.</string>
+    <!-- 1=printer -->
+    <string name="spool_load_auto_title">Load into %1$s: Automatic</string>
+    <string name="spool_load_the_spool">the spool</string>
+    <string name="spool_load_auto_hint">The slot where the spool appears.</string>
+    <string name="spool_load_auto_refused">This printer has no slots the Hub can watch. Choose a slot.</string>
+    <!-- 1=percent -->
+    <string name="app_update_downloading_percent">Downloading… %1$s%%</string>
+    <string name="app_update_install_plain">Install</string>
+    <string name="app_update_banner">Update available</string>
+    <!-- 1=version -->
+    <string name="app_update_banner_version">Update available (Spoolwarden %1$s)</string>
+    <string name="printer_previous_place">its previous place</string>
+    <string name="printer_clear_bambu_note">The printer still shows the old filament for this slot until a spool is loaded.</string>
+    <string name="printer_clear_update_hub">Update the Hub to clear a slot.</string>
+    <string name="printer_unload_waiting_ended">The spool waiting for this slot is not waiting any more.</string>
+    <!-- 1=spool 2=slot 3=place -->
+    <string name="printer_unload_body_klipper">Unload %1$s from %2$s? It goes back to %3$s. The slot\'s setting on the printer is cleared too, when the printer is online and can do it.</string>
+    <!-- 1=label -->
+    <string name="printer_clear_title">Clear slot %1$s?</string>
+    <string name="printer_clear_forgets">The Hub forgets the spool recorded here.</string>
+    <!-- 1=spool 2=place -->
+    <string name="printer_clear_forgets_spool">The Hub forgets the spool recorded here. %1$s goes back to %2$s.</string>
+    <!-- 1=label -->
+    <string name="printer_clear_done">Cleared slot %1$s.</string>
+    <!-- 1=spool 2=place -->
+    <string name="printer_clear_spool_back">%1$s is back on %2$s.</string>
+    <string name="printer_clear_waiting_ended">The spool that was waiting for it is not waiting any more.</string>
+    <!-- 1=spool -->
+    <string name="printer_auto_choose">Two slots were loaded. Which one got %1$s?</string>
+    <string name="printer_guided_by_address">Type a Klipper printer\'s address</string>
+    <string name="printer_guided_bambu_address">Type a Bambu Lab printer\'s address</string>
+    <!-- 1=address -->
+    <string name="printer_guided_klipper_unreached">The Hub could not reach a Klipper printer at %1$s.</string>
+    <string name="demo_notice">Demo data. Nothing here is real.</string>
+    <string name="demo_leave">Leave demo</string>
+    <string name="demo_leave_title">Leave the demo?</string>
+    <string name="demo_leave_body">Everything in it is deleted.</string>
+    <!-- 1=app_version -->
+    <string name="app_version_unpaired">App %1$s · not paired</string>
+    <!-- 1=app_version 2=server_version -->
+    <string name="app_version_server">App %1$s · Server %2$s</string>
+    <string name="label_scan_button">Scan a label</string>
+    <string name="label_scan_hint">Point the camera at the spool\'s label</string>
+    <string name="label_scan_denied">The camera is needed to scan a spool\'s label. You can allow it in the phone\'s app settings.</string>
+    <string name="label_scan_failed">The camera could not start, so the label can\'t be scanned.</string>
+    <string name="label_scan_not_label">This is not a Spoolwarden spool label.</string>
+    <string name="label_scan_not_found">This label\'s spool was not found on this Hub.</string>
+    <string name="settings_language_title">Language</string>
+    <string name="settings_language_helper">Automatic uses this phone\'s language if the app has it, otherwise the Hub\'s language.</string>
+    <string name="settings_language_machine_translated">(machine-translated)</string>
+    <string name="spool_weight_hint_empty">Type the weight with the spool to update it.</string>
+    <string name="spool_weight_hint_invalid">Type a weight in grams, more than 0.</string>
+    <string name="spool_tare_invalid">Empty spool weight must be more than 0 g</string>
+    <string name="label_print_button">Print</string>
+    <string name="label_print_size">Size</string>
+    <string name="label_size_small">62 x 29 mm</string>
+    <string name="label_size_medium">50 x 30 mm</string>
+    <string name="label_print_sheets_note">Sheets of labels are printed from the Hub page or the web app.</string>
+    <string name="label_print_address_note">The code holds this Hub\'s home address. If the Hub is renamed or moves to another port, old labels still open in this app\'s scanner but not from a phone\'s camera.</string>
+    <string name="label_print_error">Could not draw the label.</string>
+    <!-- 1=reason -->
+    <string name="label_print_error_reason">Could not draw the label. %1$s</string>
+    <!-- 1=id 2=name 3=material -->
+    <string name="label_print_preview">Label of spool %1$s: %2$s, %3$s</string>
+    <!-- 1=id 2=name 3=material 4=grams -->
+    <string name="label_print_preview_left">Label of spool %1$s: %2$s, %3$s, %4$s g</string>
+    <string name="pair_cert_trust_failed">The new certificate could not be trusted yet. Check that the Hub is reachable and try again, or pair again.</string>
+    <string name="preset_updates_title">Preset updates</string>
+    <string name="preset_updates_intro">A newer build would change these Slicer presets already in your slicers. Nothing is written over until you accept.</string>
+    <string name="preset_updates_none">No preset in your slicers needs an update.</string>
+    <string name="preset_updates_restore">Restore Slicer presets deleted in Bambu Studio</string>
+    <string name="preset_updates_restored">The next build brings them back; your PC installs it at its next sync.</string>
+    <string name="preset_updates_changed">The updates changed since this list (a newer build came). Nothing was accepted; check the new list.</string>
+    <string name="preset_updates_loading">Loading updates…</string>
+    <!-- 1=count -->
+    <plurals name="preset_updates_accept">
+        <item quantity="one">Accept %1$d update</item>
+        <item quantity="other">Accept %1$d updates</item>
+    </plurals>
+    <!-- 1=accepted -->
+    <string name="preset_updates_nothing_waiting">Nothing waiting; %1$s accepted, written at the next Slicer Sync.</string>
+    <!-- 1=count -->
+    <string name="preset_updates_accepted">%1$d accepted: your PC writes them over the Slicer presets at its next Slicer Sync.</string>
+    <string name="preset_updates_target_orca">OrcaSlicer</string>
+    <string name="preset_updates_changed_values">changed values</string>
+    <!-- 1=names -->
+    <string name="preset_updates_yours">Never written over (your own preset of that name): %1$s</string>
+    <string name="preset_updates_module_off">Slicer presets are switched off on this Hub.</string>
+    <string name="preset_updates_offline">Could not reach the Hub. Check that you are on the same network.</string>
+    <string name="preset_updates_unexpected">Unexpected response from the Hub</string>
+    <string name="preset_updates_close">Close</string>
 </resources>

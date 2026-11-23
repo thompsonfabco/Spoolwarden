@@ -52,7 +52,7 @@ fun List<LocationRow>.holder(current: String?): LocationRow? =
 
 /** The rows in fill order: one per location (a containers location is one row). */
 fun StorageAnswer.rows(): List<LocationRow> = locations.map {
-    val text = it.howFullText()
+    val text = it.howFullText() ?: if (countsUnavailable) AddText.of(R.string.common_unknown) else null
     LocationRow(it.name, text, full = text?.res == R.string.storage_full, containers = it.containers, containerNames = it.containerNames)
 }
 

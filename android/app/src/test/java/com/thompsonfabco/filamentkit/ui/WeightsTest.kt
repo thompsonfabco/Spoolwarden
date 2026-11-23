@@ -1,12 +1,21 @@
 package com.thompsonfabco.filamentkit.ui
 
+import android.os.Build
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [Build.VERSION_CODES.S])
 class WeightsTest {
+    private val context = RuntimeEnvironment.getApplication()
+
     @Test fun acceptsOnlyFinitePositiveGrams() {
         assertEquals(812.0, parseWeight("812")!!, 0.0)
         assertEquals(12.5, parseWeight(" 12.5 ")!!, 0.0)
@@ -17,14 +26,14 @@ class WeightsTest {
 
     @Test fun theWeightHintSaysWhyUpdateWeightIsGreyed() {
         assertNull(weightHint("812"))
-        assertEquals("Type the weight with the spool to update it.", weightHint(" "))
-        for (bad in listOf("abc", "0", "-1")) assertEquals("Type a weight in grams, more than 0.", weightHint(bad))
+        assertEquals("Type the weight with the spool to update it.", context.getString(weightHint(" ")!!))
+        for (bad in listOf("abc", "0", "-1")) assertEquals("Type a weight in grams, more than 0.", context.getString(weightHint(bad)!!))
     }
 
     @Test fun tareMustBeMoreThanZero() {
-        assertEquals("Empty spool weight must be more than 0 g", tareProblem("0"))
-        assertEquals(TARE_PROBLEM, tareProblem("-12"))
-        assertEquals(TARE_PROBLEM, tareProblem("abc"))
+        assertEquals("Empty spool weight must be more than 0 g", context.getString(tareProblem("0")!!))
+        assertEquals("Empty spool weight must be more than 0 g", context.getString(tareProblem("-12")!!))
+        assertEquals("Empty spool weight must be more than 0 g", context.getString(tareProblem("abc")!!))
         assertNull("blank = unknown", tareProblem(""))
         assertNull(tareProblem("  "))
         assertNull(tareProblem("213"))

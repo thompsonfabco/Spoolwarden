@@ -1,8 +1,10 @@
 package com.thompsonfabco.filamentkit.ui.history
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.UndoWhyNot
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.coroutines.CancellationException
 import kotlin.math.max
 
@@ -26,10 +28,10 @@ data class UndoOffer(val subjects: List<String>, val kinds: Set<String>, val ser
 
 /** What pressing Undo came to: [text] is what the toast says next. */
 sealed interface UndoOutcome {
-    val text: String
+    val text: Say
 
-    data class Done(override val text: String) : UndoOutcome
-    data class Refused(override val text: String) : UndoOutcome
+    data class Done(override val text: Say) : UndoOutcome
+    data class Refused(override val text: Say) : UndoOutcome
 }
 
 /** The rules of the undo toast, pure so they are tested without a screen. */
@@ -59,28 +61,33 @@ object UndoRules {
     }
 
     /** The words of a refusal: the Hub's own `message` when it sent one, else ours for its `error`. */
-    fun refusal(e: Throwable): String {
-        if (e !is ApiError) return HistoryTexts.UNDO_FAILED
+    fun refusal(e: Throwable): Say {
+        if (e !is ApiError) return Say.Words(R.string.history_undo_failed)
         val hubText = e.message.takeUnless { e.notFromHub }
         return when {
-            hubText != null && e.status == CONFLICT -> hubText
+            hubText != null && e.status == CONFLICT -> Say.FromHub(hubText)
             e.status == CONFLICT -> whyNot(e.code)
-            e.status == NOT_FOUND -> HistoryTexts.UNDO_UPDATE_HUB
-            e.status != 0 && !e.notFromHub -> e.message
-            else -> HistoryTexts.UNDO_FAILED
+            e.status == NOT_FOUND -> Say.Words(R.string.history_undo_update_hub)
+            e.status != 0 && !e.notFromHub -> Say.FromHub(e.message)
+            else -> Say.Words(R.string.history_undo_failed)
         }
     }
 
     /** Our words for a `why_not` value. */
-    fun whyNot(code: String?): String = when (code) {
-        UndoWhyNot.CHANGED_SINCE -> HistoryTexts.UNDO_CHANGED_SINCE
-        UndoWhyNot.TOO_OLD -> HistoryTexts.UNDO_TOO_OLD
-        UndoWhyNot.ALREADY_UNDONE -> HistoryTexts.UNDO_ALREADY_UNDONE
-        else -> HistoryTexts.UNDO_NOT_UNDOABLE
-    }
+    fun whyNot(code: String?): Say = Say.Words(
+        when (code) {
+            UndoWhyNot.CHANGED_SINCE -> R.string.undo_why_changed_since
+            UndoWhyNot.TOO_OLD -> R.string.undo_why_too_old
+            UndoWhyNot.ALREADY_UNDONE -> R.string.undo_why_already_undone
+            else -> R.string.undo_why_not_undoable
+        },
+    )
 
     /** "Put back." and, for a load or an unload, the Hub's note after it. */
-    fun done(note: String?): String = listOfNotNull(HistoryTexts.PUT_BACK, note?.takeIf { it.isNotBlank() }).joinToString(" ")
+    fun done(note: String?): Say {
+        val extra = note?.takeIf { it.isNotBlank() } ?: return Say.Words(R.string.spools_put_back)
+        return Say.Words(R.string.history_put_back_note, listOf(extra))
+    }
 
     private const val CONFLICT = 409
     private const val NOT_FOUND = 404

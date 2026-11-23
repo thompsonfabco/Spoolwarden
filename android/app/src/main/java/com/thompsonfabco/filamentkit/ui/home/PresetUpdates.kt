@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.home
 
+import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
@@ -15,14 +16,20 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.AcceptedUpdates
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.PresetUpdate
 import com.thompsonfabco.filamentkit.net.PresetUpdates
+import com.thompsonfabco.filamentkit.ui.printers.Say
+import com.thompsonfabco.filamentkit.ui.printers.sayText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,30 +53,19 @@ interface PresetUpdatesBackend {
 }
 
 object PresetUpdateTexts {
-    const val TITLE = "Preset updates"
-    const val INTRO = "A newer build would change these Slicer presets already in your slicers. Nothing is written over until you accept."
-    const val NONE = "No preset in your slicers needs an update."
-    const val RESTORE = "Restore Slicer presets deleted in Bambu Studio"
-    const val RESTORED = "The next build brings them back; your PC installs it at its next sync."
-    const val CHANGED = "The updates changed since this list (a newer build came). Nothing was accepted; check the new list."
-    const val LOADING = "Loading updates…"
-
-    fun accept(n: Int) = "Accept $n update${if (n == 1) "" else "s"}"
-    fun nothingWaiting(accepted: Int) = "Nothing waiting; $accepted accepted, written at the next Slicer Sync."
-    fun accepted(n: Int) = "$n accepted: your PC writes them over the Slicer presets at its next Slicer Sync."
-    fun slicer(target: String) = when (target) {
-        "bambu_studio", "bambu" -> "Bambu Studio"
-        "orca_slicer", "orca" -> "OrcaSlicer"
+    fun accepted(n: Int): Say = Say.Words(R.string.preset_updates_accepted, listOf(n))
+    fun slicer(context: Context, target: String) = when (target) {
+        "bambu_studio", "bambu" -> context.getString(R.string.presets_target_bambu)
+        "orca_slicer", "orca" -> context.getString(R.string.preset_updates_target_orca)
         else -> target
     }
-    fun row(u: PresetUpdate) = "${u.name} (${slicer(u.target)}): " + u.keys.joinToString(", ").ifEmpty { "changed values" }
-    fun yours(names: List<String>) = "Never written over (your own preset of that name): ${names.joinToString(", ")}"
-    fun error(e: Exception): String = when {
-        e is ApiError && e.code == "updates_changed" -> CHANGED
-        e is ApiError && e.code == "module_off" -> "Slicer presets are switched off on this Hub."
-        e is ApiError && e.code == "offline" -> "Could not reach the Hub. Check that you are on the same network."
-        e is ApiError -> e.message
-        else -> "Unexpected response from the Hub"
+    fun row(context: Context, u: PresetUpdate) = "${u.name} (${slicer(context, u.target)}): " + u.keys.joinToString(", ").ifEmpty { context.getString(R.string.preset_updates_changed_values) }
+    fun error(e: Exception): Say = when {
+        e is ApiError && e.code == "updates_changed" -> Say.Words(R.string.preset_updates_changed)
+        e is ApiError && e.code == "module_off" -> Say.Words(R.string.preset_updates_module_off)
+        e is ApiError && e.code == "offline" -> Say.Words(R.string.preset_updates_offline)
+        e is ApiError -> Say.FromHub(e.message)
+        else -> Say.Words(R.string.preset_updates_unexpected)
     }
 }
 
@@ -77,7 +73,7 @@ data class PresetUpdatesState(
     val list: PresetUpdates? = null,
     val loading: Boolean = false,
     val busy: Boolean = false,
-    val message: String? = null,
+    val message: Say? = null,
     val messageIsError: Boolean = false,
     val unauthorized: Boolean = false,
 )
@@ -120,7 +116,7 @@ class PresetUpdatesViewModel(private val backend: PresetUpdatesBackend) : ViewMo
         viewModelScope.launch {
             run({ _state.update { it.copy(busy = false) } }) {
                 backend.restoreDeleted()
-                _state.update { it.copy(message = PresetUpdateTexts.RESTORED, messageIsError = false) }
+                _state.update { it.copy(message = Say.Words(R.string.preset_updates_restored), messageIsError = false) }
             }
         }
     }
@@ -145,35 +141,40 @@ class PresetUpdatesViewModel(private val backend: PresetUpdatesBackend) : ViewMo
 fun PresetUpdatesDialog(vm: PresetUpdatesViewModel, onClose: () -> Unit) {
     val s by vm.state.collectAsState()
     val l = s.list
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = { if (!s.busy) onClose() },
-        title = { Text(PresetUpdateTexts.TITLE) },
+        title = { Text(stringResource(R.string.preset_updates_title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 when {
-                    l == null && s.loading -> Text(PresetUpdateTexts.LOADING)
+                    l == null && s.loading -> Text(stringResource(R.string.preset_updates_loading))
                     l == null -> Unit
                     l.waiting.isEmpty() -> Text(
-                        if (l.accepted > 0) PresetUpdateTexts.nothingWaiting(l.accepted) else PresetUpdateTexts.NONE,
+                        if (l.accepted > 0) stringResource(R.string.preset_updates_nothing_waiting, l.accepted)
+                        else stringResource(R.string.preset_updates_none),
                         style = MaterialTheme.typography.bodySmall,
                     )
                     else -> {
-                        Text(PresetUpdateTexts.INTRO, style = MaterialTheme.typography.bodySmall)
-                        l.waiting.forEach { Text("• " + PresetUpdateTexts.row(it)) }
+                        Text(stringResource(R.string.preset_updates_intro), style = MaterialTheme.typography.bodySmall)
+                        l.waiting.forEach { Text("• " + PresetUpdateTexts.row(context, it)) }
                         Button(onClick = vm::accept, enabled = !s.busy && !s.loading) {
-                            Text(if (s.busy) "Accepting…" else PresetUpdateTexts.accept(l.waiting.size))
+                            Text(
+                                if (s.busy) stringResource(R.string.common_accepting)
+                                else pluralStringResource(R.plurals.preset_updates_accept, l.waiting.size, l.waiting.size),
+                            )
                         }
                     }
                 }
                 if (l != null && l.yours.isNotEmpty()) {
-                    Text(PresetUpdateTexts.yours(l.yours), style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.preset_updates_yours, l.yours.joinToString(", ")), style = MaterialTheme.typography.bodySmall)
                 }
-                s.message?.let { Text(it, color = if (s.messageIsError) MaterialTheme.colorScheme.error else Color.Unspecified) }
+                s.message?.let { Text(sayText(it), color = if (s.messageIsError) MaterialTheme.colorScheme.error else Color.Unspecified) }
                 OutlinedButton(onClick = vm::restoreDeleted, enabled = !s.busy && !s.unauthorized) {
-                    Text(PresetUpdateTexts.RESTORE)
+                    Text(stringResource(R.string.preset_updates_restore))
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onClose, enabled = !s.busy) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onClose, enabled = !s.busy) { Text(stringResource(R.string.preset_updates_close)) } },
     )
 }
