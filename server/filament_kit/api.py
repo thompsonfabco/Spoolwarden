@@ -1406,8 +1406,10 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return await run_in_threadpool(intake_history.get, request.path_params["hid"])
 
     async def history_photo(request: Request):
-        data = await run_in_threadpool(intake_history.photo, request.path_params["hid"], request.path_params["n"])
-        return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+        thumb = request.query_params.get("size") == "thumb"
+        fn = intake_history.photo_thumb if thumb else intake_history.photo
+        data = await run_in_threadpool(fn, request.path_params["hid"], request.path_params["n"])
+        return Response(data, media_type="image/jpeg", headers=intake_history.photo_headers(data, thumb=thumb))
 
     async def history_revise(request: Request):
         body = await _json(request)
