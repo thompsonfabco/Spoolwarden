@@ -893,7 +893,7 @@ function printersTab() {
       { label: t("live_usage_more") });
     return more;
   }
-  // By month at tablet width and up: the monthly bars (02-components 7.12), drawn by the page as inline SVG in the accent colour, one bar per month, oldest on the left,
+  // By month at tablet width and up: the monthly bars, drawn by the page as inline SVG in the accent colour, one bar per month, oldest on the left,
   // the value in words above each bar and the month under it; the room decides if the words stand or lie (12 values do not fit above narrow bars)
   const SVGNS = "http://www.w3.org/2000/svg";
   const svg = (tag, attrs, ...kids) => { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, String(v)); e.append(...kids.filter(Boolean)); return e; };
