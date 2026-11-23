@@ -224,6 +224,23 @@ const REC_GROUPS = [["identity", "common_group_identity"], ["weights", "recent_g
   ["temperatures", "common_group_temperatures"], ["other", "common_group_other"]];
 const REC_BY = Object.fromEntries(REC_FIELDS.map((f) => [f.key, f]));
 const recLabel = (k) => (REC_BY[k] ? SW.t(REC_BY[k].label) : k);
+// the read confidence of a record (the design, components 7.2; web app 7.1): the Hub's `confidence` is {level, low, medium, not_on_label},
+// or null for a record typed by hand, and absent on a Hub that does not report it (then there is no filter and no line, as on the Hub page)
+const REC_LEVELS = ["low", "not_rated", "medium", "not_on_label"];                     // the lowest level first
+const recToCheck = (r) => !!(r.confidence && ((r.confidence.low || []).length || (r.confidence.medium || []).length));
+function recSummary(r) {
+  const c = r.confidence;
+  if (!c) return null;                                                                // by hand: no reading, no line
+  const parts = c.level === "high" ? [SW.status("high", { small: true })] : REC_LEVELS.map((lv) => {
+    if (lv === "not_rated") return c.level === "not_rated" || r.confidence_rated === false ? h("span", { class: "muted", textContent: SW.t("recent_confidence_not_rated") }) : null;
+    const fields = (c[lv] || []).map(recLabel).join(", ");
+    return fields ? SW.status(lv, { small: true, text: SW.t("confidence_summary_" + lv, { fields }) }) : null;
+  }).filter(Boolean);
+  if (!parts.length) return null;
+  const line = h("p", { class: "add__summary recent__confidence" });
+  parts.forEach((p, i) => line.append(...(i ? [" · ", p] : [p])));
+  return line;
+}
 // a value as the person reads it: "(empty)", the colour with its #, a number with its unit
 function recShow(k, v) {
   if (v == null || v === "") return SW.t("common_field_empty_value");
@@ -305,6 +322,7 @@ function historyTab() {
   const photo = (id, n) => `${BASE}/api/${hp(id, "photos/" + n)}`;
   let records = [], reader = false, keep = 0;                 // the list as the Hub last gave it; whether the Label Reader is on
   let addr = "", ready = Promise.resolve();                   // the record the address names; the list being read
+  let recFilter = "all";                                      // the filter: all, or the records to check (kept while the list is read again)
   const item = (id) => list.querySelector(`.coll__item[data-id="${CSS.escape(id)}"]`);
 
   // ----- the list (7.1) -----
@@ -316,8 +334,31 @@ function historyTab() {
       records = d.records; reader = !!d.ai; keep = d.keep;
       loadShare();
       intro.textContent = SW.t("recent_intro", { count: d.keep, size: SW.t("recent_size_mb", { value: (d.photo_bytes / 1048576).toFixed(1) }) });
-      return records.length ? table() : SW.empty({ icon: "recent", title: SW.t("recent_empty_title"), text: SW.t("recent_empty_text") });
+      return records.length ? listView() : SW.empty({ icon: "recent", title: SW.t("recent_empty_title"), text: SW.t("recent_empty_text") });
     });
+  }
+  // the filter (7.1): "All <n>" and "To check <n>", only when the Hub reports read confidence; it hides rows, so Newer and Older still find every record
+  function listView() {
+    const conf = records.some((r) => r.confidence !== undefined);
+    if (!conf) recFilter = "all";
+    const box = table();
+    if (!conf) return box;
+    const bar = SW.segmented({ legend: SW.t("recent_col_filament"), legendSr: true, name: "recent-filter", value: recFilter,
+      options: [{ value: "all", label: SW.t("recent_filter_all", { count: records.length }) },
+        { value: "check", label: SW.t("recent_filter_check", { count: records.filter(recToCheck).length }) }] });
+    bar.addEventListener("change", (e) => { setFilter(e.target.value); });
+    applyFilter(box);
+    return h("div", {}, h("div", { class: "coll__toolbar" }, bar), box);
+  }
+  function applyFilter(root = list) {
+    for (const it of root.querySelectorAll(".coll__item")) it.hidden = recFilter === "check" && !recToCheck(records.find((r) => r.id === it.dataset.id) || {});
+  }
+  function setFilter(v) {
+    recFilter = v;
+    applyFilter();
+    const radio = list.querySelector(`.segmented__input[value="${v}"]`);
+    if (radio) radio.checked = true;
+    if (addr && (item(addr) || {}).hidden) location.hash = "#recent";          // the record the address names is not in this list
   }
   // ----- share corrections (7.5): the link under the intro, the lines at Save and Accept, and the page of what waits -----
   async function loadShare() {
@@ -474,7 +515,8 @@ function historyTab() {
     const main = h("div", { class: "coll__row", role: "row" },
       cell("expand", "1", x), cell("visual", "1", listThumb(r)),
       cell("title", "1", h("a", { class: "coll__title", href: "#recent/" + id, textContent: name }),
-        h("span", { class: "coll__sub" }, recSource(r), " · ", h("time", { datetime: r.at, title: recWhen(r.at), textContent: recAge(r.at) }))),
+        h("span", { class: "coll__sub" }, recSource(r), " · ", h("time", { datetime: r.at, title: recWhen(r.at), textContent: recAge(r.at) })),
+        recSummary(r)),
       cell("status", "1", histMark(r.state)),
       cell("spool", "2", h("span", { class: "mono", textContent: recSpools(r.spools.map((s) => s.spool_id)) })));
     const reg = detail(r, name);
@@ -776,7 +818,8 @@ function historyTab() {
 
   // ----- the address: #recent/<id> opens the record in place under its row -----
   async function open(id) {
-    const it = item(id);
+    let it = item(id);
+    if (it && it.hidden) { setFilter("all"); it = item(id); }  // a record the filter hides, named by the address: the list shows all again
     if (!it) { missing.replaceChildren(goneNote()); return; }
     const reg = it._reg;
     if (reg.hidden) SW.openDetail(reg, { opener: it.querySelector(".coll__expand"), focusTitle: false });
@@ -965,12 +1008,23 @@ window.addEventListener("storage", (e) => {                 // another tab chose
 // ----- the Settings sheet or page -----
 const installed = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 let installPrompt = null;                                    // a browser that offers installing
-window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; });
+// the label says what the press does: a browser that makes the install offer after the page has drawn changes every
+// "Add to Home Screen" button on screen to "Install app" at once, and the buttons go when the app is installed
+const markInstall = (box, label) => { box.setAttribute("data-install", ""); label.setAttribute("data-install-label", ""); return box; };
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault(); installPrompt = e;
+  for (const l of document.querySelectorAll("[data-install-label]")) l.textContent = SW.t("nav_more_install");
+});
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  for (const b of document.querySelectorAll("[data-install]")) b.remove();
+});
 // wide: Settings as a page, which also holds "Add to Home Screen" (the More sheet is not there)
 function settingsBody(wide) {
   const group = (title, ...kids) => h("section", { class: "settings__group" }, h("h2", { class: "settings__title" }, title), ...kids);
   const live = () => h("p", { class: "result", role: "status" });   // the choice's own sentence goes here (shared script)
   const hubPageLink = () => HUB_PAGE ? h("a", { class: "btn", href: HUB_PAGE }, SW.t("common_open_hub_page")) : null;
+  const homeBtn = h("button", { class: "btn", type: "button", on: { click: (e) => addToHome(e.currentTarget) } }, installPrompt ? SW.t("nav_more_install") : SW.t("nav_more_home_screen"));
   return [h("div", { class: "settings" },
     group(SW.t("appearance_title"), appearanceControl({ wide: true, name: null }), h("p", { class: "muted" }, SW.t("settings_saved_on_phone")), live()),
     group(SW.t("appearance_theme_title"), SW.themePicker(), h("p", { class: "muted" }, SW.t("settings_theme_help")), live()),
@@ -979,8 +1033,8 @@ function settingsBody(wide) {
     voiceGroup(group),
     group(SW.t("settings_this_hub"), HUB ? h("p", { class: "settings__hub" }, HUB) : null,
       h("p", { class: "settings__address" }, location.origin + location.pathname), hubPageLink()),
-    wide && !installed() ? group(SW.t("nav_more_home_screen"), h("p", { class: "muted" }, SW.t("nav_more_home_screen_summary", { product: PRODUCT })),
-      h("p", {}, h("button", { class: "btn", type: "button", on: { click: (e) => addToHome(e.currentTarget) } }, installPrompt ? SW.t("nav_more_install") : SW.t("nav_more_home_screen")))) : null)];
+    wide && !installed() ? markInstall(group(SW.t("nav_more_home_screen"), h("p", { class: "muted" }, SW.t("nav_more_home_screen_summary", { product: PRODUCT })),
+      h("p", {}, homeBtn)), homeBtn) : null)];
 }
 function addToHome(opener) {
   if (installPrompt) { installPrompt.prompt(); installPrompt = null; } else installSheet(opener);
@@ -1008,12 +1062,14 @@ moreBtn.addEventListener("click", () => {
   const to = (hash) => (e) => { e.preventDefault(); goFrom(rec, hash); };
   const gsRow = moreRow("overview", "", "", { hidden: true }, () => { rec.popped = true; rec.dlg._noReturn = true; rec.dlg.close(); hubSheet(moreBtn, true); });
   const spoolmanRow = moreRow("spool", tt("hub_open_spoolman"), "", { href: "#", hidden: true, target: "_blank", rel: "noopener" });
+  const installRow = standalone ? null : moreRow("plus", SW.t(installPrompt ? "nav_more_install" : "nav_more_home_screen"), SW.t("nav_more_home_screen_summary", { product: PRODUCT }), {},
+    () => { rec.popped = true; rec.dlg._noReturn = true; rec.dlg.close(); if (installPrompt) { installPrompt.prompt(); installPrompt = null; settling++; history.back(); } else installSheet(moreBtn, true); });
+  if (installRow) markInstall(installRow, installRow.querySelector(".more__name"));
   const rows = [
     moreRow("presets", SW.t("nav_slicer_presets"), "", { href: "#presets", "aria-current": cur("presets"),
       ...(PRESETS ? {} : { "data-state": "off", "aria-label": SW.t("nav_slicer_presets") + SW.t("nav_off_suffix") }) }, to("#presets")),
     moreRow("settings", SW.t("nav_settings"), SW.t("nav_more_settings_summary"), { href: "#settings" }, to("#settings")),
-    standalone ? null : moreRow("plus", SW.t(installPrompt ? "nav_more_install" : "nav_more_home_screen"), SW.t("nav_more_home_screen_summary", { product: PRODUCT }), {},
-      () => { rec.popped = true; rec.dlg._noReturn = true; rec.dlg.close(); if (installPrompt) { installPrompt.prompt(); installPrompt = null; settling++; history.back(); } else installSheet(moreBtn, true); }),
+    standalone ? null : installRow,
     HUB_PAGE ? moreRow("overview", tt("hub_screen_title"), "", {}, () => { rec.popped = true; rec.dlg._noReturn = true; rec.dlg.close(); hubSheet(moreBtn, true); })
       : h("p", { class: "more__row more__row--off muted" }, SW.icon("overview", "more__icon"), h("span", { class: "more__name" }, tt("hub_screen_title")), h("span", { class: "more__summary" }, tt("hub_only_at_home"))),
     gsRow, spoolmanRow,
@@ -1060,6 +1116,35 @@ function navItem([key, name, icon], tab) {
   if (off) { a.dataset.state = "off"; a.setAttribute("aria-label", off); }   // dimmed, and the name says why
   return h("li", {}, a);
 }
+// the badge on the Printers destination: a warning triangle while any printer reports an alert, a problem or a refused state.
+// A printer "needs a look" by the rule of the printers screen's own count (its state is none of connected, offline, connecting, not
+// configured); a connected one is asked for its alerts (`status.hms`) only when none of the list already does.
+const PRINTER_CALM = new Set(["connected", "unknown_model", "offline", "connecting", "not_configured"]);
+async function printersNeedLook() {
+  const list = ((await api("printers")).printers || []);
+  if (list.some((p) => !PRINTER_CALM.has(p.state))) return true;
+  const up = list.filter((p) => p.state === "connected" || p.state === "unknown_model");
+  const states = await Promise.all(up.map((p) => api(`printers/${encodeURIComponent(p.id)}/state`).catch(() => null)));
+  return states.some((s) => s && s.status && Array.isArray(s.status.hms) && s.status.hms.length > 0);
+}
+function paintPrintersBadge(look) {
+  const a = document.querySelector('.nav__item[href="#printers"]');
+  if (!a) return;
+  a.querySelector(".nav__badge--warn")?.remove();
+  if (look) {
+    a.append(h("span", { class: "nav__badge nav__badge--warn", "aria-hidden": "true", data: { state: "warn" } }, SW.shape("s-triangle")));
+    a.setAttribute("aria-label", SW.t("nav_printers_look"));
+  } else a.removeAttribute("aria-label");
+}
+function watchPrinters() {
+  const look = async () => {
+    if (document.hidden) return;
+    try { paintPrintersBadge(await printersNeedLook()); } catch (e) { /* the badge keeps what it showed; the shell's own banner says the Hub is away */ }
+  };
+  look();
+  setInterval(look, 15000);
+  document.addEventListener("visibilitychange", look);
+}
 function navigation() {
   const main = [["add", "nav_add", "plus"], ["spools", "nav_spools", "spool"], ["printers", "nav_printers", "printer"], ["recent", "nav_recent", "recent"]];
   const rest = [["presets", "nav_slicer_presets", "presets"], ["settings", "nav_settings", "settings"]];   // in More on phones
@@ -1078,6 +1163,7 @@ function navigation() {
   shellView = SW.shell({ hub: HUB || PRODUCT, home: "add", titleOf: (s) => { const k = ALIAS[s] || s; return (s === "spools" && tabs.spools.sheetTitle()) || (tabs[k] && tabs[k].title && tabs[k].title()) || SW.t(TITLES[k] || TITLES[place]); }, onSection: () => route() });
   nav.append(moreBtn);                                       // after SW.shell: this More has its own sheet
   paintMore();
+  if (PRINTERS) watchPrinters();
   matchMedia("(max-width: 600px)").addEventListener("change", () => route());   // Settings: a sheet or a page
 }
 
@@ -1209,7 +1295,9 @@ function startAlerts() {
   document.head.append(link); document.body.append(script);
 }
 function alertsGroup(group) {
-  const panel = PUSH && typeof alertsPanel === "function" ? alertsPanel(() => installSheet()) : null;
+  const panel = PUSH && typeof alertsPanel === "function" ? alertsPanel((e) => addToHome(e && e.currentTarget)) : null;
+  const home = panel && panel.querySelector('[data-action="home"]');         // the panel's "Add to Home Screen" button (an iPhone in the browser)
+  if (home) markInstall(home, home);
   const recent = window.SW_ALERTS ? SW.btn(tt("settings_alerts_recent"), { cls: "btn--ghost", action: "alerts-recent", run: (e) => SW_ALERTS.openList(e.currentTarget) }) : null;
   return panel || recent ? group(SW.t("settings_alerts_title"), panel, recent) : null;
 }
