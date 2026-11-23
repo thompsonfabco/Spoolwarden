@@ -13,11 +13,15 @@ import kotlinx.serialization.json.contentOrNull
 
 /** Catalogue texts for "Checked out" (rows, Return, Home). */
 object CheckedOutSay {
-    fun returned(location: String?): Say =
-        if (location.isNullOrBlank()) Say.Words(R.string.spools_returned) else Say.Words(R.string.spools_returned_to, listOf(location))
+    fun returned(location: String?, printerNotifiedFalse: Boolean = false): Say {
+        val base = if (location.isNullOrBlank()) Say.Words(R.string.spools_returned) else Say.Words(R.string.spools_returned_to, listOf(location))
+        return if (printerNotifiedFalse) Say.Joined(listOf(base, Say.Words(R.string.spools_return_printer_not_told))) else base
+    }
 
     fun homeNow(location: String): Say = Say.Words(R.string.spools_home_done, listOf(location))
 }
+
+fun JsonObject.printerNotifiedFalse(): Boolean = (this["printer_notified"] as? JsonPrimitive)?.booleanOrNull == false
 
 /** What the Hub says of a spool's remembered place (`checked_out`, `home`, `checked_out_since`). */
 data class CheckedOutInfo(val checkedOut: Boolean, val home: String?, val since: String?)

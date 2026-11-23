@@ -187,3 +187,4 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | view | not 
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | voice | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | volume | not text: a route, JSON field or wire value of the Weigh Station voice (VO5)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | wait | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | printer_notified | wire field of POST api/spools/{id}/return

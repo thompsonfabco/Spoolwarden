@@ -5895,4 +5895,5 @@
     <string name="preset_updates_offline">Could not reach the Hub. Check that you are on the same network.</string>
     <string name="preset_updates_unexpected">Unexpected response from the Hub</string>
     <string name="preset_updates_close">Close</string>
+    <string name="spools_return_printer_not_told">The printer could not be told; only the Hub\'s record changed.</string>
 </resources>

@@ -325,13 +325,14 @@ class SearchViewModel(
         _state.update { it.copy(returningId = spool.id, returnFailure = null) }
         viewModelScope.launch {
             try {
-                val where = send(spool.id).toSpoolSummary().location
+                val raw = send(spool.id)
+                val where = raw.toSpoolSummary().location
                 val event = undoFlow?.find(UndoOffer(listOf("spool:${spool.id}"), setOf(CheckedOutRules.RETURNED_KIND)))
                 _state.update { s ->
                     val left = s.checked.filter { it.id != spool.id }
                     s.copy(
                         returningId = null, checked = left, checkedCount = s.checkedCount?.let { n -> maxOf(n - 1, 0) },
-                        returnToast = ReturnToast(CheckedOutSay.returned(where), event),
+                        returnToast = ReturnToast(CheckedOutSay.returned(where, raw.printerNotifiedFalse()), event),
                     )
                 }
             } catch (e: CancellationException) {
