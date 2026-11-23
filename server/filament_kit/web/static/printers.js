@@ -247,9 +247,9 @@ function printersTab() {
     auto_waiting: "Waiting for {spool} to be loaded into any slot of {printer}.", auto_stop: "Stop waiting", auto_stopped: "Stopped waiting for {spool}.",
     auto_choose: "Two slots were loaded. Which one got {spool}?", auto_chosen: "{spool} is loaded into {slot}.",
     auto_started: "Waiting for {spool} to appear in a slot of {printer}.", auto_not_possible: "This printer has no slots the Hub can watch. Choose a slot.",
-    printer_used_by_month: "By month", printer_used_show_list: "Show the list", printer_used_month_none: "No months to show yet.",
+    printer_used_by_month: "By month", printer_used_month_none: "No months to show yet.",
     printer_used_col_month: "Month", printer_used_col_grams: "Grams", printer_used_col_prints: "Prints", printer_used_col_unfinished: "Did not finish",
-    printer_used_col_material: "Most used material", printer_used_download: "Download as CSV",
+    printer_used_col_material: "Most used material",
   };
   function tg(key, vars) {
     const v = t(key, vars);
@@ -433,7 +433,8 @@ function printersTab() {
       h("div", { class: "group__body" }, g.facts, g.conn, g.statusBox, g.stream, g.controls, g.autoBox, g.msg, h("div", { class: "printer__buttons" }, g.camBtn, g.loadAny), g.camBox));
     g.slots = group("printers_col_slots", g.slotsBox);
     g.used = group("printer_group_used", g.usageBox, g.usageLine);
-    g.used.head.append(h("span", { class: "muted printer__days" }, t("printer_used_last_days")));
+    g.days = h("span", { class: "muted printer__days" }, t("printer_used_last_days"));
+    g.used.head.append(g.days);
     g.map = group("printer_map_title_bambu", g.mapBox, g.mapLine, g.reportBox, g.repLine, g.manualLine);
     g.set = group("printer_settings_title", g.setBox, g.setLine);
     for (const x of [g.slots, g.used, g.set]) hubGroup(x.el);       // the map group says it already, with its own line
@@ -876,20 +877,84 @@ function printersTab() {
 
   // ----- Filament used -----
   const stamp = (at) => (at || "").replace("T", " ").slice(0, 16);
+  // Download as CSV: one range (7 days, 30 days, 12 months) of this printer's file, through the twin; the page clicks a link, the name and the bytes are the Hub's
+  function downloadUsage(g, days) {
+    const a = window.SW_HISTORY.downloadLink("usage", "", `printer=${enc(g.id)}&days=${days}`);
+    a.hidden = true;
+    document.body.append(a);
+    a.click();
+    a.remove();
+  }
+  function usageMenu(g) {
+    if (!window.SW_HISTORY) return null;
+    const more = SW.iconBtn("more", t("live_usage_more"), { cls: "pused__more", action: "usage-more" });
+    SW.menu(more, () => [{ heading: t("live_download_csv") },
+      ...[[7, "activity_csv_7"], [30, "activity_csv_30"], [365, "activity_csv_365"]].map(([days, key]) => ({ label: t(key), icon: "download", action: "download-csv-" + days, run: () => downloadUsage(g, days) }))],
+      { label: t("live_usage_more") });
+    return more;
+  }
+  // By month at tablet width and up: the monthly bars, drawn by the page as inline SVG in the accent colour, one bar per month, oldest on the left,
+  // the value in words above each bar and the month under it; the room decides if the words stand or lie (12 values do not fit above narrow bars)
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const svg = (tag, attrs, ...kids) => { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, String(v)); e.append(...kids.filter(Boolean)); return e; };
+  const gramsWords = (grams) => (grams >= 1000 ? t("analytics_kilograms", { kg: (grams / 1000).toFixed(2) }) : t("analytics_grams", { grams: Math.round(grams) }));
+  const monthName = (key, long) => { const [y, m] = key.split("-").map(Number); return new Date(Date.UTC(y, m - 1, 15)).toLocaleDateString(undefined, { month: long ? "long" : "short", timeZone: "UTC" }); };
+  function lastTwelve(months) {                          // the 12 months ending with the newest the Hub answered, or this month; a month with nothing is 0 g
+    const now = new Date(), key = (y, m) => `${y}-${String(m).padStart(2, "0")}`;
+    let end = key(now.getFullYear(), now.getMonth() + 1);
+    for (const m of months) if (String(m.month) > end) end = String(m.month);
+    let [y, mo] = end.split("-").map(Number);
+    const got = new Map(months.map((m) => [String(m.month), Number(m.grams) || 0])), out = [];
+    for (let i = 0; i < 12; i++) { const k = key(y, mo); out.unshift({ month: k, grams: got.get(k) || 0 }); if (--mo === 0) { mo = 12; y--; } }
+    return out;
+  }
+  function monthBars(g, months, capId) {
+    const rows = lastTwelve(months), top = Math.max(0, ...rows.map((r) => r.grams)), most = rows.find((r) => r.grams === top);
+    const W = Math.max(480, Math.round(g.usageBox.clientWidth) || 600), slot = W / 12, flat = slot < 56;
+    const room = 100, head = flat ? 58 : 22, base = head + room, H = base + 34, bw = Math.max(8, Math.min(44, slot - 6));
+    const bars = rows.map((r, i) => {
+      const cx = slot * i + slot / 2, hgt = top ? Math.max(2, Math.round((r.grams / top) * room)) : 2, y = base - hgt, jan = r.month.endsWith("-01");
+      return svg("g", { class: "pused__bar-month", "aria-hidden": "true", "data-month": r.month },
+        svg("rect", { x: cx - bw / 2, y, width: bw, height: hgt, fill: "var(--accent)" }),
+        svg("text", { class: "mono", x: flat ? cx + 4 : cx, y: y - 6, "text-anchor": flat ? "start" : "middle", "font-size": 12, fill: "var(--text)",
+          ...(flat ? { transform: `rotate(-90 ${cx + 4} ${y - 6})` } : {}) }, gramsWords(r.grams)),
+        svg("text", { x: cx, y: base + 14, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }, monthName(r.month)),
+        i === 0 || jan ? svg("text", { x: cx, y: base + 27, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }, r.month.slice(0, 4)) : null);
+    });
+    const chart = svg("svg", { class: "pused__chart", viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-labelledby": capId, focusable: "false" }, ...bars,
+      svg("line", { x1: 0, y1: base, x2: W, y2: base, stroke: "var(--border-strong)", "stroke-width": 1 }));
+    const caption = h("figcaption", { id: capId, class: "muted" }, [t("analytics_chart_label") + ".", top ? t("printer_used_bars_most", { month: monthName(most.month, true), amount: gramsWords(top) }) : ""].filter(Boolean).join(" "));
+    return { chart, caption };
+  }
   async function loadUsage() {
     const g = page;
     if (!g) return;
     await fill(g.usageBox, t("printer_group_used"), async () => {
-      const bar = h("div", { class: "pused__bar" }, SW.btn(tg(g.byMonth ? "printer_used_show_list" : "printer_used_by_month"), { cls: "btn--ghost", action: "usage-by-month", run: () => { g.byMonth = !g.byMonth; loadUsage(); } }),
-        window.SW_HISTORY ? window.SW_HISTORY.downloadLink("usage", tg("printer_used_download"), `printer=${enc(g.id)}`) : null);
-      if (g.byMonth) {                                   // the months as a table ({months: [{month, grams, prints, unfinished_prints, top_material?}]})
+      const bar = h("div", { class: "pused__bar" }, SW.btn(g.byMonth ? t("printer_used_last_days") : tg("printer_used_by_month"), { cls: "btn--ghost", action: "usage-by-month", run: () => { g.byMonth = !g.byMonth; loadUsage(); } }),
+        usageMenu(g));
+      if (g.days) g.days.hidden = !!g.byMonth;           // the caption "Last 7 days" is of the list; the button says it while the months show
+      if (g.byMonth) {                                   // the months: bars at tablet width and up, then the table ({months: [{month, grams, prints, unfinished_prints, top_material?}]})
         const r = await pj(`${enc(g.id)}/usage?by=month`);
         if (page !== g) return null;
         const months = r.months || [];
+        if (!months.length) return [bar, h("p", { class: "muted" }, tg("printer_used_month_none"))];
         const th = (k) => h("th", { scope: "col" }, tg("printer_used_col_" + k));
-        return [bar, months.length ? h("table", { class: "pused__months" }, h("thead", {}, h("tr", {}, th("month"), th("grams"), th("prints"), th("unfinished"), th("material"))),
+        const tableId = SW.uid("pm"), bars = SW.phone() ? null : monthBars(g, months, SW.uid("pc"));
+        const table = h("table", { class: "pused__months", id: tableId }, h("thead", {}, h("tr", {}, th("month"), th("grams"), th("prints"), th("unfinished"), th("material"))),
           h("tbody", {}, months.map((m) => h("tr", {}, h("td", {}, m.month), h("td", { class: "mono" }, t("common_grams", { grams: m.grams ?? "?" })), h("td", {}, m.prints ?? ""),
-            h("td", {}, m.unfinished_prints ?? ""), h("td", {}, m.top_material || ""))))) : h("p", { class: "muted" }, tg("printer_used_month_none"))];
+            h("td", {}, m.unfinished_prints ?? ""), h("td", {}, m.top_material || "")))));
+        if (!bars) return [bar, table];                  // a phone: the table alone
+        const word = (open) => (open ? t("printer_used_hide_table") : t("analytics_show_table"));
+        const showTable = SW.btn(word(g.tableOpen !== false), { cls: "btn--ghost", action: "usage-table", run: () => {
+          g.tableOpen = g.tableOpen === false;
+          table.hidden = !g.tableOpen;
+          showTable.textContent = word(g.tableOpen);
+          showTable.setAttribute("aria-expanded", String(g.tableOpen));
+        } });
+        showTable.setAttribute("aria-expanded", String(g.tableOpen !== false));
+        showTable.setAttribute("aria-controls", tableId);
+        table.hidden = g.tableOpen === false;            // the table is open with the bars until it is hidden
+        return [bar, h("figure", { class: "pused__figure" }, bars.chart, bars.caption, showTable), table];
       }
       const r = await pj(`${enc(g.id)}/usage?days=7`);
       if (page !== g) return null;
