@@ -499,7 +499,7 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 - **`spool label`** needs the running Hub and `--out`; it writes one SVG file with a label for each spool number. The
   sizes `a4-63x34`, `a4-70x37` and `letter-66x25` are sheets: print them at actual size (100%), not fitted to the page. The
   codes hold the Hub's address: if the Hub is renamed or moves to another port, old labels stop opening from a phone's
-  camera, but the Spoolwarden app's scanner still reads them.
+  camera, but **Scan a label** in the app (Android) still reads them.
 - **`devices show <device>`** lists a Weigh Station's settings with their ids; **`devices set <device> <setting> <value>`**
   checks the value against that setting, shows the change and asks first (`-y` skips the question).
 - **`tag-reader flash`** writes the Tag Reader plugged into the Hub's USB (see [Flash a device](#flash-a-device)).
