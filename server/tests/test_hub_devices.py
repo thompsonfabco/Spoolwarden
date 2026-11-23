@@ -128,6 +128,7 @@ out.lockedTrust = text(card("Trusted"));
 out.readers = $$(".coll--readers .coll__item").map((i) => $$(".coll__row:first-child .coll__cell", i).map(text));
 out.web = text(card("The web app"));
 out.webAlt = $$(".card img.qr").map((i) => i.alt);
+out.webOpen = $$(".devices__web a.btn").map((a) => ({ text: text(a), href: a.getAttribute("href"), target: a.getAttribute("target"), rel: a.getAttribute("rel"), label: a.getAttribute("aria-label") }));
 unlock();
 await until(() => $(".coll--trusted .coll__item"), "the trusted computers");
 await until(() => text(card("Weigh")).includes("No Weigh Station"), "the requests");
@@ -154,6 +155,7 @@ return out;
     assert [r[0] for r in page["readers"]] == ["Tag Reader for Workshop X1", "Tag Reader for Garage Voron"]
     assert _T("devices_webapp_hint") in page["web"] and _T("devices_webapp_keep") in page["web"]
     assert page["webAlt"] == [_T("devices_webapp_home_alt")]
+    assert len(page["webOpen"]) == 1 and page["webOpen"][0]["text"] == "Open" and page["webOpen"][0]["href"].endswith("/intake") and page["webOpen"][0]["target"] == "_blank" and page["webOpen"][0]["rel"] == "noopener noreferrer"
     assert page["unlockedHead"].endswith(_T("devices_meta_trusted", count=2))
     assert [r[0] for r in page["trusted"]] == ["Desk PC", "Shop laptop"]
     assert page["trustedHead"][0] == _T("common_field_name") and page["trustedHead"][3] == _T("devices_trusted_col_expires")

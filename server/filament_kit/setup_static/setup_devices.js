@@ -577,10 +577,16 @@ function webAppCard() {
       devQrUrls = [];
       fill(body,
         h("p", { textContent: SW.t("devices_webapp_home") }),
-        h("div", { class: "devices__web" }, devCodeBlock(SW.t("devices_webapp_home_caption"), r.url), devQr(r.qr_svg, SW.t("devices_webapp_home_alt"), devQrUrls)),
+        h("div", { class: "devices__web" }, devCodeBlock(SW.t("devices_webapp_home_caption"), r.url),
+          h("a", { class: "btn btn--ghost", href: r.url, target: "_blank", rel: "noopener noreferrer",
+            textContent: devT("devices_open"), "aria-label": devT("devices_open_named", { name: SW.t("devices_webapp_home_caption") }) }),
+          devQr(r.qr_svg, SW.t("devices_webapp_home_alt"), devQrUrls)),
         h("p", { class: "muted", textContent: SW.t("devices_webapp_hint") }),
         r.public_url ? h("p", { textContent: SW.t("devices_webapp_away") }) : null,
-        r.public_url ? h("div", { class: "devices__web" }, devCodeBlock(SW.t("devices_webapp_away_caption"), r.public_url), devQr(r.public_qr_svg, SW.t("devices_webapp_away_alt"), devQrUrls)) : null,
+        r.public_url ? h("div", { class: "devices__web" }, devCodeBlock(SW.t("devices_webapp_away_caption"), r.public_url),
+          h("a", { class: "btn btn--ghost", href: r.public_url, target: "_blank", rel: "noopener noreferrer",
+            textContent: devT("devices_open"), "aria-label": devT("devices_open_named", { name: SW.t("devices_webapp_away_caption") }) }),
+          devQr(r.public_qr_svg, SW.t("devices_webapp_away_alt"), devQrUrls)) : null,
         h("p", { textContent: SW.t("devices_webapp_keep") }));
     }, (e) => {
       if (e.locked) throw e;
