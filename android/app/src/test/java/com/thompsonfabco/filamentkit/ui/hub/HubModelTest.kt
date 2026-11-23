@@ -1,5 +1,8 @@
 package com.thompsonfabco.filamentkit.ui.hub
 
+import android.os.Build
+import androidx.annotation.StringRes
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.GettingStarted
 import com.thompsonfabco.filamentkit.net.HubAnswer
@@ -24,6 +27,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 import java.time.ZoneId
 import java.util.Locale
 
@@ -53,6 +60,12 @@ private fun answer(
     hubPage = if (full) "https://hub.local:8710/setup" else null,
 )
 
+private fun words(@StringRes id: Int, vararg args: Any) = HubText.Words(id, args.toList())
+
+private fun hub(text: String) = HubText.FromHub(text)
+
+private fun field(@StringRes label: Int, value: HubText) = HubLine.Field(words(label), value)
+
 class HubModelTest {
     private val time: (String?) -> String? = { it?.let { t -> "T($t)" } }
 
@@ -65,7 +78,11 @@ class HubModelTest {
             hubSections(answer(), time).map { it.group },
         )
         assertEquals(
-            listOf("Status", "Getting started", "Version", "Features", "Filament Catalog", "Backups", "Label Reader", "Devices", "Recently added"),
+            listOf(
+                R.string.devices_status_title, R.string.start_title, R.string.updates_version_title, R.string.nav_features,
+                R.string.settings_group_catalog, R.string.storage_use_item_backups, R.string.settings_group_label_reader,
+                R.string.nav_devices, R.string.nav_recently_added,
+            ),
             hubSections(answer(), time).map { it.group.title },
         )
     }
@@ -73,11 +90,11 @@ class HubModelTest {
     @Test fun missingOptionalPartsLeaveTheirGroupOutAndVersionStays() {
         val sections = hubSections(answer(gettingStarted = null, full = false), time)
         assertEquals(listOf(HubGroup.Version), sections.map { it.group })
-        assertEquals(listOf(HubLine.Field("Installed", "0.7.0")), sections.single().lines)
+        assertEquals(listOf(field(R.string.updates_installed, hub("0.7.0"))), sections.single().lines)
     }
 
     @Test fun gettingStartedShowsOnlyWhileStepsRemainAndNotHidden() {
-        assertEquals("Getting started on the Hub: 4 of 8 done", gettingStartedLine(GettingStarted(4, 8, hidden = false, finished = false)))
+        assertEquals(words(R.string.hub_getting_started_line, 4, 8), gettingStartedLine(GettingStarted(4, 8, hidden = false, finished = false)))
         assertNull(gettingStartedLine(null))
         assertNull("hidden", gettingStartedLine(GettingStarted(4, 8, hidden = true, finished = false)))
         assertNull("finished", gettingStartedLine(GettingStarted(8, 8, hidden = false, finished = true)))
@@ -93,7 +110,7 @@ class HubModelTest {
         assertFalse(HubGroup.GettingStarted in hidden)
         assertFalse(HubGroup.GettingStarted in finished)
         val shown = hubSections(answer(), time).first { it.group == HubGroup.GettingStarted }
-        assertEquals(listOf(HubLine.Note("4 of 8 done")), shown.lines)
+        assertEquals(listOf(HubLine.Note(words(R.string.start_count, 4, 8))), shown.lines)
     }
 
     @Test fun statusKeepsTheHubsTextAndFix() {
@@ -111,10 +128,10 @@ class HubModelTest {
         val v = hubSections(answer(), time).first { it.group == HubGroup.Version }
         assertEquals(
             listOf(
-                HubLine.Field("Installed", "0.7.0"),
-                HubLine.Field("Newest", "0.8.0"),
-                HubLine.Field("Last checked", "T(2026-11-17T08:00:00+00:00)"),
-                HubLine.Note("Update available"),
+                field(R.string.updates_installed, hub("0.7.0")),
+                field(R.string.hub_newest, hub("0.8.0")),
+                field(R.string.updates_last_checked, hub("T(2026-11-17T08:00:00+00:00)")),
+                HubLine.Note(words(R.string.hub_update_available)),
             ),
             v.lines,
         )
@@ -122,17 +139,17 @@ class HubModelTest {
 
     @Test fun readerShowsKeySetOrNotSetNeverTheKey() {
         val r = hubSections(answer(), time).first { it.group == HubGroup.LabelReader }
-        assertEquals(listOf(HubLine.Field("Engine", "local"), HubLine.Field("Key", "Not set")), r.lines)
+        assertEquals(listOf(field(R.string.hub_engine, hub("local")), field(R.string.hub_key, words(R.string.status_not_set))), r.lines)
     }
 
     @Test fun backupsAndCatalogSayNeverWhenNothingIsKnown() {
         val sections = hubSections(answer(), time)
         assertEquals(
-            listOf(HubLine.Field("Last backup", "Never"), HubLine.Field("Nightly backup", "Off")),
+            listOf(field(R.string.hub_last_backup, words(R.string.common_never)), field(R.string.settings_backups_nightly, words(R.string.status_off))),
             sections.first { it.group == HubGroup.Backups }.lines,
         )
         assertEquals(
-            listOf(HubLine.Field("Version", "1.4"), HubLine.Field("Last checked", "T(2026-11-17T07:00:00+00:00)")),
+            listOf(field(R.string.updates_version_title, hub("1.4")), field(R.string.updates_last_checked, hub("T(2026-11-17T07:00:00+00:00)"))),
             sections.first { it.group == HubGroup.Catalog }.lines,
         )
     }
@@ -141,8 +158,16 @@ class HubModelTest {
         val d = hubSections(answer(), time).first { it.group == HubGroup.Devices }
         assertEquals(
             listOf(
-                HubLine.Field("My phone (this device)", "Phone · 0.7.0 · last seen T(2026-11-17T09:00:00+00:00)"),
-                HubLine.Field("Station", "Weigh Station · Version not known · Out of date"),
+                HubLine.Field(
+                    words(R.string.hub_device_this, "My phone"),
+                    HubText.Joined(listOf(
+                        words(R.string.devices_kind_phone), hub("0.7.0"), words(R.string.hub_device_last_seen, "T(2026-11-17T09:00:00+00:00)"),
+                    )),
+                ),
+                HubLine.Field(
+                    hub("Station"),
+                    HubText.Joined(listOf(words(R.string.devices_kind_station), words(R.string.devices_version_unknown), words(R.string.hub_out_of_date))),
+                ),
             ),
             d.lines,
         )
@@ -153,22 +178,22 @@ class HubModelTest {
             answer().copy(devices = listOf(HubDevice("Old box", "", "0.6.0", null, outOfDate = false, thisOne = false))),
             time,
         ).first { it.group == HubGroup.Devices }
-        assertEquals(listOf(HubLine.Field("Old box", "0.6.0")), d.lines)
+        assertEquals(listOf(HubLine.Field(hub("Old box"), HubText.Joined(listOf(hub("0.6.0"))))), d.lines)
     }
 
     @Test fun anUnknownDeviceKindIsShownAsTheHubWroteIt() {
-        assertEquals("gadget", deviceKindText("gadget"))
-        assertEquals("Tag Reader", deviceKindText("reader"))
+        assertEquals(hub("gadget"), deviceKindText("gadget"))
+        assertEquals(words(R.string.devices_kind_reader), deviceKindText("reader"))
     }
 
     @Test fun recordsKeptIsTheNumber() {
         val r = hubSections(answer(), time).first { it.group == HubGroup.RecentlyAdded }
-        assertEquals(listOf(HubLine.Field("Records kept", "41")), r.lines)
+        assertEquals(listOf(field(R.string.settings_reader_keep, hub("41"))), r.lines)
     }
 
     @Test fun featuresShowOnOrOff() {
         val f = hubSections(answer(), time).first { it.group == HubGroup.Features }
-        assertEquals(listOf(HubLine.Field("Alerts", "On"), HubLine.Field("Camera", "Off")), f.lines)
+        assertEquals(listOf(HubLine.Field(hub("Alerts"), words(R.string.status_on)), HubLine.Field(hub("Camera"), words(R.string.status_off))), f.lines)
     }
 
     @Test fun theHubsTimeIsShownInThePhonesZoneAndATextThatIsNotATimeStaysAsItIs() {
@@ -183,6 +208,57 @@ class HubModelTest {
         assertNull(hubDay(null))
         assertNull(hubTime(null))
         assertNull(hubTime(" "))
+    }
+}
+
+/** The words the screen shows, resolved from the catalogue: every group, line and Home's line, in English. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [Build.VERSION_CODES.S])
+class HubModelWordsTest {
+    private val context = RuntimeEnvironment.getApplication()
+    private val time: (String?) -> String? = { it?.let { t -> "T($t)" } }
+
+    private fun shown(h: HubAnswer): List<String> = hubSections(h, time).flatMap { section ->
+        listOf(context.getString(section.group.title)) + section.lines.map { line ->
+            when (line) {
+                is HubLine.Field -> "${line.label.resolve(context)}: ${line.value.resolve(context)}"
+                is HubLine.Note -> line.text.resolve(context)
+                is HubLine.Check -> "${line.state} ${line.text} ${line.fix.orEmpty()}".trim()
+            }
+        }
+    }
+
+    @Test fun everyGroupAndLineReadsAsItDidBeforeTheCatalogue() {
+        assertEquals(
+            listOf(
+                "Status", "Ok The Hub is running.", "Look No backup yet. Add a backup folder.",
+                "Getting started", "4 of 8 done",
+                "Version", "Installed: 0.7.0", "Newest: 0.8.0", "Last checked: T(2026-11-17T08:00:00+00:00)", "Update available",
+                "Features", "Alerts: On", "Camera: Off",
+                "Filament Catalog", "Version: 1.4", "Last checked: T(2026-11-17T07:00:00+00:00)",
+                "Backups", "Last backup: Never", "Nightly backup: Off",
+                "Label Reader", "Engine: local", "Key: Not set",
+                "Devices",
+                "My phone (this device): Phone · 0.7.0 · last seen T(2026-11-17T09:00:00+00:00)",
+                "Station: Weigh Station · Version not known · Out of date",
+                "Recently added", "Records kept: 41",
+            ),
+            shown(answer()),
+        )
+        assertEquals(
+            "Getting started on the Hub: 4 of 8 done",
+            gettingStartedLine(GettingStarted(4, 8, hidden = false, finished = false))!!.resolve(context),
+        )
+    }
+
+    @Test fun theOtherDeviceKindsAndANeverCheckedCatalogRead() {
+        assertEquals("Web app", deviceKindText("web").resolve(context))
+        assertEquals("Slicer Sync PC", deviceKindText("pc").resolve(context))
+        assertEquals("Built-in", deviceKindText("builtin").resolve(context))
+        assertEquals("gadget", deviceKindText("gadget").resolve(context))
+        val catalog = shown(answer().copy(catalog = HubCatalogFacts(null, null)))
+        assertTrue("Version: Not known" in catalog)
+        assertTrue("Last checked: Never" in catalog)
     }
 }
 
@@ -259,6 +335,6 @@ class HubViewModelTest {
         val vm = HubViewModel({ answer() })
         vm.refresh()
         dispatcher.scheduler.runCurrent()
-        assertEquals("Getting started on the Hub: 4 of 8 done", gettingStartedLine(vm.state.value.hub?.gettingStarted))
+        assertEquals(words(R.string.hub_getting_started_line, 4, 8), gettingStartedLine(vm.state.value.hub?.gettingStarted))
     }
 }

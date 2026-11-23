@@ -5686,4 +5686,31 @@
     <string name="spools_home_done">Home is now %1$s.</string>
     <!-- 1=reason -->
     <string name="spools_home_failed">Could not change the home: %1$s</string>
+    <string name="hub_glance_title">The Hub at a glance</string>
+    <string name="hub_glance_open">The Hub at a glance</string>
+    <string name="hub_change_on_page">Change this on the Hub page.</string>
+    <string name="hub_newest">Newest</string>
+    <string name="hub_update_available">Update available</string>
+    <string name="hub_last_backup">Last backup</string>
+    <string name="hub_engine">Engine</string>
+    <string name="hub_key">Key</string>
+    <string name="hub_not_known">Not known</string>
+    <!-- 1=time -->
+    <string name="hub_device_last_seen">last seen %1$s</string>
+    <!-- 1=name -->
+    <string name="hub_device_this">%1$s (this device)</string>
+    <string name="hub_out_of_date">Out of date</string>
+    <string name="hub_kind_builtin">Built-in</string>
+    <string name="hub_unavailable">This Hub cannot show this yet. Update the Hub to see it here.</string>
+    <!-- 1=done 2=total -->
+    <string name="hub_getting_started_line">Getting started on the Hub: %1$s of %2$s done</string>
+    <string name="hub_health_title">Check history</string>
+    <string name="hub_health_show_30">Show 30 days</string>
+    <string name="hub_health_show_7">Show 7 days</string>
+    <string name="hub_health_no_changes">No checks changed in this time.</string>
+    <string name="hub_health_state_bad">Needs fixing</string>
+    <!-- 1=date -->
+    <string name="hub_no_history_before">No history before %1$s.</string>
+    <!-- 1=time 2=check 3=from 4=to -->
+    <string name="hub_health_row_spoken">%1$s. %2$s: from %3$s to %4$s</string>
 </resources>

@@ -237,6 +237,7 @@ import com.thompsonfabco.filamentkit.ui.hub.HealthViewModel
 import com.thompsonfabco.filamentkit.ui.hub.HubViewModel
 import com.thompsonfabco.filamentkit.ui.hub.gettingStartedLine
 import com.thompsonfabco.filamentkit.ui.hub.hubPlaceTitle
+import com.thompsonfabco.filamentkit.ui.hub.hubText
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
 import com.thompsonfabco.filamentkit.ui.home.VersionLine
 import com.thompsonfabco.filamentkit.ui.home.labelReaderOff
@@ -1143,7 +1144,7 @@ internal fun FilamentKitApp(
                             ),
                             lowCount = alertsUi.lowCount ?: 0,
                             onOpenLow = { openAlertTarget(AlertTarget.RunningLow) },
-                            gettingStarted = gettingStartedLine(hubUi.hub?.gettingStarted),
+                            gettingStarted = gettingStartedLine(hubUi.hub?.gettingStarted)?.let { hubText(it) },
                             onOpenHub = ::openHubGlance,
                             onRefreshPrinters = printersVm::refresh,
                             onReviewCertificate = app.router::pairAgain,
