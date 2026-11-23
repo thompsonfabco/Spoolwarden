@@ -343,7 +343,7 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | --- | --- | --- |
 | `status` | Checks everything and prints one row per check | Overview |
 | `printer list` | All printers, set up and found | Printers |
-| `printer show <printer>` | One printer: details and slots | Printers, expanded row |
+| `printer show <printer> [--watch]` | One printer: details and slots; `--watch` shows live state and temperatures | Printers, expanded row |
 | `printer test <printer>` | Test connection | Test connection |
 | `printer add [--klipper] [options]` | Add a printer; asks for what is missing | Add a printer |
 | `printer use <printer>` | Add a Klipper printer that a scan found | Use this printer |
@@ -361,6 +361,10 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `printer forget-certificate <printer>` | Forget certificate (Bambu) | Forget certificate |
 | `printer forget <printer>` | Forget printer | Forget printer |
 | `printer live <printer>` | Prints where the live view is | Open the live printer view |
+| `printer load <printer> <slot> <spool> [-y]` | Load a spool into a slot (asks); with the slot `auto`, into whichever slot gets a spool next; `printer load <printer> auto --stop` ends the waiting | Open the live printer view, Load / Load a spool |
+| `printer unload <printer> <slot> [-y]` | Unload the spool of a slot (asks) | Open the live printer view, Unload |
+| `printer clear <printer> <slot> [-y]` | Clear slot: the Hub forgets the spool recorded there (asks) | Open the live printer view, Clear slot |
+| `printer usage <printer> [--days N]` | Filament used by the printer, newest first (default: the last 7 days) | Open the live printer view, Filament used (last 7 days) |
 | `printer menu` | The Printers screen | Printers |
 | `klipper add-on` | Prints the commands that install the Klipper add-on | Klipper add-on |
 | `recent` (same as `recent history`) | Recently added records | Recently added |
@@ -377,8 +381,11 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `spool empty <n> [-y]` | Mark a spool empty (asks) | Spools |
 | `spool return <n>` | Send a checked-out spool back to its home (undoable, so it asks nothing) | Spools |
 | `spool home <n> <location> [-y]` | Change the home of a checked-out spool (asks) | Spools |
+| `spool label <number>... [--size 62x29\|50x30\|a4-63x34\|a4-70x37\|letter-66x25] --out <file.svg>` | Write the labels of these spools as one SVG file | Spools, Print a label |
 | `events [--since ID\|TIME] [--kind PREFIX] [--follow]` | The Hub's events, newest last; `--follow` keeps printing new ones | Settings > Alerts > Recent alerts (alerts only) |
 | `devices` (same as `devices list`) | Paired devices | Devices |
+| `devices show <device>` | One device's detail; for a Weigh Station its status and settings | Devices, Open |
+| `devices set <device> <setting> <value> [-y]` | Change a Weigh Station setting through the Hub (previews, asks) | Devices, Open, Settings |
 | `devices forget <device>` | Unpair a device | Unpair |
 | `pair [--slicer-sync \| --weigh-station] [--text] [--no-wait]` | Pairing code, QR and fingerprint | Pair a phone / Link Slicer Sync / Link a Weigh Station |
 | `weigh-station pair [--local]` | Run on the Weigh Station: pair it with the Hub | Pair the Weigh Station on this Hub |
@@ -425,12 +432,16 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `catalog update [--scheduled]` | Update now | Update now |
 | `catalog rollback` | Go back to the version before | Go back to the version before |
 | `catalog add <file \| ->` | Add your own entry | Add entry |
+| `catalog add --ask` | Add your own entry: asks Brand, Name, Material and the optional values | Add entry |
+| `catalog local` | Your own entries | See custom entries |
+| `catalog local remove <id>` | Remove one of your own entries (asks) | Remove |
 | `catalog adopt <folder>` | Take over a catalog folder from an older install | (none) |
 | `catalog token [--remove]` | Set, replace or remove the catalog token | Catalog token (optional) |
 | `backup create [--out DIR]` | Back up now | Back up now |
 | `backup list` | Backups on this Hub | Backups on the Hub |
 | `backup keep <days>` | Keep nightly backups for N days | Keep nightly backups for |
-| `restore <zip> \| --uploaded` | Restore (asks for the typed word) | Restore |
+| `backup password [--remove \| --show]` | Set the backup password (typed twice), remove it (asks) or print it; new backups are encrypted while one is set (root) | Set a backup password / Change the backup password / Remove the backup password |
+| `restore <zip> \| --uploaded [--password-file FILE]` | Restore (asks for the typed word); `--password-file` holds the password of an encrypted backup | Restore |
 | `web status` | Access from outside: rows as in `status` | Settings > Network and addresses |
 | `web passphrase` | Set or replace the web passphrase | Web passphrase |
 | `remote firewall` | Print the firewall rules (changes nothing) | Show the firewall rules |
@@ -438,6 +449,7 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `setup-code [--new] [--revoke-trusted]` | Hub page address and setup code | Setup code, Trusted computers |
 | `port [<number>]` | Show the Hub's port, or move the Hub to another | Settings > Network and addresses, Hub port |
 | `certificate` | Make the Hub's certificate if missing; print its fingerprint | (none) |
+| `certificate --renew` | Make a new certificate for this Hub: every paired phone, PC and Weigh Station must trust it again or be paired again (root; asks) | (none) |
 | `spoolman fields` | Make Spoolwarden's extra fields in Spoolman | Overview, Make the fields |
 | `spoolman address [<url>]` | Show or change the Spoolman in use (checked before saving) | Settings > General, Spoolman address |
 | `update [--check \| --rollback] [--scheduled]` | Updates | Updates |
@@ -460,10 +472,10 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `local-intake plan` | What installing the latest reader release needs, per tier (saved when run as root) | (none) |
 | `local-intake remove [-y]` | Uninstall the local reader from this machine and switch the local reader off (root; its settings are kept) | (none) |
 | `local-intake test <photo>...` | Read photos with the local reader only and print the result (nothing saved) | (none) |
-| `label-reader corrections [list]` | The corrections waiting to be shared (root) | (none) |
+| `label-reader corrections [list]` | The corrections waiting to be shared | (none) |
 | `label-reader corrections remove <id>...` | Take corrections out of the list; nothing is sent (root) | (none) |
 | `label-reader corrections retry <record>...` | Queue the corrections of records again that `list` shows as not waiting (root) | (none) |
-| `label-reader corrections package <file>` | Save the exact zip that `send` would send, to look at it first (root) | (none) |
+| `label-reader corrections package <file>` | Save the exact zip that `send` would send, to look at it first | (none) |
 | `label-reader corrections send` | Ask the Label Reader to send the corrections waiting (it does the upload) (root) | (none) |
 
 ### Notes on some commands
@@ -478,6 +490,18 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
   known or its mapping
   failed. It holds no serial number, address, name or account id; read it first. When the printer can't be reached,
   the report is built from what the Hub saved and says so. **Collect a report** on the Hub page does the same.
+- **`printer load`, `printer unload` and `printer clear`** need the running Hub. Each prints what will change and asks
+  first; `-y` skips the question. `<slot>` is the slot's label as `printer show <printer>` gives it, and `load` also needs
+  the spool's number. `unload` and `clear` send the spool recorded in the slot back to its place; `clear` also ends a wait
+  for that slot. With the slot `auto`, `load` makes the Hub watch the printer's slots until you put the spool in an empty
+  one; a spool already waiting on that printer is replaced, and `printer load <printer> auto --stop` ends the wait
+  without asking.
+- **`spool label`** needs the running Hub and `--out`; it writes one SVG file with a label for each spool number. The
+  sizes `a4-63x34`, `a4-70x37` and `letter-66x25` are sheets: print them at actual size (100%), not fitted to the page. The
+  codes hold the Hub's address: if the Hub is renamed or moves to another port, old labels stop opening from a phone's
+  camera, but the Spoolwarden app's scanner still reads them.
+- **`devices show <device>`** lists a Weigh Station's settings with their ids; **`devices set <device> <setting> <value>`**
+  checks the value against that setting, shows the change and asks first (`-y` skips the question).
 - **`tag-reader flash`** writes the Tag Reader plugged into the Hub's USB (see [Flash a device](#flash-a-device)).
   `--port <port>` names its USB port. `--source <folder>` builds the firmware from the `reader` folder of a checkout with
   PlatformIO and flashes it; `--out <file>` only writes its `secrets.h` (mode 600) so you can build elsewhere
