@@ -211,7 +211,7 @@ def test_edit_carried_by_build_is_fine(tmp_path):
 
 
 def test_partial_build_values_are_not_late_edits(tmp_path):
-    """Ruling S28: a value a half-finished install wrote (equal to dirs.partial's copy) is not an in-app edit."""
+    """a value a half-finished install wrote (equal to dirs.partial's copy) is not an in-app edit."""
     env = Env(tmp_path, live={"A": (_preset("A", filament_density=["1.31"]), _info())})
     env.snapshot({"A": _preset("A", filament_density=["1.24"])})
     build = env.build({"A": _preset("A", filament_density=["1.35"])})

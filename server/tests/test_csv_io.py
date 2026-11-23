@@ -1,4 +1,4 @@
-"""Tests for filament_kit.csv_io (HD5 CSV export & import)."""
+"""Tests for filament_kit.csv_io (CSV export & import)."""
 from __future__ import annotations
 
 import csv

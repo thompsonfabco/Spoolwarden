@@ -1,4 +1,4 @@
-"""The history pieces of the phone web app's page script (HD8): Undo after an action, the refusal sentences, a spool's events and
+"""The history pieces of the phone web app's page script: Undo after an action, the refusal sentences, a spool's events and
 the downloads, run in Node without a browser (the page's own functions are cut out of app.js and given stubs for `api`, `SW` and `tt`)."""
 from __future__ import annotations
 

@@ -619,7 +619,7 @@ def _ask(prompt: str) -> str:
 
 
 def _server_setup(ex: _Exec, arg: str) -> None:
-    """install.sh steps 5-6 (Ruling F): first-run questions, key, certificate, avahi file."""
+    """install.sh steps 5-6: first-run questions, key, certificate, avahi file."""
     from . import cli  # cli imports apply; import here, not at module load
     etc = config.paths().etc
     if "server_name" not in _raw_config() and (not _can_ask() or _guided()):
@@ -843,8 +843,7 @@ def _other_routes(ex: _Exec, name: str) -> list[str]:
 
 def _remote_off(ex: _Exec, name: str) -> None:
     """Remove the kit's own remote files: the route file mcp-route made for this kit, the kit's router conf (a
-    default_server on 443 that would keep any other router from loading) and its certbot deploy hook (Ruling
-    AF). nginx, certbot, the certificate, mcp-route and other routes stay. While mcp.d holds routes the kit did
+    default_server on 443 that would keep any other router from loading) and its certbot deploy hook. nginx, certbot, the certificate, mcp-route and other routes stay. While mcp.d holds routes the kit did
     not add, the router conf stays too: it is what serves them (C-I2)."""
     gone = []
     f = _under(ex.root, f"{remote.ROUTE_DIR}/{name}.conf")

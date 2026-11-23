@@ -1,4 +1,4 @@
-"""S3.17 (the design, web app, third point): while the Hub cannot be reached every screen of the web app keeps its last data with
+"""(the design, web app, third point): while the Hub cannot be reached every screen of the web app keeps its last data with
 "Last update <age>: the Hub did not answer.", and every button that needs the Hub gets aria-disabled and the reason "Needs the
 Hub." ("Read labels" and "Preview" say "The Hub cannot be reached."). Run in a headless Chrome, Edge or Chromium already on the
 machine (tests/page_drive.mjs for the presses, tests/aut5_run.mjs for the audit), with the Hub stopped by the page itself: its

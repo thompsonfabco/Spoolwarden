@@ -1,4 +1,4 @@
-"""S5.4: the `config` menu, the Printers screen (8.4), the Features checklist (8.5) and the prompts (8.7), driven
+"""the `config` menu, the Printers screen (8.4), the Features checklist (8.5) and the prompts (8.7), driven
 with typed lines in the numbered variant (`--numbered`, `--plain`) and exits. The full-screen variant is
 tested in test_menu_ui.py."""
 from __future__ import annotations

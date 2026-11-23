@@ -1,4 +1,4 @@
-"""AF5: `printer add` in the guided order: the found list, the details, the test with Add anyway,
+"""`printer add` in the guided order: the found list, the details, the test with Add anyway,
 and Map its slots now."""
 from __future__ import annotations
 

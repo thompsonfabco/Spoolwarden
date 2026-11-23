@@ -133,3 +133,17 @@ def test_a_job_that_fails_is_not_allowed_to_pass():
     for job, text in jobs.items():
         m = re.search(r"timeout-minutes:\s*(\d+)", text)
         assert m and int(m.group(1)) <= 30, job
+
+
+def test_the_four_shards_are_balanced_and_exact():
+    shards = fk_shard.shards(TESTS, 4)
+    whole = fk_shard.all_files(TESTS)
+    flat = [f for s in shards for f in s]
+    assert sorted(flat) == whole and len(flat) == len(set(flat)) == len(whole)
+    loads = [
+        sum(fk_shard._weight((TESTS / f).read_bytes().replace(b"\r\n", b"\n"), f) for f in s)
+        for s in shards
+    ]
+    assert max(loads) < 2 * min(loads), f"shard imbalance: {loads}"
+    demo_shard = next(i for i, s in enumerate(shards) if "test_demo_sealed.py" in s)
+    assert not any(f.startswith("test_hub_") or f in fk_shard._BROWSER_FILES for f in shards[demo_shard])

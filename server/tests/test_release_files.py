@@ -31,7 +31,7 @@ def test_release_workflow_uses_both_signing_secrets():
     assert "${{ secrets.FK_KEYSTORE_B64 }}" in text
     assert "${{ secrets.FK_KEYSTORE_PASSWORD }}" in text
     # secrets only ever reach a step through env, never a run line
-    # (the one exception: actions/checkout's `token` input for the private filament-library, Ruling BU)
+    # (the one exception: actions/checkout's `token` input for the private filament-library, )
     for line in text.splitlines():
         if "secrets." in line:
             assert (re.match(r"\s+(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY|FK_LIBRARY_TOKEN): "
@@ -257,7 +257,7 @@ def test_web_extra_pins_mcp_exactly():
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/spoolwarden-cli.sh")
-    # the first case list that runs as root: its words, however the lines are split (S5.8 added the new names)
+    # the first case list that runs as root: its words, however the lines are split (added the new names)
     start = text.index('case "${1:-}" in')
     block = text[start:text.index('run_as_root "$@"', start)]
     words = set(re.split(r"[|\)\s]+", block.split(" in", 1)[1]))
@@ -292,7 +292,7 @@ def test_uninstall_uses_modules_units_and_cleans_station():
 
 def test_uninstall_removes_the_kits_remote_files():
     """Task 9 (WSL): uninstall left the kit's router conf, its deploy hook and its route (to a port nothing serves
-    any more). Like `modules disable remote` (Ruling AF): only the kit's own files; nginx, certbot, the certificate,
+    any more). Like `modules disable remote`: only the kit's own files; nginx, certbot, the certificate,
     mcp-route and other routes stay. The certbot timer drop-in goes with --purge."""
     from filament_kit import remote
     text = _read("install/uninstall.sh")
@@ -464,8 +464,11 @@ def test_install_modules_station_alone_still_needs_address_without_terminal(tmp_
 def test_install_modules_unknown_name_fails(tmp_path):
     venv, env = _stub_venv(tmp_path)
     part = _install_part("# A custom list is closed first", "# A station whose server is on another machine")
+    from filament_kit import modules
     r = _run_part('MODE=custom\nCUSTOM=",bogus"\n' + part, venv, env, tmp_path)
-    assert r.returncode == 1 and "unknown module 'bogus'" in r.stderr
+    assert r.returncode == 1 and "bogus" in r.stderr and "use features from:" in r.stderr
+    with pytest.raises(modules.ModuleError, match="unknown feature 'bogus'"):
+        modules.close_selection(["bogus"])
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
@@ -585,7 +588,7 @@ def test_install_unknown_module_name_is_caught_before_packages(tmp_path):
     ok = subprocess.run([_bash(), str(f), ",spoolman,server"], capture_output=True, text=True, timeout=30, env=env)
     bad = subprocess.run([_bash(), str(f), ",server,bogus"], capture_output=True, text=True, timeout=30, env=env)
     assert ok.returncode == 0 and "passed" in ok.stdout, ok.stderr
-    assert bad.returncode != 0 and "unknown module bogus" in bad.stderr and "passed" not in bad.stdout
+    assert bad.returncode != 0 and "unknown feature bogus" in bad.stderr and "passed" not in bad.stdout
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
@@ -1000,7 +1003,7 @@ def test_inline_python_survives_shell_single_quotes(rel):
     assert blocks >= 1, f"{rel}: no python -c block left; update PYTHON_C_SCRIPTS"
 
 
-# --- final review I3 (Ruling BU): CI builds, signs and publishes library.tar.gz ----------------------------------
+# --- final review I3: CI builds, signs and publishes library.tar.gz ----------------------------------
 
 def _step(text: str, name: str) -> str:
     i = text.index(f"- name: {name}")
@@ -1230,3 +1233,58 @@ def test_the_avahi_file_announces_the_old_and_the_new_service_type():
     text = _read("install/avahi/filament-kit.service")
     assert re.findall(r"<type>([^<]+)</type>", text) == ["_filamentkit._tcp", "_spoolwarden._tcp"]
     assert text.count("<port>8710</port>") == 2          # apply.py rewrites every one to the configured port
+
+
+def test_e2e_scenario_f_checks_installed_unit_descriptions_and_rename_notice(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("e2e_mod", ROOT / "tools" / "e2e" / "e2e.py")
+    e2e_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(e2e_mod)
+    u = tmp_path / "systemd"
+    u.mkdir()
+    (u / "filament-kit.service").write_text("[Unit]\nDescription=Spoolwarden Hub\n", encoding="utf-8")
+    (u / "filament-kit-setup@.service").write_text("[Unit]\nDescription=Spoolwarden Hub page helper\n", encoding="utf-8")
+
+    def fake_run(cmd, **_kw):
+        # systemctl returns bare unit name if not installed, or Description if loaded
+        name = cmd[-1]
+        val = "Spoolwarden Hub" if name == "filament-kit.service" else name
+        return type("R", (), {"returncode": 0, "stdout": val + "\n"})()
+
+    descs = e2e_mod.E2E._installed_unit_descriptions(unit_dir=u, run_cmd=fake_run)
+    assert descs == {
+        "filament-kit.service": "Spoolwarden Hub",
+        "filament-kit-setup@.service": "Spoolwarden Hub page helper",
+    }
+    src = (ROOT / "tools" / "e2e" / "e2e.py").read_text(encoding="utf-8")
+    assert "once-only new-name line appears" in src and "rb_descs == old_descs" in src
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_restore_prints_once_only_rename_notice_and_uses_features_wording(tmp_path):
+    sh = (ROOT / "install" / "install.sh").read_text(encoding="utf-8")
+    mods = (ROOT / "server" / "filament_kit" / "modules.py").read_text(encoding="utf-8")
+    assert "module names" not in sh and "module names" not in mods
+    fns = "\n".join(re.findall(r"^(?:from_old_name|renamed_note)\(\) \{.*\}$", sh, re.M))
+    restore_block = re.search(r"# ---------- restore:.*?^fi$", sh, re.M | re.S).group(0)
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    (bin_ / "filament-kit").write_text("#!/bin/sh\n", encoding="utf-8")
+    script = (
+        fns + "\nOLD_NAME=0\nif from_old_name bin; then OLD_NAME=1; fi\n"
+        "RESTORE=/tmp/b.zip\n"
+        + restore_block.replace("/usr/local/bin/spoolwarden", "echo")
+    )
+    r = subprocess.run([_bash(), "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.count("filament-kit is now called Spoolwarden. The command is spoolwarden; filament-kit still works for now.") == 1
+    assert "restore --yes /tmp/b.zip" in r.stdout
+
+
+def test_android_workflow_checks_nonzero_test_count_and_uploads_results():
+    wf = (ROOT / ".github" / "workflows" / "android.yml").read_text(encoding="utf-8")
+    assert "- run: ./gradlew testDebugUnitTest assembleDebug --no-build-cache\n" in wf
+    assert "app/build/test-results/**/*.xml" in wf
+    assert "total <= 0" in wf
+    assert "uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in wf
+    assert "path: android/app/build/test-results/" in wf

@@ -10,7 +10,7 @@ is too short for it all, the temperatures go first, then the lot, then the date,
 
 This module holds the data functions (what a label says, where an address goes), the drawing, the print page and the
 route handlers. It mounts nothing: `kit_routes()` and `labels_tab.routes()` give the routes as lists, and the registry
-step (RC9) mounts them. Texts are plain constants named like the keys they will have in the catalogue (RC9 moves them).
+step mounts them. Texts are plain constants named like the keys they will have in the catalogue (moves them).
 
     label_data(spool)                    the facts a label shows, from a Spoolman spool
     short_address(number, cfg)           the address in the QR code
@@ -66,7 +66,7 @@ PAGE_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 's
 PAGE_HEADERS = {"Content-Security-Policy": PAGE_CSP, "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
                 "Cache-Control": "no-store"}
 
-# ---- texts (plain constants for now: RC9 moves them to the catalogue under these names)
+# ---- texts (plain constants for now: moves them to the catalogue under these names)
 TEXT_LABELS_TITLE_ONE = "Print a label"
 TEXT_LABELS_TITLE_MANY = "Print labels"
 TEXT_LABELS_SIZE = "Size"
@@ -484,7 +484,7 @@ class KitRoute(NamedTuple):
 
 
 def kit_routes(sm_factory, cfg_factory=config.load) -> list[KitRoute]:
-    """The kit routes of 6.1 that RC8 owns, for the registry step to mount. `sm_factory()` gives the Spoolman client."""
+    """The kit routes of 6.1 that owns, for the registry step to mount. `sm_factory()` gives the Spoolman client."""
 
     async def label(request: Request) -> Response:
         try:

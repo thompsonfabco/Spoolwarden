@@ -1,4 +1,4 @@
-"""RC1b wave, the old (JSON) form kept beside the XML one for one release: every file the wave moved to XML (pairing
+"""wave, the old (JSON) form kept beside the XML one for one release: every file the wave moved to XML (pairing
 devices/pending/spent, station-requests, reads, the Label Reader's record and plan, reader-setup, a kept read's meta)
 has its JSON written in the shape v0.6.2 wrote it, kept current, and a change an older release makes to it wins once."""
 import hashlib

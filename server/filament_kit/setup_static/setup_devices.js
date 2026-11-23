@@ -19,7 +19,7 @@ let devMetaEl = null;            // the line under the title, kept to change its
 let devTrusted = null;           // trusted computers listed, once read (null: not read, locked or off)
 let devQrUrls = [];
 
-// The words of this section's kind, version, Open and device detail. Until the catalogue holds them (EV2 files
+// The words of this section's kind, version, Open and device detail. Until the catalogue holds them (files
 // them) the English shows here through devT; a catalogue text of the same key wins as soon as there is one.
 const DEV_EN = {
   devices_kind_phone: "Phone", devices_kind_pc: "Slicer Sync PC", devices_kind_station: "Weigh Station", devices_kind_web: "Web app", devices_kind_reader: "Tag Reader",
@@ -577,10 +577,16 @@ function webAppCard() {
       devQrUrls = [];
       fill(body,
         h("p", { textContent: SW.t("devices_webapp_home") }),
-        h("div", { class: "devices__web" }, devCodeBlock(SW.t("devices_webapp_home_caption"), r.url), devQr(r.qr_svg, SW.t("devices_webapp_home_alt"), devQrUrls)),
+        h("div", { class: "devices__web" }, devCodeBlock(SW.t("devices_webapp_home_caption"), r.url),
+          h("a", { class: "btn btn--ghost", href: r.url, target: "_blank", rel: "noopener noreferrer",
+            textContent: devT("devices_open"), "aria-label": devT("devices_open_named", { name: SW.t("devices_webapp_home_caption") }) }),
+          devQr(r.qr_svg, SW.t("devices_webapp_home_alt"), devQrUrls)),
         h("p", { class: "muted", textContent: SW.t("devices_webapp_hint") }),
         r.public_url ? h("p", { textContent: SW.t("devices_webapp_away") }) : null,
-        r.public_url ? h("div", { class: "devices__web" }, devCodeBlock(SW.t("devices_webapp_away_caption"), r.public_url), devQr(r.public_qr_svg, SW.t("devices_webapp_away_alt"), devQrUrls)) : null,
+        r.public_url ? h("div", { class: "devices__web" }, devCodeBlock(SW.t("devices_webapp_away_caption"), r.public_url),
+          h("a", { class: "btn btn--ghost", href: r.public_url, target: "_blank", rel: "noopener noreferrer",
+            textContent: devT("devices_open"), "aria-label": devT("devices_open_named", { name: SW.t("devices_webapp_away_caption") }) }),
+          devQr(r.public_qr_svg, SW.t("devices_webapp_away_alt"), devQrUrls)) : null,
         h("p", { textContent: SW.t("devices_webapp_keep") }));
     }, (e) => {
       if (e.locked) throw e;

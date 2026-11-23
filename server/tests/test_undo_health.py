@@ -1,4 +1,4 @@
-"""Unit tests for HD1 undo, health history, event filters, viewer role, and history_cli."""
+"""Unit tests for undo, health history, event filters, viewer role, and history_cli."""
 from __future__ import annotations
 
 import argparse

@@ -1,4 +1,4 @@
-"""The Hub's setup names beside the old words, `--hub` beside `--server`, the feature titles (design S2.11, N27)."""
+"""The Hub's setup names beside the old words, `--hub` beside `--server`, the feature titles (design N27)."""
 from __future__ import annotations
 
 import io

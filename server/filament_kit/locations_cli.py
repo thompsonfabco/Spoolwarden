@@ -200,6 +200,14 @@ class _Plan:
         return self.before.used(loc, self.taken) if loc is not None else storage.counts_of(self.taken).get(row["name"], 0)
 
 
+def _open_plan(sm_factory) -> "_Plan | int":
+    try:
+        return _Plan(_sm(sm_factory))
+    except SpoolmanError as e:
+        output.error(f"Spoolman did not answer: {e}", "start Spoolman, then run it again.")
+        return output.FAILED
+
+
 def _no_such(name: str, plan: _Plan) -> int:
     output.error(f'there is no location called "{name}".',
                  "the locations are " + ", ".join(r["name"] for r in plan.rows) + ".")
@@ -311,7 +319,9 @@ def cmd_add(a, sm_factory) -> int:
     stop = _need_root("add", "")
     if stop is not None:
         return stop
-    plan = _Plan(_sm(sm_factory))
+    plan = _open_plan(sm_factory)
+    if isinstance(plan, int):
+        return plan
     row = {"id": None, "name": a.name.strip(), "type": BULK, "limit": None, "count": None, "fill": NONE,
            "materials": [], "overflow": False, "default_overflow": False, "sealed": False}
     stop = _apply_options(row, a, adding=True)
@@ -325,7 +335,9 @@ def cmd_edit(a, sm_factory) -> int:
     stop = _need_root("edit", "")
     if stop is not None:
         return stop
-    plan = _Plan(_sm(sm_factory))
+    plan = _open_plan(sm_factory)
+    if isinstance(plan, int):
+        return plan
     row = plan.find(a.name)
     if row is None:
         return _no_such(a.name, plan)
@@ -346,7 +358,9 @@ def cmd_move(a, sm_factory) -> int:
     stop = _need_root("move", "")
     if stop is not None:
         return stop
-    plan = _Plan(_sm(sm_factory))
+    plan = _open_plan(sm_factory)
+    if isinstance(plan, int):
+        return plan
     row = plan.find(a.name)
     if row is None:
         return _no_such(a.name, plan)
@@ -373,7 +387,9 @@ def cmd_remove(a, sm_factory) -> int:
     stop = _need_root("remove", "")
     if stop is not None:
         return stop
-    plan = _Plan(_sm(sm_factory))
+    plan = _open_plan(sm_factory)
+    if isinstance(plan, int):
+        return plan
     row = plan.find(a.name)
     if row is None:
         return _no_such(a.name, plan)
@@ -401,7 +417,9 @@ def cmd_default_overflow(a, sm_factory) -> int:
     stop = _need_root("default-overflow", "")
     if stop is not None:
         return stop
-    plan = _Plan(_sm(sm_factory))
+    plan = _open_plan(sm_factory)
+    if isinstance(plan, int):
+        return plan
     row = plan.find(a.name)
     if row is None:
         return _no_such(a.name, plan)
@@ -426,7 +444,9 @@ def cmd_sealed(a, sm_factory) -> int:
     stop = _need_root("sealed", "")
     if stop is not None:
         return stop
-    plan = _Plan(_sm(sm_factory))
+    plan = _open_plan(sm_factory)
+    if isinstance(plan, int):
+        return plan
     row = plan.find(a.name)
     if row is None:
         return _no_such(a.name, plan)

@@ -1,4 +1,4 @@
-"""AF2 (c): a tag source at an https address is pinned the first time it is read (trust on first use), a changed
+"""(c): a tag source at an https address is pinned the first time it is read (trust on first use), a changed
 certificate is refused with the fix, and a plain-HTTP source is read as it was."""
 import json
 import threading

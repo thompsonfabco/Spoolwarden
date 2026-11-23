@@ -1,4 +1,4 @@
-"""S5.5: the `printer` commands: naming a printer, `printer list` (AUT-9), `show`, `test`, `add`, `use`,
+"""the `printer` commands: naming a printer, `printer list` (AUT-9), `show`, `test`, `add`, `use`,
 `dismiss`, `rename`, `address`, `access-code`, `api-key`, `lane-data`, `detect`, `scan`, `reports`, `forget-certificate`,
 `forget`, `live`, `menu`, the old spellings, and the `--json` shapes of the Hub's own replies. The commands are run
 through `cli.main` against a registry in a temporary folder; the Hub is never running unless a test gives it a fake

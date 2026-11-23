@@ -1845,6 +1845,12 @@
     <string name="updates_notes_current">Release notes of %1$s</string>
     <!-- 1=version -->
     <string name="updates_notes_new">What %1$s brings</string>
+    <string name="updates_reader_check">Check Label Reader</string>
+    <string name="updates_reader_dialog_body">The local Label Reader stops while it installs and starts again by itself.</string>
+    <!-- 1=version -->
+    <string name="updates_reader_dialog_title">Update Label Reader to %1$s?</string>
+    <!-- 1=version -->
+    <string name="updates_reader_update">Update Label Reader to %1$s</string>
     <string name="updates_remove_command">sudo spoolwarden uninstall</string>
     <string name="updates_remove_line">To remove Spoolwarden: on the Hub, run</string>
     <!-- 1=previous -->
@@ -4132,6 +4138,7 @@
         <item quantity="other">%1$d spools are recorded there. They keep that location until you move them; it is no longer offered for new spools.</item>
     </plurals>
     <string name="storage_remove_body_none">No spools are recorded there.</string>
+    <string name="storage_remove_body_unknown">Spool count is unknown right now. Any spools there keep that location until you move them; it is no longer offered for new spools.</string>
     <string name="storage_notice_converted">Storage locations were converted. Check them.</string>
     <!-- 1=reason -->
     <string name="storage_check_not_saved">Storage locations could not be saved (%1$s).</string>
@@ -5686,4 +5693,39 @@
     <string name="spools_home_done">Home is now %1$s.</string>
     <!-- 1=reason -->
     <string name="spools_home_failed">Could not change the home: %1$s</string>
+    <string name="cli_panel_wifi_off_no_usb">No panel was on USB, so the panel itself still holds its Wi-Fi settings and will keep them until it is connected by USB and set again.</string>
+    <string name="spools_return_printer_not_told">The printer could not be told to clear its slot.</string>
+    <string name="demo_not_mountable">The demo cannot be switched on in this version.</string>
+    <string name="cli_config_share_corrections_delete_ask_one">Delete the 1 correction still waiting?</string>
+    <string name="cli_config_share_corrections_kept_one">1 correction kept.</string>
+    <!-- 1=set -->
+    <string name="storage_warn_container_name">Same name as a container in %1$s.</string>
+    <string name="csv_import_menu">Import from CSV</string>
+    <string name="csv_import_spools_title">Import spools from CSV</string>
+    <string name="csv_import_locations_title">Import storage locations from CSV</string>
+    <string name="csv_import_file_label">CSV file</string>
+    <string name="csv_import_sample">Download a sample file</string>
+    <string name="csv_import_check">Check</string>
+    <string name="csv_import_col_no">No.</string>
+    <string name="csv_import_col_line">What would be added</string>
+    <string name="csv_import_col_line_locations">What would change</string>
+    <string name="csv_import_col_problems">Problems</string>
+    <!-- 1=count -->
+    <plurals name="csv_import_left_out">
+        <item quantity="one">%1$d row has problems and is left out.</item>
+        <item quantity="other">%1$d rows have problems and is left out.</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="csv_import_add_spools">
+        <item quantity="one">Add %1$d spool</item>
+        <item quantity="other">Add %1$d spools</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="csv_import_added_spools">
+        <item quantity="one">Added %1$d spool.</item>
+        <item quantity="other">Added %1$d spools.</item>
+    </plurals>
+    <string name="csv_import_commit_locations">Import locations</string>
+    <!-- 1=add 2=change -->
+    <string name="csv_import_imported_locations">Added %1$s locations and changed %2$s.</string>
 </resources>

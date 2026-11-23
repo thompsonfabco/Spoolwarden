@@ -60,7 +60,7 @@ async function setParent(line, target, box, opener) {
 }
 
 // ----- Download as CSV: the file the Hub gives for GET export/lines.csv, unlocked as a file leaves the Hub -----
-// Texts the catalogue does not have yet (only HD2 opens it): the catalogue's own wins once the key is there.
+// Texts the catalogue does not have yet (only opens it): the catalogue's own wins once the key is there.
 const PRESETS_STUB = { presets_download_csv: "Download as CSV", presets_csv_failed: "Could not download the file: {reason}" };
 const presetsT = (key, vars) => {
   const v = SW.t(key, vars);

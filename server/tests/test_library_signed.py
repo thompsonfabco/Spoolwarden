@@ -1,4 +1,4 @@
-"""Final review I3 (Ruling BU): a library archive from a GitHub release is checked against the release's signed
+"""Final review I3: a library archive from a GitHub release is checked against the release's signed
 SHA256SUMS (release.verify_sums) before it is unpacked; a custom mirror without SHA256SUMS keeps the hash-only
 check with a note. Also the one GitHub-token host policy (M7): library.py uses release.py's."""
 from __future__ import annotations

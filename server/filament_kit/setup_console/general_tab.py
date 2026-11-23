@@ -11,7 +11,7 @@
     POST settings/port {code, port}      change the Hub's web port: checked here before starting the `port_change` job
     POST remote/firewall {code}          the rules the owner sets up by hand: printed only, and it names their networks
     GET  settings/local-intake           the local label reader's health (local_reader.test): a read, no code
-    POST settings/local-intake/test {code, url, tier}   the same check for an address not saved yet (S2.18): the
+    POST settings/local-intake/test {code, url, tier}   the same check for an address not saved yet: the
                                          Hub contacts a host the user names, so it takes the code; nothing is stored,
                                          no token is sent, no redirect is followed; trusts a changed cert when told
     GET  settings/local-intake/plan      what the last plan job (local_intake_plan) saved: no network here, the server's

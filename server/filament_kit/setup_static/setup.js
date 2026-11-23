@@ -23,11 +23,19 @@ function h(tag, props, ...kids) {
 async function api(path, body) {
   const init = { method: body === undefined ? "GET" : "POST", credentials: "same-origin", headers: {} };
   if (body !== undefined) { init.body = JSON.stringify(body); init.headers["Content-Type"] = "application/json"; }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort("timeout"), 30000);
+  init.signal = ctrl.signal;
   let r;
-  try { r = await fetch("/setup/api/" + path, init); } catch {
+  try { r = await fetch("/setup/api/" + path, init); } catch (e) {
+    clearTimeout(timer);
+    if (e && (e.name === "AbortError" || e.name === "TimeoutError") || ctrl.signal.aborted) {
+      throw Object.assign(new Error(SW.t("common_timeout")), { timeout: true });
+    }
     hubJobs().down();                                       // nothing answered
     throw Object.assign(new Error(SW.t("common_hub_no_answer")), { unreachable: true });
   }
+  clearTimeout(timer);
   hubJobs().up();
   let data;
   try { data = await r.json(); } catch { data = { error: `HTTP ${r.status}` }; }

@@ -1,4 +1,4 @@
-"""RC4: the web app's language, demo banner, print page and label, the push language and the Bambu Lab
+"""the web app's language, demo banner, print page and label, the push language and the Bambu Lab
 add by address. No network, no Hub: the kit API is a fake that records what it was asked."""
 from __future__ import annotations
 

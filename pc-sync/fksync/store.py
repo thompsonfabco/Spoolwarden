@@ -149,7 +149,7 @@ def load_token(dirs: AppDirs) -> str | None:
 # --- config ------------------------------------------------------------------------------------
 
 def load_config(dirs: AppDirs) -> dict:
-    """config.xml; an older Sync's config.json is read when there is no XML form, and moved to it (RC1c)."""
+    """config.xml; an older Sync's config.json is read when there is no XML form, and moved to it."""
     xp = statexml.xml_path(dirs.config)
     if xp.exists():
         newer = statexml.read(dirs.config)      # a config.json that an older Sync changed after our last write wins once
@@ -175,7 +175,7 @@ def load_config(dirs: AppDirs) -> dict:
 
 
 def save_config(dirs: AppDirs, cfg: dict) -> None:
-    """Both forms, XML first: an older Sync that is put back after a rollback still finds its pairing (RC1c)."""
+    """Both forms, XML first: an older Sync that is put back after a rollback still finds its pairing."""
     statexml.write_both(dirs.config, cfg)
 
 

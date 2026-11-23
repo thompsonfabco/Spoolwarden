@@ -458,7 +458,7 @@ def _mcp_call(tools, name, args):
 
 
 def test_mcp_add_of_an_existing_filament_keeps_its_line(tools, sm, spoolman_fake_store):
-    # Ruling AC: Claude filling `line` on a routine add must not move a reused filament to another line
+    # Claude filling `line` on a routine add must not move a reused filament to another line
     (a,) = add(sm, item(line="PLA+"))
     fid = sm.get(f"spool/{a}")["filament"]["id"]
     sm.patch(f"filament/{fid}", {"extra": {"line": json.dumps("PLA+")}})

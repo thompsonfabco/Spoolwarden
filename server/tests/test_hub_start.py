@@ -1,4 +1,4 @@
-"""Tests for AF6 Getting Started tab routes and settings Network port / Label Reader endpoints."""
+"""Tests for Getting Started tab routes and settings Network port / Label Reader endpoints."""
 from __future__ import annotations
 
 import os

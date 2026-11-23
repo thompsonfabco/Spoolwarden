@@ -1,4 +1,4 @@
-"""AF1: install.sh's new parts: the first question, the port decision and its questions, the
+"""install.sh's new parts: the first question, the port decision and its questions, the
 port written at a first install, the first-run file; and apply's Guided Setup ending and addresses. The shell pieces are
 cut out of install.sh and run with bash (a pseudo-terminal where a terminal is the point); Linux only."""
 import io

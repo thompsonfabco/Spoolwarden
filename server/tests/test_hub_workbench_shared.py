@@ -1,4 +1,4 @@
-"""Shared parts the looks need (step S6.4b, the design, components): the 'Sort by' label in sortable collection heads
+"""Shared parts the looks need (b, the design, components): the 'Sort by' label in sortable collection heads
 (hidden under Console's table, shown before sort chips in cards/tiles/rows) and the navigation's switched-off mark
 (data-state='off', hidden ', switched off' suffix in all four looks, hollow-circle ::after in sidebar and list only)."""
 from __future__ import annotations

@@ -838,6 +838,9 @@ def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, rem
         except placement.NoFreeContainer as e:
             raise SpoolEditError(str(e), "home") from None
         patch["extra"] = {**(spool.get("extra") or {}), **prev_extra(home, since)}
+    if "location" in patch and patch["location"] != spool.get("location") and checked_out(spool):
+        if view_context().slot_of(patch["location"]) is None:
+            patch["extra"] = {**(spool.get("extra") or {}), **prev_extra("")}
     if not patch:
         return spool
     if dry:
@@ -859,8 +862,16 @@ def _report_update(sm: Spoolman, before: dict, after: dict, patch: dict, empty: 
         elif "remaining_weight" in patch:
             event_sink.emit_spool("spool.weighed", before, sid, **grams)
         if "location" in patch and patch["location"] != before.get("location"):
-            event_sink.emit_spool("spool.moved", before, sid, before_location=before.get("location"),
-                                  after_location=patch["location"])
+            if checked_out(before) and view_context().slot_of(patch["location"]) is None:
+                before_home, before_since = prev_entry(before)
+                slot = (view_context().slot_of(before.get("location")) or {}).get("slot")
+                event_sink.emit_spool("spool.returned", before, sid, before_location=before.get("location"),
+                                      after_location=patch["location"] or None, before_slot=slot,
+                                      after_grams=patch.get("remaining_weight"),
+                                      before_since=before_since, before_home=before_home)
+            else:
+                event_sink.emit_spool("spool.moved", before, sid, before_location=before.get("location"),
+                                      after_location=patch["location"])
     if "remaining_weight" in patch:
         event_sink.weight_changed(sm)
 

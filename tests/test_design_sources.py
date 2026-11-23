@@ -209,7 +209,7 @@ def _kotlin_fields():
 def _web_sources():
     files = [p for d in ("setup_static", "web/static") for p in sorted((SERVER / d).iterdir())
              if p.suffix in (".css", ".js") and "bundle" not in p.name]
-    files += sorted(p for p in SHARED.iterdir() if p.suffix in (".css", ".js"))    # the shared components (S0.11)
+    files += sorted(p for p in SHARED.iterdir() if p.suffix in (".css", ".js"))    # the shared components
     assert files
     return files
 

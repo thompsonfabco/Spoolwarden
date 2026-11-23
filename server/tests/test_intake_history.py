@@ -490,7 +490,7 @@ def test_a_damaged_record_xml_is_no_such_record_not_a_crash(sm):
     assert any("record.xml" in p for p in statexml.problems())
 
 
-# ---------------------------------------------------------------- RC1d rework: the mode, and the old form for one release
+# ---------------------------------------------------------------- rework: the mode, and the old form for one release
 
 @pytest.mark.skipif(not hasattr(os, "geteuid"), reason="file modes are the Hub's on Linux")
 def test_a_record_json_moved_to_xml_keeps_its_private_mode(sm):
@@ -540,3 +540,21 @@ def test_a_record_keeps_record_json_beside_record_xml_for_one_release(sm):
     intake_history._save(rec)
     assert json.loads((d / "record.json").read_text(encoding="utf-8"))["device"] == "changed"
     assert intake_history.list_records(True)["count"] == 1
+
+
+def test_photo_thumb_bounds_size_and_sets_cache_headers(sm):
+    _, hid = add(sm, read_id=read(sm)["read_id"])
+    small = intake_history.photo_thumb(hid, 1)
+    assert small == JPEG
+    hdrs = intake_history.photo_headers(small, thumb=True)
+    assert hdrs["Cache-Control"] == intake_history.PHOTO_CACHE
+    assert hdrs["Content-Length"] == str(len(small))
+    assert hdrs["ETag"].startswith('"') and hdrs["ETag"].endswith('"')
+    assert hdrs["X-Content-Type-Options"] == "nosniff"
+    with pytest.raises(intake_history.HistoryError) as exc:
+        intake_history.photo_thumb(hid, 1, max_bytes=2)
+    assert exc.value.status == 413 and exc.value.code == "too_large"
+    (intake_history._dir(hid) / "photo1.jpg").write_bytes(b"not-a-jpeg")
+    with pytest.raises(intake_history.HistoryError) as bad:
+        intake_history.photo_thumb(hid, 1)
+    assert bad.value.status == 415 and bad.value.code == "bad_image"

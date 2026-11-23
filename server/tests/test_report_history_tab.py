@@ -1,4 +1,4 @@
-"""Tests for HD6: redact extras, redacted Hub report with 3-file retention, and history_tab routes."""
+"""Tests for redact extras, redacted Hub report with 3-file retention, and history_tab routes."""
 from __future__ import annotations
 
 import os
