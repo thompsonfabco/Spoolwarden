@@ -201,6 +201,23 @@ def short_hostname() -> str:
     return socket.gethostname().split(".")[0]
 
 
+def hub_id() -> str:
+    """Stable random identifier for this Hub, persisted in state as XML (never an owner name or hostname)."""
+    from .profiles import statexml
+    with _locked():
+        f = config.paths().state / "pairing_hub_id.xml"
+        names = (f,)
+        _refuse_links(names)
+        data = statexml.read(f, tag="hub", mode=0o600, state_owned=True)
+        _refuse_links(names)
+        if isinstance(data, dict) and isinstance(data.get("id"), str) and data["id"]:
+            return data["id"]
+        hid = uuid.uuid4().hex
+        config.paths().state.mkdir(parents=True, exist_ok=True)
+        statexml.write(f, {"id": hid}, 0o600, tag="hub", state_owned=True)
+        return hid
+
+
 def make_cert(hostname: str, ips: list[str], dest: Path, extra_dns: list[str] = ()) -> str:
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes, serialization

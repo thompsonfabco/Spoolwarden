@@ -1265,7 +1265,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     def info_body() -> dict:
         return {"name": config.load()["server_name"], "version": __version__, "api": API_VERSION,
                 "apk_version": _apk_version(), "modules": sorted(on),
-                "look": config.look(config.load())}
+                "look": config.look(config.load()),
+                "hub_id": pairing.hub_id()}
 
     @_handle
     async def info(request: Request):
@@ -1280,7 +1281,9 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             return _err(401, "code_expired", str(e))
         except pairing.PairingError as e:
             return _err(401, "unauthorized", str(e))
-        return JSONResponse({"token": token})
+        dev_id = await run_in_threadpool(pairing.check, token)
+        role = await run_in_threadpool(pairing.role_of, dev_id) if dev_id else None
+        return JSONResponse({"token": token, "role": role})
 
     @_authed
     async def unpair(request: Request):

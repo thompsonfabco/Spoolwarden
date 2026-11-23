@@ -77,9 +77,23 @@ def test_pair_then_call(sm):
     assert c.post("/api/pair", json={"code": "000000" if p.code != "000000" else "111111"}).status_code == 401
     r = c.post("/api/pair", json={"code": p.code})
     assert r.status_code == 200
+    assert r.json()["role"] is None
     tok = r.json()["token"]
     r = c.get("/api/spools", headers=auth(tok))
     assert r.status_code == 200 and r.json()["spools"] == []
+
+
+def test_info_has_stable_random_hub_id_and_pair_returns_viewer_role(sm, tmp_path):
+    import re
+    c = client(sm)
+    b1 = c.get("/api/info").json()
+    b2 = c.get("/api/info").json()
+    assert re.fullmatch(r"[0-9a-f]{32}", b1["hub_id"])
+    assert b1["hub_id"] == b2["hub_id"]
+    assert (tmp_path / "state" / "pairing_hub_id.xml").exists()
+    p_ha = pairing.issue(device_hint="home-assistant", role=pairing.VIEWER_ROLE)
+    r_ha = c.post("/api/pair", json={"code": p_ha.code})
+    assert r_ha.status_code == 200 and r_ha.json()["role"] == pairing.VIEWER_ROLE
 
 
 def test_unpair_revokes_only_the_caller(sm, caplog):
