@@ -223,9 +223,11 @@ check.
 - The set-up lines are accepted over USB only.
 
 **Going back.** `sudo spoolwarden weigh-station panel-wifi --off` removes the token, sets `station.panel_link` back to
-`usb` and applies it. With the panel plugged in by USB it also tells the panel to forget its Wi-Fi settings; it ends with
-**The panel is back on the USB cable.** If the panel does not confirm that, the command says so (**The panel did not
-confirm that it forgot its Wi-Fi settings; its token is gone, so it can no longer connect.**).
+`usb` and applies it. With the panel plugged in by USB it also tells the panel to forget its Wi-Fi settings; it ends
+with **The panel is back on the USB cable.** If the panel does not confirm that, the command says so (**The panel did
+not confirm that it forgot its Wi-Fi settings; its token is gone, so it can no longer connect.**). Without the panel on
+USB it only removes the token: the panel keeps its Wi-Fi settings but can no longer connect. To make it forget them,
+plug it in and run the command again.
 
 **What still needs the USB cable.** The set-up, `--off` telling the panel to forget, and every firmware write: the Weigh
 Station writes firmware only to a panel it finds on USB. A panel on firmware 14 or later that already has the bundled

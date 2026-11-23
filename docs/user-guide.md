@@ -639,6 +639,7 @@ Station returns a spool too, when you scan its tag.
 - It stays checked out until it is returned. **Unload slot** and **Clear slot** on the Hub page send it back the same
   way, and so does loading another spool into the slot.
 - **Return** is for a spool you took out of the printer by hand.
+- Moving it with **Move** does not return it: only its place changes, and it stays checked out with its home.
 
 ### What Return does
 
