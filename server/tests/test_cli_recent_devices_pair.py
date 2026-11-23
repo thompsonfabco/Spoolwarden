@@ -700,11 +700,12 @@ def test_pair_prints_the_qr_the_instruction_the_code_the_fingerprint_and_the_exp
     tail = [ln for ln in lines[qr_rows[-1] + 1:] if ln]
     assert tail[0] == "Open the Spoolwarden app and scan this code, or type the pairing code."
     assert re.fullmatch(r"Pairing code: \d{3} \d{3}", tail[1])
-    assert tail[2] == "Certificate fingerprint (the phone asks for two groups of it):"
+    assert re.fullmatch(r"Hub address: https://\S+:\d+", tail[2])
+    assert tail[3] == "Certificate fingerprint (the phone asks for two groups of it):"
     g = fingerprint_groups()
-    assert tail[3] == "  " + " ".join(g[:8]) and tail[4] == "  " + " ".join(g[8:]) and len(g) == 16
-    assert re.fullmatch(r"Expires at \d\d:\d\d \(in (10|9) min\)\.", tail[5])
-    assert tail[6] == "Paired: phone." and len(tail) == 7 and waiting["looks"] == 1
+    assert tail[4] == "  " + " ".join(g[:8]) and tail[5] == "  " + " ".join(g[8:]) and len(g) == 16
+    assert re.fullmatch(r"Expires at \d\d:\d\d \(in (10|9) min\)\.", tail[6])
+    assert tail[7] == "Paired: phone." and len(tail) == 8 and waiting["looks"] == 1
     assert max(len(ln) for ln in tail) <= 79
 
 
