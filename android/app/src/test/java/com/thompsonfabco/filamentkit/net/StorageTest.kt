@@ -54,6 +54,7 @@ class StorageTest {
              "counts_unavailable":true}""",
         )!!
         assertEquals(listOf("Rack 1", "Storage box"), a.names)
+        assertTrue(a.countsUnavailable)
         assertNull(a.locations[0].used)
         assertNull(a.locations[1].used)
         assertNull(a.locations[1].free)
@@ -75,6 +76,7 @@ class StorageTest {
         val a = StorageAnswer.ofNames(listOf("Shelf A", "Shelf B"))
         assertFalse(a.detailed)
         assertEquals(listOf("Shelf A", "Shelf B"), a.names)
+        assertFalse(a.countsUnavailable)
         assertNull(a.locations[0].used)
     }
 }
