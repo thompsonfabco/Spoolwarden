@@ -252,6 +252,8 @@ sealed interface RecentFailure {
     data object CloudDown : RecentFailure
     data object Unreadable : RecentFailure
     data object NoPhoto : RecentFailure
+    data object CsvUpdateHub : RecentFailure
+    data object CsvNotSaved : RecentFailure
 
     /** A refusal with the Hub's own message, shown as given. */
     data class Hub(val message: String) : RecentFailure
@@ -419,8 +421,8 @@ class HistoryListViewModel(
                     backend.exportCsv("recent", target)
                     _state.update { it.copy(csvFile = target) }
                 } catch (e: ApiError) {
-                    val words = csvProblemText(e) ?: throw e
-                    _state.update { it.copy(csvProblem = RecentFailure.Hub(words)) }
+                    val problem = csvProblemText(e) ?: throw e
+                    _state.update { it.copy(csvProblem = problem) }
                 }
             }
             _state.update { it.copy(csvBusy = false) }

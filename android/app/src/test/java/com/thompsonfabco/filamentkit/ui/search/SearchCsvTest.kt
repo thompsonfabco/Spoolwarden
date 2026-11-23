@@ -1,7 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.search
 
 import com.thompsonfabco.filamentkit.net.ApiError
-import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
+import com.thompsonfabco.filamentkit.ui.history.RecentFailure
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -51,11 +51,11 @@ class SearchCsvTest {
         val vm = vm()
         error = ApiError(404, "not_found", "The Hub returned an error (404)")
         vm.downloadCsv(File("a.csv"))
-        assertEquals(HistoryTexts.CSV_UPDATE_HUB, vm.state.value.csvProblem)
+        assertEquals(RecentFailure.CsvUpdateHub, vm.state.value.csvProblem)
         assertNull(vm.state.value.csvFile)
         error = ApiError(0, "storage", "disk full")
         vm.downloadCsv(File("a.csv"))
-        assertEquals(HistoryTexts.CSV_NOT_SAVED, vm.state.value.csvProblem)
+        assertEquals(RecentFailure.CsvNotSaved, vm.state.value.csvProblem)
     }
 
     @Test fun otherFailuresGoThroughTheUsualHubNotices() {

@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
+import android.content.Context
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
@@ -31,6 +32,21 @@ internal fun sayText(say: Say): String = when (say) {
         }.toTypedArray(),
     )
     is Say.FromHub -> say.text
+}
+
+/** [say] as text where there is no composition (a toast): the same words [sayText] gives. */
+internal fun Say.resolve(context: Context): String = when (this) {
+    is Say.Words -> context.getString(
+        id,
+        *args.map { arg ->
+            when (arg) {
+                is UsageReason.Known -> context.getString(arg.id)
+                is UsageReason.Other -> arg.text
+                else -> arg
+            }
+        }.toTypedArray(),
+    )
+    is Say.FromHub -> text
 }
 
 /**

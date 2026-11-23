@@ -148,11 +148,11 @@ internal fun HistoryListScreen(
                 SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { open = true })
                 SwMenu(open, { open = false }) {
                     SwMenuItem(
-                        if (s.csvBusy) HistoryTexts.DOWNLOADING else HistoryTexts.DOWNLOAD_CSV,
+                        stringResource(if (s.csvBusy) R.string.history_downloading else R.string.common_download_csv),
                         {
                             open = false
                             csvTarget(context, csvFileName("recent", null))?.let(vm::downloadCsv)
-                                ?: vm.csvShown(RecentFailure.Hub(HistoryTexts.CSV_NOT_SAVED))
+                                ?: vm.csvShown(RecentFailure.CsvNotSaved)
                         },
                         enabled = !s.csvBusy,
                     )

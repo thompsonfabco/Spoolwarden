@@ -9,7 +9,7 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.UndoAnswer
 import com.thompsonfabco.filamentkit.net.UndoState
 import com.thompsonfabco.filamentkit.net.UsageMonth
-import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import java.io.File
 import com.thompsonfabco.filamentkit.ui.history.UndoKinds
 import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
@@ -802,7 +802,7 @@ class PrinterViewModelTest {
         assertNull(vm.state.value.undoOffer)
         val calls = backend.printerCalls
         val outcome = vm.undoOnHub(event(31, "spool.unloaded", "spool:7"))
-        assertEquals(UndoOutcome.Done("Put back. The printer still shows what it was set to."), outcome)
+        assertEquals(UndoOutcome.Done(Say.Words(R.string.history_put_back_note, listOf("The printer still shows what it was set to."))), outcome)
         assertEquals(listOf(31L), backend.undone)
         assertNull("the result line no longer holds", vm.state.value.slotNote)
         runCurrent()
@@ -884,11 +884,11 @@ class PrinterViewModelTest {
         val vm = vm()
         backend.exportError = ApiError(404, "not_found", "The Hub returned an error (404)")
         vm.downloadUsageCsv(File("a.csv")); runCurrent()
-        assertEquals(Say.FromHub(HistoryTexts.CSV_UPDATE_HUB), vm.state.value.csvProblem)
+        assertEquals(Say.Words(R.string.history_csv_update_hub), vm.state.value.csvProblem)
         assertNull(vm.state.value.csvFile)
         backend.exportError = ApiError(0, "storage", "disk full")
         vm.downloadUsageCsv(File("a.csv")); runCurrent()
-        assertEquals(Say.FromHub(HistoryTexts.CSV_NOT_SAVED), vm.state.value.csvProblem)
+        assertEquals(Say.Words(R.string.history_csv_not_saved), vm.state.value.csvProblem)
     }
 
     @Test fun blankCodeIsNotSent() = runTest(dispatcher) {

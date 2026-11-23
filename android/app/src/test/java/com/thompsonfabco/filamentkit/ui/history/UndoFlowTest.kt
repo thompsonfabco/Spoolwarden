@@ -1,9 +1,11 @@
 package com.thompsonfabco.filamentkit.ui.history
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.UndoAnswer
 import com.thompsonfabco.filamentkit.net.UndoState
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -75,10 +77,10 @@ class UndoFlowTest {
     @Test fun undoSaysPutBackAndAddsTheHubsNoteForALoad() = runBlocking {
         val hub = Fake()
         val flow = UndoFlow(hub) { now }
-        assertEquals(UndoOutcome.Done("Put back."), flow.undo(event(8, UndoKinds.MOVED)))
+        assertEquals(UndoOutcome.Done(Say.Words(R.string.spools_put_back)), flow.undo(event(8, UndoKinds.MOVED)))
         hub.undoAnswer = { UndoAnswer(true, 9, "The printer still shows what it was set to.") }
         assertEquals(
-            UndoOutcome.Done("Put back. The printer still shows what it was set to."),
+            UndoOutcome.Done(Say.Words(R.string.history_put_back_note, listOf("The printer still shows what it was set to."))),
             flow.undo(event(8, UndoKinds.LOADED)),
         )
     }
@@ -87,15 +89,15 @@ class UndoFlowTest {
         val hub = Fake()
         val flow = UndoFlow(hub) { now }
         hub.undoAnswer = { throw refusal("changed_since", "The Hub's own sentence.") }
-        assertEquals(UndoOutcome.Refused("The Hub's own sentence."), flow.undo(event(8, UndoKinds.MOVED)))
+        assertEquals(UndoOutcome.Refused(Say.FromHub("The Hub's own sentence.")), flow.undo(event(8, UndoKinds.MOVED)))
         hub.undoAnswer = { throw refusal("changed_since", null) }
-        assertEquals("This changed again since, so it cannot be undone.", flow.undo(event(8, UndoKinds.MOVED)).text)
+        assertEquals(Say.Words(R.string.undo_why_changed_since), flow.undo(event(8, UndoKinds.MOVED)).text)
         hub.undoAnswer = { throw refusal("too_old", null) }
-        assertEquals(HistoryTexts.UNDO_TOO_OLD, flow.undo(event(8, UndoKinds.MOVED)).text)
+        assertEquals(Say.Words(R.string.undo_why_too_old), flow.undo(event(8, UndoKinds.MOVED)).text)
         hub.undoAnswer = { throw refusal("already_undone", null) }
-        assertEquals(HistoryTexts.UNDO_ALREADY_UNDONE, flow.undo(event(8, UndoKinds.MOVED)).text)
+        assertEquals(Say.Words(R.string.undo_why_already_undone), flow.undo(event(8, UndoKinds.MOVED)).text)
         hub.undoAnswer = { throw refusal("not_undoable", null) }
-        assertEquals(HistoryTexts.UNDO_NOT_UNDOABLE, flow.undo(event(8, UndoKinds.MOVED)).text)
+        assertEquals(Say.Words(R.string.undo_why_not_undoable), flow.undo(event(8, UndoKinds.MOVED)).text)
         assertTrue(flow.undo(event(8, UndoKinds.MOVED)) is UndoOutcome.Refused)
     }
 
@@ -103,10 +105,10 @@ class UndoFlowTest {
         val hub = Fake()
         val flow = UndoFlow(hub) { now }
         hub.undoAnswer = { throw ApiError(404, "not_found", "The Hub returned an error (404)") }
-        assertEquals(HistoryTexts.UNDO_UPDATE_HUB, flow.undo(event(8, UndoKinds.MOVED)).text)
+        assertEquals(Say.Words(R.string.history_undo_update_hub), flow.undo(event(8, UndoKinds.MOVED)).text)
         hub.undoAnswer = { throw ApiError(0, "offline", "Could not reach the Hub") }
-        assertEquals(HistoryTexts.UNDO_FAILED, flow.undo(event(8, UndoKinds.MOVED)).text)
+        assertEquals(Say.Words(R.string.history_undo_failed), flow.undo(event(8, UndoKinds.MOVED)).text)
         hub.undoAnswer = { throw ApiError(500, "internal", "The Hub returned an error (500)") }
-        assertEquals(HistoryTexts.UNDO_FAILED, flow.undo(event(8, UndoKinds.MOVED)).text)
+        assertEquals(Say.Words(R.string.history_undo_failed), flow.undo(event(8, UndoKinds.MOVED)).text)
     }
 }

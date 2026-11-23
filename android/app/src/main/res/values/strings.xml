@@ -5762,4 +5762,24 @@
     <string name="corrections_a11y_removing">Removing the correction for %1$s</string>
     <!-- 1=name 2=count -->
     <string name="corrections_a11y_photos">Photos of the correction for %1$s: %2$d</string>
+    <!-- 1=note -->
+    <string name="history_put_back_note">Put back. %1$s</string>
+    <string name="history_undo_update_hub">Update the Hub to use Undo.</string>
+    <string name="history_undo_failed">Nothing was undone. Try again.</string>
+    <string name="history_activity_title">Recent activity</string>
+    <string name="history_by_month">By month</string>
+    <string name="history_downloading">Downloading…</string>
+    <string name="history_no_months">No months to show yet.</string>
+    <string name="history_months_update_hub">Update the Hub to see filament used by month.</string>
+    <string name="history_csv_update_hub">Update the Hub to download this file.</string>
+    <string name="history_csv_not_saved">The file could not be saved on this phone. Is there enough free space?</string>
+    <!-- 1=count -->
+    <plurals name="history_prints">
+        <item quantity="one">%1$d print</item>
+        <item quantity="other">%1$d prints</item>
+    </plurals>
+    <!-- 1=count -->
+    <string name="history_unfinished">%1$d did not finish</string>
+    <!-- 1=material -->
+    <string name="history_most_used">Most used: %1$s</string>
 </resources>

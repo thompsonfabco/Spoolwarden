@@ -228,7 +228,6 @@ import com.thompsonfabco.filamentkit.ui.history.HistoryPhotoEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
 import com.thompsonfabco.filamentkit.ui.history.UndoFlow
 import com.thompsonfabco.filamentkit.ui.history.showUndoable
-import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersViewModel
 import com.thompsonfabco.filamentkit.ui.hub.HubGlanceRoute
 import com.thompsonfabco.filamentkit.ui.hub.HubScreen
@@ -1429,7 +1428,7 @@ internal fun FilamentKitApp(
                                     if (undo == null) {
                                         toast.show(said, kind = kind)
                                     } else {
-                                        toast.showUndoable(said, context.getString(R.string.common_undo), undo.event, undoHoldMs(context), undo.run, kind)
+                                        toast.showUndoable(said, context.getString(R.string.common_undo), undo.event, context, undo.run, kind)
                                     }
                                 }
                             },
