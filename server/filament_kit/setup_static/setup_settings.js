@@ -87,7 +87,7 @@ const setT = (key, vars) => {
 
 let setEl = null;                 // the section's region, kept while Settings stays open
 let setGeneral = null;            // the one read of settings/general
-const setSeen = { g: null, lib: null, st: null, al: null };
+const setSeen = { g: null, lib: null, st: null, al: null, cw: null };      // cw: the corrections waiting (setup_corrections.js)
 let setHashMove = false;          // the address moved inside Settings: the groups are not read again
 let setScrollOn = false;
 const FRESH_MS = 5000;
@@ -185,6 +185,7 @@ function wireGroup(form, id, o) {
     running = true;
     try {
       keys = o.keys = g.changed();
+      if (!keys.length && o.again && (await o.again()) !== false) return;      // the reader is set differently from the Hub: Save sets it again
       if (keys.length && o.before && !(await o.before(keys))) return;
       if (o.send.reset) o.send.reset();
       return await save0();
@@ -247,7 +248,7 @@ function settingsTab() {
     return setEl;
   }
   setGeneral = null;
-  setSeen.g = setSeen.lib = setSeen.st = setSeen.al = null;
+  setSeen.g = setSeen.lib = setSeen.st = setSeen.al = setSeen.cw = null;
   const link = ([id, key]) => h("li", {}, h("a", { class: "subnav__link", href: "#settings/" + id, "data-id": id, on: { click: jump } },
     SW.t(key), SW.status("needs_look", { small: true, cls: "subnav__dirty", text: SW.t("common_unsaved") })));
   const row = ([id, key]) => h("li", {}, h("a", { class: "settings__row", href: "#settings/" + id, "data-id": id },
@@ -297,6 +298,7 @@ function loadGroup(id, o = {}) {
       wrap._readAt = Date.now();
       const had = wrap.contains(document.activeElement), keep = o.quiet && !o.result ? capture(wrap) : null, el = def[3](data, o);
       if (L) L.done(el); else wrap.replaceChildren(el);
+      if (el._after) wrap.append(el._after);          // a card of its own under the group, outside its Save
       stamp(wrap);
       if (keep && keep.size) {                     // what was typed and not sent stays (the shared carry), and the group shows it as unsaved
         wrap._keep = keep;
@@ -341,9 +343,10 @@ function listState(id) {
   if (!g) return "";
   if (id === "general") return String(v.server_name || "");
   if (id === "label-reader") {
-    if (g.ai_intake_on && g.local_intake_on) return SW.t("settings_reader_order_" + ({ auto: "auto", "local-then-cloud": "local_cloud", "cloud-then-local": "cloud_local",
-      cloud: "cloud", local: "local" }[v["intake.reader"] || "auto"]));
-    return g.ai_intake_on ? SW.t("settings_reader_order_cloud") : g.local_intake_on ? SW.t("settings_reader_order_local") : SW.t("settings_state_off");
+    const order = g.ai_intake_on && g.local_intake_on ? SW.t("settings_reader_order_" + ({ auto: "auto", "local-then-cloud": "local_cloud", "cloud-then-local": "cloud_local",
+      cloud: "cloud", local: "local" }[v["intake.reader"] || "auto"]))
+      : g.ai_intake_on ? SW.t("settings_reader_order_cloud") : g.local_intake_on ? SW.t("settings_reader_order_local") : SW.t("settings_state_off");
+    return setSeen.cw > 0 ? SW.t("settings_state_reader_waiting", { order, count: setSeen.cw }) : order;
   }
   if (id === "voice") return g.station_on ? SW.t(v["station.tts"] === "espeak" ? "settings_voice_espeak" : "settings_voice_piper") : SW.t("settings_state_off");
   return "";
@@ -667,20 +670,24 @@ function groupLabelReader({ g }) {
   body.push(heading("settings_reader_group_recent"),
     requiredField({ name: "intake.history_keep", type: "number", mono: true, label: SW.t("settings_reader_keep"), value: String(v["intake.history_keep"] == null ? 20 : v["intake.history_keep"]),
       hint: SW.t("settings_reader_keep_hint", { count: hist.count || 0, size: megabytes(hist.photo_bytes || 0) }), check: whole(0, 500, "settings_reader_keep_error") }));
+  const share = corrSwitch(g);                   // setup_corrections.js: Share corrections
+  body.push(heading("settings_corr_heading"), share.node);
   if (cloud) body.push(SW.banner({ kind: "warn", inline: true, text: SW.t("settings_reader_restart_warn") }));
 
   const el = setGroup("label-reader", { desc: SW.t("settings_reader_desc"), save: SW.t("settings_reader_save"), badges, body });
   const o = { send: null };
   if (keyProxy) el.querySelector(".group__body").append(keyProxy);
-  const own = { key: async (value) => {
+  const own = { [CORR_KEY]: share.send, key: async (value) => {
     try { await api("key", { key: value, code: theCode() }); } catch (e) { throw setRefusal(el, Object.assign(e, { data: { ...(e.data || {}), field: "key" } })); }
     keyField._control.value = "";                // accepted: it does not stay in the page (the proxy keeps what was sent, so the group is clean)
     return {};
   } };
   o.send = sender(() => el, () => o.group, own, { "intake.history_keep": (x) => Number(x), reads_per_day: (x) => Number(x) });
-  o.before = async (keys) => !(keys.includes("model") || keys.includes("reads_per_day")) || !!(await SW.ask({ kind: "confirm", title: SW.t("settings_restart_title"),
-    text: SW.t("settings_restart_body"), confirm: SW.t("settings_restart_confirm") }));
-  o.done = (text) => (o.keys.includes("key") ? text + " " + SW.t("settings_reader_key_saved") : text);
+  o.before = async (keys) => (await share.before(keys)) && (!(keys.includes("model") || keys.includes("reads_per_day")) || !!(await SW.ask({ kind: "confirm", title: SW.t("settings_restart_title"),
+    text: SW.t("settings_restart_body"), confirm: SW.t("settings_restart_confirm") })));
+  o.done = (text) => [share.named(text), o.keys.includes("key") ? SW.t("settings_reader_key_saved") : "", share.done(o.keys)].filter(Boolean).join(" ");
+  o.again = share.again;
+  el._after = correctionsCard(!!v[CORR_KEY]);      // Corrections waiting
   wireGroup(el, "label-reader", o);
   el.addEventListener("click", (e) => { if (keyField && e.target.closest('[data-action="undo-changes"]')) keyField._control.value = ""; });
   return el;
