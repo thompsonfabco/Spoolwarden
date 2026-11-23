@@ -4134,4 +4134,8 @@ window.SW_TEXT = Object.freeze({
   "spool_load_the_spool": "the spool",
   "spool_load_auto_hint": "The slot where the spool appears.",
   "spool_load_auto_refused": "This printer has no slots the Hub can watch. Choose a slot.",
+  "app_update_downloading_percent": "Downloading… {percent}%",
+  "app_update_install_plain": "Install",
+  "app_update_banner": "Update available",
+  "app_update_banner_version": "Update available (Spoolwarden {version})",
 });

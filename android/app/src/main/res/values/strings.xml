@@ -5809,4 +5809,10 @@
     <string name="spool_load_the_spool">the spool</string>
     <string name="spool_load_auto_hint">The slot where the spool appears.</string>
     <string name="spool_load_auto_refused">This printer has no slots the Hub can watch. Choose a slot.</string>
+    <!-- 1=percent -->
+    <string name="app_update_downloading_percent">Downloading… %1$s%%</string>
+    <string name="app_update_install_plain">Install</string>
+    <string name="app_update_banner">Update available</string>
+    <!-- 1=version -->
+    <string name="app_update_banner_version">Update available (Spoolwarden %1$s)</string>
 </resources>

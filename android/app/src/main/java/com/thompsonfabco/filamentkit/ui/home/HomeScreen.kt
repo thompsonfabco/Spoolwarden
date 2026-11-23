@@ -76,6 +76,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwMenu
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
 import com.thompsonfabco.filamentkit.ui.components.ageWords
+import com.thompsonfabco.filamentkit.ui.printers.sayText
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 import com.thompsonfabco.filamentkit.update.UpdateTexts
@@ -309,7 +310,7 @@ private fun UpdateNotice(update: UpdateUi, onInstall: () -> Unit, onConfirm: () 
     val refused = UpdateTexts.refused(update)
     val links = LocalUriHandler.current
     val installLabel = when {
-        update.busy -> UpdateTexts.installLabel(update)
+        update.busy -> sayText(UpdateTexts.installLabel(update))
         refused -> stringResource(R.string.common_try_again)
         else -> stringResource(R.string.app_update_install)
     }
