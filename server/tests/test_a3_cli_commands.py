@@ -326,3 +326,11 @@ def test_every_parser_command_appears_in_help_command_table(capsys):
             missing.append(s)
     assert missing == [], f"parser commands missing from _COMMAND_TABLE: {missing}"
     assert "certificate --renew" in table_spans
+    assert any(tc.startswith("local-intake update") for tc in table_spans)
+
+
+def test_local_intake_update_routes_to_cmd_local_intake_install(monkeypatch):
+    seen = []
+    monkeypatch.setattr(cli, "cmd_local_intake_install", lambda tier, version, yes, planned=False: seen.append((tier, version, yes, planned)) or 0)
+    assert cli.main(["local-intake", "update", "--tier", "cpu", "--version", "1.2.3", "-y"]) == 0
+    assert seen == [("cpu", "1.2.3", True, False)]

@@ -6839,6 +6839,8 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`local-intake status`', 'Does the local reader answer, which tiers it can use, the reader order', '(none)'),
  ('`local-intake install [--tier auto\\|cpu\\|gpu] [--version VERSION] [--planned] [-y]`',
   'Install or upgrade the local reader from its signed release on this machine (root; sizes are shown first)', '(none)'),
+ ('`local-intake update [--tier auto\\|cpu\\|gpu] [--version VERSION] [--planned] [-y]`',
+  'Upgrade the local reader to its latest signed release (root; sizes are shown first)', '(none)'),
  ('`local-intake share-corrections [on\\|off] [--delete-waiting] [--status]`',
   'Share corrections: `on` or `off` sets it (root); no word sets the reader to the saved value; `--status` shows both',
   '(none)'),
@@ -7438,6 +7440,13 @@ def _build_parser():
     _add_yes(lii, "do not ask (the sizes are still printed)")
     lii.add_argument("--planned", action="store_true", help="the version and tier the last `local-intake plan` "
                                                             "saved (the setup page's job)")
+    liu = lisub.add_parser("update", help="upgrade the local reader to its latest signed release "
+                                          "(root; sizes are shown first)")
+    liu.add_argument("--tier", choices=["auto", "cpu", "gpu"], help="default: local_intake.tier (auto)")
+    liu.add_argument("--version", help="a release version instead of the latest")
+    _add_yes(liu, "do not ask (the sizes are still printed)")
+    liu.add_argument("--planned", action="store_true", help="the version and tier the last `local-intake plan` "
+                                                            "saved (the setup page's job)")
     lis = lisub.add_parser("share-corrections", help="Share corrections: `on` / `off` sets it (root); no word sets "
                                                      "the reader to the saved value (the setup page's job); "
                                                      "--status shows both")
@@ -7757,7 +7766,7 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "web":
         return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
     if args.cmd == "local-intake":
-        if args.li_cmd == "install":
+        if args.li_cmd in ("install", "update"):
             return cmd_local_intake_install(args.tier, args.version, args.yes, planned=args.planned)
         if args.li_cmd == "plan":
             return cmd_local_intake_plan()
