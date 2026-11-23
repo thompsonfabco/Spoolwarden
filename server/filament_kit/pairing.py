@@ -168,19 +168,97 @@ def _write_atomic(path: Path, data: bytes, mode: int, state_owned: bool = False)
         raise
 
 
+_BRIDGE_IFACES = ("docker", "br-", "veth", "virbr", "cni", "flannel", "kube", "podman", "tun", "tap", "wsl", "vethernet")
+_DOCKER_BRIDGE_NET = ipaddress.ip_network("172.17.0.0/16")
+
+
+def _is_bridge_iface(name: str) -> bool:
+    low = name.lower()
+    return any(low.startswith(p) for p in _BRIDGE_IFACES)
+
+
+def _is_docker_bridge_ip(ip: str) -> bool:
+    try:
+        return ipaddress.ip_address(ip) in _DOCKER_BRIDGE_NET
+    except ValueError:
+        return False
+
+
+def _default_route_udp_ip() -> str | None:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 80))
+            ip = s.getsockname()[0]
+            return ip if _usable(ip) else None
+    except OSError:
+        return None
+
+
+def _linux_route_and_addrs() -> tuple[str | None, str | None, list[tuple[str, str]]]:
+    default_dev: str | None = None
+    default_src: str | None = None
+    try:
+        out = subprocess.run(["ip", "-4", "route", "show", "default"], capture_output=True, text=True, timeout=3).stdout
+        for line in out.splitlines():
+            m_dev = re.search(r"\bdev\s+(\S+)", line)
+            m_src = re.search(r"\bsrc\s+(\S+)", line)
+            if m_dev:
+                default_dev = m_dev.group(1)
+            if m_src and _usable(m_src.group(1)):
+                default_src = m_src.group(1)
+            if default_dev or default_src:
+                break
+    except (OSError, subprocess.SubprocessError):
+        pass
+    addrs: list[tuple[str, str]] = []
+    try:
+        out = subprocess.run(["ip", "-4", "-o", "addr", "show"], capture_output=True, text=True, timeout=3).stdout
+        for line in out.splitlines():
+            m = re.match(r"^\d+:\s+([^\s@]+)\S*\s+inet\s+(\d+\.\d+\.\d+\.\d+)/", line)
+            if m:
+                addrs.append((m.group(1), m.group(2)))
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return default_dev, default_src, addrs
+
+
 def _candidate_ips() -> list[str]:
-    ips: list[str] = []
+    preferred: list[str] = []
+    fallback: list[str] = []
     if os.name != "nt":
+        default_dev, default_src, if_addrs = _linux_route_and_addrs()
+        if default_src and not (default_dev and _is_bridge_iface(default_dev)):
+            preferred.append(default_src)
+        for iface, ip in if_addrs:
+            if not _usable(ip):
+                continue
+            if _is_bridge_iface(iface) or (_is_docker_bridge_ip(ip) and iface != default_dev):
+                fallback.append(ip)
+            elif iface == default_dev and not default_src:
+                preferred.insert(0, ip)
+            else:
+                preferred.append(ip)
+        if not if_addrs:
+            try:
+                for ip in subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5).stdout.split():
+                    if not _usable(ip):
+                        continue
+                    (fallback if _is_docker_bridge_ip(ip) else preferred).append(ip)
+            except (OSError, subprocess.SubprocessError):
+                pass
+    if not preferred and not fallback:
+        udp_ip = _default_route_udp_ip()
+        if udp_ip:
+            (fallback if _is_docker_bridge_ip(udp_ip) else preferred).append(udp_ip)
         try:
-            ips = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5).stdout.split()
-        except (OSError, subprocess.SubprocessError):
-            ips = []
-    if not ips:
-        try:
-            ips = [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
+            for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+                ip = i[4][0]
+                if not _usable(ip):
+                    continue
+                (fallback if _is_docker_bridge_ip(ip) else preferred).append(ip)
         except OSError:
-            ips = []
-    return ips
+            pass
+    return preferred if preferred else fallback
 
 
 def _usable(ip: str) -> bool:

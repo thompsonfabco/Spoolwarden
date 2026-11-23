@@ -631,3 +631,32 @@ def test_patch_reply_adds_view_before_and_dry_and_refusals_name_their_field(sm):
     assert sm.get(f"spool/{sid}")["remaining_weight"] == 500
     r = c.patch(f"/api/spools/{sid}", headers=auth(tok), json={"location": "Nowhere Shelf", "dry_run": False})
     assert r.status_code == 200 and sm.get(f"spool/{sid}")["location"] == "Nowhere Shelf"   # the app's route is unchanged
+
+
+def test_local_ips_prefers_default_route_and_skips_bridges(monkeypatch):
+    import socket
+    from types import SimpleNamespace
+    monkeypatch.setattr(pairing.os, "name", "posix")
+    monkeypatch.setattr(
+        pairing,
+        "_linux_route_and_addrs",
+        lambda: (
+            "eth0",
+            "192.168.1.42",
+            [("docker0", "172.17.0.1"), ("br-abc123", "172.18.0.1"), ("veth0", "10.88.0.5"), ("eth0", "192.168.1.42"), ("wlan0", "192.168.1.43")],
+        ),
+    )
+    assert pairing.local_ips() == ["192.168.1.42", "192.168.1.43"]
+
+    monkeypatch.setattr(pairing, "_linux_route_and_addrs", lambda: ("docker0", "172.17.0.1", [("docker0", "172.17.0.1")]))
+    monkeypatch.setattr(pairing.subprocess, "run", lambda *a, **kw: SimpleNamespace(stdout=""))
+    assert pairing.local_ips() == ["172.17.0.1"]
+
+    monkeypatch.setattr(pairing.os, "name", "nt")
+    monkeypatch.setattr(pairing, "_default_route_udp_ip", lambda: "192.168.50.10")
+    monkeypatch.setattr(
+        pairing.socket,
+        "getaddrinfo",
+        lambda *a, **kw: [(socket.AF_INET, 0, 0, "", ("172.17.0.1", 0)), (socket.AF_INET, 0, 0, "", ("192.168.50.10", 0))],
+    )
+    assert pairing.local_ips() == ["192.168.50.10"]
