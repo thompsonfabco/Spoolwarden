@@ -1013,7 +1013,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
                 (config.paths().etc / n).unlink(missing_ok=True)
             out(f"The backup is from {m.host}, this machine is {host()}: the server gets a new certificate. Pair the phones "
                 "and the PC sync again (Devices on the setup page). Tag Readers set up for this Hub must be set up again.")
-        out("The data is back. Setting up the modules it names (this installs their packages and may take a while)...")
+        out("The data is back. Setting up the features it names (this installs their packages and may take a while)...")
         step("Starting the services")
         rc = run([WRAPPER, "modules", "apply", "--no-pair"])
         # the apply made the users the kit's modules need: the files restored before them get their owners now
@@ -1029,7 +1029,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
             if services:
                 run(["systemctl", "try-restart", *services])
         if rc != 0:
-            out("error: the data is back, but setting up the modules failed. Finish with: sudo spoolwarden modules apply"
+            out("error: the data is back, but setting up the features failed. Finish with: sudo spoolwarden features apply"
                 + "".join(f"\n  the earlier {t} is in {o}" for t, o in swapped if o is not None))
             return 1
         for _target, old in swapped:

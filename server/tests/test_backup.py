@@ -379,7 +379,16 @@ def test_a_failed_apply_keeps_the_data_and_says_how_to_finish(kit, capsys):
     assert backup.restore(z, yes=True, run=Runner(rc=1)) == 1
     assert (kit / "state" / "devices.json").read_text() == '[{"id": "d1"}]\n'
     out = capsys.readouterr().out
-    assert "sudo spoolwarden modules apply" in out and "the earlier" in out
+    assert "sudo spoolwarden features apply" in out and "the earlier" in out
+    assert "setting up the features failed" in out and "modules" not in out      # the person's word is features (E1)
+
+
+def test_a_restore_that_works_says_features_not_modules(kit, capsys):
+    z = backup.create()
+    _wipe_and_change(kit)
+    assert backup.restore(z, yes=True, run=Runner()) == 0
+    out = capsys.readouterr().out
+    assert "The data is back. Setting up the features it names" in out and "modules" not in out
 
 
 # ---------------------------------------------------------------- the nightly tar.gz as the same zip

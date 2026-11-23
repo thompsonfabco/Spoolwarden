@@ -28,6 +28,8 @@ def product_name_uses(text):
         before, after = text[:m.start()], text[m.end():]
         if after.startswith(" is now called"):          # the wrapper's note names the old command (S5.9, the design, command line)
             continue
+        if after.startswith(" still works"):            # the installer's once-only line: "... filament-kit still works for now."
+            continue
         if before.endswith(("sudo ", "sudo|", "-u ", "-g ", ":")) or text == "filament-kit" or COMMAND.match(after.lstrip(" ") if after.startswith(" ") else "\0"):
             continue
         found.append(text[max(0, m.start() - 20):m.end() + 20])
@@ -64,6 +66,9 @@ def sources():
         out.append((f"server/filament_kit/{f}", _py_texts(PKG / f)))
     for f in sorted((ROOT / "install").rglob("*.sh")):
         out.append((f.relative_to(ROOT).as_posix(), _shell_messages(f)))
+    for f in sorted((ROOT / "install" / "systemd").iterdir()):         # a person reads these in `systemctl status`
+        out.append((f.relative_to(ROOT).as_posix(), [ln for ln in f.read_text("utf-8").splitlines()
+                                                     if ln.startswith("Description=")]))
     return out
 
 
