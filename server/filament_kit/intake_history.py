@@ -236,8 +236,9 @@ def record_save(saved: list[dict], *, source: str, device: str | None = None, re
                               "spool_ids": [int(x) for x in s["spool_ids"]], "filament_id": s.get("filament_id")}
                              for i, s in enumerate(saved)],
                    "revisions": [], "proposals": {}}
+            from . import pairing
             _save(rec)
-            (d / "made").write_text(str(time.time()))
+            pairing._write_atomic(d / "made", str(time.time()).encode("utf-8"), 0o644, state_owned=True)
         prune()
         log.info("intake history: record %s (%s, %d spool(s))", rid, rec["source"],
                  sum(len(s["spool_ids"]) for s in rec["saved"]))

@@ -6040,4 +6040,5 @@
     <string name="preset_updates_offline">Could not reach the Hub. Check that you are on the same network.</string>
     <string name="preset_updates_unexpected">Unexpected response from the Hub</string>
     <string name="preset_updates_close">Close</string>
+    <string name="common_request_too_large">Request too large.</string>
 </resources>

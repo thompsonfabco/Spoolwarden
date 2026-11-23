@@ -4282,4 +4282,5 @@ window.SW_TEXT = Object.freeze({
   "preset_updates_offline": "Could not reach the Hub. Check that you are on the same network.",
   "preset_updates_unexpected": "Unexpected response from the Hub",
   "preset_updates_close": "Close",
+  "common_request_too_large": "Request too large.",
 });
