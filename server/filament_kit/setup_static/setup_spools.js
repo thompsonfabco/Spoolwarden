@@ -72,7 +72,8 @@ const spReturn = (id, button) => needCode(async () => {
   try {
     const r = await api(`spools/${id}/return`, { code: theCode() });
     view.update(r.spool);
-    spToast(r.location ? tx("spools_returned_to", { location: r.location }) : tx("spools_returned"), r, view);
+    const msg = r.location ? tx("spools_returned_to", { location: r.location }) : tx("spools_returned");
+    spToast(r.printer_notified === false ? `${msg} ${tx("spools_return_printer_not_told")}` : msg, r, view);
     view.events(true);
     spRecount();
   } catch (e) {

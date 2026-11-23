@@ -608,3 +608,13 @@ def test_checked_out_since_is_printed_in_local_time_like_other_cli_times(capsys)
                           FakeApi({"GET /api/spools?filter=checked_out": listing(out_view(12, checked_out_since=ts))})) == 0
     out = capsys.readouterr().out
     assert f"since {expected}" in out
+
+
+def test_spool_return_prints_printer_not_told_when_printer_notified_false(capsys):
+    assert spools_cli.run(
+        parse("spool", "return", "12"),
+        return_api(out_view(12), lambda body: {**returned()(body), "printer_notified": False}),
+    ) == 0
+    out = capsys.readouterr().out
+    assert "Returned to Rack 1." in out
+    assert "The printer could not be told to clear its slot." in out

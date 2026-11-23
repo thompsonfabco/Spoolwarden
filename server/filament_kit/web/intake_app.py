@@ -918,6 +918,8 @@ class IntakeApp:
             return self._kit_refusal(e)
         if isinstance(out, dict) and isinstance(out.get("spool"), dict) and isinstance(out.get("view"), dict):
             out = {**out, "spool": {**out["spool"], "view": out["view"]}}
+        if isinstance(out, dict) and out.get("printer_notified") is False:
+            out = {**out, "note": self._say("spools_return_printer_not_told")}
         return out
 
     async def storage_get(self, request: Request):

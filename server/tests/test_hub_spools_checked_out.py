@@ -266,3 +266,25 @@ out.detail = { overflow: document.documentElement.scrollWidth > vw, wide: wide(d
     assert page["list"]["overflow"] is False and page["list"]["wide"] == [] and page["list"]["clipped"] == [], page["list"]
     assert page["list"]["visible"] == [True] * 3 and page["list"]["width"] >= 40, page["list"]
     assert page["detail"]["overflow"] is False and page["detail"]["wide"] == [] and page["detail"]["line"], page["detail"]
+
+
+def test_return_toast_shows_printer_not_told_when_printer_notified_false(hub, made, stubbed, tmp_path):
+    page = _co(hub, tmp_path, r"""
+await unlock();
+const origFetch = window.fetch;
+window.fetch = async (u, i) => {
+  const res = await origFetch(u, i);
+  if (String(u).includes("/return")) {
+    const data = await res.json();
+    data.printer_notified = false;
+    return new Response(JSON.stringify(data), { status: res.status, headers: { "Content-Type": "application/json" } });
+  }
+  return res;
+};
+chip("checked_out").click();
+await settle(() => !!returnBtn(__A__), "row A");
+returnBtn(__A__).click();
+await settle(() => toasts().some((t) => t.includes("The printer could not be told")), "not-told toast");
+out.toast = toasts().find((t) => t.includes("The printer could not be told"));
+""".replace("__A__", str(made["A"])))
+    assert "The printer could not be told to clear its slot." in page["toast"]

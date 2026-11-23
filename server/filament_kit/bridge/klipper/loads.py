@@ -433,6 +433,7 @@ class LoadsMixin:
             self._returned.setdefault(pid, {})[label] = int(spool["id"])
             self._seen.setdefault(pid, {})[label] = None
             c = self._conn(pid)
+            told = False
             if c is not None and c.state in ("connected", "unknown_model"):
                 try:
                     c, model, system, adapter, st, plabel = self._target(pid, label)
@@ -440,10 +441,13 @@ class LoadsMixin:
                         gcode = adapter.clear_gcode(plabel, model, system, self.hw(), st)
                         if gcode:
                             c.client.gcode(gcode)
+                        told = True
                 except (NotSupported, UnknownSlot, loading.NotFound):
-                    pass
+                    told = True
                 except (MoonrakerError, PrinterOffline) as e:
                     log.warning("klipper %s: cannot clear %s on the printer after a return (%s)", pid, label, e)
+            if not told:
+                out["printer_notified"] = False
             self.forget_spools()
             self._publish(pid)
         return out
