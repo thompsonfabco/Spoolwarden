@@ -5844,9 +5844,9 @@
     <string name="hub_device_last_seen">last seen %1$s</string>
     <!-- 1=name -->
     <string name="hub_device_this">%1$s (this device)</string>
-    <string name="hub_out_of_date">Out of date</string>
+    <string name="app_hub_out_of_date">Out of date</string>
     <string name="hub_kind_builtin">Built-in</string>
-    <string name="hub_unavailable">This Hub cannot show this yet. Update the Hub to see it here.</string>
+    <string name="app_hub_unavailable">This Hub cannot show this yet. Update the Hub to see it here.</string>
     <!-- 1=done 2=total -->
     <string name="hub_getting_started_line">Getting started on the Hub: %1$s of %2$s done</string>
     <string name="hub_health_title">Check history</string>
@@ -5910,7 +5910,7 @@
     <!-- 1=note -->
     <string name="history_put_back_note">Put back. %1$s</string>
     <string name="history_undo_update_hub">Update the Hub to use Undo.</string>
-    <string name="history_undo_failed">Nothing was undone. Try again.</string>
+    <string name="app_history_undo_failed">Nothing was undone. Try again.</string>
     <string name="history_activity_title">Recent activity</string>
     <string name="history_by_month">By month</string>
     <string name="history_downloading">Downloading…</string>
@@ -5939,7 +5939,7 @@
     <string name="catalog_entries_loading">Loading your entries…</string>
     <string name="catalog_entries_update_hub">Update the Hub to see your own entries.</string>
     <!-- 1=date -->
-    <string name="catalog_entry_added">Added %1$s</string>
+    <string name="app_catalog_entry_added">Added %1$s</string>
     <!-- 1=entry -->
     <string name="catalog_remove_entry">Remove %1$s</string>
     <!-- 1=entry -->
@@ -5967,7 +5967,7 @@
     <!-- 1=spool 2=slot 3=place -->
     <string name="printer_unload_body_klipper">Unload %1$s from %2$s? It goes back to %3$s. The slot\'s setting on the printer is cleared too, when the printer is online and can do it.</string>
     <!-- 1=label -->
-    <string name="printer_clear_title">Clear slot %1$s?</string>
+    <string name="app_printer_clear_title">Clear slot %1$s?</string>
     <string name="printer_clear_forgets">The Hub forgets the spool recorded here.</string>
     <!-- 1=spool 2=place -->
     <string name="printer_clear_forgets_spool">The Hub forgets the spool recorded here. %1$s goes back to %2$s.</string>
@@ -5975,7 +5975,7 @@
     <string name="printer_clear_done">Cleared slot %1$s.</string>
     <!-- 1=spool 2=place -->
     <string name="printer_clear_spool_back">%1$s is back on %2$s.</string>
-    <string name="printer_clear_waiting_ended">The spool that was waiting for it is not waiting any more.</string>
+    <string name="app_printer_clear_waiting_ended">The spool that was waiting for it is not waiting any more.</string>
     <!-- 1=spool -->
     <string name="printer_auto_choose">Two slots were loaded. Which one got %1$s?</string>
     <string name="printer_guided_by_address">Type a Klipper printer\'s address</string>

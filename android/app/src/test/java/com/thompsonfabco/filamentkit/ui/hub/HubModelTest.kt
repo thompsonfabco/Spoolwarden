@@ -166,7 +166,7 @@ class HubModelTest {
                 ),
                 HubLine.Field(
                     hub("Station"),
-                    HubText.Joined(listOf(words(R.string.devices_kind_station), words(R.string.devices_version_unknown), words(R.string.hub_out_of_date))),
+                    HubText.Joined(listOf(words(R.string.devices_kind_station), words(R.string.devices_version_unknown), words(R.string.app_hub_out_of_date))),
                 ),
             ),
             d.lines,

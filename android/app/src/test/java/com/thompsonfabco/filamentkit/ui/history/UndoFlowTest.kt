@@ -107,8 +107,8 @@ class UndoFlowTest {
         hub.undoAnswer = { throw ApiError(404, "not_found", "The Hub returned an error (404)") }
         assertEquals(Say.Words(R.string.history_undo_update_hub), flow.undo(event(8, UndoKinds.MOVED)).text)
         hub.undoAnswer = { throw ApiError(0, "offline", "Could not reach the Hub") }
-        assertEquals(Say.Words(R.string.history_undo_failed), flow.undo(event(8, UndoKinds.MOVED)).text)
+        assertEquals(Say.Words(R.string.app_history_undo_failed), flow.undo(event(8, UndoKinds.MOVED)).text)
         hub.undoAnswer = { throw ApiError(500, "internal", "The Hub returned an error (500)") }
-        assertEquals(Say.Words(R.string.history_undo_failed), flow.undo(event(8, UndoKinds.MOVED)).text)
+        assertEquals(Say.Words(R.string.app_history_undo_failed), flow.undo(event(8, UndoKinds.MOVED)).text)
     }
 }
