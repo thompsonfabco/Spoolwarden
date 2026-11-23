@@ -663,6 +663,7 @@ Station returns a spool too, when you scan its tag.
 - It stays checked out until it is returned. **Unload slot** and **Clear slot** on the Hub page send it back the same
   way, and so does loading another spool into the slot.
 - **Return** is for a spool you took out of the printer by hand.
+- Moving it with **Move** does not return it: only its place changes, and it stays checked out with its home.
 
 ### What Return does
 
@@ -712,7 +713,7 @@ than one page holds, the list says how many are shown (**20 of 31 shown.**).
 
 Tap a row to open the spool. Under its summary the sheet has the same **Home** line, **Change home** (a menu of the
 storage locations; the one you choose is saved at once, and the line says **Home is now Rack 2.**) and **Return**. None
-of it asks for a setup code. Like the whole web app, it works from the home network only.
+of it asks for a setup code, and it works at the web app's public address too.
 
 ### A phone with the app (Android)
 
@@ -1352,9 +1353,9 @@ says **Played on the Weigh Station.**
 
 - **The Hub page** needs the setup code, or a trusted computer, for each change and for **Test**. With the Weigh
   Station off on this Hub, the group says **The Weigh Station is switched off on this machine.**
-- **The web app** works from the home network only; elsewhere the group is read only and says **Change this at home.**
-  Neither the web app nor the app asks for a setup code. Both show the group only on a Hub that has a Weigh Station, and
-  the app's controls are disabled while the phone cannot reach the Hub.
+- **The web app** changes them on the home network. At the web app's public address the group is read only and says
+  **Change this at home.** Neither the web app nor the app asks for a setup code. Both show the group only on a Hub
+  that has a Weigh Station, and the app's controls are disabled while the phone cannot reach the Hub.
 - **The command line** checks each value before it sends it and refuses one out of range, for example
   `volume must be a whole number from 0 to 100.` **Voice** there offers **Piper (natural; a 60-80 MB download)** and
   **espeak-ng (robotic; no download)**; the one clear speaker is chosen on the Hub page.
