@@ -809,8 +809,8 @@ void test_hub_addresses_cached_skips_the_lookup() {
 }
 
 void test_hub_connect_budget_is_shared() {
-  TEST_ASSERT_EQUAL_UINT32(5000, HUB_CONNECT_BUDGET_MS);
-  TEST_ASSERT_EQUAL_UINT(5, HANDSHAKE_S);
+  TEST_ASSERT_EQUAL_UINT32(10000, HUB_CONNECT_BUDGET_MS);
+  TEST_ASSERT_EQUAL_UINT(10, HANDSHAKE_S);
   TEST_ASSERT_EQUAL_UINT32(2000, mdnsSliceMs(5000));         // about 2 s for mDNS
   TEST_ASSERT_EQUAL_UINT32(1000, mdnsSliceMs(2000));         // a short budget leaves half for the connect
   // an address that does not answer: the slices of all the addresses together stay inside the budget
@@ -872,6 +872,7 @@ void test_boot_report_server_states() {
   TEST_ASSERT_EQUAL_STRING("fail", down.wifiText());
   TEST_ASSERT_EQUAL_STRING("-", down.serverText());                      // Wi-Fi down: the Hub was not asked
   TEST_ASSERT_EQUAL_UINT(5000, HUB_CHECK_MS);
+  TEST_ASSERT_EQUAL_UINT(45000, SETUP_REACH_WINDOW_MS);
 }
 
 void test_compiled_settings_copied_again_when_they_change() {
