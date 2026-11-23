@@ -1845,6 +1845,12 @@
     <string name="updates_notes_current">Release notes of %1$s</string>
     <!-- 1=version -->
     <string name="updates_notes_new">What %1$s brings</string>
+    <string name="updates_reader_check">Check Label Reader</string>
+    <string name="updates_reader_dialog_body">The local Label Reader stops while it installs and starts again by itself.</string>
+    <!-- 1=version -->
+    <string name="updates_reader_dialog_title">Update Label Reader to %1$s?</string>
+    <!-- 1=version -->
+    <string name="updates_reader_update">Update Label Reader to %1$s</string>
     <string name="updates_remove_command">sudo spoolwarden uninstall</string>
     <string name="updates_remove_line">To remove Spoolwarden: on the Hub, run</string>
     <!-- 1=previous -->

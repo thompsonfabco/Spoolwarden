@@ -9,14 +9,16 @@ from __future__ import annotations
 
 import anyio
 
-from .. import config, updates
+from .. import config, local_intake_install, updates
 from . import jobs
 
 
 def routes(page) -> list[tuple]:
     async def read(request, body):
         def run() -> dict:
-            return page.updates_cache.get(jobs.stamp(), lambda: updates.view(config.load()))
+            v = dict(page.updates_cache.get(jobs.stamp(), lambda: updates.view(config.load())))
+            v["reader"] = local_intake_install.reader_update_view()
+            return v
         return await anyio.to_thread.run_sync(run)
 
     return [("/updates", page.guard(read), "GET")]
