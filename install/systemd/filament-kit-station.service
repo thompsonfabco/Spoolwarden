@@ -1,5 +1,5 @@
 [Unit]
-Description=filament-kit station: USB scale and NFC reader, read-only HTTP for the kit server
+Description=Spoolwarden Weigh Station: USB scale and NFC reader, read-only HTTP for the Hub
 After=network-online.target
 Wants=network-online.target
 

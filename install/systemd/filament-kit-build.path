@@ -1,5 +1,5 @@
 [Unit]
-Description=Rebuild filament-kit presets when a rebuild is requested
+Description=Rebuild Spoolwarden presets when a rebuild is requested
 
 [Path]
 PathModified=/var/lib/filament-kit/profiles/rebuild-request

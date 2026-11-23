@@ -1,5 +1,5 @@
 [Unit]
-Description=filament-kit auto-update (module updates): install the latest signed release when one is due
+Description=Spoolwarden auto-update: install the latest signed release when one is due
 After=network-online.target
 Wants=network-online.target
 

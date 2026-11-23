@@ -168,7 +168,7 @@ _NOT_THIS_STEP = ("setup_page.py", "setup_helper.py", "setup_console", "shared_s
 
 
 # data and protocol text that happen to read like a command: the pairing hashes, the backup's own name, a file's marker
-_DATA = ("sha256(", "not a filament-kit backup", "<!-- filament-kit")
+_DATA = ("sha256(", "<!-- filament-kit")
 
 
 def test_no_command_text_in_the_program_says_filament_kit():

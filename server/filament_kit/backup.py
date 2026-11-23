@@ -616,7 +616,7 @@ def verify(path: Path) -> Manifest:
         try:
             info = zf.getinfo("manifest.xml")
         except KeyError:
-            raise BackupError("this zip is not a filament-kit backup: it has no manifest.xml") from None
+            raise BackupError("this zip is not a Spoolwarden backup: it has no manifest.xml") from None
         if info.file_size > MAX_MANIFEST:
             raise BackupError("the manifest is too large")
         try:
@@ -624,7 +624,7 @@ def verify(path: Path) -> Manifest:
         except Exception:  # noqa: BLE001 - defusedxml raises its own and the parser's errors
             raise BackupError("the manifest cannot be read") from None
         if root.tag not in ("filament-kit-backup", "spoolwarden-backup") or root.get("format") != FORMAT:
-            raise BackupError("this backup has a format this kit does not know")
+            raise BackupError("this backup has a format this version of Spoolwarden does not know")
         kit = root.get("kit") or ""
         try:
             release.parse_version(kit)
@@ -641,7 +641,7 @@ def verify(path: Path) -> Manifest:
         for e in root.iterfind("files/*"):
             kind = e.tag
             if kind not in ("root", "dir", "file") or e.get("root") not in names:
-                raise BackupError("the manifest names a place outside the kit's folders")
+                raise BackupError("the manifest names a place outside Spoolwarden's folders")
             rel = "" if kind == "root" else (e.get("path") or "")
             if kind != "root" and _bad_rel(rel):
                 raise BackupError("the manifest names a path outside its folder")
@@ -673,7 +673,7 @@ def verify(path: Path) -> Manifest:
                               + ("files not listed are in it" if held - expected else "listed files are missing"))
         total = sum(i.size for i in m.files) + (m.spoolman.size if m.spoolman else 0)
         if total > MAX_TOTAL:
-            raise BackupError("the backup is larger than a kit restores")
+            raise BackupError("the backup is larger than Spoolwarden restores")
         for it in m.files + ([m.spoolman] if m.spoolman else []):
             name = "spoolman/spoolman.db" if it is m.spoolman else f"files/{it.root}/{it.path}"
             h, n = hashlib.sha256(), 0
@@ -694,7 +694,7 @@ def verify(path: Path) -> Manifest:
 def refusal(m: Manifest) -> str | None:
     """Why this kit will not restore `m`, or None."""
     if release.parse_version(m.kit) > release.parse_version(__version__):
-        return (f"this backup was made by filament-kit {m.kit}, newer than this {__version__}: install {m.kit} first "
+        return (f"this backup was made by Spoolwarden {m.kit}, newer than this {__version__}: install {m.kit} first "
                 f"({config.GET_COMMAND} --version {m.kit}), then restore")
     return None
 
@@ -918,7 +918,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
             return 1
         s = m.summary()
         titles = [modules.MODULES[n].title for n in m.modules if n in modules.MODULES]
-        out(f"Backup of {m.host or 'a kit'} made {m.created} by filament-kit {m.kit}:\n{s['files']} files"
+        out(f"Backup of {m.host or 'a Hub'} made {m.created} by Spoolwarden {m.kit}:\n{s['files']} files"
             + (" and the Spoolman database" if m.spoolman else "") + f". Features: {', '.join(titles) or 'none'}.")
         other_host = bool(m.host) and m.host != host()
         if _has_data():
@@ -994,8 +994,8 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
             if _has_data() and run([WRAPPER, "modules", "apply", "--no-pair"]) == 0:      # it was stopped above
                 out(f"error: the restore stopped ({why}); what was here is back in place and running again.")
             else:
-                out(f"error: the restore stopped ({why}); what was here is back in place. Start the kit again with: "
-                    "sudo spoolwarden modules apply")
+                out(f"error: the restore stopped ({why}); what was here is back in place. Start Spoolwarden again with: "
+                    "sudo spoolwarden features apply")
             return 1
         _carry_event_ids(last_event)
         if kept_password is not None:       # the folder swap took it away with the old etc/: put the same bytes back
@@ -1011,9 +1011,9 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
         if other_host:
             for n in ("cert.pem", "key.pem"):
                 (config.paths().etc / n).unlink(missing_ok=True)
-            out(f"The backup is from {m.host}, this machine is {host()}: the server gets a new certificate. Pair the phones "
-                "and the PC sync again (Devices on the setup page). Tag Readers set up for this Hub must be set up again.")
-        out("The data is back. Setting up the modules it names (this installs their packages and may take a while)...")
+            out(f"The backup is from {m.host}, this machine is {host()}: the Hub gets a new certificate. Pair the phones "
+                "and Slicer Sync again (Devices on the Hub page). Tag Readers set up for this Hub must be set up again.")
+        out("The data is back. Setting up the features it names (this installs their packages and may take a while)...")
         step("Starting the services")
         rc = run([WRAPPER, "modules", "apply", "--no-pair"])
         # the apply made the users the kit's modules need: the files restored before them get their owners now
@@ -1029,7 +1029,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
             if services:
                 run(["systemctl", "try-restart", *services])
         if rc != 0:
-            out("error: the data is back, but setting up the modules failed. Finish with: sudo spoolwarden modules apply"
+            out("error: the data is back, but setting up the features failed. Finish with: sudo spoolwarden features apply"
                 + "".join(f"\n  the earlier {t} is in {o}" for t, o in swapped if o is not None))
             return 1
         for _target, old in swapped:
@@ -1124,7 +1124,7 @@ def pin_upload() -> tuple[Manifest, str]:
     try:
         fd = _open_upload()
     except FileNotFoundError:
-        raise BackupError("no backup was uploaded on the setup page") from None
+        raise BackupError("no backup was uploaded on the Hub page") from None
     except OSError as e:
         raise BackupError(f"the uploaded backup cannot be opened safely ({type(e).__name__})") from None
     dest = backups_dir()
@@ -1218,7 +1218,7 @@ def take_upload() -> Path:
     try:
         want = c.read_text(encoding="ascii").strip()
     except OSError:
-        raise BackupError("no checked and confirmed backup is waiting; upload it on the setup page again") from None
+        raise BackupError("no checked and confirmed backup is waiting; upload it on the Hub page again") from None
     if not p.is_file() or not hmac.compare_digest(_sha256(p), want):
         forget_pending()
         raise BackupError("the uploaded backup changed since it was confirmed; nothing was restored")

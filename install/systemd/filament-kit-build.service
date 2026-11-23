@@ -1,5 +1,5 @@
 [Unit]
-Description=filament-kit Bambu Studio preset build (started by filament-kit-build.path)
+Description=Spoolwarden Bambu Studio preset build (started by filament-kit-build.path)
 After=spoolman.service
 
 [Service]

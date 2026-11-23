@@ -1,5 +1,5 @@
 [Unit]
-Description=filament-kit setup page helper (one request)
+Description=Spoolwarden Hub page helper (one request)
 # Started by filament-kit-setup.socket per connection. Reads one JSON request from the socket, answers one line,
 # exits. A closed list of operations (filament_kit/setup_helper.py), never a command or a path.
 

@@ -163,9 +163,12 @@ def test_the_page_upload_is_left_out(kit):
     (lambda n, d: d.replace(b'path="devices.json"', b'path="../devices.json"') if n == "manifest.xml" else d,
      "outside its folder"),
     (lambda n, d: d.replace(b'root="var/lib/filament-kit"', b'root="etc/shadow"', 1) if n == "manifest.xml" else d,
-     "outside the kit's folders"),
+     "outside Spoolwarden's folders"),
     (lambda n, d: None if n == "manifest.xml" else d, "no manifest.xml"),
+    (lambda n, d: None if n == "manifest.xml" else d, "not a Spoolwarden backup"),
     (lambda n, d: d.replace(b'format="1"', b'format="9"') if n == "manifest.xml" else d, "format"),
+    (lambda n, d: d.replace(b'format="1"', b'format="9"') if n == "manifest.xml" else d,
+     "a format this version of Spoolwarden does not know"),
 ])
 def test_a_changed_zip_is_refused(kit, tmp_path, change, why):
     bad = tmp_path / "bad.zip"
@@ -251,6 +254,7 @@ def test_restore_brings_every_file_and_the_database_back(kit, capsys):
     out = capsys.readouterr().out
     assert "Restored. The Hub is back." in out and "certificate" not in out
     assert "files and the Spoolman database. Features: " in out         # the summary of the design, command line, the Hub page's words
+    assert " by Spoolwarden " in out and " by filament-kit" not in out and "a kit" not in out
     assert "This replaces the spools, settings, printers and pairings on this Hub." in out
     assert "The Hub restarts, and afterwards the setup code is the one from the backup." in out
     # what was here first is kept, as a zip a restore takes too
@@ -304,7 +308,8 @@ def test_a_backup_from_another_host_makes_a_new_certificate(kit, monkeypatch, ca
     monkeypatch.setattr(backup, "host", lambda: "newbox")
     assert backup.restore(z, yes=True, run=Runner()) == 0
     assert not (kit / "etc" / "cert.pem").exists() and not (kit / "etc" / "key.pem").exists()
-    assert "Pair the phones and the PC sync again" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "the Hub gets a new certificate. Pair the phones and Slicer Sync again (Devices on the Hub page)" in out
 
 
 def test_a_newer_kits_backup_is_refused_with_what_to_install(kit, monkeypatch, capsys):
@@ -313,6 +318,7 @@ def test_a_newer_kits_backup_is_refused_with_what_to_install(kit, monkeypatch, c
     run = Runner()
     assert backup.restore(z, yes=True, run=run) == 1
     out = capsys.readouterr().out
+    assert "this backup was made by Spoolwarden " in out and "made by filament-kit" not in out
     assert f"install {__version__} first" in out and f"--version {__version__}" in out and "Nothing was changed" in out
     assert run.cmds == []
 
@@ -379,7 +385,16 @@ def test_a_failed_apply_keeps_the_data_and_says_how_to_finish(kit, capsys):
     assert backup.restore(z, yes=True, run=Runner(rc=1)) == 1
     assert (kit / "state" / "devices.json").read_text() == '[{"id": "d1"}]\n'
     out = capsys.readouterr().out
-    assert "sudo spoolwarden modules apply" in out and "the earlier" in out
+    assert "sudo spoolwarden features apply" in out and "the earlier" in out
+    assert "setting up the features failed" in out and "modules" not in out      # the person's word is features (E1)
+
+
+def test_a_restore_that_works_says_features_not_modules(kit, capsys):
+    z = backup.create()
+    _wipe_and_change(kit)
+    assert backup.restore(z, yes=True, run=Runner()) == 0
+    out = capsys.readouterr().out
+    assert "The data is back. Setting up the features it names" in out and "modules" not in out
 
 
 # ---------------------------------------------------------------- the nightly tar.gz as the same zip
@@ -562,6 +577,32 @@ def test_without_a_confirmation_the_job_restores_nothing(kit, monkeypatch):
     assert cli.main(["restore", "--uploaded", "--yes"]) == 1
     with pytest.raises(backup.BackupError, match="upload and check"):
         backup.confirm_pending("not a hash")
+
+
+def test_the_upload_refusals_name_the_hub_page(kit, monkeypatch):
+    with pytest.raises(backup.BackupError, match="no backup was uploaded on the Hub page"):
+        backup.pin_upload()
+    with pytest.raises(backup.BackupError, match="upload it on the Hub page again"):
+        backup.take_upload()
+
+
+def test_a_backup_larger_than_the_limit_names_spoolwarden(kit, monkeypatch):
+    z = backup.create()
+    monkeypatch.setattr(backup, "MAX_TOTAL", 1)
+    with pytest.raises(backup.BackupError, match="larger than Spoolwarden restores"):
+        backup.verify(z)
+
+
+def test_a_stopped_restore_with_a_failed_apply_says_how_to_start_again(kit, monkeypatch, capsys):
+    z = backup.create()
+    _wipe_and_change(kit)
+
+    def extract(zf, items, target, folder=None):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(backup, "_extract", extract)
+    assert backup.restore(z, yes=True, run=Runner(rc=1)) == 1
+    out = capsys.readouterr().out
+    assert "Start Spoolwarden again with: sudo spoolwarden features apply" in out and "the kit" not in out
 
 
 def _item(root, path, kind="file", mode=0o644, owner="filament-kit", group="filament-kit"):

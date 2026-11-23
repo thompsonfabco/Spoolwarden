@@ -1,5 +1,5 @@
 [Unit]
-Description=Run the filament-kit backup daily
+Description=Run the Spoolwarden backup daily
 
 [Timer]
 OnCalendar=daily

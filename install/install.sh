@@ -25,6 +25,11 @@ AGAIN='curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest
 usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP] [--restore BACKUP.zip|.enc [--password-file FILE]]" >&2; exit 2; }
 # one host name or address: station.allow never takes a range
 bad_addr() { case "$1" in "" | */* | *"*"* | *" "*) return 0 ;; esac; return 1; }
+# The once-only line: printed at the end of an install that replaces a release still called
+# filament-kit. 0.6.1 was the first one called Spoolwarden and the first with the `spoolwarden` command, so a host that has
+# the old command and not the new one is such a host. Only text: the old command and every unit, path and key stay.
+from_old_name() { [ -e "$1/filament-kit" ] && [ ! -e "$1/spoolwarden" ]; }
+renamed_note() { printf '\nfilament-kit is now called Spoolwarden. The command is spoolwarden; filament-kit still works for now.\n'; }
 
 # --set KEY=VALUE: a setting a chosen module needs, the ones the module menu asks for (repeatable)
 add_set() {
@@ -67,7 +72,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 if [ -n "$RESTORE" ]; then
-    [ -f "$RESTORE" ] || die "$RESTORE: no such file (give the backup .zip or .enc from the setup page or spoolwarden backup create)"
+    [ -f "$RESTORE" ] || die "$RESTORE: no such file (give the backup .zip or .enc from the Hub page or spoolwarden backup create)"
     RESTORE="$(cd "$(dirname "$RESTORE")" && pwd)/$(basename "$RESTORE")"
 fi
 if [ -n "$PASSWORD_FILE" ]; then
@@ -82,7 +87,7 @@ case "$MODE" in            # the Hub's setup names are the old words under new n
 esac
 case "$MODE" in
     "" | server | station | all-in-one) ;;
-    *) die "unknown mode '$MODE' (use server, station or all-in-one; to choose single modules use --modules a,b,c)" ;;
+    *) die "unknown mode '$MODE' (use server, station or all-in-one; to choose single features use --modules a,b,c)" ;;
 esac
 if [ -n "$CUSTOM" ]; then
     [ -z "$MODE" ] || die "use --mode or --modules, not both"
@@ -90,7 +95,7 @@ if [ -n "$CUSTOM" ]; then
     CUSTOM=",$CUSTOM"          # names are checked and what they need is added just before the address check
 fi
 if [ -n "$SETS" ]; then
-    [ "$MODE" = custom ] || die "--set goes with --modules (a custom module list)"
+    [ "$MODE" = custom ] || die "--set goes with --modules (a custom feature list)"
     FLAG_ADDR=$(printf '%s\n' "$SETS" | sed -n 's/^set station\.allow=//p' | head -n 1)
     [ -z "$SERVER_ADDR" ] && SERVER_ADDR="$FLAG_ADDR"
 fi
@@ -132,7 +137,7 @@ $PICK" "$SAVED_DIR/config.json" 2>/dev/null) || SAVED_ADDR=""
 fi
 # Checked before anything is installed: a station without the server's address would answer nobody.
 if [ "$MODE" = station ] && [ -z "$SERVER_ADDR" ] && ! [ -t 0 ]; then
-    die "station mode needs the kit server's address: run again with --server <name-or-IP>"
+    die "station mode needs the Hub's address: run again with --server <name-or-IP>"
 fi
 
 # Files sit next to this script in the release tarball (install/...), or in the
@@ -177,7 +182,7 @@ with zipfile.ZipFile(sys.argv[1]) as z:
 known = re.findall(r'_m[(]"([a-z_]+)"', text)
 bad = [n for n in sys.argv[2].split(",") if n and n not in known]
 if bad:
-    sys.exit("error: unknown module %s\nfix: use module names from: %s" % (", ".join(bad), ", ".join(known)))
+    sys.exit("error: unknown feature %s\nfix: use feature names from: %s" % (", ".join(bad), ", ".join(known)))
 PYEOF
 fi
 
@@ -215,6 +220,8 @@ install -d -m 700 -o root -g root /var/backups/filament-kit
 # It carries the system Python version, so a distro Python upgrade rebuilds the venv.
 PYVER=$(python3 --version 2>&1)
 FK_MARKER="$OPT/.fk-installed"
+OLD_NAME=0                 # asked before the new command is installed below
+if from_old_name /usr/local/bin; then OLD_NAME=1; fi
 say "Installing Spoolwarden ($(basename "$WHEEL"))"
 mkdir -p "$OPT"
 # Earlier versions bundled the spec library inside the program. Keep a copy of it before the venv is replaced and
@@ -313,10 +320,10 @@ fi
 if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
     ASKED="features"
     say "Install mode"
-    echo "  server      kit server with Spoolman, printers, presets and backup (AI label reading and library on request)"
-    echo "  station     only the USB scale and NFC reader, for a kit server on another machine"
+    echo "  server      Hub with Spoolman, printers, presets and backup (AI label reading and library on request)"
+    echo "  station     only the USB scale and NFC reader, for a Hub on another machine"
     echo "  all-in-one  server and station on this machine"
-    echo "  custom      choose each module"
+    echo "  custom      choose each feature"
     choice=""
     read -r -p "Install mode: 1) server 2) station 3) all-in-one 4) custom [1] " choice || true
     case "${choice:-1}" in
@@ -331,7 +338,7 @@ if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
         # stdout is captured here; the numbered list without a usable terminal); prompts on the terminal, the
         # choice on stdout
         # First line: the modules, comma separated. Then one `set <key>=<value>` per setting the menu asked for.
-        MENU_OUT=$("$VENV/bin/filament-kit" modules menu --raw) || die "no modules chosen; run the install command again: $AGAIN"
+        MENU_OUT=$("$VENV/bin/filament-kit" modules menu --raw) || die "no features chosen; run the install command again: $AGAIN"
         CUSTOM=",$(printf '%s
 ' "$MENU_OUT" | head -n 1)"
         SETS=$(printf '%s
@@ -368,7 +375,7 @@ fi
 # With the server on this machine the station reads it over loopback; an address would break that link.
 case "$MODE:$CUSTOM,:$SETS" in
     custom:*,server,*:*"set station.allow="*)
-        die "station.allow is for a station without the server on this machine; with server in the module list the station is linked locally, so drop --set station.allow" ;;
+        die "station.allow is for a station without the server on this machine; with server in the feature list the station is linked locally, so drop --set station.allow" ;;
 esac
 # A station whose server is on another machine needs that server's address (spec section 3):
 # station mode, or custom with station on and server off.
@@ -387,7 +394,7 @@ case "$MODE" in
         ;;
 esac
 if [ "$NEED_ADDR" -eq 1 ] && [ -z "$SERVER_ADDR" ]; then
-    [ -t 0 ] || die "station mode needs the kit server's address: run again with --server <name-or-IP>"
+    [ -t 0 ] || die "station mode needs the Hub's address: run again with --server <name-or-IP>"
     while :; do
         SERVER_ADDR=""
         read -r -p "Server address (name or IP): " SERVER_ADDR || true
@@ -512,6 +519,7 @@ fi
 # Guided Setup: modules apply asks nothing and ends with the address and the setup code
 if [ "$GUIDED" -eq 1 ]; then export FK_GUIDED=1; fi
 
+if [ "$OLD_NAME" -eq 1 ]; then renamed_note; fi
 # ---------- 5. the modules ----------
 # (with the station on, `modules apply` also installs Piper, the [station-tts] extra, and its voice)
 exec /usr/local/bin/spoolwarden modules apply

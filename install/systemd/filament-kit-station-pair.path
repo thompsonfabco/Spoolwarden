@@ -1,5 +1,5 @@
 [Unit]
-Description=filament-kit station: a pairing the station received, waiting to be saved as root
+Description=Spoolwarden Weigh Station: a pairing the Weigh Station received, waiting to be saved as root
 # The station service writes pair/request.xml into its own state folder after the owner tapped Pair on the setup
 # page (reverse pairing); filament-kit-station-pair.service saves it.
 
