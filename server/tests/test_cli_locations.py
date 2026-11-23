@@ -632,3 +632,10 @@ def test_locations_mutations_refuse_cleanly_when_spoolman_is_down(capsys, argv):
         "Error: Spoolman did not answer: connection refused",
         "Fix: start Spoolman, then run it again.",
     ]
+
+
+def test_notes_prints_spoolman_unreachable_when_counts_unavailable(capsys):
+    cli.locations_cli.notes({"counts_unavailable": True, "notices": []})
+    got = capsys.readouterr()
+    assert got.out == ""
+    assert got.err.strip() == f"Note: {cli.locations_cli.text('common_spoolman_unreachable')}"

@@ -623,3 +623,22 @@ out.locAfter = names();
 """, width=width)
     assert page["clash"] == "Same name as a container in Rack."
     assert "Annex" in page["locPreview"] and "Annex" in page["locAfter"]
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_spoolman_down_shows_visible_notice_and_unknown_remove_count(hub, tmp_path, width, monkeypatch):
+    from filament_kit import inventory
+    from filament_kit.spoolman import SpoolmanError
+    monkeypatch.setattr(inventory, "_used_locations", lambda sm: (_ for _ in ()).throw(SpoolmanError("down", 0)))
+    page = _drive_storage(hub, tmp_path, r"""
+out.notice = text($('[data-notice="spoolman_unreachable"]'));
+$('[aria-haspopup="menu"]', rowOf("Rack 1")).click();
+const item = await until(() => [...document.querySelectorAll(".menu__item")].find((b) => text(b) === "Remove"), "Remove menu item");
+item.click();
+const dlg = await until(() => $("dialog[open]"), "remove dialog");
+out.removeBody = text($("dialog[open] p:not(.result)"));
+$("dialog[open] .btn:not(.btn--danger)").click();
+""", width=width)
+    assert page["notice"] == T("common_spoolman_unreachable")
+    assert page["removeBody"] == T("storage_remove_body_unknown")
+    assert "No spools are recorded there." not in page["removeBody"]
