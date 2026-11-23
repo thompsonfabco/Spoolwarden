@@ -20,6 +20,7 @@ import json
 import logging
 import math
 import re
+import threading
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -786,6 +787,16 @@ def spool_view(s: dict, ctx: ViewContext | None = None) -> dict:
             "checked_out": bool(home or since), "home": home or None, "checked_out_since": since}
 
 
+_SPOOL_LOCKS_GUARD = threading.Lock()
+_SPOOL_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _spool_lock(spool_id) -> threading.Lock:
+    key = str(spool_id)
+    with _SPOOL_LOCKS_GUARD:
+        return _SPOOL_LOCKS.setdefault(key, threading.Lock())
+
+
 def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, remaining: float | None = None,
                  location: str | None = None, empty: bool = False, dry: bool,
                  locations: list[str] | None = None, rules=None, home: str | None = None) -> dict:
@@ -794,6 +805,16 @@ def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, rem
     the storage locations is refused, `field` "home"). With
     `locations` (the web app's list), a location outside it is refused; the app's route passes none and takes any.
     With `rules` (the storage list), the name of an Individual containers location means its lowest free container."""
+    with _spool_lock(spool_id):
+        return _update_spool_locked(
+            sm, spool_id, gross=gross, remaining=remaining, location=location,
+            empty=empty, dry=dry, locations=locations, rules=rules, home=home,
+        )
+
+
+def _update_spool_locked(sm: Spoolman, spool_id: int, *, gross: float | None = None, remaining: float | None = None,
+                         location: str | None = None, empty: bool = False, dry: bool,
+                         locations: list[str] | None = None, rules=None, home: str | None = None) -> dict:
     spool = sm.get(f"spool/{spool_id}")
     if sum(x is not None for x in (gross, remaining)) + bool(empty) > 1:
         raise SpoolEditError("give only one of gross, remaining or empty", "empty" if empty else "remaining")
