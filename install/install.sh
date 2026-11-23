@@ -25,7 +25,7 @@ AGAIN='curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest
 usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP] [--restore BACKUP.zip|.enc [--password-file FILE]]" >&2; exit 2; }
 # one host name or address: station.allow never takes a range
 bad_addr() { case "$1" in "" | */* | *"*"* | *" "*) return 0 ;; esac; return 1; }
-# The once-only line (design 06 section 2, R76): printed at the end of an install that replaces a release still called
+# The once-only line: printed at the end of an install that replaces a release still called
 # filament-kit. 0.6.1 was the first one called Spoolwarden and the first with the `spoolwarden` command, so a host that has
 # the old command and not the new one is such a host. Only text: the old command and every unit, path and key stay.
 from_old_name() { [ -e "$1/filament-kit" ] && [ ! -e "$1/spoolwarden" ]; }
