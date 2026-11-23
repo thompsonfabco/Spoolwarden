@@ -324,9 +324,9 @@ private fun Overflow(onSettings: () -> Unit, onReport: () -> Unit, onRefresh: ()
 private fun AutoNotice(printer: Printer, state: PrinterUiState, viewModel: PrinterViewModel) {
     val auto = state.auto ?: return
     val notice = PrinterTexts.autoNotice(auto, printer.name)
-    val stop = SwAction(PrinterTexts.STOP_WAITING) { if (!state.autoBusy) viewModel.stopWaiting() }
+    val stop = SwAction(stringResource(R.string.live_auto_stop)) { if (!state.autoBusy) viewModel.stopWaiting() }
     NoticeCard(
-        NoticeKind.Info, notice.text,
+        NoticeKind.Info, sayText(notice.text),
         actions = notice.choices.map { label -> SwAction(label) { if (!state.autoBusy) viewModel.chooseAutoSlot(label) } } + stop,
     )
 }
@@ -709,18 +709,18 @@ private fun SlotSheet(
 @Composable
 private fun ClearButton(onClear: () -> Unit, state: PrinterUiState, slot: AmsSlot) {
     SwButton(
-        PrinterTexts.CLEAR_SLOT, onClear, Modifier.fillMaxWidth(),
+        stringResource(R.string.live_clear), onClear, Modifier.fillMaxWidth(),
         enabled = state.slotBusy == null && !state.unloading && !state.clearing, busy = state.slotBusy == slot.label && state.clearAsk == null,
     )
 }
 
 /** The result of an unload or clear: its sentence and, when the Hub ended a waiting spool, the second one. */
 @Composable
-private fun SlotResult(note: Note, also: String?, modifier: Modifier = Modifier) {
+private fun SlotResult(note: Note, also: Say?, modifier: Modifier = Modifier) {
     if (also == null) {
         ResultLine(note, modifier)
     } else {
-        NoticeCard(if (note.ok) NoticeKind.Ok else NoticeKind.Bad, sayText(note.say) + " " + also, modifier)
+        NoticeCard(if (note.ok) NoticeKind.Ok else NoticeKind.Bad, sayText(note.say) + " " + sayText(also), modifier)
     }
 }
 
@@ -728,16 +728,16 @@ private fun SlotResult(note: Note, also: String?, modifier: Modifier = Modifier)
 private fun ClearDialog(ask: ClearAsk, state: PrinterUiState, viewModel: PrinterViewModel) {
     val say = rememberBusySay()
     SwDialog(
-        title = PrinterTexts.clearTitle(ask.label),
+        title = sayText(PrinterTexts.clearTitle(ask.label)),
         onClose = { if (state.clearing) say() else viewModel.cancelClear() },
         confirm = SwDialogButton(
-            PrinterTexts.CLEAR_SLOT, viewModel::confirmClear, kind = SwButtonKind.DestructiveFilled, busy = state.clearing,
+            stringResource(R.string.live_clear), viewModel::confirmClear, kind = SwButtonKind.DestructiveFilled, busy = state.clearing,
         ),
         cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelClear),
         cancelEnabled = !state.clearing,
     ) {
         BusyBack(state.clearing, say)
-        Text(PrinterTexts.clearBody(ask.spool, ask.place, ask.note), style = MaterialTheme.typography.bodyMedium)
+        Text(sayText(PrinterTexts.clearBody(ask.spool, ask.place, ask.note)), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -755,7 +755,7 @@ private fun UnloadDialog(ask: UnloadAsk, klipper: Boolean, state: PrinterUiState
     ) {
         BusyBack(state.unloading, say)
         Text(
-            if (klipper) PrinterTexts.unloadKlipperBody(ask.spool, ask.label, ask.location)
+            if (klipper) sayText(PrinterTexts.unloadKlipperBody(ask.spool, ask.label, ask.location))
             else if (ask.location.isBlank()) stringResource(R.string.printer_unload_body_noplace, ask.spool, ask.label)
             else stringResource(R.string.printer_unload_body, ask.spool, ask.label, ask.location),
             style = MaterialTheme.typography.bodyMedium,

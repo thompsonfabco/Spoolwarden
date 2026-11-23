@@ -12,6 +12,7 @@ import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
 import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.UnloadResult
+import com.thompsonfabco.filamentkit.ui.spool.LoadTexts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -78,21 +79,20 @@ class PrinterAutoTest {
 
     @Test fun theNoticeNamesTheSpoolAndThePrinterAndHasNoChoices() {
         val n = PrinterTexts.autoNotice(waiting(), "Workshop X1")
-        assertEquals("Waiting for Acme PLA Red to be loaded into any slot of Workshop X1.", n.text)
+        assertEquals(LoadTexts.waitingAuto(Say.FromHub("Acme PLA Red"), "Workshop X1"), n.text)
         assertTrue(n.choices.isEmpty())
-        assertEquals("Stop waiting", PrinterTexts.STOP_WAITING)
     }
 
     @Test fun inTheStateChooseTheNoticeAsksWhichSlotAndOffersThem() {
         val n = PrinterTexts.autoNotice(choosing(), "Workshop X1")
-        assertEquals("Two slots were loaded. Which one got Acme PLA Red?", n.text)
+        assertEquals(Say.Words(R.string.printer_auto_choose, listOf(Say.FromHub("Acme PLA Red"))), n.text)
         assertEquals(listOf("A1", "A3"), n.choices)
     }
 
     @Test fun aSpoolWithoutANameIsNamedByItsNumberOrAsTheSpool() {
-        assertEquals("Spool 12", PrinterTexts.autoSpool(waiting().copy(spool = null)))
-        assertEquals("Spool 12", PrinterTexts.autoSpool(waiting().copy(spool = spool.copy(name = " "))))
-        assertEquals("the spool", PrinterTexts.autoSpool(waiting().copy(spool = null, spoolId = null)))
+        assertEquals(Say.Words(R.string.spool_title, listOf(12)), PrinterTexts.autoSpool(waiting().copy(spool = null)))
+        assertEquals(Say.Words(R.string.spool_title, listOf(12)), PrinterTexts.autoSpool(waiting().copy(spool = spool.copy(name = " "))))
+        assertEquals(Say.Words(R.string.spool_load_the_spool), PrinterTexts.autoSpool(waiting().copy(spool = null, spoolId = null)))
     }
 
     @Test fun thePollReadsTheAutoAndItGoesWhenTheHubStopsSendingIt() = runTest(dispatcher) {

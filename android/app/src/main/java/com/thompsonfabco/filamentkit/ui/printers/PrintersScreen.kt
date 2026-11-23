@@ -651,10 +651,10 @@ private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewMode
         )
         d.notReached?.let {
             NoticeCard(
-                NoticeKind.Bad, PrinterTexts.klipperNotReached(it),
+                NoticeKind.Bad, stringResource(R.string.printer_guided_klipper_unreached, it),
                 actions = listOf(
-                    SwAction(PrinterTexts.TRY_AGAIN) { viewModel.submitAddKlipper(host, port, name, key) },
-                    SwAction(PrinterTexts.ADD_ANYWAY) { viewModel.addKlipperAnyway(host, port, name, key) },
+                    SwAction(stringResource(R.string.printer_guided_try_again)) { viewModel.submitAddKlipper(host, port, name, key) },
+                    SwAction(stringResource(R.string.printer_guided_add_anyway)) { viewModel.addKlipperAnyway(host, port, name, key) },
                 ),
             )
         }
@@ -679,7 +679,7 @@ private fun GuideSheet(g: AddGuide, found: List<Printer>, onPairAgain: () -> Uni
                 stringResource(R.string.printers_add), Modifier.semantics { heading() },
                 style = MaterialTheme.typography.titleMedium,
             )
-            Text(PrinterTexts.GUIDE_FOUND, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.printer_guided_found), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
             g.problem?.let { FindProblem(it, onPairAgain) }
             if (rows.isNotEmpty()) {
                 Panel {
@@ -691,10 +691,10 @@ private fun GuideSheet(g: AddGuide, found: List<Printer>, onPairAgain: () -> Uni
             }
             when {
                 g.searching -> BusyReason(R.string.add_picker_looking)
-                rows.isEmpty() -> Text(PrinterTexts.GUIDE_NONE, style = MaterialTheme.typography.bodyMedium, color = SpoolwardenTheme.colors.muted)
+                rows.isEmpty() -> Text(stringResource(R.string.printer_guided_none), style = MaterialTheme.typography.bodyMedium, color = SpoolwardenTheme.colors.muted)
             }
-            SwButton(PrinterTexts.GUIDE_BAMBU_BY_ADDRESS, viewModel::addBambuByAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Plain)
-            SwButton(PrinterTexts.GUIDE_BY_ADDRESS, viewModel::addByAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Plain)
+            SwButton(stringResource(R.string.printer_guided_bambu_address), viewModel::addBambuByAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Plain)
+            SwButton(stringResource(R.string.printer_guided_by_address), viewModel::addByAddress, Modifier.fillMaxWidth(), kind = SwButtonKind.Plain)
         }
     }
 }
@@ -727,13 +727,13 @@ private fun GuideRowView(row: GuideRow, viewModel: PrintersViewModel) {
 @Composable
 private fun MapOfferDialog(offer: MapOffer, viewModel: PrintersViewModel, onChoose: (id: String, mapNow: Boolean) -> Unit) {
     SwDialog(
-        title = PrinterTexts.MAP_TITLE,
+        title = stringResource(R.string.printer_guided_map_title),
         onClose = viewModel::dismissMapOffer,
-        confirm = SwDialogButton(PrinterTexts.MAP_NOW, { onChoose(offer.id, true) }, kind = SwButtonKind.Main),
-        cancel = SwAction(PrinterTexts.MAP_LATER) { onChoose(offer.id, false) },
+        confirm = SwDialogButton(stringResource(R.string.printers_map_slots), { onChoose(offer.id, true) }, kind = SwButtonKind.Main),
+        cancel = SwAction(stringResource(R.string.printer_guided_map_later)) { onChoose(offer.id, false) },
     ) {
         Text(offer.name, style = MaterialTheme.typography.titleSmall)
-        Text(PrinterTexts.MAP_BODY, style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.printer_guided_map_body), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
