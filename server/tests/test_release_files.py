@@ -464,10 +464,11 @@ def test_install_modules_station_alone_still_needs_address_without_terminal(tmp_
 def test_install_modules_unknown_name_fails(tmp_path):
     venv, env = _stub_venv(tmp_path)
     part = _install_part("# A custom list is closed first", "# A station whose server is on another machine")
+    from filament_kit import modules
     r = _run_part('MODE=custom\nCUSTOM=",bogus"\n' + part, venv, env, tmp_path)
     assert r.returncode == 1 and "bogus" in r.stderr and "use features from:" in r.stderr
-    with pytest.raises(importlib.import_module("filament_kit.modules").ModuleError, match="unknown feature 'bogus'"):
-        importlib.import_module("filament_kit.modules").close_selection(["bogus"])
+    with pytest.raises(modules.ModuleError, match="unknown feature 'bogus'"):
+        modules.close_selection(["bogus"])
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
