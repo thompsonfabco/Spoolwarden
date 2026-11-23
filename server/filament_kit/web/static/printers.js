@@ -249,7 +249,7 @@ function printersTab() {
     auto_started: "Waiting for {spool} to appear in a slot of {printer}.", auto_not_possible: "This printer has no slots the Hub can watch. Choose a slot.",
     printer_used_by_month: "By month", printer_used_month_none: "No months to show yet.",
     printer_used_col_month: "Month", printer_used_col_grams: "Grams", printer_used_col_prints: "Prints", printer_used_col_unfinished: "Did not finish",
-    printer_used_col_material: "Most used material", printer_used_hide_table: "Hide the table", printer_used_bars_most: "The most was in {month}: {amount}.",
+    printer_used_col_material: "Most used material",
   };
   function tg(key, vars) {
     const v = t(key, vars);
@@ -923,7 +923,7 @@ function printersTab() {
     });
     const chart = svg("svg", { class: "pused__chart", viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img", "aria-labelledby": capId, focusable: "false" }, ...bars,
       svg("line", { x1: 0, y1: base, x2: W, y2: base, stroke: "var(--border-strong)", "stroke-width": 1 }));
-    const caption = h("figcaption", { id: capId, class: "muted" }, [t("analytics_chart_label") + ".", top ? tg("printer_used_bars_most", { month: monthName(most.month, true), amount: gramsWords(top) }) : ""].filter(Boolean).join(" "));
+    const caption = h("figcaption", { id: capId, class: "muted" }, [t("analytics_chart_label") + ".", top ? t("printer_used_bars_most", { month: monthName(most.month, true), amount: gramsWords(top) }) : ""].filter(Boolean).join(" "));
     return { chart, caption };
   }
   async function loadUsage() {
@@ -944,7 +944,7 @@ function printersTab() {
           h("tbody", {}, months.map((m) => h("tr", {}, h("td", {}, m.month), h("td", { class: "mono" }, t("common_grams", { grams: m.grams ?? "?" })), h("td", {}, m.prints ?? ""),
             h("td", {}, m.unfinished_prints ?? ""), h("td", {}, m.top_material || "")))));
         if (!bars) return [bar, table];                  // a phone: the table alone
-        const word = (open) => (open ? tg("printer_used_hide_table") : t("analytics_show_table"));
+        const word = (open) => (open ? t("printer_used_hide_table") : t("analytics_show_table"));
         const showTable = SW.btn(word(g.tableOpen !== false), { cls: "btn--ghost", action: "usage-table", run: () => {
           g.tableOpen = g.tableOpen === false;
           table.hidden = !g.tableOpen;
