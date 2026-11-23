@@ -53,6 +53,9 @@ Red cancels at any step. Yellow advances: a short press does the step's job, and
 | phone (the server or its AI can't help) | use the phone app; red starts over | off | on | "Use phone" and why |
 
 - A linked tag (already on a spool in Spoolman) skips the camera, from lookup straight to weigh.
+- A linked tag whose spool is checked out (loaded into a printer, not yet returned) is returned instead: where it waits to
+  be weighed the display reads "Returning", a short press of yellow weighs it and a long press returns it. See
+  [Checked-out spools](../docs/user-guide.md#at-the-weigh-station).
 - Recognition is the kit server's job: the local AI module first, then Claude (`ai_intake`). With neither, the panel
   says "use phone". With no match it goes back to the camera step with "No match", so you can try again.
 - Weighing needs a settled reading (the scale says stable, over 20 g). Otherwise the display says
@@ -119,7 +122,7 @@ real time, 0.25 s ahead, between the lamp lines. A newer phrase cuts the current
 The C3 plays the bytes over I2S to the MAX98357. Each byte is a sample with 128 as silence; the panel converts it to
 signed 16-bit, applies the volume from the `V` line, and writes it to both channels. The samples wait in a ring buffer
 (1 s). When the stream runs dry, the panel fades to silence over 50 ms instead of holding the last sample, so there is
-no click. Bluetooth is never started. Wi-Fi is off unless the panel was set up for it with `sudo spoolwarden weigh-station panel-wifi` (firmware 14); until then the panel only talks over its USB cable.
+no click. Bluetooth is never started. Wi-Fi is off unless the panel was set up for it with `sudo spoolwarden weigh-station panel-wifi` (firmware 14; see [The panel over Wi-Fi](#the-panel-over-wi-fi)); until then the panel only talks over its USB cable.
 
 For an older ESP8266 panel the station keeps its original speech path: a headset driver in open air, so everything
 below 450 Hz is cut, 2.5 kHz is lifted 8 dB and the result is compressed hard. The bytes are a PWM duty (16-240
@@ -131,6 +134,105 @@ at `ttyUSB` ports (older panels on a CH340), and takes the first that answers HE
 a 1 s write timeout, so a stalled panel can't hang the service. An old CH340 panel and the PN532 reader both have no
 USB serial number, so their `ttyUSB` numbers can swap between boots. The service finds the panel by its HELLO and
 gives nfcpy the other port (`NFC_DEVICE=auto`).
+
+## The panel over Wi-Fi
+
+By default the panel talks to the Weigh Station over its USB cable. Optionally it can join your Wi-Fi network and talk
+to the Weigh Station over that, so it then only needs power. It is **off until you set it up**, and the USB cable keeps
+working: while the Weigh Station is talking to the panel over a cable plugged into it, the panel uses the cable.
+
+It is covered by automated tests only and has not been tried on a real panel; whether the panel keeps its link while it
+speaks is not confirmed (see [known gaps](../docs/known-gaps.md#weigh-station), entry 22).
+
+**What you need.**
+
+- Panel firmware **14 or later**. The Weigh Station carries firmware 14 and writes it to an ESP32-C3 panel on older
+  firmware over USB by itself (once per version, unless `"panel_flash"` is `false`); firmware 13 and older has no Wi-Fi. A panel that
+  is not on firmware 14 yet is refused by the set-up with **This panel's firmware is too old for Wi-Fi.**
+- A 2.4 GHz Wi-Fi network (the panel's chip has no 5 GHz). The name is 1 to 32 characters. The password is 8 to 63
+  characters, or empty for an open network; a 64-digit key cannot be used.
+- The panel plugged into the Weigh Station's computer by USB for the set-up, a Terminal on that computer, and a Weigh
+  Station that has started at least once (it makes its certificate then).
+- The Weigh Station's computer on the same network. The panel dials it at one address and a port, the panel port
+  (`station.panel_port` in `/etc/filament-kit/config.json`, default 5004; `STATION_PANEL_PORT`), which has to differ from the Weigh
+  Station's own port. The panel keeps the address you set up with: if the computer gets a new address, run the set-up
+  again.
+
+**Set it up.** Run, on the Weigh Station's computer:
+
+```
+sudo spoolwarden weigh-station panel-wifi
+```
+
+It stops the Weigh Station (it holds the panel's USB port) and looks for the panel, then asks two questions:
+
+1. **Wi-Fi name:**
+2. **Wi-Fi password (empty for an open network):** (each character shows as a star)
+
+It then writes two lines to the panel over USB: the network's name and password, and the Weigh Station's address, the
+panel port, the SHA-256 fingerprint of the Weigh Station's certificate and a new token. The panel answers each line with
+OK and stores them in its own memory. The Weigh Station keeps the token in its state folder (`panel_link.xml`, readable
+by its own user only), sets `station.panel_link` to `wifi` (`STATION_PANEL_LINK`) and applies the change, which restarts
+it. The command ends with **The panel is set up for Wi-Fi.**
+
+`--address ADDRESS` is the address the panel is to reach the Weigh Station at, a name or a number of at most 64
+characters with no spaces. Without it the command uses the computer's first usable IPv4 address (not the loopback or a
+link-local one).
+
+If the set-up cannot go on it says why and leaves the Weigh Station's settings and token as they were: for example
+**The Wi-Fi name must be 1 to 32 characters.**, **The Wi-Fi password must be 8 to 63 characters, or empty for an open
+network.**, **The panel did not answer over USB. Check the cable and try again.**, **The panel did not accept the Wi-Fi
+settings.**, **The panel could not save the Wi-Fi settings. Run this again; if it fails again, flash the panel: sudo
+spoolwarden weigh-station flash-display** and **The panel's port must differ from the Weigh Station's own port (5003).**
+With no panel answering on USB it says `no panel answered on USB.`, and the command needs a Terminal to ask its
+questions.
+
+**What the panel shows.** With Wi-Fi set up and the cable quiet, the panel joins the network, calls the Weigh Station
+and checks its certificate, then speaks the same lines as over USB. While it is not linked, the display reads **No Weigh
+Station service** (over two rows) and then:
+
+| Third row | Meaning |
+|---|---|
+| **Wi-Fi: joining** | joining the network |
+| **Wi-Fi: no network** | still not joined after 10 seconds |
+| **Wi-Fi: connected** | joined, but the Weigh Station is not reached |
+
+The fourth row is **Net:** and the first 16 characters of the network's name, or, when the Weigh Station refused the
+panel, **Refused: wrong token** (the token it holds is not the stored one, for example after the set-up was done
+against another panel), **Refused: USB in use** (a panel on USB is in use; USB wins) or **Refused: busy** (another
+Wi-Fi panel is connected; one at a time). When the certificate it meets is not the one it was set up with, the display
+reads **Wrong certificate** and **Set up again by USB**: run the set-up again with the panel plugged in. Once the link
+is up the display is as over USB. `sudo spoolwarden status` shows **Panel: on Wi-Fi** (or **Panel: on USB**), and, when
+the link is set to Wi-Fi and the Weigh Station has no panel, **The Weigh Station's panel is not connected.** with what to
+check.
+
+**How the link is secured.**
+
+- It is TLS, with the Weigh Station's own certificate (the one its HTTPS uses). The panel does not check a certificate
+  chain; it pins the fingerprint it was given at the set-up and checks it before it sends anything, so the token never
+  goes to another computer.
+- The panel's first line is `HELLO` with the token. The Weigh Station compares it in constant time with the stored one.
+  A wrong or missing token, a first line that is not a `HELLO`, a panel on USB, or a second Wi-Fi panel gets one
+  `REFUSED` line, after a second's wait, and the connection is closed. A connection has 5 seconds for its handshake and
+  `HELLO`, and at most 8 can wait at once.
+- While the link is `wifi` the Weigh Station answers connections from the home network ranges (the private IPv4 ranges,
+  link-local and the IPv6 local ranges), because a panel dials in from an address the router hands out; the token and the
+  pinned certificate decide who gets in.
+- The Wi-Fi password is stored in the panel only. It is never written to the settings, the state folder or a log; it
+  appears only in the line that goes down the USB cable.
+- The set-up lines are accepted over USB only.
+
+**Going back.** `sudo spoolwarden weigh-station panel-wifi --off` removes the token, sets `station.panel_link` back to
+`usb` and applies it. With the panel plugged in by USB it also tells the panel to forget its Wi-Fi settings; it ends with
+**The panel is back on the USB cable.** If the panel does not confirm that, the command says so (**The panel did not
+confirm that it forgot its Wi-Fi settings; its token is gone, so it can no longer connect.**).
+
+**What still needs the USB cable.** The set-up, `--off` telling the panel to forget, and every firmware write: the Weigh
+Station writes firmware only to a panel it finds on USB. A panel on firmware 14 or later that already has the bundled
+layout gets the program image alone and keeps its Wi-Fi set-up. A panel that gets the whole image (one on firmware 13 or
+older, a blank board, one whose version cannot be read, or one older than a firmware that changes the flash layout)
+loses its stored Wi-Fi set-up; after that the Weigh Station reports **The panel was flashed from
+scratch, so its Wi-Fi set-up is gone. On the Weigh Station's computer, run: sudo spoolwarden weigh-station panel-wifi**
 
 ## Build, flash and test
 
