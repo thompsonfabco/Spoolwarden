@@ -95,13 +95,6 @@ Things the pages and apps already show, or the other interfaces already do, that
 24. **The web app and the app (Android) cannot add a line to the Filament Catalog.** The form, the list of your own
     entries and removing one fail there. Use the Hub page (**Settings**, **Filament Catalog**) or `sudo spoolwarden
     catalog add`.
-25. **The app (Android) shows a spool's ten oldest events, not its newest ten.** The Hub page and the web app show the
-    newest; so does `spoolwarden activity --spool <n>`.
-26. **The command line cannot load, unload or clear a printer's slot, the automatic slot included.** It also has no
-    command for a printer's filament used, watching one printer, one device's detail, your own catalog entries or a
-    spool's label. `spoolwarden spool move <n> auto` is refused; give the location's name. Use the Hub page for the rest.
-27. **Spool labels are not served.** **Print a label** on the Hub page and in the web app opens a page that is not
-    there, and the app (Android) shows neither **Print a label** nor **Scan a label**.
 28. **The demo cannot be switched on.** **Try the demo** answers "The demo cannot be switched on in this version."
 29. **Language offers no language besides English.** The choice is there; nothing else is in it.
 30. **Devices shows no kind and no version for paired phones and PCs.** It says "Version not known". A Tag Reader shows
