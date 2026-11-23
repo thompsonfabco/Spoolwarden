@@ -93,22 +93,13 @@ ANSWERS_500 = "answers 500: the stop's NotInDemo is not mapped to the page's 409
 # the page's route wrapper (setup_page.py `route`, held) answers every exception but `Refused` with "internal error" (500), so
 # a stop that fires below `printer_add`, `printer_code` and `printer_forget` (tlspin's, registry's) is no 409 "Not in the demo."
 # yet: the hunk is in the DPROOF report (one `except demo.DemoError` clause in `route`); the three leave when it lands
-TEMPORARY_HELD_ROUTE_LEAKS: dict[str, list[str]] = {
-    "POST /setup/api/printers": [ANSWERS_500],
-    "POST /setup/api/printers/{serial}/code": [ANSWERS_500],
-    "POST /setup/api/printers/{serial}/forget": [ANSWERS_500],
-}
+TEMPORARY_HELD_ROUTE_LEAKS: dict[str, list[str]] = {}
 
 # Command-line leaks found by the CLI walk (first run on testbox-linux, DPROOF-02): each needs a demo stop in cli.py (held) or
 # the module it calls. Held exactly like the route list: the test fails when a leak is gone (the entry must go) or a new one
 # appears, so the dict can only shrink toward empty. "write x" is a write outside the demo's folder, "never ends" a command that
 # waits for a pairing in the demo (no outside reach was recorded while it waited).
-TEMPORARY_HELD_CLI_LEAKS: dict[str, list[str]] = {
-    "never ends": ["pair"],
-    "write etc/config.json": ["features setup server", "local-intake remove --yes", "modules set server"],
-    "write etc/config.xml": ["features setup server", "local-intake remove --yes", "modules set server"],
-    "write state/alert-test": ["alerts test"],
-}
+TEMPORARY_HELD_CLI_LEAKS: dict[str, list[str]] = {}
 
 JPEG = bytes([0xFF, 0xD8, 0xFF, 0xE0]) + bytes(64)                  # a photo as far as the Hub checks one
 ZIP = b"PK" + bytes([3, 4]) + bytes(64)                             # an upload as far as the page checks one

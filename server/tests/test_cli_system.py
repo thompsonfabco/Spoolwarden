@@ -818,7 +818,7 @@ def test_pair_home_assistant_issues_viewer_role(capsys, monkeypatch, tmp_path):
     modules_on("server")
     cert = tmp_path / "cert.pem"
     cert.write_bytes(b"CERT")
-    monkeypatch.setattr(cli.config, "paths", lambda: SimpleNamespace(etc=tmp_path, var=tmp_path, opt=tmp_path))
+    monkeypatch.setattr(cli.config, "paths", lambda: SimpleNamespace(etc=tmp_path, var=tmp_path, opt=tmp_path, state=tmp_path))
     seen = {}
 
     def fake_issue(**kw):

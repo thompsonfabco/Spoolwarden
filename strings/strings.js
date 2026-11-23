@@ -4049,4 +4049,5 @@ window.SW_TEXT = Object.freeze({
   "spools_home_failed": "Could not change the home: {reason}",
   "cli_panel_wifi_off_no_usb": "No panel was on USB, so the panel itself still holds its Wi-Fi settings and will keep them until it is connected by USB and set again.",
   "spools_return_printer_not_told": "The printer could not be told to clear its slot.",
+  "demo_not_mountable": "The demo cannot be switched on in this version.",
 });
