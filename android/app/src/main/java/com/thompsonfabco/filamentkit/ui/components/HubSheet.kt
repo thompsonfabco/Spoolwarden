@@ -20,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.nav.HubState
-import com.thompsonfabco.filamentkit.ui.hub.HubTexts
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
 /** What the Hub connection sheet shows about the Hub (05-android-app 2.4). */
@@ -87,7 +86,7 @@ internal fun HubSheet(
                 HubState.Connected -> {
                     val link = ButtonDefaults.textButtonColors(contentColor = SpoolwardenTheme.colors.accentText)
                     actions.openHubGlance?.let { open ->
-                        TextButton(onClick = open, colors = link) { Text(HubTexts.OPEN_SCREEN, style = MaterialTheme.typography.labelLarge) }
+                        TextButton(onClick = open, colors = link) { Text(stringResource(R.string.hub_glance_open), style = MaterialTheme.typography.labelLarge) }
                     }
                     TextButton(onClick = actions.hubSettings, colors = link) {
                         Text(stringResource(R.string.hub_sheet_settings), style = MaterialTheme.typography.labelLarge)
