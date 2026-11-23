@@ -6,6 +6,7 @@ Findings of today's markup that a later step rebuilds are listed in tests/allowl
 fails the run. Skipped when Node 22+ or a Chromium-family browser is missing (the runner exits 2 for "no browser")."""
 from __future__ import annotations
 
+import calendar
 import json
 import os
 import shutil
@@ -2383,16 +2384,34 @@ def test_the_page_audit_passes_with_the_printers_badge_showing(served_printers, 
 
 
 # Filament used on a printer's page (plan step C2): By month as bars from tablet width, the CSV range menu, the toggle that says "Last 7 days".
+# The page's clock is frozen in the browser (the new cases name no real-time month): the months of the fake kit are counted back from this day.
+# FK_C2_FROZEN (yyyy-mm-dd) moves it, to prove the cases do not depend on the calendar.
+FROZEN = tuple(int(x) for x in os.environ.get("FK_C2_FROZEN", "2027-03-10").split("-"))
+FREEZE_JS = """
+{
+  const Real = Date, fixed = Real.UTC(__Y__, __M__ - 1, __D__, 12);
+  class Frozen extends Real { constructor(...a) { if (a.length) super(...a); else super(fixed); } static now() { return fixed; } }
+  window.Date = Frozen;
+}
+""".replace("__Y__", str(FROZEN[0])).replace("__M__", str(FROZEN[1])).replace("__D__", str(FROZEN[2]))
+
+
+def _ago(n: int) -> str:
+    """The month n months before the frozen day, as the Hub writes it (yyyy-mm)."""
+    i = FROZEN[0] * 12 + FROZEN[1] - 1 - n
+    return f"{i // 12}-{i % 12 + 1:02d}"
+
+
 class MonthsKit(PrintersKit):
-    """PrintersKit that also answers `usage?by=month` (newest month first; a January in the span, a month with nothing between; example data only)."""
+    """PrintersKit that also answers `usage?by=month` (newest month first; counted back from the frozen day; a month with nothing between; example data only)."""
 
     def get(self, path):
         if path.startswith(f"/api/printers/{SERIAL}/usage") and "by=month" in path:
             return {"months": [
-                {"month": "2026-11", "grams": 1840.0, "prints": 9, "unfinished_prints": 1, "top_material": "PETG"},
-                {"month": "2026-10", "grams": 640.0, "prints": 4, "unfinished_prints": 0, "top_material": "PLA"},
-                {"month": "2026-07", "grams": 212.5, "prints": 2, "unfinished_prints": 0, "top_material": "ABS"},
-                {"month": "2026-01", "grams": 95.0, "prints": 1, "unfinished_prints": 0, "top_material": "PLA"}]}
+                {"month": _ago(0), "grams": 1840.0, "prints": 9, "unfinished_prints": 1, "top_material": "PETG"},
+                {"month": _ago(1), "grams": 640.0, "prints": 4, "unfinished_prints": 0, "top_material": "PLA"},
+                {"month": _ago(4), "grams": 212.5, "prints": 2, "unfinished_prints": 0, "top_material": "ABS"},
+                {"month": _ago(10), "grams": 95.0, "prints": 1, "unfinished_prints": 0, "top_material": "PLA"}]}
         return super().get(path)
 
 
@@ -2480,7 +2499,7 @@ return { findings: (found || []).filter((f) => /pused|usage-|Show as table|Hide 
 
 
 def _used(url, tmp_path, tail: str, width: int) -> dict:
-    return _drive(url, tmp_path, USED_OPEN.replace("__SERIAL__", SERIAL) + tail, width, "light", None, "", block_install=True)
+    return _drive(url, tmp_path, USED_OPEN.replace("__SERIAL__", SERIAL) + tail, width, "light", None, FREEZE_JS, block_install=True)
 
 
 @pytest.mark.parametrize("width", [375, 820])
@@ -2493,14 +2512,15 @@ def test_by_month_on_a_printer_is_drawn_as_bars_from_tablet_width_and_as_a_table
         assert not out["svg"] and out["button"] is None, json.dumps(out)
         return
     assert out["svg"] and out["role"] == "img" and out["named"] and out["hidden"], json.dumps(out)
-    assert len(out["months"]) == 12 and out["months"] == sorted(out["months"]) and out["months"][-1] >= "2026-11", json.dumps(out)       # oldest on the left
+    assert out["months"] == [_ago(11 - i) for i in range(12)], json.dumps(out)       # the 12 months ending with the frozen day's, oldest on the left
     values = dict(zip(out["months"], out["values"]))
-    assert values["2026-11"] == "1.84 kg" and values["2026-10"] == "640 g" and values["2026-07"] == "213 g" and values["2026-09"] == "0 g", json.dumps(out)
+    assert values[_ago(0)] == "1.84 kg" and values[_ago(1)] == "640 g" and values[_ago(4)] == "213 g" and values[_ago(2)] == "0 g" and values[_ago(10)] == "95 g", json.dumps(out)
     heights = dict(zip(out["months"], out["heights"]))
-    assert heights["2026-11"] > heights["2026-10"] > heights["2026-07"] > heights["2026-09"] and heights["2026-09"] == 2, json.dumps(out)   # a month with nothing is a flat tick
-    assert out["caption"] == "Filament used per month in the last 12 months. The most was in November: 1.84 kg.", json.dumps(out)
+    assert heights[_ago(0)] > heights[_ago(1)] > heights[_ago(4)] > heights[_ago(10)] > heights[_ago(2)] and heights[_ago(2)] == 2, json.dumps(out)   # a month with nothing is a flat tick
+    newest = calendar.month_name[int(_ago(0)[5:])]
+    assert out["caption"] == f"Filament used per month in the last 12 months. The most was in {newest}: 1.84 kg.", json.dumps(out)
     assert out["fillIsAccent"] and out["overlaps"] == 0 and out["small"] >= 8, json.dumps(out)
-    assert out["years"][0] == min(out["months"])[:4], json.dumps(out)                    # the year stands on the first bar (and on each January)
+    assert out["years"] == [m[:4] for i, m in enumerate(out["months"]) if i == 0 or m.endswith("-01")], json.dumps(out)     # the year stands on the first bar and on each January
     assert (out["button"]["text"], out["button"]["expanded"], out["button"]["controls"]) == ("Hide the table", "true", True), json.dumps(out)
     assert out["button"]["height"] == out["button"]["like"] >= 40, json.dumps(out)          # as tall as the By month button beside it
     assert out["hiddenAfter"] == {"text": "Show as table", "expanded": "false", "table": True}, json.dumps(out)
