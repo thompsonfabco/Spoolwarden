@@ -118,7 +118,8 @@ const previewSkeleton = () => h("div", { class: "skeleton", "aria-busy": "true" 
   ...[0, 1].map(() => h("div", { class: "skeleton__item", "aria-hidden": "true" },
     h("span", { class: "skeleton__line skeleton__line--title" }), h("span", { class: "skeleton__line" }))));
 
-// o: {title, place (the address), read() (the preview), path and body (what Apply sends), opener, refusal(p)}
+// o: {title, place (the address), read() (the preview), path and body (what Apply sends), opener, refusal(p), more() (a line for the
+// preview: a node, or null)}
 // Resolves with the reply when the change was saved, else null.
 async function previewDrawer(o) {
   if (isDrawerOpen()) return null;
@@ -167,6 +168,7 @@ async function previewDrawer(o) {
     const target = body.querySelector("a") || dlg.querySelector('[data-action="cancel"]');
     if (target) target.focus();
   };
+  const moreAsked = o.more ? o.more().catch(() => null) : null;
   let p = null;
   try { p = await o.read(); } catch (e) {
     const msg = (e.data && e.data.error) || e.message;
@@ -191,8 +193,10 @@ async function previewDrawer(o) {
       ? h("p", { class: "features__lead muted", textContent: SW.t("features_reader_lead_in") })
       : null;
     fields.ready = true;
+    const more = moreAsked ? await moreAsked : null;
     body.replaceChildren(...[
       ...p.notes.map((n) => h("p", { class: "muted", textContent: n })),
+      more,
       h("p", {}, h("span", { class: "features__after", textContent: SW.t("features_drawer_afterwards") }), " ",
         p.after.length ? p.after.map(featureName).join(", ") : SW.t("features_drawer_nothing")),
       leadIn,
@@ -228,6 +232,7 @@ function featureDrawer(m, opener) {
   const turningOnReader = m.name === READER_FEATURE && !m.on;
   return previewDrawer({ title, place: m.name, opener, path: "modules", body: { name: m.name, on: !m.on },
     read: () => api(`modules/preview?name=${encodeURIComponent(m.name)}`),
+    more: m.name === READER_FEATURE && m.on ? corrWarn : null,       // setup_corrections.js: corrections waiting go with the reader
     // the one refusal of switching the server module off is known by the module (or its code), not by its English words
     refusal: (p) => (p.code === "server_module" || (m.name === "server" && m.on) ? SW.t("features_drawer_refused_server") : hubText(p.refused)) })
     .then((r) => (r ? featureSaved(opener, turningOnReader) : null));
