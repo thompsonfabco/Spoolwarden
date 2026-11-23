@@ -2484,7 +2484,10 @@
     <string name="printer_unload_moved_back">Moved back: spool %1$s to %2$s.</string>
     <!-- 1=id -->
     <string name="printer_unload_moved_back_noplace">Moved back: spool %1$s to its previous place.</string>
+    <!-- 1=month 2=amount -->
+    <string name="printer_used_bars_most">The most was in %1$s: %2$s.</string>
     <string name="printer_used_empty">Nothing used in the last 7 days.</string>
+    <string name="printer_used_hide_table">Hide the table</string>
     <string name="printer_used_job_default">Print job</string>
     <string name="printer_used_last_days">Last 7 days</string>
     <!-- 1=grams -->
