@@ -36,7 +36,7 @@ object PrinterTexts {
     fun unloadKlipperBody(spool: String, slot: String, location: String): Say =
         Say.Words(R.string.printer_unload_body_klipper, listOf(spool, slot, placeSay(location)))
 
-    fun clearTitle(label: String): Say = Say.Words(R.string.printer_clear_title, listOf(label))
+    fun clearTitle(label: String): Say = Say.Words(R.string.app_printer_clear_title, listOf(label))
 
     /** The Auto in the state `choose` (A4). */
     fun autoChoose(spool: Say): Say = Say.Words(R.string.printer_auto_choose, listOf(spool))
@@ -88,7 +88,7 @@ object PrinterTexts {
             listOfNotNull(
                 Say.Words(R.string.printer_clear_done, listOf(label)),
                 spool?.let { Say.Words(R.string.printer_clear_spool_back, listOf(Say.Cap(it), placeSay(place))) },
-                Say.Words(R.string.printer_clear_waiting_ended).takeIf { waitingEnded },
+                Say.Words(R.string.app_printer_clear_waiting_ended).takeIf { waitingEnded },
                 Say.Words(R.string.live_clear_printer).takeIf { printerCleared },
                 note,
             ),

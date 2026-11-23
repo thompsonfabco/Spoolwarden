@@ -155,7 +155,7 @@ fun hubSections(h: HubAnswer, time: (String?) -> String? = { hubTime(it) }): Lis
                 if (d.kind.isNotBlank()) add(deviceKindText(d.kind))
                 add(d.version?.let(::fromHub) ?: words(R.string.devices_version_unknown))
                 time(d.lastSeen)?.let { add(HubText.Words(R.string.hub_device_last_seen, listOf(it))) }
-                if (d.outOfDate) add(words(R.string.hub_out_of_date))
+                if (d.outOfDate) add(words(R.string.app_hub_out_of_date))
             }
             HubLine.Field(
                 if (d.thisOne) HubText.Words(R.string.hub_device_this, listOf(d.name)) else fromHub(d.name),

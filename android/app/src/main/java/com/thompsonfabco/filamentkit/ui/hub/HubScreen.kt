@@ -68,7 +68,7 @@ internal fun HubScreen(
         ) {
             val hub = ui.hub
             if (ui.unavailable) {
-                Text(stringResource(R.string.hub_unavailable), style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.app_hub_unavailable), style = MaterialTheme.typography.bodyLarge)
             } else {
                 ScreenState(
                     loaded = hub != null,
