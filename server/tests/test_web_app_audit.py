@@ -2380,3 +2380,151 @@ def test_the_page_audit_passes_with_the_printers_badge_showing(served_printers, 
     run = _run("--url", served_printers, "--views", "#add,#printers", "--widths", str(width), "--settle", "1500")
     assert run.returncode == 0, run.stdout + run.stderr
     assert json.loads(run.stdout)["failing"] == 0
+
+
+# Filament used on a printer's page (plan step C2): By month as bars from tablet width, the CSV range menu, the toggle that says "Last 7 days".
+class MonthsKit(PrintersKit):
+    """PrintersKit that also answers `usage?by=month` (newest month first; a January in the span, a month with nothing between; example data only)."""
+
+    def get(self, path):
+        if path.startswith(f"/api/printers/{SERIAL}/usage") and "by=month" in path:
+            return {"months": [
+                {"month": "2026-11", "grams": 1840.0, "prints": 9, "unfinished_prints": 1, "top_material": "PETG"},
+                {"month": "2026-10", "grams": 640.0, "prints": 4, "unfinished_prints": 0, "top_material": "PLA"},
+                {"month": "2026-07", "grams": 212.5, "prints": 2, "unfinished_prints": 0, "top_material": "ABS"},
+                {"month": "2026-01", "grams": 95.0, "prints": 1, "unfinished_prints": 0, "top_material": "PLA"}]}
+        return super().get(path)
+
+
+@pytest.fixture
+def served_months(tmp_path, monkeypatch, spoolman_url):
+    running = _serve_printers(tmp_path, monkeypatch, spoolman_url, MonthsKit)
+    try:
+        yield running.url + "/intake"
+    finally:
+        running.stop()
+
+
+USED_OPEN = """
+const log = [];
+document.addEventListener("click", (e) => { const a = e.target.closest && e.target.closest("a[download]"); if (a) { log.push(a.getAttribute("href")); e.preventDefault(); } }, true);
+location.hash = "#printers/__SERIAL__";
+const all = (s) => [...document.querySelectorAll(s)];
+const toggle = () => $('[data-action="usage-by-month"]');
+await until(() => toggle() && $(".pused__row"), "the filament used list");
+"""
+USED_CSV = """
+const out = { list: { toggle: text(toggle()), caption: $(".printer__days") && !$(".printer__days").hidden ? text($(".printer__days")) : null }, files: [] };
+const more = () => $('[data-action="usage-more"]');
+out.more = more().getAttribute("aria-label");
+for (const days of [7, 30, 365]) {
+  more().click();
+  await until(() => $(".menu"), "the menu");
+  if (days === 7) out.menu = { heading: text($(".menu__heading")), items: all(".menu__item").map(text), icons: all(".menu__item use").length };
+  const was = log.length;
+  $('.menu__item[data-action="download-csv-' + days + '"]').click();
+  await until(() => log.length > was && !$(".menu"), "the download of " + days);
+}
+out.files = log.slice();
+return out;
+"""
+USED_TOGGLE = """
+const out = { before: text(toggle()), caption: $(".printer__days") && !$(".printer__days").hidden ? text($(".printer__days")) : null };
+toggle().click();
+await until(() => $(".pused__months") || $(".pused__bar ~ p.muted"), "the months");
+out.during = text(toggle());
+out.captionDuring = $(".printer__days") && !$(".printer__days").hidden ? text($(".printer__days")) : null;
+toggle().click();
+await until(() => $(".pused__row"), "the list again");
+out.after = text(toggle());
+out.captionAfter = $(".printer__days") && !$(".printer__days").hidden ? text($(".printer__days")) : null;
+return out;
+"""
+USED_BARS = """
+toggle().click();
+await until(() => $(".pused__months"), "the months");
+const out = { toggle: text(toggle()), svg: !!$("svg.pused__chart"), sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth };
+const table = $(".pused__months"), show = () => $('[data-action="usage-table"]');
+out.rows = all(".pused__months tbody tr").length;
+out.tableShown = !table.hidden && table.getBoundingClientRect().height > 0;
+out.button = show() ? { text: text(show()), expanded: show().getAttribute("aria-expanded"), controls: show().getAttribute("aria-controls") === table.id, height: Math.round(show().getBoundingClientRect().height), like: Math.round(toggle().getBoundingClientRect().height) } : null;
+if (out.svg) {
+  const svg = $("svg.pused__chart"), cap = $("figcaption");
+  out.role = svg.getAttribute("role"); out.named = svg.getAttribute("aria-labelledby") === cap.id; out.caption = text(cap);
+  out.months = all("g.pused__bar-month").map((g) => g.dataset.month);
+  out.values = all("g.pused__bar-month text.mono").map(text);
+  out.heights = all("g.pused__bar-month rect").map((r) => Number(r.getAttribute("height")));
+  out.hidden = all("g.pused__bar-month").every((g) => g.getAttribute("aria-hidden") === "true");
+  out.years = all("g.pused__bar-month text:not(.mono)").map(text).filter((s) => /^[0-9]{4}$/.test(s));
+  const probe = document.createElement("i"); probe.style.color = "var(--accent)"; document.body.append(probe);
+  out.fillIsAccent = getComputedStyle($("g.pused__bar-month rect")).fill === getComputedStyle(probe).color; probe.remove();
+  const boxes = all("g.pused__bar-month text.mono").map((t) => t.getBoundingClientRect());
+  out.overlaps = boxes.flatMap((a, i) => boxes.slice(i + 1).filter((b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5)).length;
+  out.small = Math.min(...all("g.pused__bar-month text").map((t) => parseFloat(getComputedStyle(t).fontSize) * (svg.getBoundingClientRect().width / svg.viewBox.baseVal.width)));
+  out.box = Math.round(svg.getBoundingClientRect().width);
+  show().click();
+  out.hiddenAfter = { text: text(show()), expanded: show().getAttribute("aria-expanded"), table: table.hidden };
+  show().click();
+  out.reopened = { text: text(show()), expanded: show().getAttribute("aria-expanded"), table: !table.hidden };
+}
+return out;
+"""
+USED_AUDIT = "const found = " + (ROOT / "tests" / "page_audit.js").read_text(encoding="utf-8").rstrip().rstrip(";") + ";"
+USED_AUDITED = """
+toggle().click();
+await until(() => $(".pused__months"), "the months");
+await sleep(600);
+__AUDIT__
+return { findings: (found || []).filter((f) => /pused|usage-|Show as table|Hide the table|Last 7 days|By month|filament used/i.test(JSON.stringify(f))), all: (found || []).length };
+""".replace("__AUDIT__", USED_AUDIT)
+
+
+def _used(url, tmp_path, tail: str, width: int) -> dict:
+    return _drive(url, tmp_path, USED_OPEN.replace("__SERIAL__", SERIAL) + tail, width, "light", None, "", block_install=True)
+
+
+@pytest.mark.parametrize("width", [375, 820])
+def test_by_month_on_a_printer_is_drawn_as_bars_from_tablet_width_and_as_a_table_alone_on_a_phone(served_months, tmp_path, width):
+    """02-components 7.12 and 04 6.6: bars (SVG, the value in words above each, the month under it, the table open under them with 'Hide the table')
+    at tablet width and up; on a phone the table alone, no chart and no button."""
+    out = _used(served_months, tmp_path, USED_BARS, width)
+    assert out["rows"] == 4 and out["tableShown"] and not out["sideways"], json.dumps(out)
+    if width <= 600:
+        assert not out["svg"] and out["button"] is None, json.dumps(out)
+        return
+    assert out["svg"] and out["role"] == "img" and out["named"] and out["hidden"], json.dumps(out)
+    assert len(out["months"]) == 12 and out["months"] == sorted(out["months"]) and out["months"][-1] >= "2026-11", json.dumps(out)       # oldest on the left
+    values = dict(zip(out["months"], out["values"]))
+    assert values["2026-11"] == "1.84 kg" and values["2026-10"] == "640 g" and values["2026-07"] == "213 g" and values["2026-09"] == "0 g", json.dumps(out)
+    heights = dict(zip(out["months"], out["heights"]))
+    assert heights["2026-11"] > heights["2026-10"] > heights["2026-07"] > heights["2026-09"] and heights["2026-09"] == 2, json.dumps(out)   # a month with nothing is a flat tick
+    assert out["caption"] == "Filament used per month in the last 12 months. The most was in November: 1.84 kg.", json.dumps(out)
+    assert out["fillIsAccent"] and out["overlaps"] == 0 and out["small"] >= 8, json.dumps(out)
+    assert out["years"][0] == min(out["months"])[:4], json.dumps(out)                    # the year stands on the first bar (and on each January)
+    assert (out["button"]["text"], out["button"]["expanded"], out["button"]["controls"]) == ("Hide the table", "true", True), json.dumps(out)
+    assert out["button"]["height"] == out["button"]["like"] >= 40, json.dumps(out)          # as tall as the By month button beside it
+    assert out["hiddenAfter"] == {"text": "Show as table", "expanded": "false", "table": True}, json.dumps(out)
+    assert out["reopened"] == {"text": "Hide the table", "expanded": "true", "table": True}, json.dumps(out)
+
+
+@pytest.mark.parametrize("width", [375, 820])
+def test_the_usage_download_offers_the_three_ranges_in_a_menu(served_months, tmp_path, width):
+    """04 6.6: the icon button 'More actions' holds 'Download as CSV' with Last 7 days, Last 30 days and Last 12 months; each asks the twin for that range."""
+    out = _used(served_months, tmp_path, USED_CSV, width)
+    assert out["more"] == "More actions for filament used", json.dumps(out)
+    assert out["menu"]["heading"] == "Download as CSV" and out["menu"]["items"] == ["Last 7 days", "Last 30 days", "Last 12 months"], json.dumps(out)
+    assert [f.split("/api/")[1] for f in out["files"]] == [f"export/usage.csv?printer={SERIAL}&days={d}" for d in (7, 30, 365)], json.dumps(out)
+
+
+@pytest.mark.parametrize("width", [375, 820])
+def test_the_by_month_button_reads_last_7_days_while_the_months_show(served_months, tmp_path, width):
+    """04 6.6: 'By month' (which then reads 'Last 7 days'); the list's own caption 'Last 7 days' is not shown over the months."""
+    out = _used(served_months, tmp_path, USED_TOGGLE, width)
+    assert out == {"before": "By month", "caption": "Last 7 days", "during": "Last 7 days", "captionDuring": None,
+                   "after": "By month", "captionAfter": "Last 7 days"}, json.dumps(out)
+
+
+@pytest.mark.parametrize("width", [375, 820])
+def test_the_page_audit_passes_on_a_printer_showing_by_month(served_months, tmp_path, width):
+    out = _used(served_months, tmp_path, USED_AUDITED, width)
+    assert out["findings"] == [], json.dumps(out)
