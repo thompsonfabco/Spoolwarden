@@ -27,7 +27,11 @@ def env(tmp_path, monkeypatch, mountable):
         monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
     monkeypatch.setenv("FK_NO_SYSTEMD", "1")
     monkeypatch.setattr(event_sink, "runs", event_sink.RunBook())
+    printers._switches.clear()
+    printers._made.clear()
     yield tmp_path
+    printers._switches.clear()
+    printers._made.clear()
     event_sink.set_sink(None)
 
 
@@ -123,6 +127,15 @@ def test_leave_deletes_the_folder_and_brings_the_hub_back(env):
     assert sorted(p.name for p in (env / "state").iterdir()) == before
     with pytest.raises(demo.NotDemo):
         demo.leave()
+
+
+def test_stopped_switch_does_not_touch_state_on_leave(env):
+    from filament_kit.bridge.connection import Manager
+    sw = printers.Switch(Manager(port=1), printers.Family("bambu", Spoolman("http://127.0.0.1:1")))
+    sw.stop()
+    on()
+    assert demo.leave() == {"demo": False}
+    assert sorted(p.name for p in (env / "state").iterdir()) == []
 
 
 @pytest.mark.parametrize("spoolman,printers_,why", [
