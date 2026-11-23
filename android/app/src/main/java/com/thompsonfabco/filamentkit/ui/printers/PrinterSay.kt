@@ -17,6 +17,12 @@ import java.util.Locale
 sealed interface Say {
     data class Words(@StringRes val id: Int, val args: List<Any> = emptyList()) : Say
     data class FromHub(val text: String) : Say
+
+    /** Sentences that are each a text of their own, joined by [separator] (a note that follows a result). */
+    data class Joined(val parts: List<Say>, val separator: String = " ") : Say
+
+    /** [say] with its first letter in capitals: a name that starts a sentence. */
+    data class Cap(val say: Say) : Say
 }
 
 @Composable
@@ -33,6 +39,8 @@ internal fun sayText(say: Say): String = when (say) {
         }.toTypedArray(),
     )
     is Say.FromHub -> say.text
+    is Say.Joined -> say.parts.map { sayText(it) }.joinToString(say.separator)
+    is Say.Cap -> sayText(say.say).replaceFirstChar { it.uppercase() }
 }
 
 /** [say] as text where there is no composition (a toast): the same words [sayText] gives. */
@@ -49,6 +57,8 @@ internal fun Say.resolve(context: Context): String = when (this) {
         }.toTypedArray(),
     )
     is Say.FromHub -> text
+    is Say.Joined -> parts.joinToString(separator) { it.resolve(context) }
+    is Say.Cap -> say.resolve(context).replaceFirstChar { it.uppercase() }
 }
 
 /**
