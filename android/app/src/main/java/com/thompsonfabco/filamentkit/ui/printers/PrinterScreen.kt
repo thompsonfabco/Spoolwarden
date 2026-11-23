@@ -57,14 +57,12 @@ import com.thompsonfabco.filamentkit.ui.ColorSwatch
 import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.history.CsvOutcome
-import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
 import com.thompsonfabco.filamentkit.ui.history.MonthRows
 import com.thompsonfabco.filamentkit.ui.history.MonthTable
 import com.thompsonfabco.filamentkit.ui.history.csvFileName
 import com.thompsonfabco.filamentkit.ui.history.csvTarget
 import com.thompsonfabco.filamentkit.ui.history.shareCsv
 import com.thompsonfabco.filamentkit.ui.history.showUndoable
-import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import kotlinx.coroutines.launch
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
@@ -216,7 +214,7 @@ fun PrinterScreen(
         // its own scope: the offer going away must not cut the toast short
         toastScope.launch {
             val event = viewModel.findUndo(offer)
-            toast?.showUndoable(offerText, undoLabel, event, undoHoldMs(context), viewModel::undoOnHub)
+            toast?.showUndoable(offerText, undoLabel, event, context, viewModel::undoOnHub)
         }
     }
     // the slot sheet closes when the unload or clear question opens
@@ -878,7 +876,7 @@ private fun UsagePanel(s: ToolsUiState, tools: PrinterToolsViewModel, state: Pri
         title = stringResource(R.string.printer_usage_title), padded = false,
         action = {
             SwButton(
-                if (state.monthsOn) HistoryTexts.LAST_DAYS else HistoryTexts.BY_MONTH, { vm.showMonths(!state.monthsOn) },
+                stringResource(if (state.monthsOn) R.string.printer_used_last_days else R.string.history_by_month), { vm.showMonths(!state.monthsOn) },
                 kind = SwButtonKind.Quiet,
             )
         },
@@ -888,8 +886,8 @@ private fun UsagePanel(s: ToolsUiState, tools: PrinterToolsViewModel, state: Pri
         Column(Modifier.padding(horizontal = space.s4, vertical = space.s2), verticalArrangement = Arrangement.spacedBy(space.s2)) {
             state.csvProblem?.let { NoticeCard(NoticeKind.Bad, sayText(it)) }
             SwButton(
-                if (state.csvBusy) HistoryTexts.DOWNLOADING else HistoryTexts.DOWNLOAD_CSV,
-                { csvTarget(context, csvFileName("usage", vm.printerId))?.let(vm::downloadUsageCsv) ?: vm.csvShown(Say.FromHub(HistoryTexts.CSV_NOT_SAVED)) },
+                stringResource(if (state.csvBusy) R.string.history_downloading else R.string.common_download_csv),
+                { csvTarget(context, csvFileName("usage", vm.printerId))?.let(vm::downloadUsageCsv) ?: vm.csvShown(Say.Words(R.string.history_csv_not_saved)) },
                 kind = SwButtonKind.Plain, enabled = !state.csvBusy,
             )
         }
@@ -913,10 +911,10 @@ private fun MonthsBody(state: PrinterUiState, vm: PrinterViewModel) {
             stringResource(R.string.common_working), Modifier.padding(space.s4), color = colors.muted, style = MaterialTheme.typography.bodyMedium,
         )
         state.monthsOlderHub -> Text(
-            HistoryTexts.MONTHS_UPDATE_HUB, Modifier.padding(space.s4), color = colors.muted, style = MaterialTheme.typography.bodyMedium,
+            stringResource(R.string.history_months_update_hub), Modifier.padding(space.s4), color = colors.muted, style = MaterialTheme.typography.bodyMedium,
         )
         months != null && months.isEmpty() -> Text(
-            HistoryTexts.NO_MONTHS, Modifier.padding(space.s4), color = colors.muted, style = MaterialTheme.typography.bodyMedium,
+            stringResource(R.string.history_no_months), Modifier.padding(space.s4), color = colors.muted, style = MaterialTheme.typography.bodyMedium,
         )
         months != null -> MonthRows(MonthTable.lines(months))
     }

@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.thompsonfabco.filamentkit.ui.spool.DOT
@@ -25,12 +26,13 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 internal fun MonthRows(lines: List<MonthLine>, modifier: Modifier = Modifier) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
+    val context = LocalContext.current
     Column(modifier) {
         lines.forEachIndexed { i, line ->
             if (i > 0) HorizontalDivider(color = colors.border, thickness = SpoolwardenTheme.sizes.hairline)
             Column(
                 Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).padding(horizontal = space.s4, vertical = space.s2)
-                    .semantics(mergeDescendants = true) { contentDescription = line.spoken },
+                    .semantics(mergeDescendants = true) { contentDescription = line.spoken(context) },
                 verticalArrangement = Arrangement.spacedBy(space.s1),
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -38,7 +40,7 @@ internal fun MonthRows(lines: List<MonthLine>, modifier: Modifier = Modifier) {
                     Text(line.grams, style = SpoolwardenTheme.type.data)
                 }
                 Text(
-                    listOfNotNull(line.prints, line.unfinished, line.material).joinToString(DOT),
+                    listOfNotNull(line.printsText(context), line.unfinishedText(context), line.materialText(context)).joinToString(DOT),
                     color = colors.muted, style = SpoolwardenTheme.type.dataSmall,
                 )
             }

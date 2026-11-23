@@ -41,9 +41,9 @@ internal fun shareCsv(context: Context, file: File, subject: String): CsvOutcome
 }
 
 /** The words for a download the Hub or the phone could not do (404: an older Hub; `storage`: the phone); null for any other failure. */
-internal fun csvProblemText(e: com.thompsonfabco.filamentkit.net.ApiError): String? = when {
-    e.status == 404 -> HistoryTexts.CSV_UPDATE_HUB
-    e.code == "storage" -> HistoryTexts.CSV_NOT_SAVED
+internal fun csvProblemText(e: com.thompsonfabco.filamentkit.net.ApiError): RecentFailure? = when {
+    e.status == 404 -> RecentFailure.CsvUpdateHub
+    e.code == "storage" -> RecentFailure.CsvNotSaved
     else -> null
 }
 

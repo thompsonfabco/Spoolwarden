@@ -16,14 +16,14 @@ interface ActivityBackend {
     suspend fun activity(subject: String, limit: Int): List<ActivityEvent> = emptyList()
 
     /** `POST api/events/{id}/undo`; 409 is a refusal, 404 an older Hub. */
-    suspend fun undoEvent(id: Long): UndoAnswer = throw ApiError(404, "not_found", HistoryTexts.UNDO_UPDATE_HUB)
+    suspend fun undoEvent(id: Long): UndoAnswer = throw ApiError(404, "not_found", "not_found")
 
     /** `GET api/printers/{id}/usage?by=month`; null when the Hub has no such view (an older Hub). */
     suspend fun usageByMonth(printerId: String): List<UsageMonth>? = null
 
     /** `GET api/export/{set}.csv` into [to]; 404 is an older Hub. */
     suspend fun exportCsv(set: String, to: File, days: Int? = null, printer: String? = null): Unit =
-        throw ApiError(404, "not_found", HistoryTexts.CSV_UPDATE_HUB)
+        throw ApiError(404, "not_found", "not_found")
 
     companion object {
         /** Calls go to whatever [current] returns at that moment, so a re-pair reaches the screen. */

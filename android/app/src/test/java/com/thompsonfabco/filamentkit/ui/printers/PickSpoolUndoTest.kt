@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.LoadResult
@@ -8,6 +9,7 @@ import com.thompsonfabco.filamentkit.net.UndoAnswer
 import com.thompsonfabco.filamentkit.net.UndoState
 import com.thompsonfabco.filamentkit.ui.history.UndoFlow
 import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -121,7 +123,7 @@ class PickSpoolUndoTest {
         assertNull(v.state.value.loadedEvent)
         val outcome = v.undoLoad(e)
         assertEquals(listOf(9L), fake.undone)
-        assertEquals(UndoOutcome.Done("Put back. The printer still shows what it was set to."), outcome)
+        assertEquals(UndoOutcome.Done(Say.Words(R.string.history_put_back_note, listOf("The printer still shows what it was set to."))), outcome)
     }
 
     @Test fun aRefusedUndoSaysWhy() = runTest(dispatcher) {
@@ -130,6 +132,6 @@ class PickSpoolUndoTest {
         v.loadSpool(7)
         fake.undoError = ApiError(409, "changed_since", "The Hub says why.")
         val outcome = v.undoLoad(v.state.value.loadedEvent!!)
-        assertEquals(UndoOutcome.Refused("The Hub says why."), outcome)
+        assertEquals(UndoOutcome.Refused(Say.FromHub("The Hub says why.")), outcome)
     }
 }

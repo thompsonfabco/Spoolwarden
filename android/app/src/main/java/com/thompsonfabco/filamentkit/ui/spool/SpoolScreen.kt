@@ -1,6 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.spool
 
 import androidx.compose.ui.platform.LocalContext
+import com.thompsonfabco.filamentkit.ui.printers.resolve
 import com.thompsonfabco.filamentkit.ui.storage.LocationRow
 import com.thompsonfabco.filamentkit.ui.storage.holder
 import com.thompsonfabco.filamentkit.ui.storage.rows
@@ -69,7 +70,6 @@ import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
 import com.thompsonfabco.filamentkit.ui.history.ActivityList
 import com.thompsonfabco.filamentkit.ui.history.showUndoable
 import com.thompsonfabco.filamentkit.ui.history.spoolResultToastText
-import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -110,7 +110,7 @@ fun SpoolScreen(
         scope.launch {
             val event = vm.findUndo(offer)
             if (event != null || moved == null) {
-                toast?.showUndoable(offerText, undo, event, undoHoldMs(context), vm::undoOnHub)
+                toast?.showUndoable(offerText, undo, event, context, vm::undoOnHub)
             } else {
                 val answer = toast?.show(offerText, if (moved.previous != null) undo else null)
                 if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed && moved.previous != null) vm.undoMove(moved.previous)
@@ -123,7 +123,7 @@ fun SpoolScreen(
     LaunchedEffect(returned) {
         if (returned == null) return@LaunchedEffect
         vm.returnToastShown()
-        toast?.showUndoable(returned.text, undo, returned.event, undoHoldMs(context), vm::undoOnHub)
+        toast?.showUndoable(returned.text, undo, returned.event, context, vm::undoOnHub)
     }
 
     val scrollModifier = if (embedded) {
@@ -168,7 +168,7 @@ fun SpoolScreen(
                         ui.activity, ui.undoing, enabled = online && !ui.writing,
                         onUndo = { event ->
                             toast?.dismiss()
-                            scope.launch { vm.undoRow(event).text.takeIf { it.isNotBlank() }?.let { toast?.show(it) } }
+                            scope.launch { vm.undoRow(event).text.resolve(context).takeIf { it.isNotBlank() }?.let { toast?.show(it) } }
                         },
                     )
                 }

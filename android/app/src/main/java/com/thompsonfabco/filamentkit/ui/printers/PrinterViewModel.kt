@@ -22,7 +22,6 @@ import com.thompsonfabco.filamentkit.net.SlotSpool
 import com.thompsonfabco.filamentkit.net.UnloadResult
 import com.thompsonfabco.filamentkit.net.UsageMonth
 import com.thompsonfabco.filamentkit.net.autoText
-import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
 import com.thompsonfabco.filamentkit.ui.history.ActivityBackend
 import com.thompsonfabco.filamentkit.ui.history.UndoFlow
 import com.thompsonfabco.filamentkit.ui.history.UndoKinds
@@ -608,8 +607,8 @@ class PrinterViewModel(
                     _state.update { it.copy(csvFile = target) }
                 } catch (e: ApiError) {
                     when {
-                        e.status == NOT_FOUND -> _state.update { it.copy(csvProblem = Say.FromHub(HistoryTexts.CSV_UPDATE_HUB)) }
-                        e.code == "storage" -> _state.update { it.copy(csvProblem = Say.FromHub(HistoryTexts.CSV_NOT_SAVED)) }
+                        e.status == NOT_FOUND -> _state.update { it.copy(csvProblem = Say.Words(R.string.history_csv_update_hub)) }
+                        e.code == "storage" -> _state.update { it.copy(csvProblem = Say.Words(R.string.history_csv_not_saved)) }
                         else -> throw e
                     }
                 }

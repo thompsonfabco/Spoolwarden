@@ -10,6 +10,7 @@ import com.thompsonfabco.filamentkit.ui.history.UndoOffer
 import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
 import com.thompsonfabco.filamentkit.ui.history.undoOfferFor
 import com.thompsonfabco.filamentkit.ui.parseWeight
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -478,7 +479,7 @@ class SpoolViewModel(
 
     /** Undo on a row of the activity list: one at a time; the answer's words are for a toast. */
     suspend fun undoRow(event: ActivityEvent): UndoOutcome {
-        if (_state.value.undoing != null) return UndoOutcome.Refused("")
+        if (_state.value.undoing != null) return UndoOutcome.Refused(Say.FromHub(""))
         _state.update { it.copy(undoing = event.id) }
         try {
             return undoOnHub(event)

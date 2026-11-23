@@ -58,6 +58,8 @@ import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.history.RecentFailure
+import com.thompsonfabco.filamentkit.ui.history.failureText
 import com.thompsonfabco.filamentkit.ui.pair.LabelScan
 import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwCollection
@@ -72,7 +74,6 @@ import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
 import com.thompsonfabco.filamentkit.ui.history.CsvOutcome
-import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
 import com.thompsonfabco.filamentkit.ui.history.csvFileName
 import com.thompsonfabco.filamentkit.ui.history.csvProblemText
 import com.thompsonfabco.filamentkit.ui.history.UndoFlow
@@ -80,8 +81,8 @@ import com.thompsonfabco.filamentkit.ui.history.UndoOffer
 import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
 import com.thompsonfabco.filamentkit.ui.history.csvTarget
 import com.thompsonfabco.filamentkit.ui.history.showUndoable
-import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.history.shareCsv
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import com.thompsonfabco.filamentkit.ui.spool.CheckedOutRules
 import com.thompsonfabco.filamentkit.ui.spool.CheckedOutTexts
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
@@ -130,7 +131,7 @@ data class SearchUi(
     /** The downloaded file, waiting for the screen to open the share sheet ([SearchViewModel.csvShown]). */
     val csvFile: File? = null,
     /** Why the download did not happen: the words for an older Hub or a full phone, or a failure the usual notices say. */
-    val csvProblem: String? = null,
+    val csvProblem: RecentFailure? = null,
     val csvFailure: HubFailure? = null,
     /** The "Checked out" filter; the chip's count is the `total` of the answer. */
     val checkedOnly: Boolean = false,
@@ -247,7 +248,7 @@ class SearchViewModel(
     }
 
     /** The screen opened the share sheet (or could not): the file is not offered again; [problem] says why not, if it did not open. */
-    fun csvShown(problem: String?) = _state.update { it.copy(csvFile = null, csvProblem = problem) }
+    fun csvShown(problem: RecentFailure?) = _state.update { it.copy(csvFile = null, csvProblem = problem) }
 
     /** The "Running low" chip: shows the list of low spools (least first, as the Hub gives it) instead of the search. */
     fun setLowOnly(on: Boolean) {
@@ -347,7 +348,7 @@ class SearchViewModel(
 
     /** The toast's Undo; the list is read again whatever came of it. */
     suspend fun undoReturn(event: ActivityEvent): UndoOutcome {
-        val flow = undoFlow ?: return UndoOutcome.Refused("")
+        val flow = undoFlow ?: return UndoOutcome.Refused(Say.FromHub(""))
         val outcome = flow.undo(event)
         loadCheckedOut()
         return outcome
@@ -437,7 +438,7 @@ fun SearchScreen(
     LaunchedEffect(returned) {
         if (returned == null) return@LaunchedEffect
         vm.returnToastShown()
-        toast?.showUndoable(returned.text, undoLabel, returned.event, undoHoldMs(context), vm::undoReturn)
+        toast?.showUndoable(returned.text, undoLabel, returned.event, context, vm::undoReturn)
     }
     // Download as CSV: the file goes to the system share sheet
     val csv = ui.csvFile
@@ -447,7 +448,7 @@ fun SearchScreen(
             vm.csvShown(
                 when (shareCsv(context, csv, csvSubject)) {
                     CsvOutcome.Opened -> null
-                    CsvOutcome.NoApp -> context.getString(R.string.printer_report_no_app)
+                    CsvOutcome.NoApp -> RecentFailure.Hub(context.getString(R.string.printer_report_no_app))
                 },
             )
         }
@@ -462,11 +463,11 @@ fun SearchScreen(
                 SwMenu(open, { open = false }) {
                     if (spoolmanUrl != null) SwMenuItem(stringResource(R.string.spools_open_spoolman), { open = false; openInBrowser(context, spoolmanUrl) })
                     if (vm.canExport) SwMenuItem(
-                        if (ui.csvBusy) HistoryTexts.DOWNLOADING else HistoryTexts.DOWNLOAD_CSV,
+                        stringResource(if (ui.csvBusy) R.string.history_downloading else R.string.common_download_csv),
                         {
                             open = false
                             csvTarget(context, csvFileName("spoolman-spools", null))?.let(vm::downloadCsv)
-                                ?: vm.csvShown(HistoryTexts.CSV_NOT_SAVED)
+                                ?: vm.csvShown(RecentFailure.CsvNotSaved)
                         },
                         enabled = !ui.csvBusy,
                     )
@@ -568,7 +569,7 @@ fun SearchScreen(
                     }
                     HubNoticeOf(ui.failure, onPairAgain)
                     HubNoticeOf(ui.csvFailure, onPairAgain)
-                    (ui.csvProblem ?: ui.csvFailure?.let { hubFailureText(it) })?.let { NoticeCard(NoticeKind.Bad, it) }
+                    (ui.csvProblem?.let { failureText(it) } ?: ui.csvFailure?.let { hubFailureText(it) })?.let { NoticeCard(NoticeKind.Bad, it) }
                     if (ui.lowOnly) LowSpoolsList(ui, openOrToggle, online, onTryAgain = vm::loadLowSpools)
                     if (ui.checkedOnly) CheckedOutList(ui, openOrToggle, online, onReturn = vm::returnToHome, onPairAgain = onPairAgain, onTryAgain = vm::loadCheckedOut)
                     val searched = ui.searched
