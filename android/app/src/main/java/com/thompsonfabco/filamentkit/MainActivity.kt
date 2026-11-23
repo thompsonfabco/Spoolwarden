@@ -434,7 +434,7 @@ internal fun FilamentKitApp(
     var demoOn by remember { mutableStateOf(false) }
     LaunchedEffect(info) { info?.let { demoOn = it.demo } }
     val labelPhotos = showLabelPhotos(info)
-    val version = versionLine(BuildConfig.VERSION_NAME, config.isPaired(), info?.version)
+    val version = versionLine(LocalContext.current, BuildConfig.VERSION_NAME, config.isPaired(), info?.version)
     // On screen: the chip follows the server, and is checked right away on return to the app. Not while pairing,
     // where nothing shows it.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -1266,7 +1266,7 @@ internal fun FilamentKitApp(
                                             val shown = when (found) {
                                                 is LabelLookup.Failed -> found.text.ifBlank { appContext.getString(R.string.common_hub_answer_unknown) }
                                                 LabelLookup.CertificateChanged -> appContext.getString(R.string.common_cert_changed_notice)
-                                                else -> LabelScan.NOT_FOUND_TEXT
+                                                else -> appContext.getString(R.string.label_scan_not_found)
                                             }
                                             notice = shown
                                             delay(LabelScan.RESCAN_MS)

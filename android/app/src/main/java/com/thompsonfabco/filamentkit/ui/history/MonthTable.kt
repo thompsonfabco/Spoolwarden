@@ -37,11 +37,11 @@ object MonthTable {
         month
     }
 
-    fun lines(months: List<UsageMonth>, locale: Locale = Locale.getDefault()): List<MonthLine> =
+    fun lines(context: Context, months: List<UsageMonth>, locale: Locale = Locale.getDefault()): List<MonthLine> =
         months.sortedByDescending { it.month }.map { m ->
             MonthLine(
                 month = monthName(m.month, locale),
-                grams = formatGrams(m.grams) + " g",
+                grams = context.getString(R.string.common_grams, formatGrams(m.grams)),
                 prints = m.prints,
                 unfinished = m.unfinishedPrints,
                 material = m.topMaterial,

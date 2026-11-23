@@ -36,9 +36,10 @@ class LanguageChoiceTest {
     }
 
     @Test fun aLanguageIsNamedAsItNamesItselfWithTheMachineNoteWhenMarked() {
-        assertEquals("English", languageName("en"))
-        assertEquals("Deutsch (machine-translated)", languageName("de", machineTranslated = setOf("de")))
-        assertEquals("Русский", languageName("ru"))
+        val context = RuntimeEnvironment.getApplication()
+        assertEquals("English", languageName(context, "en"))
+        assertEquals("Deutsch (machine-translated)", languageName(context, "de", machineTranslated = setOf("de")))
+        assertEquals("Русский", languageName(context, "ru"))
     }
 
     @Test fun theChoiceIsReadFromAndroidsTagsAndNoneIsAutomatic() {

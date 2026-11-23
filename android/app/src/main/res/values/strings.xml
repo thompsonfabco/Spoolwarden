@@ -5837,4 +5837,24 @@
     <string name="printer_guided_bambu_address">Type a Bambu Lab printer\'s address</string>
     <!-- 1=address -->
     <string name="printer_guided_klipper_unreached">The Hub could not reach a Klipper printer at %1$s.</string>
+    <string name="demo_notice">Demo data. Nothing here is real.</string>
+    <string name="demo_leave">Leave demo</string>
+    <string name="demo_leave_title">Leave the demo?</string>
+    <string name="demo_leave_body">Everything in it is deleted.</string>
+    <!-- 1=app_version -->
+    <string name="app_version_unpaired">App %1$s · not paired</string>
+    <!-- 1=app_version 2=server_version -->
+    <string name="app_version_server">App %1$s · Server %2$s</string>
+    <string name="label_scan_button">Scan a label</string>
+    <string name="label_scan_hint">Point the camera at the spool\'s label</string>
+    <string name="label_scan_denied">The camera is needed to scan a spool\'s label. You can allow it in the phone\'s app settings.</string>
+    <string name="label_scan_failed">The camera could not start, so the label can\'t be scanned.</string>
+    <string name="label_scan_not_label">This is not a Spoolwarden spool label.</string>
+    <string name="label_scan_not_found">This label\'s spool was not found on this Hub.</string>
+    <string name="settings_language_title">Language</string>
+    <string name="settings_language_helper">Automatic uses this phone\'s language if the app has it, otherwise the Hub\'s language.</string>
+    <string name="settings_language_machine_translated">(machine-translated)</string>
+    <string name="spool_weight_hint_empty">Type the weight with the spool to update it.</string>
+    <string name="spool_weight_hint_invalid">Type a weight in grams, more than 0.</string>
+    <string name="spool_tare_invalid">Empty spool weight must be more than 0 g</string>
 </resources>
