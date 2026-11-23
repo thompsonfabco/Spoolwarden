@@ -12,9 +12,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.ui.pair.MismatchSource
 import com.thompsonfabco.filamentkit.ui.pair.mismatchText
 import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
@@ -38,9 +40,6 @@ class TrustAction(
     val failed: Boolean = false,
     val reset: () -> Unit = {},
 )
-
-internal const val TRUST_FAILED = "The new certificate could not be trusted yet. Check that the Hub is reachable and " +
-    "try again, or pair again."
 
 @Composable
 internal fun MismatchNotice(expected: String, actual: String, onPairAgain: () -> Unit, trust: TrustAction? = null) {
@@ -66,7 +65,7 @@ internal fun MismatchNotice(expected: String, actual: String, onPairAgain: () ->
                     Text(text.button, textAlign = TextAlign.Center)
                 }
             }
-            if (trust?.failed == true) Text(TRUST_FAILED, color = MaterialTheme.colorScheme.error)
+            if (trust?.failed == true) Text(stringResource(R.string.pair_cert_trust_failed), color = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -74,7 +73,7 @@ internal fun MismatchNotice(expected: String, actual: String, onPairAgain: () ->
 @Composable
 internal fun UnpairedNotice(onPairAgain: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("This phone is no longer paired with the Hub.", color = MaterialTheme.colorScheme.error)
-        Button(onClick = onPairAgain) { Text("Pair again") }
+        Text(stringResource(R.string.common_not_paired_notice), color = MaterialTheme.colorScheme.error)
+        Button(onClick = onPairAgain) { Text(stringResource(R.string.common_pair_again)) }
     }
 }
