@@ -182,7 +182,7 @@ with zipfile.ZipFile(sys.argv[1]) as z:
 known = re.findall(r'_m[(]"([a-z_]+)"', text)
 bad = [n for n in sys.argv[2].split(",") if n and n not in known]
 if bad:
-    sys.exit("error: unknown module %s\nfix: use module names from: %s" % (", ".join(bad), ", ".join(known)))
+    sys.exit("error: unknown feature %s\nfix: use feature names from: %s" % (", ".join(bad), ", ".join(known)))
 PYEOF
 fi
 
