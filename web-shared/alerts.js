@@ -99,7 +99,7 @@ const state = { cursor: null, events: new Map(), conditions: [], raised: new Set
 const opts = { host: null, interval: 10000, href: (a) => HUB_HREF[a.place] || null, open: null, limit: 200 };
 let loaded = 0;                 // the clock when the page started polling; events from before it (less the clock skew allowed) never arrive as new
 const SKEW = 10 * 60000;
-let timer = 0, tick = 0, running = false, polling = false, host = null, dlg = null;
+let timer = 0, tick = 0, running = false, polling = false, pollPending = false, host = null, dlg = null;
 const shown = new Map();      // banner key -> {ver, el}
 const rank = (s) => (s === "bad" ? 2 : s === "warn" ? 1 : 0);
 
@@ -244,7 +244,7 @@ function clientId() {
   return id;
 }
 async function poll() {
-  if (polling) return;
+  if (polling) { pollPending = true; return; }
   polling = true;
   try {
     // the first call asks for the last 7 days by time, and pages on (since the last id, same limit) while the answer is full; the
@@ -266,9 +266,15 @@ async function poll() {
     }
   } catch (err) {
     if (opts.onError) opts.onError(err);
-  } finally { polling = false; }
+  } finally {
+    polling = false;
+    if (pollPending) {
+      pollPending = false;
+      poll();
+    }
+  }
 }
-function stop() { running = false; clearTimeout(timer); clearInterval(tick); }
+function stop() { running = false; pollPending = false; clearTimeout(timer); clearInterval(tick); }
 // start({host, interval, href(action) -> address | null, open(action), api(path), now(), Notification, onError}): the first poll's promise
 function start(o = {}) {
   stop();
