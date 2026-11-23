@@ -454,19 +454,6 @@ def test_a_record_and_a_pending_read_are_xml_files(sm):
     assert intake_history.list_records(True)["count"] == 1
 
 
-def test_photo_thumb_bounds_size_and_sets_cache_headers(sm):
-    _, hid = add(sm, read_id=read(sm)["read_id"])
-    small = intake_history.photo_thumb(hid, 1)
-    assert small == JPEG
-    hdrs = intake_history.photo_headers(small, thumb=True)
-    assert hdrs["Cache-Control"] == intake_history.PHOTO_CACHE
-    assert hdrs["Content-Length"] == str(len(small))
-    assert hdrs["X-Content-Type-Options"] == "nosniff"
-    with pytest.raises(intake_history.HistoryError) as exc:
-        intake_history.photo_thumb(hid, 1, max_bytes=2)
-    assert exc.value.status == 413 and exc.value.code == "too_large"
-
-
 def test_a_record_json_is_read_moved_once_and_keeps_its_version_count(sm):
     r, hid = add(sm)
     d = intake_history._dir(hid)
@@ -478,19 +465,6 @@ def test_a_record_json_is_read_moved_once_and_keeps_its_version_count(sm):
     assert got == rec and intake_history._version(got) == 0
     assert (d / "record.xml").is_file() and (d / "record.json").is_file()
     assert intake_history.list_records(True)["count"] == 1
-
-
-def test_photo_thumb_bounds_size_and_sets_cache_headers(sm):
-    _, hid = add(sm, read_id=read(sm)["read_id"])
-    small = intake_history.photo_thumb(hid, 1)
-    assert small == JPEG
-    hdrs = intake_history.photo_headers(small, thumb=True)
-    assert hdrs["Cache-Control"] == intake_history.PHOTO_CACHE
-    assert hdrs["Content-Length"] == str(len(small))
-    assert hdrs["X-Content-Type-Options"] == "nosniff"
-    with pytest.raises(intake_history.HistoryError) as exc:
-        intake_history.photo_thumb(hid, 1, max_bytes=2)
-    assert exc.value.status == 413 and exc.value.code == "too_large"
 
 
 def test_a_damaged_record_xml_with_its_json_beside_it_serves_the_json_and_keeps_the_xml_aside(sm):
@@ -575,7 +549,12 @@ def test_photo_thumb_bounds_size_and_sets_cache_headers(sm):
     hdrs = intake_history.photo_headers(small, thumb=True)
     assert hdrs["Cache-Control"] == intake_history.PHOTO_CACHE
     assert hdrs["Content-Length"] == str(len(small))
+    assert hdrs["ETag"].startswith('"') and hdrs["ETag"].endswith('"')
     assert hdrs["X-Content-Type-Options"] == "nosniff"
     with pytest.raises(intake_history.HistoryError) as exc:
         intake_history.photo_thumb(hid, 1, max_bytes=2)
     assert exc.value.status == 413 and exc.value.code == "too_large"
+    (intake_history._dir(hid) / "photo1.jpg").write_bytes(b"not-a-jpeg")
+    with pytest.raises(intake_history.HistoryError) as bad:
+        intake_history.photo_thumb(hid, 1)
+    assert bad.value.status == 415 and bad.value.code == "bad_image"
