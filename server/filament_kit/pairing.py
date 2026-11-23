@@ -13,6 +13,7 @@ import secrets
 import socket
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -184,80 +185,68 @@ def _is_docker_bridge_ip(ip: str) -> bool:
         return False
 
 
-def _default_route_udp_ip() -> str | None:
+def _read_proc_net_route() -> list[tuple[str, int, int]]:
+    """Read Linux `/proc/net/route` as (iface, dest_host_order, mask_host_order)."""
+    routes: list[tuple[str, int, int]] = []
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("192.0.2.1", 80))
-            ip = s.getsockname()[0]
-            return ip if _usable(ip) else None
+        text = Path("/proc/net/route").read_text(encoding="utf-8", errors="ignore")
     except OSError:
+        return routes
+    for line in text.splitlines()[1:]:
+        cols = line.split()
+        if len(cols) < 8:
+            continue
+        try:
+            routes.append((cols[0], int(cols[1], 16), int(cols[7], 16)))
+        except ValueError:
+            continue
+    return routes
+
+
+def _iface_for_ip(ip: str, routes: list[tuple[str, int, int]]) -> str | None:
+    try:
+        addr = int.from_bytes(ipaddress.IPv4Address(ip).packed, sys.byteorder)
+    except ValueError:
         return None
-
-
-def _linux_route_and_addrs() -> tuple[str | None, str | None, list[tuple[str, str]]]:
-    default_dev: str | None = None
-    default_src: str | None = None
-    try:
-        out = subprocess.run(["ip", "-4", "route", "show", "default"], capture_output=True, text=True, timeout=3).stdout
-        for line in out.splitlines():
-            m_dev = re.search(r"\bdev\s+(\S+)", line)
-            m_src = re.search(r"\bsrc\s+(\S+)", line)
-            if m_dev:
-                default_dev = m_dev.group(1)
-            if m_src and _usable(m_src.group(1)):
-                default_src = m_src.group(1)
-            if default_dev or default_src:
-                break
-    except (OSError, subprocess.SubprocessError):
-        pass
-    addrs: list[tuple[str, str]] = []
-    try:
-        out = subprocess.run(["ip", "-4", "-o", "addr", "show"], capture_output=True, text=True, timeout=3).stdout
-        for line in out.splitlines():
-            m = re.match(r"^\d+:\s+([^\s@]+)\S*\s+inet\s+(\d+\.\d+\.\d+\.\d+)/", line)
-            if m:
-                addrs.append((m.group(1), m.group(2)))
-    except (OSError, subprocess.SubprocessError):
-        pass
-    return default_dev, default_src, addrs
+    best_iface: str | None = None
+    best_bits = -1
+    for iface, dest, mask in routes:
+        if mask != 0 and (addr & mask) == (dest & mask):
+            bits = mask.bit_count()
+            if bits > best_bits:
+                best_bits = bits
+                best_iface = iface
+    return best_iface
 
 
 def _candidate_ips() -> list[str]:
-    preferred: list[str] = []
-    fallback: list[str] = []
+    raw: list[str] = []
     if os.name != "nt":
-        default_dev, default_src, if_addrs = _linux_route_and_addrs()
-        if default_src and not (default_dev and _is_bridge_iface(default_dev)):
-            preferred.append(default_src)
-        for iface, ip in if_addrs:
-            if not _usable(ip):
-                continue
-            if _is_bridge_iface(iface) or (_is_docker_bridge_ip(ip) and iface != default_dev):
-                fallback.append(ip)
-            elif iface == default_dev and not default_src:
-                preferred.insert(0, ip)
-            else:
-                preferred.append(ip)
-        if not if_addrs:
-            try:
-                for ip in subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5).stdout.split():
-                    if not _usable(ip):
-                        continue
-                    (fallback if _is_docker_bridge_ip(ip) else preferred).append(ip)
-            except (OSError, subprocess.SubprocessError):
-                pass
-    if not preferred and not fallback:
-        udp_ip = _default_route_udp_ip()
-        if udp_ip:
-            (fallback if _is_docker_bridge_ip(udp_ip) else preferred).append(udp_ip)
         try:
-            for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-                ip = i[4][0]
-                if not _usable(ip):
-                    continue
-                (fallback if _is_docker_bridge_ip(ip) else preferred).append(ip)
+            raw = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5).stdout.split()
+        except (OSError, subprocess.SubprocessError):
+            raw = []
+    if not raw:
+        try:
+            raw = [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
         except OSError:
-            pass
+            raw = []
+    routes = _read_proc_net_route() if os.name != "nt" else []
+    default_ifaces = {iface for iface, dest, mask in routes if dest == 0 and mask == 0}
+    default_ips: list[str] = []
+    other_ips: list[str] = []
+    fallback: list[str] = []
+    for ip in raw:
+        if not _usable(ip):
+            continue
+        iface = _iface_for_ip(ip, routes) if routes else None
+        if (iface and _is_bridge_iface(iface)) or (_is_docker_bridge_ip(ip) and iface not in default_ifaces):
+            fallback.append(ip)
+        elif iface and iface in default_ifaces:
+            default_ips.append(ip)
+        else:
+            other_ips.append(ip)
+    preferred = default_ips + other_ips
     return preferred if preferred else fallback
 
 

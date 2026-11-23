@@ -634,26 +634,36 @@ def test_patch_reply_adds_view_before_and_dry_and_refusals_name_their_field(sm):
 
 
 def test_local_ips_prefers_default_route_and_skips_bridges(monkeypatch):
+    import ipaddress
     import socket
+    import sys
     from types import SimpleNamespace
-    monkeypatch.setattr(pairing.os, "name", "posix")
-    monkeypatch.setattr(
-        pairing,
-        "_linux_route_and_addrs",
-        lambda: (
-            "eth0",
-            "192.168.1.42",
-            [("docker0", "172.17.0.1"), ("br-abc123", "172.18.0.1"), ("veth0", "10.88.0.5"), ("eth0", "192.168.1.42"), ("wlan0", "192.168.1.43")],
-        ),
-    )
-    assert pairing.local_ips() == ["192.168.1.42", "192.168.1.43"]
 
-    monkeypatch.setattr(pairing, "_linux_route_and_addrs", lambda: ("docker0", "172.17.0.1", [("docker0", "172.17.0.1")]))
-    monkeypatch.setattr(pairing.subprocess, "run", lambda *a, **kw: SimpleNamespace(stdout=""))
+    def le_ip(s: str) -> int:
+        return int.from_bytes(ipaddress.IPv4Address(s).packed, sys.byteorder)
+
+    routes = [
+        ("eth0", 0, 0),
+        ("docker0", le_ip("172.17.0.0"), le_ip("255.255.0.0")),
+        ("br-abc123", le_ip("172.18.0.0"), le_ip("255.255.0.0")),
+        ("veth0", le_ip("10.88.0.0"), le_ip("255.255.0.0")),
+        ("wlan0", le_ip("192.168.2.0"), le_ip("255.255.255.0")),
+        ("eth0", le_ip("192.168.1.0"), le_ip("255.255.255.0")),
+    ]
+    monkeypatch.setattr(pairing.os, "name", "posix")
+    monkeypatch.setattr(pairing, "_read_proc_net_route", lambda: routes)
+    monkeypatch.setattr(
+        pairing.subprocess,
+        "run",
+        lambda *a, **kw: SimpleNamespace(stdout="172.17.0.1 172.18.0.1 10.88.0.5 192.168.2.43 192.168.1.42"),
+    )
+    assert pairing.local_ips() == ["192.168.1.42", "192.168.2.43"]
+
+    monkeypatch.setattr(pairing, "_read_proc_net_route", lambda: [("docker0", 0, 0), ("docker0", le_ip("172.17.0.0"), le_ip("255.255.0.0"))])
+    monkeypatch.setattr(pairing.subprocess, "run", lambda *a, **kw: SimpleNamespace(stdout="172.17.0.1"))
     assert pairing.local_ips() == ["172.17.0.1"]
 
     monkeypatch.setattr(pairing.os, "name", "nt")
-    monkeypatch.setattr(pairing, "_default_route_udp_ip", lambda: "192.168.50.10")
     monkeypatch.setattr(
         pairing.socket,
         "getaddrinfo",

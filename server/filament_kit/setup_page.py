@@ -476,6 +476,8 @@ class SetupPage:
                 if e.extra.get("trust_gone"):
                     self._clear_trust(resp)
                 return resp
+            except demo.DemoError as e:
+                return JSONResponse({"error": e.message, "code": e.code}, 409)
             except Exception:  # noqa: BLE001 - a crash is logged (no values in it), the page gets a plain line
                 log.exception("setup %s", request.url.path)
                 return JSONResponse({"error": "internal error (see the server log)"}, 500)

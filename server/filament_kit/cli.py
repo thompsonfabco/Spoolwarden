@@ -189,6 +189,7 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, home_assist
              text: bool = False, wait: bool = True) -> int:
     """`pair`: what the Hub page's pairing dialog shows, in its order (the QR code for a phone, the instruction,
     the pairing code, the certificate fingerprint, the expiry), then waits for the device. `--json` ends after the document."""
+    demo.stop()
     cmd = "sudo spoolwarden pair" + (
         " --slicer-sync" if slicer_sync else " --weigh-station" if weigh_station else " --home-assistant" if home_assistant else ""
     )
@@ -5276,6 +5277,7 @@ def _features_report(cfg: dict, before, explicit, notes=(), *, plan_shown: bool 
 def cmd_modules_set(mode: str, server: str | None = None) -> int:
     """`features setup <setup>`: `Setup: Weigh Station only.`, the plan and the apply. The Weigh Station only setup
     needs the Hub's address: `--hub`, or asked at a terminal."""
+    demo.stop()
     mode = modules.canonical_mode(mode)
     if not _require_root():
         return output.NEEDS_SUDO
@@ -6323,6 +6325,7 @@ def cmd_local_intake_install(tier: str | None, version: str | None, yes: bool, f
 def cmd_local_intake_remove(yes: bool, run=None) -> int:
     """Uninstall the reader installed by `local-intake install`, switch the module off (with whatever needs it only)
     and apply. A reader on another machine is not touched: then only the module goes off."""
+    demo.stop()
     from . import local_intake_install as lii
     if not _require_root():
         return output.NEEDS_SUDO
