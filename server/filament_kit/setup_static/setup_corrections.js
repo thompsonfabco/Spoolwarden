@@ -176,25 +176,29 @@ function correctionsCard(on) {
         : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s"), h("span", { class: "sr" }, SW.t("photo_none")));
     const fields = Object.keys(c).filter((k) => JSON.stringify(c[k]) !== JSON.stringify(was[k]));
     const remove = SW.btn(SW.t("common_remove"), { name: SW.t("settings_corr_remove_named", { name }), action: "remove-correction", run: () => removeOne(e.id) });
-    return h("li", { class: "revisions__item", "data-id": String(e.id) },
-      h("div", { class: "actions" }, thumb, h("div", {},
+    return h("li", { class: "revisions__item corr__item", "data-id": String(e.id) },
+      h("div", { class: "corr__photo" }, thumb),
+      h("div", { class: "corr__record" },
         rec ? h("a", { href: "#recent/" + encodeURIComponent(rec), textContent: name }) : h("span", { textContent: name }),
-        h("p", { class: "muted" }, e.created_at ? [h("time", { class: "mono", textContent: corrWhen(e.created_at) }), " · "] : null,
-          SW.t("settings_corr_read_by", { engine: SW.t(e.source === "cloud" ? "settings_reader_group_cloud" : "settings_reader_group_local") })),
+        e.created_at ? h("p", { class: "muted" }, h("time", { class: "mono", textContent: corrWhen(e.created_at) })) : null,
         !rec ? h("p", { class: "muted", textContent: SW.t("settings_corr_record_gone") }) : null,
-        !rec || !e.photos ? h("p", { class: "muted", textContent: SW.t("settings_corr_photos_gone") }) : null)),
-      fields.length ? h("ul", { class: "changes changes--compact" }, fields.map((k) => recChange(k, was[k], c[k]))) : null,
-      e.note ? h("p", { class: "muted", textContent: SW.t("recent_revision_note", { note: e.note }) }) : null,
-      remove);
+        !rec || !e.photos ? h("p", { class: "muted", textContent: SW.t("settings_corr_photos_gone") }) : null),
+      h("p", { class: "corr__by muted", textContent: SW.t("settings_corr_read_by", { engine: SW.t(e.source === "cloud" ? "settings_reader_group_cloud" : "settings_reader_group_local") }) }),
+      h("div", { class: "corr__changes" },
+        fields.length ? h("ul", { class: "changes changes--compact" }, fields.map((k) => recChange(k, was[k], c[k]))) : null,
+        e.note ? h("p", { class: "muted", textContent: SW.t("recent_revision_note", { note: e.note }) }) : null),
+      h("div", { class: "corr__remove" }, remove));
   }
   function notQueuedRow(q) {
     const name = q.name || String(q.record || ""), reason = corrReason(q.reason);
-    return h("li", { class: "revisions__item", "data-record": String(q.record || "") },
-      h("div", { class: "actions" }, h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s"), h("span", { class: "sr" }, SW.t("photo_none"))), h("div", {},
+    return h("li", { class: "revisions__item corr__item corr__item--not-queued", "data-record": String(q.record || "") },
+      h("div", { class: "corr__photo" }, h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s"), h("span", { class: "sr" }, SW.t("photo_none")))),
+      h("div", { class: "corr__record" },
         q.record ? h("a", { href: "#recent/" + encodeURIComponent(q.record), textContent: name }) : h("span", { textContent: name }),
-        q.at ? h("p", { class: "muted" }, h("time", { class: "mono", textContent: recTime(q.at) })) : null)),
-      SW.banner({ kind: "warn", inline: true, text: reason ? SW.t("settings_corr_not_waiting", { reason }) : SW.t("settings_corr_not_waiting_plain") }),
-      SW.btn(SW.t("common_try_again"), { action: "try-correction-again", run: () => tryAgain(q.record) }));
+        q.at ? h("p", { class: "muted" }, h("time", { class: "mono", textContent: recTime(q.at) })) : null),
+      h("div", { class: "corr__changes" },
+        SW.banner({ kind: "warn", inline: true, text: reason ? SW.t("settings_corr_not_waiting", { reason }) : SW.t("settings_corr_not_waiting_plain") })),
+      h("div", { class: "corr__remove" }, SW.btn(SW.t("common_try_again"), { action: "try-correction-again", run: () => tryAgain(q.record) })));
   }
 
   const removeOne = (id) => {

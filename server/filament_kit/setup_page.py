@@ -74,7 +74,7 @@ log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "setup_static"
 # one stylesheet per section, linked after setup.css (the shell) in this order, which is the cascade order: a section adds
 # its own file here and never appends to another's
-CSS_SECTIONS = tuple(f"setup_{n}.css" for n in ("updates", "features", "printers", "overview", "printers_add", "settings", "flash", "intake", "alerts", "analytics", "spools", "printer_live", "start"))
+CSS_SECTIONS = tuple(f"setup_{n}.css" for n in ("updates", "features", "printers", "overview", "printers_add", "settings", "flash", "intake", "alerts", "analytics", "spools", "printer_live", "start", "corrections"))
 SHELL_SCRIPTS = (
     "setup.js", "setup_history.js", "setup_alertbar.js", "setup_overview_alerts.js", "setup_alerts.js",
     "setup_tabs.js", "setup_start.js", "setup_overview.js", "setup_features.js", "setup_updates.js",

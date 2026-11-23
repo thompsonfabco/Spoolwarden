@@ -118,14 +118,23 @@ function devicesTile() {
   }, () => {}));
   return list;
 }
-function tiles() {
+// the Label Reader tile's last line, "<n> corrections waiting to be shared": only while Share corrections is on and any wait; the only
+// reminder there is (no toast, no mark). The tile already goes to Settings > Label Reader; the line also asks the page to scroll to the card
+function readerTile() {
   const cloud = S.cloud_reads;
-  return h("ul", { class: "tiles", "aria-label": SW.t("overview_tiles_label") },
-    printersTile(), recentTile(), devicesTile(),
-    S.reader_install_pending
-      ? tile(SW.t("common_label_reader"), "#settings/label-reader", SW.t("features_reader_not_installed"), SW.t("features_reader_finish"), false)
-      : tile(SW.t("common_label_reader"), "#settings/label-reader", SW.t("overview_tile_reader_value", { used: cloud.used, limit: cloud.limit }),
-        SW.t("overview_tile_reader_line"), !S.anthropic.ai_intake));
+  const t = S.reader_install_pending
+    ? tile(SW.t("common_label_reader"), "#settings/label-reader", SW.t("features_reader_not_installed"), SW.t("features_reader_finish"), false)
+    : tile(SW.t("common_label_reader"), "#settings/label-reader", SW.t("overview_tile_reader_value", { used: cloud.used, limit: cloud.limit }),
+      SW.t("overview_tile_reader_line"), !S.anthropic.ai_intake);
+  later(corrSaved().then(async (on) => {
+    const n = on ? await corrCount() : 0;
+    if (n) t.querySelector("a").append(h("span", { class: "tile__line tile__corr", "data-corr-line": "",
+      on: { click: () => { window.__swCorrArrived = true; } }, textContent: SW.t("overview_tile_reader_corrections", { count: n }) }));
+  }));
+  return t;
+}
+function tiles() {
+  return h("ul", { class: "tiles", "aria-label": SW.t("overview_tiles_label") }, printersTile(), recentTile(), devicesTile(), readerTile());
 }
 
 // ----- the header meta line: the version, the setup, an update, the job, and when it was checked -----
@@ -155,6 +164,113 @@ function halfBanner(r) {
   b.append(ovCode(u.half_install));
   return b;
 }
+
+// ----- history (02-components 7.11): the strips of the Checks' "Last 7 days" column, Show history and Show 30 days -----
+// The card's range and what `health` answered for it; `state` is loading, ready or failed (then the strips are left out). The
+// component is here, not in components.js: that file and its stylesheet are at the size limit of foundations 12 rule 7.
+const ovHist = { days: 7, data: null, state: "loading", token: 0 };
+const ovPad = (n) => String(n).padStart(2, "0");
+// a moment as `2026-11-11 23:10`, in the browser's time
+function ovStamp(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${ovPad(d.getMonth() + 1)}-${ovPad(d.getDate())} ${ovPad(d.getHours())}:${ovPad(d.getMinutes())}`;
+}
+const ovSince = (d) => SW.t("overview_strip_since", { date: ovStamp(d.since || d.to).slice(0, 10) });
+// "<check> <from> to <to>", "now" where the stretch still lasts; with `nodes` the times are <time> in mono, for the tooltip
+function stripSentence(check, span, end, nodes) {
+  const from = ovStamp(span.from), to = span.to === end ? SW.t("overview_strip_now") : ovStamp(span.to);
+  if (!nodes) return SW.t("overview_strip_span", { check, from, to });
+  return SW.t("overview_strip_span", { check, from: "\u0001", to: "\u0002" }).split(/([\u0001\u0002])/)
+    .map((x) => (x === "\u0001" ? h("time", { class: "mono", textContent: from }) : x === "\u0002" ? h("time", { class: "mono", textContent: to }) : x));
+}
+// a touch that ends outside a strip hides its tooltip
+document.addEventListener("pointerup", (e) => {
+  for (const tip of document.querySelectorAll(".history-strip__tip:not([hidden])")) if (!tip.parentElement.contains(e.target)) tip.hidden = true;
+});
+// one strip: `entry` is the check's {spans} from `health` (none: it was fine all along), `data` the whole answer; gives its nodes
+function historyStrip(entry, data, text, days) {
+  const start = Date.parse(data.from), whole = Date.parse(data.to) - start || 1;
+  const at = (iso) => Math.min(100, Math.max(0, ((Date.parse(iso) - start) / whole) * 100));
+  const spans = (entry ? entry.spans : []).slice().sort((a, b) => Date.parse(a.from) - Date.parse(b.from));
+  const gap = data.since ? at(data.since) : 100;          // the history starts here; before it the track is a dashed line
+  // a stretch is never narrower than --s1 (its width is that at least) and never starts less than that from the end
+  const place = (el, from, to) => { el.style.insetInlineStart = `min(${from.toFixed(2)}%, calc(100% - var(--s1)))`; el.style.width = `${(to - from).toFixed(2)}%`; return el; };
+  const marks = spans.map((sp) => place(h("span", { class: "history-strip__span", "data-state": sp.state }), at(sp.from), at(sp.to)));
+  const plain = h("span", { class: "history-strip__plain" }), none = h("span", { class: "history-strip__none" });
+  plain.style.insetInlineStart = `${gap.toFixed(2)}%`;
+  none.style.width = `${gap.toFixed(2)}%`;
+  const track = h("span", { class: "history-strip__track", "aria-hidden": "true" }, plain, gap > 0 ? none : null, ...marks);
+  const id = SW.uid("tip"), tip = h("span", { class: "tooltip history-strip__tip", role: "tooltip", id, hidden: true });
+  const label = spans.length
+    ? SW.t("overview_strip_label_look", { check: text, days, count: spans.length, sentence: stripSentence(text, spans[spans.length - 1], data.to) })
+    : SW.t("overview_strip_label_fine", { check: text, days });
+  const strip = h("span", { class: "history-strip", role: "img", tabindex: "0", "aria-describedby": id, "aria-label": label },
+    track, h("span", { class: "history-strip__caption muted", textContent: SW.t("overview_strip_caption", { days }) }));
+  const wrap = h("span", { class: "tip history-strip__wrap" }, strip, tip);
+  let cur = -1, timer = 0;
+  const show = (i) => {
+    clearTimeout(timer); cur = i;
+    tip.replaceChildren(...stripSentence(text, spans[i], data.to, true));
+    tip.hidden = false;
+    tip.dataset.place = wrap.getBoundingClientRect().top < tip.offsetHeight + 16 ? "below" : "above";
+  };
+  const hide = () => { clearTimeout(timer); tip.hidden = true; };
+  const arm = (fn, ms) => { clearTimeout(timer); timer = setTimeout(fn, ms); };
+  const under = (e) => { const i = marks.indexOf(e.target); return i < 0 ? spans.length - 1 : i; };
+  strip.addEventListener("mouseover", (e) => { const i = marks.indexOf(e.target); if (i >= 0) arm(() => show(i), 500); });
+  strip.addEventListener("mouseleave", () => arm(hide, 100));
+  tip.addEventListener("mouseenter", () => clearTimeout(timer));
+  // a long press: a touch that stays; the finger arriving is the pointer's first event, so no press-down handler is needed
+  strip.addEventListener("pointerover", (e) => { if (e.pointerType === "touch" && spans.length) arm(() => show(under(e)), 500); });
+  for (const ev of ["pointerup", "pointercancel"]) strip.addEventListener(ev, () => clearTimeout(timer));
+  strip.addEventListener("focus", () => { if (spans.length && strip.matches(":focus-visible")) show(spans.length - 1); });
+  strip.addEventListener("blur", hide);
+  strip.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !tip.hidden) { hide(); e.stopPropagation(); return; }
+    if (!spans.length || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    e.preventDefault();
+    const to = tip.hidden || cur < 0 ? spans.length - 1 : cur + (e.key === "ArrowRight" ? 1 : -1);
+    show(Math.min(spans.length - 1, Math.max(0, to)));
+    SW.announce(stripSentence(text, spans[cur], data.to));
+  });
+  return [wrap, gap > 0 ? h("span", { class: "history-strip__since muted", textContent: ovSince(data) }) : null];
+}
+// the empty cell of a row (a row with no key has none, and none is filled while the history cannot be read)
+const ovSlot = (r) => h("div", { class: "history", "data-strip": r.key || "", "data-text": r.text });
+// draws every strip of `box` from ovHist; the column's title says the range
+function paintStrips(box) {
+  for (const th of box.querySelectorAll('.coll__head [data-col="history"]')) th.textContent = SW.t("overview_strip_caption", { days: ovHist.days });
+  const by = new Map(((ovHist.data && ovHist.data.checks) || []).map((c) => [c.key, c]));
+  for (const slot of box.querySelectorAll("[data-strip]")) {
+    if (!slot.dataset.strip || ovHist.state === "failed") slot.replaceChildren();
+    else if (ovHist.state === "loading") slot.replaceChildren(h("span", { class: "skeleton__line history__wait", "aria-hidden": "true" }));
+    else slot.replaceChildren(...historyStrip(by.get(slot.dataset.strip), ovHist.data, slot.dataset.text, ovHist.days).filter(Boolean));
+  }
+}
+// "History of the checks" (#overview/history): the changes of the card's range as a table, newest first
+function ovHistoryTable(d, days) {
+  const word = (s) => SW.t(s === "bad" ? "overview_history_bad" : s === "look" ? "status_needs_look" : "status_ok");
+  const rows = [...(d.changes || [])].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  const cols = [["time", "overview_history_col_time"], ["check", "overview_col_check"], ["from", "overview_history_col_from"], ["to", "overview_history_col_to"]];
+  const since = !d.since || Date.parse(d.since) > Date.parse(d.from) ? h("p", { class: "history__foot muted", textContent: ovSince(d) }) : null;
+  return h("div", { class: "history__body" },
+    rows.length ? h("table", { class: "history__table" },
+      h("thead", {}, h("tr", {}, cols.map(([col, key]) => h("th", { scope: "col", "data-col": col, textContent: SW.t(key) })))),
+      h("tbody", {}, rows.map((c) => h("tr", {}, h("td", {}, h("time", { class: "mono", datetime: c.at, textContent: ovStamp(c.at) })),
+        h("td", { textContent: c.text || c.key }), h("td", { textContent: word(c.from) }), h("td", { textContent: word(c.to) })))))
+      : h("p", { class: "muted", textContent: SW.t("overview_history_empty", { days }) }),
+    rows.length ? h("p", { class: "history__foot muted", textContent: SW.t("overview_history_foot", { days }) }) : null, since);
+}
+async function ovHistoryBody(region) {
+  const days = ovHist.days, title = SW.t("overview_history_error", { reason: "" }).trim();
+  const L = SW.loading(region, { thing: SW.t("overview_history_title"), items: 3, onTry: () => ovHistoryBody(region), title });
+  try {
+    L.done(ovHistoryTable(await api("health?days=" + days), days));
+  } catch (e) {
+    L.done(SW.errorState({ title, text: hubText(e.message), onTry: () => ovHistoryBody(region) }));
+  }
+}
+AX_PLACES.history = (opener) => axDialog("history", SW.t("overview_history_title"), ovHistoryBody, opener, SW.phone());
 
 // ----- the checks: the Hub's rows in groups, a detail row under the row before it -----
 function checkItems(rows) {
@@ -189,26 +305,27 @@ function checkItem(r, i) {
     h("div", { class: "coll__row", role: "row" },
       checkCell("status", 1, SW.status(CHECK_STATUS[r.state] || "note", { small: true, prefix: true })),
       checkCell("title", 1, [h("span", { textContent: r.text }), ...r.details.map((d) => h("p", { class: "muted coll__detail", textContent: d }))]),
-      fix ? checkCell("fix", 2, fix, SW.t("common_fix")) : null));
+      fix ? checkCell("fix", 2, fix, SW.t("common_fix")) : null,
+      checkCell("history", 2, ovSlot(r))));
   if (box) item.append(h("div", { class: "coll__row coll__row--result", role: "row", hidden: !box.dataset.state },
-    h("div", { class: "coll__cell", role: "cell", "aria-colspan": 3 }, box)));
+    h("div", { class: "coll__cell", role: "cell", "aria-colspan": 4 }, box)));
   return item;
 }
 function checksTable(items, label) {
-  const cols = [["status", "common_field_status", 1], ["title", "overview_col_check", 1], ["fix", "common_fix", 2]];
+  const cols = [["status", "common_field_status", 1], ["title", "overview_col_check", 1], ["fix", "common_fix", 2], ["history", "overview_strip_caption", 2]];
   const kids = [];
   let group = null;
   items.forEach((r) => {
     if (r.group && r.group !== group) {
       group = r.group;
       kids.push(h("div", { class: "coll__item coll__group", role: "rowgroup" }, h("div", { class: "coll__row", role: "row" },
-        h("div", { class: "coll__cell", role: "cell", "aria-colspan": 3, textContent: group }))));
+        h("div", { class: "coll__cell", role: "cell", "aria-colspan": 4, textContent: group }))));
     }
     kids.push(checkItem(r, r.index));
   });
   return h("div", { class: "coll coll--checks", role: "table", "aria-label": label },
     h("div", { class: "coll__head", role: "rowgroup" }, h("div", { class: "coll__row", role: "row" }, cols.map(([col, key, prio]) =>
-      h("div", { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": prio, textContent: SW.t(key) })))),
+      h("div", { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": prio, textContent: SW.t(key, { days: ovHist.days }) })))),
     kids);
 }
 // groups in the order of their first row; the worst state first within a group, and the groups with a problem first
@@ -236,6 +353,8 @@ function checksView(rows) {
 function overviewTab() {
   const banner = h("div"), body = h("div"), badges = h("span", { class: "overview__badges" });
   const note = h("div", { role: "status" });     // the hidden-values note
+  const histNote = h("div", { class: "overview__history", role: "status" });      // "Could not read the history", with Try again
+  Object.assign(ovHist, { days: 7, data: null, state: "loading", token: ovHist.token + 1 });
   let checkedAt = Date.now();
   const show = (r) => {
     checkedAt = Date.now();
@@ -247,6 +366,7 @@ function overviewTab() {
     if (view.ok || !view.bad) marks.push(SW.status("ok", { small: true, text: view.ok ? SW.t("overview_badge_ok", { count: view.ok }) : undefined }));
     badges.replaceChildren(...marks);
     fill(body, ...view.nodes);
+    paintStrips(body);
     note.replaceChildren(...(r.redacted ? [lockNote("lock_hidden_note")] : []));
   };
   // addresses and serials load by themselves once the page is open, and are read again without the code when it locks
@@ -261,15 +381,39 @@ function overviewTab() {
     SW.busy(again, SW.t("common_checking"));
     try { await read(open); } finally { SW.idle(again); }
   } });
+  // the strips come from `health`; a refusal leaves them out and the table stays
+  const readHistory = async () => {
+    const token = ++ovHist.token;
+    Object.assign(ovHist, { data: null, state: "loading" });
+    histNote.replaceChildren();
+    paintStrips(body);
+    try {
+      const d = await api("health?days=" + ovHist.days);
+      if (token === ovHist.token) Object.assign(ovHist, { data: d, state: "ready" });
+    } catch (e) {
+      if (token !== ovHist.token) return;
+      ovHist.state = "failed";
+      histNote.replaceChildren(SW.banner({ kind: "warn", inline: true, text: SW.t("overview_history_error", { reason: hubText(e.message) }),
+        actions: [SW.btn(SW.t("common_try_again"), { action: "history-again", run: readHistory })] }));
+    }
+    if (token === ovHist.token) paintStrips(body);
+  };
+  const days = SW.btn(SW.t("overview_history_30"), { cls: "btn--ghost", action: "history-days", run: () => {
+    ovHist.days = ovHist.days === 7 ? 30 : 7;
+    days.textContent = SW.t(ovHist.days === 7 ? "overview_history_30" : "overview_history_7");
+    return readHistory();
+  } });
   const head = h("div", { class: "page-head__actions" }, again);      // Run the checks again, in the section header
   pageHead(null, head);
   whenOpen(body, (now) => { open = now; return read(now); });
+  later(readHistory());
   if (S.reader_install_pending === false) window.__swReaderLeftEarly = false;
   const reader = S.reader_install_pending && window.__swReaderLeftEarly === true ? h("div", { class: "banner banner--warn" },
     SW.shape("s-triangle"), h("p", { class: "banner__text", textContent: SW.t("reader_not_installed") }),
     h("a", { class: "btn", href: "#settings/label-reader", textContent: SW.t("features_reader_finish") })) : null;
   return [banner, reader, overviewStart(), ovLowCard(), tiles(), hubFilamentLine(),
     h("section", { class: "card overview__checks", "aria-labelledby": "overview-checks-title" },
-      h("div", { class: "overview__head" }, h("h2", { id: "overview-checks-title", textContent: SW.t("overview_checks_title") }), badges),
-      body), note];
+      h("div", { class: "overview__head" }, h("h2", { id: "overview-checks-title", textContent: SW.t("overview_checks_title") }),
+        SW.btn(SW.t("overview_history_show"), { cls: "btn--ghost", action: "history-show", run: (e) => openPlace("history", e.currentTarget) }), days, badges),
+      histNote, body), note];
 }

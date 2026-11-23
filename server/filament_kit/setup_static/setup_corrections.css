@@ -1,0 +1,24 @@
+/* Corrections waiting (03-hub-page 10.5.2): a row is a grid of photo, record, read by, changes and Remove; the foot holds Remove all at the left */
+.corr__item { display: grid; grid-template-columns: calc(var(--s7) + var(--s2)) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 3fr) max-content; align-items: start; gap: var(--s2) var(--s3); padding: var(--s3) 0; }
+.corr__item > * { min-width: 0; }
+.corr__by, .corr__record { overflow-wrap: anywhere; }
+.corr__body > .actions [data-action="download-package"] { margin-inline-start: auto; }
+@media (max-width: 1024px) {
+  .corr__item { grid-template-columns: calc(var(--s7) + var(--s2)) minmax(0, 1fr) minmax(0, 2fr) max-content; }
+  .corr__photo, .corr__changes, .corr__remove { grid-row: 1 / span 2; }
+  .corr__record { grid-column: 2; grid-row: 1; }
+  .corr__by { grid-column: 2; grid-row: 2; }
+  .corr__changes { grid-column: 3; }
+  .corr__remove { grid-column: 4; }
+}
+@media (max-width: 600px) {
+  .corr__item { grid-template-columns: calc(var(--s7) + var(--s2)) minmax(0, 1fr); }
+  .corr__photo { grid-row: 1 / span 2; }
+  .corr__changes { grid-column: 1 / -1; grid-row: 3; }
+  .corr__remove { grid-column: 1 / -1; grid-row: 4; }
+  .corr__remove .btn { width: 100%; }
+  .corr__body > .actions { flex-direction: column; align-items: stretch; }
+  .corr__body > .actions .btn { width: 100%; }
+  .corr__body > .actions [data-action="download-package"] { margin-inline-start: 0; }
+  .corr__body > .actions [data-action="send-corrections"] { order: -1; }
+}
