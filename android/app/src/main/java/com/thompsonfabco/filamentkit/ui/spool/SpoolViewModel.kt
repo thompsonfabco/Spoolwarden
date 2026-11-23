@@ -367,12 +367,13 @@ class SpoolViewModel(
         if (s.writing) return
         _state.update { it.copy(returning = true, failure = null) }
         run(onFailure = { f -> _state.update { it.copy(returning = false, failure = f, retry = Retry.Refresh) } }) {
-            val updated = backend.returnSpool(id).toSpoolSummary()
+            val raw = backend.returnSpool(id)
+            val updated = raw.toSpoolSummary()
             val event = undoFlow.find(UndoOffer(listOf("spool:$id"), setOf(CheckedOutRules.RETURNED_KIND)))
             _state.update {
                 it.copy(
                     spool = shown(updated), returning = false, loadedAt = now(), result = null, failure = it.failure.afterSuccess(),
-                    returnToast = ReturnToast(CheckedOutSay.returned(updated.location), event),
+                    returnToast = ReturnToast(CheckedOutSay.returned(updated.location, raw.printerNotifiedFalse()), event),
                 )
             }
             loadActivity()

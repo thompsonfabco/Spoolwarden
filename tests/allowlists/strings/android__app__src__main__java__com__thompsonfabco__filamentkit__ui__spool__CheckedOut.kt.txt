@@ -3,3 +3,4 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/CheckedOut.kt |
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/CheckedOut.kt | home | not text: a route, JSON field or wire value of checked-out spools (CO6)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/CheckedOut.kt | spool.returned | not text: a route, JSON field or wire value of checked-out spools (CO6)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/CheckedOut.kt | view | not text: a route, JSON field or wire value of checked-out spools (CO6)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/CheckedOut.kt | printer_notified | wire field of POST api/spools/{id}/return

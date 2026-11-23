@@ -87,6 +87,13 @@ class CheckedOutRulesTest {
     @Test fun theActionNamesTheHome() {
         assertEquals(Say.Words(R.string.spools_returned_to, listOf("Shelf B")), CheckedOutSay.returned("Shelf B"))
         assertEquals(Say.Words(R.string.spools_returned), CheckedOutSay.returned(null))
+        assertEquals(
+            Say.Joined(listOf(Say.Words(R.string.spools_returned_to, listOf("Shelf B")), Say.Words(R.string.spools_return_printer_not_told))),
+            CheckedOutSay.returned("Shelf B", printerNotifiedFalse = true),
+        )
+        assertTrue(buildJsonObject { put("printer_notified", false) }.printerNotifiedFalse())
+        assertFalse(buildJsonObject { put("printer_notified", true) }.printerNotifiedFalse())
+        assertFalse(buildJsonObject {}.printerNotifiedFalse())
         assertEquals(Say.Words(R.string.spools_home_done, listOf("Dry box 1")), CheckedOutSay.homeNow("Dry box 1"))
     }
 

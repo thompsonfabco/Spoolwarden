@@ -897,11 +897,14 @@ class Api(
         else -> "http_$status"
     }
 
-    /** The answer's `spool`, with its phone-shaped `view` (where the checked-out fields are) kept beside it when there is one. */
+    /** The answer's `spool`, with its phone-shaped `view` and `printer_notified` kept beside it when present. */
     private fun spool(body: JsonElement): JsonObject {
         val spool = body.jsonObject["spool"]?.jsonObject ?: throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a spool")
-        val view = body.jsonObject["view"] as? JsonObject ?: return spool
-        return if (spool.containsKey("view")) spool else JsonObject(spool + ("view" to view))
+        val extras = buildMap<String, JsonElement> {
+            (body.jsonObject["view"] as? JsonObject)?.takeIf { !spool.containsKey("view") }?.let { put("view", it) }
+            body.jsonObject["printer_notified"]?.takeIf { !spool.containsKey("printer_notified") }?.let { put("printer_notified", it) }
+        }
+        return if (extras.isEmpty()) spool else JsonObject(spool + extras)
     }
 
     private inline fun <reified T> decode(body: JsonElement): T = json.decodeFromJsonElement(body)
