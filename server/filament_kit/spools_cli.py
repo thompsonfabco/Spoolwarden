@@ -398,6 +398,10 @@ def cmd_spool_return(api, number) -> int:
     output.emit(r)
     place = (r.get("spool") or {}).get("location") or (r.get("view") or {}).get("location")
     output.out(CLI_SPOOL_RETURN_DONE.format(place=place) if place else CLI_SPOOL_RETURN_DONE_PLAIN)
+    if r.get("printer_notified") is False:
+        from . import station_client
+        output.out(station_client._catalogue_text("spools_return_printer_not_told",
+                                                  "The printer could not be told to clear its slot."))
     event = r.get("event_id")
     output.out(CLI_SPOOL_RETURN_UNDO.format(undo=f"sudo {COMMAND} undo" + (f" {event}" if event is not None else "")))
     return 0
