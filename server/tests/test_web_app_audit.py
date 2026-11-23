@@ -2387,7 +2387,7 @@ def test_the_page_audit_passes_with_the_printers_badge_showing(served_printers, 
     assert json.loads(run.stdout)["failing"] == 0
 
 
-# Filament used on a printer's page (plan step C2): By month as bars from tablet width, the CSV range menu, the toggle that says "Last 7 days".
+# Filament used on a printer's page: By month as bars from tablet width, the CSV range menu, the toggle that says "Last 7 days".
 # The page's clock starts at this day in the browser and then runs on (the new cases name no real-time month; nothing that reads Date waits for a clock that
 # stands still): the months of the fake kit are counted back from this day.
 # FK_C2_FROZEN (yyyy-mm-dd) moves it, to prove the cases do not depend on the calendar.
