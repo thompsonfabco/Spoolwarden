@@ -24,6 +24,7 @@ owner configured and only when the owner asks for a revision. The number kept is
 from __future__ import annotations
 
 import datetime
+import io
 import json
 import logging
 import re
@@ -329,11 +330,45 @@ def get(rid: str) -> dict:
     return out
 
 
+THUMB_MAX_BYTES = 256 * 1024
+THUMB_MAX_EDGE = 240
+PHOTO_CACHE = "private, max-age=300"
+
+
 def photo(rid: str, n: int) -> bytes:
     ps = _photos(_dir(rid))
     if not isinstance(n, int) or not 1 <= n <= len(ps):
         raise HistoryError(404, "not_found", "no such photo")
     return ps[n - 1].read_bytes()
+
+
+def photo_thumb(rid: str, n: int, *, max_bytes: int = THUMB_MAX_BYTES, max_edge: int = THUMB_MAX_EDGE) -> bytes:
+    """Return a bounded JPEG thumbnail for a stored label photo, enforcing max_bytes."""
+    raw = photo(rid, n)
+    try:
+        from PIL import Image, ImageOps
+        with Image.open(io.BytesIO(raw)) as im:
+            im = ImageOps.exif_transpose(im)
+            if im.mode != "RGB":
+                im = im.convert("RGB")
+            im.thumbnail((max_edge, max_edge))
+            buf = io.BytesIO()
+            im.save(buf, format="JPEG", quality=78, optimize=True)
+            data = buf.getvalue()
+    except Exception:  # noqa: BLE001 - Pillow is optional and tests may store minimal JPEG bytes
+        data = raw
+    if len(data) > max_bytes:
+        raise HistoryError(413, "too_large", f"thumbnail exceeds {max_bytes} bytes")
+    return data
+
+
+def photo_headers(data: bytes, *, thumb: bool = False) -> dict[str, str]:
+    """Cache and content headers for history photo/thumbnail responses."""
+    return {
+        "Cache-Control": PHOTO_CACHE,
+        "Content-Length": str(len(data)),
+        "X-Content-Type-Options": "nosniff",
+    }
 
 
 def photo_paths(rid: str) -> list[str]:

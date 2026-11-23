@@ -338,8 +338,10 @@ class IntakeApp:
 
     async def history_photo(self, request: Request):
         from .. import intake_history
-        data = await anyio.to_thread.run_sync(intake_history.photo, request.path_params["hid"], request.path_params["n"])
-        return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+        thumb = request.query_params.get("size") == "thumb"
+        fn = intake_history.photo_thumb if thumb else intake_history.photo
+        data = await anyio.to_thread.run_sync(fn, request.path_params["hid"], request.path_params["n"])
+        return Response(data, media_type="image/jpeg", headers=intake_history.photo_headers(data, thumb=thumb))
 
     async def history_revise(self, request: Request):
         from .. import intake_history
