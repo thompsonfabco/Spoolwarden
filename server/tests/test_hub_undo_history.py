@@ -284,7 +284,7 @@ out.toasts = t.length;
 """)
     code = page["spools"]["calls"][0].rsplit(" ", 1)[1]
     assert page["more"] == "More actions for spools"
-    assert page["spools"]["items"] == ["Spools (Spoolman's file)", "Filaments (Spoolman's file)"] and page["heading"] == "Download as CSV"
+    assert page["spools"]["items"] == ["Spools (Spoolman's file)", "Filaments (Spoolman's file)", "Import from CSV"] and page["heading"] == "Download as CSV"
     assert page["spools"]["lockedAsks"] and page["spools"]["lockedCalls"] == 0 and page["filaments"]["lockedCalls"] == 0
     assert page["spools"]["calls"] == [f"GET export/spoolman-spools.csv {code}"] and page["spools"]["files"] == ["spoolman-spools.csv"]
     assert page["filaments"]["calls"] == [f"GET export/spoolman-filaments.csv {code}"] and page["filaments"]["files"] == ["spoolman-filaments.csv"]
@@ -327,7 +327,8 @@ return out;
 """
     page = _drive(hub, tmp_path, script)
     code = page["flow"]["calls"][0].rsplit(" ", 1)[1]
-    assert page["flow"]["items"] == ["Download as CSV"] and page["flow"]["inside"]
+    want_items = ["Download as CSV", "Import from CSV"] if name == "storage" else ["Download as CSV"]
+    assert page["flow"]["items"] == want_items and page["flow"]["inside"]
     assert page["flow"]["lockedAsks"] and page["flow"]["lockedCalls"] == 0
     assert page["flow"]["calls"] == [f"GET {path} {code}"] and page["flow"]["files"] == [f"{set_}.csv"] and code and code != "null"
     assert page["label"].startswith("More actions for ")
@@ -474,12 +475,12 @@ def test_filament_used_has_a_menu_that_downloads_the_printers_usage_csv_after_th
 mount();
 await until(() => $$(".plive__used").length === 4, "the usage");
 out.label = $(".plive__usagemore").getAttribute("aria-label");
-out.flow = await csvFlow(() => $(".plive__usagemore"), "download-csv");
+out.flow = await csvFlow(() => $(".plive__usagemore"), "download-csv-30");
 """)
     code = page["flow"]["calls"][0].rsplit(" ", 1)[1]
-    assert page["label"] == "More actions for filament used" and page["flow"]["items"] == ["Download as CSV"] and page["flow"]["inside"]
+    assert page["label"] == "More actions for filament used" and page["flow"]["items"] == ["Last 7 days", "Last 30 days", "Last 12 months"] and page["flow"]["inside"]
     assert page["flow"]["lockedAsks"] and page["flow"]["lockedCalls"] == 0
-    assert page["flow"]["calls"] == [f"GET export/usage.csv?printer={SERIAL} {code}"] and page["flow"]["files"] == ["usage.csv"] and code and code != "null"
+    assert page["flow"]["calls"] == [f"GET export/usage.csv?printer={SERIAL}&days=30 {code}"] and page["flow"]["files"] == ["usage.csv"] and code and code != "null"
 
 
 @pytest.mark.parametrize("look", LOOKS)
