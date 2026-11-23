@@ -6041,4 +6041,37 @@
     <string name="preset_updates_unexpected">Unexpected response from the Hub</string>
     <string name="preset_updates_close">Close</string>
     <string name="common_request_too_large">Request too large.</string>
+    <!-- 1=count -->
+    <plurals name="overview_tile_reader_corrections">
+        <item quantity="one">%1$d correction waiting to be shared</item>
+        <item quantity="other">%1$d corrections waiting to be shared</item>
+    </plurals>
+    <!-- 1=days -->
+    <string name="overview_strip_caption">Last %1$s days</string>
+    <!-- 1=date -->
+    <string name="overview_strip_since">No history before %1$s.</string>
+    <!-- 1=check 2=from 3=to -->
+    <string name="overview_strip_span">%1$s %2$s to %3$s</string>
+    <string name="overview_strip_now">now</string>
+    <!-- 1=check 2=days -->
+    <string name="overview_strip_label_fine">History of %1$s, last %2$s days: fine.</string>
+    <!-- 1=check 2=days 3=count 4=sentence -->
+    <plurals name="overview_strip_label_look">
+        <item quantity="one">History of %1$s, last %2$s days: needed a look %3$d time. Newest: %4$s.</item>
+        <item quantity="other">History of %1$s, last %2$s days: needed a look %3$d times. Newest: %4$s.</item>
+    </plurals>
+    <string name="overview_history_show">Show history</string>
+    <string name="overview_history_30">Show 30 days</string>
+    <string name="overview_history_7">Show 7 days</string>
+    <string name="overview_history_title">History of the checks</string>
+    <!-- 1=reason -->
+    <string name="overview_history_error">Could not read the history. %1$s</string>
+    <string name="overview_history_col_time">Time</string>
+    <string name="overview_history_col_from">From</string>
+    <string name="overview_history_col_to">To</string>
+    <string name="overview_history_bad">Needs a look now</string>
+    <!-- 1=days -->
+    <string name="overview_history_foot">Changes of the last %1$s days.</string>
+    <!-- 1=days -->
+    <string name="overview_history_empty">No changes in the last %1$s days.</string>
 </resources>
