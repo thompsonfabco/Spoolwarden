@@ -15,15 +15,23 @@ def all_files(test_dir):
     return sorted(p.name for p in Path(test_dir).glob("test_*.py"))
 
 
-def _weight(data):
+_BROWSER_FILES = {"test_alerts_ui.py", "test_menu_ui.py", "test_webapp_offline_marks.py"}
+
+
+def _weight(data, name: str = ""):
     if b"\npytestmark = pytest.mark.browser_audit" in data:
         return 0
-    return data.count(b"\n")
+    lines = data.count(b"\n")
+    if name == "test_demo_sealed.py":
+        return lines + 50000
+    if name.startswith("test_hub_") or name in _BROWSER_FILES:
+        return lines + 2000
+    return lines
 
 
 def shards(test_dir, n):
     """The n shards, as lists of file names: shards(d, n)[i - 1] is shard i."""
-    weight = {name: _weight((Path(test_dir) / name).read_bytes().replace(b"\r\n", b"\n")) for name in all_files(test_dir)}
+    weight = {name: _weight((Path(test_dir) / name).read_bytes().replace(b"\r\n", b"\n"), name) for name in all_files(test_dir)}
     out, load = [[] for _ in range(n)], [0] * n
     for name in sorted(weight, key=lambda f: (-weight[f], f)):
         i = load.index(min(load))
