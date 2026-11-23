@@ -106,6 +106,9 @@ def run(store, n=1, dt=0.0):
 def test_assign_to_an_empty_slot_waits_then_survives_the_wipe(rig, sm, store, caplog, monkeypatch):
     m, _, c = rig
     monkeypatch.setattr(pending, "STORE", store)             # Manager.status shows this store's waiting jobs
+    # the pushall that follows the send is a snapshot of the slot as set: answered after the push(WIPED) below it would
+    # put the setting back before the tick looks. This test is about the wipe, so no pushall follows the send.
+    monkeypatch.setattr(connection, "PUSHALL_AFTER_COMMAND", 3600.0)
     with caplog.at_level(logging.INFO, logger="filament_kit"):
         r = assign(rig, sm, store)
         assert r["pending"] is True and r["confirmed"] is None and "slot A3" in r["message"]
