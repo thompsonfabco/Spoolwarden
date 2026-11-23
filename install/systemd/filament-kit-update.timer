@@ -1,5 +1,5 @@
 [Unit]
-Description=Check for a new filament-kit release daily (module updates)
+Description=Check for a new Spoolwarden release daily (feature updates)
 
 [Timer]
 OnCalendar=daily
