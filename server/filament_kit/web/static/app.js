@@ -1147,9 +1147,12 @@ function paintPrintersBadge(look) {
   } else a.removeAttribute("aria-label");
 }
 function watchPrinters() {
+  let reading = false;                                       // one round at a time: a slow Hub does not get the next round on top
   const look = async () => {
-    if (document.hidden) return;
+    if (document.hidden || reading) return;
+    reading = true;
     try { paintPrintersBadge(await printersNeedLook()); } catch (e) { /* the badge keeps what it showed; the shell's own banner says the Hub is away */ }
+    finally { reading = false; }                             // a failed round does not stop the watch
   };
   look();
   setInterval(look, 15000);

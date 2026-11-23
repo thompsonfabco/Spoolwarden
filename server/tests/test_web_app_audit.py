@@ -2380,6 +2380,35 @@ def test_the_printers_destination_shows_a_warning_badge_when_a_printer_needs_a_l
         assert out["badge"] and out["name"] == "Printers, needs a look" and out["hidden"] == "true" and out["shape"], json.dumps(out)
 
 
+# The watch reads the printers again every 15 s; the page's interval is made 150 ms and every answer of the list takes 600 ms, so a slow
+# round is still running when the next tick comes. At most one request may be in flight, and the next round starts after the slow one ends.
+FAST_WATCH = """
+{ const real = window.setInterval; window.setInterval = (f, ms) => real(f, ms === 15000 ? 150 : ms); }
+window.__rounds = [];
+{
+  const real = window.fetch; let open = 0;
+  window.__peak = 0;
+  window.fetch = (u, o) => {
+    if (!new URL(String(u), location.href).pathname.endsWith("/api/printers")) return real(u, o);
+    window.__rounds.push("start"); open++; window.__peak = Math.max(window.__peak, open);
+    return real(u, o).then((r) => new Promise((done) => setTimeout(() => done(r), 600))).finally(() => { open--; window.__rounds.push("end"); });
+  };
+}
+"""
+SLOW_ROUNDS = """
+const n = (w) => window.__rounds.filter((e) => e === w).length;
+await until(() => n("end") >= 2 && n("start") >= 3, "three rounds", 9000);
+return { log: window.__rounds.slice(0, 4), peak: window.__peak };
+"""
+
+
+@pytest.mark.parametrize("served_look", ["calm"], indirect=True)
+def test_a_slow_printers_round_does_not_overlap_the_next_one(served_look, tmp_path):
+    out = _drive(served_look.url, tmp_path, SLOW_ROUNDS, 375, "light", None, FAST_WATCH)
+    assert out["peak"] == 1, json.dumps(out)                                          # never two requests at once
+    assert out["log"] == ["start", "end", "start", "end"], json.dumps(out)            # the next round starts after the slow one ends
+
+
 @pytest.mark.parametrize("width", [375, 820])
 def test_the_page_audit_passes_with_the_printers_badge_showing(served_printers, width):
     run = _run("--url", served_printers, "--views", "#add,#printers", "--widths", str(width), "--settle", "1500")
