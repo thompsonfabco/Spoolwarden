@@ -107,6 +107,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | month | not
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | months | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | name | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | names | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
+android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | newest | not text: a query parameter name of the events call (A1: the newest events of a spool)
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | not_found | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | not_queued | wire name or value of the Hub's reply, matched as given; not a text
 android/app/src/main/java/com/thompsonfabco/filamentkit/net/Api.kt | note | literal outside ui/ found when the scan was widened (request 0238): a route, key, log tag or text; texts move to the catalogue in the app's screen steps

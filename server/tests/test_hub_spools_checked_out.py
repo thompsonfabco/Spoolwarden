@@ -5,8 +5,7 @@ state, and an older Hub that offers none of it), in the four looks at 1280 and 3
 
 The kit's side (CO1: the view's `checked_out` / `home` / `checked_out_since`, `inventory.return_spool`, `NotCheckedOut`, the `home` edit)
 is NOT in this tree: `stubbed` puts a stand-in for each in place, over the fake Spoolman. The stand-in is the contract the page assumes:
-  spool view   + checked_out: bool, home: str|null, checked_out_since: str|null   (here: a remembered place in `extra.prev_location`,
-               plain text or {location, since}; a spool in a printer slot with none is checked out with no home)
+  spool view   + checked_out: bool, home: str|null, checked_out_since: str|null   (here: a remembered place in `extra.prev_location` and its time in `extra.prev_since`, as `inventory.prev_extra` writes them; a spool in a printer slot with none is checked out with no home)
   return_spool (sm, id, rules=, dry=) -> {spool, event: {id, undo}}   NotCheckedOut for a spool that is not checked out
   edit_spool   (..., home="<place>") -> {spool, dry}   NotCheckedOut (409), SpoolEditError field "home" for an unknown place (400)
 The same skip rules as the page audit: no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
@@ -36,15 +35,7 @@ class NotCheckedOut(Exception):
 
 
 def _prev(s: dict) -> tuple[str, str | None]:
-    v = (s.get("extra") or {}).get("prev_location")
-    if isinstance(v, str):
-        try:
-            v = json.loads(v)
-        except ValueError:
-            pass
-    if isinstance(v, dict):
-        return v.get("location") or "", v.get("since")
-    return (v if isinstance(v, str) else ""), None
+    return inventory.prev_entry(s)                          # the product's own reader: the extras are seeded by `inventory.prev_extra`
 
 
 def _checked(s: dict) -> bool:
@@ -96,8 +87,8 @@ def made(hub_app, spoolman_url):  # noqa: F811
     with httpx.Client() as c:
         fil = c.get(spoolman_url + "/api/v1/filament").json()[0]["id"]
         make = lambda **kw: c.post(spoolman_url + "/api/v1/spool", json={"filament_id": fil, "remaining_weight": 500, **kw}).raise_for_status().json()["id"]  # noqa: E731
-        return {"A": make(location="Workshop X1 – AMS A1", extra={"prev_location": json.dumps({"location": "Rack 1", "since": SINCE})}),
-                "B": make(location="Workshop X1 – AMS A2", extra={"prev_location": json.dumps("Rack 2")}),
+        return {"A": make(location="Workshop X1 – AMS A1", extra=inventory.prev_extra("Rack 1", SINCE)),
+                "B": make(location="Workshop X1 – AMS A2", extra=inventory.prev_extra("Rack 2")),
                 "C": make(location="Workshop X1 – AMS A3"),
                 "D": make(location="Rack 1")}
 

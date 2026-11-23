@@ -45,6 +45,9 @@ def tls_context(cert, key) -> ssl.SSLContext:
     return ctx
 
 
+DRAIN_SECONDS = 2    # the most a refusal spends, in all, on the rest of the caller's body before it closes (the handler's `timeout` is 30)
+
+
 def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, store=None,
                  wrong_tickets=None, *, page_ranges: str | None = None,
                  page_from: str = "home") -> type[BaseHTTPRequestHandler]:
@@ -150,7 +153,27 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
             if not 0 <= n <= page.MAX_BODY:
                 self._error(413, "too_big")
                 return None
+            self._taken = True
             return self.rfile.read(n)
+
+        def _drain(self):
+            """Read what a refusal left of the request body (at most 64 KiB) before the connection closes: a socket closed with
+            request bytes unread makes Windows send a reset (10054) or an abort (10053) that can destroy the 403 / 404 the caller
+            has not read yet. The whole drain has DRAIN_SECONDS: a caller that declares a body and sends none, or trickles it, is
+            let go when they are up (the answer is already sent), not after the handler's `timeout` per read."""
+            if getattr(self, "_taken", False):
+                return
+            try:
+                left = min(int(self.headers.get("Content-Length") or 0), 16 * page.MAX_BODY)
+                end = time.monotonic() + DRAIN_SECONDS
+                while left > 0 and end > time.monotonic():
+                    self.connection.settimeout(end - time.monotonic())
+                    chunk = self.rfile.read1(min(left, 8192))
+                    if not chunk:
+                        break
+                    left -= len(chunk)
+            except (ValueError, OSError):
+                pass
 
         def _json(self, raw):
             try:
@@ -168,6 +191,13 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
             return origin is None or (host is not None and origin in (f"https://{host}", f"http://{host}"))
 
         def do_POST(self):
+            self._taken = False
+            try:
+                self._post()
+            finally:
+                self._drain()
+
+        def _post(self):
             path = self.path.split("?")[0]
             caller = self._caller()
             if not guard.allowed(caller, "POST", path, self._session()):
