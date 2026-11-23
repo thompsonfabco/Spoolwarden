@@ -1,4 +1,4 @@
-"""Orca system store (Ruling L): BBL JSON from Orca's unpacked system folder + the OrcaFilamentLibrary index."""
+"""Orca system store: BBL JSON from Orca's unpacked system folder + the OrcaFilamentLibrary index."""
 import json
 import shutil
 from pathlib import Path

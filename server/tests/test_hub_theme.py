@@ -1,4 +1,4 @@
-"""S6.1: the Hub's default theme (`appearance.theme`) reaches both page shells (`data-look`, the two `theme-color` metas,
+"""the Hub's default theme (`appearance.theme`) reaches both page shells (`data-look`, the two `theme-color` metas,
 the two manifests) and `look` in GET api/info; the group save writes it and refuses an unknown name."""
 from __future__ import annotations
 

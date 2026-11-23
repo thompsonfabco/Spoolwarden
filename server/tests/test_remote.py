@@ -326,7 +326,7 @@ def test_firewall_command_without_resources_prints_a_fix(monkeypatch, capsys):
 
 
 def test_remote_off_removes_the_kits_router_conf_and_deploy_hook(tmp_path, capsys):
-    """Ruling AF: off removes the kit's own router conf (a default_server on 443 that would block any other
+    """off removes the kit's own router conf (a default_server on 443 that would block any other
     router) and its certbot deploy hook; nginx, certbot, the certificate and other routes stay."""
     root = tmp_path / "root"
     conf = root / "etc/nginx/conf.d/filament-kit-router.conf"

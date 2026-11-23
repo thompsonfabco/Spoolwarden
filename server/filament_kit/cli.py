@@ -4032,7 +4032,7 @@ def _found_printers(klipper: bool) -> tuple[str, int] | None:
 def _klipper_test(host: str, port: int, key: str) -> bool:
     """The test before a Klipper printer is saved: the Hub asks the printer for its info. This is the
     existing probe (`Moonraker.info`) run from the command line's own process: the kit route `POST /api/printers/test`
-    (EV1 part B) is not there yet."""
+    (part B) is not there yet."""
     from .bridge.klipper.moonraker import Moonraker, MoonrakerError
     try:
         Moonraker(host, port, api_key=key, timeout=5).info()
@@ -7502,7 +7502,7 @@ def _build_parser():
                     help="forget every trusted computer, so each needs the setup code again (alone, or with --new)")
     _add_yes(sc)
     klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
-    history_cli.add_parser(sub)       # activity, undo, usage, export, import, report (HD2)
+    history_cli.add_parser(sub)       # activity, undo, usage, export, import, report
     return ap, sub
 
 

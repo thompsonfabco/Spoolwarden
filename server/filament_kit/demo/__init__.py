@@ -6,7 +6,7 @@ leaving deletes that folder, so the Hub is the empty Hub it was. Nothing the dem
 or the outside: the pieces that would answer `NotInDemo` (message "Not in the demo.") through `stop()`.
 
 Pieces: `inventory` (the demo's Spoolman, which `spoolman.Spoolman` calls while the demo is on), `printers` (the
-pretend printers and the scripted alert), `routes` (the route list RC9 mounts). The sample set is `sample.xml`
+pretend printers and the scripted alert), `routes` (the route list mounts). The sample set is `sample.xml`
 (docs/the example-data rules, "Workshop hub": 64 spools of 23 filaments, three printers and one found).
 No JSON is stored.
 """

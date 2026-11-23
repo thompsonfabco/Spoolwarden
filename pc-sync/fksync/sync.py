@@ -24,7 +24,7 @@
      server never pairs the new live folder with the old installed build (which would turn every
      generated change into an "in-app edit"). `state.json` `live_owed` is set before that report and
      cleared by a successful live upload; while it is set the live folder is sent even when its hash
-     equals the server's (the server waits for it, ruling S32).
+     equals the server's (the server waits for it, ).
   6. No build -> `no_build` (a build is requested, at most every 15 min). The build already
      installed -> `up_to_date`, unless a generated preset was changed in Bambu Studio since that
      install (it differs from its dirs.installed copy by `inapp.diff`, or is gone); then a rebuild is
@@ -57,7 +57,7 @@ Orca Slicer (`orca` given: this PC has it; None: everything above, Bambu Studio 
   - Orca's user filament folder (`orca_live`) and its system presets (`orca_system`, zips.orca_system) are
     uploaded with `?target=orca` by the same rules (hash compare, 6 h backoff on 400/413, `orca_live_owed`
     after an install).
-  - Orca never holds up Bambu Studio (Ruling Z). An Orca upload the server refused (400/413) or that could not
+  - Orca never holds up Bambu Studio. An Orca upload the server refused (400/413) or that could not
     be packed (too large, unreadable) is not tried again for UPLOAD_BACKOFF, `orca_live_owed` included; while
     the Orca live folder is not on the server, Orca is not synced this run. A build whose `orca_live_hash` is not
     this PC's Orca live hash asks for a rebuild, but its Bambu Studio presets are installed all the same; its
@@ -67,7 +67,7 @@ Orca Slicer (`orca` given: this PC has it; None: everything above, Bambu Studio 
     installed build whose orca/ did not go in (`state.json` `installed.trees`) is caught up once Orca syncs
     again (B-I1): its orca/ is installed when it was made from these Orca presets, else a rebuild is asked for. An interrupted install is resumed with the trees it was
     started with (marker `orca`), and only when Orca's presets are untouched as well. One `installed(stamp,
-    trees)` report covers both trees and says which went in (["base"] or ["base", "orca"], Ruling AB: the
+    trees)` report covers both trees and says which went in (["base"] or ["base", "orca"], the
     server diffs the Orca folder against the last build whose orca/ was installed); a report still owed after
     a crash keeps its trees (`state.json` `report_trees`).
 
@@ -130,7 +130,7 @@ OUTCOMES = ("studio_running", "uploaded", "no_build", "up_to_date", "rebuild_req
 
 
 def marker_path(dirs: store.AppDirs) -> Path:
-    return dirs.base / "installing.json"            # by its JSON name; the file is installing.xml (RC1c)
+    return dirs.base / "installing.json"            # by its JSON name; the file is installing.xml
 
 
 def _move_marker(src: store.AppDirs, dst: store.AppDirs) -> None:
@@ -160,7 +160,7 @@ def report_failure(dirs: store.AppDirs, c, outcome: str) -> None:
 
 
 def load_state(dirs: store.AppDirs) -> dict:
-    """state.xml (an older Sync's state.json is read once and moved to XML: RC1c); {} when there is none."""
+    """state.xml (an older Sync's state.json is read once and moved to XML: ); {} when there is none."""
     return statexml.read(dirs.state) or {}
 
 
@@ -286,7 +286,7 @@ class _Run:
         label = LABELS[kind]
         try:
             if kind == "orca_live" and self._partial():
-                res = self.c.upload(kind, data, partial=self._partial())   # S28 for Orca too (Ruling O)
+                res = self.c.upload(kind, data, partial=self._partial())   # build-step for Orca too
             elif kind != "live":
                 res = self.c.upload(kind, data)
             elif self.st.get("fresh_owed"):          # this folder's first sync: the server forgets the pairing
@@ -546,7 +546,7 @@ class _Run:
         self.st["report"] = stamp
         self.st["report_trees"] = trees
         self.st["report_written"] = written
-        self.st["live_owed"] = True             # until upload_live() succeeds (S32)
+        self.st["live_owed"] = True             # until upload_live() succeeds
         if installed_orca:
             self.st["orca_live_owed"] = True
         self.st["differing"] = list(getattr(res, "differing", []) or [])
@@ -650,7 +650,7 @@ class _Run:
             shutil.rmtree(work, ignore_errors=True)
 
     def _keep_partial(self, stamp: str, build_dir: Path) -> None:
-        """Keep the half-installed build (dirs.partial) and name it in live uploads until an install (S28)."""
+        """Keep the half-installed build (dirs.partial) and name it in live uploads until an install."""
         tmp = Path(tempfile.mkdtemp(prefix=".partial.", suffix=".tmp", dir=self.d.base))
         try:
             shutil.copytree(build_dir, tmp / "partial")
@@ -719,7 +719,7 @@ class _Run:
             if done is not None:
                 return done
             if self.changed_since_install():
-                # a generated preset changed in the app since this install (S29b, S31): rebuild
+                # a generated preset changed in the app since this install (S29b, build-step): rebuild
                 if self.request(here):
                     return self.finish("rebuild_requested", f"build {stamp} is installed; your "
                                                             f"{self._apps()} changes since then were sent and a "
@@ -738,7 +738,7 @@ class _Run:
                 return self.finish("uploaded", f"build {stamp} is installed; the server has your latest presets")
             return self.finish("up_to_date", f"build {stamp} is installed")
         accepted = self.accepted_hashes(here)
-        if build.get("live_hash") not in accepted:  # only Bambu Studio gates the install (Ruling Z)
+        if build.get("live_hash") not in accepted:  # only Bambu Studio gates the install
             if self.request(here):
                 return self.finish("rebuild_requested",
                                    f"build {stamp} predates your latest {self._apps()} presets; asked for a rebuild")

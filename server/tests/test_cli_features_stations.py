@@ -1,4 +1,4 @@
-"""S5.7: `features`, `weigh-station` and `tag-reader`, with the old spellings (`modules`, `station`,
+"""`features`, `weigh-station` and `tag-reader`, with the old spellings (`modules`, `station`,
 `reader`) as the same commands. AUT-9 for `features`: 79-column lines, no escape byte without colour, ASCII with
 `--plain`, `--json` parses. Example names and addresses only."""
 from __future__ import annotations

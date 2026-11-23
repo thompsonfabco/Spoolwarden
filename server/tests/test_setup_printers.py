@@ -738,7 +738,7 @@ def test_the_states_read_says_which_bambu_printers_hold_a_slot_map(both, kl):
 
 
 def test_every_action_of_a_printer_row_is_still_in_the_script():
-    """S2.4 kept every action of the old cards: each one is reachable from the expansion and the row's menu."""
+    """kept every action of the old cards: each one is reachable from the expansion and the row's menu."""
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
     acts = text.split("function actionsOf(p, box)")[1].split("\n}\n")[0]
     for key in ("common_connect", "printers_detect", "printers_map_loading", "printers_map_slots", "common_rename", "printers_change_address",
@@ -750,7 +750,7 @@ def test_every_action_of_a_printer_row_is_still_in_the_script():
 
 
 def test_every_action_of_the_add_scan_and_add_on_cards_is_still_in_the_script():
-    """S2.5 kept what the old cards did: add (Bambu Lab and Klipper), scan with its subnet, Use this printer, the
+    """kept what the old cards did: add (Bambu Lab and Klipper), scan with its subnet, Use this printer, the
     commands with Copy, the unavailable text, and the old cards are gone."""
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
     for call in ('api(path, { ...body, code: theCode() })', 'api("printers/scan", { subnet: typed, code: theCode() })', 'api("printers/pack", {})',
@@ -770,7 +770,7 @@ def test_the_scan_refusals_name_the_subnet_field(both, scanned):
 
 
 def test_the_add_on_refusal_carries_its_reason_and_the_page_reads_that_not_the_text(both, monkeypatch):
-    """The page shows the add-on text and Try again from the reply's `reason`, so a rewording cannot break it (S7.1)."""
+    """The page shows the add-on text and Try again from the reply's `reason`, so a rewording cannot break it."""
     from filament_kit import klipper_cli, release
 
     def bad(v, cfg):

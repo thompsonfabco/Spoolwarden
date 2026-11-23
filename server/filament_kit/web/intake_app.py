@@ -248,7 +248,7 @@ class IntakeApp:
             ("/intake/labels.js", self.asset, ["GET"]),
             ("/intake/labels", self.labels_page, ["GET"]),            # the print page
             ("/intake/labels/page.css", self.labels_paper, ["GET"]),  # its paper, per size
-            ("/intake/sw.js", self.api(self.service_worker), ["GET"]),   # S3.14: scope is the app; Printers tab or not
+            ("/intake/sw.js", self.api(self.service_worker), ["GET"]),   # scope is the app; Printers tab or not
             ("/intake/signin.js", self.asset, ["GET"]),   # the sign-in page's Show button (auth.py, web unit)
             ("/intake/shared/{name}", self.shared_asset, ["GET"]),
             ("/intake/icon.png", self.icon_route, ["GET"]),
@@ -426,7 +426,7 @@ class IntakeApp:
             f"<script src='{b}/shared/theme-init.js'></script>"
             f"<link rel=stylesheet href='{b}/shared/tokens.css'><link rel=stylesheet href='{b}/shared/components.css'>"
             f"<link rel=stylesheet href='{b}/app.css'>"
-            # S3.3: the catalogue and the shared script load before the page's own scripts (the shell turns the title into
+            # the catalogue and the shared script load before the page's own scripts (the shell turns the title into
             # "<Page title> · <Hub name>")
             + body + ((pages.strings_scripts(self.base, strings_src)       # English first, then the language in use
                        + f"<script src='{b}/shared/components.js'></script>"
@@ -464,7 +464,7 @@ class IntakeApp:
                 "history": "1" if self.history else "0",
                 "hub": cfg.get("server_name") or "", "hub-page": self._hub_page(request),
                 "presets": "1" if "presets" in modules.enabled(cfg) else "0",
-                "spool-edit": "1"}   # the spool read and edit routes below (S3.9)
+                "spool-edit": "1"}   # the spool read and edit routes below
         if self._demo_on():
             data["demo"] = "1"       # the banner of the design, components on every screen
         if not data["hub-page"]:
@@ -476,7 +476,7 @@ class IntakeApp:
     LANG_CODE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?")
     LABEL_SIZES = ("62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25")
     LABEL_IDS = re.compile(r"[1-9]\d{0,8}(?:,[1-9]\d{0,8}){0,99}")          # whole numbers of 1 or more, as the refusal says
-    # RC4's sentences the string catalogue does not hold yet (the keys file names them for RC9); the catalogue's own text wins (D13)
+    # 's sentences the string catalogue does not hold yet (the keys file names them for ); the catalogue's own text wins (D13)
     STUB_TEXTS = {"labels_bad_size": "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25.",
                   "labels_bad_ids": "Give the spool numbers as ids=<n,n,...>, whole numbers of 1 or more.",
                   "web_answer_too_large": "The Hub's answer is too large to pass on.",
@@ -493,7 +493,7 @@ class IntakeApp:
 
     def home_address(self) -> str:
         """The Hub's home address, `https://<name>.local[:port]`: what the Hub puts in a label's code (labels.home_address of
-        RC8: the host's own name and the Hub's port, no port for 443). This unit runs on the Hub's machine and reads the same
+        the host's own name and the Hub's port, no port for 443). This unit runs on the Hub's machine and reads the same
         settings, so the print page names the address the codes really hold."""
         port = self.tools.cfg().get("port", hubport.FALLBACK_PORT)
         return f"https://{pairing.short_hostname()}.local{hubport.url_port(port)}"

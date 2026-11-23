@@ -1,5 +1,5 @@
-"""HD7d: the Undo toasts, a spool's last ten events and the Download as CSV menus of the Hub page, in a real
-headless browser against a stub Hub: the routes the server steps HD1/HD5/HD6 will add (`POST events/{id}/undo`, `GET activity`,
+"""the Undo toasts, a spool's last ten events and the Download as CSV menus of the Hub page, in a real
+headless browser against a stub Hub: the routes the server steps //will add (`POST events/{id}/undo`, `GET activity`,
 `GET export/{set}.csv`, and `event` in the answers of the changes) are not in the tree, so the page's fetch is answered by a stub in
 the page and every request is recorded. The Spools section is answered completely by the stub; the printer's live view is the one
 of test_hub_printer_live.py with its own stub; Settings > Storage locations, Slicer presets and Recently added are the real page

@@ -57,7 +57,7 @@ def test_keep_edits_copies_changed_value():
     live = dict(LIVE, filament_notes=f"Summary\n{inapp.MARK}\nmine")
     log = []
     keys = inapp.keep_edits(cfg, dict(INSTALLED, filament_notes="Summary"), live, log)
-    assert keys == {"filament_flow_ratio": ["0.95"]}         # pressure_advance equals the generated value (S27)
+    assert keys == {"filament_flow_ratio": ["0.95"]}         # pressure_advance equals the generated value
     assert cfg["filament_flow_ratio"] == ["0.95"]
     assert any("filament_flow_ratio" in line and "(your in-app value, kept)" in line for line in log)
     assert not any("pressure_advance" in line and "in-app value" in line for line in log)  # same value: no log
@@ -182,7 +182,7 @@ def test_partial_build_note_lines_are_not_the_owners():
 
 
 def test_kept_notes_without_an_installed_copy():
-    """Ruling S34: with no installed copy (a re-paired PC) the owner's saved note lines are carried."""
+    """with no installed copy (a re-paired PC) the owner's saved note lines are carried."""
     cfg = {"name": "x", "filament_notes": "Summary\nSpoolman filament ids: 1"}
     inapp.keep_edits(cfg, None, {"filament_notes": "anything"}, [], notes=["mine", "Spoolman filament ids: 9"])
     assert cfg["filament_notes"] == f"Summary\n{inapp.MARK}\nmine\nSpoolman filament ids: 1"

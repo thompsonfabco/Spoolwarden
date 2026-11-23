@@ -6,7 +6,7 @@ state, the key, printers and their slot maps, devices, the passphrase, backups a
 cannot be read counts as not done; this module never raises.
 
 `view()` is what `spoolwarden status` prints (its block and `--json` key `getting_started`) and what the Hub page's
-route `GET start` serves (step AF6 calls `view()`; the route adds nothing but the HTTP).
+route `GET start` serves (calls `view()`; the route adds nothing but the HTTP).
 
     {show, hidden, finished, restore_offer, done, total, steps: [{id, state: done|next|open, line, target}]}
 

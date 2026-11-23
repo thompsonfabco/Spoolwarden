@@ -35,7 +35,7 @@ def panel_port_from_env() -> int:
 VOICE_RANGES = {"speaker": (0, 903), "speed": (50, 200), "volume": (0, 100)}
 VOICE_SPEED_STEP = 10      # the speed goes in steps of 10: the station checks it again
 VOICE_KEYS = {"speech": "speech", "speaker": "voice_speaker", "speed": "voice_speed", "volume": "speaker_volume"}
-# the sentences of the voice routes' refusals (the string catalogue's, the English as the fallback: RC9 / RG1 add the keys)
+# the sentences of the voice routes' refusals (the string catalogue's, the English as the fallback: / RG1 add the keys)
 _t = _station_page.catalogue_text
 VOICE_TEXTS = {
     "bad_speech": _t("station_voice_bad_speech", "speech must be true or false."),

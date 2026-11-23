@@ -400,7 +400,7 @@ def test_saved_helpers_serialize_threads(lib, store):
         lines.set_parent_saved("nope--nope", "Generic PLA")
 
 
-# ---------- fix round 1: line stability (S12) ----------
+# ---------- fix round 1: line stability ----------
 
 def test_group_records_members_and_library_update_does_not_move(store):
     lib_a = make_lib(_local("Acme", "PLA", "PLA"))
@@ -466,7 +466,7 @@ def test_empty_slug_parts_get_hash_ids(lib):
     assert lines.propose("Acme", "***", "PLA", library=lib, store=None, lines=ls)["exists"] is True
 
 
-# ---------- fix round 1: Generic step from the store (S9), "+" (S10), rechoose (S13) ----------
+# ---------- fix round 1: Generic step from the store, "+", rechoose ----------
 
 def _store(tmp_path, presets: dict) -> bbl.Store:
     folder = tmp_path / "bbl-x"

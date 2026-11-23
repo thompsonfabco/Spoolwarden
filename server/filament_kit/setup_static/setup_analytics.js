@@ -3,7 +3,7 @@
 // through textContent, as there. The section is opened by the registry (TABS in setup.js), which is not this file's.
 "use strict";
 
-// The texts of this section until the catalogue has them (only HD2 opens strings/): a key the catalogue has wins.
+// The texts of this section until the catalogue has them (only opens strings/): a key the catalogue has wins.
 const AN_TEXT = {
   analytics_error: "Could not read the analytics{reason}",
   analytics_title: "Analytics",

@@ -3,7 +3,7 @@
 "Checked out (<n>)", the rows with the place, Home and since, Return and its Undo toast, the Home line with Change home, the empty
 state, and an older Hub that offers none of it), in the four looks at 1280 and 390 px.
 
-The kit's side (CO1: the view's `checked_out` / `home` / `checked_out_since`, `inventory.return_spool`, `NotCheckedOut`, the `home` edit)
+The kit's side (the view's `checked_out` / `home` / `checked_out_since`, `inventory.return_spool`, `NotCheckedOut`, the `home` edit)
 is NOT in this tree: `stubbed` puts a stand-in for each in place, over the fake Spoolman. The stand-in is the contract the page assumes:
   spool view   + checked_out: bool, home: str|null, checked_out_since: str|null   (here: a remembered place in `extra.prev_location` and its time in `extra.prev_since`, as `inventory.prev_extra` writes them; a spool in a printer slot with none is checked out with no home)
   return_spool (sm, id, rules=, dry=) -> {spool, event: {id, undo}}   NotCheckedOut for a spool that is not checked out

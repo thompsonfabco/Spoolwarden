@@ -11,7 +11,7 @@ mapping or loading: the printers' mapping.lock files are held for the whole inst
 (filament-kit-update.timer, daily) runs `update --scheduled`, which does nothing unless the module is on and
 `updates.schedule` (daily or weekly) says a check is due, and never reinstalls a version that was rolled back.
 
-Hardware data feed (Ruling BG): after the program check (up to date or updated), the latest release's
+Hardware data feed: after the program check (up to date or updated), the latest release's
 `bambu_hardware.xml` asset is verified the same way (the signature over SHA256SUMS, then the file's hash),
 validated with `bridge.hardware.validate` and only then put in place of the override
 /etc/filament-kit/bambu_hardware.xml (atomic replace while no printer is mapping or loading, else the next run

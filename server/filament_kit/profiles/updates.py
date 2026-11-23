@@ -52,7 +52,7 @@ STATUS_IGNORE = {"updated_time", "setting_id", "user_id", "base_id", "is_custom_
 
 
 def _read_state(path: Path):
-    """A state file of this module (SLICER, updates), by its JSON name: its XML form when there is one (RC1c)."""
+    """A state file of this module (SLICER, updates), by its JSON name: its XML form when there is one."""
     return statexml.read(path)
 
 

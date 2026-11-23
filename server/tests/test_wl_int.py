@@ -165,7 +165,7 @@ def test_a_usb_search_with_no_panel_at_all_still_clears_the_facts(monkeypatch):
     assert (st.ports["panel_version"], st.ports["panel_chip"], st.ports["panel_nfc"]) == (None, None, None)
 
 
-# ---- the Hub's voice call end to end: the sender (VO2) against the station's real handler (VO1) ----
+# ---- the Hub's voice call end to end: the sender against the station's real handler ----
 
 from test_vo1_station_voice import fresh, hub  # noqa: E402,F401  (a real station HTTP handler allowing 127.0.0.1)
 

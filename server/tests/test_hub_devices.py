@@ -1,4 +1,4 @@
-"""The Devices section of the Hub page (step S2.9, the design, Hub page): AUT-5 with every card and the pairing dialog, and the
+"""The Devices section of the Hub page (the design, Hub page): AUT-5 with every card and the pairing dialog, and the
 real controls pressed in a headless browser. Helpers and the example-data Hub are those of test_hub_page_audit.py. The same
 skip rules: no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
@@ -17,7 +17,7 @@ from filament_kit.web.slots import INTAKE_DEVICE
 
 from test_hub_page_audit import CODE, ROOT, _missing, _node, _run, hub_app, hub_change  # noqa: F401
 
-# ---------------------------------------------------------------- Devices (step S2.9, the design, Hub page)
+# ---------------------------------------------------------------- Devices (the design, Hub page)
 # The Devices section pressed in a real headless browser (tests/page_drive.mjs): the requests the page sends are recorded by
 # a wrapper of fetch, and a few replies are changed in the page (a new device appearing, a short expiry, a slow or failing
 # answer) so each state of the pairing dialog, the requests asking to pair and the trusted computers is reached.

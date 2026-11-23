@@ -516,7 +516,7 @@ def test_a_damaged_record_xml_is_no_such_record_not_a_crash(sm):
     assert any("record.xml" in p for p in statexml.problems())
 
 
-# ---------------------------------------------------------------- RC1d rework: the mode, and the old form for one release
+# ---------------------------------------------------------------- rework: the mode, and the old form for one release
 
 @pytest.mark.skipif(not hasattr(os, "geteuid"), reason="file modes are the Hub's on Linux")
 def test_a_record_json_moved_to_xml_keeps_its_private_mode(sm):

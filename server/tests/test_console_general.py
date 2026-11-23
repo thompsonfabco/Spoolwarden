@@ -205,7 +205,7 @@ def test_the_settings_tab_has_the_cards():
     assert "function groupGeneral(" in tabs and "function remoteBlock(" in tabs and '"remote_issue"' in tabs
 
 
-# ---------- several keys of one group at once (S2.17, N2) ----------
+# ---------- several keys of one group at once (N2) ----------
 
 def _group(app, values, **kw):
     return post(client(app), "settings/general", {"values": values}, **kw)

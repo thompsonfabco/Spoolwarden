@@ -132,7 +132,7 @@ def https_row(cfg: dict) -> dict | None:
     """The one Checks row for a reader on another machine at an http address, else None (127.0.0.1, localhost or an
     https address). `{"group": "Label Reader", "state": "note" | "needs_a_look", "text", "fix": str | None}`: with
     ENFORCE_HTTPS off a note with TEXT_NOT_HTTPS_NOTE and no fix; on, "needs_a_look" with TEXT_NOT_HTTPS_ROW and
-    TEXT_NOT_HTTPS_FIX. The row's registration is AF5's."""
+    TEXT_NOT_HTTPS_FIX. The row's registration is 's."""
     url = settings(cfg)["url"]
     if not needs_https(url):
         return None
@@ -285,7 +285,7 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False,
         req = urllib.request.Request(url, data=data, method=method or ("GET" if body is None else "POST"),
                                      headers=headers)
         try:
-            with opener.open(req, timeout=max(1.0, deadline - time.monotonic())) as resp:  # noqa: S310
+            with opener.open(req, timeout=max(1.0, deadline - time.monotonic())) as resp:  # noqa: build-step
                 if raw_cap is None:
                     raw = resp.read()
                 else:

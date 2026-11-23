@@ -808,7 +808,7 @@ class E2E:
         r = run.sh([fk, "update", "--check"], name="update-check-held")
         run.check(sc, "update --check: the rolled-back version is held from the timer",
                   r.returncode == 0 and ("rolled back earlier" in r.stdout                   # the old text
-                                         or f"{self.v2} was rolled back" in r.stdout),        # since S5.8
+                                         or f"{self.v2} was rolled back" in r.stdout),        # since 
                   r.stdout + r.stderr)
 
     # ---- e) station upgraded by the updater keeps its server address

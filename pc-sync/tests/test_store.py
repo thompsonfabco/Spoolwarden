@@ -50,7 +50,7 @@ def test_config_roundtrip(tmp_path):
     store.save_config(d, cfg)
     assert store.load_config(d) == cfg
     d.config.write_text("{broken", encoding="utf-8")
-    statexml.xml_path(d.config).write_text("<broken", encoding="utf-8")      # both forms (RC1c)
+    statexml.xml_path(d.config).write_text("<broken", encoding="utf-8")      # both forms
     with pytest.raises(ValueError):
         store.load_config(d)
 

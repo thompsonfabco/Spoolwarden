@@ -5,7 +5,7 @@ whose slug is empty becomes `x` + sha1(text)[:6]). Every line owns one generated
 that all its presets share; it never changes once given out. The Bambu parent is only ever the template a preset
 is flattened from, never a slot's preset.
 
-Parent steps (the Decision, rulings S9/S10): (1) the library's `bambu_parent` (a local entry's wins) if the
+Parent steps (the Decision, rulings S9/build-step): (1) the library's `bambu_parent` (a local entry's wins) if the
 uploaded system store has it; (2) brand: an instantiable system preset of the vendor and the line's Bambu type
 whose base name minus its first word equals the product (casefold, "+" read as "plus", alphanumerics only), else
 the only such preset if there is exactly one; (3) material: the store's own Generic preset for the type (vendor
@@ -15,7 +15,7 @@ parent the owner did not set. A system preset gated only by `compatible_printers
 `compatible_printers`) never yields a build parent, so it is not chosen; a line left with no parent keeps
 `parent_source "none"` and shows in `problems`.
 
-Orca parent (Task 3, Ruling L): `orca_parent` is the base name of an OrcaFilamentLibrary `@System` preset that
+Orca parent (Task 3, ): `orca_parent` is the base name of an OrcaFilamentLibrary `@System` preset that
 the line's Orca presets inherit (`"<orca_parent> @System"`), with its own `orca_parent_source`. Steps
 (`choose_orca_parent`): (1) the library's `orca_parent` (a local entry's wins) if the uploaded Orca library index
 has it; (2) brand: a `"<vendor> <product> @System"` preset (casefold); (3) material: `Generic <Orca type> @System`,
@@ -612,7 +612,7 @@ def load() -> LineSet:
     if not isinstance(rows, list):
         _corrupt(xp if xp.exists() else path, "no lines list")
     if xp.name != path.name and not xp.exists():
-        statexml.migrate(path, data)            # RC1c: the first read of an older Hub's file writes the XML form
+        statexml.migrate(path, data)            # the first read of an older Hub's file writes the XML form
     out = LineSet()
     for r in rows:
         line = _row(r)
@@ -640,7 +640,7 @@ def save(lines: dict[str, Line]) -> None:
     path = _path()
     rows = [asdict(lines[k]) for k in sorted(lines)] + list(getattr(lines, "invalid", []))
     data = {"version": FILE_VERSION, "lines": rows}
-    statexml.write(path, data)                  # RC1c: lines.xml; the JSON form stays as it was at the move
+    statexml.write(path, data)                  # lines.xml; the JSON form stays as it was at the move
 
 
 @contextmanager

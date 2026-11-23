@@ -1,4 +1,4 @@
-"""The Printers section of the Hub page (step S2.4, the design, Hub page): the page audit of the collection, an open row and both
+"""The Printers section of the Hub page (the design, Hub page): the page audit of the collection, an open row and both
 drawers (AUT-5, through tests/aut5_run.mjs), and the section pressed in a real headless browser through tests/page_drive.mjs:
 mapping progress and Stop that stay, addresses and serials that follow the lock, drawers in every look, and nothing typed left
 behind. The page is served with the data of test_hub_page_audit.py plus printers in each state. The same skip rules as the
@@ -132,7 +132,7 @@ def _printer_views(voron: str) -> str:
 
 def test_printers_rows_expansions_and_both_drawers_pass_the_audit(printers_hub):
     """The collection, a Bambu Lab row open, a Klipper row open, an offline row with its problem line, the Map by loading
-    filament drawer and the Saved reports drawer. The three cards S2.5 rebuilds (Add a printer, Find Klipper printers, the
+    filament drawer and the Saved reports drawer. The three cards rebuilds (Add a printer, Find Klipper printers, the
     add-on) are in the page and keep their findings, which tests/allowlists/aut5_hub/ lists; nothing else may be found."""
     url, voron = printers_hub
     views = _printer_views(voron)
@@ -367,7 +367,7 @@ return out;
     assert mapper.manual.starts == 1, mapper.manual.starts
 
 
-# ---------------------------------------------------------------- Printers add (S2.5): Add a printer, Find Klipper printers, Klipper add-on
+# ---------------------------------------------------------------- Printers add: Add a printer, Find Klipper printers, Klipper add-on
 
 PRINTERS_PRELUDE = """
   const until = async (what, f, ms = 10000) => {
@@ -782,10 +782,10 @@ return { width: document.documentElement.clientWidth, caption: box($(".code__cap
     assert page["scroll"] <= page["width"], page
 
 
-# ---------------------------------------------------------------- EV4b phase 2: live view mounted in detailRegion, old link removed
+# ---------------------------------------------------------------- phase 2: live view mounted in detailRegion, old link removed
 
 def test_ev4b_removes_external_live_view_links_while_preserving_add_and_csv(printers_hub, tmp_path):
-    """EV4b phase 2 removes liveUrl and both printers_live_view links while keeping Guided Add and Printers CSV."""
+    """phase 2 removes liveUrl and both printers_live_view links while keeping Guided Add and Printers CSV."""
     js = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
     assert "liveUrl" not in js and "printers_live_view" not in js and "/intake" not in js
     assert "printersMenu" in js and "openAddDrawer" in js
@@ -806,7 +806,7 @@ return { links, addBtn, csv };
 
 
 def test_ev4b_mounts_printer_live_above_facts_and_stops_polling_and_camera_on_collapse_and_redraw(printers_hub, tmp_path):
-    """EV4b phase 2 mounts window.printerLive(p) above facts(p, box), drops slotsBox/detailSlots, and stops polling and
+    """phase 2 mounts window.printerLive(p) above facts(p, box), drops slotsBox/detailSlots, and stops polling and
     camera sessions cleanly on detail collapse, re-open and leaving the section, and keeps the live view across a lock redraw."""
     live_js = (STATIC / "setup_printer_live.js").read_text(encoding="utf-8")
     url, _ = printers_hub

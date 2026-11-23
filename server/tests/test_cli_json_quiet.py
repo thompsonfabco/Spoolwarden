@@ -1,4 +1,4 @@
-"""S5.3: `--json` and `--quiet`. Every command that prints data or a result is run with `--json`: standard output
+"""`--json` and `--quiet`. Every command that prints data or a result is run with `--json`: standard output
 is then one JSON document with no escape byte, whatever the command did; an error is `{"ok": false, "error", "fix"}`
 beside the usual text on standard error and the usual exit code; a command that would ask stops with exit code 2 unless
 it has `--yes`; the menus refuse. `--quiet` drops result lines, notes and progress, and keeps errors, what was asked for

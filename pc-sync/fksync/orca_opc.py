@@ -1,7 +1,7 @@
 """Reads the filament presets packed in Orca Slicer's OrcaFilamentLibrary.opc (port of ops gen.py orca_lib_ids).
 
 Orca 2.5.0 ships its system presets packed in `resources/profiles/*.opc` (header "ZCRO"); the JSON folders
-are empty. Like ops gen.py this does not decode the whole format; it reads what the server needs (Ruling L):
+are empty. Like ops gen.py this does not decode the whole format; it reads what the server needs:
 every preset record is `<u64 len><name><u64 len>filament/...json` followed by its values, then a tail
 `<u64 len><inherits> <empty> <empty> <len>"true"|"false" <len><setting_id or empty> <len><filament_id or empty>`
 (an `@base` record holds the filament_id its `@System` children inherit). The

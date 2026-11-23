@@ -3,7 +3,7 @@
 // moves and removes change only that copy and the "Where a new spool goes" panel) and one Save sends the whole list.
 "use strict";
 
-// ----- the data: the Hub's own routes (SL2, storage_api.py) -----
+// ----- the data: the Hub's own routes (storage_api.py) -----
 // GET settings/storage answers {locations, order_by_material, everything_else, notices}; POST settings/storage/preview (no code, writes
 // nothing) answers the same for the unsaved list; POST settings/storage (code) saves the whole list.
 const loadStorage = () => api("settings/storage");
@@ -21,7 +21,7 @@ async function saveStorage(list) {
 }
 
 // ----- Download as CSV: the file the Hub gives for GET export/locations.csv, unlocked as a file leaves the Hub -----
-// Texts the catalogue does not have yet (only HD2 opens it): the catalogue's own wins once the key is there.
+// Texts the catalogue does not have yet (only opens it): the catalogue's own wins once the key is there.
 const ST_STUB = { storage_download_csv: "Download as CSV", storage_csv_failed: "Could not download the file: {reason}" };
 const stT = (key, vars) => {
   const v = SW.t(key, vars);

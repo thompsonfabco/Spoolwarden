@@ -1,5 +1,5 @@
 """The CLI's words stay as they were when `status`, `web status` and `update --check` moved onto functions that
-return data (status.py, updates.check_info): the console reads the data, the terminal prints these rows. Since S5.1 the
+return data (status.py, updates.check_info): the console reads the data, the terminal prints these rows. Since the
 rows come under their group's heading with a glyph and a state word; `old_rows` gives them back as the old lines."""
 from __future__ import annotations
 

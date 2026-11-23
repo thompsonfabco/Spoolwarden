@@ -1,4 +1,4 @@
-"""EV3 request guard (station/guard.py, station/http.py): each route for each caller class, the
+"""request guard (station/guard.py, station/http.py): each route for each caller class, the
 429 of wrong tickets and its reset, the tickets, a cookie of another station, the shape of every refusal."""
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def refusal_ok(d):
     assert set(d) == {"error", "message"} and d["error"] and d["message"], d      # never {error, text}, never a bare word
 
 
-# ---- the table of the ruling: route x caller
+# ---- the table of the rule: route x caller
 
 PAGE_FILES = ["/", "/static/station.js", "/static/station.css"]
 SESSION_READS = ["/state", "/settings", "/photo"]

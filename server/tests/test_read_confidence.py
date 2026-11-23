@@ -1,4 +1,4 @@
-"""Per-field Label Reader confidence, the record summary, and the engine that read it (design S2.6, N4): in the
+"""Per-field Label Reader confidence, the record summary, and the engine that read it (design N4): in the
 read reply, stored with each Recently added record, and absent (not broken) on a record kept before they existed."""
 from __future__ import annotations
 
@@ -137,7 +137,7 @@ def test_an_old_record_without_the_new_fields_still_reads(sm):
 
 
 def test_an_old_cloud_record_with_high_levels_is_not_rated(sm):
-    """A record kept by the first S2.6 build: Cloud levels "high", no `confidence_rated`."""
+    """A record kept by the first build: Cloud levels "high", no `confidence_rated`."""
     out = intake.read_labels(sm, [JPEG], "", None, client=FakeClaude(copy.deepcopy(READ)))
     hid = save(sm, out["read_id"])
     rec = intake_history._load(hid)

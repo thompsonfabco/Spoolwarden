@@ -1,4 +1,4 @@
-"""S5.9: the command is `spoolwarden`. `filament-kit` is a small wrapper that prints one Note line on
+"""the command is `spoolwarden`. `filament-kit` is a small wrapper that prints one Note line on
 standard error and runs `spoolwarden` with the same arguments, standard input, standard output and exit code."""
 import os
 import re

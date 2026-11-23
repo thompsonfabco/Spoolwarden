@@ -1,4 +1,4 @@
-"""RC1a: config.py reads config.xml first, falls back to config.json, and saves both forms."""
+"""config.py reads config.xml first, falls back to config.json, and saves both forms."""
 import json
 import os
 import stat

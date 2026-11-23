@@ -1,4 +1,4 @@
-"""Plan step A3: CLI command mounting (printer slots/usage/watch, devices show/set, catalog local/add --ask,
+"""Plan CLI command mounting (printer slots/usage/watch, devices show/set, catalog local/add --ask,
 Share corrections in config/status, non-sudo corrections list/package, and help --markdown table)."""
 from __future__ import annotations
 
