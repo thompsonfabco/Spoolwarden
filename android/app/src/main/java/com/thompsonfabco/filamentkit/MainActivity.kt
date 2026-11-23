@@ -223,7 +223,6 @@ import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
 import com.thompsonfabco.filamentkit.ui.history.HistoryEditEntry
 import com.thompsonfabco.filamentkit.ui.history.CorrectionsEntry
-import com.thompsonfabco.filamentkit.ui.history.CorrectionsTexts
 import com.thompsonfabco.filamentkit.ui.history.HistoryListEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryPhotoEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
@@ -1681,10 +1680,10 @@ private fun placeTitle(destination: NavDestination?, entry: NavBackStackEntry?, 
             return SpoolCache.title(id) ?: stringResource(R.string.spool_title, id.toString())
         }
         entry != null && tagUidOf(entry) != null -> return stringResource(R.string.common_tag, tagUidOf(entry).orEmpty())
-        destination?.hasRoute(RecentCorrectionsRoute::class) == true -> return CorrectionsTexts.TITLE
     }
     return stringResource(
     when {
+        destination?.hasRoute(RecentCorrectionsRoute::class) == true -> R.string.corrections_title
         destination?.hasRoute(SpoolLoadRoute::class) == true || destination?.hasRoute(SpoolLoadSlotRoute::class) == true ||
             destination?.hasRoute(SpoolLoadPreviewRoute::class) == true -> R.string.spool_load
         destination == null -> R.string.nav_home

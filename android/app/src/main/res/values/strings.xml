@@ -5713,4 +5713,53 @@
     <string name="hub_no_history_before">No history before %1$s.</string>
     <!-- 1=time 2=check 3=from 4=to -->
     <string name="hub_health_row_spoken">%1$s. %2$s: from %3$s to %4$s</string>
+    <string name="corrections_title">Corrections waiting</string>
+    <string name="corrections_line_on">Share corrections is on</string>
+    <!-- 1=count -->
+    <string name="corrections_line_on_count">Share corrections is on · %1$d waiting</string>
+    <string name="corrections_line_will_wait">Share corrections is on: this correction will wait on the Hub to be shared.</string>
+    <string name="corrections_line_check">Share corrections is on: fields you change here will wait on the Hub to be shared once the spools are added.</string>
+    <string name="corrections_line_waiting">This correction is waiting to be shared.</string>
+    <string name="corrections_line_no_photo">Not shared: no photo was kept for this record.</string>
+    <!-- 1=reason -->
+    <string name="corrections_line_not_waiting">Saved. The correction is not waiting to be shared: %1$s.</string>
+    <!-- 1=count 2=megabytes -->
+    <string name="corrections_head">%1$d waiting · %2$s MB</string>
+    <string name="corrections_head_text">Nothing is sent until Send now is pressed on the Hub page. Remove any you do not want to share.</string>
+    <string name="corrections_head_off">Share corrections is off, so no new corrections are added. These are still waiting.</string>
+    <string name="corrections_foot">Sending is done on the Hub page, under Settings > Label Reader.</string>
+    <string name="corrections_empty_title">No corrections waiting</string>
+    <string name="corrections_empty_text">Corrections you make in Recently added, or while adding spools, appear here.</string>
+    <string name="corrections_reader_down">The reader does not answer, so the corrections waiting cannot be shown. They are kept.</string>
+    <string name="corrections_unnamed">A correction</string>
+    <!-- 1=time 2=engine -->
+    <string name="corrections_row_meta">%1$s · %2$s</string>
+    <!-- 1=field 2=read 3=now -->
+    <string name="corrections_change">%1$s: %2$s → %3$s</string>
+    <!-- 1=note -->
+    <string name="corrections_note">Note: %1$s</string>
+    <!-- 1=reason -->
+    <string name="corrections_not_waiting">Not waiting: the reader did not take this correction. %1$s</string>
+    <string name="corrections_no_record">This record is no longer kept.</string>
+    <string name="corrections_no_photos">The photos of this correction are no longer on the Hub.</string>
+    <string name="corrections_removing">Removing…</string>
+    <string name="corrections_removed">Removed. The record in Recently added is unchanged.</string>
+    <!-- 1=field 2=read 3=now -->
+    <string name="corrections_a11y_change">%1$s, %2$s, becomes %3$s</string>
+    <!-- 1=name -->
+    <string name="corrections_a11y_remove">Remove the correction for %1$s</string>
+    <!-- 1=name 2=time 3=count -->
+    <plurals name="corrections_a11y_row">
+        <item quantity="one">%1$s, corrected %2$s, %3$d change</item>
+        <item quantity="other">%1$s, corrected %2$s, %3$d changes</item>
+    </plurals>
+    <!-- 1=name 2=time 3=engine 4=count -->
+    <plurals name="corrections_a11y_row_engine">
+        <item quantity="one">%1$s, corrected %2$s, read by %3$s, %4$d change</item>
+        <item quantity="other">%1$s, corrected %2$s, read by %3$s, %4$d changes</item>
+    </plurals>
+    <!-- 1=name -->
+    <string name="corrections_a11y_removing">Removing the correction for %1$s</string>
+    <!-- 1=name 2=count -->
+    <string name="corrections_a11y_photos">Photos of the correction for %1$s: %2$d</string>
 </resources>

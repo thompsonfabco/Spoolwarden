@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -93,10 +94,11 @@ internal fun CorrectionsScreen(
         }
     }
     // the row has gone, so its result is a toast
+    val removedText = stringResource(R.string.corrections_removed)
     LaunchedEffect(s.removed) {
         if (s.removed) {
             vm.removedShown()
-            toast?.show(CorrectionsTexts.REMOVED)
+            toast?.show(removedText)
         }
     }
     val failure = s.error
@@ -109,7 +111,7 @@ internal fun CorrectionsScreen(
         }
         if (s.readerDown) {
             NoticeCard(
-                NoticeKind.Bad, CorrectionsTexts.READER_DOWN,
+                NoticeKind.Bad, stringResource(R.string.corrections_reader_down),
                 actions = listOf(SwAction(stringResource(R.string.common_try_again), vm::refresh)),
             )
         }
@@ -143,19 +145,19 @@ private fun CorrectionsList(
             item {
                 SwEmptyState(
                     icon = R.drawable.sw_ic_clock,
-                    title = CorrectionsTexts.EMPTY_TITLE,
-                    text = CorrectionsTexts.EMPTY_TEXT,
+                    title = stringResource(R.string.corrections_empty_title),
+                    text = stringResource(R.string.corrections_empty_text),
                 )
             }
         } else if (s.rows.isNotEmpty()) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(space.s1)) {
                     Text(
-                        CorrectionsTexts.head(s.count, RecentValues.megabytes(s.bytes)),
+                        stringResource(R.string.corrections_head, s.count, RecentValues.megabytes(s.bytes)),
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Text(
-                        if (s.sharingOff) CorrectionsTexts.HEAD_OFF else CorrectionsTexts.HEAD_TEXT,
+                        stringResource(if (s.sharingOff) R.string.corrections_head_off else R.string.corrections_head_text),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -163,7 +165,7 @@ private fun CorrectionsList(
         }
         items(s.rows, key = { it.id }) { row -> CorrectionCard(row, onRemove = { vm.remove(row.id) }, onOpenRecord = onOpenRecord, onOpenPhoto = onOpenPhoto) }
         items(s.notTaken) { NotTakenCard(it, onOpenRecord) }
-        item { Text(CorrectionsTexts.FOOT, color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodyMedium) }
+        item { Text(stringResource(R.string.corrections_foot), color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 
@@ -192,10 +194,15 @@ private fun CorrectionCard(
 ) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
-    val name = row.filament ?: CorrectionsTexts.UNNAMED
+    val name = row.filament ?: stringResource(R.string.corrections_unnamed)
     val engine = engineText(row.engine)
     val time = RecentValues.time(row.at)
-    val said = CorrectionsTexts.a11yRow(name, time, engine, row.changes.size)
+    val changes = row.changes.size
+    val said = if (engine == null) {
+        pluralStringResource(R.plurals.corrections_a11y_row, changes, name, time, changes)
+    } else {
+        pluralStringResource(R.plurals.corrections_a11y_row_engine, changes, name, time, engine, changes)
+    }
     CorrectionCardFrame {
         Row(horizontalArrangement = Arrangement.spacedBy(space.s3)) {
             val photoOf = row.record?.takeIf { row.recordKept != false && row.photos > 0 }
@@ -214,12 +221,12 @@ private fun CorrectionCard(
                     Text(name, Modifier.semantics { contentDescription = said }, style = MaterialTheme.typography.titleSmall)
                 }
                 Text(
-                    if (engine == null) time else CorrectionsTexts.rowMeta(time, engine),
+                    if (engine == null) time else stringResource(R.string.corrections_row_meta, time, engine),
                     Modifier.clearAndSetSemantics { }, color = colors.muted, style = SpoolwardenTheme.type.dataSmall,
                 )
                 if (row.recordKept == false) {
-                    Text(CorrectionsTexts.NO_RECORD, color = colors.muted, style = MaterialTheme.typography.bodySmall)
-                    Text(CorrectionsTexts.NO_PHOTOS, color = colors.muted, style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.corrections_no_record), color = colors.muted, style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.corrections_no_photos), color = colors.muted, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -227,15 +234,15 @@ private fun CorrectionCard(
             val field = fieldName(c.field)
             val read = correctionValue(c.field, c.read)
             val now = correctionValue(c.field, c.now)
-            val line = CorrectionsTexts.change(field, read, now)
-            val spoken = CorrectionsTexts.a11yChange(field, read, now)
+            val line = stringResource(R.string.corrections_change, field, read, now)
+            val spoken = stringResource(R.string.corrections_a11y_change, field, read, now)
             Text(line, Modifier.clearAndSetSemantics { contentDescription = spoken }, style = SpoolwardenTheme.type.dataSmall)
         }
-        row.note?.let { Text(CorrectionsTexts.note(it), style = MaterialTheme.typography.bodyMedium) }
-        val remove = if (row.removing) CorrectionsTexts.a11yRemoving(name) else CorrectionsTexts.a11yRemove(name)
+        row.note?.let { Text(stringResource(R.string.corrections_note, it), style = MaterialTheme.typography.bodyMedium) }
+        val remove = stringResource(if (row.removing) R.string.corrections_a11y_removing else R.string.corrections_a11y_remove, name)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             SwButton(
-                if (row.removing) CorrectionsTexts.REMOVING else stringResource(R.string.common_remove), onRemove,
+                stringResource(if (row.removing) R.string.corrections_removing else R.string.common_remove), onRemove,
                 Modifier.semantics { contentDescription = remove }, busy = row.removing,
             )
         }
@@ -247,7 +254,7 @@ private fun CorrectionCard(
 private fun NotTakenCard(n: NotTaken, onOpenRecord: (String) -> Unit) {
     val colors = SpoolwardenTheme.colors
     CorrectionCardFrame {
-        val name = n.filament ?: CorrectionsTexts.UNNAMED
+        val name = n.filament ?: stringResource(R.string.corrections_unnamed)
         val link = recordIdOf(n.record)
         if (link != null) {
             Text(
@@ -260,7 +267,7 @@ private fun NotTakenCard(n: NotTaken, onOpenRecord: (String) -> Unit) {
         }
         n.at?.let { Text(RecentValues.time(it), color = colors.muted, style = SpoolwardenTheme.type.dataSmall) }
         RecentStatusLine(
-            R.drawable.sw_st_triangle, CorrectionsTexts.notWaiting(n.reason), colors.warn, large = true,
+            R.drawable.sw_st_triangle, stringResource(R.string.corrections_not_waiting, n.reason), colors.warn, large = true,
         )
     }
 }
@@ -268,7 +275,7 @@ private fun NotTakenCard(n: NotTaken, onOpenRecord: (String) -> Unit) {
 @Composable
 private fun engineText(engine: Engine?): String? = when (engine) {
     Engine.Local -> stringResource(R.string.settings_reader_badge_local)
-    Engine.Cloud -> CorrectionsTexts.ENGINE_CLOUD
+    Engine.Cloud -> stringResource(R.string.add_found_engine_cloud)
     null -> null
 }
 
@@ -293,8 +300,9 @@ private fun CorrectionThumb(row: CorrectionRow, name: String, onOpen: (() -> Uni
         val bytes = row.thumbnail ?: return@produceState
         value = withContext(Dispatchers.Default) { decode(bytes, THUMB_SIDE_PX) }
     }
+    val photosSaid = stringResource(R.string.corrections_a11y_photos, name, row.photos)
     val tap = if (onOpen == null) Modifier else Modifier.clickable(role = Role.Button, onClick = onOpen)
-        .semantics { contentDescription = CorrectionsTexts.a11yPhotos(name, row.photos) }
+        .semantics { contentDescription = photosSaid }
     Box(Modifier.size(side).then(tap)) {
         val b = bitmap
         if (b == null) {
