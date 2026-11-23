@@ -5728,4 +5728,5 @@
     <string name="csv_import_commit_locations">Import locations</string>
     <!-- 1=add 2=change -->
     <string name="csv_import_imported_locations">Added %1$s locations and changed %2$s.</string>
+    <string name="common_request_too_large">Request too large.</string>
 </resources>

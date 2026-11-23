@@ -185,25 +185,29 @@ def kit_routes(authed) -> list:
         return JSONResponse({"error": e.code, "message": e.message, **extra}, status_code=e.status)
 
     async def body_of(request):
-        try:
-            return await request.json()
-        except ValueError:
-            return None             # `check` refuses it as "the request must be a JSON object"
+        from .. import http_body
+        return await http_body.read_json_any(request, http_body.VOICE_JSON_CAP, default=None)
 
     async def get(request):
         return JSONResponse(await anyio.to_thread.run_sync(lambda: get_voice(config.load())))
 
     async def patch(request):
-        body = await body_of(request)
+        from .. import http_body
         try:
+            body = await body_of(request)
             return JSONResponse(await anyio.to_thread.run_sync(lambda: patch_voice(body)))
+        except http_body.BodyTooLarge:
+            return JSONResponse({"error": "too_large", "message": http_body.too_large_text()}, status_code=413)
         except VoiceError as e:
             return refusal(e)
 
     async def test(request):
-        body = await body_of(request)
+        from .. import http_body
         try:
+            body = await body_of(request)
             await anyio.to_thread.run_sync(lambda: play_test(config.load(), body))
+        except http_body.BodyTooLarge:
+            return JSONResponse({"error": "too_large", "message": http_body.too_large_text()}, status_code=413)
         except VoiceError as e:
             return refusal(e)
         return JSONResponse({})

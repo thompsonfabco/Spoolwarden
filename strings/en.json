@@ -4455,5 +4455,6 @@
     "other": "Added {count} spools."
   },
   "csv_import_commit_locations": "Import locations",
-  "csv_import_imported_locations": "Added {add} locations and changed {change}."
+  "csv_import_imported_locations": "Added {add} locations and changed {change}.",
+  "common_request_too_large": "Request too large."
 }

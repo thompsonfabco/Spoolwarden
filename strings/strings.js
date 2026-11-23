@@ -4073,4 +4073,5 @@ window.SW_TEXT = Object.freeze({
   "csv_import_added_spools": { "one": "Added {count} spool.", "other": "Added {count} spools." },
   "csv_import_commit_locations": "Import locations",
   "csv_import_imported_locations": "Added {add} locations and changed {change}.",
+  "common_request_too_large": "Request too large.",
 });
