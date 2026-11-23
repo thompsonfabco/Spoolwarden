@@ -5782,4 +5782,23 @@
     <string name="history_unfinished">%1$d did not finish</string>
     <!-- 1=material -->
     <string name="history_most_used">Most used: %1$s</string>
+    <string name="catalog_field_name">Name *</string>
+    <string name="catalog_field_other_material">Other material *</string>
+    <string name="catalog_nozzle_from">Nozzle temperature from (°C)</string>
+    <string name="catalog_nozzle_to">Nozzle temperature to (°C)</string>
+    <string name="catalog_bed_from">Bed temperature from (°C)</string>
+    <string name="catalog_bed_to">Bed temperature to (°C)</string>
+    <string name="catalog_fill_name">Fill in Brand, Name and Material.</string>
+    <string name="catalog_hide_entries">Hide custom entries</string>
+    <string name="catalog_entries_empty">You have not added any entries of your own yet.</string>
+    <string name="catalog_entries_loading">Loading your entries…</string>
+    <string name="catalog_entries_update_hub">Update the Hub to see your own entries.</string>
+    <!-- 1=date -->
+    <string name="catalog_entry_added">Added %1$s</string>
+    <!-- 1=entry -->
+    <string name="catalog_remove_entry">Remove %1$s</string>
+    <!-- 1=entry -->
+    <string name="catalog_remove_title">Remove %1$s?</string>
+    <!-- 1=entry -->
+    <string name="catalog_remove_question">Remove %1$s from your own entries? Slicer presets are rebuilt.</string>
 </resources>
