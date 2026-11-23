@@ -525,7 +525,7 @@ class PrinterViewModel(
                 try {
                     backend.autoCancel(id)
                 } catch (e: ApiError) {
-                    if (e.code != NOT_WAITING) throw autoError(e)
+                    if (e.code != NOT_WAITING) throw e
                 }
             }
             _state.update { it.copy(autoBusy = false) }
@@ -544,7 +544,7 @@ class PrinterViewModel(
                     val name = _state.value.printer?.name.orEmpty()
                     _state.update { it.copy(slotNote = Note(chooseResult(r, name, label))) }
                 } catch (e: ApiError) {
-                    if (e.code != NOTHING_TO_CHOOSE) throw autoError(e)
+                    if (e.code != NOTHING_TO_CHOOSE) throw e
                 }
             }
             _state.update { it.copy(autoBusy = false) }
@@ -662,23 +662,11 @@ class PrinterViewModel(
         private const val NOTHING_TO_CHOOSE = "nothing_to_choose"
         private const val AUTO_NOT_POSSIBLE = "auto_not_possible"
 
-        /**
-         * An Auto route's refusal carries the Hub's sentence as `message`: `auto_not_possible` is given the words the
-         * screen shows (the Hub's own, else the ruled one); any other error is unchanged.
-         */
-        internal fun autoError(e: ApiError): ApiError {
-            val text = e.autoText
-            return when {
-                e.code == AUTO_NOT_POSSIBLE -> ApiError(e.status, e.code, text ?: LoadTexts.AUTO_REFUSED, e.extra)
-                else -> e
-            }
-        }
-
         /** The answer of a named load into [label], as the line the printer's screen shows (the load screen's words). */
         internal fun chooseResult(r: LoadResult, printer: String, label: String): Say = when (val result = loadResult(r, printer, label)) {
             is SpoolResult.Loaded -> Say.Words(R.string.spool_result_loaded, listOf(result.printer, result.slot))
             is SpoolResult.LoadedUnconfirmed -> Say.Words(R.string.spool_load_unconfirmed)
-            else -> Say.FromHub(LoadTexts.waitingIn(label))
+            else -> LoadTexts.waitingIn(label)
         }
 
         /**

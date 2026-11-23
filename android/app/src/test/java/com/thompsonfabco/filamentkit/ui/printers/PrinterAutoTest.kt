@@ -154,7 +154,7 @@ class PrinterAutoTest {
         val unconfirmed = PrinterViewModel.chooseResult(LoadResult(slot = LoadSlot("A3")), "Workshop X1", "A3")
         assertEquals(Say.Words(R.string.spool_load_unconfirmed), unconfirmed)
         val waiting = PrinterViewModel.chooseResult(LoadResult(slot = LoadSlot("A3"), pending = true), "Workshop X1", "A3")
-        assertEquals(Say.FromHub("Waiting for the spool to load in A3."), waiting)
+        assertEquals(Say.Words(R.string.live_load_waiting, listOf("A3")), waiting)
     }
 
     @Test fun choosingOnlyWorksInTheStateChoose() = runTest(dispatcher) {
@@ -187,7 +187,7 @@ class PrinterAutoTest {
         backend.failure = ApiError(409, "auto_not_possible", "", JsonObject(emptyMap()))
         vm.chooseAutoSlot("A1"); runCurrent()
         assertEquals(
-            Note(Say.FromHub("This printer has no slots the Hub can watch. Choose a slot."), ok = false),
+            Note(Say.Words(R.string.spool_load_auto_refused), ok = false),
             vm.state.value.slotNote,
         )
     }

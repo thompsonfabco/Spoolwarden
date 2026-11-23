@@ -40,6 +40,9 @@ sealed interface Problem {
     /** The Hub no longer knows this phone, or its certificate changed: the screen shows the Hub notice (05-android-app 3.4). */
     data object NoLongerPaired : Problem
     data object CertificateChanged : Problem
+
+    /** An Auto load the Hub refused with no sentence of its own: the ruled words. */
+    data object AutoRefused : Problem
 }
 
 /** The two Hub notices; a screen shows them as the notice, not as a text of its own. */

@@ -27,6 +27,7 @@ internal fun sayText(say: Say): String = when (say) {
             when (arg) {
                 is UsageReason.Known -> stringResource(arg.id)
                 is UsageReason.Other -> arg.text
+                is Say -> sayText(arg)
                 else -> arg
             }
         }.toTypedArray(),
@@ -42,6 +43,7 @@ internal fun Say.resolve(context: Context): String = when (this) {
             when (arg) {
                 is UsageReason.Known -> context.getString(arg.id)
                 is UsageReason.Other -> arg.text
+                is Say -> arg.resolve(context)
                 else -> arg
             }
         }.toTypedArray(),
@@ -56,6 +58,7 @@ internal fun Say.resolve(context: Context): String = when (this) {
  */
 internal fun printerProblem(e: ApiError): Problem = when {
     e.status == 0 && e.code != "storage" -> Problem.Unreachable
+    e.code == "auto_not_possible" && e.notFromHub -> Problem.AutoRefused
     e.notFromHub -> Problem.Unexpected
     else -> Problem.HubSaid(e.message)
 }
@@ -65,6 +68,7 @@ internal fun Problem.say(): Say = when (this) {
     Problem.Unreachable -> Say.Words(R.string.common_hub_unreachable)
     is Problem.HubSaid -> Say.FromHub(text)
     Problem.NoLongerPaired -> Say.Words(R.string.common_not_paired_notice)
+    Problem.AutoRefused -> Say.Words(R.string.spool_load_auto_refused)
     Problem.CertificateChanged -> Say.Words(R.string.common_cert_changed_notice)
     else -> Say.Words(R.string.common_hub_answer_unknown)
 }

@@ -1,5 +1,6 @@
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | %.1f | an identifier or pattern, not text on the screen; kept while the file holds it
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | ambiguous_spool | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | auto_not_possible | Hub error code (wire), not text
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | camera_unavailable | Hub identifier (printer state, job state, error code or field name), never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | cert_changed | Hub identifier (printer state, job state, error code or field name), never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterSay.kt | file_not_found | Hub identifier (printer state, job state, error code or field name), never shown

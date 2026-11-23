@@ -5803,4 +5803,10 @@
     <string name="catalog_remove_question">Remove %1$s from your own entries? Slicer presets are rebuilt.</string>
     <string name="voice_hint_remote">Chosen on the Weigh Station\'s own computer: spoolwarden config.</string>
     <string name="voice_save_failed">The change was not saved.</string>
+    <string name="spool_load_auto_waiting">Waiting for the spool to be loaded.</string>
+    <!-- 1=printer -->
+    <string name="spool_load_auto_title">Load into %1$s: Automatic</string>
+    <string name="spool_load_the_spool">the spool</string>
+    <string name="spool_load_auto_hint">The slot where the spool appears.</string>
+    <string name="spool_load_auto_refused">This printer has no slots the Hub can watch. Choose a slot.</string>
 </resources>
