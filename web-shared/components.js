@@ -283,7 +283,7 @@ function ask(o) {
     if (word) { go._refused = () => word._control.focus(); on(word._control, "input", sync); sync(); }
     const ro = (on) => { for (const f of fields) f._control.readOnly = on; };
     on(dlg, "cancel", (e) => {
-      if (dlg._busy) return e.preventDefault();
+      if (dlg._busy) { result(res, "warn", t("common_busy_wait")); return e.preventDefault(); }
       if (!(o.kind === "entry" && fields.length < 2) && kept() !== first) {
         e.preventDefault();
         leaveAsk(o.title).then((leave) => { if (leave) close(); });
