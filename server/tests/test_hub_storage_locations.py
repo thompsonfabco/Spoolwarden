@@ -591,3 +591,35 @@ def test_the_list_keeps_a_readable_width_with_the_add_or_edit_form_open(hub, tmp
         assert w["editH"] <= 48, (width, w, "the Edit button wrapped")
         if w["look"] == "panes":  # the list of groups stays while the group keeps its width, and gives way to Back only when it would not
             assert (w["list"] > 0) == (width >= 1776) and w["back"] == (width < 1776), (width, w, "the Settings list shows or hides wrongly")
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_container_clash_row_warn_and_import_csv_on_storage_and_spools(hub, tmp_path, width, monkeypatch):
+    st = storage.current()
+    st.locations.insert(1, Location("Rack", type=storage.CONTAINERS, count=2, prefix="Rack "))
+    st.locations.insert(2, Location("Rack 01", type=storage.BULK))
+    with monkeypatch.context() as m:
+        m.setattr(storage, "check", lambda *a, **k: None)
+        storage.save(st)
+    page = _drive_storage(hub, tmp_path, r"""
+SW.setLock("unlocked", { code: "__CODE__" });
+await sleep(300);
+const clashRow = rowEls().find((r) => text($(".storage__name", r)) === "Rack 01");
+out.clash = text($(".storage__clash", clashRow));
+$(".storage__barmore").click();
+await until(() => $('[data-action="import-csv"]'), "storage csv menu");
+$('[data-action="import-csv"]').click();
+await until(() => $("#csv-import-locations input[type=file]"), "storage import drawer");
+const locIn = $("#csv-import-locations input[type=file]");
+const locDt = new DataTransfer();
+locDt.items.add(new File(["name,type,limit\nAnnex,bulk,12\n"], "locs.csv", { type: "text/csv" }));
+locIn.files = locDt.files;
+locIn.dispatchEvent(new Event("change", { bubbles: true }));
+await until(() => $("#csv-import-locations tbody tr") && !$("#csv-import-locations .btn--primary").disabled, "storage preview row");
+out.locPreview = text($("#csv-import-locations tbody"));
+$("#csv-import-locations .btn--primary").click();
+await until(() => names().includes("Annex") && !$("#csv-import-locations"), "storage imported");
+out.locAfter = names();
+""", width=width)
+    assert page["clash"] == "Same name as a container in Rack."
+    assert "Annex" in page["locPreview"] and "Annex" in page["locAfter"]

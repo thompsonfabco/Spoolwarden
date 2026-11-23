@@ -756,3 +756,24 @@ def test_the_storage_messages_are_the_catalogue_texts():
     source = inspect.getsource(storage_api) + inspect.getsource(storage_api.StorageRefused)
     unused = [k for k in storage_api.MESSAGES if f'say("{k}"' not in source and f"say('{k}'" not in source]
     assert not unused, f"messages nobody sends: {unused}"
+
+
+def test_container_name_clash_is_in_notices_and_locations_cli_note(fk_env, capsys, monkeypatch):
+    from filament_kit import locations_cli
+    st = listing()
+    st.locations.insert(1, Location("Rack", type=CONTAINERS, count=2, prefix="Rack "))
+    st.locations.insert(2, Location("Rack 01", type=BULK))
+    got = storage_api.notices(st)
+    assert any(
+        n.get("code") == "container_name_clash"
+        and n.get("location") == "Rack 01"
+        and n.get("set") == "Rack"
+        and n.get("text") == "Rack 01: Same name as a container in Rack."
+        for n in got
+    ), got
+    with monkeypatch.context() as m:
+        m.setattr(storage, "check", lambda *a, **k: None)
+        storage.save(st)
+    assert locations_cli.cmd_list(lambda: FakeSm([])) == 0
+    out, err = capsys.readouterr()
+    assert "Note: Rack 01: Same name as a container in Rack." in err
