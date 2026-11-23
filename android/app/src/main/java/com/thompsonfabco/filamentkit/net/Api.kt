@@ -267,12 +267,14 @@ class Api(
 
     /**
      * `GET api/events?activity=1`: what was done, newest first, with each event's `undo`. [subject] is `spool:<id>`;
-     * [limit] at most that many. Only the events that name [subject] are kept, because an older Hub ignores the filter.
+     * [limit] at most that many, the NEWEST ones (`newest`; an older Hub ignores it and answers its first [limit] by `limit`).
+     * Only the events that name [subject] are kept, because an older Hub ignores the filter.
      */
     suspend fun activity(subject: String?, limit: Int): List<ActivityEvent> {
         val req = request("api", "events") {
             addQueryParameter("activity", "1")
             subject?.let { addQueryParameter("subject", it) }
+            addQueryParameter("newest", limit.coerceIn(1, 1000).toString())
             addQueryParameter("limit", limit.toString())
         }
         return HistoryWire.events(call(req.get()), subject)

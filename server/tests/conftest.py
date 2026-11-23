@@ -152,8 +152,11 @@ def system_writes(request, monkeypatch, tmp_path_factory):
 def _command_line_output(monkeypatch):
     """What the command line writes (glyphs, colour, width) is the same on every machine: ASCII glyphs, no colour,
     80 columns, a colour-capable terminal type (colour then follows the stream, as on a real machine, whatever TERM the
-    tests run under), and the switches of the last run forgotten."""
+    tests run under), and the switches of the last run forgotten. A wait's progress line (the design's section 6.6:
+    one line once 2 seconds pass with no other output) is out of reach, so a slow or loaded machine cannot add a line to
+    an exact stderr check; a test of the line itself sets `output.PROGRESS_AFTER` to a small number."""
     from filament_kit import output
+    monkeypatch.setattr(output, "PROGRESS_AFTER", 3600.0)
     for name in ("NO_COLOR", "SPOOLWARDEN_PLAIN", "LC_ALL", "LC_CTYPE", "LANG"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("SPOOLWARDEN_GLYPHS", "ascii")

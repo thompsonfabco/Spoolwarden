@@ -113,7 +113,7 @@ class UndoFlow(private val backend: ActivityBackend, private val now: () -> Long
     }
 
     private companion object {
-        /** A few, newest first, so the newest is found even if the Hub's order is oldest first within its limit. */
+        /** The newest few (`newest`), whatever order the Hub gives them in: [UndoRules.pick] takes the highest id. */
         const val FIND_LIMIT = 3
     }
 }
