@@ -2485,7 +2485,7 @@ def _used(url, tmp_path, tail: str, width: int) -> dict:
 
 @pytest.mark.parametrize("width", [375, 820])
 def test_by_month_on_a_printer_is_drawn_as_bars_from_tablet_width_and_as_a_table_alone_on_a_phone(served_months, tmp_path, width):
-    """02-components 7.12 and 04 6.6: bars (SVG, the value in words above each, the month under it, the table open under them with 'Hide the table')
+    """The design's Monthly bars and Filament used: bars (SVG, the value in words above each, the month under it, the table open under them with 'Hide the table')
     at tablet width and up; on a phone the table alone, no chart and no button."""
     out = _used(served_months, tmp_path, USED_BARS, width)
     assert out["rows"] == 4 and out["tableShown"] and not out["sideways"], json.dumps(out)
@@ -2509,7 +2509,7 @@ def test_by_month_on_a_printer_is_drawn_as_bars_from_tablet_width_and_as_a_table
 
 @pytest.mark.parametrize("width", [375, 820])
 def test_the_usage_download_offers_the_three_ranges_in_a_menu(served_months, tmp_path, width):
-    """04 6.6: the icon button 'More actions' holds 'Download as CSV' with Last 7 days, Last 30 days and Last 12 months; each asks the twin for that range."""
+    """The web app's Filament used: the icon button 'More actions' holds 'Download as CSV' with Last 7 days, Last 30 days and Last 12 months; each asks the twin for that range."""
     out = _used(served_months, tmp_path, USED_CSV, width)
     assert out["more"] == "More actions for filament used", json.dumps(out)
     assert out["menu"]["heading"] == "Download as CSV" and out["menu"]["items"] == ["Last 7 days", "Last 30 days", "Last 12 months"], json.dumps(out)
@@ -2518,7 +2518,7 @@ def test_the_usage_download_offers_the_three_ranges_in_a_menu(served_months, tmp
 
 @pytest.mark.parametrize("width", [375, 820])
 def test_the_by_month_button_reads_last_7_days_while_the_months_show(served_months, tmp_path, width):
-    """04 6.6: 'By month' (which then reads 'Last 7 days'); the list's own caption 'Last 7 days' is not shown over the months."""
+    """The web app's Filament used: 'By month' (which then reads 'Last 7 days'); the list's own caption 'Last 7 days' is not shown over the months."""
     out = _used(served_months, tmp_path, USED_TOGGLE, width)
     assert out == {"before": "By month", "caption": "Last 7 days", "during": "Last 7 days", "captionDuring": None,
                    "after": "By month", "captionAfter": "Last 7 days"}, json.dumps(out)
