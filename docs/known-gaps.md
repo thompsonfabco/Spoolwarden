@@ -90,21 +90,16 @@ fixed.
 
 Things the pages and apps already show, or the other interfaces already do, that this version cannot do yet.
 
-23. **The web app and the app (Android) cannot clear a printer's slot.** They show an error. Use **Clear slot** on the
-    Hub page.
-24. **The web app and the app (Android) cannot add a line to the Filament Catalog.** The form, the list of your own
-    entries and removing one fail there. Use the Hub page (**Settings**, **Filament Catalog**) or `sudo spoolwarden
-    catalog add`.
-28. **The demo cannot be switched on.** **Try the demo** answers "The demo cannot be switched on in this version."
-29. **Language offers no language besides English.** The choice is there; nothing else is in it.
-30. **Devices shows no kind and no version for paired phones and PCs.** It says "Version not known". A Tag Reader shows
-    no build and no last-seen time either.
-31. **Three things are missing on the Hub page.** There is no switch and no list for **Share corrections**: switch it
+23. **The demo cannot be switched on.** **Try the demo** answers "The demo cannot be switched on in this version."
+24. **Language offers no language besides English.** The choice is there; nothing else is in it.
+25. **Devices shows no kind and no version for a paired phone or PC until it next calls the Hub.** The app (Android) and
+    Slicer Sync report them with their calls; until then the row says "Version not known".
+26. **Three things are missing on the Hub page.** There is no switch and no list for **Share corrections**: switch it
     with `sudo spoolwarden local-intake share-corrections on` (or `off`), and see what waits in the web app, the app
     (Android) or with `sudo spoolwarden label-reader corrections list`. The history of the Checks is not shown: use the
     apps or `spoolwarden status --history`. **Import from CSV** is not there: use `sudo spoolwarden import spools
     <file>` or `sudo spoolwarden import locations <file>`.
-32. **There is no Home Assistant integration to install yet.** `spoolwarden pair --home-assistant` makes a pairing,
+27. **There is no Home Assistant integration to install yet.** `spoolwarden pair --home-assistant` makes a pairing,
     but nothing uses it.
 
 ## How this was first checked (v0.2.0)
