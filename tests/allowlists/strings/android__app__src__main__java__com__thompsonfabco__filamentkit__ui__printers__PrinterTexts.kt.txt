@@ -26,6 +26,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | Type a Klipper printer's address | text of the EV7d add screens; moves to the string catalogue with EV2, its proposed key is in the EV7d report
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | Unload $spool from $slot? It goes back to $goes. | text of the EV7b screens; moves to the string catalogue with EV2, its proposed key is printer_unload_body_klipper
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | Update the Hub to clear a slot. | text of the EV7b screens; moves to the string catalogue with EV2, its proposed key is in the EV7b report
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | Waiting for $spool to be loaded into any slot of $printer. | text of the printer screen; moves to the string catalogue with the rest of PrinterTexts (its words are the catalogue's auto_waiting)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | id | wire key or value, not shown (EV7b)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | its previous place | text of the EV7b screens; moves to the string catalogue with EV2, its proposed key is in the EV7b report
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterTexts.kt | name | wire key or value, not shown (EV7b)

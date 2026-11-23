@@ -4129,4 +4129,9 @@ window.SW_TEXT = Object.freeze({
   "catalog_remove_question": "Remove {entry} from your own entries? Slicer presets are rebuilt.",
   "voice_hint_remote": "Chosen on the Weigh Station's own computer: spoolwarden config.",
   "voice_save_failed": "The change was not saved.",
+  "spool_load_auto_waiting": "Waiting for the spool to be loaded.",
+  "spool_load_auto_title": "Load into {printer}: Automatic",
+  "spool_load_the_spool": "the spool",
+  "spool_load_auto_hint": "The slot where the spool appears.",
+  "spool_load_auto_refused": "This printer has no slots the Hub can watch. Choose a slot.",
 });

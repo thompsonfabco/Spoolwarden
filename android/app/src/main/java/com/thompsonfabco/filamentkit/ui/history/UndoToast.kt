@@ -10,6 +10,7 @@ import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.printers.resolve
+import com.thompsonfabco.filamentkit.ui.printers.sayText
 import com.thompsonfabco.filamentkit.ui.spool.SpoolResult
 import com.thompsonfabco.filamentkit.ui.spool.formatGrams
 import com.thompsonfabco.filamentkit.ui.spool.LoadTexts
@@ -55,7 +56,7 @@ internal fun spoolResultToastText(result: SpoolResult): String = when (result) {
     SpoolResult.TagMoved -> stringResource(R.string.spool_result_tag_moved)
     is SpoolResult.Loaded -> stringResource(R.string.spool_result_loaded, result.printer, result.slot)
     is SpoolResult.LoadedUnconfirmed -> stringResource(R.string.spool_load_unconfirmed)
-    is SpoolResult.Waiting -> LoadTexts.waitingIn(result.slot)
+    is SpoolResult.Waiting -> sayText(LoadTexts.waitingIn(result.slot))
 }
 
 /** The offer a spool screen result makes, or null when the Hub has no Undo for it. */

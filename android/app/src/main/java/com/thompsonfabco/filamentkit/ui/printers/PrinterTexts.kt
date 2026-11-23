@@ -1,7 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
 import com.thompsonfabco.filamentkit.net.AutoWait
-import com.thompsonfabco.filamentkit.ui.spool.LoadTexts
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -78,7 +77,7 @@ object PrinterTexts {
     fun autoNotice(auto: AutoWait, printer: String): AutoNotice {
         val spool = autoSpool(auto)
         return if (auto.choosing) AutoNotice(autoChoose(spool), auto.slots)
-        else AutoNotice(LoadTexts.waitingAuto(spool, printer), emptyList())
+        else AutoNotice("Waiting for $spool to be loaded into any slot of $printer.", emptyList())
     }
 
     /**
