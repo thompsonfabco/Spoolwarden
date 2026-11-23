@@ -922,3 +922,58 @@ const det = await until(() => x1.querySelector(".detail:not([hidden])"), "the de
 return { hasSlotsBox: !!det.querySelector(".printers-slots"), hasLive: !!det.querySelector(".plive") };
 """)
     assert page == {"hasSlotsBox": True, "hasLive": False}, page
+
+
+def test_guided_add_lists_found_bambu_and_adds_by_use_and_by_address(printers_hub, tmp_path):
+    url, _ = printers_hub
+    registry.detected("01P00A000000088", "192.0.2.88", "P1S", "Found P1S")
+    page = _drive(url, tmp_path, ADD_PRE + """
+const region = await openAdd();
+const foundItems = [...region.querySelectorAll(".printers-add__found li")].map(text);
+const useBambu = [...region.querySelectorAll(".printers-add__found li")].find((li) => text(li).includes("Found P1S")).querySelector(".btn");
+useBambu.click();
+await until(() => footBtn(region, "Back"), "bambu details after Use");
+const prefilled = {
+  family: $('[name="add-type"]:checked', region)?.value,
+  address: $('[name="address"]', region).value,
+  serial: $('[name="serial"]', region).value,
+  name: $('[name="name"]', region).value,
+};
+setv(region, "access_code", "12345678");
+next(region);
+footBtn(region, "Add printer").click();
+await later(region);
+await until(() => !open() && rowOf("Found P1S"), "found Bambu added");
+const region2 = await openAdd();
+kind(region2, "bambu");
+next(region2);
+setv(region2, "address", "192.0.2.99");
+setv(region2, "access_code", "87654321");
+setv(region2, "name", "Manual P1S");
+setv(region2, "serial", "01P00A000000099");
+next(region2);
+footBtn(region2, "Add printer").click();
+await later(region2);
+await until(() => !open() && rowOf("Manual P1S"), "manual Bambu added");
+return { foundItems, prefilled, posts };
+""")
+    assert any("Found P1S" in item for item in page["foundItems"]), page
+    assert any("192.0.2.57:7125" in item for item in page["foundItems"]), page
+    assert page["prefilled"] == {"family": "bambu", "address": "192.0.2.88", "serial": "01P00A000000088", "name": "Found P1S"}, page
+    assert page["posts"][0] == ["printers", {"address": "192.0.2.88", "access_code": "12345678", "name": "Found P1S", "serial": "01P00A000000088", "require_certificate": True, "code": CODE}], page
+    assert page["posts"][1] == ["printers", {"address": "192.0.2.99", "access_code": "87654321", "name": "Manual P1S", "serial": "01P00A000000099", "require_certificate": True, "code": CODE}], page
+
+
+def test_guided_add_shows_none_found_when_no_unconfigured_printers(printers_hub, tmp_path):
+    url, _ = printers_hub
+    for p in list(registry.load().values()):
+        if not p.configured:
+            registry.remove(p.serial)
+    none_text = T("printer_guided_none")
+    page = _drive(url, tmp_path, ADD_PRE + """
+const region = await openAdd();
+const ul = $(".printers-add__found", region);
+const none = [...region.querySelectorAll(".printers-add__step p.muted")].find((el) => text(el) === """ + repr(none_text) + """);
+return { foundHidden: ul.hidden, noneText: none ? text(none) : null, noneHidden: none ? none.hidden : null };
+""")
+    assert page == {"foundHidden": True, "noneText": none_text, "noneHidden": False}, page
