@@ -1279,3 +1279,12 @@ def test_install_restore_prints_once_only_rename_notice_and_uses_features_wordin
     assert r.returncode == 0, r.stderr
     assert r.stdout.count("filament-kit is now called Spoolwarden. The command is spoolwarden; filament-kit still works for now.") == 1
     assert "restore --yes /tmp/b.zip" in r.stdout
+
+
+def test_android_workflow_checks_nonzero_test_count_and_uploads_results():
+    wf = (ROOT / ".github" / "workflows" / "android.yml").read_text(encoding="utf-8")
+    assert "- run: ./gradlew testDebugUnitTest assembleDebug --no-build-cache\n" in wf
+    assert "app/build/test-results/**/*.xml" in wf
+    assert "total <= 0" in wf
+    assert "uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in wf
+    assert "path: android/app/build/test-results/" in wf
