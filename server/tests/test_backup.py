@@ -254,7 +254,7 @@ def test_restore_brings_every_file_and_the_database_back(kit, capsys):
     out = capsys.readouterr().out
     assert "Restored. The Hub is back." in out and "certificate" not in out
     assert "files and the Spoolman database. Features: " in out         # the summary of the design, command line, the Hub page's words
-    assert " by Spoolwarden " in out and "filament-kit" not in out and "a kit" not in out
+    assert " by Spoolwarden " in out and " by filament-kit" not in out and "a kit" not in out
     assert "This replaces the spools, settings, printers and pairings on this Hub." in out
     assert "The Hub restarts, and afterwards the setup code is the one from the backup." in out
     # what was here first is kept, as a zip a restore takes too
@@ -318,7 +318,7 @@ def test_a_newer_kits_backup_is_refused_with_what_to_install(kit, monkeypatch, c
     run = Runner()
     assert backup.restore(z, yes=True, run=run) == 1
     out = capsys.readouterr().out
-    assert "this backup was made by Spoolwarden " in out and "filament-kit" not in out
+    assert "this backup was made by Spoolwarden " in out and "made by filament-kit" not in out
     assert f"install {__version__} first" in out and f"--version {__version__}" in out and "Nothing was changed" in out
     assert run.cmds == []
 

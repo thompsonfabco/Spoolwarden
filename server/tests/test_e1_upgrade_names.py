@@ -132,5 +132,5 @@ def test_the_installer_and_backup_messages_use_the_ruled_names():
         for line in text.splitlines():
             if line.lstrip().startswith("#") or not re.search(r'\b(?:echo|die|out|BackupError|raise)\b', line):
                 continue
-            assert not re.search(r"kit server|setup page|single modules|module list|no modules chosen|a kit\b|the kit\b|"
+            assert not re.search(r"kit server|setup page|single modules|module list|no modules chosen|choose each module|unknown module %s|a kit\b|the kit\b|"
                                  r"filament-kit \{|Start the kit", line), f"{rel}: {line.strip()}"

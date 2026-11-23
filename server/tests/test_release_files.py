@@ -585,7 +585,7 @@ def test_install_unknown_module_name_is_caught_before_packages(tmp_path):
     ok = subprocess.run([_bash(), str(f), ",spoolman,server"], capture_output=True, text=True, timeout=30, env=env)
     bad = subprocess.run([_bash(), str(f), ",server,bogus"], capture_output=True, text=True, timeout=30, env=env)
     assert ok.returncode == 0 and "passed" in ok.stdout, ok.stderr
-    assert bad.returncode != 0 and "unknown module bogus" in bad.stderr and "passed" not in bad.stdout
+    assert bad.returncode != 0 and "unknown feature bogus" in bad.stderr and "passed" not in bad.stdout
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")

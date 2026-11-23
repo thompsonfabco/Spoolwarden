@@ -323,7 +323,7 @@ if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
     echo "  server      Hub with Spoolman, printers, presets and backup (AI label reading and library on request)"
     echo "  station     only the USB scale and NFC reader, for a Hub on another machine"
     echo "  all-in-one  server and station on this machine"
-    echo "  custom      choose each module"
+    echo "  custom      choose each feature"
     choice=""
     read -r -p "Install mode: 1) server 2) station 3) all-in-one 4) custom [1] " choice || true
     case "${choice:-1}" in
@@ -375,7 +375,7 @@ fi
 # With the server on this machine the station reads it over loopback; an address would break that link.
 case "$MODE:$CUSTOM,:$SETS" in
     custom:*,server,*:*"set station.allow="*)
-        die "station.allow is for a station without the server on this machine; with server in the module list the station is linked locally, so drop --set station.allow" ;;
+        die "station.allow is for a station without the server on this machine; with server in the feature list the station is linked locally, so drop --set station.allow" ;;
 esac
 # A station whose server is on another machine needs that server's address (spec section 3):
 # station mode, or custom with station on and server off.
