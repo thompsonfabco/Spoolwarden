@@ -916,7 +916,7 @@ private fun MonthsBody(state: PrinterUiState, vm: PrinterViewModel) {
         months != null && months.isEmpty() -> Text(
             stringResource(R.string.history_no_months), Modifier.padding(space.s4), color = colors.muted, style = MaterialTheme.typography.bodyMedium,
         )
-        months != null -> MonthRows(MonthTable.lines(months))
+        months != null -> MonthRows(MonthTable.lines(androidx.compose.ui.platform.LocalContext.current, months))
     }
 }
 

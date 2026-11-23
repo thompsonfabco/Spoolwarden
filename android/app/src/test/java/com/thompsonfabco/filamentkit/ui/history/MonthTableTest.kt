@@ -12,9 +12,14 @@ import org.robolectric.annotation.Config
 import java.util.Locale
 
 /** The By month table and the CSV file names, as pure rules. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [Build.VERSION_CODES.S])
 class MonthTableTest {
+    private val context = RuntimeEnvironment.getApplication()
+
     @Test fun rowsAreNewestFirstWithGramsPrintsUnfinishedAndTheMostUsedMaterial() {
         val rows = MonthTable.lines(
+            context,
             listOf(
                 UsageMonth("2026-10", 1520.5, 12, 1, null),
                 UsageMonth("2026-11", 1840.0, 1, 0, "PA6"),
@@ -32,7 +37,7 @@ class MonthTableTest {
     }
 
     @Test fun noMonthsIsNoRows() {
-        assertEquals(emptyList<MonthLine>(), MonthTable.lines(emptyList()))
+        assertEquals(emptyList<MonthLine>(), MonthTable.lines(context, emptyList()))
     }
 
     @Test fun aCsvFileNameKeepsOnlySafeCharacters() {
@@ -49,12 +54,12 @@ class MonthLineWordsTest {
     private val context = RuntimeEnvironment.getApplication()
 
     @Test fun aRowIsOneSentenceForAScreenReader() {
-        val row = MonthTable.lines(listOf(UsageMonth("2026-11", 1840.0, 15, 2, "PA6")), Locale.US).single()
+        val row = MonthTable.lines(context, listOf(UsageMonth("2026-11", 1840.0, 15, 2, "PA6")), Locale.US).single()
         assertEquals("November 2026. 1840 g. 15 prints. 2 did not finish. Most used: PA6", row.spoken(context))
     }
 
     @Test fun oneIsASingularPrint() {
-        val row = MonthTable.lines(listOf(UsageMonth("2026-11", 10.0, 1, 0, null)), Locale.US).single()
+        val row = MonthTable.lines(context, listOf(UsageMonth("2026-11", 10.0, 1, 0, null)), Locale.US).single()
         assertEquals("1 print", row.printsText(context))
         assertEquals("0 did not finish", row.unfinishedText(context))
         assertNull(row.materialText(context))

@@ -1,5 +1,8 @@
 package com.thompsonfabco.filamentkit.ui
 
+import androidx.annotation.StringRes
+import com.thompsonfabco.filamentkit.R
+
 /** A weight in grams the app will send or store: finite and above zero (no NaN, no Infinity). */
 fun isValidWeight(grams: Double): Boolean = grams.isFinite() && grams > 0
 
@@ -7,13 +10,13 @@ fun isValidWeight(grams: Double): Boolean = grams.isFinite() && grams > 0
 fun parseWeight(text: String): Double? = text.trim().toDoubleOrNull()?.takeIf(::isValidWeight)
 
 /** Why Update weight can't be tapped yet; null when it can. */
-fun weightHint(text: String): String? = when {
+@StringRes
+fun weightHint(text: String): Int? = when {
     parseWeight(text) != null -> null
-    text.isBlank() -> "Type the weight with the spool to update it."
-    else -> "Type a weight in grams, more than 0."
+    text.isBlank() -> R.string.spool_weight_hint_empty
+    else -> R.string.spool_weight_hint_invalid
 }
 
-const val TARE_PROBLEM = "Empty spool weight must be more than 0 g"
-
 /** The inline message for a typed empty-spool weight (tare); null when blank (unknown) or above 0 g. */
-fun tareProblem(text: String): String? = if (text.isBlank() || parseWeight(text) != null) null else TARE_PROBLEM
+@StringRes
+fun tareProblem(text: String): Int? = if (text.isBlank() || parseWeight(text) != null) null else R.string.spool_tare_invalid

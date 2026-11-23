@@ -74,7 +74,7 @@ class LabelScanTest {
     }
 
     @Test fun labelModeHasItsOwnHintAndNoticeOverThePreview() {
-        frame(ScannerState.Scanning, labelMode = true, notice = LabelScan.NOT_LABEL_TEXT)
+        frame(ScannerState.Scanning, labelMode = true, notice = "This is not a Spoolwarden spool label.")
         rule.onNodeWithText("Point the camera at the spool's label").assertExists()
         rule.onNodeWithText("This is not a Spoolwarden spool label.").assertExists()
         rule.onAllNodesWithText("Point the camera at the QR code").assertCountEquals(0)
@@ -88,14 +88,14 @@ class LabelScanTest {
 
     @Test fun labelModeProblemsHaveTheLabelTextsAndNoAddressStep() {
         frame(ScannerState.Denied, labelMode = true)
-        rule.onNodeWithText(LabelScan.DENIED).assertExists()
+        rule.onNodeWithText("The camera is needed to scan a spool's label. You can allow it in the phone's app settings.").assertExists()
         rule.onNodeWithText("Try again").assertExists()
         rule.onAllNodesWithText("Enter the address instead").assertCountEquals(0)
     }
 
     @Test fun labelModeCameraFailedIsTextOnly() {
         frame(ScannerState.CameraFailed, labelMode = true)
-        rule.onNodeWithText(LabelScan.FAILED).assertExists()
+        rule.onNodeWithText("The camera could not start, so the label can't be scanned.").assertExists()
         rule.onAllNodesWithText("Enter the address instead").assertCountEquals(0)
         rule.onAllNodesWithText("Try again").assertCountEquals(0)
     }
