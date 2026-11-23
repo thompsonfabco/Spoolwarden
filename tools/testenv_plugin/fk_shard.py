@@ -23,18 +23,26 @@ def _weight(data, name: str = ""):
         return 0
     lines = data.count(b"\n")
     if name == "test_demo_sealed.py":
-        return lines + 50000
+        return lines + 20000
     if name.startswith("test_hub_") or name in _BROWSER_FILES:
         return lines + 2000
     return lines
+
+
+def _is_browser(name: str) -> bool:
+    return name.startswith("test_hub_") or name in _BROWSER_FILES
 
 
 def shards(test_dir, n):
     """The n shards, as lists of file names: shards(d, n)[i - 1] is shard i."""
     weight = {name: _weight((Path(test_dir) / name).read_bytes().replace(b"\r\n", b"\n"), name) for name in all_files(test_dir)}
     out, load = [[] for _ in range(n)], [0] * n
+    demo_idx = None
     for name in sorted(weight, key=lambda f: (-weight[f], f)):
-        i = load.index(min(load))
+        choices = [k for k in range(n) if not (n >= 2 and _is_browser(name) and k == demo_idx)]
+        i = min(choices, key=lambda k: load[k])
+        if name == "test_demo_sealed.py":
+            demo_idx = i
         out[i].append(name)
         load[i] += weight[name]
     return [sorted(files) for files in out]
