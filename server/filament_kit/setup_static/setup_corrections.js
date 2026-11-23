@@ -197,30 +197,37 @@ function correctionsCard(on) {
       SW.btn(SW.t("common_try_again"), { action: "try-correction-again", run: () => tryAgain(q.record) }));
   }
 
-  const removeOne = (id) => needCode(async () => {
-    working(res, SW.t("common_working"));
-    try { await api(`label-reader/corrections/${encodeURIComponent(id)}/remove`, { code: theCode() }); } catch (e) {
-      if (e.locked) { SW.result(res, null); throw e; }
-      corrFail(res, e);
-      return;
-    }
-    await load(false);
-    say(res, SW.t("settings_corr_removed"), true);
-  });
-  const tryAgain = (record) => needCode(async () => {
-    working(res, SW.t("common_working"));
-    let r;
-    try { r = await api(`label-reader/corrections/${encodeURIComponent(record)}/retry`, { code: theCode() }); } catch (e) {
-      if (e.locked) { SW.result(res, null); throw e; }
-      corrFail(res, e);
-      return;
-    }
-    await load(false);
-    if (r.state === "waiting") say(res, SW.t("recent_corr_waiting"), true);
-    else if (r.state === "not_queued") say(res, corrReason(r.reason) ? SW.t("settings_corr_not_waiting", { reason: corrReason(r.reason) }) : SW.t("settings_corr_not_waiting_plain"), "warn");
-    else SW.result(res, null);
-  });
+  const removeOne = (id) => {
+    if (sending) return;
+    return needCode(async () => {
+      working(res, SW.t("common_working"));
+      try { await api(`label-reader/corrections/${encodeURIComponent(id)}/remove`, { code: theCode() }); } catch (e) {
+        if (e.locked) { SW.result(res, null); throw e; }
+        corrFail(res, e);
+        return;
+      }
+      await load(false);
+      say(res, SW.t("settings_corr_removed"), true);
+    });
+  };
+  const tryAgain = (record) => {
+    if (sending) return;
+    return needCode(async () => {
+      working(res, SW.t("common_working"));
+      let r;
+      try { r = await api(`label-reader/corrections/${encodeURIComponent(record)}/retry`, { code: theCode() }); } catch (e) {
+        if (e.locked) { SW.result(res, null); throw e; }
+        corrFail(res, e);
+        return;
+      }
+      await load(false);
+      if (r.state === "waiting") say(res, SW.t("recent_corr_waiting"), true);
+      else if (r.state === "not_queued") say(res, corrReason(r.reason) ? SW.t("settings_corr_not_waiting", { reason: corrReason(r.reason) }) : SW.t("settings_corr_not_waiting_plain"), "warn");
+      else SW.result(res, null);
+    });
+  };
   async function removeAll(n, opener) {
+    if (sending) return;
     const r = await corrAsk({ kind: "destructive", title: SW.t("settings_corr_remove_all_title"), text: SW.t("settings_corr_remove_all_body", { count: n }),
       confirm: SW.t("settings_corr_remove_all"), opener }, "label-reader/corrections/remove-all", {});
     if (!r) return;
@@ -228,6 +235,7 @@ function correctionsCard(on) {
     say(res, SW.t("settings_corr_removed_all", { count: r.removed }), true);
   }
   async function download() {
+    if (sending) return;
     working(res, SW.t("common_working"));
     try {
       const r = await fetch("/setup/api/label-reader/corrections/package", { credentials: "same-origin" });
@@ -246,12 +254,13 @@ function correctionsCard(on) {
   }
   // Send now: the job strip follows the job; the list is not editable while it runs, and is read again when it ends
   async function sendNow(n, opener) {
+    if (sending) return;
     const r = await corrAsk({ kind: "confirm", title: SW.t("settings_corr_send_title", { count: n }), text: SW.t("settings_corr_send_body"),
       confirm: SW.t("settings_corr_send_confirm"), opener }, "label-reader/corrections/send", {});
     if (!r) return;
     const asked = r.count || n, wrap = el.closest(".settings__group");
     sending = true;
-    for (const b of el.querySelectorAll(".btn")) b.disabled = true;
+    for (const b of el.querySelectorAll(".btn")) b.setAttribute("aria-disabled", "true");
     if (wrap) wrap._hold = true;
     say(res, SW.t("settings_corr_sending", { count: asked }), "run");
     const end = await SW.setting("waitJob")();
@@ -283,7 +292,7 @@ function correctionsCard(on) {
       h("div", { class: "actions" }, ...[rmAll, pack, go].filter(Boolean)), h("p", { class: "field__hint", textContent: SW.t("settings_corr_package_hint") }), res);
     if (!n) { SW.disable(pack, SW.t("settings_corr_nothing")); SW.disable(go, SW.t("settings_corr_nothing")); }      // beside the buttons, so after they are in
     el.hidden = !(on || n > 0 || nq.length > 0);
-    if (sending) for (const b of el.querySelectorAll(".btn")) b.disabled = true;
+    if (sending) for (const b of el.querySelectorAll(".btn")) b.setAttribute("aria-disabled", "true");
   }
   function failed(e) {
     const code = e.data && e.data.code, reason = hubText(e.message);

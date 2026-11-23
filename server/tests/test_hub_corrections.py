@@ -408,10 +408,16 @@ out.ask = dialogInfo(dlg);
 out.primary = !!$(".btn--primary", $(".dialog__foot", dlg));
 press("cancel"); await closed();
 out.kept = rows().length;
+footButton("send-corrections").focus();
 footButton("send-corrections").click();
 await until(dialog, "the question again");
 press("confirm"); await closed();
 out.sending = await until(() => { const t = text(cardResult()); return t; }, "the sending line");
+out.sendingFocus = {
+  active: document.activeElement === footButton("send-corrections"),
+  nativeDisabled: footButton("send-corrections").disabled,
+  ariaDisabled: footButton("send-corrections").getAttribute("aria-disabled"),
+};
 out.result = await until(() => { const t = text(cardResult()); return t && t.startsWith("Sent") ? t : null; }, "the result");
 out.after = { rows: rows().length, empty: !!$("#set-corrections .empty"), reason: text($("#set-corrections .btn__reason")) };
 """)
@@ -419,6 +425,7 @@ out.after = { rows: rows().length, empty: !!$("#set-corrections .empty"), reason
                            "buttons": [T("common_cancel"), T("settings_corr_send_confirm")]} and page["primary"] is True
     assert page["kept"] == 2 and started == ["corrections_send"]
     assert page["sending"] == T("settings_corr_sending", count=2)
+    assert page["sendingFocus"] == {"active": True, "nativeDisabled": False, "ariaDisabled": "true"}
     assert page["result"] == T("settings_corr_sent", count=2)
     assert len(data["submits"]) == 1 and data["queue"] == []
     assert page["after"] == {"rows": 0, "empty": True, "reason": T("settings_corr_nothing")}
