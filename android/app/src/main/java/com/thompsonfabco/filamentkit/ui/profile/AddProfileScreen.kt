@@ -232,7 +232,7 @@ private fun EntryRow(entry: LocalEntry, vm: AddProfileViewModel) {
         Column(Modifier.weight(1f)) {
             Text(line, style = MaterialTheme.typography.bodyLarge)
             val detail = listOfNotNull(
-                entry.material.ifBlank { null }, hubDay(entry.added)?.let { stringResource(R.string.catalog_entry_added, it) },
+                entry.material.ifBlank { null }, hubDay(entry.added)?.let { stringResource(R.string.app_catalog_entry_added, it) },
             ).joinToString(" · ")
             if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodySmall, color = SpoolwardenTheme.colors.muted)
         }

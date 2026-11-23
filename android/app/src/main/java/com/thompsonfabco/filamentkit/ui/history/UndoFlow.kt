@@ -62,14 +62,14 @@ object UndoRules {
 
     /** The words of a refusal: the Hub's own `message` when it sent one, else ours for its `error`. */
     fun refusal(e: Throwable): Say {
-        if (e !is ApiError) return Say.Words(R.string.history_undo_failed)
+        if (e !is ApiError) return Say.Words(R.string.app_history_undo_failed)
         val hubText = e.message.takeUnless { e.notFromHub }
         return when {
             hubText != null && e.status == CONFLICT -> Say.FromHub(hubText)
             e.status == CONFLICT -> whyNot(e.code)
             e.status == NOT_FOUND -> Say.Words(R.string.history_undo_update_hub)
             e.status != 0 && !e.notFromHub -> Say.FromHub(e.message)
-            else -> Say.Words(R.string.history_undo_failed)
+            else -> Say.Words(R.string.app_history_undo_failed)
         }
     }
 
