@@ -614,3 +614,21 @@ def test_the_overflow_and_any_sentence_is_said_once_by_add_edit_and_default_over
     catalogue = json.loads((Path(__file__).parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
     assert sentence == catalogue["storage_error_overflow_any"]
     assert sentence in Path(storage.__file__).read_text(encoding="utf-8")          # the server's own message
+
+
+@pytest.mark.parametrize("argv", [
+    ["locations", "add", "Shelf B"],
+    ["locations", "edit", "Rack 1", "--limit", "10"],
+    ["locations", "move", "Rack 1", "--first"],
+    ["locations", "remove", "Rack 1", "--yes"],
+])
+def test_locations_mutations_refuse_cleanly_when_spoolman_is_down(capsys, argv):
+    class DownSm:
+        def get(self, *a, **kw):
+            raise SpoolmanError("connection refused", 0)
+    rc, out, err = run(capsys, DownSm(), *argv)
+    assert rc == 1 and out == ""
+    assert err.splitlines() == [
+        "Error: Spoolman did not answer: connection refused",
+        "Fix: start Spoolman, then run it again.",
+    ]
