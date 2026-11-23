@@ -79,7 +79,7 @@ def test_the_address_is_a_page_the_web_app_serves():
 
 
 def test_the_state_carries_the_public_address_for_the_settings_field(app):
-    """The owner's ruling (2026-11-21): Settings > Network and addresses shows the stored address in its field. The Hub's
+    """The owner's rule (2026-11-21): Settings > Network and addresses shows the stored address in its field. The Hub's
     report and logs still hide it (redact.py)."""
     _web(public="https://fk.example.org/filament")
     r = client(app).get("/setup/api/state")
@@ -92,7 +92,7 @@ def test_the_state_carries_the_public_address_for_the_settings_field(app):
 def test_the_page_copes_with_the_missing_address_and_a_wrong_code_keeps_the_card():
     src = "".join((STATIC / n).read_text(encoding="utf-8") for n in ("setup_devices.js", "setup_settings.js"))
     assert 'value: S.web.public_url || ""' in src and "S.web.public_set" in src
-    # the public address is a hidden value: read with the code once the page is open, its note beside the card (S1.5)
+    # the public address is a hidden value: read with the code once the page is open, its note beside the card
     assert "devWhenOpen(body, (open) =>" in src and 'lockNote("lock_hidden_note")' in src
     assert "Show the public address" not in src
 

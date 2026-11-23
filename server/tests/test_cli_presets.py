@@ -1,4 +1,4 @@
-"""S5.7: `presets` and its old spelling `profiles`. Each command runs through `cli.main` against the Hub's own
+"""`presets` and its old spelling `profiles`. Each command runs through `cli.main` against the Hub's own
 build, line and update code (the fakes of test_builds and test_presets_updates). AUT-9 for `presets status`: 79-column
 lines, no escape byte without colour, ASCII with `--plain`, `--json` parses. Example names only."""
 from __future__ import annotations

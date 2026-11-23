@@ -1,4 +1,4 @@
-"""History, analytics, export/import, undo, and report CLI commands (the design, command line s9.22-9.26, 09 Stage 13 HD2)."""
+"""History, analytics, export/import, undo, and report CLI commands (the design, command line s9.22-9.26, 09 Stage 13 )."""
 from __future__ import annotations
 
 import argparse

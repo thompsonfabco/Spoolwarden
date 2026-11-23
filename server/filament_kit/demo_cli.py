@@ -1,11 +1,11 @@
 """`spoolwarden demo [status]`, `sudo spoolwarden demo on|off`, and the line "Demo data." every result has.
 
-    add_parsers(sub)     the command for cli.py's parser (RC9 mounts it)
+    add_parsers(sub)     the command for cli.py's parser (mounts it)
     run_demo(args)       the command; the exit codes of the design, command line
     announce()           "Demo data." above a result while the demo is on: standard output, also with `--quiet`;
                          with `--json` standard error, so that standard output stays the one document
 
-The texts are plain constants until RC9 puts them in the catalogue (keys in the comments).
+The texts are plain constants until puts them in the catalogue (keys in the comments).
 """
 from __future__ import annotations
 

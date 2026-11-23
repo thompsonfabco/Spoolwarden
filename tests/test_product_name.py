@@ -26,7 +26,7 @@ def product_name_uses(text):
     found = []
     for m in NAME.finditer(text):
         before, after = text[:m.start()], text[m.end():]
-        if after.startswith(" is now called"):          # the wrapper's note names the old command (S5.9, the design, command line)
+        if after.startswith(" is now called"):          # the wrapper's note names the old command (the design, command line)
             continue
         if after.startswith(" still works"):            # the installer's once-only line: "... filament-kit still works for now."
             continue

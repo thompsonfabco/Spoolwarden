@@ -1,5 +1,5 @@
-"""The web app, run in Node without a browser: CO5 (the Checked out chip and list, the Home line, Return with its result and
-Undo; the design, web app) and VO4 (Settings > Weigh Station voice: Speak, Voice read only, Speaker, Speed,
+"""The web app, run in Node without a browser: (the Checked out chip and list, the Home line, Return with its result and
+Undo; the design, web app) and (Settings > Weigh Station voice: Speak, Voice read only, Speaker, Speed,
 Volume, Test; the design, web app). The page's own functions (with their stub texts, `tt`) are cut out of
 app.js and given a small DOM, `api` and `SW`."""
 from __future__ import annotations
@@ -304,7 +304,7 @@ def _vo(tmp_path):
     return _node(tmp_path, VO_HARNESS % {**_parts(js), "vo": _cut(js, "// ----- Weigh Station voice", "// ----- the language")})
 
 
-# ---- CO5 ----
+# ---- ---
 
 def test_checked_out_is_shown_only_when_the_hubs_filters_name_it(tmp_path):
     out = _co(tmp_path)
@@ -374,7 +374,7 @@ def test_the_checked_out_list_says_when_it_shows_one_page(tmp_path):
     assert "2 of 5 shown." in out["two"][1]                          # the chip counts `total`, the list one page
 
 
-# ---- VO4 ----
+# ---- ---
 
 def test_the_voice_panel_follows_the_hub(tmp_path):
     out = _vo(tmp_path)

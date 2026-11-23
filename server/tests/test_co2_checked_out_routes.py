@@ -189,7 +189,7 @@ def test_return_and_home_have_the_callers_of_the_spools_move_and_weight(sm, prin
 
 
 def test_return_is_no_more_reachable_than_the_most_permissive_spool_change_the_web_app_has(sm, printers, store):  # noqa: F811
-    """CO2 caller ruling: return gives the web app NO MORE REACH than it already has for changing a spool. Every spool change the
+    """caller rule: return gives the web app NO MORE REACH than it already has for changing a spool. Every spool change the
     web app has, with the list that admits its kit route (or none: it runs in the app's own process) and whether its twin refuses
     the public address; return's reach must equal the widest of them, so moving return (or one of them) between lists fails here.
     Reach: 2 = the public address too (WEB_ROUTES, or a twin with no home-only check), 1 = home only (HOME_WEB_ROUTES, or a twin

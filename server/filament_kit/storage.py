@@ -135,7 +135,7 @@ class Storage:
                      if counts.get(loc.container_name(n), 0) == 0), None)
 
     def containers(self, loc: Location, taken) -> list[dict] | None:
-        """The whole set in number order, [{name, number, taken}] (the `containers` field SL2 adds to the contract);
+        """The whole set in number order, [{name, number, taken}] (the `containers` field adds to the contract);
         None for Bulk storage. The `prefix` field is `loc.container_prefix()`."""
         if loc.type != CONTAINERS:
             return None

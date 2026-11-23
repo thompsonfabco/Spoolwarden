@@ -1,4 +1,4 @@
-"""The demo's routes as a LIST for RC9 to mount; nothing here is mounted.
+"""The demo's routes as a LIST for to mount; nothing here is mounted.
 
 Each `Route` has a plain handler `fn(body: dict) -> (status, answer)`; the answer is the JSON object, a refusal is
 `{"error": code, "message": sentence}`; the page route's refusal has the page's shape `{"error": sentence, "code": code}`
@@ -65,5 +65,5 @@ ROUTES: list[Route] = [
 
 
 def mountable() -> list[Route]:
-    """What RC9 mounts: `ROUTES` once `demo.MOUNTABLE` is True (the seal's leak lists are empty), nothing before."""
+    """What mounts: `ROUTES` once `demo.MOUNTABLE` is True (the seal's leak lists are empty), nothing before."""
     return list(ROUTES) if demo.MOUNTABLE else []

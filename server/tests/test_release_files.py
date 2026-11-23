@@ -31,7 +31,7 @@ def test_release_workflow_uses_both_signing_secrets():
     assert "${{ secrets.FK_KEYSTORE_B64 }}" in text
     assert "${{ secrets.FK_KEYSTORE_PASSWORD }}" in text
     # secrets only ever reach a step through env, never a run line
-    # (the one exception: actions/checkout's `token` input for the private filament-library, Ruling BU)
+    # (the one exception: actions/checkout's `token` input for the private filament-library, )
     for line in text.splitlines():
         if "secrets." in line:
             assert (re.match(r"\s+(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY|FK_LIBRARY_TOKEN): "
@@ -257,7 +257,7 @@ def test_web_extra_pins_mcp_exactly():
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/spoolwarden-cli.sh")
-    # the first case list that runs as root: its words, however the lines are split (S5.8 added the new names)
+    # the first case list that runs as root: its words, however the lines are split (added the new names)
     start = text.index('case "${1:-}" in')
     block = text[start:text.index('run_as_root "$@"', start)]
     words = set(re.split(r"[|\)\s]+", block.split(" in", 1)[1]))
@@ -292,7 +292,7 @@ def test_uninstall_uses_modules_units_and_cleans_station():
 
 def test_uninstall_removes_the_kits_remote_files():
     """Task 9 (WSL): uninstall left the kit's router conf, its deploy hook and its route (to a port nothing serves
-    any more). Like `modules disable remote` (Ruling AF): only the kit's own files; nginx, certbot, the certificate,
+    any more). Like `modules disable remote`: only the kit's own files; nginx, certbot, the certificate,
     mcp-route and other routes stay. The certbot timer drop-in goes with --purge."""
     from filament_kit import remote
     text = _read("install/uninstall.sh")
@@ -1003,7 +1003,7 @@ def test_inline_python_survives_shell_single_quotes(rel):
     assert blocks >= 1, f"{rel}: no python -c block left; update PYTHON_C_SCRIPTS"
 
 
-# --- final review I3 (Ruling BU): CI builds, signs and publishes library.tar.gz ----------------------------------
+# --- final review I3: CI builds, signs and publishes library.tar.gz ----------------------------------
 
 def _step(text: str, name: str) -> str:
     i = text.index(f"- name: {name}")

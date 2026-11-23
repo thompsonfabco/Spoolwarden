@@ -1,4 +1,4 @@
-"""How sure the Label Reader was of each field: high, medium, low or not on the label (design S2.6, N4).
+"""How sure the Label Reader was of each field: high, medium, low or not on the label (design N4).
 
 The rule, one for every engine:
   - a field with no value on the item is "not_on_label";

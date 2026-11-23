@@ -1008,7 +1008,7 @@ def test_every_tab_the_shell_lists_has_its_view():
     src = (STATIC / "setup.js").read_text(encoding="utf-8")
     every = "".join(p.read_text(encoding="utf-8") for p in STATIC.glob("*.js"))
     block = src[src.index("const TABS = {"):src.index("const tabNow")]
-    # S1.3: the ten sections of foundations 8 in their two groups (Everyday the first five, System the rest), named from
+    # the ten sections of foundations 8 in their two groups (Everyday the first five, System the rest), named from
     # the catalogue; the old addresses #modules and #intake lead to their new names
     assert re.findall(r"^  (\w+): \[", block, re.M) == [
         "overview", "printers", "spools", "analytics", "recent", "devices",

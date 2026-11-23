@@ -19,7 +19,7 @@ let devMetaEl = null;            // the line under the title, kept to change its
 let devTrusted = null;           // trusted computers listed, once read (null: not read, locked or off)
 let devQrUrls = [];
 
-// The words of this section's kind, version, Open and device detail. Until the catalogue holds them (EV2 files
+// The words of this section's kind, version, Open and device detail. Until the catalogue holds them (files
 // them) the English shows here through devT; a catalogue text of the same key wins as soon as there is one.
 const DEV_EN = {
   devices_kind_phone: "Phone", devices_kind_pc: "Slicer Sync PC", devices_kind_station: "Weigh Station", devices_kind_web: "Web app", devices_kind_reader: "Tag Reader",

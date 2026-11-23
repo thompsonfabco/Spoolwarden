@@ -207,7 +207,7 @@ def test_install_both_trees_then_report_and_upload_both(env):
 
 
 def test_orca_live_newer_than_build_asks_for_rebuild_but_installs_bambu_studio(env):
-    """Ruling Z: the Orca hash never gates the Bambu Studio install; the orca/ tree waits for a matching build."""
+    """the Orca hash never gates the Bambu Studio install; the orca/ tree waits for a matching build."""
     folders, orca, dirs = env
     live = _hashes(folders, orca)[0]
     c = OrcaClient(_state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": "older"}),
@@ -215,7 +215,7 @@ def test_orca_live_newer_than_build_asks_for_rebuild_but_installs_bambu_studio(e
     c.st["accepted_updates"] = _all(STAMP)          # written over the existing presets
     assert _run(c, folders, orca, dirs) == "installed"
     assert ("rebuild", live) in c.calls
-    assert c.rebuild_orca == [_hashes(folders, orca)[2]]           # Ruling O: both live hashes
+    assert c.rebuild_orca == [_hashes(folders, orca)[2]]           # both live hashes
     assert json.loads((folders.user_filament / "base" / "Acme PLA @BBL H2D.json").read_text())[
         "nozzle_temperature"] == ["220"]
     assert json.loads((orca.user_filament / f"{N}.json").read_text())["nozzle_temperature"] == ["215"]
@@ -314,7 +314,7 @@ def _matching(folders, orca):
 
 
 def test_orca_pack_failure_skips_the_orca_install_and_backs_off(env, monkeypatch):
-    """Ruling Z: the Orca live folder cannot be packed (too large): Bambu Studio installs, orca/ does not, and
+    """the Orca live folder cannot be packed (too large): Bambu Studio installs, orca/ does not, and
     the Orca pack is not tried again for 6 h (orca_live_owed included)."""
     folders, orca, dirs = env
     live, olive = _matching(folders, orca)
@@ -347,7 +347,7 @@ def test_orca_pack_failure_skips_the_orca_install_and_backs_off(env, monkeypatch
 
 
 def test_orca_upload_refused_backs_off_and_bambu_studio_still_installs(env):
-    """Ruling Z: a 400 on the Orca live upload: no orca/ install, no rebuild asked for Orca, Bambu Studio
+    """a 400 on the Orca live upload: no orca/ install, no rebuild asked for Orca, Bambu Studio
     installed; orca_live_owed never bypasses the 6 h backoff."""
     folders, orca, dirs = env
     live, olive = _matching(folders, orca)
@@ -371,7 +371,7 @@ def test_orca_upload_refused_backs_off_and_bambu_studio_still_installs(env):
     assert "orca_live" not in _uploads(c)
 
 
-# ---------- Ruling AB: the install report says which trees went in ----------
+# ---------- the install report says which trees went in ----------
 
 def test_install_report_names_both_trees(env):
     folders, orca, dirs = env

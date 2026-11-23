@@ -83,7 +83,7 @@ def test_orca_system_zip_limits(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("kind,partial,path", [
     ("orca_live", None, "/api/sync/live?target=orca"),
-    ("orca_live", "20261102-010203", "/api/sync/live?target=orca&partial=20261102-010203"),   # Ruling O
+    ("orca_live", "20261102-010203", "/api/sync/live?target=orca&partial=20261102-010203"),   # 
     ("orca_system", None, "/api/sync/system?target=orca"),
     ("system", None, "/api/sync/system")])
 def test_client_upload_routes(monkeypatch, kind, partial, path):
@@ -313,7 +313,7 @@ def test_orca_absent_installs_bambu_only_and_snapshot_has_no_orca(tmp_path):
 
 def test_base_only_install_keeps_the_previous_orca_snapshot(tmp_path):
     """B-I1: a base/-only install must not drop the Orca snapshot of the last build whose orca/ went in: the server
-    keeps that build as its Orca snapshot (Ruling AB), and changed_since_install diffs Orca edits against it."""
+    keeps that build as its Orca snapshot, and changed_since_install diffs Orca edits against it."""
     e = Env(tmp_path, orca=False)
     e.snapshot({N: _orca_preset(N, nozzle_temperature=["210"])})
     b = e.build({N: _orca_preset(N, nozzle_temperature=["230"])},

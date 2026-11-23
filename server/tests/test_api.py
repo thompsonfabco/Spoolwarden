@@ -461,7 +461,7 @@ def test_pair_tells_a_spent_code_from_a_wrong_one(sm):
     assert r.status_code == 401 and r.json()["error"] == "code_expired"
 
 
-# ---------- S3.7: the add preview per item, colour in find, search paging ----------
+# ---------- the add preview per item, colour in find, search paging ----------
 
 def _snapshot(sm) -> str:
     return json.dumps({k: sm.get(k) for k in ("vendor", "filament", "spool")}, sort_keys=True)

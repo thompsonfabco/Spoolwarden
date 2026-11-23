@@ -49,6 +49,8 @@ LOCS_B = rf" {LOCITEM_B}(?:(?:, |,? and |; ?){GUARD}(?:{LOCITEM_B}|(?:ruling of 
 B_REF = rf"(?:(?:the )?(?:ruling|DECISIONS|design) )?R\d{{1,3}}\b(?:{LOCS_B})?"
 B_CLOCK = rf"(?<!\w)(?:ruling|design|ruled)(?: of)? {CLOCK}"
 B_ANY = r"(?<![A-Za-z0-9_-])R\d{2,3}(?![A-Za-z0-9_-])"
+E_RULING = re.compile(r"\b(?:ruling|ruled)\b", re.I)
+E_STEP = re.compile(r"\b(?:step\s+[A-Z]{1,4}\d+(?:\.\d+)*|(?:AF|HD|HC|HB|SL|EV|RC|CO|VO)\d+[A-Za-z]?|S\d+\.\d+)\b")
 D_NAME = (r"(?<!\w)(?:(?:see|per|in|the brief|the handoff|the hand-off|brief|handoff|hand-off) )?"
           r"`?20\d\d-\d\d-\d\d-\d{4}-[a-z0-9-]+\.md`?")
 PAGE = r"(?<!\w)(?:(?:see|per|in) )?`?(?:docs/)?(?:maintainer|testing-e2e|android-e2e)\.md(?::\d+)?`?"
@@ -93,13 +95,15 @@ def _valid(s, m):
     return True
 
 
-def _hits(line):
+def _hits(line, rel=""):
     """The kinds of reference in one line."""
-    if not any(c in line for c in ("R", "0", "1", "docs", ".md", "design", "ruling", "ruled", "DECISIONS")):
-        return []
-    kinds = [_kind(m) for m in UNIT_RE.finditer(line) if _valid(line, m)]
-    if BARE_ID.search(line):
-        kinds.append("B")
+    kinds = []
+    if any(c in line for c in ("R", "0", "1", "docs", ".md", "design", "ruling", "ruled", "DECISIONS")):
+        kinds.extend(_kind(m) for m in UNIT_RE.finditer(line) if _valid(line, m))
+        if BARE_ID.search(line):
+            kinds.append("B")
+    if not rel.startswith("tests/allowlists/") and (E_RULING.search(line) or E_STEP.search(line)):
+        kinds.append("E")
     return kinds
 
 
@@ -152,7 +156,7 @@ def _exceptions():
 def _scan():
     """({kind: ["path:line: text"]}, the set of exception keys that matched a line)."""
     skip = _exceptions()
-    found = {"A": [], "B": [], "C": [], "D": []}
+    found = {"A": [], "B": [], "C": [], "D": [], "E": []}
     used = set()
     for rel in _files():
         data = (ROOT / rel).read_bytes()
@@ -163,7 +167,7 @@ def _scan():
         except UnicodeDecodeError:
             continue
         for n, line in enumerate(text.split("\n"), 1):
-            kinds = _hits(line.rstrip("\r"))
+            kinds = _hits(line.rstrip("\r"), rel)
             if not kinds:
                 continue
             if (rel, line.strip()) in skip:
@@ -194,6 +198,10 @@ def test_no_citation_by_document_number():
 
 def test_no_hand_off_file_name():
     assert not _scan()[0]["D"], "a hand-off file name:\n" + "\n".join(_scan()[0]["D"])
+
+
+def test_no_ruling_or_build_step_reference():
+    assert not _scan()[0]["E"], "a ruling/ruled or build-step reference:\n" + "\n".join(_scan()[0]["E"])
 
 
 def test_every_exception_still_matches_a_line():

@@ -1,4 +1,4 @@
-"""AF5: the Checks rows of the satellites (the design, command line)."""
+"""the Checks rows of the satellites (the design, command line)."""
 from __future__ import annotations
 
 import pytest

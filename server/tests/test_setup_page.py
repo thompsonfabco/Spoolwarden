@@ -192,11 +192,11 @@ def test_remote_preview_warns_when_the_hub_uses_port_443(app, monkeypatch):
 def test_shared_files_are_served_and_the_sprite_comes_first(app):
     c = client(app)
     r = c.get("/setup")
-    check_sprite_first(r.text, "<div id=app>")                                 # S1.3: the shell replaces it
+    check_sprite_first(r.text, "<div id=app>")                                 # the shell replaces it
     assert r.headers["content-security-policy"] == SETUP_CSP
     check_files(c.get, "/setup")
     assert client(app, AWAY).get("/setup/shared/tokens.css").status_code == 403
-    head = r.text.split("<body>")[0]                                            # S1.1: theme first, then tokens, components, own
+    head = r.text.split("<body>")[0]                                            # theme first, then tokens, components, own
     links = ["/setup/shared/theme-init.js", "/setup/shared/tokens.css", "/setup/shared/components.css", "/setup/setup.css"]
     assert [head.index(x) for x in links] == sorted(head.index(x) for x in links)
     sections = [f"/setup/{n}" for n in CSS_SECTIONS]                             # one stylesheet per section, after the shell's
@@ -204,11 +204,11 @@ def test_shared_files_are_served_and_the_sprite_comes_first(app):
     assert sorted(p.name for p in STATIC.glob("setup_*.css")) == sorted(CSS_SECTIONS)             # none left unlinked
     assert all(c.get(x).status_code == 200 and c.get(x).headers["content-type"].startswith("text/css") for x in sections)
     assert head.index("/setup/shared/theme-init.js") < head.index("/setup/shared/strings.js") < head.index("/setup/shared/tokens.css")
-    assert head.index("/setup/shared/strings.js") < head.index("/setup/shared/components.js")   # S1.3: the shared shell
+    assert head.index("/setup/shared/strings.js") < head.index("/setup/shared/components.js")   # the shared shell
     assert re.search(r"<script defer src='/setup/shared/components\.js'>", head)
-    assert re.search(r"components\.js'></script><script defer src='/setup/shared/components-lock\.js'>", head)   # S1.5: the lock
+    assert re.search(r"components\.js'></script><script defer src='/setup/shared/components-lock\.js'>", head)   # the lock
     assert re.search(r"<title>[^<]+</title>", head) and "filament-kit setup" not in head   # the Hub name; the script adds the page
-    js = c.get("/setup/setup.js").text                                         # S1.2/S1.3: the shared appearance control in the top bar
+    js = c.get("/setup/setup.js").text                                         # /the shared appearance control in the top bar
     assert "spoolwarden.appearance" in js and "SW.segmented" in js and "appearance--menu" in js
     assert "Light" not in js and "Dark" not in js
     for key in ("app_name", "nav_label", "nav_more", "common_skip_to_content", "topbar_version_prefix", "nav_everyday", "nav_system"):

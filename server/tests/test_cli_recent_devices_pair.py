@@ -1,4 +1,4 @@
-"""S5.6: `recent`, `devices` and `pair`, with their old spellings (`intake`, `unpair`, `pair --pc`).
+"""`recent`, `devices` and `pair`, with their old spellings (`intake`, `unpair`, `pair --pc`).
 
 Each command is run through `cli.main` against the Hub's own history and pairing code, with the fake Spoolman and a fake
 Label Reader. AUT-9 for `recent` and `pair --text` as root: 79-column lines, no escape byte without colour, ASCII and no

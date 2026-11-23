@@ -1,4 +1,4 @@
-"""QR codes drawn by the Hub (S2.8): each one stands for its link, with qrencode absent; segno is vendored unchanged."""
+"""QR codes drawn by the Hub: each one stands for its link, with qrencode absent; segno is vendored unchanged."""
 import hashlib
 import re
 import shutil

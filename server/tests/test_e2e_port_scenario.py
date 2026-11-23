@@ -1,4 +1,4 @@
-"""AF1: the pure parts of tools/e2e's scenario i (the installer's port): the /proc/<pid>/status reader, the scenario's
+"""the pure parts of tools/e2e's scenario i (the installer's port): the /proc/<pid>/status reader, the scenario's
 registration, and the run holding 443 so every other scenario's Hub installs on 8710. The scenario itself runs on a
 real host in the batch gate."""
 from __future__ import annotations

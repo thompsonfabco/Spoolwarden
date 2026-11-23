@@ -1,7 +1,7 @@
-"""S7.1: the Hub's own message texts in the plain names (the design, foundations, command line and platform mapping): Fix texts of
+"""the Hub's own message texts in the plain names (the design, foundations, command line and platform mapping): Fix texts of
 status.py, error texts of setup_console/*.py and setup_helper.py, no_preset and the busy-stream text of the web app's
 printers, the internal-error text of the phone web app. The command name in a text (`sudo filament-kit ...`) and its
-subcommand spellings wait for the rename (S5.9); reply keys, status codes and stored values are not texts."""
+subcommand spellings wait for the rename; reply keys, status codes and stored values are not texts."""
 from __future__ import annotations
 
 import ast
@@ -23,15 +23,15 @@ OLD = [r"the server", r"this server(?:'s)?", r"the kit(?:'s)?", r"this kit", r"p
        r"the library", r"filament library", r"all-in-one", r"your server", r"station-side",
        r"(?<![a-z])retry(?![_a-z])"]
 OLD_RX = re.compile(r"(?<![A-Za-z0-9_/.-])(?:%s)(?![A-Za-z0-9_])" % "|".join(OLD), re.I)
-# The command a text names (its name and old subcommand spellings wait for S5.9) is not an old name; the words after it
+# The command a text names (its name and old subcommand spellings wait for ) is not an old name; the words after it
 # in the same string still are checked.
 COMMAND = re.compile(r"(?:filament-kit|spoolwarden)(?:-[a-z]+)?(?: (?:modules|library|profiles|station|cert|ensure-fields|config|web|"
                      r"restore|setup-code|update|reader|status|printer)\b(?: (?:--?[a-z][a-z-]*|(?:apply|enable|disable|set|list|menu|units|update|rollback|status|passphrase|build|hub|weigh-station|hub-with-weigh-station|server|station|all-in-one|web|spoolman|remote)|<[^>]*>"
                      r"|[A-Z]{2,})(?=[ .,;:)]|$)){0,3})?")
-# Stored values and texts of other steps that are not the Hub's message texts of S7.1 (file: the whole text, exactly).
+# Stored values and texts of other steps that are not the Hub's message texts of (file: the whole text, exactly).
 KEPT = {
     "setup_console/intake_tab.py": {"setup page"},                                  # the stored name of a device
-    # the host refusal is rewritten as the refusal page by S3.16 (the design, Hub page), not by S7.1; the log line is not shown
+    # the host refusal is rewritten as the refusal page by (the design, Hub page), not by the log line is not shown
     "web/intake_app.py": {"open this page by the server's own name or address",
                           "orders: the kit server did not give the order history: %s"},
     "web/printers_app.py": {"retry: 30000\ndata: "},                        # the stream protocol, not a text

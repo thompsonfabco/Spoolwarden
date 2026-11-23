@@ -1,4 +1,4 @@
-"""S1.4: the setup code check that changes nothing (`POST code/check`: right, wrong with `tries_left`, too many with `retry_at`,
+"""the setup code check that changes nothing (`POST code/check`: right, wrong with `tries_left`, too many with `retry_at`,
 the lockout the same as on any gated call), the trusted computer's expiry in `GET trust`, and `field` in the error replies of
 the setup page's endpoints that check input."""
 from __future__ import annotations
@@ -155,11 +155,11 @@ def test_helper_endpoint_errors_name_their_field(app, helper):
     _field(post(c, "backups/keep", {"days": 0}), "days")
     _field(post(c, "readers", {"name": 5}), "name")
     # a missing code names the code field (the page locks again on it)
-    assert post(c, "key", {"key": "sk-ant-EXAMPLE"}, code=None).json()["field"] == "code"   # refused for the code (S1.5 locks on it)
+    assert post(c, "key", {"key": "sk-ant-EXAMPLE"}, code=None).json()["field"] == "code"   # refused for the code (locks on it)
 
 
 def test_a_gated_change_refused_for_its_code_names_the_code_field(app):
-    """The page locks again only on replies with field "code" (S1.5): no code, a wrong code and a lockout on an ordinary
+    """The page locks again only on replies with field "code": no code, a wrong code and a lockout on an ordinary
     change all carry it; an error about the change's own input does not."""
     c = client(app)
     r = post(c, "key", {"key": "sk-ant-EXAMPLE"}, code=None)

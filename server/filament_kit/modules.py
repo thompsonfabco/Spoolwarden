@@ -214,7 +214,7 @@ def validate(cfg: dict) -> None:
         raise ModuleError(
             "server without the spoolman feature needs spoolman_url "
             f"pointing at a remote Spoolman (got {cfg.get('spoolman_url') or ''!r})")
-    if "web" in on or "remote" in on:  # Ruling AA: the web unit is the OAuth issuer, remote or not
+    if "web" in on or "remote" in on:  # the web unit is the OAuth issuer, remote or not
         pu = urlparse(str((cfg.get("web") or {}).get("public_url") or ""))
         if pu.scheme != "https" or not pu.hostname:
             who = "web" if "web" in on else "remote"

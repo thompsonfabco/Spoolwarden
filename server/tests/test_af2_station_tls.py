@@ -1,4 +1,4 @@
-"""AF2 (a): the Weigh Station's own certificate and HTTPS listener, the three values on its hello call, and what the
+"""(a): the Weigh Station's own certificate and HTTPS listener, the three values on its hello call, and what the
 Hub keeps of them with the station's pairing."""
 import hashlib
 import http.client

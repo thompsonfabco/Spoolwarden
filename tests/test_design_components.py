@@ -1,4 +1,4 @@
-"""Checks of the shared component files of design step S0.11 (the design, build order):
+"""Checks of the shared component files of design (the design, build order):
 web-shared/components.css and web-shared/components.js, and the additions components-jobs.css, components-media.css,
 components-media.js and components-lock.js (the Hub page's lock chip and unlock dialog), and alerts.css and alerts.js (the alert banner host,
 the Alerts list, the events poller and the notification helper).
@@ -169,8 +169,8 @@ class _Quiet(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-# S0.11 "Check": AUT-5 on the sample page at 1280 px and 320 px (touch), light and dark; every view has no finding.
-# One runner for every page (S1.11): tests/aut5_run.mjs, with no allow-list here.
+# "Check": AUT-5 on the sample page at 1280 px and 320 px (touch), light and dark; every view has no finding.
+# One runner for every page: tests/aut5_run.mjs, with no allow-list here.
 def test_page_audit_on_the_sample():
     node = _node()
     if not node:

@@ -1,4 +1,4 @@
-/* Printers add (S2.5) */
+/* Printers add */
 .printers-add { display: grid; gap: var(--s3); }
 .printers-add__title { margin: 0; }
 .printers-add__step { display: grid; gap: var(--s3); }

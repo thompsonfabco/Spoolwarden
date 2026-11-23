@@ -3,10 +3,10 @@
 `load(manager, sm, serial, label, spool_id, dry)`:
   1. the printer must be in the registry, the spool in Spoolman (not archived), the printer connected with a
      known `gcode_state`, the slot known (the calibrated slot map's address, else the report's units
-     (`ams.units`: A1 ... Z4, AA1 ..., HT-A ..., Ext or Ext-L / Ext-R)). Ruling BK: a print does not block a
+     (`ams.units`: A1 ... Z4, AA1 ..., HT-A ..., Ext or Ext-L / Ext-R)). a print does not block a
      load (the owner loads a spool into a free slot while printing, as the scanner allowed); only the slot that
      feeds the running job is refused (`SlotInUse`: `ams.tray_now`, and an extruder's `snow` when the report has
-     it; Ruling BM: on a multi-nozzle or unknown model without `snow`, every slot in the job's `mapping`, and
+     it; on a multi-nozzle or unknown model without `snow`, every slot in the job's `mapping`, and
      every slot while the job has no `mapping` yet, when the printer is asked for a pushall, at most every 30 s),
      and a slot mapping or calibration job (`mapping.load_guard`). Mapping and the slot test keep
      `slottest.check_idle`;
@@ -90,7 +90,7 @@ class NotFound(Exception):
 
 
 class SlotInUse(Exception):
-    """The target slot feeds the print that is running now (Ruling BK); nothing was changed."""
+    """The target slot feeds the print that is running now; nothing was changed."""
 
 
 def _feeding(report: dict) -> set[tuple[int, int]]:
@@ -110,7 +110,7 @@ def _feeding(report: dict) -> set[tuple[int, int]]:
 
 def reported_nozzles(report: dict) -> int | None:
     """How many nozzles the report says the printer has (`device.extruder.info` entries), None when it does not say.
-    Used for a printer whose model is empty or unknown (Ruling BR); a known model's own count wins."""
+    Used for a printer whose model is empty or unknown; a known model's own count wins."""
     n = len(status._l(status._d(status._d(status._d(report).get("device")).get("extruder")).get("info")))
     return n or None
 
@@ -123,7 +123,7 @@ def _has_snow(report: dict) -> bool:
 def _job_labels(serial: str, model, report: dict) -> set[str] | None:
     """The labels of every slot the running job's `mapping` names, or None when the report has no mapping. Decoded
     with the calibrated slot map, and also with every numbering scheme the model may use (a union: this only ever
-    refuses more, Ruling BM)."""
+    refuses more, )."""
     raw = status._d(report).get("mapping")
     if not isinstance(raw, list) or not raw:
         return None
@@ -156,11 +156,10 @@ def _job_labels(serial: str, model, report: dict) -> set[str] | None:
 
 def in_use(serial: str, model, report: dict, ams_id: int, tray_id: int, label: str,
            on_no_mapping=None) -> str | None:
-    """Why this slot may not be changed now (None: it may). Only while a job is active (Ruling BK): the slot that
-    feeds it (`tray_now`, an extruder's `snow`). On a model with more than one nozzle whose report has no `snow`
-    (Ruling BM), `tray_now` shows one nozzle only, so every slot in the job's `mapping` counts as in use, and an
+    """Why this slot may not be changed now (None: it may). Only while a job is active: the slot that
+    feeds it (`tray_now`, an extruder's `snow`). On a model with more than one nozzle whose report has no `snow`, `tray_now` shows one nozzle only, so every slot in the job's `mapping` counts as in use, and an
     active job without a `mapping` refuses every slot (fails closed). An unknown model (nozzle count not known)
-    takes its nozzle count from the report (`device.extruder.info`, Ruling BR); when the report does not say
+    takes its nozzle count from the report (`device.extruder.info`, ); when the report does not say
     either it is treated as one with more than one nozzle. `on_no_mapping()` is called on that last refusal."""
     gs = status._s(status._d(report).get("gcode_state"))
     if gs not in status.ACTIVE:
@@ -168,7 +167,7 @@ def in_use(serial: str, model, report: dict, ams_id: int, tray_id: int, label: s
     if (ams_id, tray_id) in _feeding(report):
         return f"{label} feeds the print that is running ({gs})"
     mi = hardware.load().model(model)
-    nozzles = mi.nozzles if mi.known else reported_nozzles(report)   # Ruling BR
+    nozzles = mi.nozzles if mi.known else reported_nozzles(report)   # 
     if (nozzles is None or nozzles > 1) and not _has_snow(report):
         labels = _job_labels(serial, model, report)
         if labels is None:
@@ -182,7 +181,7 @@ def in_use(serial: str, model, report: dict, ams_id: int, tray_id: int, label: s
 
 def check_slot_free(manager, serial: str, report: dict, ams_id: int, tray_id: int, label: str, model=None) -> None:
     """Raise PrinterOffline / NoStatus unless the printer is connected and says what it is doing; SlotInUse when
-    `in_use` says so. A print on other slots does not refuse (Ruling BK)."""
+    `in_use` says so. A print on other slots does not refuse."""
     if manager.state(serial) not in slottest.ONLINE:
         raise PrinterOffline(serial)
     gs = status._s(status._d(report).get("gcode_state"))
@@ -194,7 +193,7 @@ def check_slot_free(manager, serial: str, report: dict, ams_id: int, tray_id: in
 
 
 def ask_for_mapping(manager, serial: str) -> None:
-    """A job without a `mapping` (Ruling BM): ask the printer for a full report, which carries it, so the next load is
+    """A job without a `mapping`: ask the printer for a full report, which carries it, so the next load is
     not refused for the whole print. At most once per MAPPING_PUSHALL_GAP s per printer; best effort."""
     now = _clock()
     with _PUSHALL_GUARD:
@@ -485,7 +484,7 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: 
             "location": loc}
     alias = addr[3] if addr else next((a for a, cur in layout.aliases(p.model).items() if cur == label), None)
     old_loc = status.location(name, alias) if alias else None
-    # Spoolman only, so it works offline; but not the slot the running print feeds (Ruling BK)
+    # Spoolman only, so it works offline; but not the slot the running print feeds
     why = in_use(serial, p.model, report, addr[0], addr[1], label,
                  lambda: ask_for_mapping(manager, serial)) if addr and report else None
     if why:

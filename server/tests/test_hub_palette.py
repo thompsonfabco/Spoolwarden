@@ -100,7 +100,7 @@ def test_palette_shows_in_the_hub_page_at_three_widths_and_console_is_unchanged(
     _check_styles(*(_drive(hub, tmp_path, STYLES, width=w) for w in (1280, 768, 320)))
 
 
-# the rework items: the tablet top bar keeps the light/dark switch on one row, a detail opens in the sheet (not in its row, S6.11), the pill
+# the rework items: the tablet top bar keeps the light/dark switch on one row, a detail opens in the sheet (not in its row, ), the pill
 # row stays under the top bar while the page scrolls, and the active pill is not bolder than the others (the design, components table)
 REWORK = """
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

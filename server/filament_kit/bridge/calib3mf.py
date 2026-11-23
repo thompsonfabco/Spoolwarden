@@ -588,7 +588,7 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
     disk (`snapshot.save`) before the print command and deleted after a confirmed restore. `should_stop()` true
     (CLI signal, service stopping) stops the job at once (`stop` command), then the slots are restored.
 
-    Numbering (P3, ruling BL): the first job sends `ams_mapping` in legacy numbers, Bambu Studio's command (plus
+    Numbering (P3, ): the first job sends `ams_mapping` in legacy numbers, Bambu Studio's command (plus
     `ams_mapping2` when the model lists it); the mapping the printer reports (in its own numbering: the owner's H2D
     answers [0, 2, 128, 129] with [0, 2, 32768, 33024]) is decoded against EVERY candidate scheme of the model
     (`ModelInfo.numbering`) and the first in the model's order that round-trips all loaded slots is the result

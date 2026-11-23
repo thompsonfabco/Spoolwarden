@@ -1,5 +1,5 @@
 """`spoolwarden locations`, the Storage locations screen of `config` (8.3), the six old keys `config set`
-refuses, and the installer's storage question (SL3). The changes go through `storage_api.save`, the Hub page's own path,
+refuses, and the installer's storage question. The changes go through `storage_api.save`, the Hub page's own path,
 so these tests pin what the command line adds to it: the words, the exit codes, the Error and Fix lines, the asking and
 the screens. Example names only."""
 from __future__ import annotations

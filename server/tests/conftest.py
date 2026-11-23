@@ -177,7 +177,7 @@ def secret_terminal(monkeypatch):
 
 
 def old_rows(out: str) -> list[str]:
-    """`status` output as the lines it had before S5.1 (`OK   text`, `FAIL text`, `     fix: ...`, `--   text`), so a test
+    """`status` output as the lines it had before (`OK   text`, `FAIL text`, `     fix: ...`, `--   text`), so a test
     of what a row says need not know the heading, glyph and wrapping of the new layout. The header, the group headings
     and the summary are left out; a row wrapped at the width is joined again. Any other line is an AssertionError, so a
     stray line, a wrong word or a row that lost its layout fails the test that reads the output through here."""

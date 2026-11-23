@@ -337,7 +337,7 @@ def test_readme_sections_a_user_needs():
         assert (ROOT / path).exists(), path      # a file, or a folder
 
 
-# S7.3: the user documents use the plain names of foundations 2, not the old ones. The word list is the `BANNED` of
+# the user documents use the plain names of foundations 2, not the old ones. The word list is the `BANNED` of
 # tests/test_design_lints.py (AUT-7); it is read from that file, not copied.
 PLAIN_NAME_DOCS = ("README.md", "docs/user-guide.md", "docs/install-server.md", "docs/install-iphone-web-app.md",
                    "docs/install-android-app.md", "docs/android-app.md", "docs/klipper.md", "docs/known-gaps.md")

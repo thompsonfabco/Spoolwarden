@@ -1564,7 +1564,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             remaining=_opt(body, "remaining", float), location=_opt(body, "location", str),
             empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, True), rules=rules(),
             home=_opt(body, "home", str), auto_location=_opt(body, "auto_location", bool, False)))
-        return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added (S3.9); `home`: 409 not_checked_out
+        return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added; `home`: 409 not_checked_out
 
     def returner(spool_id: int, *, grams: float | None = None, dry: bool = False, gross: float | None = None) -> dict:
         """`inventory.return_spool`, or the Klipper family's when the spool sits in one of its printers' slots (the

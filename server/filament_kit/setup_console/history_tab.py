@@ -1,4 +1,4 @@
-"""History, Undo, Health, CSV export/import and Hub report routes for the Setup Console (HD6).
+"""History, Undo, Health, CSV export/import and Hub report routes for the Setup Console.
 
     GET  /setup/api/activity                  (open)     activity events with actor/subject/kind filters
     POST /setup/api/events/{id}/undo          (code)     undo a reversible event
