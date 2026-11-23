@@ -1,4 +1,4 @@
-"""Share corrections on the Hub page (step B1), in a real headless browser against the real routes of the kit and the fake
+"""Share corrections on the Hub page, in a real headless browser against the real routes of the kit and the fake
 local reader (fakes/local_reader_fake.py, which has the abilities of a 1.1 reader and no others): the switch and its paragraph
 in Settings > Label Reader with each of its states, Corrections waiting (the list, Remove, Remove all, Download the package,
 Send now, a correction the reader did not take, a refusal that shows its code), the question when switching off while
