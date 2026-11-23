@@ -169,9 +169,10 @@ class ManualMaps:
 
     def answer_offer(self, serial: str, share: bool) -> dict:
         """The owner's answer to the one-time question: share this map in a printer report (default off)."""
+        from .. import pairing
         d = demo.where(config.paths().state / "printers" / serial, f"printers/{serial}")
         d.mkdir(parents=True, exist_ok=True)
-        (d / OFFERED).write_text("yes\n" if share else "no\n", encoding="utf-8")
+        pairing._write_atomic(d / OFFERED, ("yes\n" if share else "no\n").encode("utf-8"), 0o644, state_owned=True)
         with self._lock:
             s = self._sessions.get(serial)
             if s is not None:
