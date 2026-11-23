@@ -1,9 +1,11 @@
 package com.thompsonfabco.filamentkit.ui.spool
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.UndoAnswer
 import com.thompsonfabco.filamentkit.net.UndoState
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -78,7 +80,7 @@ class SpoolCheckedOutTest {
         vm.refresh()
         advanceUntilIdle()
         assertTrue(CheckedOutRules.offered(vm.state.value.spool!!))
-        assertEquals("Home: Shelf B", CheckedOutRules.homeLine(vm.state.value.spool!!))
+        assertEquals(Say.Words(R.string.spools_home, listOf("Shelf B")), CheckedOutRules.homeLine(vm.state.value.spool!!))
     }
 
     @Test fun aHubWithoutTheFeatureOffersNothingEvenForAnOpenSpool() = runTest(dispatcher) {
@@ -113,7 +115,7 @@ class SpoolCheckedOutTest {
         advanceUntilIdle()
         assertEquals(listOf("return:214"), calls)
         assertFalse(vm.state.value.spool!!.checkedOut)
-        assertEquals("Returned to Shelf B.", vm.state.value.returnToast!!.text)
+        assertEquals(Say.Words(R.string.spools_returned_to, listOf("Shelf B")), vm.state.value.returnToast!!.text)
         assertEquals(8L, vm.state.value.returnToast!!.event!!.id)
         assertFalse(vm.state.value.returning)
     }
@@ -123,12 +125,12 @@ class SpoolCheckedOutTest {
         val vm = vm()
         vm.returnToHome()
         advanceUntilIdle()
-        assertEquals("Returned to Dry box 1.", vm.state.value.returnToast!!.text)
+        assertEquals(Say.Words(R.string.spools_returned_to, listOf("Dry box 1")), vm.state.value.returnToast!!.text)
         returnedAt = null
         val none = vm()
         none.returnToHome()
         advanceUntilIdle()
-        assertEquals("Returned.", none.state.value.returnToast!!.text)
+        assertEquals(Say.Words(R.string.spools_returned), none.state.value.returnToast!!.text)
     }
 
     @Test fun aRefusalReadsTheHubsMessageAndNothingChanges() = runTest(dispatcher) {
@@ -169,7 +171,7 @@ class SpoolCheckedOutTest {
         assertEquals("home:214:Dry box 1", calls.last())
         assertNull(vm.state.value.home)
         assertEquals("Dry box 1", vm.state.value.spool!!.home)
-        assertEquals("Home is now Dry box 1.", vm.state.value.returnToast!!.text)
+        assertEquals(Say.Words(R.string.spools_home_done, listOf("Dry box 1")), vm.state.value.returnToast!!.text)
         assertNull(vm.state.value.returnToast!!.event)
     }
 

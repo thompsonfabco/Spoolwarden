@@ -68,7 +68,7 @@ internal fun HubScreen(
         ) {
             val hub = ui.hub
             if (ui.unavailable) {
-                Text(HubTexts.UNAVAILABLE, style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.hub_unavailable), style = MaterialTheme.typography.bodyLarge)
             } else {
                 ScreenState(
                     loaded = hub != null,
@@ -82,10 +82,10 @@ internal fun HubScreen(
                         var openProblem by remember { mutableStateOf(false) }
                         hubSections(hub).forEach { section ->
                             SettingsPanel {
-                                GroupTitle(section.group.title)
+                                GroupTitle(stringResource(section.group.title))
                                 section.lines.forEach { LineView(it) }
                                 Text(
-                                    HubTexts.CHANGE_ON_HUB_PAGE, color = SpoolwardenTheme.colors.muted,
+                                    stringResource(R.string.hub_change_on_page), color = SpoolwardenTheme.colors.muted,
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                                 hub.hubPage?.let { page ->
@@ -115,7 +115,7 @@ private fun HealthPanel(health: HealthUi, onDays: (Int) -> Unit, onTryAgain: () 
     val space = SpoolwardenTheme.space
     val answer = health.answer
     SettingsPanel {
-        GroupTitle(HubTexts.HEALTH_TITLE)
+        GroupTitle(stringResource(R.string.hub_health_title))
         when {
             health.failed && answer == null -> NoticeCard(
                 NoticeKind.Bad, health.message ?: stringResource(R.string.common_offline_text),
@@ -123,21 +123,25 @@ private fun HealthPanel(health: HealthUi, onDays: (Int) -> Unit, onTryAgain: () 
             )
             answer == null -> Text(stringResource(R.string.common_working), color = colors.muted, style = MaterialTheme.typography.bodyMedium)
             else -> {
-                val rows = HealthTable.rows(answer, HealthWords(stringResource(R.string.status_ok), stringResource(R.string.status_needs_look)))
-                if (rows.isEmpty()) Text(HubTexts.HEALTH_NO_CHANGES, style = MaterialTheme.typography.bodyMedium)
+                val words = HealthWords(
+                    stringResource(R.string.status_ok), stringResource(R.string.status_needs_look), stringResource(R.string.hub_health_state_bad),
+                )
+                val rows = HealthTable.rows(answer, words)
+                if (rows.isEmpty()) Text(stringResource(R.string.hub_health_no_changes), style = MaterialTheme.typography.bodyMedium)
                 rows.forEach { row ->
-                    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }, verticalArrangement = Arrangement.spacedBy(space.s1)) {
+                    val spoken = hubText(row.spoken)
+                    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = spoken }, verticalArrangement = Arrangement.spacedBy(space.s1)) {
                         Text(row.time, color = colors.muted, style = MaterialTheme.typography.bodySmall)
                         Text(row.check, style = MaterialTheme.typography.bodyMedium)
                         Text("${row.from} → ${row.to}", style = MaterialTheme.typography.labelLarge)
                     }
                 }
-                HealthTable.footnote(answer)?.let { Text(it, color = colors.muted, style = MaterialTheme.typography.bodySmall) }
+                HealthTable.footnote(answer)?.let { Text(hubText(it), color = colors.muted, style = MaterialTheme.typography.bodySmall) }
             }
         }
         val long = health.days == HealthUi.LONG_DAYS
         SwButton(
-            if (long) HubTexts.HEALTH_SHOW_7 else HubTexts.HEALTH_SHOW_30,
+            stringResource(if (long) R.string.hub_health_show_7 else R.string.hub_health_show_30),
             { onDays(if (long) HealthUi.DEFAULT_DAYS else HealthUi.LONG_DAYS) },
             Modifier.fillMaxWidth(), enabled = !health.loading,
         )
@@ -147,8 +151,8 @@ private fun HealthPanel(health: HealthUi, onDays: (Int) -> Unit, onTryAgain: () 
 @Composable
 private fun LineView(line: HubLine) {
     when (line) {
-        is HubLine.Field -> FieldRow(line.label, line.value)
-        is HubLine.Note -> Text(line.text, style = MaterialTheme.typography.bodyMedium)
+        is HubLine.Field -> FieldRow(hubText(line.label), hubText(line.value))
+        is HubLine.Note -> Text(hubText(line.text), style = MaterialTheme.typography.bodyMedium)
         is HubLine.Check -> CheckRow(line)
     }
 }
@@ -179,8 +183,9 @@ private fun StateShape(shape: Int, colour: Color) {
     Icon(painterResource(shape), contentDescription = null, modifier = Modifier.size(SpoolwardenTheme.space.s2 + SpoolwardenTheme.space.s1 / 2), tint = colour)
 }
 
-/** The top bar's title on the Hub screen, which has no catalogue text yet; null on any other screen. */
+/** The top bar's title on the Hub screen; null on any other screen. */
+@Composable
 internal fun hubPlaceTitle(destination: NavDestination?): String? =
-    if (destination != null && destination.hasRoute(HubGlanceRoute::class)) HubTexts.TITLE else null
+    if (destination != null && destination.hasRoute(HubGlanceRoute::class)) stringResource(R.string.hub_glance_title) else null
 
 private const val MS_PER_SECOND = 1000L

@@ -78,11 +78,11 @@ internal fun autoOffered(printer: Printer?): Boolean = printer?.autoPossible == 
 internal fun preselected(printer: Printer?): String? = AUTO_SLOT.takeIf { autoOffered(printer) }
 
 /** What the Hub's refusal of an Auto says: its own `message`, else the ruled sentence (A6). */
-internal fun autoRefusal(e: ApiError): String = e.autoText ?: LoadTexts.AUTO_REFUSED
+internal fun autoRefusal(e: ApiError): HubFailure = e.autoText?.let { HubFailure.Message(it) } ?: HubFailure.AutoRefused
 
 /** An Auto call's failure: the refusal (409 `auto_not_possible`) in words, anything else as every load failure. */
 internal fun autoFailure(e: Throwable): HubFailure =
-    if (e is ApiError && e.code == AUTO_NOT_POSSIBLE) HubFailure.Message(autoRefusal(e)) else hubFailure(e)
+    if (e is ApiError && e.code == AUTO_NOT_POSSIBLE) autoRefusal(e) else hubFailure(e)
 
 private const val AUTO_NOT_POSSIBLE = "auto_not_possible"
 

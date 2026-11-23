@@ -1,7 +1,10 @@
 package com.thompsonfabco.filamentkit.ui.settings
 
+import androidx.annotation.StringRes
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.VoiceSettings
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -43,7 +46,8 @@ internal fun snapSpeed(raw: Float): Int =
 internal fun snapVolume(raw: Float): Int = Math.round(raw).coerceIn(VOLUME_MIN, VOLUME_MAX)
 
 /** The line under the read-only Voice row: where the voice is chosen. */
-internal fun voiceHint(s: VoiceSettings): String = if (s.remote) VoiceTexts.VOICE_HINT_REMOTE else VoiceTexts.VOICE_HINT
+@StringRes
+internal fun voiceHint(s: VoiceSettings): Int = if (s.remote) R.string.voice_hint_remote else R.string.voice_apps_readonly
 
 /** The Speaker row exists only for a voice with more than one speaker. */
 internal fun speakerShown(s: VoiceSettings): Boolean = s.speakerRange != null
@@ -67,11 +71,11 @@ internal fun voiceTestRequest(saved: VoiceSettings, edit: VoiceEdit) =
     VoiceTestRequest(edit.speaker.takeIf { speakerShown(saved) }, edit.speed, edit.volume)
 
 /** The sentence a failed Test shows: the Hub's own, else ours for its three refusals. */
-internal fun testFailureText(e: ApiError): String = when {
-    !e.notFromHub -> e.message
-    e.code == "busy" -> VoiceTexts.TEST_BUSY
-    e.code == "off" -> VoiceTexts.TEST_OFF
-    else -> VoiceTexts.TEST_NO_ANSWER
+internal fun testFailureText(e: ApiError): Say = when {
+    !e.notFromHub -> Say.FromHub(e.message)
+    e.code == "busy" -> Say.Words(R.string.settings_voice_test_busy)
+    e.code == "off" -> Say.Words(R.string.settings_voice_test_off)
+    else -> Say.Words(R.string.settings_voice_test_no_answer)
 }
 
 /** The Hub could not be reached: the controls are marked as needing the Hub. */

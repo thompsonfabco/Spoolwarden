@@ -1,7 +1,9 @@
 package com.thompsonfabco.filamentkit.ui.settings
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.VoiceSettings
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.Assert.assertEquals
@@ -28,12 +30,12 @@ class VoiceRulesTest {
         assertFalse(SettingsGroup.Voice in settingsGroups(developer = true, voice = false))
         val groups = settingsGroups(developer = false, voice = true)
         assertEquals(SettingsGroup.Alerts, groups[groups.indexOf(SettingsGroup.Voice) - 1])
-        assertEquals(VoiceTexts.GROUP, "Weigh Station voice")
+        assertEquals(R.string.settings_group_voice, SettingsGroup.Voice.title)
     }
 
     @Test fun theVoiceLineSaysWhereTheVoiceIsChosen() {
-        assertEquals("Change the voice on the Hub page.", voiceHint(many))
-        assertEquals("Chosen on the Weigh Station's own computer: spoolwarden config.", voiceHint(many.copy(remote = true)))
+        assertEquals(R.string.voice_apps_readonly, voiceHint(many))
+        assertEquals(R.string.voice_hint_remote, voiceHint(many.copy(remote = true)))
     }
 
     @Test fun theSpeakerRowNeedsARange() {
@@ -45,10 +47,6 @@ class VoiceRulesTest {
         assertNull(speakerFrom("-1", many.speakerRange))
         assertNull(speakerFrom("", many.speakerRange))
         assertNull(speakerFrom("3", null))
-    }
-
-    @Test fun theHintCountsTheSpeakersFromTheRange() {
-        assertEquals("This voice has 904 speakers. Try a few with Test.", VoiceTexts.speakerHint(many.speakerRange!!.last + 1))
     }
 
     @Test fun speedGoesInStepsOfTenFrom50To200() {
@@ -90,14 +88,14 @@ class VoiceRulesTest {
     }
 
     @Test fun theHubsSentenceIsShownAsItIsSent() {
-        assertEquals("Busy now.", testFailureText(ApiError(409, "busy", "Busy now.", noHubMessage = false)))
+        assertEquals(Say.FromHub("Busy now."), testFailureText(ApiError(409, "busy", "Busy now.", noHubMessage = false)))
     }
 
     @Test fun aReplyWithoutAHubSentenceFallsBackToOurs() {
         fun bare(status: Int, code: String) = ApiError(status, code, "The Hub returned an error ($status)", noHubMessage = true)
-        assertEquals(VoiceTexts.TEST_BUSY, testFailureText(bare(409, "busy")))
-        assertEquals(VoiceTexts.TEST_OFF, testFailureText(bare(409, "off")))
-        assertEquals(VoiceTexts.TEST_NO_ANSWER, testFailureText(bare(502, "no_answer")))
+        assertEquals(Say.Words(R.string.settings_voice_test_busy), testFailureText(bare(409, "busy")))
+        assertEquals(Say.Words(R.string.settings_voice_test_off), testFailureText(bare(409, "off")))
+        assertEquals(Say.Words(R.string.settings_voice_test_no_answer), testFailureText(bare(502, "no_answer")))
     }
 
     @Test fun offlineIsTheHubNotAnsweringAtAll() {

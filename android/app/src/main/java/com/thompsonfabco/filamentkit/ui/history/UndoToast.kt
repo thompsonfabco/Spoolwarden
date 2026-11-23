@@ -9,6 +9,8 @@ import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ActivityEvent
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwToastState
+import com.thompsonfabco.filamentkit.ui.printers.resolve
+import com.thompsonfabco.filamentkit.ui.printers.sayText
 import com.thompsonfabco.filamentkit.ui.spool.SpoolResult
 import com.thompsonfabco.filamentkit.ui.spool.formatGrams
 import com.thompsonfabco.filamentkit.ui.spool.LoadTexts
@@ -31,7 +33,7 @@ internal suspend fun SwToastState.showUndoable(
     text: String,
     undoLabel: String,
     event: ActivityEvent?,
-    holdMs: Long,
+    context: Context,
     undo: suspend (ActivityEvent) -> UndoOutcome,
     kind: NoticeKind? = null,
 ) {
@@ -39,8 +41,8 @@ internal suspend fun SwToastState.showUndoable(
         show(text, kind = kind)
         return
     }
-    if (show(text, undoLabel, kind = kind, holdMs = holdMs) != SnackbarResult.ActionPerformed) return
-    show(undo(event).text)
+    if (show(text, undoLabel, kind = kind, holdMs = undoHoldMs(context)) != SnackbarResult.ActionPerformed) return
+    show(undo(event).text.resolve(context))
 }
 
 /** The toast's words for a spool screen result: the same sentence as the result line. */
@@ -54,7 +56,7 @@ internal fun spoolResultToastText(result: SpoolResult): String = when (result) {
     SpoolResult.TagMoved -> stringResource(R.string.spool_result_tag_moved)
     is SpoolResult.Loaded -> stringResource(R.string.spool_result_loaded, result.printer, result.slot)
     is SpoolResult.LoadedUnconfirmed -> stringResource(R.string.spool_load_unconfirmed)
-    is SpoolResult.Waiting -> LoadTexts.waitingIn(result.slot)
+    is SpoolResult.Waiting -> sayText(LoadTexts.waitingIn(result.slot))
 }
 
 /** The offer a spool screen result makes, or null when the Hub has no Undo for it. */

@@ -85,8 +85,7 @@ internal val SettingsGroup.title: Int
         SettingsGroup.Appearance -> R.string.appearance_title
         SettingsGroup.Hub -> R.string.hub_sheet_title
         SettingsGroup.Alerts -> R.string.settings_group_alerts
-        // no catalogue text yet: titleText says VoiceTexts.GROUP
-        SettingsGroup.Voice -> 0
+        SettingsGroup.Voice -> R.string.settings_group_voice
         SettingsGroup.Updates -> R.string.settings_updates_title
         SettingsGroup.Licences -> R.string.settings_licences_title
         SettingsGroup.Developer -> R.string.settings_developer_title
@@ -94,7 +93,7 @@ internal val SettingsGroup.title: Int
 
 /** The title a group shows. */
 @Composable
-internal fun SettingsGroup.titleText(): String = if (this == SettingsGroup.Voice) VoiceTexts.GROUP else stringResource(title)
+internal fun SettingsGroup.titleText(): String = stringResource(title)
 
 /** The live summary under a group's title. */
 @Composable

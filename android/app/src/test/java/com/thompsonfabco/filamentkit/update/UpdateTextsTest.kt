@@ -1,6 +1,7 @@
 package com.thompsonfabco.filamentkit.update
 
 import android.content.pm.PackageInstaller
+import com.thompsonfabco.filamentkit.ui.printers.resolve
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -16,10 +17,12 @@ class UpdateTextsTest {
     private val signatureMessage = "INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package com.thompsonfabco.filamentkit " +
         "signatures do not match newer version; ignoring!"
 
+    private val app = RuntimeEnvironment.getApplication()
+
     @Test fun bannerNamesTheServersRelease() {
-        assertEquals("Update available (Spoolwarden 0.5.0)", UpdateTexts.bannerTitle("0.5.0"))
-        assertEquals("Update available", UpdateTexts.bannerTitle(null))
-        assertEquals("Update available", UpdateTexts.bannerTitle(" "))
+        assertEquals("Update available (Spoolwarden 0.5.0)", UpdateTexts.bannerTitle("0.5.0").resolve(app))
+        assertEquals("Update available", UpdateTexts.bannerTitle(null).resolve(app))
+        assertEquals("Update available", UpdateTexts.bannerTitle(" ").resolve(app))
     }
 
     /** That paragraph, unlike the page's "App not installed" line, doesn't tell the user to uninstall. */
@@ -31,22 +34,21 @@ class UpdateTextsTest {
     @Test fun afterARefusalTheButtonDoesNotSayInstall() {
         val refused = UpdateUi(available = 7, failure = UpdateFailure.Signature)
         assertTrue(UpdateTexts.refused(refused))
-        assertEquals("Try again", UpdateTexts.installLabel(refused))
+        assertEquals("Try again", UpdateTexts.installLabel(refused).resolve(app))
     }
 
     @Test fun anyOtherFailureKeepsThePlainButton() {
         val other = UpdateUi(available = 7, failure = UpdateFailure.Storage)
         assertFalse(UpdateTexts.refused(other))
-        assertEquals("Install", UpdateTexts.installLabel(other))
-        assertEquals("Install", UpdateTexts.installLabel(UpdateUi(available = 7)))
-        assertEquals("Downloading…", UpdateTexts.installLabel(UpdateUi(available = 7, busy = true)))
-        assertEquals("Downloading… 42%", UpdateTexts.installLabel(UpdateUi(available = 7, busy = true, progress = 42)))
-        assertEquals("Downloading…", UpdateTexts.installLabel(UpdateUi(available = 7, busy = true)))
+        assertEquals("Install", UpdateTexts.installLabel(other).resolve(app))
+        assertEquals("Install", UpdateTexts.installLabel(UpdateUi(available = 7)).resolve(app))
+        assertEquals("Downloading…", UpdateTexts.installLabel(UpdateUi(available = 7, busy = true)).resolve(app))
+        assertEquals("Downloading… 42%", UpdateTexts.installLabel(UpdateUi(available = 7, busy = true, progress = 42)).resolve(app))
     }
 
     @Test fun aRetryUnderWaySaysDownloading() {
         val retry = UpdateUi(available = 7, busy = true, failure = UpdateFailure.Signature)
-        assertEquals("Downloading…", UpdateTexts.installLabel(retry))
+        assertEquals("Downloading…", UpdateTexts.installLabel(retry).resolve(app))
     }
 
     @Test fun nothingToSayWhenItWorkedWaitsOrWasCancelled() {
@@ -64,7 +66,7 @@ class UpdateTextsTest {
             PackageInstaller.STATUS_FAILURE_STORAGE, PackageInstaller.STATUS_FAILURE_TIMEOUT,
         )
         for (s in statuses) for (m in listOf(null, signatureMessage, "INSTALL_FAILED_VERSION_DOWNGRADE")) {
-            val t = UpdateTexts.installFailure(s, m)!!
+            val t = app.getString(UpdateTexts.installFailure(s, m)!!)
             assertFalse(t, "uninstall" in t.lowercase())
         }
     }
@@ -102,9 +104,7 @@ class UpdateTextsTest {
 
     /** The catalogue's words (what the screen shows) are the ones the rule above is checked on, and none says uninstall. */
     @Test fun theCatalogueSaysWhatTheRuleChecks() {
-        val app = RuntimeEnvironment.getApplication()
         for (f in UpdateFailure.entries) {
-            assertEquals(f.name, f.english, app.getString(f.text))
             assertFalse(f.name, "uninstall" in app.getString(f.text).lowercase())
         }
         assertFalse("uninstall" in app.getString(R.string.app_update_signature_body).lowercase())

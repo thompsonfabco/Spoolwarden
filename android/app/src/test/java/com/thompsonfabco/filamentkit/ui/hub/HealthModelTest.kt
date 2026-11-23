@@ -11,11 +11,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.HealthAnswer
 import com.thompsonfabco.filamentkit.net.HealthChange
@@ -58,7 +60,7 @@ private fun health(since: String? = null, changes: List<HealthChange> = emptyLis
 /** The check history table of the Hub screen: its rows, its footnote, its days. */
 class HealthTableTest {
     private val utc = ZoneId.of("UTC")
-    private val words = HealthWords(ok = "Fine", look = "Look")
+    private val words = HealthWords(ok = "Fine", look = "Look", bad = "Needs fixing")
 
     @Test fun rowsAreNewestFirstWithStatesAsWords() {
         val rows = HealthTable.rows(
@@ -74,7 +76,8 @@ class HealthTableTest {
         assertEquals("Needs fixing", rows[2].to)
         assertEquals("Fine", rows[2].from)
         assertEquals("Nov 16, 2026, 7:00 AM", rows[0].time.replace(' ', ' '))
-        assertEquals("Nov 15, 2026, 11:10 PM. Workshop X1: from Fine to Needs fixing", rows[2].spoken.replace(' ', ' '))
+        assertEquals(HubText.Words(R.string.hub_health_row_spoken, listOf(rows[2].time, "Workshop X1", "Fine", "Needs fixing")), rows[2].spoken)
+        assertEquals("Nov 15, 2026, 11:10 PM", rows[2].time.replace('\u202f', ' '))
     }
 
     @Test fun aStateTheAppDoesNotKnowIsShownAsTheHubWroteIt() {
@@ -82,7 +85,10 @@ class HealthTableTest {
     }
 
     @Test fun theFootnoteSaysWhenTheRecordStartsAndIsAbsentWithoutIt() {
-        assertEquals("No history before Nov 14, 2026.", HealthTable.footnote(health(since = "2026-11-14T10:00:00Z"), utc, Locale.US))
+        assertEquals(
+            HubText.Words(R.string.hub_no_history_before, listOf("Nov 14, 2026")),
+            HealthTable.footnote(health(since = "2026-11-14T10:00:00Z"), utc, Locale.US),
+        )
         assertNull(HealthTable.footnote(health(), utc, Locale.US))
     }
 }
@@ -143,6 +149,8 @@ class HealthViewModelTest {
     }
 }
 
+private const val TITLE = "The Hub at a glance"
+
 /** The table on the Hub screen itself, in light and dark at font scale 1 and 2. */
 @OptIn(ExperimentalMaterial3Api::class)
 @RunWith(RobolectricTestRunner::class)
@@ -173,7 +181,7 @@ class HubScreenHealthTest {
             CompositionLocalProvider(LocalDensity provides Density(base.density, fontScale)) {
                 SpoolwardenTheme(Look.Console, if (dark) Appearance.Dark else Appearance.Light) {
                     Column(Modifier.fillMaxSize()) {
-                        SwTopBar(title = HubTexts.TITLE)
+                        SwTopBar(title = TITLE)
                         HubScreen(HubUi(hub = hub, loaded = true), online = true, onTryAgain = {}, health = if (withHealth) ui else null, onHealthDays = { asked += it })
                     }
                 }
@@ -187,6 +195,7 @@ class HubScreenHealthTest {
         assertTrue(rule.onAllNodesWithText("Check history").fetchSemanticsNodes().isNotEmpty())
         assertTrue(rule.onAllNodesWithText("Workshop X1").fetchSemanticsNodes().isNotEmpty())
         assertTrue(rule.onAllNodesWithText("OK → Needs fixing").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(rule.onAllNodesWithContentDescription("Workshop X1: from OK to Needs fixing", substring = true).fetchSemanticsNodes().isNotEmpty())
         assertTrue(rule.onAllNodesWithText("No history before", substring = true).fetchSemanticsNodes().isNotEmpty())
         for (isDark in listOf(false, true)) for (scale in listOf(1f, 2f)) {
             dark = isDark
@@ -194,7 +203,7 @@ class HubScreenHealthTest {
             rule.waitForIdle()
             val merged = rule.onRoot().fetchSemanticsNode()
             val unmerged = rule.onRoot(useUnmergedTree = true).fetchSemanticsNode()
-            assertEquals("dark=$isDark fontScale=$scale", emptyList<String>(), SemanticsAudit.findings(merged, unmerged, density, HubTexts.TITLE))
+            assertEquals("dark=$isDark fontScale=$scale", emptyList<String>(), SemanticsAudit.findings(merged, unmerged, density, TITLE))
         }
     }
 

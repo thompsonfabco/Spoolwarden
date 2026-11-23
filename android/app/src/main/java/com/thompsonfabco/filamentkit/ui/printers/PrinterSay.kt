@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
+import android.content.Context
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
@@ -16,6 +17,12 @@ import java.util.Locale
 sealed interface Say {
     data class Words(@StringRes val id: Int, val args: List<Any> = emptyList()) : Say
     data class FromHub(val text: String) : Say
+
+    /** Sentences that are each a text of their own, joined by [separator] (a note that follows a result). */
+    data class Joined(val parts: List<Say>, val separator: String = " ") : Say
+
+    /** [say] with its first letter in capitals: a name that starts a sentence. */
+    data class Cap(val say: Say) : Say
 }
 
 @Composable
@@ -26,11 +33,32 @@ internal fun sayText(say: Say): String = when (say) {
             when (arg) {
                 is UsageReason.Known -> stringResource(arg.id)
                 is UsageReason.Other -> arg.text
+                is Say -> sayText(arg)
                 else -> arg
             }
         }.toTypedArray(),
     )
     is Say.FromHub -> say.text
+    is Say.Joined -> say.parts.map { sayText(it) }.joinToString(say.separator)
+    is Say.Cap -> sayText(say.say).replaceFirstChar { it.uppercase() }
+}
+
+/** [say] as text where there is no composition (a toast): the same words [sayText] gives. */
+internal fun Say.resolve(context: Context): String = when (this) {
+    is Say.Words -> context.getString(
+        id,
+        *args.map { arg ->
+            when (arg) {
+                is UsageReason.Known -> context.getString(arg.id)
+                is UsageReason.Other -> arg.text
+                is Say -> arg.resolve(context)
+                else -> arg
+            }
+        }.toTypedArray(),
+    )
+    is Say.FromHub -> text
+    is Say.Joined -> parts.joinToString(separator) { it.resolve(context) }
+    is Say.Cap -> say.resolve(context).replaceFirstChar { it.uppercase() }
 }
 
 /**
@@ -40,6 +68,7 @@ internal fun sayText(say: Say): String = when (say) {
  */
 internal fun printerProblem(e: ApiError): Problem = when {
     e.status == 0 && e.code != "storage" -> Problem.Unreachable
+    e.code == "auto_not_possible" && e.notFromHub -> Problem.AutoRefused
     e.notFromHub -> Problem.Unexpected
     else -> Problem.HubSaid(e.message)
 }
@@ -49,6 +78,7 @@ internal fun Problem.say(): Say = when (this) {
     Problem.Unreachable -> Say.Words(R.string.common_hub_unreachable)
     is Problem.HubSaid -> Say.FromHub(text)
     Problem.NoLongerPaired -> Say.Words(R.string.common_not_paired_notice)
+    Problem.AutoRefused -> Say.Words(R.string.spool_load_auto_refused)
     Problem.CertificateChanged -> Say.Words(R.string.common_cert_changed_notice)
     else -> Say.Words(R.string.common_hub_answer_unknown)
 }

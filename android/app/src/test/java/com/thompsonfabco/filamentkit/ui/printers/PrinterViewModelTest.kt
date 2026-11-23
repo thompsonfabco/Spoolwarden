@@ -9,7 +9,7 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.UndoAnswer
 import com.thompsonfabco.filamentkit.net.UndoState
 import com.thompsonfabco.filamentkit.net.UsageMonth
-import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import java.io.File
 import com.thompsonfabco.filamentkit.ui.history.UndoKinds
 import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
@@ -590,29 +590,28 @@ class PrinterViewModelTest {
         vm.start(); runCurrent()
         vm.askClear(a1); runCurrent()
         assertEquals(listOf("A1" to true), backend.clears)
-        assertEquals(ClearAsk("A1", "Acme Basic Black", "Shelf 2"), vm.state.value.clearAsk)
+        assertEquals(ClearAsk("A1", Say.FromHub("Acme Basic Black"), "Shelf 2"), vm.state.value.clearAsk)
         val calls = backend.printerCalls
         vm.confirmClear(); runCurrent()
         assertEquals(listOf("A1" to true, "A1" to false), backend.clears)
         assertNull(vm.state.value.clearAsk)
         assertEquals(
-            Note(Say.FromHub("Cleared slot A1. Acme Basic Black is back on Shelf 2. The spool that was waiting for it is not waiting any more. The slot's setting on the printer is cleared too.")),
+            Note(PrinterTexts.clearDone("A1", Say.FromHub("Acme Basic Black"), "Shelf 2", waitingEnded = true, printerCleared = true)),
             vm.state.value.slotNote,
         )
         assertTrue("the status is fetched again", backend.printerCalls > calls)
         vm.stop()
     }
 
-    private val stillShows = "The printer still shows the old filament for this slot until a spool is loaded."
 
     @Test fun clearSlotOnABambuPrinterSaysThePrinterStillShowsTheOldFilament() = runTest(dispatcher) {
         withSlots()
         val vm = vm()
         vm.start(); runCurrent()
         vm.askClear(a1); runCurrent()
-        assertEquals(stillShows, vm.state.value.clearAsk?.note)
+        assertEquals(PrinterTexts.CLEAR_BAMBU_NOTE, vm.state.value.clearAsk?.note)
         vm.confirmClear(); runCurrent()
-        assertEquals(Note(Say.FromHub("Cleared slot A1. $stillShows")), vm.state.value.slotNote)
+        assertEquals(Note(PrinterTexts.clearDone("A1", null, null, false, false, PrinterTexts.CLEAR_BAMBU_NOTE)), vm.state.value.slotNote)
         vm.stop()
     }
 
@@ -622,9 +621,9 @@ class PrinterViewModelTest {
         val vm = vm()
         vm.start(); runCurrent()
         vm.askClear(a1); runCurrent()
-        assertEquals("The Hub's words.", vm.state.value.clearAsk?.note)
+        assertEquals(Say.FromHub("The Hub's words."), vm.state.value.clearAsk?.note)
         vm.confirmClear(); runCurrent()
-        assertEquals(Note(Say.FromHub("Cleared slot A1. The Hub's words.")), vm.state.value.slotNote)
+        assertEquals(Note(PrinterTexts.clearDone("A1", null, null, false, false, Say.FromHub("The Hub's words."))), vm.state.value.slotNote)
         vm.stop()
     }
 
@@ -634,25 +633,14 @@ class PrinterViewModelTest {
         vm.start(); runCurrent()
         vm.askClear(a1); runCurrent()
         assertNull(vm.state.value.clearAsk?.note)
-        assertFalse(PrinterTexts.clearBody(null, null, vm.state.value.clearAsk?.note).contains("still shows"))
         vm.confirmClear(); runCurrent()
-        assertEquals(Note(Say.FromHub("Cleared slot A1.")), vm.state.value.slotNote)
+        assertEquals(Note(PrinterTexts.clearDone("A1", null, null, false, false)), vm.state.value.slotNote)
         vm.stop()
     }
 
-    @Test fun unloadOnAKlipperPrinterSaysTheSlotSettingIsClearedToo() {
-        assertEquals(
-            "Unload Acme PLA from A1? It goes back to Shelf 2. The slot's setting on the printer is cleared too, when the printer is online and can do it.",
-            PrinterTexts.unloadKlipperBody("Acme PLA", "A1", "Shelf 2"),
-        )
-        assertTrue(PrinterTexts.unloadKlipperBody("Acme PLA", "A1", "").contains("goes back to its previous place."))
-        assertFalse(PrinterTexts.unloadKlipperBody("Acme PLA", "A1", "Shelf 2").contains("stays as it is"))
-    }
-
-    @Test fun theClearTextsCarryTheNoteLast() {
-        assertEquals("Clear slot A1? The Hub forgets the spool recorded here. $stillShows",
-            PrinterTexts.clearQuestion("A1", null, null, PrinterTexts.clearNote(null, bambu = true)))
-        assertEquals("Cleared slot A1. $stillShows", PrinterTexts.clearDone("A1", null, null, false, false, PrinterTexts.CLEAR_BAMBU_NOTE))
+    @Test fun theClearNoteIsTheHubsOrTheBambuOneOrNone() {
+        assertEquals(PrinterTexts.CLEAR_BAMBU_NOTE, PrinterTexts.clearNote(null, bambu = true))
+        assertEquals(Say.FromHub("Hub words"), PrinterTexts.clearNote("Hub words", bambu = true))
         assertNull(PrinterTexts.clearNote(null, bambu = false))
         assertNull(PrinterTexts.clearNote(" ", bambu = false))
     }
@@ -662,7 +650,7 @@ class PrinterViewModelTest {
         val vm = vm()
         vm.start(); runCurrent()
         vm.askClear(AmsSlot(1, "A2")); runCurrent()
-        assertEquals(ClearAsk("A2", null, null, stillShows), vm.state.value.clearAsk)
+        assertEquals(ClearAsk("A2", null, null, PrinterTexts.CLEAR_BAMBU_NOTE), vm.state.value.clearAsk)
         vm.cancelClear()
         vm.confirmClear(); runCurrent()
         assertEquals("cancelling sends only the dry run", listOf("A2" to true), backend.clears)
@@ -691,23 +679,15 @@ class PrinterViewModelTest {
         vm.start(); runCurrent()
         vm.askUnload(a1); runCurrent()
         vm.confirmUnload(); runCurrent()
-        assertEquals("The spool waiting for this slot is not waiting any more.", vm.state.value.slotAlso)
+        assertEquals(PrinterTexts.UNLOAD_WAITING_ENDED, vm.state.value.slotAlso)
         vm.askUnload(a1); runCurrent()
         assertNull("a new question clears the old sentence", vm.state.value.slotAlso)
         vm.stop()
     }
 
-    @Test fun theClearQuestionReadsAsTheDesignSays() {
-        assertEquals(
-            "Clear slot A1? The Hub forgets the spool recorded here. Acme Basic Black goes back to Shelf 2.",
-            PrinterTexts.clearQuestion("A1", "Acme Basic Black", "Shelf 2"),
-        )
-        assertEquals("Clear slot A1? The Hub forgets the spool recorded here.", PrinterTexts.clearQuestion("A1", null, null))
-        assertEquals(
-            "Clear slot A1? The Hub forgets the spool recorded here. Spool 7 goes back to its previous place.",
-            PrinterTexts.clearQuestion("A1", PrinterTexts.spoolName(buildJsonObject { put("id", 7) }), " "),
-        )
-        assertEquals("Cleared slot A1.", PrinterTexts.clearDone("A1", null, null, waitingEnded = false, printerCleared = false))
+    @Test fun aSpoolViewIsNamedByBrandAndNameElseNumberElseTheSpool() {
+        assertEquals(Say.Words(R.string.spool_title, listOf("7")), PrinterTexts.spoolName(buildJsonObject { put("id", 7) }))
+        assertEquals(Say.FromHub("Acme Basic"), PrinterTexts.spoolName(buildJsonObject { put("vendor", "Acme"); put("name", "Basic") }))
     }
 
     @Test fun theExternalHolderUnloadsLikeASlot() = runTest(dispatcher) {
@@ -734,15 +714,7 @@ class PrinterViewModelTest {
         assertEquals("Spool 9", PrinterHelp.spoolName(SlotSpool(9)))
         assertEquals("the spool", PrinterHelp.spoolName(SlotSpool()))
         assertEquals("Moved back: the spool → Shelf 1", PrinterHelp.movedBackLine(null, null, "Shelf 1"))
-        assertEquals("the spool", PrinterTexts.spoolName(buildJsonObject { }))
-        assertEquals(
-            "Clear slot A1? The Hub forgets the spool recorded here. The spool goes back to Shelf 1.",
-            PrinterTexts.clearQuestion("A1", "the spool", "Shelf 1"),
-        )
-        assertEquals(
-            "Cleared slot A1. The spool is back on Shelf 1.",
-            PrinterTexts.clearDone("A1", "the spool", "Shelf 1", waitingEnded = false, printerCleared = false),
-        )
+        assertEquals(Say.Words(R.string.spool_load_the_spool), PrinterTexts.spoolName(buildJsonObject { }))
     }
 
     @Test fun externalHoldersAreNamedFromSay() {
@@ -802,7 +774,7 @@ class PrinterViewModelTest {
         assertNull(vm.state.value.undoOffer)
         val calls = backend.printerCalls
         val outcome = vm.undoOnHub(event(31, "spool.unloaded", "spool:7"))
-        assertEquals(UndoOutcome.Done("Put back. The printer still shows what it was set to."), outcome)
+        assertEquals(UndoOutcome.Done(Say.Words(R.string.history_put_back_note, listOf("The printer still shows what it was set to."))), outcome)
         assertEquals(listOf(31L), backend.undone)
         assertNull("the result line no longer holds", vm.state.value.slotNote)
         runCurrent()
@@ -884,11 +856,11 @@ class PrinterViewModelTest {
         val vm = vm()
         backend.exportError = ApiError(404, "not_found", "The Hub returned an error (404)")
         vm.downloadUsageCsv(File("a.csv")); runCurrent()
-        assertEquals(Say.FromHub(HistoryTexts.CSV_UPDATE_HUB), vm.state.value.csvProblem)
+        assertEquals(Say.Words(R.string.history_csv_update_hub), vm.state.value.csvProblem)
         assertNull(vm.state.value.csvFile)
         backend.exportError = ApiError(0, "storage", "disk full")
         vm.downloadUsageCsv(File("a.csv")); runCurrent()
-        assertEquals(Say.FromHub(HistoryTexts.CSV_NOT_SAVED), vm.state.value.csvProblem)
+        assertEquals(Say.Words(R.string.history_csv_not_saved), vm.state.value.csvProblem)
     }
 
     @Test fun blankCodeIsNotSent() = runTest(dispatcher) {
