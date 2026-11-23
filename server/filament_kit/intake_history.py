@@ -24,6 +24,7 @@ owner configured and only when the owner asks for a revision. The number kept is
 from __future__ import annotations
 
 import datetime
+import hashlib
 import io
 import json
 import logging
@@ -345,6 +346,8 @@ def photo(rid: str, n: int) -> bytes:
 def photo_thumb(rid: str, n: int, *, max_bytes: int = THUMB_MAX_BYTES, max_edge: int = THUMB_MAX_EDGE) -> bytes:
     """Return a bounded JPEG thumbnail for a stored label photo, enforcing max_bytes."""
     raw = photo(rid, n)
+    if not raw.startswith(b"\xff\xd8\xff"):
+        raise HistoryError(415, "bad_image", "not a JPEG image")
     try:
         from PIL import Image, ImageOps
         with Image.open(io.BytesIO(raw)) as im:
@@ -367,6 +370,7 @@ def photo_headers(data: bytes, *, thumb: bool = False) -> dict[str, str]:
     return {
         "Cache-Control": PHOTO_CACHE,
         "Content-Length": str(len(data)),
+        "ETag": f'"{hashlib.sha256(data).hexdigest()[:16]}"',
         "X-Content-Type-Options": "nosniff",
     }
 
