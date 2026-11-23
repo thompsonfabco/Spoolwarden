@@ -170,8 +170,6 @@ data class AddUiState(
     val weight: Double? = null,
     val sealed: Boolean = true,
     val questions: List<String> = emptyList(),
-    /** Which reader answered the read and how sure it was (null: no read, or a manual add). */
-    val readInfo: ReaderTexts.Info? = null,
     /** The read's items as the server sent them, plus the user's edits; sent back to `add` as-is. */
     val items: List<JsonObject> = emptyList(),
     /** Notices of the read (the Hub's own words) and the app's note on a weight it could not use. */
@@ -583,7 +581,6 @@ class AddViewModel(
         _state.update {
             it.copy(
                 stage = Stage.Review, items = items, questions = res.questions, notices = notices,
-                readInfo = ReaderTexts.info(res),
                 previewLines = emptyList(), error = null, generation = it.generation + 1,
             )
         }
@@ -1039,7 +1036,6 @@ class AddViewModel(
                 stage = if (manual || items != null) Stage.Review else Stage.Capture,
                 draftId = d.id, photos = d.photos, hint = d.hint, tag = d.tag ?: it.tag, weight = d.weightGrams,
                 sealed = d.sealed, questions = res?.questions.orEmpty(), items = items.orEmpty(),
-                readInfo = res?.let(ReaderTexts::info),
                 addedBefore = d.addedBefore?.let { ids -> AddedBefore(ids) },
                 generation = it.generation + 1,
             )
