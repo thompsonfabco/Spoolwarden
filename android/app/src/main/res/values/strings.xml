@@ -5731,4 +5731,104 @@
     <string name="csv_import_commit_locations">Import locations</string>
     <!-- 1=add 2=change -->
     <string name="csv_import_imported_locations">Added %1$s locations and changed %2$s.</string>
+    <string name="settings_corr_heading">Share corrections</string>
+    <string name="settings_corr_label">Share corrections to improve the Label Reader</string>
+    <string name="settings_corr_text">When this is on, each correction you make to a reading waits on this Hub to be shared: the label photos (made smaller, with location and camera data removed), what the Label Reader read, what you changed it to, and your note if you wrote one. Readings by On this Hub and by Cloud (Claude) both count. Nothing is sent until you press Send now; then the corrections waiting go to the project maintainer for review, to improve the Label Reader.</string>
+    <string name="settings_corr_needs_reader">Needs Label Reader: On this Hub, which keeps the corrections until they are sent. Switch it on in Features. Cloud (Claude) readings are shared too once it is on.</string>
+    <string name="settings_corr_too_old">The reader on this Hub is too old to share corrections. Update it in Updates.</string>
+    <string name="settings_corr_no_answer">The reader does not answer, so this cannot be changed now.</string>
+    <string name="settings_corr_differs">The reader is set differently from this Hub. Save Label Reader to set it again.</string>
+    <string name="settings_corr_restarted">The reader restarted.</string>
+    <!-- 1=count -->
+    <plurals name="settings_corr_deleted">
+        <item quantity="one">%1$d correction deleted.</item>
+        <item quantity="other">%1$d corrections deleted.</item>
+    </plurals>
+    <string name="settings_corr_stop_title">Stop sharing corrections?</string>
+    <!-- 1=count -->
+    <plurals name="settings_corr_stop_body">
+        <item quantity="one">%1$d correction is still waiting. Keep it to send later, or delete it now.</item>
+        <item quantity="other">%1$d corrections are still waiting. Keep them to send later, or delete them now.</item>
+    </plurals>
+    <string name="settings_corr_keep">Keep them</string>
+    <string name="settings_corr_delete">Delete them</string>
+    <string name="settings_corr_title">Corrections waiting</string>
+    <!-- 1=count 2=size -->
+    <string name="settings_corr_count">%1$d waiting · %2$s</string>
+    <string name="settings_corr_intro">Nothing is sent until you press Send now. Remove any you do not want to share.</string>
+    <string name="settings_corr_intro_off">Share corrections is off, so no new corrections are added. These are still waiting.</string>
+    <string name="settings_corr_empty_title">No corrections waiting</string>
+    <string name="settings_corr_empty_text">Corrections you make in Recently added, or while adding spools, appear here.</string>
+    <string name="settings_corr_reader_down">The reader does not answer, so the corrections waiting cannot be shown. They are kept.</string>
+    <!-- 1=reason -->
+    <string name="settings_corr_read_error">Could not read the corrections waiting. %1$s</string>
+    <!-- 1=engine -->
+    <string name="settings_corr_read_by">Read by %1$s</string>
+    <string name="settings_corr_record_gone">This record is no longer kept.</string>
+    <string name="settings_corr_photos_gone">The photos of this correction are no longer on the Hub.</string>
+    <!-- 1=reason -->
+    <string name="settings_corr_not_waiting">Not waiting: the reader did not take this correction. %1$s</string>
+    <string name="settings_corr_not_waiting_plain">Not waiting: the reader did not take this correction.</string>
+    <!-- 1=name -->
+    <string name="settings_corr_remove_named">Remove the correction for %1$s</string>
+    <string name="settings_corr_removed">Removed. The record in Recently added is unchanged.</string>
+    <string name="settings_corr_remove_all">Remove all</string>
+    <string name="settings_corr_remove_all_title">Remove all corrections waiting?</string>
+    <!-- 1=count -->
+    <plurals name="settings_corr_remove_all_body">
+        <item quantity="one">%1$d correction is taken out of this list and is not sent. The records in Recently added are unchanged.</item>
+        <item quantity="other">%1$d corrections are taken out of this list and are not sent. The records in Recently added are unchanged.</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="settings_corr_removed_all">
+        <item quantity="one">Removed %1$d correction. Nothing was sent.</item>
+        <item quantity="other">Removed %1$d corrections. Nothing was sent.</item>
+    </plurals>
+    <string name="settings_corr_package">Download the package</string>
+    <string name="settings_corr_package_hint">The package is the exact file that Send now sends, so you can look at it first.</string>
+    <!-- 1=reason -->
+    <string name="settings_corr_package_failed">Could not make the package. %1$s</string>
+    <string name="settings_corr_nothing">Nothing is waiting.</string>
+    <string name="settings_corr_send">Send now</string>
+    <!-- 1=count -->
+    <plurals name="settings_corr_send_title">
+        <item quantity="one">Send %1$d correction?</item>
+        <item quantity="other">Send %1$d corrections?</item>
+    </plurals>
+    <string name="settings_corr_send_body">The photos and values in this list go to the project maintainer for review, to improve the Label Reader. This cannot be taken back.</string>
+    <string name="settings_corr_send_confirm">Send</string>
+    <!-- 1=count -->
+    <plurals name="settings_corr_sending">
+        <item quantity="one">Sending %1$d correction…</item>
+        <item quantity="other">Sending %1$d corrections…</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="settings_corr_sent">
+        <item quantity="one">Sent %1$d correction. Thank you.</item>
+        <item quantity="other">Sent %1$d corrections. Thank you.</item>
+    </plurals>
+    <!-- 1=reason -->
+    <string name="settings_corr_not_sent">Could not send. %1$s The corrections are still waiting.</string>
+    <string name="settings_corr_not_sent_plain">Could not send. The corrections are still waiting.</string>
+    <string name="settings_corr_set_failed">The reader could not be set. See the log.</string>
+    <!-- 1=order 2=count -->
+    <plurals name="settings_state_reader_waiting">
+        <item quantity="one">%1$s · %2$d correction waiting</item>
+        <item quantity="other">%1$s · %2$d corrections waiting</item>
+    </plurals>
+    <string name="recent_corr_on">Share corrections is on: this correction will wait on this Hub to be shared.</string>
+    <string name="recent_corr_waiting">This correction is waiting to be shared.</string>
+    <string name="recent_corr_link">Corrections waiting</string>
+    <string name="recent_corr_no_photo">Not shared: no photo was kept for this record.</string>
+    <!-- 1=reason -->
+    <string name="recent_corr_not_taken">Saved. The correction is not waiting to be shared: %1$s.</string>
+    <string name="recent_corr_not_taken_plain">Saved. The correction is not waiting to be shared.</string>
+    <string name="recent_corr_meta">Share corrections</string>
+    <!-- 1=count -->
+    <string name="recent_corr_meta_waiting">%1$d waiting</string>
+    <!-- 1=count -->
+    <plurals name="features_corr_warn">
+        <item quantity="one">Deletes %1$d correction waiting to be shared. Send it first in Settings > Label Reader, or go on.</item>
+        <item quantity="other">Deletes %1$d corrections waiting to be shared. Send them first in Settings > Label Reader, or go on.</item>
+    </plurals>
 </resources>

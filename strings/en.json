@@ -4457,5 +4457,87 @@
     "other": "Added {count} spools."
   },
   "csv_import_commit_locations": "Import locations",
-  "csv_import_imported_locations": "Added {add} locations and changed {change}."
+  "csv_import_imported_locations": "Added {add} locations and changed {change}.",
+  "settings_corr_heading": "Share corrections",
+  "settings_corr_label": "Share corrections to improve the Label Reader",
+  "settings_corr_text": "When this is on, each correction you make to a reading waits on this Hub to be shared: the label photos (made smaller, with location and camera data removed), what the Label Reader read, what you changed it to, and your note if you wrote one. Readings by On this Hub and by Cloud (Claude) both count. Nothing is sent until you press Send now; then the corrections waiting go to the project maintainer for review, to improve the Label Reader.",
+  "settings_corr_needs_reader": "Needs Label Reader: On this Hub, which keeps the corrections until they are sent. Switch it on in Features. Cloud (Claude) readings are shared too once it is on.",
+  "settings_corr_too_old": "The reader on this Hub is too old to share corrections. Update it in Updates.",
+  "settings_corr_no_answer": "The reader does not answer, so this cannot be changed now.",
+  "settings_corr_differs": "The reader is set differently from this Hub. Save Label Reader to set it again.",
+  "settings_corr_restarted": "The reader restarted.",
+  "settings_corr_deleted": {
+    "one": "{count} correction deleted.",
+    "other": "{count} corrections deleted."
+  },
+  "settings_corr_stop_title": "Stop sharing corrections?",
+  "settings_corr_stop_body": {
+    "one": "{count} correction is still waiting. Keep it to send later, or delete it now.",
+    "other": "{count} corrections are still waiting. Keep them to send later, or delete them now."
+  },
+  "settings_corr_keep": "Keep them",
+  "settings_corr_delete": "Delete them",
+  "settings_corr_title": "Corrections waiting",
+  "settings_corr_count": "{count} waiting · {size}",
+  "settings_corr_intro": "Nothing is sent until you press Send now. Remove any you do not want to share.",
+  "settings_corr_intro_off": "Share corrections is off, so no new corrections are added. These are still waiting.",
+  "settings_corr_empty_title": "No corrections waiting",
+  "settings_corr_empty_text": "Corrections you make in Recently added, or while adding spools, appear here.",
+  "settings_corr_reader_down": "The reader does not answer, so the corrections waiting cannot be shown. They are kept.",
+  "settings_corr_read_error": "Could not read the corrections waiting. {reason}",
+  "settings_corr_read_by": "Read by {engine}",
+  "settings_corr_record_gone": "This record is no longer kept.",
+  "settings_corr_photos_gone": "The photos of this correction are no longer on the Hub.",
+  "settings_corr_not_waiting": "Not waiting: the reader did not take this correction. {reason}",
+  "settings_corr_not_waiting_plain": "Not waiting: the reader did not take this correction.",
+  "settings_corr_remove_named": "Remove the correction for {name}",
+  "settings_corr_removed": "Removed. The record in Recently added is unchanged.",
+  "settings_corr_remove_all": "Remove all",
+  "settings_corr_remove_all_title": "Remove all corrections waiting?",
+  "settings_corr_remove_all_body": {
+    "one": "{count} correction is taken out of this list and is not sent. The records in Recently added are unchanged.",
+    "other": "{count} corrections are taken out of this list and are not sent. The records in Recently added are unchanged."
+  },
+  "settings_corr_removed_all": {
+    "one": "Removed {count} correction. Nothing was sent.",
+    "other": "Removed {count} corrections. Nothing was sent."
+  },
+  "settings_corr_package": "Download the package",
+  "settings_corr_package_hint": "The package is the exact file that Send now sends, so you can look at it first.",
+  "settings_corr_package_failed": "Could not make the package. {reason}",
+  "settings_corr_nothing": "Nothing is waiting.",
+  "settings_corr_send": "Send now",
+  "settings_corr_send_title": {
+    "one": "Send {count} correction?",
+    "other": "Send {count} corrections?"
+  },
+  "settings_corr_send_body": "The photos and values in this list go to the project maintainer for review, to improve the Label Reader. This cannot be taken back.",
+  "settings_corr_send_confirm": "Send",
+  "settings_corr_sending": {
+    "one": "Sending {count} correction…",
+    "other": "Sending {count} corrections…"
+  },
+  "settings_corr_sent": {
+    "one": "Sent {count} correction. Thank you.",
+    "other": "Sent {count} corrections. Thank you."
+  },
+  "settings_corr_not_sent": "Could not send. {reason} The corrections are still waiting.",
+  "settings_corr_not_sent_plain": "Could not send. The corrections are still waiting.",
+  "settings_corr_set_failed": "The reader could not be set. See the log.",
+  "settings_state_reader_waiting": {
+    "one": "{order} · {count} correction waiting",
+    "other": "{order} · {count} corrections waiting"
+  },
+  "recent_corr_on": "Share corrections is on: this correction will wait on this Hub to be shared.",
+  "recent_corr_waiting": "This correction is waiting to be shared.",
+  "recent_corr_link": "Corrections waiting",
+  "recent_corr_no_photo": "Not shared: no photo was kept for this record.",
+  "recent_corr_not_taken": "Saved. The correction is not waiting to be shared: {reason}.",
+  "recent_corr_not_taken_plain": "Saved. The correction is not waiting to be shared.",
+  "recent_corr_meta": "Share corrections",
+  "recent_corr_meta_waiting": "{count} waiting",
+  "features_corr_warn": {
+    "one": "Deletes {count} correction waiting to be shared. Send it first in Settings > Label Reader, or go on.",
+    "other": "Deletes {count} corrections waiting to be shared. Send them first in Settings > Label Reader, or go on."
+  }
 }
