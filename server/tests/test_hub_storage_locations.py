@@ -642,3 +642,25 @@ $("dialog[open] .btn:not(.btn--danger)").click();
     assert page["notice"] == T("common_spoolman_unreachable")
     assert page["removeBody"] == T("storage_remove_body_unknown")
     assert "No spools are recorded there." not in page["removeBody"]
+
+
+def test_csv_import_rejects_oversized_file_before_reading(hub, tmp_path):
+    page = _drive_storage(hub, tmp_path, r"""
+SW.setLock("unlocked", { code: "__CODE__" });
+await sleep(300);
+$(".storage__barmore").click();
+await until(() => $('[data-action="import-csv"]'), "storage csv menu");
+$('[data-action="import-csv"]').click();
+await until(() => $("#csv-import-locations input[type=file]"), "storage import drawer");
+const locIn = $("#csv-import-locations input[type=file]");
+const big = new File([new Uint8Array(5 * 1024 * 1024 + 10)], "big.csv", { type: "text/csv" });
+const dt = new DataTransfer();
+dt.items.add(big);
+locIn.files = dt.files;
+locIn.dispatchEvent(new Event("change", { bubbles: true }));
+await until(() => text($("#csv-import-locations .field__error")), "size error");
+out.err = text($("#csv-import-locations .field__error"));
+out.checkDisabled = $("#csv-import-locations .actions .btn:not(.btn--primary)").disabled;
+""")
+    assert page["err"] == T("hub_csv_too_large")
+    assert page["checkDisabled"] is True

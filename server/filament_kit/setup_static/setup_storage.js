@@ -118,6 +118,11 @@ function stOpenCsvImport({ kind, opener, onDone }) {
     commitBtn.disabled = true; checkBtn.disabled = !f;
     SW.fieldError(fileField, "");
     if (!f) return;
+    if (f.size > 5 * 1024 * 1024) {
+      checkBtn.disabled = true;
+      SW.fieldError(fileField, SW.t("hub_csv_too_large"));
+      return;
+    }
     rawText = await f.text();
     await runImport(true);
   });
