@@ -277,3 +277,52 @@ def test_assumption_1_show_event_opt_in(mode, tmp_path):
         pytest.skip("opt-in: set AUT5_NOTIFY_SHOW=1 to also require the browser's \"show\" event (needs the OS to display notifications)")
     out = _notify_page(mode, tmp_path, show=True)
     assert out["created"] == "created" and out["shown"] == "show"
+
+
+def test_poll_while_in_flight_coalesces_to_one_extra_poll(tmp_path):
+    import json
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("needs node")
+    probe = tmp_path / "poll_probe.mjs"
+    probe.write_text(
+        f"""
+import {{ readFileSync }} from "node:fs";
+import vm from "node:vm";
+const host = {{ replaceChildren() {{}} }};
+const ctx = {{
+  window: {{}},
+  document: {{ addEventListener() {{}}, visibilityState: "visible" }},
+  localStorage: {{ getItem() {{ return "c1"; }}, setItem() {{}} }},
+  SW: {{ h: () => ({{}}), t: (k) => k }},
+  setTimeout, clearTimeout, setInterval, clearInterval, URL, URLSearchParams, Date, Map, Set, Object, Promise, Error,
+}};
+ctx.window = ctx;
+vm.runInNewContext(readFileSync({str((Path(__file__).resolve().parents[2] / "web-shared" / "alerts.js"))!r}, "utf8"), ctx);
+let calls = 0, release;
+ctx.SW_ALERTS.start({{
+  host,
+  interval: 60000,
+  api: () => {{
+    calls += 1;
+    if (calls === 1) return new Promise((r) => {{ release = r; }});
+    return Promise.resolve({{ events: [], next: 10 }});
+  }},
+}});
+await Promise.resolve();
+ctx.SW_ALERTS.poll();
+ctx.SW_ALERTS.poll();
+ctx.SW_ALERTS.poll();
+release({{ events: [], next: 9 }});
+for (let i = 0; i < 10; i++) await Promise.resolve();
+ctx.SW_ALERTS.stop();
+console.log(JSON.stringify({{ calls }}));
+""",
+        encoding="utf-8",
+    )
+    r = subprocess.run([node, str(probe)], capture_output=True, text=True, timeout=15)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert json.loads(r.stdout.strip()) == {"calls": 2}
