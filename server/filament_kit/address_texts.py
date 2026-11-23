@@ -1,10 +1,10 @@
-"""The texts of the address and first-run phase (step AF5) that the server builds or that the client steps (Hub
+"""The texts of the address and first-run phase that the server builds or that the client steps (Hub
 page, apps) name by key: the Hub's port, Getting started, the guided printer, the Label Reader lead-in and the Checks
 rows of the satellites.
 
 `MESSAGES` holds every text under its key in strings/en.json, first letter included; the catalogue holds exactly these
 (test_af5_texts keeps them equal). The sentences of the installer stay literals in install/install.sh and apply.py.
-The texts of hubport.py, station_client.py, tagsources.py and local_reader.py (AF1, AF2) are kept equal to
+The texts of hubport.py, station_client.py, tagsources.py and local_reader.py () are kept equal to
 their catalogue keys by the same test (`MIRRORED`), so the Hub page and the apps name one key for each.
 
 {product} and {command} are the product's and the command's name (the catalogue holds app_name and command_name once);
@@ -170,7 +170,7 @@ MESSAGES: dict[str, str | dict] = {
     "check_reader_cert_fix": "Press Test in Settings > Label Reader to trust the new certificate.",
 }
 
-# What the code of AF1 and AF2 holds under a catalogue key: {key: (module, constant)}. The catalogue holds these texts
+# What the code of and holds under a catalogue key: {key: (module, constant)}. The catalogue holds these texts
 # once for the Hub page and the apps; test_af5_texts keeps each constant equal to its key (a `{command}` filled in, a
 # `{text!r}` as `'{text}'`). The Checks rows read these constants (one text source), and the constants hold the wording
 # of the design, so the tag-source rows are here too.

@@ -920,7 +920,7 @@ def test_script_has_the_load_and_unload_flows():
 
 def test_script_reruns_a_dry_run_asked_for_while_another_ran():
     """Picking spool B while A's dry run is in flight queues B's (dryAgain), run when A's call ends, instead
-    of leaving an empty plan and a disabled Load button (S3.11: in the Load sheet; the busy flag is the printer page's)."""
+    of leaving an empty plan and a disabled Load button (in the Load sheet; the busy flag is the printer page's)."""
     src = (STATIC / "printers.js").read_text(encoding="utf-8")
     assert "if (g.slotBusy) { if (dry) dryAgain = true; return; }" in src
     assert "if (dryAgain && spool && dlg.isConnected) { dryAgain = false; doLoad(true); }" in src
@@ -961,7 +961,7 @@ def test_manual_map_refuses_another_step_and_a_post_without_origin(app, kit):
 
 def test_the_printers_tab_offers_map_by_loading_filament():
     text = (STATIC / "printers.js").read_text(encoding="utf-8")
-    # S3.6: while a mapping runs the button is aria-disabled with its reason beside it, not natively disabled
+    # while a mapping runs the button is aria-disabled with its reason beside it, not natively disabled
     assert 'SW.btn(t("printers_map_loading"), { action: "map-by-loading", run: () => openManual(byLoad) })' in text
     assert 'disabled(byLoad, running ? t("printers_map_running_reason") : null);' in text
     for step in ("start", "confirm", "skip", "stop", "offer"):
@@ -1030,7 +1030,7 @@ def test_add_edit_and_forget_go_to_the_kit_with_only_their_keys(managing):
 
 
 def test_scan_test_and_clear_pass_to_the_kit_with_only_their_keys(managing):
-    """EV6b: the guided add's Klipper search and test, and Clear slot, are twins of the kit's routes."""
+    """the guided add's Klipper search and test, and Clear slot, are twins of the kit's routes."""
     app, kit = managing
     with TestClient(app, base_url=ORIGIN, client=HOME) as c:
         c.post(P + "/scan", headers=H, json={"subnet": "10.9.9.0/24"})
@@ -1063,7 +1063,7 @@ def test_clear_checks_its_slot_label_and_flag_before_the_kit(slotapp, slotkit):
 
 
 def test_the_guided_add_and_clear_slot_are_in_the_script():
-    """EV6b: the guided sheet's steps and its calls, and Clear slot beside Unload with a dry run before the sheet."""
+    """the guided sheet's steps and its calls, and Clear slot beside Unload with a dry run before the sheet."""
     text = (STATIC / "printers.js").read_text(encoding="utf-8")
     for words in ("function guidedAdd(", 'pj("scan", {})', 'pj("test", {', 'pj("add", sent)', "/clear`, { dry_run: true }", "/clear`, { dry_run: false }",
                   'action: "clear-slot"', 'tg("printer_guided_map_title")'):
@@ -1072,7 +1072,7 @@ def test_the_guided_add_and_clear_slot_are_in_the_script():
 
 
 def test_a_field_the_kit_names_reaches_the_printers_tab(managing, monkeypatch):
-    """S1.4: the kit's `field` (api.py) travels through the web unit's answer to the page."""
+    """the kit's `field` (api.py) travels through the web unit's answer to the page."""
     from filament_kit.web.slots import SlotError
     app, kit = managing
 
@@ -1172,7 +1172,7 @@ def test_the_printers_tab_has_manage_printers():
         assert words in text, words
     # the review's rules, as the kit enforces them: a new certificate comes with the code, an unpinned printer's new
     # address with its code, a Klipper move with its key
-    # (S3.5: the address change asks for the Access Code pinned or not, the user's staging decision of 2026-11-12)
+    # (the address change asks for the Access Code pinned or not, the user's staging decision of 2026-11-12)
     assert "edit({ unpin: true, access_code: c }" in text
     assert "...(bambu ? { access_code: rest[0] } : { api_key: rest[0] })" in text
 
@@ -1217,7 +1217,7 @@ def test_every_printer_route_takes_the_id_shape_the_kit_makes():
 
 def test_manage_printers_uses_inline_fields_not_prompts():
     """FB-044: no window.prompt (it cannot mask a secret); the Access Code and API key fields are secret fields of the shared
-    field component (S3.5: in sheets); the Klipper add is one form, and its port must be 1-65535 instead of silently becoming
+    field component (in sheets); the Klipper add is one form, and its port must be 1-65535 instead of silently becoming
     7125 (FB-045a)."""
     text = (STATIC / "printers.js").read_text(encoding="utf-8")
     code = " ".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("//"))
@@ -1272,7 +1272,7 @@ def test_a_failed_manual_map_poll_backs_off_and_keeps_polling():
 
 
 def test_confirmations_and_questions_are_sheets_not_native_dialogs():
-    """S3.5: the five confirmations and the seven questions of the design, web app are SW.ask sheets, opened through app.js's
+    """the five confirmations and the seven questions of the design, web app are SW.ask sheets, opened through app.js's
     openHere (Back closes them); a secret is a secret field and the stored text comes from the catalogue."""
     src = (STATIC / "printers.js").read_text(encoding="utf-8")
     code = " ".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("//"))

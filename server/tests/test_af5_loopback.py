@@ -1,4 +1,4 @@
-"""AF5: a station on the Hub's own machine is called as it answers, the not-on-HTTPS row is
+"""a station on the Hub's own machine is called as it answers, the not-on-HTTPS row is
 never shown for it, the no-downgrade rule still holds, and `status` does not exit 1 for it."""
 import json
 import threading

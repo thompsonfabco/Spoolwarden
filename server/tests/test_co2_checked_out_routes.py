@@ -189,7 +189,7 @@ def test_return_and_home_have_the_callers_of_the_spools_move_and_weight(sm, prin
 
 
 def test_return_is_no_more_reachable_than_the_most_permissive_spool_change_the_web_app_has(sm, printers, store):  # noqa: F811
-    """CO2 caller ruling: return gives the web app NO MORE REACH than it already has for changing a spool. Every spool change the
+    """caller rule: return gives the web app NO MORE REACH than it already has for changing a spool. Every spool change the
     web app has, with the list that admits its kit route (or none: it runs in the app's own process) and whether its twin refuses
     the public address; return's reach must equal the widest of them, so moving return (or one of them) between lists fails here.
     Reach: 2 = the public address too (WEB_ROUTES, or a twin with no home-only check), 1 = home only (HOME_WEB_ROUTES, or a twin
@@ -579,3 +579,51 @@ def test_the_command_lines_requests_find_every_field_they_read(c, sm):
     # 400 for an unknown location carries the Hub's message
     bad = c.patch(f"/api/spools/{t['id']}", json={"home": "Nowhere", "dry_run": True})
     assert bad.status_code == 400 and isinstance(bad.json()["message"], str) and bad.json()["message"]
+
+
+def test_move_to_non_printer_ends_checked_out_and_undo_restores_it_while_move_to_printer_keeps_it(c, sm, store):  # noqa: F811
+    from filament_kit import undo
+    s = _out(sm, home="Rack 1", name="MoveOut")
+    dry = c.patch(f"/api/spools/{s['id']}", json={"location": "Rack 2", "dry_run": True}).json()
+    assert dry["view"]["checked_out"] is False and dry["view"]["home"] is None and dry["view"]["checked_out_since"] is None
+    done = c.patch(f"/api/spools/{s['id']}", json={"location": "Rack 2", "dry_run": False}).json()
+    assert done["view"]["checked_out"] is False and done["view"]["home"] is None and done["view"]["checked_out_since"] is None
+    assert done["spool"]["location"] == "Rack 2" and inventory.prev_entry(sm.get(f"spool/{s['id']}")) == ("", None)
+    ret_ev = [e for e in store.all_events() if e["kind"] == "spool.returned"]
+    assert len(ret_ev) == 1 and ret_ev[0]["data"]["after_location"] == "Rack 2" and ret_ev[0]["data"]["before_home"] == "Rack 1"
+    assert not [e for e in store.all_events() if e["kind"] == "spool.moved"]
+    u = undo.undo_event(ret_ev[0]["id"], sm, store=store)
+    assert u["undone"] is True
+    restored = sm.get(f"spool/{s['id']}")
+    assert restored["location"] == SLOT and inventory.prev_entry(restored) == ("Rack 1", SINCE)
+    p = _out(sm, home="Rack 1", name="MoveInPrinter")
+    other_slot = SLOT.replace("A2", "A3")
+    moved = c.patch(f"/api/spools/{p['id']}", json={"location": other_slot, "dry_run": False}).json()
+    assert moved["view"]["checked_out"] is True and moved["view"]["home"] == "Rack 1" and moved["view"]["checked_out_since"] == SINCE
+    assert [e for e in store.all_events() if e["kind"] == "spool.moved"]
+
+
+def test_web_twin_return_carries_catalogue_note_when_printer_notified_false(sm):
+    from filament_kit.bridge.registry import Printer
+    from filament_kit.bridge import registry
+    registry.upsert(Printer("klipper-1", "Voron", "klipper", "http://127.0.0.1:7125", "", True, family="klipper"))
+    s = inventory.add_spools(sm, [__import__("test_inventory").item(name="KlipperOut")],
+                             {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2,
+                              "overflow": "Overflow", "sealed_location": "Sealed stock"}, dry=False)
+    sid = s.spool_ids[0]
+    sm.patch(f"spool/{sid}", {"location": "Voron – Slot 1",
+                               "extra": {**(sm.get(f"spool/{sid}").get("extra") or {}),
+                                         **inventory.prev_extra("Rack 1", SINCE)}})
+    with TestClient(create_app(sm=sm), raise_server_exceptions=False) as client:
+        client.headers.update(_auth())
+        kit_res = client.post(f"/api/spools/{sid}/return", json={})
+        assert kit_res.status_code == 200 and kit_res.json().get("printer_notified") is False
+
+    kit = RecordingKit()
+    kit.answer = {"spool": {"id": 1, "location": "Rack 1"}, "view": {"id": 1, "checked_out": False},
+                  "location": "Rack 1", "printer_notified": False}
+    with _web(sm, kit) as w:
+        r = w.post("/intake/api/spools/1/return", headers=ORIGIN)
+        assert r.status_code == 200
+        assert r.json().get("printer_notified") is False
+        assert r.json().get("note") == "The printer could not be told to clear its slot."

@@ -1,4 +1,4 @@
-"""VO2: the voice keys, handing Speak/Speaker/Speed/Volume to the Weigh Station, the logic of the kit
+"""the voice keys, handing Speak/Speaker/Speed/Volume to the Weigh Station, the logic of the kit
 routes, and the page route for Test. The station is a stub: `station_client.call` is replaced by a recorder."""
 from __future__ import annotations
 

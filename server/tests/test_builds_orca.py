@@ -60,7 +60,7 @@ def _family_files(stamp: str) -> dict[str, bytes]:
 
 
 def _json_of(path: Path) -> bytes:
-    """A state file as the JSON text the golden files hold (the files themselves are XML now: RC1c)."""
+    """A state file as the JSON text the golden files hold (the files themselves are XML now: )."""
     return (json.dumps(statexml.read(path), indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
@@ -215,7 +215,7 @@ def test_orca_printers_without_an_orca_upload_build_bambu_only(orca_cfg):
 
 
 def test_orca_edits_and_deletions_from_a_fresh_orca_live_folder(orca_cfg):
-    """Ruling Z: no Orca wait. After an install the build runs on the Bambu Studio live upload alone (the stale
+    """no Orca wait. After an install the build runs on the Bambu Studio live upload alone (the stale
     Orca folder is not diffed); a fresh Orca live upload's edits and deletions are then taken."""
     TB.synced(orca_cfg)
     orca_synced()
@@ -310,7 +310,7 @@ def test_new_sync_pc_without_orca_is_never_waited_for(orca_cfg):
 
 
 def test_failing_orca_upload_never_strands_a_request_and_its_stale_folder_is_not_diffed(orca_cfg):
-    """Ruling Z: the Orca live folder predates the install (the Orca upload keeps failing) and differs from the
+    """the Orca live folder predates the install (the Orca upload keeps failing) and differs from the
     installed build. A pending request waits for the Bambu Studio live folder only; that upload alone renews it
     (no manual request) and the build runs: the stale Orca values are no in-app edits, no Orca preset counts as
     deleted, the installed build's Orca record and restores are carried unchanged."""
@@ -329,7 +329,7 @@ def test_failing_orca_upload_never_strands_a_request_and_its_stale_folder_is_not
     builds.request_rebuild("spoolman changed")
     TB.tick()
     r = builds.run_build(orca_cfg, now=TG.NOW + 1)
-    assert r["waiting"] is True and r["error"] == builds.WAIT_LIVE                # Bambu Studio's S32, as before
+    assert r["waiting"] is True and r["error"] == builds.WAIT_LIVE                # Bambu Studio's build-step, as before
     TB.tick()
     builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")   # Orca's fails
     assert builds.state_view("a")["rebuild_requested"] is not None                # renewed by that upload alone
@@ -347,7 +347,7 @@ def test_failing_orca_upload_never_strands_a_request_and_its_stale_folder_is_not
 
 
 def test_orca_store_alone_leaves_the_family_build_and_lines_unchanged(env, fixed_ids):
-    """M1 (Ruling X): an uploaded Orca store without presets_orca / slicer_printers changes nothing."""
+    """M1: an uploaded Orca store without presets_orca / slicer_printers changes nothing."""
     builds.store_upload("orca_system", io.BytesIO(orca_system_zip()), device_id="a")
     stamp = _family_build(env)
     got = _family_files(stamp)
@@ -375,7 +375,7 @@ def test_counts_are_bambu_studio_presets(orca_cfg):
 
 
 def test_presets_orca_nozzles_config(orca_cfg):
-    """I2 (Ruling W): Orca presets for Bambu printers skip 0.2 unless presets_orca_nozzles says otherwise."""
+    """I2: Orca presets for Bambu printers skip 0.2 unless presets_orca_nozzles says otherwise."""
     TB.synced(orca_cfg)
     orca_synced()
     r = builds.run_build(orca_cfg, now=TG.NOW)
@@ -390,7 +390,7 @@ def test_presets_orca_nozzles_config(orca_cfg):
     assert {TGO.h2d("0.2"), TGO.h2d("0.4")} <= names and TGO.h2d("0.6") not in names
 
 
-# ---------- fix round 3 (Ruling AB): the Orca snapshot is the build whose orca/ went in ----------
+# ---------- fix round 3: the Orca snapshot is the build whose orca/ went in ----------
 
 PETG = TG.fil(60, "PETG Basic Blue", vendor="SUNLU", material="PETG",
               extra={"line": json.dumps("PETG Basic")})
@@ -460,7 +460,7 @@ def test_install_report_trees_are_checked(orca_cfg):
 # ---------- final review fixes ----------
 
 def test_state_view_says_whether_the_server_makes_orca_presets(env, orca_cfg):
-    """B-I2: pc-sync syncs Orca Slicer only when the server makes Orca presets (Ruling X: the config alone)."""
+    """B-I2: pc-sync syncs Orca Slicer only when the server makes Orca presets (the config alone)."""
     assert builds.state_view("a")["orca_target"] is True
     config.save({})
     assert builds.state_view("a")["orca_target"] is False

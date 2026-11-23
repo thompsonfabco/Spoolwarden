@@ -77,9 +77,23 @@ def test_pair_then_call(sm):
     assert c.post("/api/pair", json={"code": "000000" if p.code != "000000" else "111111"}).status_code == 401
     r = c.post("/api/pair", json={"code": p.code})
     assert r.status_code == 200
+    assert r.json()["role"] is None
     tok = r.json()["token"]
     r = c.get("/api/spools", headers=auth(tok))
     assert r.status_code == 200 and r.json()["spools"] == []
+
+
+def test_info_has_stable_random_hub_id_and_pair_returns_viewer_role(sm, tmp_path):
+    import re
+    c = client(sm)
+    b1 = c.get("/api/info").json()
+    b2 = c.get("/api/info").json()
+    assert re.fullmatch(r"[0-9a-f]{32}", b1["hub_id"])
+    assert b1["hub_id"] == b2["hub_id"]
+    assert (tmp_path / "state" / "pairing_hub_id.xml").exists()
+    p_ha = pairing.issue(device_hint="home-assistant", role=pairing.VIEWER_ROLE)
+    r_ha = c.post("/api/pair", json={"code": p_ha.code})
+    assert r_ha.status_code == 200 and r_ha.json()["role"] == pairing.VIEWER_ROLE
 
 
 def test_unpair_revokes_only_the_caller(sm, caplog):
@@ -447,7 +461,7 @@ def test_pair_tells_a_spent_code_from_a_wrong_one(sm):
     assert r.status_code == 401 and r.json()["error"] == "code_expired"
 
 
-# ---------- S3.7: the add preview per item, colour in find, search paging ----------
+# ---------- the add preview per item, colour in find, search paging ----------
 
 def _snapshot(sm) -> str:
     return json.dumps({k: sm.get(k) for k in ("vendor", "filament", "spool")}, sort_keys=True)
@@ -617,3 +631,42 @@ def test_patch_reply_adds_view_before_and_dry_and_refusals_name_their_field(sm):
     assert sm.get(f"spool/{sid}")["remaining_weight"] == 500
     r = c.patch(f"/api/spools/{sid}", headers=auth(tok), json={"location": "Nowhere Shelf", "dry_run": False})
     assert r.status_code == 200 and sm.get(f"spool/{sid}")["location"] == "Nowhere Shelf"   # the app's route is unchanged
+
+
+def test_local_ips_prefers_default_route_and_skips_bridges(monkeypatch):
+    import ipaddress
+    import socket
+    import sys
+    from types import SimpleNamespace
+
+    def le_ip(s: str) -> int:
+        return int.from_bytes(ipaddress.IPv4Address(s).packed, sys.byteorder)
+
+    routes = [
+        ("eth0", 0, 0),
+        ("docker0", le_ip("172.17.0.0"), le_ip("255.255.0.0")),
+        ("br-abc123", le_ip("172.18.0.0"), le_ip("255.255.0.0")),
+        ("veth0", le_ip("10.88.0.0"), le_ip("255.255.0.0")),
+        ("wlan0", le_ip("192.168.2.0"), le_ip("255.255.255.0")),
+        ("eth0", le_ip("192.168.1.0"), le_ip("255.255.255.0")),
+    ]
+    monkeypatch.setattr(pairing.os, "name", "posix")
+    monkeypatch.setattr(pairing, "_read_proc_net_route", lambda: routes)
+    monkeypatch.setattr(
+        pairing.subprocess,
+        "run",
+        lambda *a, **kw: SimpleNamespace(stdout="172.17.0.1 172.18.0.1 10.88.0.5 192.168.2.43 192.168.1.42"),
+    )
+    assert pairing.local_ips() == ["192.168.1.42", "192.168.2.43"]
+
+    monkeypatch.setattr(pairing, "_read_proc_net_route", lambda: [("docker0", 0, 0), ("docker0", le_ip("172.17.0.0"), le_ip("255.255.0.0"))])
+    monkeypatch.setattr(pairing.subprocess, "run", lambda *a, **kw: SimpleNamespace(stdout="172.17.0.1"))
+    assert pairing.local_ips() == ["172.17.0.1"]
+
+    monkeypatch.setattr(pairing.os, "name", "nt")
+    monkeypatch.setattr(
+        pairing.socket,
+        "getaddrinfo",
+        lambda *a, **kw: [(socket.AF_INET, 0, 0, "", ("172.17.0.1", 0)), (socket.AF_INET, 0, 0, "", ("192.168.50.10", 0))],
+    )
+    assert pairing.local_ips() == ["192.168.50.10"]

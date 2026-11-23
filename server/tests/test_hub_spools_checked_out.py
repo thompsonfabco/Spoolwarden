@@ -3,7 +3,7 @@
 "Checked out (<n>)", the rows with the place, Home and since, Return and its Undo toast, the Home line with Change home, the empty
 state, and an older Hub that offers none of it), in the four looks at 1280 and 390 px.
 
-The kit's side (CO1: the view's `checked_out` / `home` / `checked_out_since`, `inventory.return_spool`, `NotCheckedOut`, the `home` edit)
+The kit's side (the view's `checked_out` / `home` / `checked_out_since`, `inventory.return_spool`, `NotCheckedOut`, the `home` edit)
 is NOT in this tree: `stubbed` puts a stand-in for each in place, over the fake Spoolman. The stand-in is the contract the page assumes:
   spool view   + checked_out: bool, home: str|null, checked_out_since: str|null   (here: a remembered place in `extra.prev_location` and its time in `extra.prev_since`, as `inventory.prev_extra` writes them; a spool in a printer slot with none is checked out with no home)
   return_spool (sm, id, rules=, dry=) -> {spool, event: {id, undo}}   NotCheckedOut for a spool that is not checked out
@@ -266,3 +266,25 @@ out.detail = { overflow: document.documentElement.scrollWidth > vw, wide: wide(d
     assert page["list"]["overflow"] is False and page["list"]["wide"] == [] and page["list"]["clipped"] == [], page["list"]
     assert page["list"]["visible"] == [True] * 3 and page["list"]["width"] >= 40, page["list"]
     assert page["detail"]["overflow"] is False and page["detail"]["wide"] == [] and page["detail"]["line"], page["detail"]
+
+
+def test_return_toast_shows_printer_not_told_when_printer_notified_false(hub, made, stubbed, tmp_path):
+    page = _co(hub, tmp_path, r"""
+await unlock();
+const origFetch = window.fetch;
+window.fetch = async (u, i) => {
+  const res = await origFetch(u, i);
+  if (String(u).includes("/return")) {
+    const data = await res.json();
+    data.printer_notified = false;
+    return new Response(JSON.stringify(data), { status: res.status, headers: { "Content-Type": "application/json" } });
+  }
+  return res;
+};
+chip("checked_out").click();
+await settle(() => !!returnBtn(__A__), "row A");
+returnBtn(__A__).click();
+await settle(() => toasts().some((t) => t.includes("The printer could not be told")), "not-told toast");
+out.toast = toasts().find((t) => t.includes("The printer could not be told"));
+""".replace("__A__", str(made["A"])))
+    assert "The printer could not be told to clear its slot." in page["toast"]

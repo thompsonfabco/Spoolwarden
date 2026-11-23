@@ -1,4 +1,4 @@
-"""Statexml extensions (step RC1c follow-up): list files, mode and owner, read-only reads, tag=,
+"""Statexml extensions (c follow-up): list files, mode and owner, read-only reads, tag=,
 quarantine. The same tests run on the Hub copy and the Slicer Sync copy."""
 import errno
 import json

@@ -81,7 +81,7 @@ def _read_info(path: Path) -> dict:
 
 
 def _read_build_file(path: Path) -> dict | None:
-    """A build's BUILD file by its JSON name: the XML form when there is one (RC1c)."""
+    """A build's BUILD file by its JSON name: the XML form when there is one."""
     return statexml.read(path)
 
 
@@ -252,7 +252,7 @@ def _fit_variants(cfg: dict, mine: dict, variants: list[str], src_variants, log:
 
 def _variant_source(live_cfg: dict | None, installed: dict | None, live_fresh: bool):
     """The extruder variant names the carried values were written for: the live preset's, except that a stale
-    live folder (Ruling Z) never counts when an installed copy stands in for it. With no installed copy at all
+    live folder never counts when an installed copy stands in for it. With no installed copy at all
     (a first install, before any build was kept) the live upload is the only copy, and the record came from it."""
     src = live_cfg if (live_fresh or installed is None) else installed
     return (src or {}).get("filament_extruder_variant")
@@ -621,7 +621,7 @@ class OrcaPrinter:
     label: str                  # in preset names: "<line> @<label> <nozzle>" ("H2D", "SV08 MAX")
     bambu: bool                 # parents from Orca's BBL system presets; nozzles from them, per line
     nozzles: list[str]          # a configured printer's nozzles; for a Bambu printer the allowed ones ([]: all
-                                # the store lists but 0.2, as ops made them: Ruling W)
+                                # the store lists but 0.2, as ops made them: )
     compat: dict[str, str]      # nozzle -> compatible_printers entry (a configured printer's own preset names)
     chamber: int | None = None
 
@@ -634,7 +634,7 @@ class OrcaTarget:
     """What an Orca build needs. `store` = the uploaded Orca system presets (None: no Orca presets, one problem);
     `live` = Orca's uploaded user filament folder (`Live(..., sub="")`); `snapshot`/`partial` = the installed /
     half-installed build folders (their `orca/` tree and BUILD.json `orca_inapp`); `deleted_before` = Orca preset
-    names deleted in the app; `owner_edits` = {inapp, notes} of the Orca tree kept across a PC change (S34)."""
+    names deleted in the app; `owner_edits` = {inapp, notes} of the Orca tree kept across a PC change."""
     store: object | None
     printers: list[OrcaPrinter]
     problems: list[str]
@@ -644,7 +644,7 @@ class OrcaTarget:
     deleted_before: set[str] | None = None
     owner_edits: dict | None = None
     user_id: str = ""           # Orca's user id as the PC sync reported it (the .info user_id without a live folder)
-    live_fresh: bool = True     # False: `live` predates the installed build (Ruling Z): never diffed, see _build_orca
+    live_fresh: bool = True     # False: `live` predates the installed build: never diffed, see _build_orca
 
 
 def _label(name: str) -> str:
@@ -659,7 +659,7 @@ def orca_printers(models: list[str], slicer_printers: list,
     []), then each valid `slicer_printers` entry {"name", "slicer": "orca", "nozzles": [...], optional "label",
     optional "compatible_printers": {nozzle: printer preset name}}. A bad entry is a problem line.
     `bambu_nozzles` (config `presets_orca_nozzles`) limits the Bambu printers' Orca nozzles; None: every nozzle
-    the Orca store lists except 0.2 (Ruling W: ops made Orca H2D presets for 0.4/0.6/0.8 only)."""
+    the Orca store lists except 0.2 (ops made Orca H2D presets for 0.4/0.6/0.8 only)."""
     out: list[OrcaPrinter] = []
     problems: list[str] = []
     seen: set[str] = set()
@@ -719,7 +719,7 @@ def orca_preset_name(line: Line, printer: OrcaPrinter, nozzle: str) -> str:
 
 def _orca_recorded(t: OrcaTarget) -> tuple[dict[str, dict], dict[str, list[str]]]:
     """(the Orca in-app record to start from, the owner's saved Orca note lines): the partial build's record,
-    else the installed build's, else (a new sync PC, S34) the owner's kept record and note lines."""
+    else the installed build's, else (a new sync PC, build-step) the owner's kept record and note lines."""
     if t.partial is not None:
         return _recorded(t.partial, "orca_inapp"), {}
     if t.snapshot is not None:
@@ -737,7 +737,7 @@ def _build_orca(t: OrcaTarget, *, groups: dict[str, list[dict]], ls: LineSet, li
     """The Orca tree `out_dir/orca/` for every grouped line; returns the manifest's Orca keys (+ `_rows`).
 
     A stale Orca live folder (`t.live_fresh` False: not uploaded since the installed build, e.g. the Orca upload
-    keeps failing; Ruling Z) is never diffed: its old values would read as in-app edits. The installed build's
+    keeps failing; ) is never diffed: its old values would read as in-app edits. The installed build's
     record (`orca_inapp`, note lines) and its `orca_restored` are carried unchanged, nothing counts as deleted in
     the app but what was deleted before, and the presets are generated as usual."""
     problems.extend(t.problems)
@@ -945,7 +945,7 @@ def _build_orca_preset(line: Line, name: str, p: OrcaPrinter, nozzle: str, paren
     # 4. in-app edits
     installed = _read_json(Path(t.snapshot) / ORCA / f"{name}.json") if t.snapshot is not None else None
     half = _read_json(Path(t.partial) / ORCA / f"{name}.json") if t.partial is not None else None
-    # a stale live folder is not diffed (Ruling Z): the installed copy stands in for it, so only the record and
+    # a stale live folder is not diffed: the installed copy stands in for it, so only the record and
     # the installed note lines are carried
     mine = inapp.keep_edits(cfg, installed, live_cfg if t.live_fresh else installed, edits, recorded=recorded,
                             partial=half, notes=notes)

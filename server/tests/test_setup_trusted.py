@@ -317,7 +317,7 @@ def test_the_page_and_the_guide_say_a_new_code_keeps_trusted_computers():
 def test_the_page_offers_it_in_the_unlock_dialog_and_keeps_the_rules():
     trust = (STATIC / "setup_trust.js").read_text(encoding="utf-8")
     assert "innerHTML" not in trust and "document.cookie" not in trust
-    # S1.5: no offer after an unrelated change; the unlock dialog's checkbox, there while the feature is on
+    # no offer after an unrelated change; the unlock dialog's checkbox, there while the feature is on
     assert "offerTrust" not in trust and "SW.lock.trustOffered = !!T.enabled" in trust
     setup = (STATIC / "setup.js").read_text(encoding="utf-8")
     assert "offerTrust" not in setup and "codeIn" not in setup and "readersCard, trustCard]" in setup
@@ -338,5 +338,5 @@ def test_the_script_is_served_and_the_second_question_stays(app):
     assert "/setup/setup_trust.js" in c.get("/setup").text
     assert c.get("/setup/setup_trust.js").status_code == 200
     tabs = (STATIC / "setup_updates.js").read_text(encoding="utf-8") + (STATIC / "setup_tabs.js").read_text(encoding="utf-8")
-    # update and rollback ask in their dialogs (S1.6), trusted or not
+    # update and rollback ask in their dialogs, trusted or not
     assert "if (question) asking(" in tabs and 'startJob(box, "update", {' in tabs and 'startJob(back, "rollback",\n' in tabs

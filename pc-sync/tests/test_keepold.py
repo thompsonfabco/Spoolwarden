@@ -1,4 +1,4 @@
-"""RC1c, keep the old form: after a write through the new code, the JSON file that v0.6.2's
+"""keep the old form: after a write through the new code, the JSON file that v0.6.2's
 Slicer Sync reads is there, current, and in the shape its writer made (store.py:164, sync.py:165/486/812, installer.py:242).
 Each test reads the file with v0.6.2's own reading code (copied here, with its line)."""
 import base64

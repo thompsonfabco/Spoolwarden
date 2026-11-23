@@ -151,7 +151,7 @@ def test_remote_needs_https_public_url():
 
 
 def test_web_needs_https_public_url():
-    # Ruling AA: the web unit is the OAuth issuer, so it needs its public address even without remote
+    # the web unit is the OAuth issuer, so it needs its public address even without remote
     cfg = config._merge(config.DEFAULTS, {})
     cfg["modules"] = {"spoolman": True, "server": True, "web": True}
     for url in (None, "", "http://x.example/", "not a url", "https://"):

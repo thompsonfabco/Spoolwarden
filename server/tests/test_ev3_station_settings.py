@@ -1,4 +1,4 @@
-"""EV3 (a): the station's own settings file (station/settings.py), the lamp mapping (flow.lamp_modes) and where the
+"""(a): the station's own settings file (station/settings.py), the lamp mapping (flow.lamp_modes) and where the
 station keeps its state (state.state_dir)."""
 from __future__ import annotations
 

@@ -659,7 +659,7 @@ def test_aut9_the_new_commands_hold_80_columns_no_escape_ascii_and_json(argv, ca
     assert isinstance(json.loads(js), dict)
 
 
-# ---------- the rework of S5.8 ----------
+# ---------- the rework of ---------
 
 REAL_AUDIT = cli._hub_audit
 
@@ -818,7 +818,7 @@ def test_pair_home_assistant_issues_viewer_role(capsys, monkeypatch, tmp_path):
     modules_on("server")
     cert = tmp_path / "cert.pem"
     cert.write_bytes(b"CERT")
-    monkeypatch.setattr(cli.config, "paths", lambda: SimpleNamespace(etc=tmp_path, var=tmp_path, opt=tmp_path))
+    monkeypatch.setattr(cli.config, "paths", lambda: SimpleNamespace(etc=tmp_path, var=tmp_path, opt=tmp_path, state=tmp_path))
     seen = {}
 
     def fake_issue(**kw):

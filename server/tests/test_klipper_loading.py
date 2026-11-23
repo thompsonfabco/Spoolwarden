@@ -578,7 +578,7 @@ def test_a_klipper_load_writes_spool_loaded_and_unloaded_in_one_batch(printer, s
         event_sink.set_sink(None)
 
 
-# ---------- CO1: checked out, the one send-back, Return ----------
+# ---------- checked out, the one send-back, Return ----------
 
 SINCE = "2026-11-20T10:00:00Z"
 

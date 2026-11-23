@@ -1,4 +1,4 @@
-"""AF2b: the Weigh Station's drop-in follows station.page_from, is rewritten when it must be, says its
+"""the Weigh Station's drop-in follows station.page_from, is rewritten when it must be, says its
 closing line once, and the installer's closing address is the https one."""
 import json
 import subprocess

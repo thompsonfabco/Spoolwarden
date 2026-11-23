@@ -1,4 +1,4 @@
-"""RC1e: the Bambu per-printer files (slot map, mapping status, slot snapshot) keep the old JSON form current for a rollback
+"""the Bambu per-printer files (slot map, mapping status, slot snapshot) keep the old JSON form current for a rollback
 (v0.6.2's exact bytes, mode and key order), and a read that rewrites the XML form keeps its mode and the save lock."""
 import json
 import os

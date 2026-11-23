@@ -147,6 +147,21 @@ def test_panel_wifi_off_goes_back_to_usb_even_with_no_panel_there(bench, monkeyp
     assert seen == [None] and bench.applied == [False] and bench.calls == ["is-active", "stop", "start"]
 
 
+def test_panel_wifi_off_with_no_panel_on_usb_says_panel_still_holds_settings(bench, monkeypatch, capsys):
+    from filament_kit import spools_cli
+    monkeypatch.setattr(panel, "open_panel", lambda dev: None)
+    monkeypatch.setattr(panel_setup, "disable", lambda send=None: {"panel_link": "usb", "panel_forgotten": False})
+    assert cli.cmd_station_panel_wifi(off=True, run=bench.run) == 0
+    out = capsys.readouterr().out
+    assert "The panel is back on the USB cable." in out
+    norm = " ".join(out.split())
+    expected = ("No panel was on USB, so the panel itself still holds its Wi-Fi settings and will keep them "
+                "until it is connected by USB and set again.")
+    assert expected in norm
+    if hasattr(spools_cli, "CLI_PANEL_WIFI_OFF_NO_USB"):
+        assert spools_cli.CLI_PANEL_WIFI_OFF_NO_USB == expected and norm.count(expected) == 1
+
+
 def test_panel_wifi_is_parsed_with_its_options(monkeypatch):
     seen = []
     monkeypatch.setattr(cli, "cmd_station_panel_wifi", lambda **kw: seen.append(kw) or 0)

@@ -1,4 +1,4 @@
-"""S2.1: every status row carries its group (also in `G overview`), `G state` reports the Cloud reads used today and the
+"""every status row carries its group (also in `G overview`), `G state` reports the Cloud reads used today and the
 limit, and one live summary line for each navigation section. The CLI's `status` words are held by
 test_console_cli_snapshots.py."""
 from __future__ import annotations

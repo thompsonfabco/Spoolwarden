@@ -289,13 +289,13 @@ def test_load_no_preset(client, mgr):
 def test_load_busy_offline_cert_changed(client, mgr, monkeypatch):
     preset(monkeypatch)
     url = f"/api/printers/{SERIAL}/slots/A1/load"
-    # Ruling BK: mid-print, only the slot that feeds the job is refused (slot_in_use); another slot goes through
+    # mid-print, only the slot that feeds the job is refused (slot_in_use); another slot goes through
     mgr.report["gcode_state"] = "PREPARE"
     mgr.report["ams"]["tray_now"] = "0"                  # A1 feeds the job
     err(client.post(url, json={"spool_id": 1, "dry_run": False}), 409, "slot_in_use")
     assert mgr.writes == []
     mgr.report["ams"]["tray_now"] = "1"                  # A2 feeds it: A1 is free
-    mgr.report["mapping"] = [1]                          # the job uses A2 only (dual nozzle, no snow: Ruling BM)
+    mgr.report["mapping"] = [1]                          # the job uses A2 only (dual nozzle, no snow: )
     assert client.post(url, json={"spool_id": 1, "dry_run": True}).status_code == 200
     mgr.report["gcode_state"] = "IDLE"
     mgr.st = "offline"

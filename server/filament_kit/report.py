@@ -1,4 +1,4 @@
-"""Redacted plain-text Hub report (HD6, the design, Hub page and command line).
+"""Redacted plain-text Hub report (the design, Hub page and command line).
 
 Collects versions, enabled features, Checks rows with fix lines, printers (kind and model), devices by kind and
 version, storage use, the last update log, the last 200 events, non-private settings, and the last 500 lines of each

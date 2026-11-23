@@ -19,7 +19,7 @@ in `X-Reader-Build`: handed to the Hub with when it last called, reader_tokens.S
 
 A scan loads the tag's spool into the slot through the kit server's own load route (KitApi, as the MCP printer
 tools do): the user's exact preset or `no_preset`, never Generic (bridge/loading.py); mid-print only the slot that
-feeds the job is refused (Ruling BK: `slot_in_use`). The reply comes within SCAN_WAIT seconds of the request
+feeds the job is refused (`slot_in_use`). The reply comes within SCAN_WAIT seconds of the request
 (a deadline from the start of the scan) even when the printer's confirmation takes longer (the firmware waits
 6 s): the load goes on in the background and the reply says "sent". Queue-on-empty (ported from the scanner): a
 slot the printer reports empty (`present` false) or still reading its tag is not set at once (the AMS resets a

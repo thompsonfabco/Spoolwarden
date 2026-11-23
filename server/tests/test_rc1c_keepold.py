@@ -1,4 +1,4 @@
-"""RC1c, keep the old form: after a write through the new code, the JSON file that v0.6.2's
+"""keep the old form: after a write through the new code, the JSON file that v0.6.2's
 Hub reads is there, current, and in the shape its writer made (builds.py:180 / lines.py:602: json.dumps(indent=2,
 ensure_ascii=False) + newline, mode 0644, state owner). Each test reads the file with v0.6.2's own reading code (copied
 here, with its line), and one test per file."""

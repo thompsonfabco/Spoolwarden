@@ -123,7 +123,7 @@ def test_broken_library_falls_back_to_filament_map(built, monkeypatch):
 
 
 def test_recorded_line_wins_over_a_longer_library_prefix(built, monkeypatch):
-    """Final review I2: the build keeps a filament in its recorded line (S12); after a library update adds a longer
+    """Final review I2: the build keeps a filament in its recorded line; after a library update adds a longer
     product that exists as another line, preset_for still follows the build's filament-id map. An explicit
     extra.line (the new-colour case) and a filament not in the map still go by vendor + line."""
     from filament_kit.profiles import lines as lines_mod

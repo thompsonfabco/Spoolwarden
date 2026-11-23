@@ -4,7 +4,7 @@
 import { spawnSync } from "node:child_process";
 
 function killTree(proc) {
-  if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(proc.pid), "/T", "/F"], { stdio: "ignore" });
+  if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(proc.pid), "/T", "/F"], { stdio: "ignore", timeout: 5000 });
   else proc.kill("SIGKILL");
 }
 

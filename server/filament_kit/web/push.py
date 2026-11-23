@@ -144,7 +144,7 @@ class Store:
             k = sub["info"]["keys"]
             el = ET.SubElement(root, "sub", endpoint=events._text(ep), p256dh=events._text(k["p256dh"]),
                                auth=events._text(k["auth"]), created=f"{sub.get('created') or 0:.0f}")
-            if sub.get("lang"):                  # RC4: the language in use on that phone
+            if sub.get("lang"):                  # the language in use on that phone
                 el.set("lang", sub["lang"])
         data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
         f = self.path

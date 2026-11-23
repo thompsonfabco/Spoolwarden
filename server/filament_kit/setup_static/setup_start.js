@@ -3,7 +3,7 @@
 (() => {
   "use strict";
 
-  // the texts of the demo, a stub table (key -> English) until the string catalogue has them (RC9 adds them)
+  // the texts of the demo, a stub table (key -> English) until the string catalogue has them (adds them)
   const STUB = {
     start_demo_lead: "Just looking?",
     start_demo_try: "Try the demo",

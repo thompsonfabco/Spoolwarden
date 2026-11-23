@@ -529,7 +529,7 @@ def test_the_hub_unreachable_text_names_the_home_address_it_tried(tmp_path):
 
 
 def test_every_text_the_flash_section_says_is_in_the_catalogue():
-    """The section says nothing of its own (S2.16): each key it asks the catalogue for exists, with the words the design, Hub page gives."""
+    """The section says nothing of its own: each key it asks the catalogue for exists, with the words the design, Hub page gives."""
     import re
     js = (STATIC / "setup_flash.js").read_text(encoding="utf-8")
     texts = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))

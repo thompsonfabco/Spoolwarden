@@ -1265,7 +1265,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     def info_body() -> dict:
         return {"name": config.load()["server_name"], "version": __version__, "api": API_VERSION,
                 "apk_version": _apk_version(), "modules": sorted(on),
-                "look": config.look(config.load())}
+                "look": config.look(config.load()),
+                "hub_id": pairing.hub_id()}
 
     @_handle
     async def info(request: Request):
@@ -1280,7 +1281,9 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             return _err(401, "code_expired", str(e))
         except pairing.PairingError as e:
             return _err(401, "unauthorized", str(e))
-        return JSONResponse({"token": token})
+        dev_id = await run_in_threadpool(pairing.check, token)
+        role = await run_in_threadpool(pairing.role_of, dev_id) if dev_id else None
+        return JSONResponse({"token": token, "role": role})
 
     @_authed
     async def unpair(request: Request):
@@ -1403,8 +1406,10 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return await run_in_threadpool(intake_history.get, request.path_params["hid"])
 
     async def history_photo(request: Request):
-        data = await run_in_threadpool(intake_history.photo, request.path_params["hid"], request.path_params["n"])
-        return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+        thumb = request.query_params.get("size") == "thumb"
+        fn = intake_history.photo_thumb if thumb else intake_history.photo
+        data = await run_in_threadpool(fn, request.path_params["hid"], request.path_params["n"])
+        return Response(data, media_type="image/jpeg", headers=intake_history.photo_headers(data, thumb=thumb))
 
     async def history_revise(request: Request):
         body = await _json(request)
@@ -1559,7 +1564,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             remaining=_opt(body, "remaining", float), location=_opt(body, "location", str),
             empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, True), rules=rules(),
             home=_opt(body, "home", str), auto_location=_opt(body, "auto_location", bool, False)))
-        return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added (S3.9); `home`: 409 not_checked_out
+        return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added; `home`: 409 not_checked_out
 
     def returner(spool_id: int, *, grams: float | None = None, dry: bool = False, gross: float | None = None) -> dict:
         """`inventory.return_spool`, or the Klipper family's when the spool sits in one of its printers' slots (the

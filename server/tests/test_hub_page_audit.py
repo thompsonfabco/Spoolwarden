@@ -1,4 +1,4 @@
-"""AUT-5 on the Hub page (step S1.11, the design, accessibility): the page audit (tests/page_audit.js) in every section of the
+"""AUT-5 on the Hub page (the design, accessibility): the page audit (tests/page_audit.js) in every section of the
 Hub page (/setup), Console light and dark, at 1280 px and 320 px, through tests/aut5_run.mjs in a headless Chrome, Edge
 or Chromium already on the machine. The page is served with example data only (the example-data rules: "Workshop hub",
 Workshop X1, Garage Voron, Kitchen phone, rd-01) and the printers and Klipper modules on, with fakes for the managers.
@@ -575,4 +575,30 @@ def test_overview_passes_the_audit_locked_with_a_failing_check(hub, monkeypatch)
     """Locked (the all-sections test above also runs it, with no Overview line in the allow-list), with a check that needs a look."""
     monkeypatch.setattr(cli.Spoolman, "missing_fields", lambda self: ["spoolwarden_example"])
     run = _run("--url", hub, "--views", "#overview", "--ready", OVERVIEW_FAILING)
+    assert run.returncode == 0, run.stdout + run.stderr
+
+
+API_TIMEOUT_CHECK = """(async () => {
+  const realST = window.setTimeout;
+  const realFetch = window.fetch;
+  let seenSignal = null;
+  window.setTimeout = (fn, ms, ...a) => (ms === 30000 ? realST(fn, 1, ...a) : realST(fn, ms, ...a));
+  window.fetch = (u, o) => {
+    if (!String(u).includes("/setup/api/ping-timeout-test")) return realFetch(u, o);
+    seenSignal = o && o.signal;
+    return new Promise((_, rej) => {
+      if (o && o.signal) o.signal.addEventListener("abort", () => rej(new DOMException("Aborted", "AbortError")));
+    });
+  };
+  let err = null;
+  try { await api("ping-timeout-test"); } catch (e) { err = e; }
+  if (!seenSignal) throw new Error("api() did not pass AbortSignal to fetch");
+  if (!err || !err.timeout || err.message !== "The Hub did not answer in 30 s.") {
+    throw new Error("unexpected timeout error: " + (err && err.message));
+  }
+})()"""
+
+
+def test_hub_api_times_out_after_30s_with_common_timeout_sentence(hub):
+    run = _run("--url", hub, "--views", "#overview", "--ready", API_TIMEOUT_CHECK)
     assert run.returncode == 0, run.stdout + run.stderr

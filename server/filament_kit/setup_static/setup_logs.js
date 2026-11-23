@@ -4,7 +4,7 @@
 // are the logs as they were, behind the code. Undo and Collect a Hub report change something or hand a file out: they take the code.
 "use strict";
 
-// The texts of this part that the catalogue does not hold yet (only HD2 opens strings/): the catalogue's text wins once it has the key.
+// The texts of this part that the catalogue does not hold yet (only opens strings/): the catalogue's text wins once it has the key.
 const ACT_TEXT = {
   logs_view: "Logs view", logs_activity: "Activity", logs_service_logs: "Service logs",
   activity_who: "Who", activity_who_unknown: "Unknown", activity_kind: "What kind",

@@ -1,4 +1,4 @@
-"""S5.1: how the command line writes. The first block is AUT-9 for `status` and a
+"""how the command line writes. The first block is AUT-9 for `status` and a
 failing command, run with COLUMNS=80: no line over 79 characters, no escape byte without colour, ASCII and no CR in
 `--plain`, a failing command with an empty standard output and an error that starts "Error: ". The rest holds the
 pieces: the glyph set, colour, tables, wrapping, the progress line and the exit codes."""

@@ -1,4 +1,4 @@
-"""The Slicer presets section of the Hub page (step S2.10, the design, Hub page), pressed in a real headless browser through
+"""The Slicer presets section of the Hub page (the design, Hub page), pressed in a real headless browser through
 tests/page_drive.mjs: each control reaches the same Hub route as before (the Hub's own functions are watched, in order), and
 the page says what the catalogue says. The page is served with the data of test_hub_page_audit.py (a first install and a
 rebuild with an update waiting). The same skip rules as the page audit: no Node 22 or no browser is a skip (a failure with
@@ -228,7 +228,7 @@ location.hash = "#overview";
 await sleep(3500);
 return { hash: location.hash, build: !!$('[data-action="build"]'), meta: text($(".page-head__meta")), title: text($("h1")) };
 """)
-    # Overview draws its own meta line (S2.2); what must not be there is the presets one
+    # Overview draws its own meta line; what must not be there is the presets one
     assert {k: page[k] for k in ("hash", "build", "title")} == {"hash": "#overview", "build": False, "title": T("nav_overview")}, page
     assert "Last build" not in (page["meta"] or "") and T("presets_meta_sync") not in (page["meta"] or ""), page
 

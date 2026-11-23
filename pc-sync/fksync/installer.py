@@ -14,7 +14,7 @@ Order (each check runs before anything is written):
      live preset's current value (the builder never writes G-code of its own);
   3. a preset edited or deleted in the app after the build was made refuses the install
      (unless more than a quarter of the installed presets vanished at once: an app reset); a live
-     value equal to the copy in dirs.partial (a build whose install stopped part-way, ruling S28) was
+     value equal to the copy in dirs.partial (a build whose install stopped part-way, ) was
      written by that install, not typed in the app, so it is not an edit (the server agrees); nor is
      a live value equal to the build's own record of the in-app values it carried (BUILD.json
      `inapp`, `orca_inapp` for Orca: the build saw it, e.g. a "nil" it filled in); a preset the build
@@ -141,7 +141,7 @@ def trusted_gcode(system_filament: Path, *more: Path) -> set[str]:
 
 def _build_meta(build_dir: Path, prefix: str = "") -> tuple[dict[str, dict], set[str]]:
     """(BUILD.json `<prefix>inapp`: {preset: {key: value}}, casefolded `<prefix>restored` names); empty when absent."""
-    m = statexml.read(build_dir / "BUILD.json")         # BUILD.xml, or an older Hub's BUILD.json (RC1c)
+    m = statexml.read(build_dir / "BUILD.json")         # BUILD.xml, or an older Hub's BUILD.json
     if not isinstance(m, dict):
         return {}, set()
     rec = m.get(f"{prefix}inapp")
@@ -213,7 +213,7 @@ def _replace_installed(build_dir: Path, dirs: AppDirs, skip: tuple[str, ...] = (
     """dirs.installed becomes what the slicers hold now: a copy of the build, with each target's kept presets
     swapped for their live copy (or dropped when they live under another file name); a `skip`ped tree (not
     installed here) keeps the previous snapshot's copy, if any: it is still what the app holds (the server's
-    Orca snapshot too, Ruling AB)."""
+    Orca snapshot too, )."""
     dirs.ensure()
     work = Path(tempfile.mkdtemp(prefix=".installed.", suffix=".tmp", dir=dirs.base))
     try:

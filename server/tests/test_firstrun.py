@@ -1,4 +1,4 @@
-"""AF1: the first-run file."""
+"""the first-run file."""
 import os
 
 import pytest

@@ -1,4 +1,4 @@
-"""RC6b / RC7: the stops that live in the modules that reach outside, and the wiring: while the demo is on
+"""/ the stops that live in the modules that reach outside, and the wiring: while the demo is on
 no connection is made, no release is fetched, no backup is made or restored, the root helper changes nothing, a Tag
 Reader gets no firmware or token, and what the Hub records lands in the demo's folder."""
 from __future__ import annotations

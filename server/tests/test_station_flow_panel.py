@@ -520,14 +520,14 @@ def test_an_older_hub_without_speak_is_spoken_from_the_display_lines(rig):
     assert rig.said[-1] == "Recognised Elegoo PLA Galaxy Blue. Put it on the scale."
 
 
-# --- CO3: a checked-out spool opens the weigh step in returning mode ---------------------------------------------
+# --- a checked-out spool opens the weigh step in returning mode ---------------------------------------------
 
 OUT = "4:cc:dd"
 OUT_SPOOL = {**SPOOL, "checked_out": True, "home": "Rack 1", "slot": "H2D - AMS 1"}
 
 
 def checked_out(rig, home="Rack 1", **extra):
-    """A Hub that knows checked-out spools: the tag's answer, the save with `return`, and the return route (stubs of CO2)."""
+    """A Hub that knows checked-out spools: the tag's answer, the save with `return`, and the return route (stubs of )."""
     sp = {**OUT_SPOOL, "home": home}
     real_lookup = rig.api.tag_lookup
     rig.api.returns = []

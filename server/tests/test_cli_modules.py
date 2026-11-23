@@ -71,7 +71,7 @@ def test_modules_set_all_in_one_saves_and_applies(applied):
     assert cfg["station"]["url"] == "http://127.0.0.1:5003"
     assert cfg["station"]["allow"] == ["127.0.0.1"]
     assert applied[0]["modules"]["station"] is True
-    assert ("finish", False) in applied  # Ruling H: no pairing QR
+    assert ("finish", False) in applied  # no pairing QR
 
 
 def test_modules_apply_keeps_pairing(applied):

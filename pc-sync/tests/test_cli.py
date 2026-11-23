@@ -314,7 +314,7 @@ def test_pair_show_link_switch_keeps_the_visible_prompt(paths, srv, monkeypatch)
 
 
 def test_pair_with_a_bare_host_finds_the_hub_on_the_second_port(paths, srv, monkeypatch, capsys):
-    """AF8: no port typed, so the Hub is looked for on 443, then 8710 (here: a closed port, then the Hub); the port found is saved."""
+    """no port typed, so the Hub is looked for on 443, then 8710 (here: a closed port, then the Hub); the port found is saved."""
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
     closed = s.getsockname()[1]

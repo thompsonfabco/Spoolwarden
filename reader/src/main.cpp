@@ -459,6 +459,7 @@ HTTPClient       apiHttp;
 bool          mdnsUp = false;
 volatile bool wifiGotIp = false;   // Wi-Fi got an address (set by the event, taken by ensureMdns)
 std::string   hubIpNow;            // the address in use ("" = look it up on the next connect)
+RTC_DATA_ATTR bool hasConnectedOnce = false;   // cold boot beeps on first connect; reconnects stay quiet
 
 void onWifiGotIp(arduino_event_id_t, arduino_event_info_t) { wifiGotIp = true; }
 
@@ -511,7 +512,11 @@ bool hubConnect(WiFiClientSecure& tls, uint32_t budgetMs) {
       hubIpNow = list[i].ip;
       return true;
     }
-    Serial.printf("hub %s: %s did not answer\n", bp.host.c_str(), list[i].ip.c_str());
+    char tlsErr[120] = "";
+    int tlsCode = tls.lastError(tlsErr, sizeof(tlsErr));
+    Serial.printf("hub %s: %s did not answer (mbedtls=%d %s, ip=%s, rssi=%d)\n",
+                  bp.host.c_str(), list[i].ip.c_str(), tlsCode, tlsErr,
+                  WiFi.localIP().toString().c_str(), WiFi.RSSI());
   }
   if (list.empty()) Serial.printf("hub %s: no address\n", bp.host.c_str());
   hubIpNow.clear();                                      // look it up again on the next connect
@@ -542,8 +547,8 @@ class CappedString : public Stream {
 // boundMs: one attempt with that connect and read time each (the Hub check at start, HUB_CHECK_MS).
 int apiRequest(const String& url, const char* body, String& resp, bool quick = false, uint32_t boundMs = 0) {
   int code = -1;
-  uint32_t readMs = boundMs ? boundMs : quick ? LIST_QUICK_TIMEOUT_MS : 6000;
-  uint32_t connectMs = boundMs ? boundMs : quick ? LIST_QUICK_TIMEOUT_MS : 5000;
+  uint32_t readMs = boundMs ? boundMs : quick ? LIST_QUICK_TIMEOUT_MS : 12000;
+  uint32_t connectMs = boundMs ? boundMs : quick ? LIST_QUICK_TIMEOUT_MS : 10000;
   for (int attempt = 0; attempt < (quick || boundMs ? 1 : 2); attempt++) {
     apiHttp.setReuse(true);
     apiHttp.setTimeout(readMs);
@@ -552,6 +557,13 @@ int apiRequest(const String& url, const char* body, String& resp, bool quick = f
     apiHttp.addHeader("X-Auth-Token", cfg.token.c_str());
     if (body) { apiHttp.addHeader("Content-Type", "application/json"); code = apiHttp.POST(body); }
     else      code = apiHttp.GET();
+    if (code <= 0) {
+      char tlsErr[120] = "";
+      int tlsCode = apiTls.lastError(tlsErr, sizeof(tlsErr));
+      Serial.printf("api %s failed: %d | mbedtls=%d %s | ip=%s | WiFi %s RSSI %d\n",
+                    url.c_str(), code, tlsCode, tlsErr, WiFi.localIP().toString().c_str(),
+                    WiFi.status() == WL_CONNECTED ? "up" : "DOWN", WiFi.RSSI());
+    }
     if (code > 0) {
       resp = "";
       int len = apiHttp.getSize();          // -1 = unknown (chunked)
@@ -687,9 +699,9 @@ void sendScan(const String& uid) {
   Serial.printf("scan round trip %lu ms\n", millis() - t0);
   if (code <= 0) {
     char tlsErr[120] = "";
-    apiTls.lastError(tlsErr, sizeof(tlsErr));
-    Serial.printf("POST failed: %d %s | TLS: %s | WiFi %s RSSI %d | heap %u\n", code,
-                  HTTPClient::errorToString(code).c_str(), tlsErr,
+    int tlsCode = apiTls.lastError(tlsErr, sizeof(tlsErr));
+    Serial.printf("POST failed: %d %s | mbedtls=%d %s | ip=%s | WiFi %s RSSI %d | heap %u\n", code,
+                  HTTPClient::errorToString(code).c_str(), tlsCode, tlsErr, WiFi.localIP().toString().c_str(),
                   WiFi.status() == WL_CONNECTED ? "up" : "DOWN", WiFi.RSSI(), ESP.getFreeHeap());
   } else {
     Serial.printf("POST %d: %s\n", code, resp.c_str());
@@ -1058,12 +1070,18 @@ void setup() {
   }
   savedLabel   = prefs.getString("slot_label", "").c_str();
   if (prefs.isKey("slot")) prefs.remove("slot");   // the H2D-only firmware's slot index
+  uint32_t reachStart = millis();
   refreshLists(false, HUB_CHECK_MS);   // bounded; reports server= as soon as the Hub answers
+  while (WiFi.status() == WL_CONNECTED && !serverOk && millis() - reachStart < SETUP_REACH_WINDOW_MS) {
+    serialPoll();
+    delay(HUB_CHECK_RETRY_MS);
+    refreshLists(false, HUB_CHECK_MS);
+  }
   checkForUpdate();
   lastActivity = millis();
   redraw();
   if (WiFi.status() != WL_CONNECTED || !serverOk) buzzError();
-  else                                            buzzOk();
+  else if (!hasConnectedOnce) { hasConnectedOnce = true; buzzOk(); }
   Serial.println(helloLine((long)FW_BUILD, true, boot.wifiText(), boot.serverText()).c_str());
 }
 

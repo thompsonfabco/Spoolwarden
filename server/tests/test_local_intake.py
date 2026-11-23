@@ -584,7 +584,7 @@ def test_the_cli_token_needs_root(monkeypatch, capsys):
     assert cli.main(["local-intake", "token"]) == 3 and "administrator rights" in capsys.readouterr().err
 
 
-# ---------- testing an address before it is saved (S2.18) ----------
+# ---------- testing an address before it is saved ----------
 
 TEST = "settings/local-intake/test"
 

@@ -1,4 +1,4 @@
-"""Every printer's state, job progress and slots in one read (`G printers/states`, S2.3 / N14): it answers from what the
+"""Every printer's state, job progress and slots in one read (`G printers/states`, / N14): it answers from what the
 managers already hold, opens no printer connection, and leaves the per-printer replies as they were."""
 from __future__ import annotations
 

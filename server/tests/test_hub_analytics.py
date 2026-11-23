@@ -1,5 +1,5 @@
 """The Analytics section of the Hub page, in a real headless browser against a stub of the kit's
-analytics (HD3's module is not in this tree): the six insight sentences in their order (and none when the Hub has none), one
+analytics ('s module is not in this tree): the six insight sentences in their order (and none when the Hub has none), one
 SVG bar per month for twelve months with an empty one among them, the choice of printer, Show as table, the table per
 material for the chosen month, the honest notes, "No usage yet", the wait and the failure with Try again, in all four looks at
 1280 and 390 px (nothing wider than the page; Panes does not squeeze a label to a sliver). Uses the normal Hub registry.

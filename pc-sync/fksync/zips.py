@@ -3,7 +3,7 @@
 pack() refuses (TooLarge) a folder over the upload limits before zipping it, and is deterministic: the same files give the same bytes (sorted names, fixed timestamps
 and attributes), so it never depends on mtimes.
 
-orca_system() packs Orca Slicer's system presets the same way (Ruling L: BBL JSON + the packed library's index).
+orca_system() packs Orca Slicer's system presets the same way (BBL JSON + the packed library's index).
 
 unpack_build() accepts only `BUILD.json`, `base/<name>.json|.info` and `orca/<name>.json|.info` (the Orca
 Slicer tree; both flat) with a safe <name>,
@@ -53,7 +53,7 @@ LIBRARY_INDEX = "OrcaFilamentLibrary/index.json"
 
 
 def library_index(opc: Path) -> bytes:
-    """`OrcaFilamentLibrary/index.json` for a packed library (Ruling L); the same file gives the same bytes."""
+    """`OrcaFilamentLibrary/index.json` for a packed library; the same file gives the same bytes."""
     st = opc.stat()
     when = datetime.datetime.fromtimestamp(int(st.st_mtime), datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     index = {"version": 1, "source": f"{opc.name} {when}", "presets": orca_opc.library_presets(opc.read_bytes())}
@@ -61,7 +61,7 @@ def library_index(opc: Path) -> bytes:
 
 
 def orca_system(orca, max_bytes: int | None = None) -> tuple[bytes, str]:
-    """(zip, tree hash) of Orca's system presets for `PUT /api/sync/system?target=orca` (Ruling L):
+    """(zip, tree hash) of Orca's system presets for `PUT /api/sync/system?target=orca`:
     `BBL/filament/**.json` from Orca's unpacked %APPDATA%\\OrcaSlicer\\system\\BBL\\filament, plus
     `OrcaFilamentLibrary/index.json` listing the presets packed in OrcaFilamentLibrary.opc (left out when this
     PC has no .opc). The hash is what the server's tree hash of the unpacked zip gives."""
