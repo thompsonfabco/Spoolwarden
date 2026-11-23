@@ -64,6 +64,11 @@ def _http_error(e: HTTPException) -> JSONResponse:
 
 
 def _to_response(e: Exception) -> JSONResponse:
+    from . import http_body
+    if isinstance(e, http_body.BodyTooLarge):
+        return _err(413, "too_large", http_body.too_large_text())
+    if isinstance(e, http_body.BadBody):
+        return _err(400, "bad_request", str(e))
     if isinstance(e, HTTPException):  # e.g. a malformed or oversized multipart body from request.form()
         return _http_error(e)
     if isinstance(e, demo.DemoError):      # a stop of the demo (409), or a demo refusal (400)
@@ -374,13 +379,11 @@ def _authed(fn):
 
 
 async def _json(request: Request) -> dict:
+    from . import http_body
     try:
-        body = await request.json()
-    except ValueError:
-        raise BadRequest("the request body must be JSON") from None
-    if not isinstance(body, dict):
-        raise BadRequest("the request body must be a JSON object")
-    return body
+        return await http_body.read_json_object(request, http_body.DEFAULT_JSON_CAP)
+    except http_body.BadBody as e:
+        raise BadRequest(str(e)) from None
 
 
 _KINDS = {bool: "true or false", float: "a number", str: "text"}
@@ -1302,7 +1305,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def intake_read(request: Request):
-        async with request.form() as form:
+        async with request.form(max_files=intake.MAX_PHOTOS, max_fields=10) as form:
             photos = []
             for i, f in enumerate(form.getlist("photo")):
                 if not isinstance(f, UploadFile):
@@ -1471,7 +1474,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return await run_in_threadpool(station_flow.tag_info, sm, request.path_params["uid"])
 
     async def station_recognize(request: Request):
-        async with request.form() as form:
+        async with request.form(max_files=intake.MAX_PHOTOS, max_fields=10) as form:
             f = form.get("image")
             if not isinstance(f, UploadFile):
                 raise station_flow.FlowError(400, "bad_request", "image must be a file upload",
@@ -1725,10 +1728,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     async def alerts_test(request: Request):
         """A test alert for the caller: nothing is stored; the caller's next `GET api/events` carries it as `test`
         (once, within 60 s). The caller is the Hub page's browser id (`client`) or the device of the token."""
-        try:
-            body = await request.json()
-        except ValueError:
-            body = {}
+        from . import http_body
+        body = await http_body.read_json_any(request, http_body.SMALL_JSON_CAP, default={})
         client = str(body.get("client") or "").strip()[:80] if isinstance(body, dict) else ""
         caller = f"client:{client}" if client else f"device:{request.state.device}"
         return JSONResponse({"ok": True, "test": await run_in_threadpool(alerts_api.queue_test, caller)})

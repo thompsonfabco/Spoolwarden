@@ -687,6 +687,11 @@ class IntakeApp:
             except ReadError as e:
                 return JSONResponse({"error": e.message, "read_id": e.read_id}, 502)
             except Exception as e:  # noqa: BLE001 - a refusal is shown on the phone; a crash is logged only
+                from .. import http_body
+                if isinstance(e, http_body.BodyTooLarge):
+                    return JSONResponse({"error": "too_large", "message": http_body.too_large_text()}, 413)
+                if isinstance(e, http_body.BadBody):
+                    return JSONResponse({"error": str(e)}, 400)
                 text = mcp_tools.error_text(e)
                 if text is None:
                     log.exception("intake %s", request.url.path)
@@ -700,13 +705,8 @@ class IntakeApp:
         return route
 
     async def _body(self, request: Request) -> dict:
-        try:
-            b = await request.json()
-        except ValueError:
-            raise Problem("the request body must be JSON") from None
-        if not isinstance(b, dict):
-            raise Problem("the request body must be a JSON object")
-        return b
+        from .. import http_body
+        return await http_body.read_json_object(request, http_body.DEFAULT_JSON_CAP)
 
     def _station(self) -> StationClient | None:
         url = (self.tools.cfg().get("station") or {}).get("url")

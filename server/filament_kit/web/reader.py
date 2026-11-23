@@ -495,12 +495,13 @@ class Reader:
     async def scan(self, request: Request):
         if demo.is_on():                  # a tap of a real tag loads nothing in the demo
             return reply(409, "error", demo.NOT_IN_DEMO)
+        from .. import http_body
         try:
-            body = json.loads(await request.body() or b"{}")
-        except ValueError:
-            return reply(400, "error", "the body must be JSON")
-        if not isinstance(body, dict):
-            return reply(400, "error", "the body must be a JSON object")
+            body = await http_body.read_json_object(request, http_body.SMALL_JSON_CAP, allow_empty=True)
+        except http_body.BodyTooLarge:
+            return reply(413, "error", http_body.too_large_text())
+        except http_body.BadBody as e:
+            return reply(400, "error", str(e))
         printer, label, dry = body.get("printer"), body.get("slot"), body.get("dry_run", False)
         if isinstance(printer, int) and not isinstance(printer, bool):
             printer = str(printer)
