@@ -465,7 +465,9 @@ def test_install_modules_unknown_name_fails(tmp_path):
     venv, env = _stub_venv(tmp_path)
     part = _install_part("# A custom list is closed first", "# A station whose server is on another machine")
     r = _run_part('MODE=custom\nCUSTOM=",bogus"\n' + part, venv, env, tmp_path)
-    assert r.returncode == 1 and "unknown module 'bogus'" in r.stderr
+    assert r.returncode == 1 and "bogus" in r.stderr and "use features from:" in r.stderr
+    with pytest.raises(importlib.import_module("filament_kit.modules").ModuleError, match="unknown feature 'bogus'"):
+        importlib.import_module("filament_kit.modules").close_selection(["bogus"])
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
@@ -585,7 +587,7 @@ def test_install_unknown_module_name_is_caught_before_packages(tmp_path):
     ok = subprocess.run([_bash(), str(f), ",spoolman,server"], capture_output=True, text=True, timeout=30, env=env)
     bad = subprocess.run([_bash(), str(f), ",server,bogus"], capture_output=True, text=True, timeout=30, env=env)
     assert ok.returncode == 0 and "passed" in ok.stdout, ok.stderr
-    assert bad.returncode != 0 and "unknown module bogus" in bad.stderr and "passed" not in bad.stdout
+    assert bad.returncode != 0 and "unknown feature bogus" in bad.stderr and "passed" not in bad.stdout
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
@@ -1255,3 +1257,24 @@ def test_e2e_scenario_f_checks_installed_unit_descriptions_and_rename_notice(tmp
     }
     src = (ROOT / "tools" / "e2e" / "e2e.py").read_text(encoding="utf-8")
     assert "once-only new-name line appears" in src and "rb_descs == old_descs" in src
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_restore_prints_once_only_rename_notice_and_uses_features_wording(tmp_path):
+    sh = (ROOT / "install" / "install.sh").read_text(encoding="utf-8")
+    mods = (ROOT / "server" / "filament_kit" / "modules.py").read_text(encoding="utf-8")
+    assert "module names" not in sh and "module names" not in mods
+    fns = "\n".join(re.findall(r"^(?:from_old_name|renamed_note)\(\) \{.*\}$", sh, re.M))
+    restore_block = re.search(r"# ---------- restore:.*?^fi$", sh, re.M | re.S).group(0)
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    (bin_ / "filament-kit").write_text("#!/bin/sh\n", encoding="utf-8")
+    script = (
+        fns + "\nOLD_NAME=0\nif from_old_name bin; then OLD_NAME=1; fi\n"
+        "RESTORE=/tmp/b.zip\n"
+        + restore_block.replace("/usr/local/bin/spoolwarden", "echo")
+    )
+    r = subprocess.run([_bash(), "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.count("filament-kit is now called Spoolwarden. The command is spoolwarden; filament-kit still works for now.") == 1
+    assert "restore --yes /tmp/b.zip" in r.stdout

@@ -169,7 +169,7 @@ def set_mode(cfg: dict, mode: str, say: Callable[[str], None] | None = print) ->
                 dropped.append(n)
     out["modules"] = module_map(on, cfg)
     if dropped and say is not None:
-        say(f"Mode {mode}: turned off {', '.join(dropped)} (they need modules this mode does not have).")
+        say(f"Mode {mode}: turned off {', '.join(dropped)} (they need features this mode does not have).")
     if mode == "all-in-one":
         st = out.setdefault("station", {})
         st["allow"] = ["127.0.0.1"]
@@ -200,7 +200,7 @@ def validate(cfg: dict) -> None:
     if mods:
         for n in mods:
             if n not in MODULES:
-                raise ModuleError(f"unknown module {n!r}")
+                raise ModuleError(f"unknown feature {n!r}")
     on = enabled(cfg)
     for n in MODULES:
         if n in on:
@@ -212,7 +212,7 @@ def validate(cfg: dict) -> None:
         raise ModuleError(f"{hubport.TEXT_REMOTE_REFUSAL_SHORT}; fix: {hubport.TEXT_REMOTE_FIX}")
     if needs_spoolman_url(on, cfg):
         raise ModuleError(
-            "server without the spoolman module needs spoolman_url "
+            "server without the spoolman feature needs spoolman_url "
             f"pointing at a remote Spoolman (got {cfg.get('spoolman_url') or ''!r})")
     if "web" in on or "remote" in on:  # Ruling AA: the web unit is the OAuth issuer, remote or not
         pu = urlparse(str((cfg.get("web") or {}).get("public_url") or ""))
@@ -240,7 +240,7 @@ def validate(cfg: dict) -> None:
     if "station" in on and "server" not in on:
         if not any(str(e).strip() not in _LOCAL_HOSTS for e in allow):
             raise ModuleError(
-                "station without the server module needs the server's address in station.allow; "
+                "station without the server feature needs the server's address in station.allow; "
                 "fix: pass --server <name-or-IP> (modules set station --server X)")
 
 
@@ -293,7 +293,7 @@ def change_note(name: str, turned_on: bool, others) -> list[str]:
 def toggle(on, name: str) -> tuple[frozenset[str], list[str]]:
     """Flip `name`. On: its needs go on too; off: whatever needs it goes off. Returns (new set, messages)."""
     if name not in MODULES:
-        raise ModuleError(f"unknown module {name!r}")
+        raise ModuleError(f"unknown feature {name!r}")
     on = frozenset(on)
     if name in on:
         gone = dependents_closure(name, on)
@@ -335,9 +335,9 @@ def close_selection(names) -> tuple[frozenset[str], list[str]]:
     names = [n.strip() for n in names if n.strip()]
     for n in names:
         if n not in MODULES:
-            raise ModuleError(f"unknown module {n!r}")
+            raise ModuleError(f"unknown feature {n!r}")
     extra = needs_closure(names)
-    notes = [f"{', '.join(extra)} also turned on (needed by the modules you chose)."] if extra else []
+    notes = [f"{', '.join(extra)} also turned on (needed by the features you chose)."] if extra else []
     return frozenset(names) | set(extra), notes
 
 

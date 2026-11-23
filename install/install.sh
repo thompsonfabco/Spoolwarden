@@ -25,6 +25,11 @@ AGAIN='curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest
 usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP] [--restore BACKUP.zip|.enc [--password-file FILE]]" >&2; exit 2; }
 # one host name or address: station.allow never takes a range
 bad_addr() { case "$1" in "" | */* | *"*"* | *" "*) return 0 ;; esac; return 1; }
+# The once-only line: printed at the end of an install that replaces a release still called
+# filament-kit. 0.6.1 was the first one called Spoolwarden and the first with the `spoolwarden` command, so a host that has
+# the old command and not the new one is such a host. Only text: the old command and every unit, path and key stay.
+from_old_name() { [ -e "$1/filament-kit" ] && [ ! -e "$1/spoolwarden" ]; }
+renamed_note() { printf '\nfilament-kit is now called Spoolwarden. The command is spoolwarden; filament-kit still works for now.\n'; }
 
 # --set KEY=VALUE: a setting a chosen module needs, the ones the module menu asks for (repeatable)
 add_set() {
@@ -177,7 +182,7 @@ with zipfile.ZipFile(sys.argv[1]) as z:
 known = re.findall(r'_m[(]"([a-z_]+)"', text)
 bad = [n for n in sys.argv[2].split(",") if n and n not in known]
 if bad:
-    sys.exit("error: unknown module %s\nfix: use module names from: %s" % (", ".join(bad), ", ".join(known)))
+    sys.exit("error: unknown feature %s\nfix: use features from: %s" % (", ".join(bad), ", ".join(known)))
 PYEOF
 fi
 
@@ -215,6 +220,8 @@ install -d -m 700 -o root -g root /var/backups/filament-kit
 # It carries the system Python version, so a distro Python upgrade rebuilds the venv.
 PYVER=$(python3 --version 2>&1)
 FK_MARKER="$OPT/.fk-installed"
+OLD_NAME=0                 # asked before the new command is installed below
+if from_old_name /usr/local/bin; then OLD_NAME=1; fi
 say "Installing Spoolwarden ($(basename "$WHEEL"))"
 mkdir -p "$OPT"
 # Earlier versions bundled the spec library inside the program. Keep a copy of it before the venv is replaced and
@@ -286,6 +293,7 @@ chmod -R go-w "$OPT"
 
 # ---------- restore: the backup's modules and data instead of the questions below ----------
 if [ -n "${RESTORE:-}" ]; then
+    if [ "$OLD_NAME" -eq 1 ]; then renamed_note; fi
     if [ -n "${PASSWORD_FILE:-}" ]; then
         exec /usr/local/bin/spoolwarden restore --yes --password-file "$PASSWORD_FILE" "$RESTORE"
     fi
@@ -359,7 +367,7 @@ try:
     chosen, notes = modules.close_selection(os.environ["FK_MODULES"].split(","))
 except modules.ModuleError as e:
     names = ", ".join(modules.MODULES)
-    sys.exit(f"error: {e}\nfix: use module names from: {names}")
+    sys.exit(f"error: {e}\nfix: use features from: {names}")
 for note in notes:
     print(note, file=sys.stderr)
 print("," + ",".join(n for n in modules.MODULES if n in chosen))
@@ -463,7 +471,7 @@ if mode == "custom":
         chosen, notes = modules.close_selection(os.environ["FK_MODULES"].split(","))
     except modules.ModuleError as e:
         names = ", ".join(modules.MODULES)
-        sys.exit(f"error: {e}\nfix: use module names from: {names}")
+        sys.exit(f"error: {e}\nfix: use features from: {names}")
     for note in notes:
         print(note)
     on = set(chosen)
@@ -512,6 +520,7 @@ fi
 # Guided Setup: modules apply asks nothing and ends with the address and the setup code
 if [ "$GUIDED" -eq 1 ]; then export FK_GUIDED=1; fi
 
+if [ "$OLD_NAME" -eq 1 ]; then renamed_note; fi
 # ---------- 5. the modules ----------
 # (with the station on, `modules apply` also installs Piper, the [station-tts] extra, and its voice)
 exec /usr/local/bin/spoolwarden modules apply
