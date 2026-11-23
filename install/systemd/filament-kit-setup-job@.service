@@ -1,5 +1,5 @@
 [Unit]
-Description=filament-kit background job %i, started from the setup page
+Description=Spoolwarden background job %i, started from the Hub page
 # One instance per job in setup_helper.JOBS (apply, update, rollback, check). Its own unit, so a job goes on while it
 # restarts the kit server (and the page with it). It is no module's unit: an update stops the modules' units, never
 # this one. The output goes to /run/filament-kit-setup/job.log (root:filament-kit 640), which the page shows.

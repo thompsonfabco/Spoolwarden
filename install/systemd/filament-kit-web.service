@@ -1,5 +1,5 @@
 [Unit]
-Description=filament-kit web UI and MCP endpoint
+Description=Spoolwarden web app and MCP endpoint
 After=network-online.target filament-kit.service
 Wants=network-online.target
 

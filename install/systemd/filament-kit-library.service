@@ -1,5 +1,5 @@
 [Unit]
-Description=filament-kit filament library update (skips unless config library.schedule says it is due)
+Description=Spoolwarden filament library update (skips unless config library.schedule says it is due)
 After=network-online.target
 Wants=network-online.target
 
