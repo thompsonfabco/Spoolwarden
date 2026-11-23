@@ -55,11 +55,20 @@ function h(tag, props, ...kids) {
 
 // The Hub request helper is the shared one (SW.api, base set with SW.configure below). A request that gets no answer within the
 // time of the design, web app (30 s; 90 s for a label read; 180 s for a preset build) is a request that cannot reach the Hub.
+let markHubDown = null;
 const waitFor = (path) => (/^read$|\/revise$/.test(path) ? 90000 : path === "generate" ? 180000 : 30000);
 async function api(path, opts = {}) {
   const stop = new AbortController(), timer = setTimeout(() => stop.abort(), waitFor(path));
   try { return await SW.api(path, { ...opts, signal: stop.signal }); }
-  catch (e) { throw e && e.name === "AbortError" ? new SW.HubError({ unreachable: true }) : e; }
+  catch (e) {
+    if (e && e.name === "AbortError") throw new SW.HubError({ unreachable: true, timeout: true, message: SW.t("common_timeout") });
+    if (e instanceof SW.HubError && (e.status === 502 || e.status === 503 || e.status === 504)
+        && !(e.data && (e.data.error || e.data.message))) {
+      if (markHubDown) markHubDown();
+      throw new SW.HubError({ unreachable: true, status: e.status });
+    }
+    throw e;
+  }
   finally { clearTimeout(timer); }
 }
 
@@ -113,6 +122,7 @@ function answer() {                                          // the line, and ro
 function says(e, o = {}) {
   let text;
   if (!(e instanceof SW.HubError)) text = (e && e.message) || String(e);
+  else if (e.timeout) text = SW.t("common_timeout");
   else if (e.unreachable) text = SW.t("common_hub_unreachable");
   else if (e.status === 403 && e.error === "bad origin") text = SW.t("shell_error_bad_origin");
   else if (e.status === 500) text = SW.t("shell_error_internal");
@@ -319,7 +329,7 @@ function historyTab() {
   const el = h("section", { class: "hidden" }, intro, corrLink, missing, list, corr);
   let shareOn = false;                                        // Share corrections is on at the Hub (the twin of GET intake/share-corrections)
   const hp = (id, what) => `history/${encodeURIComponent(id)}${what ? "/" + what : ""}`;
-  const photo = (id, n) => `${BASE}/api/${hp(id, "photos/" + n)}`;
+  const photo = (id, n, thumb = false) => `${BASE}/api/${hp(id, "photos/" + n)}${thumb ? "?thumb=1" : ""}`;
   let records = [], reader = false, keep = 0;                 // the list as the Hub last gave it; whether the Label Reader is on
   let addr = "", ready = Promise.resolve();                   // the record the address names; the list being read
   let recFilter = "all";                                      // the filter: all, or the records to check (kept while the list is read again)
@@ -409,7 +419,7 @@ function historyTab() {
     const c = e.corrected || {}, name = [c.vendor || c.brand, c.name].filter(Boolean).join(" ") || String(e.id);
     const rec = e.record && kept.has(e.record) ? e.record : null;
     // the reader's entry as the Hub passes it on: `thumbnail_b64` and `created_at`
-    const img = rec && e.photos ? photo(rec, 1) : thumbSrc(e.thumbnail_b64);
+    const img = rec && e.photos ? photo(rec, 1, true) : thumbSrc(e.thumbnail_b64);
     const when = e.created_at;
     const line = h("p", { class: "result", role: "status" });
     const rm = needsHub(SW.btn(tt("corr_remove"), { action: "remove-correction", label: tt("corr_remove_named", { name }), run: (ev) => {
@@ -443,7 +453,7 @@ function historyTab() {
     const r = q.record ? records.find((x) => x.id === q.record) : null, rec = r && kept.has(r.id) ? r.id : null;
     const name = q.name || String(q.record || "");
     return h("li", { class: "corr__card corr__card--not-queued" },
-      rec && r.photos ? h("span", { class: "thumb" }, h("img", { class: "thumb__img", alt: "", src: photo(rec, 1), loading: "lazy" }))
+      rec && r.photos ? h("span", { class: "thumb" }, h("img", { class: "thumb__img", alt: "", src: photo(rec, 1, true), loading: "lazy" }))
         : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s")),
       h("div", { class: "corr__body" },
         rec ? h("a", { href: "#recent/" + rec, textContent: name }) : h("span", { textContent: name }),
@@ -504,7 +514,7 @@ function historyTab() {
   }
   // the first photo small, with its count; a dashed box when no photo was kept
   const listThumb = (r) => (r.photos
-    ? h("span", { class: "thumb" }, h("img", { class: "thumb__img", alt: "", loading: "lazy", src: photo(r.id, 1) }),
+    ? h("span", { class: "thumb" }, h("img", { class: "thumb__img", alt: "", loading: "lazy", src: photo(r.id, 1, true) }),
       r.photos > 1 ? h("span", { class: "thumb__count mono", "aria-hidden": "true", textContent: String(r.photos) }) : null)
     : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s"), h("span", { class: "sr", textContent: SW.t("photo_none") })));
   function row(r) {
@@ -590,7 +600,7 @@ function historyTab() {
       h("div", { class: "group__body" }, rec.photos
         ? h("div", { class: "photos" }, ...Array.from({ length: rec.photos }, (_, i) => {
           const b = h("button", { class: "thumb thumb--m", type: "button", "aria-label": SW.t("photo_enlarge", { number: i + 1, total: rec.photos }) },
-            h("img", { class: "thumb__img", alt: "", loading: "lazy", src: photo(id, i + 1) }));
+            h("img", { class: "thumb__img", alt: "", loading: "lazy", src: photo(id, i + 1, true) }));
           b.addEventListener("click", () => viewer(c, i + 1, b));
           return b;
         }))
@@ -1440,7 +1450,8 @@ function sinceText(v) {                                      // "YYYY-MM-DD HH:M
 // the result of a return names the place the Hub's answer gives (the home, or where the placement rules put it); "Returned." only when it gives none
 function returnedText(r) {
   const s = r && r.spool, at = s && ((s.view && s.view.location) || s.location);
-  return at ? tt("checked_out_returned_to", { location: at }) : tt("checked_out_returned");
+  const base = at ? tt("checked_out_returned_to", { location: at }) : tt("checked_out_returned");
+  return r && r.printer_notified === false ? `${base} ${SW.t("spools_return_printer_not_told")}` : base;
 }
 // sends the spool back at once and asks nothing; the toast offers Undo through the event the answer names. `done` runs after a put back.
 async function returnSpool(id, done) {
@@ -1868,6 +1879,7 @@ if ("serviceWorker" in navigator) {
     if (again) again();
     for (const f of hubBack) f();
   }
+  markHubDown = hubDown;
   SW.configure({ down: hubDown, up: hubUp });
   window.addEventListener("offline", hubDown);
   window.addEventListener("online", () => { if (down) { paintOffline(); probe(); } });
