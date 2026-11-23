@@ -1230,3 +1230,28 @@ def test_the_avahi_file_announces_the_old_and_the_new_service_type():
     text = _read("install/avahi/filament-kit.service")
     assert re.findall(r"<type>([^<]+)</type>", text) == ["_filamentkit._tcp", "_spoolwarden._tcp"]
     assert text.count("<port>8710</port>") == 2          # apply.py rewrites every one to the configured port
+
+
+def test_e2e_scenario_f_checks_installed_unit_descriptions_and_rename_notice(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("e2e_mod", ROOT / "tools" / "e2e" / "e2e.py")
+    e2e_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(e2e_mod)
+    u = tmp_path / "systemd"
+    u.mkdir()
+    (u / "filament-kit.service").write_text("[Unit]\nDescription=Spoolwarden Hub\n", encoding="utf-8")
+    (u / "filament-kit-setup@.service").write_text("[Unit]\nDescription=Spoolwarden Hub page helper\n", encoding="utf-8")
+
+    def fake_run(cmd, **_kw):
+        # systemctl returns bare unit name if not installed, or Description if loaded
+        name = cmd[-1]
+        val = "Spoolwarden Hub" if name == "filament-kit.service" else name
+        return type("R", (), {"returncode": 0, "stdout": val + "\n"})()
+
+    descs = e2e_mod.E2E._installed_unit_descriptions(unit_dir=u, run_cmd=fake_run)
+    assert descs == {
+        "filament-kit.service": "Spoolwarden Hub",
+        "filament-kit-setup@.service": "Spoolwarden Hub page helper",
+    }
+    src = (ROOT / "tools" / "e2e" / "e2e.py").read_text(encoding="utf-8")
+    assert "once-only new-name line appears" in src and "rb_descs == old_descs" in src

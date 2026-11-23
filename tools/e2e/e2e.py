@@ -881,6 +881,30 @@ class E2E:
                 bad[path] = c
         run.check(sc, f"all {len(set(links))} linked files load with 200 and a body", bool(links) and not bad, str(bad))
 
+    @staticmethod
+    def _installed_unit_descriptions(unit_dir: Path = Path("/etc/systemd/system"), run_cmd=subprocess.run) -> dict[str, str]:
+        """Description= of each installed filament-kit* unit file (never uninstalled units, which systemctl returns bare)."""
+        out: dict[str, str] = {}
+        if not unit_dir.is_dir():
+            return out
+        for path in sorted(unit_dir.glob("filament-kit*")):
+            if not path.is_file():
+                continue
+            desc = ""
+            if "@" not in path.name:
+                r = run_cmd(["systemctl", "show", "-p", "Description", "--value", path.name],
+                            capture_output=True, text=True, check=False, timeout=15)
+                val = (r.stdout or "").strip()
+                if r.returncode == 0 and val and val != path.name:
+                    desc = val
+            if not desc:
+                for ln in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                    if ln.startswith("Description="):
+                        desc = ln[len("Description="):]
+                        break
+            out[path.name] = desc
+        return out
+
     def f_cross_tag(self, sc="f") -> None:
         run, rel = self.run, self.rel
         if not self.previous:
@@ -903,6 +927,7 @@ class E2E:
                   r.stdout[-1500:] + r.stderr[-800:])
         if r.returncode:
             raise Fail("install of the previous release failed; see the log")
+        old_descs = self._installed_unit_descriptions()
         r = kit_python("from filament_kit import pairing; print(pairing.issue('e2e').code)")
         code, body = jhttp("POST", f"{KIT}/api/pair", body={"code": r.stdout.strip()})
         if code != 200 or not isinstance(body, dict) or not body.get("token"):
@@ -937,6 +962,18 @@ class E2E:
         r = self._update(name="cross-tag-update", timeout=3600)
         run.check(sc, f"{old}'s own updater installs {self.v2}", r.returncode == 0 and installed_version() == self.v2,
                   r.stdout[-1500:] + r.stderr[-800:])
+        new_descs = self._installed_unit_descriptions()
+        old_prod = re.compile(r"(?<![\w/.\-`])filament-kit(?![\w\-]|\.[a-z])")
+        old_words = re.compile(r"\b(?:kit server|setup page|module updates|web UI)\b")
+        bad_descs = {u: d for u, d in new_descs.items()
+                     if "Spoolwarden" not in d or old_prod.search(d) or old_words.search(d)}
+        run.check(sc, "after the update: installed units' Description lines read the new names",
+                  bool(new_descs) and not bad_descs, f"bad={bad_descs}")
+        rename_line = "filament-kit is now called Spoolwarden. The command is spoolwarden; filament-kit still works for now."
+        want_count = 1 if version_tuple(old) < (0, 6, 1) else 0
+        got_count = (r.stdout or "").count(rename_line)
+        run.check(sc, f"once-only new-name line appears {want_count} time(s) updating from {old}",
+                  got_count == want_count, f"got={got_count}")
         self._still_works(sc, f"after the update to {self.v2}", auth, spool["id"], self.v2)
         run.check(sc, "after the update: the same modules are on", read_cfg().get("modules") == modules_before,
                   str(read_cfg().get("modules")))
@@ -947,6 +984,9 @@ class E2E:
         r = self._update("--rollback", name="cross-tag-rollback", timeout=3600)
         run.check(sc, f"this checkout's rollback restores {old}", r.returncode == 0 and installed_version() == old,
                   r.stdout[-1500:] + r.stderr[-800:])
+        rb_descs = self._installed_unit_descriptions()
+        run.check(sc, f"after the rollback: installed units' Description lines match {old}",
+                  rb_descs == old_descs, f"before={old_descs} after={rb_descs}")
         self._still_works(sc, f"after the rollback to {old}", auth, spool["id"], old)
         r = run.sh([fk, "update", "--check"], name="cross-tag-check")
         run.check(sc, f"{old} still runs its own commands after the rollback", r.returncode == 0, r.stdout + r.stderr)
