@@ -452,3 +452,31 @@ out.second = await second;
     assert page["cancel"] == {"text": T("common_busy_wait"), "state": "warn", "open": True} and T("common_busy_wait") == "Still working. Wait for it to finish."
     assert page["escape"] == {"prevented": True, "text": T("common_busy_wait"), "open": True}
     assert page["answer"] is True and page["closed"] is True and page["second"] is None
+
+
+def test_setup_api_health_redacts_addresses_when_locked(tmp_path, monkeypatch):
+    from starlette.applications import Starlette
+    from starlette.testclient import TestClient
+    from filament_kit import health as health_mod, setup_page
+
+    for name in ("etc", "state", "opt"):
+        (tmp_path / name).mkdir(exist_ok=True)
+        monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
+    monkeypatch.setenv("FK_NO_SYSTEMD", "1")
+    monkeypatch.setattr(setup_page.SetupPage, "_lan", lambda self, req: True)
+    monkeypatch.setattr(
+        health_mod,
+        "health_view",
+        lambda days=7: {
+            "since": "2026-11-20T00:00:00Z",
+            "checks": [{"key": "k1", "text": "Printer at 192.168.1.55 offline", "group": "printers", "now": "bad", "spans": []}],
+            "changes": [{"at": "2026-11-23T00:00:00Z", "key": "k1", "text": "Station at 10.0.0.12 down", "from": "ok", "to": "bad"}],
+        },
+    )
+    sp = setup_page.SetupPage(hosts=lambda: {"testserver"})
+    with TestClient(Starlette(routes=sp.routes())) as c:
+        r = c.get("/setup/api/health?days=7", headers={"host": "testserver"})
+    assert r.status_code == 200
+    body = r.json()
+    assert "192.168.1.55" not in body["checks"][0]["text"]
+    assert "10.0.0.12" not in body["changes"][0]["text"]

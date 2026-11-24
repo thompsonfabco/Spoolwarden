@@ -15,7 +15,7 @@ from __future__ import annotations
 import anyio
 from starlette.responses import Response, StreamingResponse
 
-from .. import alerts_api, csv_io, event_sink, events, health, trusted, undo
+from .. import alerts_api, csv_io, event_sink, events, health, redact, trusted, undo
 from ..spoolman import SpoolmanError
 from .texts import say
 
@@ -147,7 +147,17 @@ def routes(page) -> list[tuple]:
             days = 7
         if days not in (7, 30):
             raise Refused(400, say("hub_health_days"), field="days")
-        res = await anyio.to_thread.run_sync(health.health_view, days)
+
+        def run() -> dict:
+            res = health.health_view(days)
+            known = redact.known_values()
+            for bucket in ("checks", "changes"):
+                for row in res.get(bucket) or ():
+                    if isinstance(row, dict) and isinstance(row.get("text"), str):
+                        row["text"] = redact.text(row["text"], known)
+            return res
+
+        res = await anyio.to_thread.run_sync(run)
         return {"days": days, **res}
 
     async def export_csv(request, body):
