@@ -1,4 +1,4 @@
-"""An upgrade from the last release named filament-kit (v0.6.8) shows the new name wherever a person reads it (plan step E1):
+"""An upgrade from the last release named filament-kit (v0.6.8) shows the new name wherever a person reads it:
 the Description= of every unit (`systemctl status`, the journal) and the installer's once-only line. Unit FILE names, the
 program and the paths stay as they were, so the upgrade keeps working."""
 import re
