@@ -674,8 +674,8 @@ Station returns a spool too, when you scan its tag.
   no location and the result says **Returned.** without a place.
 - **A Klipper printer's slot:** the Hub's record changes first and the printer never stops it. If the spool is recorded
   in one of that printer's slots, the printer answers and is not printing, the Hub also tells it to clear the slot, as
-  **Clear slot** does. If the printer does not answer, or is printing, only the Hub's record changes, and no screen says
-  that the printer was not told. Either way the Hub does not load the spool back into the slot while the printer still
+  **Clear slot** does. If the printer does not answer, or is printing, only the Hub's record changes, and the Hub page,
+  web app, Android app, and command line note **The printer could not be told to clear its slot.** Either way the Hub does not load the spool back into the slot while the printer still
   shows it there.
 - **A Bambu Lab printer's slot:** only the Hub's record changes. The printer's own slot setting is left as it is.
 - **Undo** puts the spool back in the slot, checked out again with its home and its time. It works for 7 days after the
@@ -1722,6 +1722,8 @@ is on; a record with no photo goes to Claude only. Only a Claude revision counts
 
 **Order history.** The `orders` Feature works with either Label Reader Feature on. The order history is used only in Claude's
 reads; the local reader never gets it.
+
+**Share corrections.** When switched on under **Settings**, **Label Reader** on the Hub page (or `sudo spoolwarden local-intake share-corrections on`), each manual change you save to a reading waits on this Hub with its downsized photos (camera metadata removed) until you press **Send now** in **Settings**, **Label Reader** or run `sudo spoolwarden label-reader corrections send`. You can inspect or remove waiting items before sending (`Remove`, `sudo spoolwarden label-reader corrections list`, `sudo spoolwarden label-reader corrections remove <id>...`).
 
 A backup holds the reader's settings and token with the rest of `/etc/filament-kit`.
 
