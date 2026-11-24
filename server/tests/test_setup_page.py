@@ -1413,3 +1413,47 @@ def test_setup_pair_home_assistant_issues_viewer_pairing(app):
     assert body["ok"] is True and body["kind"] == "home-assistant" and body["qr_svg"] is None
     tok = pairing.redeem_code(body["code"])
     assert pairing.role_of(pairing.authorize(tok)[0]) == "viewer"
+
+
+def test_logs_tab_units_and_logs_routes_forward_to_helper(app):
+    from filament_kit import setup_helper
+    r_units = client(app).get("/setup/api/logs/units")
+    assert r_units.status_code == 200
+    assert r_units.json()["units"] == setup_helper.journal_units(config.load())
+    assert post(client(app), "logs", {"unit": "spoolwarden", "lines": 20}, code=None).status_code in (401, 403)
+    seen = {}
+
+    def fake_helper(req):
+        seen["req"] = req
+        return {"ok": True, "status": 200, "unit": "spoolwarden", "text": "line1\nline2", "truncated": False}
+
+    app.state.setup_helper = fake_helper
+    r_logs = post(client(app), "logs", {"unit": "spoolwarden", "lines": 20})
+    assert r_logs.status_code == 200
+    assert r_logs.json() == {"unit": "spoolwarden", "text": "line1\nline2", "truncated": False}
+    assert seen["req"]["op"] == "journal" and seen["req"]["unit"] == "spoolwarden" and seen["req"]["lines"] == 20
+
+
+def test_webapp_tab_get_hides_public_and_post_reveals_public_url_and_443_omits_port(app):
+    cfg = config.load()
+    cfg.setdefault("modules", {})["web"] = True
+    cfg["web"] = {"public_url": "https://hub.example.com:8443"}
+    config.save(cfg)
+
+    r_get = client(app).get("/setup/api/webapp")
+    assert r_get.status_code == 200
+    g = r_get.json()
+    assert g["public_hidden"] is True and g["public_url"] is None and g["public_qr_svg"] is None
+    assert ":8710/intake" in g["url"] and g["qr_svg"].startswith("<svg")
+
+    r_post = post(client(app), "webapp", {})
+    assert r_post.status_code == 200
+    p = r_post.json()
+    assert p["public_hidden"] is False and p["public_url"] == "https://hub.example.com:8443/intake"
+    assert p["public_qr_svg"].startswith("<svg")
+
+    cfg["port"] = 443
+    config.save(cfg)
+    r_443 = client(app).get("/setup/api/webapp")
+    assert r_443.status_code == 200
+    assert r_443.json()["url"].endswith(".local/intake") and ":443" not in r_443.json()["url"]
