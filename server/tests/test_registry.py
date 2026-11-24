@@ -249,10 +249,10 @@ def test_unconfigured_entries_are_capped_and_the_oldest_goes():
 
 
 def test_the_cap_keeps_an_entry_that_holds_an_api_key():
-    kept = registry.detected_klipper("10.0.0.200", 7125)
+    kept = registry.detected_klipper("10.0.0.200", 7125, lookups=False)
     registry.set_api_key(kept.serial, "abc")
     for i in range(registry.MAX_FOUND + 5):
-        registry.detected_klipper(f"10.0.1.{i + 1}", 7125)
+        registry.detected_klipper(f"10.0.1.{i + 1}", 7125, lookups=False)
     assert kept.serial in registry.load()
 
 
