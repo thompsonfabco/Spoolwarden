@@ -1,4 +1,4 @@
-"""Settings on the Hub page (step S2.19, the design, Hub page), in a real headless browser: nine groups in a fixed order with
+"""Settings on the Hub page (the design, Hub page), in a real headless browser: nine groups in a fixed order with
 the sub-navigation, one Save per group that sends its changed keys in one request (N2), the unsaved marks and the leave
 guard, the restart question, and on a phone the list of groups and one group at a time. The AUT-5 audit passes on every
 group at 320 and 1280 px, light and dark. The page is served with the data of test_hub_page_audit.py. The same skip rules
@@ -95,7 +95,7 @@ return out;
     assert page["groups"] == GROUPS and page["nav"] == NAMES and page["titles"] == NAMES
     assert page["saves"][:2] == [T("settings_general_save"), T("settings_storage_save")] and T("settings_reader_save") in page["saves"]
     assert page["dirty"] == {"link": T("common_unsaved"), "title": True, "foot": T("common_unsaved_changes"), "other": False}
-    # the storage list does not go through settings/general any more: it is saved whole by setup_storage.js (a stub until SL2)
+    # the storage list does not go through settings/general any more: it is saved whole by setup_storage.js (a stub until )
     assert seen == [], seen
     assert page["saved"] == T("settings_storage_saved")
     assert page["after"] == {"dirty": None, "link": False}

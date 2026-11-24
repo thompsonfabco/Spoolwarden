@@ -1,4 +1,4 @@
-"""CSV export and import for Hub data and Spoolman files (HD5, the design, Hub page).
+"""CSV export and import for Hub data and Spoolman files (the design, Hub page).
 
 Exports (`export_csv`):
 - `usage` (`days`, `printer`)

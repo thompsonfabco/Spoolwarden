@@ -1,4 +1,4 @@
-"""The updater's hardware data feed (spec R 2.5, Ruling BG): a signed bambu_hardware.xml release asset, verified
+"""The updater's hardware data feed (spec R 2.5, ): a signed bambu_hardware.xml release asset, verified
 and validated before it replaces /etc/filament-kit/bambu_hardware.xml."""
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ def test_a_hand_made_override_survives_a_newer_feed_and_a_kit_upgrade(env, srv, 
     assert _update(env, srv) == 0
     assert override.read_bytes() == mine
     assert not override.with_name(HW + ".previous").exists()
-    # the loader agrees with the feed (Ruling BT): the hand-made 1.2 is no longer newer than the kit's 1.6, so it
+    # the loader agrees with the feed: the hand-made 1.2 is no longer newer than the kit's 1.6, so it
     # is ignored, and the updater says so instead of implying it is still in use
     hardware._reset_cache()
     assert "not newer" in " ".join(hardware.load().warnings)

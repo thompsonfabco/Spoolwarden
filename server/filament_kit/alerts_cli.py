@@ -14,7 +14,7 @@ import json
 import sys
 from datetime import datetime, timezone
 
-from . import alerts, alerts_api, events, output
+from . import alerts, alerts_api, demo, events, output
 from .alerts_api import say
 from .spoolman import SpoolmanError
 
@@ -129,6 +129,7 @@ def cmd_set(what: str, value: str) -> int:
 
 def cmd_test() -> int:
     """`alerts test`: one test alert to every client that asks within a minute (the Hub reads the marker file)."""
+    demo.stop()
     stop = _need_root("test")
     if stop is not None:
         return stop

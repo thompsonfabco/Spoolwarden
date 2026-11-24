@@ -19,7 +19,7 @@ in `X-Reader-Build`: handed to the Hub with when it last called, reader_tokens.S
 
 A scan loads the tag's spool into the slot through the kit server's own load route (KitApi, as the MCP printer
 tools do): the user's exact preset or `no_preset`, never Generic (bridge/loading.py); mid-print only the slot that
-feeds the job is refused (Ruling BK: `slot_in_use`). The reply comes within SCAN_WAIT seconds of the request
+feeds the job is refused (`slot_in_use`). The reply comes within SCAN_WAIT seconds of the request
 (a deadline from the start of the scan) even when the printer's confirmation takes longer (the firmware waits
 6 s): the load goes on in the background and the reply says "sent". Queue-on-empty (ported from the scanner): a
 slot the printer reports empty (`present` false) or still reading its tag is not set at once (the AMS resets a
@@ -495,12 +495,13 @@ class Reader:
     async def scan(self, request: Request):
         if demo.is_on():                  # a tap of a real tag loads nothing in the demo
             return reply(409, "error", demo.NOT_IN_DEMO)
+        from .. import http_body
         try:
-            body = json.loads(await request.body() or b"{}")
-        except ValueError:
-            return reply(400, "error", "the body must be JSON")
-        if not isinstance(body, dict):
-            return reply(400, "error", "the body must be a JSON object")
+            body = await http_body.read_json_object(request, http_body.SMALL_JSON_CAP, allow_empty=True)
+        except http_body.BodyTooLarge:
+            return reply(413, "error", http_body.too_large_text())
+        except http_body.BadBody as e:
+            return reply(400, "error", str(e))
         printer, label, dry = body.get("printer"), body.get("slot"), body.get("dry_run", False)
         if isinstance(printer, int) and not isinstance(printer, bool):
             printer = str(printer)

@@ -6,7 +6,7 @@ leaving deletes that folder, so the Hub is the empty Hub it was. Nothing the dem
 or the outside: the pieces that would answer `NotInDemo` (message "Not in the demo.") through `stop()`.
 
 Pieces: `inventory` (the demo's Spoolman, which `spoolman.Spoolman` calls while the demo is on), `printers` (the
-pretend printers and the scripted alert), `routes` (the route list RC9 mounts). The sample set is `sample.xml`
+pretend printers and the scripted alert), `routes` (the route list mounts). The sample set is `sample.xml`
 (docs/the example-data rules, "Workshop hub": 64 spools of 23 filaments, three printers and one found).
 No JSON is stored.
 """
@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .. import config
+from ..station.page import say
 
 FOLDER = "demo"
 MARKER = "demo.xml"
@@ -27,7 +28,7 @@ NOT_EMPTY = "The demo is for an empty Hub. This Hub has real data."
 NOT_IN_DEMO = "Not in the demo."
 CANNOT_TELL = "Cannot tell whether this Hub is empty: Spoolman cannot be reached. Start Spoolman, then try again."
 NO_CAMERA = "No camera in the demo."
-NOT_MOUNTABLE = "The demo cannot be switched on in this version."
+NOT_MOUNTABLE = say("demo_not_mountable")
 NOT_IN_DEMO_CODE = "in_demo"            # the code of a stop (409); "not_in_demo" is the leave route's: the demo is off
 SAMPLE = Path(__file__).with_name("sample.xml")
 # Whether the demo may be switched on: `start()` refuses (`NotMountable`) while this is False. Set True only when the seal test's leak lists (`server/tests/test_demo_sealed.py`)

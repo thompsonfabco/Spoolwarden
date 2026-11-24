@@ -144,4 +144,16 @@ class StorageRowsTest {
         assertNull(rows.holder("Elsewhere"))
         assertNull(rows.holder(null))
     }
+
+    @Test fun rowsShowUnknownWhenCountsUnavailable() {
+        val rows = StorageAnswer(
+            listOf(
+                StorageLocation("Rack 1", limit = 20, used = null),
+                StorageLocation("Box", type = "containers", count = 12, used = null, free = null),
+            ),
+            countsUnavailable = true,
+        ).rows()
+        assertEquals(listOf(AddText.of(R.string.common_unknown), AddText.of(R.string.common_unknown)), rows.map { it.howFull })
+        assertEquals(listOf(false, false), rows.map { it.full })
+    }
 }

@@ -177,7 +177,11 @@ def routes(page) -> list[tuple]:
             raise Refused(404, "this Hub cannot return a spool")
         out = inventory.return_spool(sm(), spool_id, rules=storage.current())
         v = view(out["spool"], low_g())
-        return {"spool": v, "event": out.get("event"), "location": v["location"] or None}
+        from ..bridge import registry
+        where = inventory.view_context().slot_of((out.get("before") or {}).get("location")) or {}
+        p = registry.load().get(where.get("printer_id") or "")
+        extra = {"printer_notified": False} if p is not None and p.family == "klipper" else {}
+        return {"spool": v, "event": out.get("event"), "location": v["location"] or None, **extra}
 
     def last_tag() -> dict:
         found = tagsources.latest(config.load())

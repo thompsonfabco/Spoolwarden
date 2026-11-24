@@ -1,4 +1,4 @@
-"""Recently added on the Hub page (step S2.7, the design, Hub page): the list, one record, and a record changed by hand, by the Label Reader
+"""Recently added on the Hub page (the design, Hub page): the list, one record, and a record changed by hand, by the Label Reader
 and undone, in a real browser (tests/hub_drive.mjs) and under the page audit (tests/aut5_run.mjs). The page, its example data and the
 runners are test_hub_page_audit.py's. The same skips: no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations

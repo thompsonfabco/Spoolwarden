@@ -52,7 +52,7 @@ STATUS_IGNORE = {"updated_time", "setting_id", "user_id", "base_id", "is_custom_
 
 
 def _read_state(path: Path):
-    """A state file of this module (SLICER, updates), by its JSON name: its XML form when there is one (RC1c)."""
+    """A state file of this module (SLICER, updates), by its JSON name: its XML form when there is one."""
     return statexml.read(path)
 
 
@@ -112,13 +112,14 @@ def _hold(src: Path, dest: Path, gen, now) -> None:
         lines = inapp_mod.notes_text(gen.get("filament_notes")).splitlines()
         if inapp_mod.MARK in lines:
             mine = [x for x in lines[lines.index(inapp_mod.MARK) + 1:] if not x.startswith(inapp_mod.IDS_PREFIX)]
+    from .. import pairing
     if not mine or not isinstance(now, dict):
-        shutil.copyfile(src, dest)
+        pairing._write_atomic(dest, src.read_bytes(), 0o644)
         return
     have = [x for x in inapp_mod.notes_text(now.get("filament_notes")).splitlines()
             if x != inapp_mod.MARK and x not in mine]
     cfg = dict(now, filament_notes="\n".join(have + [inapp_mod.MARK] + mine))
-    dest.write_text(json.dumps(cfg, indent=4, ensure_ascii=False), encoding="utf-8")
+    pairing._write_atomic(dest, json.dumps(cfg, indent=4, ensure_ascii=False).encode("utf-8"), 0o644)
 
 
 def classify(out_tree: Path, live: Path | None, held: Path, root: Path | None = None) -> dict[str, dict]:

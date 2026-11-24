@@ -353,7 +353,7 @@ def test_resume_refused_when_a_new_preset_was_edited_after_the_crash(env):
     assert ("upload", "live", folders.user_id, STAMP) in c.calls and ("rebuild", here) in c.calls
     assert not [x for x in c.calls if x[0] == "installed"]
     assert "edited" in _log(dirs)
-    # ruling S28: the half-installed build is kept as dirs.partial and named in every live upload until an install
+    # the half-installed build is kept as dirs.partial and named in every live upload until an install
     assert sync.load_state(dirs)["partial"]["stamp"] == STAMP
     assert json.loads((dirs.partial / "BUILD.json").read_text())["stamp"] == STAMP
     assert (dirs.partial / "base" / f"{new_name}.json").is_file()
@@ -394,7 +394,7 @@ def test_failed_report_skips_the_live_upload_and_is_sent_first_next_run(env):
 
 def test_live_upload_owed_after_an_install_is_sent_even_when_the_hashes_match(env):
     """Round 3: the report went through, the re-upload failed; the next run must send live although the server's
-    hash equals this PC's (the install left the folder byte-identical), or the server waits forever (S32)."""
+    hash equals this PC's (the install left the folder byte-identical), or the server waits forever."""
     folders, dirs = env
     live = _hashes(folders)[0]
     c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))
@@ -415,7 +415,7 @@ def test_live_upload_owed_after_an_install_is_sent_even_when_the_hashes_match(en
 
 
 def test_studio_info_rewrites_and_own_presets_do_not_ask_for_a_rebuild(env):
-    """Ruling S31: only a generated preset that differs from dirs.installed (inapp.diff) or is gone asks for one."""
+    """only a generated preset that differs from dirs.installed (inapp.diff) or is gone asks for one."""
     folders, dirs = env
     live = _hashes(folders)[0]
     c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))
@@ -435,7 +435,7 @@ def test_studio_info_rewrites_and_own_presets_do_not_ask_for_a_rebuild(env):
 
 
 def test_rebuild_requested_after_an_inapp_edit_of_the_installed_build(env):
-    """Ruling S29b: the installed build is current, but the live folder changed since the install."""
+    """the installed build is current, but the live folder changed since the install."""
     folders, dirs = env
     live = _hashes(folders)[0]
     c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))

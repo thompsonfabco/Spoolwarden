@@ -1,4 +1,4 @@
-"""S5.1: a text is a plain string; `output.wrap` (what every command prints through) recognises a command
+"""a text is a plain string; `output.wrap` (what every command prints through) recognises a command
 by pattern, keeps it whole on one line and, when it does not fit the rest of the line, gives it a line of its own five
 spaces in. Nothing marks a command in a text: no control byte or marker is in any text, so the setup page and the
 Hub, which show the same texts, see plain strings. The scan reads the modules' own string literals with the syntax

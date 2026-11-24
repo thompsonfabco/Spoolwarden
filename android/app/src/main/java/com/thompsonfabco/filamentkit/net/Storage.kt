@@ -50,6 +50,7 @@ data class StorageAnswer(
     val orderByMaterial: List<MaterialOrder> = emptyList(),
     val everythingElse: List<String> = emptyList(),
     val detailed: Boolean = true,
+    val countsUnavailable: Boolean = false,
 ) {
     val names: List<String> get() = locations.map { it.name }
 
@@ -64,6 +65,7 @@ object StorageWire {
     const val LOCATIONS = "locations"
     const val ORDER_BY_MATERIAL = "order_by_material"
     const val EVERYTHING_ELSE = "everything_else"
+    const val COUNTS_UNAVAILABLE = "counts_unavailable"
 
     /** On a dry-run placement: `placed_by`, the reason code (`material`, `any`, `overflow`, `sealed`). */
     const val PLACED_BY = "placed_by"
@@ -85,7 +87,12 @@ object StorageWire {
             val m = o.text("material") ?: return@mapNotNull null
             MaterialOrder(m, o.texts("locations"))
         }
-        return StorageAnswer(locations, byMaterial, (root[EVERYTHING_ELSE] as? JsonArray).orEmpty().mapNotNull { it.asText() })
+        return StorageAnswer(
+            locations,
+            byMaterial,
+            (root[EVERYTHING_ELSE] as? JsonArray).orEmpty().mapNotNull { it.asText() },
+            countsUnavailable = root.flag(COUNTS_UNAVAILABLE),
+        )
     }
 
     private fun location(e: JsonElement): StorageLocation? {

@@ -137,15 +137,15 @@ def test_a_route_listed_ahead_of_the_web_unit_is_not_yet_called_by_it():
         assert not any(rx.fullmatch(c) for c in calls), f"{template} is called now: drop it from the list above"
 
 
-# The kit routes the web unit's twins call (EV6a, EV6b, HD8) that the Hub has not mounted yet (their api.py mounts are
-# EV1's, HD1's and RC9's steps). Each is ruled for a web token; none can be in WEB_ROUTES while the app has no such
+# The kit routes the web unit's twins call () that the Hub has not mounted yet (their api.py mounts are
+# 's, 's and 's steps). Each is a web token; none can be in WEB_ROUTES while the app has no such
 # route (test_every_listed_route_is_a_route_of_the_app), so until then the token is refused and the twin gets the
 # refusal. The mount step lists the route in WEB_ROUTES and deletes its line here; the tests below make that so.
 UNDO_CALL = "/api/events/{quote(event, safe="
 CALLED_BEFORE_THE_HUB_MOUNTS_THEM = {
-    ("GET", "/api/languages"),                              # RC2 builds it, RC9 mounts it
+    ("GET", "/api/languages"),                              # builds it, mounts it
     ("GET", "/api/strings/{code}"),                         # the texts of a language, `<code>.js`
-    ("POST", "/api/demo/leave"),                            # RC6
+    ("POST", "/api/demo/leave"),                            # 
 }
 _CALLED_BEFORE_THE_HUB_MOUNTS_THEM_RX = [
     re.compile(re.sub(r"\{\w+\}", "[^/]+", t).replace("[^/]+.csv", "[^/]+")) for _, t in CALLED_BEFORE_THE_HUB_MOUNTS_THEM]
@@ -163,7 +163,7 @@ def test_a_route_the_hub_has_not_mounted_is_refused_to_the_web_token_until_it_is
 
 
 def test_the_ruled_routes_stay_off_the_web_token_for_every_other_method():
-    """The ruling names a method for each: the others stay refused (not the imports)."""
+    """The a method for each: the others stay refused (not the imports)."""
     for method, path in (("POST", "/api/hub"), ("GET", "/api/printers/1/slots/1/clear"), ("PUT", "/api/library/local/1"),
                          ("POST", "/api/import/spools"), ("POST", "/api/import/locations"), ("POST", "/api/export/usage.csv")):
         assert not api._web_may(method, path), (method, path)

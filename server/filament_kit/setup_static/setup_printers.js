@@ -922,19 +922,30 @@ function openAddDrawer(opener) {
     });
   } }) : null;
   function drawFound(open) {
-    const printers = S.printers.list.filter((p) => klipperOf(p) && !p.configured);
+    const printers = S.printers.list.filter((p) => !p.configured && (klipperOf(p) ? P.klipper : P.bambu));
     found.replaceChildren(...printers.map((p) => {
+      const kl = klipperOf(p);
       const name = open ? p.name : scrub(p, p.name);
-      return E("li", null, E("div", null, name, open && p.name !== p.host ? E("span", "coll__sub mono", hostPort(p)) : null),
+      const addr = kl ? hostPort(p) : p.ip || "";
+      const sub = open && addr && p.name !== (kl ? p.host : p.ip) ? E("span", "coll__sub mono", addr) : null;
+      return E("li", null, E("div", null, name, sub),
         SW.btn(SW.t("printer_guided_use"), { name: SW.t("printers_use_name", { name }), run: () => SW.guard(SW.t("printer_guided_use").toLowerCase(), () => {
           if (!form.isConnected || step !== 0) return;
-          const previousHost = v(f.host).replace(/^\[(.*)\]$/, "$1");
-          if (previousHost.toLowerCase() !== p.host.toLowerCase() || Number(v(f.port)) !== p.port) f.api_key._control.value = "";
-          family = "klipper";
-          if (type) type.querySelector('input[value="klipper"]').checked = true;
-          f.host._control.value = p.host;
-          f.port._control.value = p.port;
-          if (!f.name._control.value && p.name !== p.host) f.name._control.value = p.name;
+          if (kl) {
+            const previousHost = v(f.host).replace(/^\[(.*)\]$/, "$1");
+            if (previousHost.toLowerCase() !== p.host.toLowerCase() || Number(v(f.port)) !== p.port) f.api_key._control.value = "";
+            family = "klipper";
+            if (type) type.querySelector('input[value="klipper"]').checked = true;
+            f.host._control.value = p.host;
+            f.port._control.value = p.port;
+            if (!f.name._control.value && p.name !== p.host) f.name._control.value = p.name;
+          } else {
+            family = "bambu";
+            if (type) type.querySelector('input[value="bambu"]').checked = true;
+            f.address._control.value = p.ip || "";
+            f.serial._control.value = p.serial || "";
+            if (!f.name._control.value && p.name && p.name !== p.ip && p.name !== p.serial) f.name._control.value = p.name;
+          }
           show(1);
         }) }));
     }));
@@ -943,7 +954,7 @@ function openAddDrawer(opener) {
   }
   const noFound = E("p", "muted", SW.t("printer_guided_none"));
   const choose = E("div", "printers-add__step",
-    P.klipper ? [E("h4", "printers-add__title", SW.t("printer_guided_found")), found, noFound, E("div", "actions", scan), scanResult] : null,
+    P.klipper || P.bambu ? [E("h4", "printers-add__title", SW.t("printer_guided_found")), found, noFound, P.klipper ? E("div", "actions", scan) : null, P.klipper ? scanResult : null] : null,
     P.bambu ? E("p", "muted", SW.t("printer_guided_bambu_by_address")) : null, type);
   const more = X("details", { class: "printers-add__more" }, E("summary", null, SW.t("common_more")), f.serial);
   const details = E("div", "printers-add__step", f.address, f.access_code, f.host, f.port, f.name, more, f.api_key);
@@ -1046,7 +1057,7 @@ function openAddDrawer(opener) {
   const d = openDrawer("add", { serial: "add" }, SW.t("printers_add"), form, [result, cancel, back, next, add, retry, anyway, later, map],
     { opener, address: "#printers/add", back: "#printers", busy: () => adding, dirty, result,
       end: () => { f.access_code._control.value = f.api_key._control.value = ""; } });
-  if (P.klipper) whenOpen(found, drawFound);
+  if (P.klipper || P.bambu) whenOpen(found, drawFound);
   show(0);
   return d;
 }

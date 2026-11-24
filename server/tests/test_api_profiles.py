@@ -126,7 +126,7 @@ def test_live_upload_bad_user_id(c, uid):
 @pytest.mark.parametrize("part, status", [("20270115-080000", 200), ("20270115-080000-2", 200), ("x", 400),
                                           ("../20270115-080000", 400), ("", 400)])
 def test_live_upload_partial_stamp(c, part, status):
-    """Ruling S28: `partial` (optional, a build stamp) is stored with the live upload; anything else is a 400."""
+    """`partial` (optional, a build stamp) is stored with the live upload; anything else is a 400."""
     tok = token()
     r = put_zip(c, tok, "live", zip_of({"base/x.json": "{}"}), "?user_id=1&partial=" + part)
     assert r.status_code == status, r.text
@@ -207,7 +207,7 @@ def test_build_download_and_installed(c, sm):
     names = zipfile.ZipFile(io.BytesIO(r.content)).namelist()
     assert "BUILD.json" in names and f"base/{TG.sunlu(TG.H2D, '0.4')}.json" in names
     assert "BUILD.xml" not in names                 # an older Slicer Sync accepts only BUILD.json
-    r = c.get(f"/api/sync/build?stamp={stamp}&format=xml", headers=auth(tok))     # RC1c: one that reads XML asks
+    r = c.get(f"/api/sync/build?stamp={stamp}&format=xml", headers=auth(tok))     # one that reads XML asks
     xnames = zipfile.ZipFile(io.BytesIO(r.content)).namelist()
     assert r.status_code == 200 and "BUILD.xml" in xnames and "BUILD.json" not in xnames
     assert f"base/{TG.sunlu(TG.H2D, '0.4')}.json" in xnames
@@ -493,7 +493,7 @@ def test_bambu_target_is_the_default(c):
 
 @pytest.mark.parametrize("part, status", [("20270115-080000", 200), ("x", 400), ("", 400)])
 def test_orca_live_partial(c, part, status):
-    """Ruling O: orca_live takes `partial` exactly like live."""
+    """orca_live takes `partial` exactly like live."""
     tok = token()
     r = put_zip(c, tok, "live", zip_of({"a.json": "{}"}), "?target=orca&partial=" + part)
     assert r.status_code == status, r.text

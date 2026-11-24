@@ -1,4 +1,4 @@
-"""AF2 (b) and (e): the Hub's pinned calls to a Weigh Station, the refusal on a changed certificate, and an older
+"""(b) and (e): the Hub's pinned calls to a Weigh Station, the refusal on a changed certificate, and an older
 station (plain HTTP, no fingerprint said) that keeps working until it is updated."""
 import json
 import threading

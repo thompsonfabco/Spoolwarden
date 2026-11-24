@@ -1845,6 +1845,12 @@
     <string name="updates_notes_current">Release notes of %1$s</string>
     <!-- 1=version -->
     <string name="updates_notes_new">What %1$s brings</string>
+    <string name="updates_reader_check">Check Label Reader</string>
+    <string name="updates_reader_dialog_body">The local Label Reader stops while it installs and starts again by itself.</string>
+    <!-- 1=version -->
+    <string name="updates_reader_dialog_title">Update Label Reader to %1$s?</string>
+    <!-- 1=version -->
+    <string name="updates_reader_update">Update Label Reader to %1$s</string>
     <string name="updates_remove_command">sudo spoolwarden uninstall</string>
     <string name="updates_remove_line">To remove Spoolwarden: on the Hub, run</string>
     <!-- 1=previous -->
@@ -2484,7 +2490,10 @@
     <string name="printer_unload_moved_back">Moved back: spool %1$s to %2$s.</string>
     <!-- 1=id -->
     <string name="printer_unload_moved_back_noplace">Moved back: spool %1$s to its previous place.</string>
+    <!-- 1=month 2=amount -->
+    <string name="printer_used_bars_most">The most was in %1$s: %2$s.</string>
     <string name="printer_used_empty">Nothing used in the last 7 days.</string>
+    <string name="printer_used_hide_table">Hide the table</string>
     <string name="printer_used_job_default">Print job</string>
     <string name="printer_used_last_days">Last 7 days</string>
     <!-- 1=grams -->
@@ -4132,6 +4141,7 @@
         <item quantity="other">%1$d spools are recorded there. They keep that location until you move them; it is no longer offered for new spools.</item>
     </plurals>
     <string name="storage_remove_body_none">No spools are recorded there.</string>
+    <string name="storage_remove_body_unknown">Spool count is unknown right now. Any spools there keep that location until you move them; it is no longer offered for new spools.</string>
     <string name="storage_notice_converted">Storage locations were converted. Check them.</string>
     <!-- 1=reason -->
     <string name="storage_check_not_saved">Storage locations could not be saved (%1$s).</string>
@@ -5686,4 +5696,349 @@
     <string name="spools_home_done">Home is now %1$s.</string>
     <!-- 1=reason -->
     <string name="spools_home_failed">Could not change the home: %1$s</string>
+    <string name="cli_panel_wifi_off_no_usb">No panel was on USB, so the panel itself still holds its Wi-Fi settings and will keep them until it is connected by USB and set again.</string>
+    <string name="spools_return_printer_not_told">The printer could not be told to clear its slot.</string>
+    <string name="demo_not_mountable">The demo cannot be switched on in this version.</string>
+    <string name="cli_config_share_corrections_delete_ask_one">Delete the 1 correction still waiting?</string>
+    <string name="cli_config_share_corrections_kept_one">1 correction kept.</string>
+    <!-- 1=set -->
+    <string name="storage_warn_container_name">Same name as a container in %1$s.</string>
+    <string name="csv_import_menu">Import from CSV</string>
+    <string name="csv_import_spools_title">Import spools from CSV</string>
+    <string name="csv_import_locations_title">Import storage locations from CSV</string>
+    <string name="csv_import_file_label">CSV file</string>
+    <string name="csv_import_sample">Download a sample file</string>
+    <string name="csv_import_check">Check</string>
+    <string name="csv_import_col_no">No.</string>
+    <string name="csv_import_col_line">What would be added</string>
+    <string name="csv_import_col_line_locations">What would change</string>
+    <string name="csv_import_col_problems">Problems</string>
+    <!-- 1=count -->
+    <plurals name="csv_import_left_out">
+        <item quantity="one">%1$d row has problems and is left out.</item>
+        <item quantity="other">%1$d rows have problems and is left out.</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="csv_import_add_spools">
+        <item quantity="one">Add %1$d spool</item>
+        <item quantity="other">Add %1$d spools</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="csv_import_added_spools">
+        <item quantity="one">Added %1$d spool.</item>
+        <item quantity="other">Added %1$d spools.</item>
+    </plurals>
+    <string name="csv_import_commit_locations">Import locations</string>
+    <!-- 1=add 2=change -->
+    <string name="csv_import_imported_locations">Added %1$s locations and changed %2$s.</string>
+    <string name="settings_corr_heading">Share corrections</string>
+    <string name="settings_corr_label">Share corrections to improve the Label Reader</string>
+    <string name="settings_corr_text">When this is on, each correction you make to a reading waits on this Hub to be shared: the label photos (made smaller, with location and camera data removed), what the Label Reader read, what you changed it to, and your note if you wrote one. Readings by On this Hub and by Cloud (Claude) both count. Nothing is sent until you press Send now; then the corrections waiting go to the project maintainer for review, to improve the Label Reader.</string>
+    <string name="settings_corr_needs_reader">Needs Label Reader: On this Hub, which keeps the corrections until they are sent. Switch it on in Features. Cloud (Claude) readings are shared too once it is on.</string>
+    <string name="settings_corr_too_old">The reader on this Hub is too old to share corrections. Update it in Updates.</string>
+    <string name="settings_corr_no_answer">The reader does not answer, so this cannot be changed now.</string>
+    <string name="settings_corr_differs">The reader is set differently from this Hub. Save Label Reader to set it again.</string>
+    <string name="settings_corr_restarted">The reader restarted.</string>
+    <!-- 1=count -->
+    <plurals name="settings_corr_deleted">
+        <item quantity="one">%1$d correction deleted.</item>
+        <item quantity="other">%1$d corrections deleted.</item>
+    </plurals>
+    <string name="settings_corr_stop_title">Stop sharing corrections?</string>
+    <!-- 1=count -->
+    <plurals name="settings_corr_stop_body">
+        <item quantity="one">%1$d correction is still waiting. Keep it to send later, or delete it now.</item>
+        <item quantity="other">%1$d corrections are still waiting. Keep them to send later, or delete them now.</item>
+    </plurals>
+    <string name="settings_corr_keep">Keep them</string>
+    <string name="settings_corr_delete">Delete them</string>
+    <string name="settings_corr_title">Corrections waiting</string>
+    <!-- 1=count 2=size -->
+    <string name="settings_corr_count">%1$d waiting · %2$s</string>
+    <string name="settings_corr_intro">Nothing is sent until you press Send now. Remove any you do not want to share.</string>
+    <string name="settings_corr_intro_off">Share corrections is off, so no new corrections are added. These are still waiting.</string>
+    <string name="settings_corr_empty_title">No corrections waiting</string>
+    <string name="settings_corr_empty_text">Corrections you make in Recently added, or while adding spools, appear here.</string>
+    <string name="settings_corr_reader_down">The reader does not answer, so the corrections waiting cannot be shown. They are kept.</string>
+    <!-- 1=reason -->
+    <string name="settings_corr_read_error">Could not read the corrections waiting. %1$s</string>
+    <!-- 1=engine -->
+    <string name="settings_corr_read_by">Read by %1$s</string>
+    <string name="settings_corr_record_gone">This record is no longer kept.</string>
+    <string name="settings_corr_photos_gone">The photos of this correction are no longer on the Hub.</string>
+    <!-- 1=reason -->
+    <string name="settings_corr_not_waiting">Not waiting: the reader did not take this correction. %1$s</string>
+    <string name="settings_corr_not_waiting_plain">Not waiting: the reader did not take this correction.</string>
+    <!-- 1=name -->
+    <string name="settings_corr_remove_named">Remove the correction for %1$s</string>
+    <string name="settings_corr_removed">Removed. The record in Recently added is unchanged.</string>
+    <string name="settings_corr_remove_all">Remove all</string>
+    <string name="settings_corr_remove_all_title">Remove all corrections waiting?</string>
+    <!-- 1=count -->
+    <plurals name="settings_corr_remove_all_body">
+        <item quantity="one">%1$d correction is taken out of this list and is not sent. The records in Recently added are unchanged.</item>
+        <item quantity="other">%1$d corrections are taken out of this list and are not sent. The records in Recently added are unchanged.</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="settings_corr_removed_all">
+        <item quantity="one">Removed %1$d correction. Nothing was sent.</item>
+        <item quantity="other">Removed %1$d corrections. Nothing was sent.</item>
+    </plurals>
+    <string name="settings_corr_package">Download the package</string>
+    <string name="settings_corr_package_hint">The package is the exact file that Send now sends, so you can look at it first.</string>
+    <!-- 1=reason -->
+    <string name="settings_corr_package_failed">Could not make the package. %1$s</string>
+    <string name="settings_corr_nothing">Nothing is waiting.</string>
+    <string name="settings_corr_send">Send now</string>
+    <!-- 1=count -->
+    <plurals name="settings_corr_send_title">
+        <item quantity="one">Send %1$d correction?</item>
+        <item quantity="other">Send %1$d corrections?</item>
+    </plurals>
+    <string name="settings_corr_send_body">The photos and values in this list go to the project maintainer for review, to improve the Label Reader. This cannot be taken back.</string>
+    <string name="settings_corr_send_confirm">Send</string>
+    <!-- 1=count -->
+    <plurals name="settings_corr_sending">
+        <item quantity="one">Sending %1$d correction…</item>
+        <item quantity="other">Sending %1$d corrections…</item>
+    </plurals>
+    <!-- 1=count -->
+    <plurals name="settings_corr_sent">
+        <item quantity="one">Sent %1$d correction. Thank you.</item>
+        <item quantity="other">Sent %1$d corrections. Thank you.</item>
+    </plurals>
+    <!-- 1=reason -->
+    <string name="settings_corr_not_sent">Could not send. %1$s The corrections are still waiting.</string>
+    <string name="settings_corr_not_sent_plain">Could not send. The corrections are still waiting.</string>
+    <string name="settings_corr_set_failed">The reader could not be set. See the log.</string>
+    <!-- 1=order 2=count -->
+    <plurals name="settings_state_reader_waiting">
+        <item quantity="one">%1$s · %2$d correction waiting</item>
+        <item quantity="other">%1$s · %2$d corrections waiting</item>
+    </plurals>
+    <string name="recent_corr_on">Share corrections is on: this correction will wait on this Hub to be shared.</string>
+    <string name="recent_corr_waiting">This correction is waiting to be shared.</string>
+    <string name="recent_corr_link">Corrections waiting</string>
+    <string name="recent_corr_no_photo">Not shared: no photo was kept for this record.</string>
+    <!-- 1=reason -->
+    <string name="recent_corr_not_taken">Saved. The correction is not waiting to be shared: %1$s.</string>
+    <string name="recent_corr_not_taken_plain">Saved. The correction is not waiting to be shared.</string>
+    <string name="recent_corr_meta">Share corrections</string>
+    <!-- 1=count -->
+    <string name="recent_corr_meta_waiting">%1$d waiting</string>
+    <!-- 1=count -->
+    <plurals name="features_corr_warn">
+        <item quantity="one">Deletes %1$d correction waiting to be shared. Send it first in Settings > Label Reader, or go on.</item>
+        <item quantity="other">Deletes %1$d corrections waiting to be shared. Send them first in Settings > Label Reader, or go on.</item>
+    </plurals>
+    <string name="hub_glance_title">The Hub at a glance</string>
+    <string name="hub_glance_open">The Hub at a glance</string>
+    <string name="hub_change_on_page">Change this on the Hub page.</string>
+    <string name="hub_newest">Newest</string>
+    <string name="hub_update_available">Update available</string>
+    <string name="hub_last_backup">Last backup</string>
+    <string name="hub_engine">Engine</string>
+    <string name="hub_key">Key</string>
+    <string name="hub_not_known">Not known</string>
+    <!-- 1=time -->
+    <string name="hub_device_last_seen">last seen %1$s</string>
+    <!-- 1=name -->
+    <string name="hub_device_this">%1$s (this device)</string>
+    <string name="app_hub_out_of_date">Out of date</string>
+    <string name="hub_kind_builtin">Built-in</string>
+    <string name="app_hub_unavailable">This Hub cannot show this yet. Update the Hub to see it here.</string>
+    <!-- 1=done 2=total -->
+    <string name="hub_getting_started_line">Getting started on the Hub: %1$s of %2$s done</string>
+    <string name="hub_health_title">Check history</string>
+    <string name="hub_health_show_30">Show 30 days</string>
+    <string name="hub_health_show_7">Show 7 days</string>
+    <string name="hub_health_no_changes">No checks changed in this time.</string>
+    <string name="hub_health_state_bad">Needs fixing</string>
+    <!-- 1=date -->
+    <string name="hub_no_history_before">No history before %1$s.</string>
+    <!-- 1=time 2=check 3=from 4=to -->
+    <string name="hub_health_row_spoken">%1$s. %2$s: from %3$s to %4$s</string>
+    <string name="corrections_title">Corrections waiting</string>
+    <string name="corrections_line_on">Share corrections is on</string>
+    <!-- 1=count -->
+    <string name="corrections_line_on_count">Share corrections is on · %1$d waiting</string>
+    <string name="corrections_line_will_wait">Share corrections is on: this correction will wait on the Hub to be shared.</string>
+    <string name="corrections_line_check">Share corrections is on: fields you change here will wait on the Hub to be shared once the spools are added.</string>
+    <string name="corrections_line_waiting">This correction is waiting to be shared.</string>
+    <string name="corrections_line_no_photo">Not shared: no photo was kept for this record.</string>
+    <!-- 1=reason -->
+    <string name="corrections_line_not_waiting">Saved. The correction is not waiting to be shared: %1$s.</string>
+    <!-- 1=count 2=megabytes -->
+    <string name="corrections_head">%1$d waiting · %2$s MB</string>
+    <string name="corrections_head_text">Nothing is sent until Send now is pressed on the Hub page. Remove any you do not want to share.</string>
+    <string name="corrections_head_off">Share corrections is off, so no new corrections are added. These are still waiting.</string>
+    <string name="corrections_foot">Sending is done on the Hub page, under Settings > Label Reader.</string>
+    <string name="corrections_empty_title">No corrections waiting</string>
+    <string name="corrections_empty_text">Corrections you make in Recently added, or while adding spools, appear here.</string>
+    <string name="corrections_reader_down">The reader does not answer, so the corrections waiting cannot be shown. They are kept.</string>
+    <string name="corrections_unnamed">A correction</string>
+    <!-- 1=time 2=engine -->
+    <string name="corrections_row_meta">%1$s · %2$s</string>
+    <!-- 1=field 2=read 3=now -->
+    <string name="corrections_change">%1$s: %2$s → %3$s</string>
+    <!-- 1=note -->
+    <string name="corrections_note">Note: %1$s</string>
+    <!-- 1=reason -->
+    <string name="corrections_not_waiting">Not waiting: the reader did not take this correction. %1$s</string>
+    <string name="corrections_no_record">This record is no longer kept.</string>
+    <string name="corrections_no_photos">The photos of this correction are no longer on the Hub.</string>
+    <string name="corrections_removing">Removing…</string>
+    <string name="corrections_removed">Removed. The record in Recently added is unchanged.</string>
+    <!-- 1=field 2=read 3=now -->
+    <string name="corrections_a11y_change">%1$s, %2$s, becomes %3$s</string>
+    <!-- 1=name -->
+    <string name="corrections_a11y_remove">Remove the correction for %1$s</string>
+    <!-- 1=name 2=time 3=count -->
+    <plurals name="corrections_a11y_row">
+        <item quantity="one">%1$s, corrected %2$s, %3$d change</item>
+        <item quantity="other">%1$s, corrected %2$s, %3$d changes</item>
+    </plurals>
+    <!-- 1=name 2=time 3=engine 4=count -->
+    <plurals name="corrections_a11y_row_engine">
+        <item quantity="one">%1$s, corrected %2$s, read by %3$s, %4$d change</item>
+        <item quantity="other">%1$s, corrected %2$s, read by %3$s, %4$d changes</item>
+    </plurals>
+    <!-- 1=name -->
+    <string name="corrections_a11y_removing">Removing the correction for %1$s</string>
+    <!-- 1=name 2=count -->
+    <string name="corrections_a11y_photos">Photos of the correction for %1$s: %2$d</string>
+    <!-- 1=note -->
+    <string name="history_put_back_note">Put back. %1$s</string>
+    <string name="history_undo_update_hub">Update the Hub to use Undo.</string>
+    <string name="app_history_undo_failed">Nothing was undone. Try again.</string>
+    <string name="history_activity_title">Recent activity</string>
+    <string name="history_by_month">By month</string>
+    <string name="history_downloading">Downloading…</string>
+    <string name="history_no_months">No months to show yet.</string>
+    <string name="history_months_update_hub">Update the Hub to see filament used by month.</string>
+    <string name="history_csv_update_hub">Update the Hub to download this file.</string>
+    <string name="history_csv_not_saved">The file could not be saved on this phone. Is there enough free space?</string>
+    <!-- 1=count -->
+    <plurals name="history_prints">
+        <item quantity="one">%1$d print</item>
+        <item quantity="other">%1$d prints</item>
+    </plurals>
+    <!-- 1=count -->
+    <string name="history_unfinished">%1$d did not finish</string>
+    <!-- 1=material -->
+    <string name="history_most_used">Most used: %1$s</string>
+    <string name="catalog_field_name">Name *</string>
+    <string name="catalog_field_other_material">Other material *</string>
+    <string name="catalog_nozzle_from">Nozzle temperature from (°C)</string>
+    <string name="catalog_nozzle_to">Nozzle temperature to (°C)</string>
+    <string name="catalog_bed_from">Bed temperature from (°C)</string>
+    <string name="catalog_bed_to">Bed temperature to (°C)</string>
+    <string name="catalog_fill_name">Fill in Brand, Name and Material.</string>
+    <string name="catalog_hide_entries">Hide custom entries</string>
+    <string name="catalog_entries_empty">You have not added any entries of your own yet.</string>
+    <string name="catalog_entries_loading">Loading your entries…</string>
+    <string name="catalog_entries_update_hub">Update the Hub to see your own entries.</string>
+    <!-- 1=date -->
+    <string name="app_catalog_entry_added">Added %1$s</string>
+    <!-- 1=entry -->
+    <string name="catalog_remove_entry">Remove %1$s</string>
+    <!-- 1=entry -->
+    <string name="catalog_remove_title">Remove %1$s?</string>
+    <!-- 1=entry -->
+    <string name="catalog_remove_question">Remove %1$s from your own entries? Slicer presets are rebuilt.</string>
+    <string name="voice_hint_remote">Chosen on the Weigh Station\'s own computer: spoolwarden config.</string>
+    <string name="voice_save_failed">The change was not saved.</string>
+    <string name="spool_load_auto_waiting">Waiting for the spool to be loaded.</string>
+    <!-- 1=printer -->
+    <string name="spool_load_auto_title">Load into %1$s: Automatic</string>
+    <string name="spool_load_the_spool">the spool</string>
+    <string name="spool_load_auto_hint">The slot where the spool appears.</string>
+    <string name="spool_load_auto_refused">This printer has no slots the Hub can watch. Choose a slot.</string>
+    <!-- 1=percent -->
+    <string name="app_update_downloading_percent">Downloading… %1$s%%</string>
+    <string name="app_update_install_plain">Install</string>
+    <string name="app_update_banner">Update available</string>
+    <!-- 1=version -->
+    <string name="app_update_banner_version">Update available (Spoolwarden %1$s)</string>
+    <string name="printer_previous_place">its previous place</string>
+    <string name="printer_clear_bambu_note">The printer still shows the old filament for this slot until a spool is loaded.</string>
+    <string name="printer_clear_update_hub">Update the Hub to clear a slot.</string>
+    <string name="printer_unload_waiting_ended">The spool waiting for this slot is not waiting any more.</string>
+    <!-- 1=spool 2=slot 3=place -->
+    <string name="printer_unload_body_klipper">Unload %1$s from %2$s? It goes back to %3$s. The slot\'s setting on the printer is cleared too, when the printer is online and can do it.</string>
+    <!-- 1=label -->
+    <string name="app_printer_clear_title">Clear slot %1$s?</string>
+    <string name="printer_clear_forgets">The Hub forgets the spool recorded here.</string>
+    <!-- 1=spool 2=place -->
+    <string name="printer_clear_forgets_spool">The Hub forgets the spool recorded here. %1$s goes back to %2$s.</string>
+    <!-- 1=label -->
+    <string name="printer_clear_done">Cleared slot %1$s.</string>
+    <!-- 1=spool 2=place -->
+    <string name="printer_clear_spool_back">%1$s is back on %2$s.</string>
+    <string name="app_printer_clear_waiting_ended">The spool that was waiting for it is not waiting any more.</string>
+    <!-- 1=spool -->
+    <string name="printer_auto_choose">Two slots were loaded. Which one got %1$s?</string>
+    <string name="printer_guided_by_address">Type a Klipper printer\'s address</string>
+    <string name="printer_guided_bambu_address">Type a Bambu Lab printer\'s address</string>
+    <!-- 1=address -->
+    <string name="printer_guided_klipper_unreached">The Hub could not reach a Klipper printer at %1$s.</string>
+    <string name="demo_notice">Demo data. Nothing here is real.</string>
+    <string name="demo_leave">Leave demo</string>
+    <string name="demo_leave_title">Leave the demo?</string>
+    <string name="demo_leave_body">Everything in it is deleted.</string>
+    <!-- 1=app_version -->
+    <string name="app_version_unpaired">App %1$s · not paired</string>
+    <!-- 1=app_version 2=server_version -->
+    <string name="app_version_server">App %1$s · Server %2$s</string>
+    <string name="label_scan_button">Scan a label</string>
+    <string name="label_scan_hint">Point the camera at the spool\'s label</string>
+    <string name="label_scan_denied">The camera is needed to scan a spool\'s label. You can allow it in the phone\'s app settings.</string>
+    <string name="label_scan_failed">The camera could not start, so the label can\'t be scanned.</string>
+    <string name="label_scan_not_label">This is not a Spoolwarden spool label.</string>
+    <string name="label_scan_not_found">This label\'s spool was not found on this Hub.</string>
+    <string name="settings_language_title">Language</string>
+    <string name="settings_language_helper">Automatic uses this phone\'s language if the app has it, otherwise the Hub\'s language.</string>
+    <string name="settings_language_machine_translated">(machine-translated)</string>
+    <string name="spool_weight_hint_empty">Type the weight with the spool to update it.</string>
+    <string name="spool_weight_hint_invalid">Type a weight in grams, more than 0.</string>
+    <string name="spool_tare_invalid">Empty spool weight must be more than 0 g</string>
+    <string name="label_print_button">Print</string>
+    <string name="label_print_size">Size</string>
+    <string name="label_size_small">62 x 29 mm</string>
+    <string name="label_size_medium">50 x 30 mm</string>
+    <string name="label_print_sheets_note">Sheets of labels are printed from the Hub page or the web app.</string>
+    <string name="label_print_address_note">The code holds this Hub\'s home address. If the Hub is renamed or moves to another port, old labels still open in this app\'s scanner but not from a phone\'s camera.</string>
+    <string name="label_print_error">Could not draw the label.</string>
+    <!-- 1=reason -->
+    <string name="label_print_error_reason">Could not draw the label. %1$s</string>
+    <!-- 1=id 2=name 3=material -->
+    <string name="label_print_preview">Label of spool %1$s: %2$s, %3$s</string>
+    <!-- 1=id 2=name 3=material 4=grams -->
+    <string name="label_print_preview_left">Label of spool %1$s: %2$s, %3$s, %4$s g</string>
+    <string name="pair_cert_trust_failed">The new certificate could not be trusted yet. Check that the Hub is reachable and try again, or pair again.</string>
+    <string name="preset_updates_title">Preset updates</string>
+    <string name="preset_updates_intro">A newer build would change these Slicer presets already in your slicers. Nothing is written over until you accept.</string>
+    <string name="preset_updates_none">No preset in your slicers needs an update.</string>
+    <string name="preset_updates_restore">Restore Slicer presets deleted in Bambu Studio</string>
+    <string name="preset_updates_restored">The next build brings them back; your PC installs it at its next sync.</string>
+    <string name="preset_updates_changed">The updates changed since this list (a newer build came). Nothing was accepted; check the new list.</string>
+    <string name="preset_updates_loading">Loading updates…</string>
+    <!-- 1=count -->
+    <plurals name="preset_updates_accept">
+        <item quantity="one">Accept %1$d update</item>
+        <item quantity="other">Accept %1$d updates</item>
+    </plurals>
+    <!-- 1=accepted -->
+    <string name="preset_updates_nothing_waiting">Nothing waiting; %1$s accepted, written at the next Slicer Sync.</string>
+    <!-- 1=count -->
+    <string name="preset_updates_accepted">%1$d accepted: your PC writes them over the Slicer presets at its next Slicer Sync.</string>
+    <string name="preset_updates_target_orca">OrcaSlicer</string>
+    <string name="preset_updates_changed_values">changed values</string>
+    <!-- 1=names -->
+    <string name="preset_updates_yours">Never written over (your own preset of that name): %1$s</string>
+    <string name="preset_updates_module_off">Slicer presets are switched off on this Hub.</string>
+    <string name="preset_updates_offline">Could not reach the Hub. Check that you are on the same network.</string>
+    <string name="preset_updates_unexpected">Unexpected response from the Hub</string>
+    <string name="preset_updates_close">Close</string>
+    <string name="common_request_too_large">Request too large.</string>
 </resources>

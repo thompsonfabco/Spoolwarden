@@ -508,7 +508,7 @@ def test_backup_create_and_restore_through_the_cli(kit, monkeypatch, capsys):
 
 
 def test_restore_piped_without_yes_is_refused_with_exit_2_and_changes_nothing(kit, monkeypatch, capsys):
-    """S5.2 / AUT-9: the typed word cannot be asked, so nothing is read, printed on standard output or changed."""
+    """/ AUT-9: the typed word cannot be asked, so nothing is read, printed on standard output or changed."""
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     z = backup.create()
     run = Runner()

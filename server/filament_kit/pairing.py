@@ -13,6 +13,7 @@ import secrets
 import socket
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -168,19 +169,85 @@ def _write_atomic(path: Path, data: bytes, mode: int, state_owned: bool = False)
         raise
 
 
+_BRIDGE_IFACES = ("docker", "br-", "veth", "virbr", "cni", "flannel", "kube", "podman", "tun", "tap", "wsl", "vethernet")
+_DOCKER_BRIDGE_NET = ipaddress.ip_network("172.17.0.0/16")
+
+
+def _is_bridge_iface(name: str) -> bool:
+    low = name.lower()
+    return any(low.startswith(p) for p in _BRIDGE_IFACES)
+
+
+def _is_docker_bridge_ip(ip: str) -> bool:
+    try:
+        return ipaddress.ip_address(ip) in _DOCKER_BRIDGE_NET
+    except ValueError:
+        return False
+
+
+def _read_proc_net_route() -> list[tuple[str, int, int]]:
+    """Read Linux `/proc/net/route` as (iface, dest_host_order, mask_host_order)."""
+    routes: list[tuple[str, int, int]] = []
+    try:
+        text = Path("/proc/net/route").read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return routes
+    for line in text.splitlines()[1:]:
+        cols = line.split()
+        if len(cols) < 8:
+            continue
+        try:
+            routes.append((cols[0], int(cols[1], 16), int(cols[7], 16)))
+        except ValueError:
+            continue
+    return routes
+
+
+def _iface_for_ip(ip: str, routes: list[tuple[str, int, int]]) -> str | None:
+    try:
+        addr = int.from_bytes(ipaddress.IPv4Address(ip).packed, sys.byteorder)
+    except ValueError:
+        return None
+    best_iface: str | None = None
+    best_bits = -1
+    for iface, dest, mask in routes:
+        if mask != 0 and (addr & mask) == (dest & mask):
+            bits = mask.bit_count()
+            if bits > best_bits:
+                best_bits = bits
+                best_iface = iface
+    return best_iface
+
+
 def _candidate_ips() -> list[str]:
-    ips: list[str] = []
+    raw: list[str] = []
     if os.name != "nt":
         try:
-            ips = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5).stdout.split()
+            raw = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5).stdout.split()
         except (OSError, subprocess.SubprocessError):
-            ips = []
-    if not ips:
+            raw = []
+    if not raw:
         try:
-            ips = [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
+            raw = [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
         except OSError:
-            ips = []
-    return ips
+            raw = []
+    routes = _read_proc_net_route() if os.name != "nt" else []
+    default_ifaces = {iface for iface, dest, mask in routes if dest == 0 and mask == 0}
+    default_ips: list[str] = []
+    other_ips: list[str] = []
+    fallback: list[str] = []
+    for ip in raw:
+        if not _usable(ip):
+            continue
+        iface = _iface_for_ip(ip, routes) if routes else None
+        if (iface and _is_bridge_iface(iface)) or (_is_docker_bridge_ip(ip) and iface not in default_ifaces):
+            fallback.append(ip)
+        elif iface and iface in default_ifaces:
+            default_ips.append(ip)
+        else:
+            other_ips.append(ip)
+    preferred = default_ips + other_ips
+    return preferred if preferred else fallback
 
 
 def _usable(ip: str) -> bool:
@@ -199,6 +266,23 @@ def local_ips() -> list[str]:
 def short_hostname() -> str:
     """The host's own name without any domain: what avahi publishes as <name>.local."""
     return socket.gethostname().split(".")[0]
+
+
+def hub_id() -> str:
+    """Stable random identifier for this Hub, persisted in state as XML (never an owner name or hostname)."""
+    from .profiles import statexml
+    with _locked():
+        f = config.paths().state / "pairing_hub_id.xml"
+        names = (f,)
+        _refuse_links(names)
+        data = statexml.read(f, tag="hub", mode=0o600, state_owned=True)
+        _refuse_links(names)
+        if isinstance(data, dict) and isinstance(data.get("id"), str) and data["id"]:
+            return data["id"]
+        hid = uuid.uuid4().hex
+        config.paths().state.mkdir(parents=True, exist_ok=True)
+        statexml.write(f, {"id": hid}, 0o600, tag="hub", state_owned=True)
+        return hid
 
 
 def make_cert(hostname: str, ips: list[str], dest: Path, extra_dns: list[str] = ()) -> str:

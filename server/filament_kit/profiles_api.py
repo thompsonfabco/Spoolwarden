@@ -4,8 +4,8 @@
 `request.state.device` and turns a `ProfileError` into `{"error", "message", **extra}`.
 
 Uploads (`PUT /api/sync/live|system`; live takes `user_id` and, after a half-finished install, `partial=<stamp>`,
-ruling S28; `target=orca` stores Orca Slicer's folders instead, kinds `orca_live` / `orca_system`, Ruling L, and
-`partial` works the same, Ruling O): the owner is checked before the body is read (409 `other_pc`), a declared
+`target=orca` stores Orca Slicer's folders instead, kinds `orca_live` / `orca_system`, and
+`partial` works the same, ): the owner is checked before the body is read (409 `other_pc`), a declared
 Content-Length over the cap is refused at once (413), then `request.stream()` is read by `builds.store_upload`
 in the threadpool through a small blocking reader, which stops at the cap (never `await request.body()`).
 
@@ -22,7 +22,7 @@ the upload as that folder's first sync (builds.store_upload `fresh`). `POST /api
 {outcome, waiting_since, app}, at most HEARTBEAT_MAX bytes, from the sync PC only: the PC is waiting for a slicer to
 close (or that wait is over); `GET /api/profiles/status` shows it as `pc.waiting`.
 
-Times in responses are ISO 8601 UTC text (`2026-11-02T08:01:00Z`, ruling S18). Every state-changing route writes
+Times in responses are ISO 8601 UTC text (`2026-11-02T08:01:00Z`, ). Every state-changing route writes
 one audit line: what, `device_id`, a few plain fields and the result; never a body, a query string or a token.
 """
 from __future__ import annotations
@@ -313,7 +313,7 @@ def routes(authed, sm) -> list[Route]:
     async def sync_rebuild(request: Request):
         device = request.state.device
         body = await _json(request)
-        lh, olh = body.get("live_hash"), body.get("orca_live_hash")       # orca_live_hash: Ruling O
+        lh, olh = body.get("live_hash"), body.get("orca_live_hash")       # orca_live_hash: 
         for key, v in (("live_hash", lh), ("orca_live_hash", olh)):
             if v is not None and not (isinstance(v, str) and HASH_RE.fullmatch(v)):
                 raise _bad(f"{key} must be a sha256 hex digest")
@@ -327,7 +327,7 @@ def routes(authed, sm) -> list[Route]:
     @authed
     async def sync_build(request: Request):
         stamp = request.query_params.get("stamp", "")
-        fmt = "xml" if request.query_params.get("format") == "xml" else "json"      # RC1c: a Slicer Sync that reads XML asks
+        fmt = "xml" if request.query_params.get("format") == "xml" else "json"      # a Slicer Sync that reads XML asks
         data = await run_in_threadpool(builds.build_zip, stamp, fmt)
         return Response(data, media_type="application/zip",
                         headers={"Content-Disposition": f'attachment; filename="build-{_safe(stamp)}.zip"'})
@@ -339,7 +339,7 @@ def routes(authed, sm) -> list[Route]:
         stamp = body.get("stamp")
         if not isinstance(stamp, str):
             raise _bad("stamp is required")
-        trees = body.get("trees")               # Ruling AB: ["base"] | ["base", "orca"]; absent = ["base"]
+        trees = body.get("trees")               # ["base"] | ["base", "orca"]; absent = ["base"]
         written = body.get("written")           # {"base"|"orca": [names]}: what the PC wrote (absent: an older PC)
         inst = await run_in_threadpool(_audit, "sync installed", device,
                                        lambda: builds.record_installed(stamp, device, trees, written), stamp=stamp)
@@ -661,7 +661,7 @@ def web_routes(authed, sm) -> list[Route]:
 
     @authed
     async def uncovered(request: Request):
-        """`GET /api/profiles/uncovered` (any paired device, S4.13): the Spoolman filaments no preset line records
+        """`GET /api/profiles/uncovered` (any paired device, ): the Spoolman filaments no preset line records
         yet, as the web app lists them. Reply: `{"uncovered_filaments": [{"id": int, "vendor": text, "name": text,
         "material": text, "lines_for_vendor": [line names of that brand, sorted]}]}`; empty when every filament has a
         line. An uncovered filament joins a line by its name at the next build; this is for the wrong-line case."""

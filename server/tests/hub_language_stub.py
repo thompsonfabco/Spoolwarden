@@ -1,5 +1,5 @@
-"""Test Hub for the Hub page's Language and demo parts (RC3): the real test Hub of test_hub_page_audit.py behind a
-wrapper that answers the routes the server steps RC2 (languages) and RC6 (demo) will add, and adds `demo` to the Hub's state answer.
+"""Test Hub for the Hub page's Language and demo parts: the real test Hub of test_hub_page_audit.py behind a
+wrapper that answers the routes the server steps (languages) and (demo) will add, and adds `demo` to the Hub's state answer.
 What it assumes of those steps is the contract of the languages routes and nothing more:
   GET  languages               -> {hub, languages: [{code, name, reviewed, installed, complete}], available: [{code, name, reviewed, complete}], problem?}
   POST languages/{code}/install  (unlocked) -> {"ok": true}; the language is then installed (or 422 {"error"} when `install_error` is set: the pack failed its check)

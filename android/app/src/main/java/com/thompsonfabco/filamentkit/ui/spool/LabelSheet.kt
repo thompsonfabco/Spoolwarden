@@ -43,38 +43,17 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.CancellationException
 
 /**
- * The texts of Print a label (05-android-app 7.10) that are not in the string catalogue yet. Only the texts owner opens
- * `strings/en.json`; each text has a proposed key in the contract-requests file and moves there with it.
- */
-object PrintTexts {
-    const val MENU = "Print a label"
-    const val TITLE = "Print a label"
-    const val PRINT = "Print"
-    const val SIZE = "Size"
-    const val SHEETS_NOTE = "Sheets of labels are printed from the Hub page or the web app."
-    const val ADDRESS =
-        "The code holds this Hub's home address. If the Hub is renamed or moves to another port, old labels still open in this app's scanner but not from a phone's camera."
-
-    /** "Could not draw the label. <the Hub's text>"; just the first sentence when no text came. */
-    fun couldNot(hubText: String) = if (hubText.isBlank()) "Could not draw the label." else "Could not draw the label. $hubText"
-
-    /** The preview's description; the weight is left out when the Hub gave none. */
-    fun preview(id: Int, name: String, material: String, left: String?) =
-        if (left == null) "Label of spool $id: $name, $material" else "Label of spool $id: $name, $material, $left g"
-}
-
-/**
  * The label sizes the phone offers (`size=` of `GET api/spools/{id}/label.svg`, 7.10): the two roll
  * sizes. Sheets of labels are printed from the Hub page or the web app.
  */
-internal enum class LabelSize(val wire: String, val title: String, val widthMm: Float, val heightMm: Float) {
-    Small("62x29", "62 x 29 mm", 62f, 29f),
-    Medium("50x30", "50 x 30 mm", 50f, 30f),
+internal enum class LabelSize(val wire: String, val titleRes: Int, val widthMm: Float, val heightMm: Float) {
+    Small("62x29", R.string.label_size_small, 62f, 29f),
+    Medium("50x30", R.string.label_size_medium, 50f, 30f),
 }
 
 /** What the app asks Android to print on: the label's own size, in thousandths of an inch; no margins. */
-internal fun labelMedia(size: LabelSize): PrintAttributes.MediaSize =
-    PrintAttributes.MediaSize("sw-label-${size.wire}", size.title, mil(size.widthMm), mil(size.heightMm))
+internal fun labelMedia(context: Context, size: LabelSize): PrintAttributes.MediaSize =
+    PrintAttributes.MediaSize("sw-label-${size.wire}", context.getString(size.titleRes), mil(size.widthMm), mil(size.heightMm))
 
 private fun mil(mm: Float): Int = Math.round(mm * 1000 / 25.4f)
 
@@ -135,8 +114,8 @@ internal fun PrintLabelSheet(spool: SpoolSummary, source: LabelSource, onDismiss
             Modifier.fillMaxWidth().padding(horizontal = space.s4).padding(bottom = space.s4),
             verticalArrangement = Arrangement.spacedBy(space.s3),
         ) {
-            Text(PrintTexts.TITLE, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
-            Text(PrintTexts.SIZE, style = MaterialTheme.typography.labelLarge, color = colors.text)
+            Text(stringResource(R.string.spools_print_label), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.label_print_size), style = MaterialTheme.typography.labelLarge, color = colors.text)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 LabelSize.entries.forEachIndexed { index, choice ->
                     SegmentedButton(
@@ -150,18 +129,28 @@ internal fun PrintLabelSheet(spool: SpoolSummary, source: LabelSource, onDismiss
                             inactiveContainerColor = colors.surface, inactiveContentColor = colors.text,
                             inactiveBorderColor = colors.borderStrong,
                         ),
-                        label = { Text(choice.title, style = MaterialTheme.typography.labelLarge) },
+                        label = { Text(stringResource(choice.titleRes), style = MaterialTheme.typography.labelLarge) },
                     )
                 }
             }
-            Text(PrintTexts.SHEETS_NOTE, style = MaterialTheme.typography.bodySmall, color = colors.muted)
-            val said = PrintTexts.preview(spool.id, spool.title, spool.material, spool.remaining?.let { formatGrams(it) })
+            Text(stringResource(R.string.label_print_sheets_note), style = MaterialTheme.typography.bodySmall, color = colors.muted)
+            val left = spool.remaining?.let { formatGrams(it) }
+            val said = if (left == null) {
+                stringResource(R.string.label_print_preview, spool.id, spool.title, spool.material)
+            } else {
+                stringResource(R.string.label_print_preview_left, spool.id, spool.title, spool.material, left)
+            }
             val ratio = size.widthMm / size.heightMm
             when (val l = load) {
                 null -> SwSkeleton(Modifier.aspectRatio(ratio), height = SpoolwardenTheme.sizes.columnMax / 4)
                 is LabelLoad.Failed, LabelLoad.CertificateChanged -> {
                     Text(
-                        if (l is LabelLoad.Failed) PrintTexts.couldNot(l.text) else stringResource(R.string.common_cert_changed_notice),
+                        if (l is LabelLoad.Failed) {
+                            if (l.text.isBlank()) stringResource(R.string.label_print_error)
+                            else stringResource(R.string.label_print_error_reason, l.text)
+                        } else {
+                            stringResource(R.string.common_cert_changed_notice)
+                        },
                         style = MaterialTheme.typography.bodyMedium, color = colors.bad,
                     )
                     SwButton(stringResource(R.string.common_try_again), { retry++ })
@@ -187,9 +176,9 @@ internal fun PrintLabelSheet(spool: SpoolSummary, source: LabelSource, onDismiss
                     onRelease = { if (page === it) page = null; it.destroy() },
                 )
             }
-            Text(PrintTexts.ADDRESS, style = MaterialTheme.typography.bodySmall, color = colors.muted)
+            Text(stringResource(R.string.label_print_address_note), style = MaterialTheme.typography.bodySmall, color = colors.muted)
             SwButton(
-                PrintTexts.PRINT, { printLabel(context, page, spool, size) }, Modifier.fillMaxWidth(),
+                stringResource(R.string.label_print_button), { printLabel(context, page, spool, size) }, Modifier.fillMaxWidth(),
                 kind = SwButtonKind.Main, enabled = load is LabelLoad.Loaded && shown,
             )
         }
@@ -200,9 +189,9 @@ internal fun PrintLabelSheet(spool: SpoolSummary, source: LabelSource, onDismiss
 private fun printLabel(context: Context, page: WebView?, spool: SpoolSummary, size: LabelSize) {
     val view = page ?: return
     val manager = context.getSystemService(PrintManager::class.java) ?: return
-    val job = "Spool ${spool.id}"
+    val job = context.getString(R.string.spool_title, spool.id)
     manager.print(
         job, view.createPrintDocumentAdapter(job),
-        PrintAttributes.Builder().setMediaSize(labelMedia(size)).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build(),
+        PrintAttributes.Builder().setMediaSize(labelMedia(context, size)).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build(),
     )
 }

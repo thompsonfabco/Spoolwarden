@@ -1,4 +1,4 @@
-"""The Devices section of the Hub page (step S2.9, the design, Hub page): AUT-5 with every card and the pairing dialog, and the
+"""The Devices section of the Hub page (the design, Hub page): AUT-5 with every card and the pairing dialog, and the
 real controls pressed in a headless browser. Helpers and the example-data Hub are those of test_hub_page_audit.py. The same
 skip rules: no Node 22 or no browser is a skip (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
@@ -17,7 +17,7 @@ from filament_kit.web.slots import INTAKE_DEVICE
 
 from test_hub_page_audit import CODE, ROOT, _missing, _node, _run, hub_app, hub_change  # noqa: F401
 
-# ---------------------------------------------------------------- Devices (step S2.9, the design, Hub page)
+# ---------------------------------------------------------------- Devices (the design, Hub page)
 # The Devices section pressed in a real headless browser (tests/page_drive.mjs): the requests the page sends are recorded by
 # a wrapper of fetch, and a few replies are changed in the page (a new device appearing, a short expiry, a slow or failing
 # answer) so each state of the pairing dialog, the requests asking to pair and the trusted computers is reached.
@@ -128,6 +128,7 @@ out.lockedTrust = text(card("Trusted"));
 out.readers = $$(".coll--readers .coll__item").map((i) => $$(".coll__row:first-child .coll__cell", i).map(text));
 out.web = text(card("The web app"));
 out.webAlt = $$(".card img.qr").map((i) => i.alt);
+out.webOpen = $$(".devices__web a.btn").map((a) => ({ text: text(a), href: a.getAttribute("href"), target: a.getAttribute("target"), rel: a.getAttribute("rel"), label: a.getAttribute("aria-label") }));
 unlock();
 await until(() => $(".coll--trusted .coll__item"), "the trusted computers");
 await until(() => text(card("Weigh")).includes("No Weigh Station"), "the requests");
@@ -154,6 +155,7 @@ return out;
     assert [r[0] for r in page["readers"]] == ["Tag Reader for Workshop X1", "Tag Reader for Garage Voron"]
     assert _T("devices_webapp_hint") in page["web"] and _T("devices_webapp_keep") in page["web"]
     assert page["webAlt"] == [_T("devices_webapp_home_alt")]
+    assert len(page["webOpen"]) == 1 and page["webOpen"][0]["text"] == "Open" and page["webOpen"][0]["href"].endswith("/intake") and page["webOpen"][0]["target"] == "_blank" and page["webOpen"][0]["rel"] == "noopener noreferrer"
     assert page["unlockedHead"].endswith(_T("devices_meta_trusted", count=2))
     assert [r[0] for r in page["trusted"]] == ["Desk PC", "Shop laptop"]
     assert page["trustedHead"][0] == _T("common_field_name") and page["trustedHead"][3] == _T("devices_trusted_col_expires")

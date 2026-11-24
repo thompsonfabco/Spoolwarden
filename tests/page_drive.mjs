@@ -50,35 +50,59 @@ function dejavuScript(dir) {
 
 async function main() {
   if (!args.url || !args.script) { console.error("usage: --url <page> --script <file>"); return 2; }
-  const exe = findBrowser();
-  if (!exe) { console.error("AUT-5: no Chrome, Edge or Chromium found (set AUT5_BROWSER)"); return 2; }
+  const directPort = args["devtools-port"] || "";
+  const exe = directPort ? "" : findBrowser();
+  if (!directPort && !exe) { console.error("AUT-5: no Chrome, Edge or Chromium found (set AUT5_BROWSER)"); return 2; }
   const script = readFileSync(args.script, "utf8");
-  const profile = mkdtempSync(join(tmpdir(), "aut5-"));
+  const profile = directPort ? null : mkdtempSync(join(tmpdir(), "aut5-"));
   const linux = process.platform === "linux" ? ["--no-sandbox", "--disable-dev-shm-usage"] : [];
-  const proc = spawn(exe, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run",
+  const proc = directPort ? null : spawn(exe, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run",
     "--no-default-browser-check", "--disable-extensions", "--disable-gpu", ...linux, "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
   let browserErr = "", browserExit = null;
-  proc.stderr.on("data", (d) => { browserErr = (browserErr + d).slice(-2000); });
-  proc.on("exit", (code, signal) => { browserExit = signal || code; });
-  proc.on("error", (e) => { browserExit = e.code || e.message; });
+  if (proc) {
+    proc.stderr.on("data", (d) => { browserErr = (browserErr + d).slice(-2000); });
+    proc.on("exit", (code, signal) => { browserExit = signal || code; });
+    proc.on("error", (e) => { browserExit = e.code || e.message; });
+  }
   const cleanup = () => {
-    endOwnBrowser(proc);
-    try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* still held */ }
+    if (proc) endOwnBrowser(proc);
+    if (profile) try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* still held */ }
   };
   process.once("exit", cleanup);
   try {
-    let port;
-    for (let i = 0; i < 300 && !port && browserExit === null; i++) {
-      await sleep(100);
+    const startMs = Number(args["start-timeout"] || process.env.AUT5_START_MS || 30000);
+    const waitMs = Number(args["wait-timeout"] || process.env.AUT5_WAIT_MS || 10000);
+    let port = directPort;
+    const portDeadline = performance.now() + startMs;
+    while (!port && performance.now() < portDeadline && browserExit === null) {
+      await sleep(50);
       try { port = readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n")[0].trim(); } catch { /* not yet */ }
     }
     if (!port) {
-      console.error(`AUT-5: the browser could not start (${exe}; ${browserExit === null ? "no DevTools port after 30 s" : "it exited: " + browserExit})\n${browserErr.trim().split("\n").slice(-8).join("\n")}`);
+      console.error(`AUT-5: the browser could not start (${exe}; ${browserExit === null ? `no DevTools port after ${startMs} ms` : "it exited: " + browserExit})\n${browserErr.trim().split("\n").slice(-8).join("\n")}`);
       return 3;
     }
-    const page = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === "page");
+    let targets;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(waitMs) });
+      targets = await res.json();
+    } catch (e) {
+      if (e && (e.name === "TimeoutError" || e.name === "AbortError")) {
+        throw new Error(`timed out waiting for /json/list after ${waitMs} ms`);
+      }
+      throw new Error(`failed waiting for /json/list: ${e.message}`);
+    }
+    const page = targets.find((t) => t.type === "page");
+    if (!page || !page.webSocketDebuggerUrl) throw new Error("no page target from /json/list");
     const ws = new WebSocket(page.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error("could not reach the browser")); });
+    await new Promise((res, rej) => {
+      const timer = setTimeout(() => {
+        try { ws.close(); } catch { /* ignore */ }
+        rej(new Error(`timed out waiting for WebSocket open after ${waitMs} ms`));
+      }, waitMs);
+      ws.onopen = () => { clearTimeout(timer); res(); };
+      ws.onerror = () => { clearTimeout(timer); rej(new Error("could not reach the browser while waiting for WebSocket open")); };
+    });
     let id = 0;
     const waiting = new Map(), errors = [];
     ws.onmessage = (m) => {
@@ -120,10 +144,16 @@ async function main() {
     const fonts = args["font-dir"] || process.env.AUT5_FONT_DIR;
     if (fonts) await send("Page.addScriptToEvaluateOnNewDocument", { source: dejavuScript(fonts) });
     await send("Page.navigate", { url: args.url });
-    for (let i = 0; i < 600; i++) {
-      if ((await send("Runtime.evaluate", { expression: "document.readyState", returnByValue: true })).result.value === "complete") break;
+    const readyDeadline = performance.now() + 30000;
+    let ready = false;
+    while (performance.now() < readyDeadline) {
+      if ((await send("Runtime.evaluate", { expression: "document.readyState", returnByValue: true })).result.value === "complete") {
+        ready = true;
+        break;
+      }
       await sleep(50);
     }
+    if (!ready) throw new Error("timed out waiting for document.readyState === complete after 30000 ms");
     if (fonts) await send("Runtime.evaluate", { expression: "window.__fonts", awaitPromise: true });
     const r = await send("Runtime.evaluate", { expression: `(async () => {\n${script}\n})()`, awaitPromise: true, returnByValue: true }, 120000);
     if (args.shot && !r.exceptionDetails) {

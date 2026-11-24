@@ -1017,7 +1017,7 @@ def test_the_screen_shows_the_code_and_the_idle_hint(monkeypatch):
 
 
 def test_return_spool_posts_the_uid_and_spool_to_the_return_route(monkeypatch):
-    """CO3: the station's return call; a 409 `not_checked_out` comes back as the Hub's answer."""
+    """the station's return call; a 409 `not_checked_out` comes back as the Hub's answer."""
     api = server_api.ServerApi.from_link(
         server_api.parse_link(f"fkit://pair?h=kit.example.com&p=8710&t={'t' * 43}&fp={'ab' * 32}&ip=192.0.2.5"))
     sent = []

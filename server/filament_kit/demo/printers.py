@@ -533,10 +533,12 @@ class Switch:
         self._real.add_listener(fn)
 
     def start(self, *a, **k) -> None:
+        _switches.add(self)
         self._pretend.start()
         self._real.start(*a, **k)
 
     def stop(self) -> None:
+        _switches.discard(self)
         self._pretend.stop()
         self._real.stop()
 

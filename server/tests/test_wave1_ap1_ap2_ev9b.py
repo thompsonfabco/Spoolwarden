@@ -1,5 +1,5 @@
 """Regression tests for AP1 (printers/test, Klipper api_key, Bambu address add, WEB_ROUTES),
-AP2 twin (GET /intake/api/share-corrections), and EV9b (`spoolwarden certificate --renew`)."""
+AP2 twin (GET /intake/api/share-corrections), and (`spoolwarden certificate --renew`)."""
 from __future__ import annotations
 
 import os

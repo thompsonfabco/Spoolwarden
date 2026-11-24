@@ -463,7 +463,7 @@ def routes(page, sm: Spoolman | None = None, camera_hub=None) -> list[tuple]:
 
     def with_session(res, serial: str, sid: str | None):
         if sid is not None:
-            c = camera_ticket.session_cookie(serial, sid)       # the path is the kit's; the name is the ruled one and it has no Max-Age
+            c = camera_ticket.session_cookie(serial, sid)       # the path is the kit's; the name is the and it has no Max-Age
             res.set_cookie(SESSION_COOKIE, sid, path=c["path"], secure=True, httponly=True, samesite="strict")
         return res
 

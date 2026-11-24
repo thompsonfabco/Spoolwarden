@@ -20,6 +20,7 @@ import json
 import logging
 import math
 import re
+import threading
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -786,6 +787,16 @@ def spool_view(s: dict, ctx: ViewContext | None = None) -> dict:
             "checked_out": bool(home or since), "home": home or None, "checked_out_since": since}
 
 
+_SPOOL_LOCKS_GUARD = threading.Lock()
+_SPOOL_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _spool_lock(spool_id) -> threading.Lock:
+    key = str(spool_id)
+    with _SPOOL_LOCKS_GUARD:
+        return _SPOOL_LOCKS.setdefault(key, threading.Lock())
+
+
 def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, remaining: float | None = None,
                  location: str | None = None, empty: bool = False, dry: bool,
                  locations: list[str] | None = None, rules=None, home: str | None = None) -> dict:
@@ -794,6 +805,16 @@ def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, rem
     the storage locations is refused, `field` "home"). With
     `locations` (the web app's list), a location outside it is refused; the app's route passes none and takes any.
     With `rules` (the storage list), the name of an Individual containers location means its lowest free container."""
+    with _spool_lock(spool_id):
+        return _update_spool_locked(
+            sm, spool_id, gross=gross, remaining=remaining, location=location,
+            empty=empty, dry=dry, locations=locations, rules=rules, home=home,
+        )
+
+
+def _update_spool_locked(sm: Spoolman, spool_id: int, *, gross: float | None = None, remaining: float | None = None,
+                         location: str | None = None, empty: bool = False, dry: bool,
+                         locations: list[str] | None = None, rules=None, home: str | None = None) -> dict:
     spool = sm.get(f"spool/{spool_id}")
     if sum(x is not None for x in (gross, remaining)) + bool(empty) > 1:
         raise SpoolEditError("give only one of gross, remaining or empty", "empty" if empty else "remaining")
@@ -838,6 +859,9 @@ def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, rem
         except placement.NoFreeContainer as e:
             raise SpoolEditError(str(e), "home") from None
         patch["extra"] = {**(spool.get("extra") or {}), **prev_extra(home, since)}
+    if "location" in patch and patch["location"] != spool.get("location") and checked_out(spool):
+        if view_context().slot_of(patch["location"]) is None:
+            patch["extra"] = {**(spool.get("extra") or {}), **prev_extra("")}
     if not patch:
         return spool
     if dry:
@@ -859,8 +883,16 @@ def _report_update(sm: Spoolman, before: dict, after: dict, patch: dict, empty: 
         elif "remaining_weight" in patch:
             event_sink.emit_spool("spool.weighed", before, sid, **grams)
         if "location" in patch and patch["location"] != before.get("location"):
-            event_sink.emit_spool("spool.moved", before, sid, before_location=before.get("location"),
-                                  after_location=patch["location"])
+            if checked_out(before) and view_context().slot_of(patch["location"]) is None:
+                before_home, before_since = prev_entry(before)
+                slot = (view_context().slot_of(before.get("location")) or {}).get("slot")
+                event_sink.emit_spool("spool.returned", before, sid, before_location=before.get("location"),
+                                      after_location=patch["location"] or None, before_slot=slot,
+                                      after_grams=patch.get("remaining_weight"),
+                                      before_since=before_since, before_home=before_home)
+            else:
+                event_sink.emit_spool("spool.moved", before, sid, before_location=before.get("location"),
+                                      after_location=patch["location"])
     if "remaining_weight" in patch:
         event_sink.weight_changed(sm)
 

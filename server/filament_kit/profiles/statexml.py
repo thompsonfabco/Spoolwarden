@@ -1,4 +1,4 @@
-"""The slicer-preset state files as XML (step RC1c), and the one way every reader and writer of them goes.
+"""The slicer-preset state files as XML, and the one way every reader and writer of them goes.
 
 A state file that was `name.json` is `name.xml` (the root element is the lower-case stem: `lines`, `installed`,
 `owner-edits`, `build`, `slicer`, `kept`, ...). The form follows the one `printers.xml` and `storage.xml` use:
@@ -599,12 +599,16 @@ def write_list(path: Path, items: list, mode: int | None = None, *, tag: str | N
 def write_plain(path: Path, obj: dict, *, also_json: bool = False) -> None:
     """Like `write` for a folder that is not the state's own (a build being made in a temp folder). `also_json` writes
     the JSON form too: the two forms of a marker file stay for one release."""
+    from .. import pairing
     xp = xml_path(path)
     xp.parent.mkdir(parents=True, exist_ok=True)
-    with open(xp, "wb") as fh:
-        fh.write(dumps(tag_of(path), obj))
+    pairing._write_atomic(xp, dumps(tag_of(path), obj), 0o644)
     if also_json:
-        Path(path).write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+        pairing._write_atomic(
+            Path(path),
+            (json.dumps(obj, indent=2, ensure_ascii=False) + "\n").encode("utf-8"),
+            0o644,
+        )
 
 
 def exists(path: Path) -> bool:

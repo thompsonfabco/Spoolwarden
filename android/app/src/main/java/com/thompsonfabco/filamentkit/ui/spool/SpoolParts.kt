@@ -41,6 +41,7 @@ import com.thompsonfabco.filamentkit.ui.components.SpoolRing
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.components.TileField
+import com.thompsonfabco.filamentkit.ui.printers.sayText
 import com.thompsonfabco.filamentkit.ui.swatchColor
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlin.math.roundToInt
@@ -189,6 +190,7 @@ internal fun HubFailureNotice(
         HubFailure.Unreachable -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_hub_unreachable), modifier, actions = again)
         HubFailure.Unexpected -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_hub_answer_unknown), modifier, actions = again)
         HubFailure.SpoolmanDown -> NoticeCard(NoticeKind.Bad, stringResource(R.string.common_spoolman_unreachable), modifier, actions = again)
+        HubFailure.AutoRefused -> NoticeCard(NoticeKind.Bad, stringResource(R.string.spool_load_auto_refused), modifier, actions = again)
         is HubFailure.Message -> NoticeCard(NoticeKind.Bad, failure.text, modifier, actions = again)
     }
 }
@@ -203,6 +205,7 @@ internal fun hubFailureText(failure: HubFailure): String? = when (failure) {
     HubFailure.Unreachable -> stringResource(R.string.common_hub_unreachable)
     HubFailure.Unexpected -> stringResource(R.string.common_hub_answer_unknown)
     HubFailure.SpoolmanDown -> stringResource(R.string.common_spoolman_unreachable)
+    HubFailure.AutoRefused -> stringResource(R.string.spool_load_auto_refused)
     is HubFailure.Message -> failure.text
 }
 
@@ -229,7 +232,7 @@ internal fun ResultLine(result: SpoolResult, modifier: Modifier = Modifier) {
         SpoolResult.TagMoved -> stringResource(R.string.spool_result_tag_moved)
         is SpoolResult.Loaded -> stringResource(R.string.spool_result_loaded, result.printer, result.slot)
         is SpoolResult.LoadedUnconfirmed -> stringResource(R.string.spool_load_unconfirmed)
-        is SpoolResult.Waiting -> LoadTexts.waiting(result)
+        is SpoolResult.Waiting -> sayText(LoadTexts.waiting(result))
     }
     NoticeCard(
         if (result is SpoolResult.LoadedUnconfirmed) NoticeKind.Warn else NoticeKind.Ok, text,

@@ -1,7 +1,7 @@
-"""Settings > Weigh Station voice on the Hub page (step VO3), in a real headless browser:
+"""Settings > Weigh Station voice on the Hub page, in a real headless browser:
 the rows Speak, Voice, Speaker, Speed, Volume and Test; no Save button, each row applies as it is changed (a slider when it is let go);
 the Speaker row for the many-speaker voice only; the line under Voice; the four results of Test; a refused change going back; and a
-Weigh Station on another computer. The group is built by setup_voice.js, registered in setup_page.SHELL_SCRIPTS and the Voice row of SET_GROUPS. The Hub's side (VO2) is a stub here: the page's `api`
+Weigh Station on another computer. The group is built by setup_voice.js, registered in setup_page.SHELL_SCRIPTS and the Voice row of SET_GROUPS. The Hub's side is a stub here: the page's `api`
 is wrapped, so station/voice (the view read G, which needs no code, and the save by P of Speak, Speaker, Speed and Volume), the Voice row's settings/general write and
 station/voice/test answer from the test. The settings values of the four are decoys: the group must read only the answer. The same skip rules as the page audit: no Node 22 or no
 browser is a skip (a failure with AUT5_REQUIRED=1)."""

@@ -1,4 +1,4 @@
-"""Tests for HD3 analytics, enriched usage entries, by=month, usage.undone, and Klipper 13-month retention."""
+"""Tests for analytics, enriched usage entries, by=month, usage.undone, and Klipper 13-month retention."""
 from __future__ import annotations
 
 import datetime as dt

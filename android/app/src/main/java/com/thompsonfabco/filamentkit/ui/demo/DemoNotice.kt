@@ -24,17 +24,6 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
-/**
- * The texts of the demo notice (05-android-app 3.7) that are not in the string catalogue yet. Only the texts owner opens
- * `strings/en.json`; each text has a proposed key in the RC5 report and moves there with it.
- */
-object DemoTexts {
-    const val NOTICE = "Demo data. Nothing here is real."
-    const val LEAVE = "Leave demo"
-    const val ASK_TITLE = "Leave the demo?"
-    const val ASK_BODY = "Everything in it is deleted."
-}
-
 /** `409 not_in_demo`: the Hub is not in the demo any more (05-android-app 3.7). */
 internal const val NOT_IN_DEMO = "not_in_demo"
 
@@ -82,17 +71,18 @@ internal fun DemoNotice(leave: suspend () -> Boolean, onGone: () -> Unit, modifi
     var refused by remember { mutableStateOf<String?>(null) }
     var certificate by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val leaveLabel = stringResource(R.string.demo_leave)
     NoticeCard(
-        NoticeKind.Info, DemoTexts.NOTICE, modifier.padding(SpoolwardenTheme.space.s3),
-        actions = listOf(SwAction(DemoTexts.LEAVE) { refused = null; certificate = false; asking = true }),
+        NoticeKind.Info, stringResource(R.string.demo_notice), modifier.padding(SpoolwardenTheme.space.s3),
+        actions = listOf(SwAction(leaveLabel) { refused = null; certificate = false; asking = true }),
         // plain content when the page opens: not announced (02-components 9.1)
         announce = false,
     )
     if (asking) {
         SwDialog(
-            title = DemoTexts.ASK_TITLE,
+            title = stringResource(R.string.demo_leave_title),
             onClose = { if (!busy) asking = false },
-            confirm = SwDialogButton(DemoTexts.LEAVE, kind = SwButtonKind.DestructiveFilled, onClick = {
+            confirm = SwDialogButton(leaveLabel, kind = SwButtonKind.DestructiveFilled, onClick = {
                 busy = true
                 scope.launch {
                     when (val outcome = leaveDemo(leave)) {
@@ -106,7 +96,7 @@ internal fun DemoNotice(leave: suspend () -> Boolean, onGone: () -> Unit, modifi
             cancel = SwAction(stringResource(R.string.common_cancel)) { asking = false },
             cancelEnabled = !busy,
         ) {
-            Text(DemoTexts.ASK_BODY, style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.demo_leave_body), style = MaterialTheme.typography.bodyMedium)
             if (certificate) Text(stringResource(R.string.common_cert_changed_notice), color = SpoolwardenTheme.colors.bad, style = MaterialTheme.typography.bodyMedium)
             refused?.let { Text(it.ifBlank { stringResource(R.string.common_hub_answer_unknown) }, color = SpoolwardenTheme.colors.bad, style = MaterialTheme.typography.bodyMedium) }
         }

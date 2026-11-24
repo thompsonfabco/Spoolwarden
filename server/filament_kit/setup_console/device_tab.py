@@ -12,7 +12,7 @@ The Hub never serves a device's HTML, script or style. What it takes from a stat
 seconds, a redirect is an error, only the address stored for that pairing. Every text from a station reaches the page as text.
 The kind and version of a pairing come from the pairing record once it holds them (`kind`, `version`); until then a row has no kind, or "station" when it is a Weigh Station pairing.
 
-The station's side (EV3): GET /state (its `photo` object reduced to a bool by `station_client.read_state`),
+The station's side: GET /state (its `photo` object reduced to a bool by `station_client.read_state`),
 GET /settings, POST /settings, GET /photo, and POST /ticket -> {ticket, expires_in: 60}; the station's page hands
 the ticket to its own POST /session. All station calls go through `station_client` (pinned TLS, single 5 s deadline,
 no redirect/proxy, and `X-Station-Proof` on POST /settings and POST /ticket).

@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.AutoWait
 import com.thompsonfabco.filamentkit.ui.spool.LoadTexts
 import kotlinx.serialization.json.JsonObject
@@ -8,72 +9,49 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 
 /**
- * The texts of Clear slot and the guided add (EV7b) that are not in the string catalogue yet. Only the catalogue step
- * (EV2) opens `strings/en.json`; each text here has a proposed key in the EV7b report and moves there with it.
- * "Unload", "Cancel", "Back", "Add printer" and "Waiting for the spool to load" are catalogue texts already.
+ * The words of Clear slot, Unload on a Klipper printer and the Auto notice, as catalogue texts with their arguments
+ * ([Say]): the view model holds them and its tests need no resources; the screen turns one into text. The texts of the
+ * guided add are used on its screen straight from the catalogue.
  */
 object PrinterTexts {
-    const val CLEAR_SLOT = "Clear slot"
+    /** Where a spool goes back to when the Hub names no place. */
+    private val PREVIOUS_PLACE = Say.Words(R.string.printer_previous_place)
 
-    /** An older Hub has no such call (404): said, not hidden, because the button is on every slot. */
-    const val CLEAR_UPDATE_HUB = "Update the Hub to clear a slot."
+    /** The Hub's [place] as given, else "its previous place". */
+    private fun placeSay(place: String?): Say = place?.ifBlank { null }?.let { Say.FromHub(it) } ?: PREVIOUS_PLACE
+
+    /** on a Bambu Lab printer Clear slot changes only the Hub's record. */
+    val CLEAR_BAMBU_NOTE: Say = Say.Words(R.string.printer_clear_bambu_note)
+
+    /** An older Hub has no Clear slot call (404): said, not hidden, because the button is on every slot. */
+    val CLEAR_UPDATE_HUB: Say = Say.Words(R.string.printer_clear_update_hub)
 
     /** What Unload adds when a spool that was waiting for the slot is waiting no more. */
-    const val UNLOAD_WAITING_ENDED = "The spool waiting for this slot is not waiting any more."
-
-    /** The guided add. "Add a printer", "Use this printer", "Looking…" and "Back" are catalogue texts. */
-    const val GUIDE_FOUND = "Found on your network"
-    const val GUIDE_NONE = "None found. Type its address in the next step."
-    const val GUIDE_BY_ADDRESS = "Type a Klipper printer's address"
-
-    /** EV7d: a Bambu Lab printer that was not found is added by its address. Proposed key `printers_guide_bambu_by_address`. */
-    const val GUIDE_BAMBU_BY_ADDRESS = "Type a Bambu Lab printer's address"
-
-    /** EV7d: the Klipper test before an add. [address] is "host:port". Reuses the Hub's texts (address_texts.py). */
-    fun klipperNotReached(address: String): String = "The Hub could not reach a Klipper printer at $address."
-    const val TRY_AGAIN = "Try again"
-    const val ADD_ANYWAY = "Add anyway"
-    const val MAP_TITLE = "Map its slots now?"
-    const val MAP_BODY = "Mapping tells the Hub which slot is which. Nothing heats or moves."
-    const val MAP_NOW = "Map slots"
-    const val MAP_LATER = "Later"
-
-    private const val CLEAR_WAITING_ENDED = "The spool that was waiting for it is not waiting any more."
-    private const val CLEAR_PRINTER_CLEARED = "The slot's setting on the printer is cleared too."
-    private const val PREVIOUS_PLACE = "its previous place"
-
-    /** on a Bambu Lab printer Clear slot changes only the Hub's record. Proposed key `printer_clear_bambu_note`. */
-    const val CLEAR_BAMBU_NOTE = "The printer still shows the old filament for this slot until a spool is loaded."
+    val UNLOAD_WAITING_ENDED: Say = Say.Words(R.string.printer_unload_waiting_ended)
 
     /**
      * Unload's question by printer family. A Bambu Lab printer's slot setting is not touched (the catalogue
-     * `printer_unload_body*`); on a Klipper printer it is cleared too. Proposed key `printer_unload_body_klipper`.
+     * `printer_unload_body*`); on a Klipper printer it is cleared too.
      */
-    fun unloadKlipperBody(spool: String, slot: String, location: String): String {
-        val goes = if (location.isBlank()) "its previous place" else location
-        return listOf(
-            "Unload $spool from $slot? It goes back to $goes.",
-            "The slot's setting on the printer is cleared too, when the printer is online and can do it.",
-        ).joinToString(" ")
-    }
+    fun unloadKlipperBody(spool: String, slot: String, location: String): Say =
+        Say.Words(R.string.printer_unload_body_klipper, listOf(spool, slot, placeSay(location)))
 
-    fun clearTitle(label: String): String = "Clear slot $label?"
+    fun clearTitle(label: String): Say = Say.Words(R.string.app_printer_clear_title, listOf(label))
 
-    /** The Auto notice's button (A4); proposed key `printer_auto_stop`. */
-    const val STOP_WAITING = "Stop waiting"
-
-    /** The Auto in the state `choose` (A4); proposed key `printer_auto_choose`. */
-    fun autoChoose(spool: String): String = "Two slots were loaded. Which one got $spool?"
+    /** The Auto in the state `choose` (A4). */
+    fun autoChoose(spool: Say): Say = Say.Words(R.string.printer_auto_choose, listOf(spool))
 
     /** A spool as the Auto notice names it: its name, else its number, else "the spool". */
-    fun autoSpool(auto: AutoWait): String =
-        auto.spool?.name?.ifBlank { null } ?: (auto.spoolId ?: auto.spool?.id)?.let { "Spool $it" } ?: "the spool"
+    fun autoSpool(auto: AutoWait): Say =
+        auto.spool?.name?.ifBlank { null }?.let { Say.FromHub(it) }
+            ?: (auto.spoolId ?: auto.spool?.id)?.let { Say.Words(R.string.spool_title, listOf(it)) }
+            ?: Say.Words(R.string.spool_load_the_spool)
 
     /**
      * The one notice an Auto assignment makes on the printer's screen (A4): [text] (waiting, or the question when two slots
      * were loaded) and, in that second state, the [choices] to press (the slots' labels).
      */
-    data class AutoNotice(val text: String, val choices: List<String>)
+    data class AutoNotice(val text: Say, val choices: List<String>)
 
     fun autoNotice(auto: AutoWait, printer: String): AutoNotice {
         val spool = autoSpool(auto)
@@ -85,40 +63,43 @@ object PrinterTexts {
      * The sentence for the question and the result: the Hub's own [hubText] when it gives one, else the app's own on a
      * Bambu Lab printer, else none (Klipper).
      */
-    fun clearNote(hubText: String?, bambu: Boolean): String? = hubText?.ifBlank { null } ?: CLEAR_BAMBU_NOTE.takeIf { bambu }
+    fun clearNote(hubText: String?, bambu: Boolean): Say? =
+        hubText?.ifBlank { null }?.let { Say.FromHub(it) } ?: CLEAR_BAMBU_NOTE.takeIf { bambu }
 
     /**
      * The question after its title: what the Hub forgets and, only with a recorded [spool], where it goes back to
      * ([place] blank: its previous place), then the printer [note] when there is one.
      */
-    fun clearBody(spool: String?, place: String?, note: String? = null): String {
-        val forgets = "The Hub forgets the spool recorded here."
-        val first = if (spool == null) forgets else "$forgets ${spool.replaceFirstChar { it.uppercase() }} goes back to ${place?.ifBlank { null } ?: PREVIOUS_PLACE}."
-        return listOfNotNull(first, note).joinToString(" ")
+    fun clearBody(spool: Say?, place: String?, note: Say? = null): Say {
+        val first = if (spool == null) Say.Words(R.string.printer_clear_forgets)
+        else Say.Words(R.string.printer_clear_forgets_spool, listOf(Say.Cap(spool), placeSay(place)))
+        return Say.Joined(listOfNotNull(first, note))
     }
 
     /** The whole question as one text: "Clear slot A1? The Hub forgets ... goes back to Shelf B." */
-    fun clearQuestion(label: String, spool: String?, place: String?, note: String? = null): String =
-        "${clearTitle(label)} ${clearBody(spool, place, note)}"
+    fun clearQuestion(label: String, spool: Say?, place: String?, note: Say? = null): Say =
+        Say.Joined(listOf(clearTitle(label), clearBody(spool, place, note)))
 
     /** The result of the real call. [spool] and [place] are what the question said; [note] ends it. */
     fun clearDone(
-        label: String, spool: String?, place: String?, waitingEnded: Boolean, printerCleared: Boolean, note: String? = null,
-    ): String =
-        listOfNotNull(
-            "Cleared slot $label.",
-            spool?.let { "${it.replaceFirstChar { c -> c.uppercase() }} is back on ${place?.ifBlank { null } ?: PREVIOUS_PLACE}." },
-            CLEAR_WAITING_ENDED.takeIf { waitingEnded },
-            CLEAR_PRINTER_CLEARED.takeIf { printerCleared },
-            note,
-        ).joinToString(" ")
+        label: String, spool: Say?, place: String?, waitingEnded: Boolean, printerCleared: Boolean, note: Say? = null,
+    ): Say =
+        Say.Joined(
+            listOfNotNull(
+                Say.Words(R.string.printer_clear_done, listOf(label)),
+                spool?.let { Say.Words(R.string.printer_clear_spool_back, listOf(Say.Cap(it), placeSay(place))) },
+                Say.Words(R.string.app_printer_clear_waiting_ended).takeIf { waitingEnded },
+                Say.Words(R.string.live_clear_printer).takeIf { printerCleared },
+                note,
+            ),
+        )
 
     /** A spool view (`inventory.spool_view`) as a person names it: brand and name, else "Spool id", else "the spool" (a sentence that starts with it capitalises it). */
-    fun spoolName(view: JsonObject): String {
+    fun spoolName(view: JsonObject): Say {
         fun text(key: String) = (view[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()?.ifBlank { null }
         val named = listOfNotNull(text("vendor"), text("name")).joinToString(" ")
-        if (named.isNotBlank()) return named
+        if (named.isNotBlank()) return Say.FromHub(named)
         val id = (view["id"] as? JsonPrimitive)?.let { it.intOrNull?.toString() ?: it.contentOrNull }
-        return if (id.isNullOrBlank()) "the spool" else "Spool $id"
+        return if (id.isNullOrBlank()) Say.Words(R.string.spool_load_the_spool) else Say.Words(R.string.spool_title, listOf(id))
     }
 }

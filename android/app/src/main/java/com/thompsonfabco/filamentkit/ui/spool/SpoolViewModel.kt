@@ -10,6 +10,7 @@ import com.thompsonfabco.filamentkit.ui.history.UndoOffer
 import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
 import com.thompsonfabco.filamentkit.ui.history.undoOfferFor
 import com.thompsonfabco.filamentkit.ui.parseWeight
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -366,12 +367,13 @@ class SpoolViewModel(
         if (s.writing) return
         _state.update { it.copy(returning = true, failure = null) }
         run(onFailure = { f -> _state.update { it.copy(returning = false, failure = f, retry = Retry.Refresh) } }) {
-            val updated = backend.returnSpool(id).toSpoolSummary()
+            val raw = backend.returnSpool(id)
+            val updated = raw.toSpoolSummary()
             val event = undoFlow.find(UndoOffer(listOf("spool:$id"), setOf(CheckedOutRules.RETURNED_KIND)))
             _state.update {
                 it.copy(
                     spool = shown(updated), returning = false, loadedAt = now(), result = null, failure = it.failure.afterSuccess(),
-                    returnToast = ReturnToast(CheckedOutTexts.returned(updated.location), event),
+                    returnToast = ReturnToast(CheckedOutSay.returned(updated.location, raw.printerNotifiedFalse()), event),
                 )
             }
             loadActivity()
@@ -415,7 +417,7 @@ class SpoolViewModel(
             _state.update {
                 it.copy(
                     spool = shown(updated), home = null, loadedAt = now(), failure = it.failure.afterSuccess(),
-                    returnToast = ReturnToast(CheckedOutTexts.homeNow(location), null),
+                    returnToast = ReturnToast(CheckedOutSay.homeNow(location), null),
                 )
             }
             loadActivity()
@@ -478,7 +480,7 @@ class SpoolViewModel(
 
     /** Undo on a row of the activity list: one at a time; the answer's words are for a toast. */
     suspend fun undoRow(event: ActivityEvent): UndoOutcome {
-        if (_state.value.undoing != null) return UndoOutcome.Refused("")
+        if (_state.value.undoing != null) return UndoOutcome.Refused(Say.FromHub(""))
         _state.update { it.copy(undoing = event.id) }
         try {
             return undoOnHub(event)

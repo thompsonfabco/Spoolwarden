@@ -645,7 +645,7 @@ def test_migration_drops_a_list_entry_that_is_a_container_name_of_the_set():
         ("Storage box 01", 1), ("Storage box 03", 1)]                          # spools stored there count in the set
 
 
-# ---- the containers helper for SL2
+# ---- the containers helper for 
 
 def test_containers_helper_lists_the_set_with_taken_and_the_prefix():
     st = migrated({**RULES, "pla_location": "Storage box"})

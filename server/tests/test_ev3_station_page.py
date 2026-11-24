@@ -1,4 +1,4 @@
-"""EV3 (b, c): the station's own page, its ticket and session, the settings routes and `version` in /state (station/page.py,
+"""(b, c): the station's own page, its ticket and session, the settings routes and `version` in /state (station/page.py,
 station/http.py). A real listener on loopback with the real handler; `allow` empty stands for an address that is not on the
 station's allow-list (a browser elsewhere on the home network)."""
 from __future__ import annotations

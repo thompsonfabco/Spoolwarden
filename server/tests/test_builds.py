@@ -499,7 +499,7 @@ def test_meta_is_a_public_copy():
     assert builds.meta()["owner"] == "a"
 
 
-# ---------- rulings S28 (partial installs) and S29a (bad system presets) ----------
+# ---------- rulings build-step (partial installs) and S29a (bad system presets) ----------
 
 def _live_zip_of(build_stamp: str, *, edit=None) -> bytes:
     """The live folder as the PC would upload it: a copy of a build's presets (`edit` = {name: {k: v}})."""
@@ -520,7 +520,7 @@ def test_partial_upload_is_stored_used_kept_and_cleared(env):
     b1 = builds.run_build(env, now=TG.NOW)["stamp"]
     builds.record_installed(b1, "a")
     tick()
-    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")   # re-upload (S32)
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")   # re-upload
     env.filaments = [dict(f, density=1.31) for f in SUNLU]
     b2 = builds.run_build(env, now=TG.NOW + 1)["stamp"]
     # the install of b2 stopped after the 0.4 preset; the PC uploads live with partial=b2
@@ -573,7 +573,7 @@ def test_unparsable_system_preset_is_a_problem_not_a_refusal(env):
         builds.store_upload("live", io.BytesIO(zip_of({"base/x.json": "{not json"})), device_id="a", user_id="1")
 
 
-# ---------- ruling S32: an install newer than the last live upload ----------
+# ---------- an install newer than the last live upload ----------
 
 def tick():
     """Let the clock move on, so upload, build, install and request times are strictly ordered."""
@@ -687,7 +687,7 @@ def test_new_sync_pc_starts_like_a_first_install(env):
     r = builds.run_build(env, now=TG.NOW + 1)
     assert r["ok"] is True, r
     m = builds.manifest(r["stamp"])
-    assert m["deleted"] == [] and m["inapp"] == builds.manifest(b1)["inapp"]   # the owner's record is kept (S34)
+    assert m["deleted"] == [] and m["inapp"] == builds.manifest(b1)["inapp"]   # the owner's record is kept
     assert names[0] in {p["name"] for p in m["presets"]}
 
 
@@ -721,7 +721,7 @@ def test_system_hash_is_null_without_the_system_folder(env, how):
     assert builds.system_store() is not None
 
 
-# ---------- ruling S34: re-pairing (a new device id) keeps the owner's edits and notes ----------
+# ---------- re-pairing (a new device id) keeps the owner's edits and notes ----------
 
 def test_repaired_pc_keeps_the_owners_inapp_edits_and_notes(env):
     """Every pairing makes a new device id, so re-pairing the same PC is an owner change. The old installed build's
@@ -763,7 +763,7 @@ def test_repaired_pc_keeps_the_owners_inapp_edits_and_notes(env):
     assert builds.manifest(b4)["inapp"][name] == {"filament_flow_ratio": flow}
 
 
-# ---------- Task 3: Orca upload kinds (Ruling L) ----------
+# ---------- Task 3: Orca upload kinds ----------
 
 ORCA_SYS = Path(__file__).parent / "data" / "orca" / "system"
 
@@ -840,7 +840,7 @@ def test_orca_store_none_when_folder_gone(env):
 
 
 def test_orca_live_partial_kept_like_live(env):
-    """Ruling O: `partial` on an orca_live upload is stored (meta `orca_partial`), keeps that build from pruning,
+    """`partial` on an orca_live upload is stored (meta `orca_partial`), keeps that build from pruning,
     is cleared by the next install report and when the sync PC changes."""
     synced(env)
     stamp = builds.run_build(env, now=TG.NOW)["stamp"]

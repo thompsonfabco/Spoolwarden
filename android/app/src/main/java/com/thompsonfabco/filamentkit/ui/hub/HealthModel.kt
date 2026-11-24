@@ -2,6 +2,7 @@ package com.thompsonfabco.filamentkit.ui.hub
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.HealthAnswer
 import com.thompsonfabco.filamentkit.net.HealthChange
 import com.thompsonfabco.filamentkit.ui.home.printersFailure
@@ -16,11 +17,11 @@ import java.util.Locale
 
 /** One row of the health table: when a check changed, which, and from and to as words. */
 data class HealthRow(val time: String, val check: String, val from: String, val to: String) {
-    val spoken: String get() = HubTexts.healthRowSpoken(time, check, from, to)
+    val spoken: HubText get() = HubText.Words(R.string.hub_health_row_spoken, listOf(time, check, from, to))
 }
 
-/** The words for a check's three states; the screen gives the catalogue's OK and Needs a look. */
-data class HealthWords(val ok: String, val look: String, val bad: String = HubTexts.STATE_BAD)
+/** The words for a check's three states; the screen gives them from the catalogue. */
+data class HealthWords(val ok: String, val look: String, val bad: String)
 
 /** The table's rows and its footnote; pure, so the words are tested without a screen. */
 object HealthTable {
@@ -45,8 +46,8 @@ object HealthTable {
             }
 
     /** "No history before Nov 14, 2026." when the Hub says its record starts then ([since]); null when it gives none. */
-    fun footnote(answer: HealthAnswer, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? =
-        answer.since?.let { hubDay(it, zone, locale) }?.let(HubTexts::noHistoryBefore)
+    fun footnote(answer: HealthAnswer, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): HubText? =
+        answer.since?.let { hubDay(it, zone, locale) }?.let { HubText.Words(R.string.hub_no_history_before, listOf(it)) }
 }
 
 /** What the health table draws from: [answer] is the last one read for [days]. */

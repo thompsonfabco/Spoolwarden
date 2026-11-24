@@ -1,4 +1,4 @@
-"""RC1e: the Bambu Lab per-printer files (slotmap, mapping status, slot snapshot) as XML."""
+"""the Bambu Lab per-printer files (slotmap, mapping status, slot snapshot) as XML."""
 import json
 import os
 import threading

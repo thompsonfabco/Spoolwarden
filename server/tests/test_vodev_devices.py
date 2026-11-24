@@ -1,4 +1,4 @@
-"""The Devices page shows a station's Speak and Volume as the Hub-set rows they are (VO1 readonly + note) and answers the
+"""The Devices page shows a station's Speak and Volume as the Hub-set rows they are (readonly + note) and answers the
 station's 409 `set_on_hub` with its own refusal, not a 502."""
 from __future__ import annotations
 

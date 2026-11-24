@@ -1,5 +1,5 @@
-"""AF5: the catalogue holds exactly the texts of the address and first-run phase that the server builds (the drift test,
-as for the events and alerts texts), and the constants of AF1 and AF2 say what their catalogue keys say."""
+"""the catalogue holds exactly the texts of the address and first-run phase that the server builds (the drift test,
+as for the events and alerts texts), and the constants of and say what their catalogue keys say."""
 import importlib
 import json
 import re

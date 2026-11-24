@@ -227,7 +227,7 @@ temperatures.form.dispatchEvent(new Event("input"));
 temperatures.g.save();
 if (document.activeElement) document.activeElement.blur();
 window.scrollTo(0, 0);
-subnav.addEventListener("click", (e) => {   // moving between groups keeps the page (the shared subnav behaviour is S2.19's)
+subnav.addEventListener("click", (e) => {   // moving between groups keeps the page (the shared subnav behaviour is 's)
   const a = e.target.closest(".subnav__link");
   if (!a) return;
   e.preventDefault();

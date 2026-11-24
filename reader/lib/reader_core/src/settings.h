@@ -67,6 +67,8 @@ std::string startPrinter(const std::string& remembered, const std::string& provi
 // server stays "-" until the Hub has answered (or not) within the bound.
 static const int HTTP_TOO_BIG = -100;   // our code, not a status: a reply refused for its size
 static const unsigned HUB_CHECK_MS = 5000;   // the Hub check at start: connect and read, each
+static const unsigned SETUP_REACH_WINDOW_MS = 45000;   // retry window at boot inside the flasher's 60 s wait
+static const unsigned HUB_CHECK_RETRY_MS = 1000;       // pause between setup reach attempts
 class BootReport {
  public:
   void wifi(bool associated) { wifi_ = associated ? "ok" : "fail"; }

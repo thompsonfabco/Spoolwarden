@@ -28,17 +28,6 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import java.util.Locale
 
 /**
- * The texts of the Language setting (05-android-app 12.2) that are not in the string catalogue yet. Only the texts owner
- * opens `strings/en.json`; each text has a proposed key in the RC5 report and moves there with it. "Automatic" is
- * `common_option_automatic`.
- */
-object LanguageTexts {
-    const val TITLE = "Language"
-    const val HELPER = "Automatic uses this phone's language if the app has it, otherwise the Hub's language."
-    const val MACHINE_TRANSLATED = "(machine-translated)"
-}
-
-/**
  * The languages this app carries, as codes: one `res/values-<code>/strings.xml` each, and one line each in
  * `res/xml/locales_config.xml` (a test holds the two equal). English is the app's own, in `res/values`.
  */
@@ -51,10 +40,10 @@ internal val MACHINE_TRANSLATED_LANGUAGES: Set<String> = emptySet()
 internal fun languageSettingShown(sdk: Int): Boolean = sdk >= Build.VERSION_CODES.TIRAMISU
 
 /** [code] named as that language names itself (`English`, `Deutsch`), with "(machine-translated)" when it still is. */
-internal fun languageName(code: String, machineTranslated: Set<String> = MACHINE_TRANSLATED_LANGUAGES): String {
+internal fun languageName(context: Context, code: String, machineTranslated: Set<String> = MACHINE_TRANSLATED_LANGUAGES): String {
     val locale = Locale.forLanguageTag(code)
     val name = locale.getDisplayName(locale).replaceFirstChar { it.titlecase(locale) }
-    return if (code in machineTranslated) "$name ${LanguageTexts.MACHINE_TRANSLATED}" else name
+    return if (code in machineTranslated) listOf(name, context.getString(R.string.settings_language_machine_translated)).joinToString(" ") else name
 }
 
 /**
@@ -95,16 +84,16 @@ private fun LanguageDropdown(context: Context, modifier: Modifier) {
     var chosen by remember { mutableStateOf(chosenLanguage(manager.applicationLocales.toLanguageTags())) }
     var open by remember { mutableStateOf(false) }
     val automatic = stringResource(R.string.common_option_automatic)
-    val shown = chosen?.let { languageName(it) } ?: automatic
+    val shown = chosen?.let { languageName(context, it) } ?: automatic
     val space = SpoolwardenTheme.space
     Column(modifier, verticalArrangement = Arrangement.spacedBy(space.s3)) {
-        GroupTitle(LanguageTexts.TITLE)
+        GroupTitle(stringResource(R.string.settings_language_title))
         Box {
             SwButton(shown, { open = true }, Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row))
             SwMenu(open, { open = false }) {
                 SwMenuItem(automatic, { open = false; chosen = null; manager.applicationLocales = LocaleList.getEmptyLocaleList() }, checked = chosen == null)
                 CARRIED_LANGUAGES.forEach { code ->
-                    SwMenuItem(languageName(code), {
+                    SwMenuItem(languageName(context, code), {
                         open = false
                         chosen = code
                         manager.applicationLocales = LocaleList.forLanguageTags(languageTags(code))
@@ -112,6 +101,6 @@ private fun LanguageDropdown(context: Context, modifier: Modifier) {
                 }
             }
         }
-        Text(LanguageTexts.HELPER, color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodySmall)
+        Text(stringResource(R.string.settings_language_helper), color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodySmall)
     }
 }

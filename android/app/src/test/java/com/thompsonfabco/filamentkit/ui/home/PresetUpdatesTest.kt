@@ -1,9 +1,16 @@
 package com.thompsonfabco.filamentkit.ui.home
 
+import android.os.Build
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.AcceptedUpdates
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.PresetUpdate
 import com.thompsonfabco.filamentkit.net.PresetUpdates
+import com.thompsonfabco.filamentkit.ui.printers.Say
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -19,6 +26,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [Build.VERSION_CODES.S])
 @OptIn(ExperimentalCoroutinesApi::class)
 class PresetUpdatesTest {
     private val dispatcher = StandardTestDispatcher()
@@ -64,7 +73,7 @@ class PresetUpdatesTest {
         fake.list = PresetUpdates("s2", 1, 0, listOf(b))
         vm.accept()
         runCurrent()
-        assertEquals(PresetUpdateTexts.CHANGED, vm.state.value.message)
+        assertEquals(Say.Words(R.string.preset_updates_changed), vm.state.value.message)
         assertTrue(vm.state.value.messageIsError)
         assertEquals("s2", vm.state.value.list!!.stamp)
         assertEquals(listOf("B"), vm.state.value.list!!.waiting.map { it.name })
@@ -84,7 +93,7 @@ class PresetUpdatesTest {
         vm.restoreDeleted()
         runCurrent()
         assertEquals(1, fake.restores)
-        assertEquals(PresetUpdateTexts.RESTORED, vm.state.value.message)
+        assertEquals(Say.Words(R.string.preset_updates_restored), vm.state.value.message)
     }
 
     @Test fun anUnpairedPhoneIsToldAndRestoreIsOff() = runTest(dispatcher) {
@@ -97,10 +106,11 @@ class PresetUpdatesTest {
     }
 
     @Test fun rowsNameTheSlicerAndWhatChanges() {
-        assertEquals("A (Bambu Studio): nozzle_temperature, bed_temperature", PresetUpdateTexts.row(a))
-        assertEquals("B (OrcaSlicer): changed values", PresetUpdateTexts.row(b))
-        assertEquals("Accept 1 update", PresetUpdateTexts.accept(1))
-        assertEquals("Slicer presets are switched off on this Hub.",
+        val context = RuntimeEnvironment.getApplication()
+        assertEquals("A (Bambu Studio): nozzle_temperature, bed_temperature", PresetUpdateTexts.row(context, a))
+        assertEquals("B (OrcaSlicer): changed values", PresetUpdateTexts.row(context, b))
+        assertEquals("Accept 1 update", context.resources.getQuantityString(R.plurals.preset_updates_accept, 1, 1))
+        assertEquals(Say.Words(R.string.preset_updates_module_off),
             PresetUpdateTexts.error(ApiError(409, "module_off", "x")))
     }
 }

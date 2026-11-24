@@ -223,13 +223,11 @@ import com.thompsonfabco.filamentkit.ui.components.SwToastState
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
 import com.thompsonfabco.filamentkit.ui.history.HistoryEditEntry
 import com.thompsonfabco.filamentkit.ui.history.CorrectionsEntry
-import com.thompsonfabco.filamentkit.ui.history.CorrectionsTexts
 import com.thompsonfabco.filamentkit.ui.history.HistoryListEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryPhotoEntry
 import com.thompsonfabco.filamentkit.ui.history.HistoryRecordEntry
 import com.thompsonfabco.filamentkit.ui.history.UndoFlow
 import com.thompsonfabco.filamentkit.ui.history.showUndoable
-import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersViewModel
 import com.thompsonfabco.filamentkit.ui.hub.HubGlanceRoute
 import com.thompsonfabco.filamentkit.ui.hub.HubScreen
@@ -237,6 +235,7 @@ import com.thompsonfabco.filamentkit.ui.hub.HealthViewModel
 import com.thompsonfabco.filamentkit.ui.hub.HubViewModel
 import com.thompsonfabco.filamentkit.ui.hub.gettingStartedLine
 import com.thompsonfabco.filamentkit.ui.hub.hubPlaceTitle
+import com.thompsonfabco.filamentkit.ui.hub.hubText
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
 import com.thompsonfabco.filamentkit.ui.home.VersionLine
 import com.thompsonfabco.filamentkit.ui.home.labelReaderOff
@@ -435,7 +434,7 @@ internal fun FilamentKitApp(
     var demoOn by remember { mutableStateOf(false) }
     LaunchedEffect(info) { info?.let { demoOn = it.demo } }
     val labelPhotos = showLabelPhotos(info)
-    val version = versionLine(BuildConfig.VERSION_NAME, config.isPaired(), info?.version)
+    val version = versionLine(LocalContext.current, BuildConfig.VERSION_NAME, config.isPaired(), info?.version)
     // On screen: the chip follows the server, and is checked right away on return to the app. Not while pairing,
     // where nothing shows it.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -1143,7 +1142,7 @@ internal fun FilamentKitApp(
                             ),
                             lowCount = alertsUi.lowCount ?: 0,
                             onOpenLow = { openAlertTarget(AlertTarget.RunningLow) },
-                            gettingStarted = gettingStartedLine(hubUi.hub?.gettingStarted),
+                            gettingStarted = gettingStartedLine(hubUi.hub?.gettingStarted)?.let { hubText(it) },
                             onOpenHub = ::openHubGlance,
                             onRefreshPrinters = printersVm::refresh,
                             onReviewCertificate = app.router::pairAgain,
@@ -1267,7 +1266,7 @@ internal fun FilamentKitApp(
                                             val shown = when (found) {
                                                 is LabelLookup.Failed -> found.text.ifBlank { appContext.getString(R.string.common_hub_answer_unknown) }
                                                 LabelLookup.CertificateChanged -> appContext.getString(R.string.common_cert_changed_notice)
-                                                else -> LabelScan.NOT_FOUND_TEXT
+                                                else -> appContext.getString(R.string.label_scan_not_found)
                                             }
                                             notice = shown
                                             delay(LabelScan.RESCAN_MS)
@@ -1429,7 +1428,7 @@ internal fun FilamentKitApp(
                                     if (undo == null) {
                                         toast.show(said, kind = kind)
                                     } else {
-                                        toast.showUndoable(said, context.getString(R.string.common_undo), undo.event, undoHoldMs(context), undo.run, kind)
+                                        toast.showUndoable(said, context.getString(R.string.common_undo), undo.event, context, undo.run, kind)
                                     }
                                 }
                             },
@@ -1680,10 +1679,10 @@ private fun placeTitle(destination: NavDestination?, entry: NavBackStackEntry?, 
             return SpoolCache.title(id) ?: stringResource(R.string.spool_title, id.toString())
         }
         entry != null && tagUidOf(entry) != null -> return stringResource(R.string.common_tag, tagUidOf(entry).orEmpty())
-        destination?.hasRoute(RecentCorrectionsRoute::class) == true -> return CorrectionsTexts.TITLE
     }
     return stringResource(
     when {
+        destination?.hasRoute(RecentCorrectionsRoute::class) == true -> R.string.corrections_title
         destination?.hasRoute(SpoolLoadRoute::class) == true || destination?.hasRoute(SpoolLoadSlotRoute::class) == true ||
             destination?.hasRoute(SpoolLoadPreviewRoute::class) == true -> R.string.spool_load
         destination == null -> R.string.nav_home

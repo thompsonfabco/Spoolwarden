@@ -80,7 +80,7 @@ SHELL_SCRIPTS = (
     "setup_tabs.js", "setup_start.js", "setup_overview.js", "setup_features.js", "setup_updates.js",
     "setup_settings.js", "setup_devices.js", "setup_printer_live.js", "setup_printers.js", "setup_trust.js",
     "setup_presets.js", "setup_backup.js", "setup_storage.js", "setup_logs.js", "setup_intake.js",
-    "setup_spools.js", "setup_analytics.js", "setup_flash.js", "setup_voice.js",
+    "setup_spools.js", "setup_analytics.js", "setup_flash.js", "setup_voice.js", "setup_corrections.js",
 )
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
@@ -388,25 +388,20 @@ class SetupPage:
         log.info("setup: %s from %s", what, self._ip(request))
 
     async def _body(self, request: Request) -> dict:
-        """The JSON body, refused past MAX_BODY bytes: by Content-Length before reading, else while streaming."""
+        """The JSON body, refused past MAX_BODY bytes via the shared bounded body reader."""
+        from . import http_body
+        cl = request.headers.get("content-length")
+        if cl is not None:
+            try:
+                int(cl)
+            except ValueError:
+                raise Refused(400, "bad Content-Length") from None
         try:
-            declared = int(request.headers.get("content-length") or 0)
-        except ValueError:
-            raise Refused(400, "bad Content-Length") from None
-        if declared > MAX_BODY:
-            raise Refused(413, "request too large")
-        raw = b""
-        async for chunk in request.stream():
-            raw += chunk
-            if len(raw) > MAX_BODY:
-                raise Refused(413, "request too large")
-        try:
-            b = json.loads(raw or b"{}")
-        except ValueError:
-            raise Refused(400, "the request body must be JSON") from None
-        if not isinstance(b, dict):
-            raise Refused(400, "the request body must be a JSON object")
-        return b
+            return await http_body.read_json_object(request, MAX_BODY, allow_empty=True)
+        except http_body.BodyTooLarge:
+            raise Refused(413, http_body.too_large_text()) from None
+        except http_body.BadBody as e:
+            raise Refused(400, str(e)) from None
 
     async def _code_ok(self, request: Request, body: dict) -> None:
         """The root helper checks the code (op `check`); a missing one is refused here and counts nowhere."""
@@ -476,6 +471,8 @@ class SetupPage:
                 if e.extra.get("trust_gone"):
                     self._clear_trust(resp)
                 return resp
+            except demo.DemoError as e:
+                return JSONResponse({"error": e.message, "code": e.code}, 409)
             except Exception:  # noqa: BLE001 - a crash is logged (no values in it), the page gets a plain line
                 log.exception("setup %s", request.url.path)
                 return JSONResponse({"error": "internal error (see the server log)"}, 500)
@@ -583,7 +580,7 @@ class SetupPage:
         from .setup_console import jobs
         return {
             "server_name": cfg["server_name"], "address": setup_code.page_url(cfg), "code_set": setup_code.is_set(),
-            "appearance": {"theme": config.look(cfg)},      # the theme for new devices (S6.1); Console when unknown
+            "appearance": {"theme": config.look(cfg)},      # the theme for new devices; Console when unknown
             "version": __version__, "mode": modules.mode_of(on),
             "modes": [{"name": n, "modules": sorted(m), "here": "server" in m} for n, m in modules.MODES.items()],
             "modules": [{"name": n, "title": m.title, "description": m.description, "needs": modules.needs_of(n),

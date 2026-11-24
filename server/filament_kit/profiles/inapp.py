@@ -79,7 +79,7 @@ def keep_edits(cfg: dict, installed: dict | None, live: dict | None, log: list[s
     record of this build). Their note lines go below MARK, before a trailing `Spoolman filament ids:` line if cfg
     has one. With no live copy (an app reset) the lines below MARK of the installed copy are carried; lines a
     half-finished install wrote (`partial`) are never taken for theirs. With no installed copy at all (a re-paired
-    PC, ruling S34) the owner's saved note lines `notes` are carried."""
+    PC, ) the owner's saved note lines `notes` are carried."""
     edits, dropped = carried(cfg, installed, live, recorded=recorded, partial=partial)
     for k in dropped:
         log.append(f"{cfg.get('name')}: {k} is the generated value again; no longer kept as your in-app value")

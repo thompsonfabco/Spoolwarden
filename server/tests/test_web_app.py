@@ -255,14 +255,14 @@ def _client(app, who=HOME):
 def test_shared_files_are_served_and_the_sprite_comes_first(app):
     with _client(app) as c:
         r = c.get("/intake")
-        check_sprite_first(r.text, "<div id=app>")                              # S3.3: the shell replaces it
+        check_sprite_first(r.text, "<div id=app>")                              # the shell replaces it
         assert r.headers["content-security-policy"] in (INTAKE_CSP, INTAKE_CSP_PRINTERS)
         check_files(c.get, "/intake")
-        head = r.text.split("<body")[0]                                         # S3.2: theme first, then tokens, components, own
+        head = r.text.split("<body")[0]                                         # theme first, then tokens, components, own
         links = ["/intake/manifest-light.webmanifest", "/intake/shared/theme-init.js", "/intake/shared/tokens.css",
                  "/intake/shared/components.css", "/intake/app.css"]
         assert [head.index(x) for x in links] == sorted(head.index(x) for x in links)
-        # S3.3: the catalogue and the shared script load after the stylesheets and before the page's own scripts
+        # the catalogue and the shared script load after the stylesheets and before the page's own scripts
         order = ["/intake/shared/components.css", "/intake/app.css", "/intake/shared/strings.js",
                  "/intake/shared/components.js", "/intake/app.js"]
         assert [r.text.index(x) for x in order] == sorted(r.text.index(x) for x in order)
@@ -271,7 +271,7 @@ def test_shared_files_are_served_and_the_sprite_comes_first(app):
         for name in ("theme-init.js", "tokens.css", "components.css"):
             assert c.get(f"/intake/shared/{name}").status_code == 200
     away = _client(app, AWAY)                                   # no lifespan: the app ran once above
-    assert away.get("/intake/shared/tokens.css").status_code == 200   # the refusal page's files (S3.16)
+    assert away.get("/intake/shared/tokens.css").status_code == 200   # the refusal page's files
     assert away.get("/intake/shared/strings.js").status_code == 403
 
 
@@ -659,7 +659,7 @@ def test_picker_names_filaments_without_a_vendor():
     assert 'SW.t("add_row_no_brand")' in src          # a filament without a brand is listed by its name, with a word for the brand
 
 
-# ---------- S3.8: Add spools in the new design ----------
+# ---------- Add spools in the new design ----------
 
 def _add_src() -> str:
     """The Add spools part of app.js: from its heading to Open spool."""
@@ -790,7 +790,7 @@ def test_the_print_alert_controls_moved_to_settings():
     assert 'const KEY = "spoolwarden.printer"' in printers and "localStorage.getItem(KEY)" in printers
 
 
-# ---------- S3.7: the add preview per item, colour in find, search paging ----------
+# ---------- the add preview per item, colour in find, search paging ----------
 
 def _stock(sm) -> str:
     return json.dumps({k: sm.get(k) for k in ("vendor", "filament", "spool")}, sort_keys=True)
@@ -972,7 +972,7 @@ def test_every_text_key_built_from_a_prefix_in_the_page_scripts_exists():
     assert ("app.js", "install_step_") in found
 
 
-# ---------- S3.10: Spools in the new design ----------
+# ---------- Spools in the new design ----------
 
 def _spools_src() -> str:
     """The Spools part of app.js: from its heading to Slicer presets."""
@@ -989,7 +989,7 @@ def test_spools_keeps_every_action_of_today_and_the_requests():
                  "const entries = placeEntries()", "PICKS.filter("):   # the place suggestions: the list with how full each is, and the extra picks                        # Last tag, search, Preview (Check) and Link tag and open
         assert call in src, call
     for call in ("api(`spools/${id}`)", "{ body: { gross: value, dry_run: dry } }", "value = wShot.value;", "{ body: { location: l, dry_run: false } }",
-                 "{ body: { empty: true, dry_run: false } }"):                      # the S3.9 routes: weight, move, mark empty
+                 "{ body: { empty: true, dry_run: false } }"):                      # the routes: weight, move, mark empty
         assert call in src, call
     for call in ('api("printers")', 'api("printers/tagged")', "api(`printers/${enc(p.id)}/state`)", "/load`, { body: { spool_id: id, dry_run: dry } }"):
         assert call in src, call                                                    # Load into a printer: the load sheet's own routes
@@ -1114,7 +1114,7 @@ def test_web_open_preview_shows_the_weight_spoolman_will_keep(app, env, sm):
     with _client(app) as c:
         r = c.post("/intake/api/open", json={"spool": sid, "gross": "4800", "dry_run": True}, headers={"Origin": ORIGIN})
         assert r.status_code == 200 and r.json()["spool"]["remaining_g"] == 1000                           # a full spool at most
-# ---- S3.15: the service worker keeps the shell, never the API ----
+# ---- the service worker keeps the shell, never the API ----
 
 STATIC = Path(web_app.__file__).parent / "static"
 
@@ -1142,7 +1142,7 @@ def test_the_service_worker_cache_is_named_after_the_version_and_older_ones_go()
 
 
 def test_the_service_worker_never_answers_or_stores_an_api_request():
-    """Only a listed shell file is handled, and of the Hub's api only the texts of a language (RC4: the app opens offline
+    """Only a listed shell file is handled, and of the Hub's api only the texts of a language (the app opens offline
     in the language last used); test_rc4_web runs the worker on both."""
     code = _sw_code()
     guard = re.search(r'if \((.*?)\) return;', code.split('addEventListener("fetch"')[1], re.S).group(1)

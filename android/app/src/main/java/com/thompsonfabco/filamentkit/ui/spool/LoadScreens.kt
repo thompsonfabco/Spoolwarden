@@ -51,6 +51,7 @@ import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
 import com.thompsonfabco.filamentkit.ui.components.SwTile
 import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
+import com.thompsonfabco.filamentkit.ui.printers.sayText
 import com.thompsonfabco.filamentkit.ui.swatchColor
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
@@ -236,7 +237,7 @@ fun LoadSlotsScreen(
             if (ui.auto) {
                 SpoolPanel {
                     ChoiceRow(
-                        LoadTexts.AUTOMATIC, LoadTexts.AUTOMATIC_HINT, selected = isAuto(ui.selected.orEmpty()), enabled = can,
+                        stringResource(R.string.common_option_automatic), stringResource(R.string.spool_load_auto_hint), selected = isAuto(ui.selected.orEmpty()), enabled = can,
                     ) { onPick(AUTO_SLOT) }
                 }
             }
@@ -305,8 +306,8 @@ private fun SlotRow(slot: AmsSlot, units: List<AmsUnit>, enabled: Boolean, selec
 /** The rows of the Hub's preview of an Auto load: the hint and, when another spool was waiting, that it is replaced. */
 @Composable
 private fun AutoPlanRows(plan: AutoLoadResult) {
-    val replaced = plan.replaces?.let { LoadTexts.replaces(LoadTexts.replacedName(it.name, it.spoolId)) }
-    val lines = listOfNotNull(LoadTexts.AUTOMATIC_HINT, replaced)
+    val replaced = plan.replaces?.let { sayText(LoadTexts.replaces(LoadTexts.replacedName(it.name, it.spoolId))) }
+    val lines = listOfNotNull(stringResource(R.string.spool_load_auto_hint), replaced)
     SpoolPanel {
         lines.forEachIndexed { i, line ->
             if (i > 0) HorizontalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
@@ -379,7 +380,7 @@ fun LoadPreviewScreen(
     LoadPage(spool, modifier) {
         val printer = ui.printer
         if (printer != null) {
-            Header(if (isAuto(slot)) LoadTexts.autoTitle(printer.name) else stringResource(R.string.spool_load_confirm_title, printer.name, slot))
+            Header(if (isAuto(slot)) sayText(LoadTexts.autoTitle(printer.name)) else stringResource(R.string.spool_load_confirm_title, printer.name, slot))
         }
         if (ui.checking) Text(stringResource(R.string.common_checking), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
         HubNoticeOf(ui.failure, onPairAgain)

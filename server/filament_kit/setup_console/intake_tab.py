@@ -47,9 +47,10 @@ def routes(page) -> list[tuple]:
         return await anyio.to_thread.run_sync(lambda: call(intake_history.get, request.path_params["hid"]))
 
     async def photo(request, body):
-        data = await anyio.to_thread.run_sync(lambda: call(intake_history.photo, request.path_params["hid"],
-                                                           request.path_params["n"]))
-        return Response(data, media_type="image/jpeg")
+        thumb = request.query_params.get("size") == "thumb"
+        fn = intake_history.photo_thumb if thumb else intake_history.photo
+        data = await anyio.to_thread.run_sync(lambda: call(fn, request.path_params["hid"], request.path_params["n"]))
+        return Response(data, media_type="image/jpeg", headers=intake_history.photo_headers(data, thumb=thumb))
 
     async def revise(request, body):
         def run() -> dict:

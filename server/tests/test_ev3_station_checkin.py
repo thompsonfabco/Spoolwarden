@@ -1,4 +1,4 @@
-"""EV3 (d): the station's 5-minute check-in (server_api.checkin, started by station/__main__.py) and the proof key read from
+"""(d): the station's 5-minute check-in (server_api.checkin, started by station/__main__.py) and the proof key read from
 the station's token (server_api.proof_key)."""
 from __future__ import annotations
 

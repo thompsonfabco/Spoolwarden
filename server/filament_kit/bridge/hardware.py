@@ -23,7 +23,7 @@ Unknown → the generic record.
     preset_name   str | None   Bambu Studio printer name ("Bambu Lab H2D"); None for the generic record
     say           str | None   speech text for the printer ("x one c"); generic: "printer"
     aliases       tuple[str]   other codes and typed names that find this model
-    nozzles       int | None   number of nozzles; generic: None (not known: treated as more than one, Ruling BM)
+    nozzles       int | None   number of nozzles; generic: None (not known: treated as more than one, )
     camera        str | None   "hls" (RTSPS, relayed as HLS), "mjpeg" (port-6000 JPEG) or None (no camera offered)
     chamber_max   int | None   highest chamber temperature in °C, None without a heated chamber
     presence      str | None   presence layout key (`Hardware.presence`), None = unknown (fall back to tray_type)

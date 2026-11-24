@@ -141,21 +141,20 @@ def move_server_file() -> None:
 
 
 def _note_old_sha() -> None:
+    from .. import pairing
     sha = _old_sha_file()
-    sha.write_text(hashlib.sha256(old_server_file().read_bytes()).hexdigest() + "\n", encoding="ascii")
-    os.chmod(sha, 0o644)
+    pairing._write_atomic(sha, (hashlib.sha256(old_server_file().read_bytes()).hexdigest() + "\n").encode("ascii"), 0o644)
 
 
 def _write_server(data: dict, old: bool = True) -> None:
     """The XML form (0644), then, when `old`, the old file in v0.6.2's shape (json.dumps indent=1 + newline) and its hash,
     for a rollback: the station user cannot write this folder, so root's writer keeps it current (save_pairing chowns
     them all)."""
+    from .. import pairing
     from ..profiles import statexml
-    server_file().write_bytes(statexml.dumps("station-server", data))
-    os.chmod(server_file(), 0o644)  # whatever root's umask: the station's service user reads it
+    pairing._write_atomic(server_file(), statexml.dumps("station-server", data), 0o644)
     if old:
-        old_server_file().write_bytes((json.dumps(data, indent=1) + "\n").encode("utf-8"))
-        os.chmod(old_server_file(), 0o644)
+        pairing._write_atomic(old_server_file(), (json.dumps(data, indent=1) + "\n").encode("utf-8"), 0o644)
         _note_old_sha()
 
 

@@ -1,4 +1,4 @@
-"""S4.13 (N25): the Slicer presets line and build actions for a paired phone (the Android app), `/api/profiles/uncovered`,
+"""(N25): the Slicer presets line and build actions for a paired phone (the Android app), `/api/profiles/uncovered`,
 `/api/profiles/lines`, `/api/profiles/lines/{id}/filaments` and `/api/profiles/build`: the web unit's `presets.*`
 functions with the same checks; the `web/*` routes stay the web unit's."""
 from __future__ import annotations
