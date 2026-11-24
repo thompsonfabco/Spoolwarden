@@ -100,3 +100,14 @@ def test_the_page_copes_with_the_missing_address_and_a_wrong_code_keeps_the_card
 def test_the_devices_tab_has_the_card():
     src = (STATIC / "setup_devices.js").read_text(encoding="utf-8")
     assert "function webAppCard(" in src and "devices_webapp_keep" in src
+
+
+def test_port_443_omits_default_port_from_local_url(app, monkeypatch):
+    cfg = config.load()
+    cfg["port"] = 443
+    config.save(cfg)
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "kit")
+    monkeypatch.setattr(setup_page, "qr_svg", lambda url: f"<svg>{url}</svg>")
+    r = client(app).get("/setup/api/webapp")
+    assert r.status_code == 200
+    assert r.json()["url"] == "https://kit.local/intake"
