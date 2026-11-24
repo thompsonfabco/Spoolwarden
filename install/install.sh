@@ -367,7 +367,7 @@ try:
     chosen, notes = modules.close_selection(os.environ["FK_MODULES"].split(","))
 except modules.ModuleError as e:
     names = ", ".join(modules.MODULES)
-    sys.exit(f"error: {e}\nfix: use features from: {names}")
+    sys.exit(f"error: {e}\nfix: use feature names from: {names}")
 for note in notes:
     print(note, file=sys.stderr)
 print("," + ",".join(n for n in modules.MODULES if n in chosen))
@@ -471,7 +471,7 @@ if mode == "custom":
         chosen, notes = modules.close_selection(os.environ["FK_MODULES"].split(","))
     except modules.ModuleError as e:
         names = ", ".join(modules.MODULES)
-        sys.exit(f"error: {e}\nfix: use features from: {names}")
+        sys.exit(f"error: {e}\nfix: use feature names from: {names}")
     for note in notes:
         print(note)
     on = set(chosen)

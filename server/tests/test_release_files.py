@@ -466,7 +466,7 @@ def test_install_modules_unknown_name_fails(tmp_path):
     part = _install_part("# A custom list is closed first", "# A station whose server is on another machine")
     from filament_kit import modules
     r = _run_part('MODE=custom\nCUSTOM=",bogus"\n' + part, venv, env, tmp_path)
-    assert r.returncode == 1 and "bogus" in r.stderr and "use features from:" in r.stderr
+    assert r.returncode == 1 and "bogus" in r.stderr and "use feature names from:" in r.stderr
     with pytest.raises(modules.ModuleError, match="unknown feature 'bogus'"):
         modules.close_selection(["bogus"])
 
