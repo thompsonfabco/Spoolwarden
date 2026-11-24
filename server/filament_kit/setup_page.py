@@ -92,7 +92,7 @@ BAD_HOST = "Open the setup page by the server's own name or address"
 NEED_CODE = "this change needs the setup code (shown when the kit was installed; at the server: sudo filament-kit setup-code)"
 MAX_BODY = 16 * 1024
 CHECK_GAP = 3.0                 # seconds between two key checks / printer tests (they reach the network)
-KINDS = {"phone": "", "pc": "pc", "station": "station"}
+KINDS = {"phone": "", "pc": "pc", "station": "station", "home-assistant": "home-assistant"}
 ENTRY = re.compile(r"[A-Za-z0-9_-]{1,64}")
 PRINTER_PORT = 8883
 _CLIENT: contextvars.ContextVar[str] = contextvars.ContextVar("setup_client", default="?")
@@ -866,11 +866,15 @@ class SetupPage:
     async def pair(self, request: Request, body: dict):
         kind = body.get("kind", "phone")
         if kind not in KINDS:
-            raise Refused(400, "kind must be phone, pc or station")
+            raise Refused(400, "kind must be phone, pc, station or home-assistant")
 
         def run() -> dict:
             try:
-                pr = pairing.issue(device_hint=KINDS[kind], scope="station" if kind == "station" else None)
+                pr = pairing.issue(
+                    device_hint=KINDS[kind],
+                    role="viewer" if kind == "home-assistant" else None,
+                    scope="station" if kind == "station" else None,
+                )
             except pairing.PairingError as e:
                 raise Refused(503, str(e)) from None
             fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())

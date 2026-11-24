@@ -1403,3 +1403,13 @@ def test_the_state_lists_an_old_station_pairing_as_a_weigh_station_and_whether_i
     config.save(cfg)
     got = client(app).get("/setup/api/state").json()["devices"]
     assert [(d["name"], d["type"], d["reachable"]) for d in got] == [("station", "station", True)]
+
+
+def test_setup_pair_home_assistant_issues_viewer_pairing(app):
+    pairing.make_cert("kit", ["192.0.2.5"], config.paths().etc)
+    r = post(client(app), "pair", {"kind": "home-assistant"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True and body["kind"] == "home-assistant" and body["qr_svg"] is None
+    tok = pairing.redeem_code(body["code"])
+    assert pairing.role_of(tok) == "viewer"

@@ -29,8 +29,9 @@ from starlette.responses import Response
 from .. import __version__, config, pairing, reader_tokens, station_client
 from ..station import panel_setup
 
-KINDS = ("phone", "pc", "station", "web", "reader", "builtin")
-CLIENT_KINDS = {"android": "phone", "slicer-sync": "pc", "weigh-station": "station", "web": "web"}   # the header's names
+KINDS = ("phone", "pc", "station", "web", "reader", "home-assistant", "builtin")
+CLIENT_KINDS = {"android": "phone", "slicer-sync": "pc", "weigh-station": "station", "web": "web",
+                "home-assistant": "home-assistant"}   # the header's names
 SETTING_ID = station_client.SETTING_ID
 SETTING_KINDS = station_client.SETTING_KINDS
 TICKET = station_client.TICKET
@@ -112,7 +113,9 @@ def _kind_of(d: dict, built_in: bool) -> str | None:
     k = CLIENT_KINDS.get(k, k)
     if k in KINDS and k not in ("reader", "builtin"):
         return k
-    return "station" if d.get("type") == "station" else None
+    if d.get("type") == "station":
+        return "station"
+    return "home-assistant" if d.get("role") == "viewer" else None
 
 
 def rows() -> list[dict]:

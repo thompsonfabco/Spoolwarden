@@ -25,8 +25,9 @@ log = logging.getLogger(__name__)
 SPOOLMAN_PORT = 7912
 HUB_PAGE_PATH = "/setup/"
 CHECK_STATES = {"ok": "ok", "fail": "look", "info": "note"}     # status.Row.state -> the contract's; detail rows go
-KINDS = ("phone", "pc", "station", "web", "reader", "builtin")
-CLIENT_KINDS = {"android": "phone", "slicer-sync": "pc", "weigh-station": "station", "web": "web"}
+KINDS = ("phone", "pc", "station", "web", "reader", "home-assistant", "builtin")
+CLIENT_KINDS = {"android": "phone", "slicer-sync": "pc", "weigh-station": "station", "web": "web",
+                "home-assistant": "home-assistant"}
 BACKUP_PAGES = 20                                               # pages of 1000 events read for the last backup
 _HOST = re.compile(r"[A-Za-z0-9.\-]{1,253}|\[[0-9A-Fa-f:.]{2,45}\]")
 
@@ -176,7 +177,7 @@ def devices(cfg: dict, this_device: str | None = None, hub_version: str | None =
     rows = []
     for d in paired if paired is not None else pairing.devices():
         raw_kind = CLIENT_KINDS.get(d.get("kind"), d.get("kind"))
-        kind = raw_kind if raw_kind in KINDS else ("station" if d.get("type") == "station" else None)
+        kind = raw_kind if raw_kind in KINDS else ("station" if d.get("type") == "station" else ("home-assistant" if d.get("role") == "viewer" else None))
         version = d.get("version") if isinstance(d.get("version"), str) and d.get("version") else None
         offer = _phone_offer() if kind == "phone" else (hub_version if kind in ("station", "pc") else None)
         late = bool(offer and older(version, offer))

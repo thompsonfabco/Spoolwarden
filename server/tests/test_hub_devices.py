@@ -629,3 +629,15 @@ out.locked = text(card("Weigh")).includes(LOCKED_TEXT);
 return out;
 """.replace("LOCKED_TEXT", json.dumps(_T("devices_requests_locked"))))
     assert page["state"] == "locked" and page["locked"] is True
+
+
+def test_link_home_assistant_menu_opens_dialog_and_formats_kind(devices_hub, tmp_path):
+    page = _page_drive(devices_hub, tmp_path, DEVICES_PRELUDE + """
+$('[data-action="pair-more"]').click();
+await until(() => $('[data-action="link-ha"]'), "Link Home Assistant menu item");
+$('[data-action="link-ha"]').click();
+await until(dlg, "the Home Assistant pairing dialog");
+out.title = text($(".dialog__title", dlg()));
+out.digits = !!$(".pairing__digits", dlg());
+""")
+    assert page["title"] == _T("devices_link_home_assistant") and page["digits"] is True

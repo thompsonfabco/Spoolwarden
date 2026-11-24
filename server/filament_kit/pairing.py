@@ -486,7 +486,7 @@ def redeem_code(code: str) -> str:
 
 
 CLIENT_KINDS = {"android": "phone", "slicer-sync": "pc", "weigh-station": "station", "web": "web",
-                "phone": "phone", "pc": "pc", "station": "station"}
+                "home-assistant": "home-assistant", "phone": "phone", "pc": "pc", "station": "station"}
 
 
 def parse_client_header(raw: str | None) -> tuple[str, str] | None:

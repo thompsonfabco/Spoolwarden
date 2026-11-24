@@ -670,3 +670,17 @@ def test_local_ips_prefers_default_route_and_skips_bridges(monkeypatch):
         lambda *a, **kw: [(socket.AF_INET, 0, 0, "", ("172.17.0.1", 0)), (socket.AF_INET, 0, 0, "", ("192.168.50.10", 0))],
     )
     assert pairing.local_ips() == ["192.168.50.10"]
+
+
+def test_x_spoolwarden_client_records_home_assistant_kind(sm):
+    p = pairing.issue(device_hint="home-assistant", role="viewer")
+    tok = pairing.redeem_code(p.code)
+    r = client(sm).get(
+        "/api/hub",
+        headers={**auth(tok), "X-Spoolwarden-Client": "home-assistant/0.1.0"},
+    )
+    assert r.status_code == 200
+    devs = [d for d in pairing.devices() if d["name"] == "home-assistant"]
+    assert len(devs) == 1
+    assert devs[0]["kind"] == "home-assistant"
+    assert devs[0]["version"] == "0.1.0"

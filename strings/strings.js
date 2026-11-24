@@ -4301,4 +4301,7 @@ window.SW_TEXT = Object.freeze({
   "overview_history_bad": "Needs a look now",
   "overview_history_foot": "Changes of the last {days} days.",
   "overview_history_empty": "No changes in the last {days} days.",
+  "devices_link_home_assistant": "Link Home Assistant",
+  "devices_pair_instruction_home_assistant": "In Home Assistant, add the Spoolwarden integration and type this pairing code when it asks. It can read the Hub and change nothing.",
+  "devices_kind_home_assistant": "Home Assistant",
 });

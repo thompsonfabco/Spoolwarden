@@ -22,7 +22,9 @@ let devQrUrls = [];
 // The words of this section's kind, version, Open and device detail. Until the catalogue holds them (files
 // them) the English shows here through devT; a catalogue text of the same key wins as soon as there is one.
 const DEV_EN = {
-  devices_kind_phone: "Phone", devices_kind_pc: "Slicer Sync PC", devices_kind_station: "Weigh Station", devices_kind_web: "Web app", devices_kind_reader: "Tag Reader",
+  devices_kind_phone: "Phone", devices_kind_pc: "Slicer Sync PC", devices_kind_station: "Weigh Station", devices_kind_web: "Web app", devices_kind_reader: "Tag Reader", devices_kind_home_assistant: "Home Assistant",
+  devices_link_home_assistant: "Link Home Assistant",
+  devices_pair_instruction_home_assistant: "In Home Assistant, add the Spoolwarden integration and type this pairing code when it asks. It can read the Hub and change nothing.",
   devices_version: "Version {version}", devices_version_unknown: "Version not known", devices_kind_version: "{kind} · {version}",
   devices_ood_station: "Out of date ({version}; the Hub is {newest}). On that machine: sudo spoolwarden update",
   devices_ood_pc: "Out of date ({version}). Install the current Slicer Sync on that PC.",
@@ -111,6 +113,7 @@ function devHeader() {
   const more = SW.iconBtn("more", SW.t("common_more_actions"), { action: "pair-more" });
   const here = S.modules.some((m) => m.name === "station" && m.on);       // the Weigh Station feature is on
   SW.menu(more, [{ label: SW.t("devices_link_station"), action: "link-station", run: () => devPair("station") },
+    { label: devT("devices_link_home_assistant"), action: "link-ha", run: () => devPair("home-assistant") },
     ...(here ? [{ label: SW.t("devices_pair_station_here"), action: "pair-here", run: () => devPairHere() }] : [])],
   { label: SW.t("common_more_actions") });
   devMetaEl = h("p", { class: "page-head__meta" });
@@ -125,6 +128,7 @@ const PAIR_KINDS = {
   phone: { heading: "devices_pair_phone", text: "devices_pair_instruction_phone", print: "devices_pair_fingerprint_phone", back: "pair-phone" },
   pc: { heading: "devices_link_sync", text: "devices_pair_instruction_sync", print: "devices_pair_fingerprint_other", back: "link-sync" },
   station: { heading: "devices_link_station", text: "devices_pair_instruction_station", print: "devices_pair_fingerprint_other", back: "pair-more" },
+  "home-assistant": { heading: "devices_link_home_assistant", text: "devices_pair_instruction_home_assistant", print: "devices_pair_fingerprint_other", back: "pair-more" },
 };
 
 // asks the Hub for a code (it needs the setup code), then shows it
@@ -283,7 +287,7 @@ const devOod = (d) => (d.out_of_date && d.kind ? devT("devices_ood_" + d.kind, {
 // the line under a name: the kind and the version, "Version not known" when the device has not said; none for a pairing without a kind
 function devKindLine(d) {
   if (!d.kind || d.kind === "builtin") return d.kind === "builtin" && d.version ? devT("devices_version", { version: d.version }) : null;
-  return devT("devices_kind_version", { kind: devT("devices_kind_" + d.kind), version: d.version ? devT("devices_version", { version: d.version }) : devT("devices_version_unknown") });
+  return devT("devices_kind_version", { kind: devT("devices_kind_" + d.kind.replace(/-/g, "_")), version: d.version ? devT("devices_version", { version: d.version }) : devT("devices_version_unknown") });
 }
 // a station's line "Panel: on USB" / "Panel: on Wi-Fi": the sentence the Hub sends as `panel`, none when it is not known
 function devPanelLine(d) { return d.panel ? h("span", { class: "coll__sub muted", textContent: d.panel }) : null; }
