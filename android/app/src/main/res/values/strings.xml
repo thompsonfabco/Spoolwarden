@@ -4723,6 +4723,8 @@
     <string name="devices_kind_version">%1$s · %2$s</string>
     <!-- 1=version 2=newest -->
     <string name="devices_ood_station">Out of date (%1$s; the Hub is %2$s). On that machine: sudo spoolwarden update</string>
+    <string name="devices_panel_usb">Panel: on USB</string>
+    <string name="devices_panel_wifi">Panel: on Wi-Fi</string>
     <!-- 1=version -->
     <string name="devices_ood_pc">Out of date (%1$s). Install the current Slicer Sync on that PC.</string>
     <string name="devices_ood_phone">Out of date. The app offers the update when it is opened.</string>

@@ -19,35 +19,7 @@ let devMetaEl = null;            // the line under the title, kept to change its
 let devTrusted = null;           // trusted computers listed, once read (null: not read, locked or off)
 let devQrUrls = [];
 
-// The words of this section's kind, version, Open and device detail. Until the catalogue holds them (files
-// them) the English shows here through devT; a catalogue text of the same key wins as soon as there is one.
-const DEV_EN = {
-  devices_kind_phone: "Phone", devices_kind_pc: "Slicer Sync PC", devices_kind_station: "Weigh Station", devices_kind_web: "Web app", devices_kind_reader: "Tag Reader", devices_kind_home_assistant: "Home Assistant",
-  devices_link_home_assistant: "Link Home Assistant",
-  devices_pair_instruction_home_assistant: "In Home Assistant, add the Spoolwarden integration and type this pairing code when it asks. It can read the Hub and change nothing.",
-  devices_version: "Version {version}", devices_version_unknown: "Version not known", devices_kind_version: "{kind} · {version}",
-  devices_ood_station: "Out of date ({version}; the Hub is {newest}). On that machine: sudo spoolwarden update",
-  devices_ood_pc: "Out of date ({version}). Install the current Slicer Sync on that PC.",
-  devices_ood_phone: "Out of date. The app offers the update when it is opened.",
-  devices_ood_reader: "Out of date. Hold the knob for 4 seconds to update.",
-  devices_open: "Open", devices_open_named: "Open {name}",
-  devices_own_page: "Its own page: {address}", devices_open_station: "Open this device's page",
-  devices_open_hint: "Your browser asks once whether to trust this device's certificate.",
-  devices_settings_dropped: "Some of this device's settings could not be shown.", devices_photo_alt: "The last photo of the Weigh Station",
-  devices_detail_kind: "Kind", devices_detail_version: "Version", devices_detail_paired: "Paired", devices_detail_last_seen: "Last seen",
-  devices_detail_build: "Build", devices_detail_error: "Could not read the device. {reason}",
-  devices_reader_settings: "Its settings are changed in {link}.",
-  devices_panel_usb: "Panel: on USB", devices_panel_wifi: "Panel: on Wi-Fi",
-  devices_status_title: "Status", devices_settings_title: "Settings", devices_down: "The Weigh Station is not answering. Its status and settings are shown when it answers.",
-  devices_settings_save: "Save", devices_settings_reset: "Back to the installed values",
-  devices_settings_reset_title: "Go back to the installed values?", devices_settings_reset_body: "The Weigh Station's own settings are removed. It uses the values the installer wrote.",
-  devices_settings_preview_title: "Save these settings?", devices_settings_change: "{name}: {from} to {to}",
-  devices_setting_number: "Enter a number from {min} to {max}.", devices_setting_number_any: "Enter a number.",
-};
-const devT = (key, vars) => {
-  const v = SW.t(key, vars);
-  return v !== key ? v : (DEV_EN[key] || key).replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m));
-};
+const devT = (key, vars) => SW.t(key, vars);
 
 const devPad = (n) => String(n).padStart(2, "0");
 const devStamp = (t) => { if (!t) return null; const d = new Date(t * 1000); return `${d.getFullYear()}-${devPad(d.getMonth() + 1)}-${devPad(d.getDate())} ${devPad(d.getHours())}:${devPad(d.getMinutes())}`; };

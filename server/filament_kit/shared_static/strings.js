@@ -3333,6 +3333,8 @@ window.SW_TEXT = Object.freeze({
   "devices_version_unknown": "Version not known",
   "devices_kind_version": "{kind} · {version}",
   "devices_ood_station": "Out of date ({version}; the Hub is {newest}). On that machine: sudo spoolwarden update",
+  "devices_panel_usb": "Panel: on USB",
+  "devices_panel_wifi": "Panel: on Wi-Fi",
   "devices_ood_pc": "Out of date ({version}). Install the current Slicer Sync on that PC.",
   "devices_ood_phone": "Out of date. The app offers the update when it is opened.",
   "devices_ood_reader": "Out of date. Hold the knob for 4 seconds to update.",
