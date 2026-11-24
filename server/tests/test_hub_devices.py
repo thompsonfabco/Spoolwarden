@@ -212,7 +212,7 @@ return out;
     assert phone["foot"] == [_T("common_cancel")] and page["focusBack"] == "pair-phone"
     assert sync["title"] == _T("devices_link_sync") and sync["say"] == _T("devices_pair_instruction_sync")
     assert sync["blocks"] == [_T("devices_pair_link")] and sync["copies"] == 1 and sync["qr"] == []
-    assert page["menu"] == [_T("devices_link_station")]
+    assert page["menu"] == [_T("devices_link_station"), _T("devices_link_home_assistant")]
     assert station["title"] == _T("devices_link_station") and station["say"] == _T("devices_pair_instruction_station").replace("`", "")
     assert station["blocks"] == [_T("devices_pair_command"), _T("devices_pair_link")] and station["copies"] == 2
     assert page["stationCommand"] == f"sudo {TEXTS['command_name']} weigh-station pair" and page["focusBackStation"] == "pair-more"
@@ -633,11 +633,13 @@ return out;
 
 def test_link_home_assistant_menu_opens_dialog_and_formats_kind(devices_hub, tmp_path):
     page = _page_drive(devices_hub, tmp_path, DEVICES_PRELUDE + """
+unlock();
 $('[data-action="pair-more"]').click();
 await until(() => $('[data-action="link-ha"]'), "Link Home Assistant menu item");
 $('[data-action="link-ha"]').click();
 await until(dlg, "the Home Assistant pairing dialog");
 out.title = text($(".dialog__title", dlg()));
 out.digits = !!$(".pairing__digits", dlg());
+return out;
 """)
     assert page["title"] == _T("devices_link_home_assistant") and page["digits"] is True

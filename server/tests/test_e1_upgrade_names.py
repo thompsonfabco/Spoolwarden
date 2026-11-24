@@ -120,7 +120,7 @@ def test_the_installer_says_nothing_on_a_new_install_or_when_the_new_command_is_
 
 def test_the_line_is_printed_once_at_the_end_and_decided_before_the_new_command_is_installed():
     text = (ROOT / "install" / "install.sh").read_text(encoding="utf-8")
-    assert text.count("renamed_note\n") + text.count("renamed_note;") == 1
+    assert text.count("renamed_note\n") + text.count("renamed_note;") == 2  # restore early-exit + normal end path
     assert text.index("if from_old_name /usr/local/bin") < text.index('install -m 755 "$RES/spoolwarden-cli.sh"')
     assert text.index('if [ "$OLD_NAME" -eq 1 ]; then renamed_note; fi') < text.index("exec /usr/local/bin/spoolwarden modules apply")
 
