@@ -1412,4 +1412,4 @@ def test_setup_pair_home_assistant_issues_viewer_pairing(app):
     body = r.json()
     assert body["ok"] is True and body["kind"] == "home-assistant" and body["qr_svg"] is None
     tok = pairing.redeem_code(body["code"])
-    assert pairing.role_of(tok) == "viewer"
+    assert pairing.role_of(pairing.authorize(tok)[0]) == "viewer"

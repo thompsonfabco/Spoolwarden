@@ -675,7 +675,7 @@ Station returns a spool too, when you scan its tag.
 - **A Klipper printer's slot:** the Hub's record changes first and the printer never stops it. If the spool is recorded
   in one of that printer's slots, the printer answers and is not printing, the Hub also tells it to clear the slot, as
   **Clear slot** does. If the printer does not answer, or is printing, only the Hub's record changes, and the Hub page,
-  web app, Android app, and command line note **The printer could not be told to clear its slot.** Either way the Hub does not load the spool back into the slot while the printer still
+  web app, the app, and command line note **The printer could not be told to clear its slot.** Either way the Hub does not load the spool back into the slot while the printer still
   shows it there.
 - **A Bambu Lab printer's slot:** only the Hub's record changes. The printer's own slot setting is left as it is.
 - **Undo** puts the spool back in the slot, checked out again with its home and its time. It works for 7 days after the
