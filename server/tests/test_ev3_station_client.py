@@ -1,4 +1,4 @@
-"""EV3 (e): the Hub's pinned, checked calls to the station's own routes (station_client.call / call_json / ticket /
+"""(e): the Hub's pinned, checked calls to the station's own routes (station_client.call / call_json / ticket /
 read_state / read_settings / change_settings / read_photo), the proof of the pairing (prove-first item 3) and the one
 deadline of a call. A real station handler over the real pinned TLS listener; the Hub side reads the real pairing."""
 from __future__ import annotations

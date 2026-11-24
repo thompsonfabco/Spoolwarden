@@ -6,6 +6,7 @@ Findings of today's markup that a later step rebuilds are listed in tests/allowl
 fails the run. Skipped when Node 22+ or a Chromium-family browser is missing (the runner exits 2 for "no browser")."""
 from __future__ import annotations
 
+import calendar
 import json
 import os
 import shutil
@@ -2075,7 +2076,7 @@ return seen;
 """
 
 
-def _drive(url: str, tmp_path, script: str, width: int, scheme: str, shot: str | None = None, init_js: str = "", block_install: bool = True) -> dict:
+def _drive(url: str, tmp_path, script: str, width: int, scheme: str, shot: str | None = None, init_js: str = "", block_install: bool = True, timeout: int = 300) -> dict:
     node = _node()
     if not node:
         _missing("the page driver needs Node 22 or later")
@@ -2087,7 +2088,11 @@ def _drive(url: str, tmp_path, script: str, width: int, scheme: str, shot: str |
     if SHOTS and shot:
         Path(SHOTS).mkdir(parents=True, exist_ok=True)
         cmd += ["--shot", str(Path(SHOTS) / f"S3-15-{shot}-{width}-{scheme}.png")]
-    run = subprocess.run(cmd, capture_output=True, encoding="utf-8", timeout=300)
+    try:
+        run = subprocess.run(cmd, capture_output=True, encoding="utf-8", timeout=timeout)
+    except subprocess.TimeoutExpired as hung:       # say what the driver had printed (the page script has its own 120 s limit, so this is the driver or the browser)
+        part = lambda b: (b.decode("utf-8", "replace") if isinstance(b, bytes) else b) or ""
+        pytest.fail(f"the page driver did not end in {timeout} s; it had printed: stdout {part(hung.stdout)[-600:]!r} stderr {part(hung.stderr)[-600:]!r}")
     if run.returncode == 2 and "no Chrome, Edge or Chromium" in run.stderr:
         _missing("the page driver needs a Chrome, Edge or Chromium (set AUT5_BROWSER)")
     if run.returncode == 3:
@@ -2380,3 +2385,249 @@ def test_the_page_audit_passes_with_the_printers_badge_showing(served_printers, 
     run = _run("--url", served_printers, "--views", "#add,#printers", "--widths", str(width), "--settle", "1500")
     assert run.returncode == 0, run.stdout + run.stderr
     assert json.loads(run.stdout)["failing"] == 0
+
+
+# Filament used on a printer's page: By month as bars from tablet width, the CSV range menu, the toggle that says "Last 7 days".
+# The page's clock starts at this day in the browser and then runs on (the new cases name no real-time month; nothing that reads Date waits for a clock that
+# stands still): the months of the fake kit are counted back from this day.
+# FK_C2_FROZEN (yyyy-mm-dd) moves it, to prove the cases do not depend on the calendar.
+FROZEN = tuple(int(x) for x in os.environ.get("FK_C2_FROZEN", "2027-03-10").split("-"))
+FREEZE_JS = """
+{
+  const Real = Date, origin = Real.UTC(__Y__, __M__ - 1, __D__, 12), p0 = performance.now(), now = () => origin + Math.round(performance.now() - p0);
+  class Frozen extends Real { constructor(...a) { if (a.length) super(...a); else super(now()); } static now() { return now(); } }
+  window.Date = Frozen;
+}
+""".replace("__Y__", str(FROZEN[0])).replace("__M__", str(FROZEN[1])).replace("__D__", str(FROZEN[2]))
+
+
+def _ago(n: int) -> str:
+    """The month n months before the frozen day, as the Hub writes it (yyyy-mm)."""
+    i = FROZEN[0] * 12 + FROZEN[1] - 1 - n
+    return f"{i // 12}-{i % 12 + 1:02d}"
+
+
+class MonthsKit(PrintersKit):
+    """PrintersKit that also answers `usage?by=month` (newest month first; counted back from the frozen day; a month with nothing between; example data only)."""
+
+    def get(self, path):
+        if path.startswith(f"/api/printers/{SERIAL}/usage") and "by=month" in path:
+            return {"months": [
+                {"month": _ago(0), "grams": 1840.0, "prints": 9, "unfinished_prints": 1, "top_material": "PETG"},
+                {"month": _ago(1), "grams": 640.0, "prints": 4, "unfinished_prints": 0, "top_material": "PLA"},
+                {"month": _ago(4), "grams": 212.5, "prints": 2, "unfinished_prints": 0, "top_material": "ABS"},
+                {"month": _ago(10), "grams": 95.0, "prints": 1, "unfinished_prints": 0, "top_material": "PLA"}]}
+        return super().get(path)
+
+
+@pytest.fixture
+def served_months(tmp_path, monkeypatch, spoolman_url):
+    running = _serve_printers(tmp_path, monkeypatch, spoolman_url, MonthsKit)
+    try:
+        yield running.url + "/intake"
+    finally:
+        running.stop()
+
+
+USED_OPEN = """
+const log = [];
+document.addEventListener("click", (e) => { const a = e.target.closest && e.target.closest("a[download]"); if (a) { log.push(a.getAttribute("href")); e.preventDefault(); } }, true);
+location.hash = "#printers/__SERIAL__";
+const all = (s) => [...document.querySelectorAll(s)];
+const waitFor = async (look, what, ms = 8000) => { const t0 = performance.now(); for (;;) { const v = look(); if (v) return v; if (performance.now() - t0 > ms) throw new Error("waited for " + what); await sleep(50); } };
+const toggle = () => $('[data-action="usage-by-month"]');
+await waitFor(() => toggle() && $(".pused__row"), "the filament used list");
+"""
+USED_CSV = """
+const out = { list: { toggle: text(toggle()), caption: $(".printer__days") && !$(".printer__days").hidden ? text($(".printer__days")) : null }, files: [] };
+const more = () => $('[data-action="usage-more"]');
+out.more = more().getAttribute("aria-label");
+for (const days of [7, 30, 365]) {
+  more().click();
+  await waitFor(() => $(".menu"), "the menu");
+  if (days === 7) out.menu = { heading: text($(".menu__heading")), items: all(".menu__item").map(text), icons: all(".menu__item use").length };
+  const was = log.length;
+  $('.menu__item[data-action="download-csv-' + days + '"]').click();
+  await waitFor(() => log.length > was && !$(".menu"), "the download of " + days);
+}
+out.files = log.slice();
+return out;
+"""
+USED_TOGGLE = """
+const out = { before: text(toggle()), caption: $(".printer__days") && !$(".printer__days").hidden ? text($(".printer__days")) : null };
+toggle().click();
+await waitFor(() => $(".pused__months") || $(".pused__bar ~ p.muted"), "the months");
+out.during = text(toggle());
+out.captionDuring = $(".printer__days") && !$(".printer__days").hidden ? text($(".printer__days")) : null;
+toggle().click();
+await waitFor(() => $(".pused__row"), "the list again");
+out.after = text(toggle());
+out.captionAfter = $(".printer__days") && !$(".printer__days").hidden ? text($(".printer__days")) : null;
+return out;
+"""
+USED_BARS = """
+toggle().click();
+await waitFor(() => $(".pused__months"), "the months");
+const out = { toggle: text(toggle()), svg: !!$("svg.pused__chart"), sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth };
+const table = $(".pused__months"), show = () => $('[data-action="usage-table"]');
+out.rows = all(".pused__months tbody tr").length;
+out.tableShown = !table.hidden && table.getBoundingClientRect().height > 0;
+out.button = show() ? { text: text(show()), expanded: show().getAttribute("aria-expanded"), controls: show().getAttribute("aria-controls") === table.id, height: Math.round(show().getBoundingClientRect().height), like: Math.round(toggle().getBoundingClientRect().height) } : null;
+if (out.svg) {
+  const svg = $("svg.pused__chart"), cap = $("figcaption");
+  out.role = svg.getAttribute("role"); out.named = svg.getAttribute("aria-labelledby") === cap.id; out.caption = text(cap);
+  out.months = all("g.pused__bar-month").map((g) => g.dataset.month);
+  out.values = all("g.pused__bar-month text.mono").map(text);
+  out.heights = all("g.pused__bar-month rect").map((r) => Number(r.getAttribute("height")));
+  out.hidden = all("g.pused__bar-month").every((g) => g.getAttribute("aria-hidden") === "true");
+  out.years = all("g.pused__bar-month text:not(.mono)").map(text).filter((s) => /^[0-9]{4}$/.test(s));
+  const probe = document.createElement("i"); probe.style.color = "var(--accent)"; document.body.append(probe);
+  out.fillIsAccent = getComputedStyle($("g.pused__bar-month rect")).fill === getComputedStyle(probe).color; probe.remove();
+  const boxes = all("g.pused__bar-month text.mono").map((t) => t.getBoundingClientRect());
+  out.overlaps = boxes.flatMap((a, i) => boxes.slice(i + 1).filter((b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5)).length;
+  out.small = Math.min(...all("g.pused__bar-month text").map((t) => parseFloat(getComputedStyle(t).fontSize) * (svg.getBoundingClientRect().width / svg.viewBox.baseVal.width)));
+  out.box = Math.round(svg.getBoundingClientRect().width);
+  show().click();
+  out.hiddenAfter = { text: text(show()), expanded: show().getAttribute("aria-expanded"), table: table.hidden };
+  show().click();
+  out.reopened = { text: text(show()), expanded: show().getAttribute("aria-expanded"), table: !table.hidden };
+}
+return out;
+"""
+USED_AUDIT = "const found = " + (ROOT / "tests" / "page_audit.js").read_text(encoding="utf-8").rstrip().rstrip(";") + ";"
+USED_AUDITED = """
+toggle().click();
+await waitFor(() => $(".pused__months"), "the months");
+await sleep(600);
+__AUDIT__
+return { findings: (found || []).filter((f) => /pused|usage-|Show as table|Hide the table|Last 7 days|By month|filament used/i.test(JSON.stringify(f))), all: (found || []).length };
+""".replace("__AUDIT__", USED_AUDIT)
+
+
+def _used(url, tmp_path, tail: str, width: int) -> dict:
+    return _drive(url, tmp_path, USED_OPEN.replace("__SERIAL__", SERIAL) + tail, width, "light", None, FREEZE_JS, block_install=True, timeout=150)
+
+
+@pytest.mark.parametrize("width", [375, 820])
+def test_by_month_on_a_printer_is_drawn_as_bars_from_tablet_width_and_as_a_table_alone_on_a_phone(served_months, tmp_path, width):
+    """The design's Monthly bars and Filament used: bars (SVG, the value in words above each, the month under it, the table open under them with 'Hide the table')
+    at tablet width and up; on a phone the table alone, no chart and no button."""
+    out = _used(served_months, tmp_path, USED_BARS, width)
+    assert out["rows"] == 4 and out["tableShown"] and not out["sideways"], json.dumps(out)
+    if width <= 600:
+        assert not out["svg"] and out["button"] is None, json.dumps(out)
+        return
+    assert out["svg"] and out["role"] == "img" and out["named"] and out["hidden"], json.dumps(out)
+    assert out["months"] == [_ago(11 - i) for i in range(12)], json.dumps(out)       # the 12 months ending with the frozen day's, oldest on the left
+    values = dict(zip(out["months"], out["values"]))
+    assert values[_ago(0)] == "1.84 kg" and values[_ago(1)] == "640 g" and values[_ago(4)] == "213 g" and values[_ago(2)] == "0 g" and values[_ago(10)] == "95 g", json.dumps(out)
+    heights = dict(zip(out["months"], out["heights"]))
+    assert heights[_ago(0)] > heights[_ago(1)] > heights[_ago(4)] > heights[_ago(10)] > heights[_ago(2)] and heights[_ago(2)] == 2, json.dumps(out)   # a month with nothing is a flat tick
+    newest = calendar.month_name[int(_ago(0)[5:])]
+    assert out["caption"] == f"Filament used per month in the last 12 months. The most was in {newest}: 1.84 kg.", json.dumps(out)
+    assert out["fillIsAccent"] and out["overlaps"] == 0 and out["small"] >= 8, json.dumps(out)
+    assert out["years"] == [m[:4] for i, m in enumerate(out["months"]) if i == 0 or m.endswith("-01")], json.dumps(out)     # the year stands on the first bar and on each January
+    assert (out["button"]["text"], out["button"]["expanded"], out["button"]["controls"]) == ("Hide the table", "true", True), json.dumps(out)
+    assert out["button"]["height"] == out["button"]["like"] >= 40, json.dumps(out)          # as tall as the By month button beside it
+    assert out["hiddenAfter"] == {"text": "Show as table", "expanded": "false", "table": True}, json.dumps(out)
+    assert out["reopened"] == {"text": "Hide the table", "expanded": "true", "table": True}, json.dumps(out)
+
+
+@pytest.mark.parametrize("width", [375, 820])
+def test_the_usage_download_offers_the_three_ranges_in_a_menu(served_months, tmp_path, width):
+    """The web app's Filament used: the icon button 'More actions' holds 'Download as CSV' with Last 7 days, Last 30 days and Last 12 months; each asks the twin for that range."""
+    out = _used(served_months, tmp_path, USED_CSV, width)
+    assert out["more"] == "More actions for filament used", json.dumps(out)
+    assert out["menu"]["heading"] == "Download as CSV" and out["menu"]["items"] == ["Last 7 days", "Last 30 days", "Last 12 months"], json.dumps(out)
+    assert [f.split("/api/")[1] for f in out["files"]] == [f"export/usage.csv?printer={SERIAL}&days={d}" for d in (7, 30, 365)], json.dumps(out)
+
+
+@pytest.mark.parametrize("width", [375, 820])
+def test_the_by_month_button_reads_last_7_days_while_the_months_show(served_months, tmp_path, width):
+    """The web app's Filament used: 'By month' (which then reads 'Last 7 days'); the list's own caption 'Last 7 days' is not shown over the months."""
+    out = _used(served_months, tmp_path, USED_TOGGLE, width)
+    assert out == {"before": "By month", "caption": "Last 7 days", "during": "Last 7 days", "captionDuring": None,
+                   "after": "By month", "captionAfter": "Last 7 days"}, json.dumps(out)
+
+
+@pytest.mark.parametrize("width", [375, 820])
+def test_the_page_audit_passes_on_a_printer_showing_by_month(served_months, tmp_path, width):
+    out = _used(served_months, tmp_path, USED_AUDITED, width)
+    assert out["findings"] == [], json.dumps(out)
+
+
+def test_web_app_proxy_502_and_30s_timeout_mark_offline_and_use_common_timeout(served_months, tmp_path):
+    script = """
+    const realFetch = window.fetch.bind(window);
+    const realST = window.setTimeout.bind(window);
+    const poll = async (fn, msg) => {
+      const end = Date.now() + 10000;
+      while (Date.now() < end) { if (fn()) return; await sleep(50); }
+      throw new Error(msg + " :: " + document.body.innerText.slice(0, 400));
+    };
+    let mode = "502";
+    window.fetch = (u, o) => {
+      if (String(u).includes("/api/vendors")) {
+        if (mode === "502") return Promise.resolve(new Response("<html>502 Bad Gateway</html>", { status: 502 }));
+        if (mode === "timeout") return new Promise((_, rej) => {
+          if (o && o.signal) o.signal.addEventListener("abort", () => rej(new DOMException("Aborted", "AbortError")));
+        });
+      }
+      return realFetch(u, o);
+    };
+    let e502 = null;
+    try { await api("vendors"); } catch (e) { e502 = e; }
+    await poll(() => document.querySelector(".offline-banner"), "502 offline banner");
+    const msg502 = says(e502);
+    mode = "timeout";
+    window.setTimeout = (fn, ms, ...a) => (ms === 30000 ? realST(fn, 1, ...a) : realST(fn, ms, ...a));
+    let eTo = null;
+    try { await api("vendors"); } catch (e) { eTo = e; }
+    const msgTo = says(eTo);
+    return {
+      e502: { unreachable: !!e502?.unreachable, status: e502?.status, msg: msg502, banner: !!document.querySelector(".offline-banner") },
+      eTo: { timeout: !!eTo?.timeout, unreachable: !!eTo?.unreachable, msg: msgTo },
+    };
+    """
+    out = _drive(served_months, tmp_path, script, 375, "light", None, FREEZE_JS, block_install=True, timeout=150)
+    assert out["e502"]["unreachable"] and out["e502"]["status"] == 502 and out["e502"]["banner"], json.dumps(out)
+    assert "Cannot reach the Hub" in out["e502"]["msg"], json.dumps(out)
+    assert out["eTo"]["timeout"] and out["eTo"]["unreachable"], json.dumps(out)
+    assert out["eTo"]["msg"] == "The Hub did not answer in 30 s.", json.dumps(out)
+
+
+def test_web_app_return_printer_notified_false_and_history_thumbnails_use_thumb_query(served_months, tmp_path):
+    script = """
+    const realFetch = window.fetch.bind(window);
+    const poll = async (fn, msg) => {
+      const end = Date.now() + 10000;
+      while (Date.now() < end) { if (fn()) return; await sleep(50); }
+      throw new Error(msg + " :: " + document.body.innerText.slice(0, 400));
+    };
+    const hdr = { "Content-Type": "application/json" };
+    window.fetch = (u, o) => {
+      const s = String(u);
+      if (s.includes("/api/spools/7/return")) {
+        return Promise.resolve(new Response(JSON.stringify({
+          spool: { id: 7, location: "Rack 1", view: { location: "Rack 1" } },
+          printer_notified: false,
+        }), { status: 200, headers: hdr }));
+      }
+      if (s.includes("/api/history")) {
+        return Promise.resolve(new Response(JSON.stringify({
+          records: [{ id: "rec-1", at: "2026-11-22T12:00:00Z", photos: 1,
+                      spools: [{ vendor: "SUNLU", name: "PLA Black", material: "PLA", color_hex: "111111" }] }],
+          keep: 20, photo_bytes: 1024,
+        }), { status: 200, headers: hdr }));
+      }
+      return realFetch(u, o);
+    };
+    const ret = await returnSpool(7);
+    document.querySelector('a[href="#recent"]').click();
+    await poll(() => document.querySelector(".thumb__img"), "history thumb img");
+    const thumbSrc = document.querySelector(".thumb__img").getAttribute("src");
+    return { text: ret.text, thumbSrc };
+    """
+    out = _drive(served_months, tmp_path, script, 375, "light", None, FREEZE_JS, block_install=True, timeout=150)
+    assert "The printer could not be told to clear its slot." in out["text"], json.dumps(out)
+    assert out["thumbSrc"].endswith("/photos/1?thumb=1"), json.dumps(out)

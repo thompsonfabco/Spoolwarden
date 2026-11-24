@@ -1,6 +1,8 @@
 package com.thompsonfabco.filamentkit.ui.spool
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.SpoolsAnswer
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -64,35 +66,43 @@ class CheckedOutRulesTest {
         val s = row(7, true, "Shelf B", "2026-11-22T08:05:00+00:00", slot = true).toSpoolSummary()
         assertEquals("Workshop X1 – A1", s.inSlot)
         assertEquals(
-            listOf("In Workshop X1 – A1", "Home: Shelf B", "since 2026-11-22 08:05"),
+            listOf(
+                Say.Words(R.string.spools_in_place, listOf("Workshop X1 – A1")),
+                Say.Words(R.string.spools_home, listOf("Shelf B")),
+                Say.Words(R.string.spools_since, listOf("2026-11-22 08:05")),
+            ),
             CheckedOutRules.lines(s, ZoneOffset.UTC),
         )
     }
 
     @Test fun anEntryWithoutSinceShowsNoTimeAndOneWithoutAHomeNoHome() {
         val s = row(7, true, slot = true).toSpoolSummary()
-        assertEquals(listOf("In Workshop X1 – A1"), CheckedOutRules.lines(s, ZoneOffset.UTC))
+        assertEquals(listOf(Say.Words(R.string.spools_in_place, listOf("Workshop X1 – A1"))), CheckedOutRules.lines(s, ZoneOffset.UTC))
     }
 
     @Test fun withoutASlotTheLocationIsWhereItIs() {
-        assertEquals("In Workshop X1 A1", CheckedOutRules.place(row(7, true, "Shelf B").toSpoolSummary()))
+        assertEquals(Say.Words(R.string.spools_in_place, listOf("Workshop X1 A1")), CheckedOutRules.place(row(7, true, "Shelf B").toSpoolSummary()))
     }
 
     @Test fun theActionNamesTheHome() {
-        assertEquals("Return to Shelf B", CheckedOutTexts.returnTo("Shelf B"))
-        assertEquals("Return", CheckedOutTexts.returnTo(null))
-        assertEquals("Returned to Shelf B.", CheckedOutTexts.returned("Shelf B"))
-        assertEquals("Returned.", CheckedOutTexts.returned(null))
-        assertEquals("Checked out (3)", CheckedOutTexts.chip(3))
-        assertEquals("Home is now Dry box 1.", CheckedOutTexts.homeNow("Dry box 1"))
+        assertEquals(Say.Words(R.string.spools_returned_to, listOf("Shelf B")), CheckedOutSay.returned("Shelf B"))
+        assertEquals(Say.Words(R.string.spools_returned), CheckedOutSay.returned(null))
+        assertEquals(
+            Say.Joined(listOf(Say.Words(R.string.spools_returned_to, listOf("Shelf B")), Say.Words(R.string.spools_return_printer_not_told))),
+            CheckedOutSay.returned("Shelf B", printerNotifiedFalse = true),
+        )
+        assertTrue(buildJsonObject { put("printer_notified", false) }.printerNotifiedFalse())
+        assertFalse(buildJsonObject { put("printer_notified", true) }.printerNotifiedFalse())
+        assertFalse(buildJsonObject {}.printerNotifiedFalse())
+        assertEquals(Say.Words(R.string.spools_home_done, listOf("Dry box 1")), CheckedOutSay.homeNow("Dry box 1"))
     }
 
     @Test fun theDetailShowsHomeOnlyWhileCheckedOut() {
         val out = row(7, true, "Shelf B").toSpoolSummary()
         val back = row(7, false, "Shelf B").toSpoolSummary()
-        assertEquals("Home: Shelf B", CheckedOutRules.homeLine(out))
+        assertEquals(Say.Words(R.string.spools_home, listOf("Shelf B")), CheckedOutRules.homeLine(out))
         assertTrue(CheckedOutRules.canChangeHome(out))
-        assertEquals("Home: not recorded", CheckedOutRules.homeLine(row(7, true).toSpoolSummary()))
+        assertEquals(Say.Words(R.string.spools_home_none), CheckedOutRules.homeLine(row(7, true).toSpoolSummary()))
         assertNull(CheckedOutRules.homeLine(back))
         assertFalse(CheckedOutRules.canChangeHome(back))
         assertFalse(CheckedOutRules.canReturn(back))

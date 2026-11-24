@@ -1,4 +1,4 @@
-"""The design's shared files (S0.10, N29/N30): what the generator copies, what package-data ships, and the sprite's
+"""The design's shared files (N29/N30): what the generator copies, what package-data ships, and the sprite's
 place in a page. The two pages' own tests (test_setup_page.py, test_web_app.py) request the files from their addresses."""
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ SOURCES = {"tokens.css": ROOT / "tokens" / "tokens.css", "theme-init.js": ROOT /
            "strings.js": ROOT / "strings" / "strings.js", "sprite.svg": ROOT / "icons" / "sprite.svg"}
 TYPES = {"tokens.css": "text/css", "theme-init.js": "text/javascript", "strings.js": "text/javascript",
          "sprite.svg": "image/svg+xml"}
-# Today's page headers (the CSP the pages had before S0.10), compared whole
+# Today's page headers (the CSP the pages had before ), compared whole
 SETUP_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
              "connect-src 'self'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'")
 INTAKE_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
@@ -75,11 +75,11 @@ def test_missing_folder_is_no_files_and_no_sprite(tmp_path, monkeypatch):
 
 def test_the_inline_sprite_takes_no_room_on_either_page():
     """A zero-size inline <svg> still makes a line box: each page's own stylesheet takes it out of the flow
-    until the page links components.css (S1.1 for the Hub page, S3.2 for the web app)."""
+    until the page links components.css (for the Hub page, for the web app)."""
     rule = re.compile(r"svg\.sprite\s*\{[^}]*position:\s*absolute[^}]*\}")
     for css in (SERVER / "filament_kit" / "setup_static" / "setup.css",):
         assert rule.search(css.read_text(encoding="utf-8")), css.name
-    # the web app links components.css since S3.2, whose .sprite rule takes the sprite out of the flow
+    # the web app links components.css since whose .sprite rule takes the sprite out of the flow
     shared = (SERVER / "filament_kit" / "shared_static" / "components.css").read_text(encoding="utf-8")
     assert re.search(r"(?<![\w.-])\.sprite\{[^}]*position:absolute[^}]*\}", shared)
     assert "/shared/components.css" in (SERVER / "filament_kit" / "web" / "intake_app.py").read_text(encoding="utf-8")

@@ -3,12 +3,12 @@ that lets a unit bind a port below 1024, and the sentences the installer and the
 
 The code's fallback stays 8710 (`config.DEFAULTS["port"]` is not changed). A first install writes `port` into the config
 file; an install whose file has no `port` key keeps 8710, and no update ever moves an existing Hub. The station's
-listener (AF2) uses the same free-port test and drop-in text.
+listener uses the same free-port test and drop-in text.
 
 Run as a program (`python -I -m filament_kit.hubport state|check|dropin ...`) for install.sh, which is shell: it asks
 the questions and prints its own lines, this module answers what it needs to know.
 
-The sentences below are plain constants: step AF5 moves them to the string catalogue.
+The sentences below are plain constants: moves them to the string catalogue.
 """
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ HIGH_LIMIT = 65535
 
 FREE, TAKEN, UNSURE = "free", "taken", "unsure"
 
-# ---- texts (AF5 moves these to the catalogue; the installer's own lines are literals in install.sh)
+# ---- texts (moves these to the catalogue; the installer's own lines are literals in install.sh)
 TEXT_NOT_A_NUMBER = "{text!r} is not a port number."
 TEXT_RANGE = "Port {port} is not allowed: use 1024 to 65535."
 TEXT_RANGE_CHANGE = "Port {port} is not allowed: use 443, or 1024 to 65535."
@@ -51,7 +51,7 @@ TEXT_REMOTE_ON_443 = "Remote access is on and uses port 443, so the Hub cannot t
 TEXT_REMOTE_FIX = "sudo spoolwarden port 8710"
 # What each paired device needs after a port change. Proof 3 failed: the Android app tries discovered hosts on
 # its stored port only (Discovery.hosts() drops the port) and Slicer Sync never browses, so the fallback sentence holds.
-# After AF7 and AF8 land and a phone is seen finding a moved Hub, TEXT_PAIRED_FOUND replaces its first sentence.
+# After and land and a phone is seen finding a moved Hub, TEXT_PAIRED_FOUND replaces its first sentence.
 TEXT_PAIRED_FOUND = "Phones and the Slicer Sync PC find the Hub again on your network."
 TEXT_PAIRED_AGAIN = "Pair your phones and the Slicer Sync PC again."
 TEXT_PAIRED_STATION = "A Weigh Station on another machine must be paired again. Tag Readers set up for this Hub must be set up again."

@@ -1,6 +1,5 @@
-"""RC3: the Hub page's Language (Settings > General and Appearance, the page's `lang`), the demo banner
-with Leave demo on every section, and Try the demo in Getting started. The Hub is the stub of hub_language_stub.py (the server steps RC2
-and RC6 are not in this tree); the page is the real Hub page. The same skip rules as the page audit: no Node 22 or no browser is a skip
+"""the Hub page's Language (Settings > General and Appearance, the page's `lang`), the demo banner
+with Leave demo on every section, and Try the demo in Getting started. The Hub is the stub of hub_language_stub.py (the server steps and are not in this tree); the page is the real Hub page. The same skip rules as the page audit: no Node 22 or no browser is a skip
 (a failure with AUT5_REQUIRED=1)."""
 from __future__ import annotations
 

@@ -3,7 +3,7 @@
 Steps (Decision "preset_for source"): printer = `models.printer_preset_name(model)`, nozzle = f"{nozzle_mm:g}";
 only Bambu Studio preset rows (`target` "bambu_studio", or none) count; the line is the filament's explicit
 `extra.line` when the build has it (a new colour of a built line, or a filament the owner moved), else the
-build's Spoolman filament-id map (where the build really put it, ruling S12), else
+build's Spoolman filament-id map (where the build really put it, ), else
 `lines.line_id_for(vendor, lines.product_of(filament, library))` (= `library.line_id`, except for a part whose slug
 is empty, matching how builds key their lines); then the build's preset of that line, printer and nozzle. A preset whose filament_id is
 not a generated id (`generate.ID_RE`), whose name could not be a file name, or that lacks either nozzle temperature
@@ -62,7 +62,7 @@ def _int(v) -> int | None:
 def _line_of(filament: dict, build: dict) -> str | None:
     """The build's line of this filament: its explicit `extra.line` when the build has that line (a new colour, or a
     filament the owner moved); else the build's filament-id map (the build keeps a filament in its recorded line,
-    ruling S12, even after a library update adds a longer product prefix); else vendor + `product_of`."""
+    even after a library update adds a longer product prefix); else vendor + `product_of`."""
     vendor = lines_mod._vendor(filament)
     explicit = lines_mod._extra_line(filament) if vendor else ""
     if explicit:

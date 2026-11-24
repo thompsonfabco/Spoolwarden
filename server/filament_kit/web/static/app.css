@@ -52,7 +52,7 @@ label.check input { width: calc(var(--s4) + var(--s1)); height: calc(var(--s4) +
 label { display: block; font-size: var(--fs-s); color: var(--muted); }
 label > input, label > select, label > textarea { margin-top: var(--s1); color: var(--text); }
 
-/* the shell (S3.3): components.css lays out the top bar, the bottom bar and the rail; these are the page's own parts */
+/* the shell: components.css lays out the top bar, the bottom bar and the rail; these are the page's own parts */
 .page { max-width: calc(var(--s7) * 21 + var(--s5) - var(--s2)); margin: 0 auto; }   /* 1024 px, centred */
 .page-head__title, .sheet__title, .empty__title, .nav__heading { margin: 0; }   /* the h1 and h2 rules above are for the tab contents */
 .topbar__brand { flex-wrap: wrap; row-gap: 0; }
@@ -267,7 +267,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .pmanual__heading { margin: 0; color: var(--muted); font-size: var(--fs-s); }
 .pmanual__foot { display: flex; flex: 1; gap: var(--s2); }
 .pmanual__foot > * { flex: 1 1 0; }
-/* Add spools (S3.8): the groups, the photo strip, the spool cards and the action bar */
+/* Add spools: the groups, the photo strip, the spool cards and the action bar */
 .add { display: grid; gap: var(--s4); }
 .add p { margin: 0; }
 .add > * { min-width: 0; }
@@ -371,7 +371,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 /* the number of spools waiting, on the Add destination */
 .nav__badge { position: absolute; top: var(--s1); left: calc(50% + var(--s1)); display: grid; place-items: center; min-width: var(--s4); height: var(--s4); padding: 0 var(--s1);
               border: var(--hairline) solid var(--accent-text); border-radius: var(--s3); background: var(--accent-soft); color: var(--accent-text); font-size: var(--fs-xs); font-weight: var(--fw-label); }
-/* Spools (S3.10): the last tag, the search, the rows and the spool sheet */
+/* Spools: the last tag, the search, the rows and the spool sheet */
 .spools { display: grid; gap: var(--s4); }
 .spools p { margin: 0; }
 .spools > * { min-width: 0; }
@@ -440,19 +440,19 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .spools__buttons { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s2); }
 .spools__danger { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
 .spools__form, .spools__load { display: grid; gap: var(--s3); padding: var(--s3); border: var(--hairline) solid var(--border); border-radius: var(--r); background: var(--surface-2); }
-/* Home and offline (S3.15) */
+/* Home and offline */
 .topbar__offline[hidden] { display: none; }
 .topbar__offline { margin-right: var(--s2); }
 .offline-banner { margin-bottom: var(--s3); }
 
-/* "Cannot reach the Hub" marks (S3.17): the line that keeps a group's data, and the reason under the action bar's button */
+/* "Cannot reach the Hub" marks: the line that keeps a group's data, and the reason under the action bar's button */
 .hub-age { display: flex; align-items: flex-start; gap: var(--s2); margin: 0 0 var(--s3); padding: var(--s2) var(--s3); border-radius: var(--r); background: var(--warn-soft); color: var(--text); font-size: var(--fs-m); }
 .hub-age__text { min-width: 0; overflow-wrap: anywhere; }
 .add__bar:has(> .btn__reason) { flex-wrap: wrap; }
 .add__bar > .btn__reason { flex: 1 1 100%; }
 .btn__reason[hidden] { display: none; }
 
-/* EV6a: the Hub page link in the top bar, the Hub screen, the catalog entries */
+/* the Hub page link in the top bar, the Hub screen, the catalog entries */
 .more__row[hidden] { display: none; }
 .more__row--off { padding: var(--s3); }
 .topbar__hubpage { display: inline-flex; align-items: center; min-height: var(--s7); padding: 0 var(--s3); color: var(--accent-text); text-decoration: none; font-size: var(--fs-s); }

@@ -37,7 +37,7 @@ def _say(key: str, /, **values) -> str:
     return say(key, **values)
 
 
-# Texts for the Checks rows and the page (AF5 moves them to the catalogue).
+# Texts for the Checks rows and the page (moves them to the catalogue).
 TEXT_STATION_CERT_CHANGED = "The Weigh Station's certificate is not the one the Hub trusts."
 TEXT_STATION_CERT_FIX = ("Restart the Weigh Station so it tells the Hub its new certificate "
                          "(sudo systemctl restart filament-kit-station), or pair it again.")
@@ -706,7 +706,7 @@ def _clean_setting(s: dict) -> dict | None:
             choices.append(v if not isinstance(c, dict) else {"value": v, "label": lab})
         out["choices"] = choices
     out["value"] = value
-    if s.get("readonly") is True:                   # the station's own page shows it, but it is not changed there (VO1)
+    if s.get("readonly") is True:                   # the station's own page shows it, but it is not changed there
         out["readonly"] = True
     if isinstance(s.get("note"), str) and s["note"].strip():
         out["note"] = s["note"].strip()[:MAX_TEXT]

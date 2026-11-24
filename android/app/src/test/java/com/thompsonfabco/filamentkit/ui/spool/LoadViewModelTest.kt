@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.spool
 
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.ApiError
@@ -11,6 +12,7 @@ import com.thompsonfabco.filamentkit.net.PresetRef
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
 import com.thompsonfabco.filamentkit.net.PrinterStatus
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -192,7 +194,7 @@ class LoadViewModelTest {
         advanceUntilIdle()
         val result = vm.state.value.finished
         assertEquals(SpoolResult.Waiting("Workshop X1", "A2"), result)
-        assertEquals("Waiting for the spool to load in A2.", LoadTexts.waitingIn("A2"))
+        assertEquals(Say.Words(R.string.live_load_waiting, listOf("A2")), LoadTexts.waitingIn("A2"))
         assertEquals(result, SpoolResult.decode((result as SpoolResult).encode()))
     }
 

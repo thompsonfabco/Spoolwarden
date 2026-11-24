@@ -1,4 +1,4 @@
-"""RC1e: the Bambu Lab filament-used log is one XML file per month per printer (`usage/<yyyy-mm>.xml`): the round trip,
+"""the Bambu Lab filament-used log is one XML file per month per printer (`usage/<yyyy-mm>.xml`): the round trip,
 the old usage.jsonl read once and left alone, a damaged month file, undo and its events, modes, and the reach of the
 reads (analytics reads every month)."""
 import errno

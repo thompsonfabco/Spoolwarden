@@ -1,4 +1,4 @@
-"""Health history view built from the event store's check conditions (the design, Hub page s4.2, 09 Stage 13 HD1)."""
+"""Health history view built from the event store's check conditions (the design, Hub page s4.2, 09 Stage 13 )."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone

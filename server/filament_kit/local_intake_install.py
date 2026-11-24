@@ -242,6 +242,26 @@ def saved_plan(now: float | None = None) -> dict | None:
             "fresh": 0 <= now - d["at"] <= PLAN_TTL}
 
 
+def reader_update_view() -> dict | None:
+    """Installed Label Reader version and latest saved plan state for the Hub Updates tab, or None."""
+    have = installed()
+    if have is None:
+        return None
+    sp = saved_plan()
+    p = sp["plan"] if sp else None
+    return {
+        "installed": have["version"],
+        "tier": have.get("tier"),
+        "latest": p.get("version") if p else None,
+        "checked_at": sp["at"] if sp else None,
+        "newer": bool(p and p.get("upgrade") and p.get("version")),
+        "fresh": bool(sp and sp.get("fresh")),
+        "downgrade": bool(p and p.get("downgrade")),
+        "conflict": p.get("conflict") if p else None,
+        "notes": (p.get("notes") or "") if p else "",
+    }
+
+
 def code_name(version: str) -> str:
     return f"{NAME}-{version}.tar.gz"
 

@@ -248,7 +248,7 @@ class IntakeApp:
             ("/intake/labels.js", self.asset, ["GET"]),
             ("/intake/labels", self.labels_page, ["GET"]),            # the print page
             ("/intake/labels/page.css", self.labels_paper, ["GET"]),  # its paper, per size
-            ("/intake/sw.js", self.api(self.service_worker), ["GET"]),   # S3.14: scope is the app; Printers tab or not
+            ("/intake/sw.js", self.api(self.service_worker), ["GET"]),   # scope is the app; Printers tab or not
             ("/intake/signin.js", self.asset, ["GET"]),   # the sign-in page's Show button (auth.py, web unit)
             ("/intake/shared/{name}", self.shared_asset, ["GET"]),
             ("/intake/icon.png", self.icon_route, ["GET"]),
@@ -338,8 +338,10 @@ class IntakeApp:
 
     async def history_photo(self, request: Request):
         from .. import intake_history
-        data = await anyio.to_thread.run_sync(intake_history.photo, request.path_params["hid"], request.path_params["n"])
-        return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+        thumb = request.query_params.get("size") == "thumb"
+        fn = intake_history.photo_thumb if thumb else intake_history.photo
+        data = await anyio.to_thread.run_sync(fn, request.path_params["hid"], request.path_params["n"])
+        return Response(data, media_type="image/jpeg", headers=intake_history.photo_headers(data, thumb=thumb))
 
     async def history_revise(self, request: Request):
         from .. import intake_history
@@ -424,7 +426,7 @@ class IntakeApp:
             f"<script src='{b}/shared/theme-init.js'></script>"
             f"<link rel=stylesheet href='{b}/shared/tokens.css'><link rel=stylesheet href='{b}/shared/components.css'>"
             f"<link rel=stylesheet href='{b}/app.css'>"
-            # S3.3: the catalogue and the shared script load before the page's own scripts (the shell turns the title into
+            # the catalogue and the shared script load before the page's own scripts (the shell turns the title into
             # "<Page title> · <Hub name>")
             + body + ((pages.strings_scripts(self.base, strings_src)       # English first, then the language in use
                        + f"<script src='{b}/shared/components.js'></script>"
@@ -462,7 +464,7 @@ class IntakeApp:
                 "history": "1" if self.history else "0",
                 "hub": cfg.get("server_name") or "", "hub-page": self._hub_page(request),
                 "presets": "1" if "presets" in modules.enabled(cfg) else "0",
-                "spool-edit": "1"}   # the spool read and edit routes below (S3.9)
+                "spool-edit": "1"}   # the spool read and edit routes below
         if self._demo_on():
             data["demo"] = "1"       # the banner of the design, components on every screen
         if not data["hub-page"]:
@@ -474,7 +476,7 @@ class IntakeApp:
     LANG_CODE = re.compile(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?")
     LABEL_SIZES = ("62x29", "50x30", "a4-63x34", "a4-70x37", "letter-66x25")
     LABEL_IDS = re.compile(r"[1-9]\d{0,8}(?:,[1-9]\d{0,8}){0,99}")          # whole numbers of 1 or more, as the refusal says
-    # RC4's sentences the string catalogue does not hold yet (the keys file names them for RC9); the catalogue's own text wins (D13)
+    # 's sentences the string catalogue does not hold yet (the keys file names them for ); the catalogue's own text wins (D13)
     STUB_TEXTS = {"labels_bad_size": "The size must be 62x29, 50x30, a4-63x34, a4-70x37 or letter-66x25.",
                   "labels_bad_ids": "Give the spool numbers as ids=<n,n,...>, whole numbers of 1 or more.",
                   "web_answer_too_large": "The Hub's answer is too large to pass on.",
@@ -491,7 +493,7 @@ class IntakeApp:
 
     def home_address(self) -> str:
         """The Hub's home address, `https://<name>.local[:port]`: what the Hub puts in a label's code (labels.home_address of
-        RC8: the host's own name and the Hub's port, no port for 443). This unit runs on the Hub's machine and reads the same
+        the host's own name and the Hub's port, no port for 443). This unit runs on the Hub's machine and reads the same
         settings, so the print page names the address the codes really hold."""
         port = self.tools.cfg().get("port", hubport.FALLBACK_PORT)
         return f"https://{pairing.short_hostname()}.local{hubport.url_port(port)}"
@@ -685,6 +687,11 @@ class IntakeApp:
             except ReadError as e:
                 return JSONResponse({"error": e.message, "read_id": e.read_id}, 502)
             except Exception as e:  # noqa: BLE001 - a refusal is shown on the phone; a crash is logged only
+                from .. import http_body
+                if isinstance(e, http_body.BodyTooLarge):
+                    return JSONResponse({"error": "too_large", "message": http_body.too_large_text()}, 413)
+                if isinstance(e, http_body.BadBody):
+                    return JSONResponse({"error": str(e)}, 400)
                 text = mcp_tools.error_text(e)
                 if text is None:
                     log.exception("intake %s", request.url.path)
@@ -698,13 +705,8 @@ class IntakeApp:
         return route
 
     async def _body(self, request: Request) -> dict:
-        try:
-            b = await request.json()
-        except ValueError:
-            raise Problem("the request body must be JSON") from None
-        if not isinstance(b, dict):
-            raise Problem("the request body must be a JSON object")
-        return b
+        from .. import http_body
+        return await http_body.read_json_object(request, http_body.DEFAULT_JSON_CAP)
 
     def _station(self) -> StationClient | None:
         url = (self.tools.cfg().get("station") or {}).get("url")
@@ -918,6 +920,8 @@ class IntakeApp:
             return self._kit_refusal(e)
         if isinstance(out, dict) and isinstance(out.get("spool"), dict) and isinstance(out.get("view"), dict):
             out = {**out, "spool": {**out["spool"], "view": out["view"]}}
+        if isinstance(out, dict) and out.get("printer_notified") is False:
+            out = {**out, "note": self._say("spools_return_printer_not_told")}
         return out
 
     async def storage_get(self, request: Request):

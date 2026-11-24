@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -36,6 +37,8 @@ import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import com.thompsonfabco.filamentkit.ui.components.NeedsHubReason
 import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.printers.Say
+import com.thompsonfabco.filamentkit.ui.printers.resolve
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -45,8 +48,9 @@ import kotlinx.serialization.Serializable
 @Serializable data object SettingsVoiceRoute
 
 /** The top bar's title on the voice group's page; null on any other screen. */
+@Composable
 internal fun voicePlaceTitle(destination: NavDestination?): String? =
-    VoiceTexts.GROUP.takeIf { destination?.hasRoute(SettingsVoiceRoute::class) == true }
+    if (destination?.hasRoute(SettingsVoiceRoute::class) == true) stringResource(R.string.settings_group_voice) else null
 
 /** What the Weigh Station voice group does; the app wires each to the [VoiceModel]. */
 internal class VoiceActions(
@@ -55,7 +59,7 @@ internal class VoiceActions(
     /** Test, with the values on the screen. */
     val onTest: (VoiceEdit) -> Unit = {},
     /** The sentences to show as a snackbar: the result of Test, or why a save did not take. */
-    val said: Flow<String> = emptyFlow(),
+    val said: Flow<Say> = emptyFlow(),
 )
 
 /**
@@ -67,7 +71,8 @@ internal class VoiceActions(
 internal fun VoiceSettingsPage(ui: VoiceUi, actions: VoiceActions, modifier: Modifier = Modifier) {
     val saved = ui.settings ?: return
     val toast = LocalToast.current
-    LaunchedEffect(actions.said, toast) { actions.said.collect { toast?.show(it) } }
+    val context = LocalContext.current
+    LaunchedEffect(actions.said, toast) { actions.said.collect { toast?.show(it.resolve(context)) } }
     // the controls show the Hub's values again after a save that did not take (the revision) or a new answer
     var edit by remember(saved, ui.revision) { mutableStateOf(VoiceEdit.of(saved)) }
     var speakerText by remember(saved, ui.revision) { mutableStateOf(saved.speaker.toString()) }
@@ -86,19 +91,19 @@ internal fun VoiceSettingsPage(ui: VoiceUi, actions: VoiceActions, modifier: Mod
 
     SettingsPage(modifier) {
         SettingsPanel {
-            SwitchRow(VoiceTexts.SPEAK, edit.speech, enabled) { on ->
+            SwitchRow(stringResource(R.string.settings_voice_speak), edit.speech, enabled) { on ->
                 edit = edit.copy(speech = on)
                 actions.onSave(edit)
             }
-            FieldRow(VoiceTexts.VOICE, saved.voice)
-            Text(voiceHint(saved), color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodyMedium)
+            FieldRow(stringResource(R.string.settings_voice_label), saved.voice)
+            Text(stringResource(voiceHint(saved)), color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodyMedium)
             if (speakerShown(saved)) {
                 val range = saved.speakerRange!!
                 Column(verticalArrangement = Arrangement.spacedBy(space.s1)) {
                     OutlinedTextField(
                         value = speakerText,
                         onValueChange = { speakerText = it.filter(Char::isDigit) },
-                        label = { Text(VoiceTexts.SPEAKER) },
+                        label = { Text(stringResource(R.string.settings_voice_speaker)) },
                         singleLine = true,
                         enabled = enabled,
                         textStyle = SpoolwardenTheme.type.input,
@@ -107,19 +112,19 @@ internal fun VoiceSettingsPage(ui: VoiceUi, actions: VoiceActions, modifier: Mod
                         modifier = Modifier.width(SpoolwardenTheme.sizes.portField).onFocusChanged { if (!it.isFocused) saveSpeaker() },
                     )
                     Text(
-                        VoiceTexts.speakerHint(range.last + 1),
+                        stringResource(R.string.voice_speaker_hint, range.last + 1),
                         color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodyMedium,
                     )
                 }
             }
             SliderRow(
-                VoiceTexts.SPEED, edit.speed, SPEED_MIN.toFloat()..SPEED_MAX.toFloat(), SPEED_SLIDER_STEPS, enabled,
+                stringResource(R.string.settings_voice_speed), edit.speed, SPEED_MIN.toFloat()..SPEED_MAX.toFloat(), SPEED_SLIDER_STEPS, enabled,
                 snap = ::snapSpeed,
                 onChange = { edit = edit.copy(speed = it) },
                 onLetGo = { actions.onSave(edit) },
             )
             SliderRow(
-                VoiceTexts.VOLUME, edit.volume, VOLUME_MIN.toFloat()..VOLUME_MAX.toFloat(), 0, enabled,
+                stringResource(R.string.settings_voice_volume), edit.volume, VOLUME_MIN.toFloat()..VOLUME_MAX.toFloat(), 0, enabled,
                 snap = ::snapVolume,
                 onChange = { edit = edit.copy(volume = it) },
                 onLetGo = { actions.onSave(edit) },
@@ -127,7 +132,7 @@ internal fun VoiceSettingsPage(ui: VoiceUi, actions: VoiceActions, modifier: Mod
         }
         Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
             SwButton(
-                VoiceTexts.TEST, { actions.onTest(edit) }, Modifier.fillMaxWidth(),
+                stringResource(R.string.settings_voice_test), { actions.onTest(edit) }, Modifier.fillMaxWidth(),
                 enabled = enabled, busy = ui.testing,
             )
             if (ui.offline) NeedsHubReason()

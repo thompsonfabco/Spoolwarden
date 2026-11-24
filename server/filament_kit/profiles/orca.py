@@ -1,4 +1,4 @@
-"""Orca Slicer system filament presets (the PC sync's `orca_system` upload, Ruling L): load and query.
+"""Orca Slicer system filament presets (the PC sync's `orca_system` upload, ): load and query.
 
 Orca 2.5.0 packs its vendor profiles into `.opc` bundles, so the upload has two parts:
   BBL/filament/**.json            Orca's unpacked `%APPDATA%\\OrcaSlicer\\system\\BBL\\filament\\` (same JSON shape as

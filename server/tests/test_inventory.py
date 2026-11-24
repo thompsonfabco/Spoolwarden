@@ -900,7 +900,7 @@ def test_search_matches_material_and_spool_number(sm, printers):
     assert [s["id"] for s in inventory.find(sm, str(b["id"]), False)] == [b["id"]]
 
 
-# ---------- CO1: checked out, the one send-back, Return, the home edit ----------
+# ---------- checked out, the one send-back, Return, the home edit ----------
 
 SINCE = "2026-11-20T10:00:00Z"
 SLOT = "Office H2D \u2013 AMS A2"

@@ -60,9 +60,38 @@ function versionCard(u) {
         : [h("span", {}, SW.t("updates_schedule_off"), " ", h("a", { href: "#features", textContent: SW.t("nav_features") }))]))));
 }
 
+function readerCard(r, box) {
+  if (!r) return null;
+  const latest = !r.latest ? SW.t("updates_not_checked") : r.newer ? SW.t("updates_latest_available", { latest: r.latest })
+    : [h("span", { class: "mono", textContent: r.latest }), SW.status("ok")];
+  const job = runningJob();
+  const checkBtn = SW.btn(SW.t("updates_reader_check"), { run: () => startJob(box, "local_intake_plan") });
+  const updateBtn = r.newer && !r.downgrade && !r.conflict ? SW.btn(SW.t("updates_reader_update", { version: r.latest }), {
+    cls: "btn--primary",
+    run: () => startJob(box, "local_intake_install", {
+      title: SW.t("updates_reader_dialog_title", { version: r.latest }),
+      text: SW.t("updates_reader_dialog_body"),
+      confirm: SW.t("updates_reader_update", { version: r.latest }),
+    }),
+  }) : null;
+  if (job) {
+    SW.disable(checkBtn, SW.t("common_wait_for_job", { job_title: job }));
+    if (updateBtn) SW.disable(updateBtn, SW.t("common_wait_for_job", { job_title: job }));
+  }
+  return h("section", { class: "card updates__reader" },
+    h("h2", {}, SW.t("common_label_reader")),
+    h("dl", { class: "kv" },
+      versionRow("updates_installed", h("span", { class: "mono", textContent: r.installed })),
+      versionRow("updates_latest", ...[].concat(latest)),
+      r.checked_at ? versionRow("updates_last_checked", fmtDate(r.checked_at)) : null),
+    r.conflict ? SW.banner({ kind: "bad", inline: true, text: r.conflict }) : null,
+    h("div", { class: "row" }, checkBtn, updateBtn),
+    box);
+}
+
 function updatesTab() {
   const out = h("div");
-  const box = boxFor("updates"), back = boxFor("updates:rollback");
+  const box = boxFor("updates"), back = boxFor("updates:rollback"), rbox = boxFor("updates:reader");
   later(readRegion(out, "updates", () => api("updates"), (u) => {
     const replaced = (u.installed_text || u.installed) !== u.installed;      // a build from before the signed releases shows its own version text
     const check = SW.btn(SW.t("updates_check"), { run: () => startJob(box, "check") });
@@ -84,6 +113,7 @@ function updatesTab() {
       refused, box,
       h("div", { class: "updates__cards" },
         versionCard(u),
+        readerCard(u.reader, rbox),
         u.notes ? h("section", { class: "card updates__notes" },
           h("h2", { id: notesId, textContent: SW.t(u.newer ? "updates_notes_new" : "updates_notes_current", { version: u.latest }) }),
           h("div", { class: "code" }, h("pre", { class: "code__text code__text--log", tabindex: "0", "aria-labelledby": notesId, textContent: u.notes }))) : null,

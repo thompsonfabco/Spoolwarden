@@ -98,7 +98,7 @@ def _shown(out: str) -> list[int]:
 
 def test_activity_without_days_shows_the_newest_50_newest_first(capsys):
     """`newest=50`, not the newest 200 cut by 7 days. This test pinned the newest 200
-    before; it now pins the ruled behaviour."""
+    before; it now pins the """
     hub = HubApi(token())                                    # its pairing is an Activity event too: the oldest here
     old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=30)
     for n in range(1, 31):

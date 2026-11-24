@@ -189,6 +189,7 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, home_assist
              text: bool = False, wait: bool = True) -> int:
     """`pair`: what the Hub page's pairing dialog shows, in its order (the QR code for a phone, the instruction,
     the pairing code, the certificate fingerprint, the expiry), then waits for the device. `--json` ends after the document."""
+    demo.stop()
     cmd = "sudo spoolwarden pair" + (
         " --slicer-sync" if slicer_sync else " --weigh-station" if weigh_station else " --home-assistant" if home_assistant else ""
     )
@@ -229,6 +230,10 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, home_assist
         print(_qr_text(pr.qr), flush=True)
         output.out("Open the Spoolwarden app and scan this code, or type the pairing code.")
     output.out(f"Pairing code: {pr.code[:3]} {pr.code[3:]}")
+    if not (slicer_sync or weigh_station or home_assistant or text):
+        ips = pairing.local_ips()
+        host = ips[0] if ips else f"{pairing.short_hostname()}.local"
+        output.out(f"Hub address: https://{host}:{cfg['port']}")
     output.out("Certificate fingerprint (" + ("the phone asks for two groups of it" if not (slicer_sync or weigh_station or home_assistant)
                else f"check it matches the one {'Home Assistant' if home_assistant else 'the Slicer Sync' if slicer_sync else 'the Weigh Station'} shows") + "):")
     output.out_lines(_fingerprint_lines(fp))
@@ -593,7 +598,9 @@ def cmd_station_panel_wifi(off: bool = False, ask=input, secret=None, run=subpro
                 done = panel_setup.disable(send if ser else None)
                 output.emit({"ok": True, **done})
                 output.out_lines(output.status_row("done", "The panel is back on the USB cable."))
-                if ser and not done["panel_forgotten"]:
+                if not ser:
+                    output.out(spools_cli.CLI_PANEL_WIFI_OFF_NO_USB)
+                elif not done["panel_forgotten"]:
                     output.out("The panel did not confirm that it forgot its Wi-Fi settings; its token is gone, so it can "
                                "no longer connect.")
             else:
@@ -1107,7 +1114,8 @@ class _ConfigMenu:
                 else:
                     count = sc.state(self.cfg).get("count") or 0
                     if count > 0:
-                        yes = ui.yesno(output.fill(_cli_text("cli_config_share_corrections_delete_ask"), count=count))
+                        key = "cli_config_share_corrections_delete_ask" if count != 1 else "cli_config_share_corrections_delete_ask_one"
+                        yes = ui.yesno(output.fill(_cli_text(key), count=count))
                         if yes is None:
                             raise _Ended
                         self._delete_waiting = bool(yes)
@@ -1540,7 +1548,8 @@ class _ConfigMenu:
                         except (sc.DeleteFailed, local_reader.LocalReaderError) as e:
                             ui.error(str(e))
                     elif waiting_n > 0:
-                        output.out(output.fill(_cli_text("cli_config_share_corrections_kept"), count=waiting_n))
+                        key = "cli_config_share_corrections_kept" if waiting_n != 1 else "cli_config_share_corrections_kept_one"
+                        output.out(output.fill(_cli_text(key), count=waiting_n))
                 try:
                     sc.apply(new, say=output.out)
                 except sc.ShareError as e:
@@ -4023,7 +4032,7 @@ def _found_printers(klipper: bool) -> tuple[str, int] | None:
 def _klipper_test(host: str, port: int, key: str) -> bool:
     """The test before a Klipper printer is saved: the Hub asks the printer for its info. This is the
     existing probe (`Moonraker.info`) run from the command line's own process: the kit route `POST /api/printers/test`
-    (EV1 part B) is not there yet."""
+    (part B) is not there yet."""
     from .bridge.klipper.moonraker import Moonraker, MoonrakerError
     try:
         Moonraker(host, port, api_key=key, timeout=5).info()
@@ -5270,6 +5279,7 @@ def _features_report(cfg: dict, before, explicit, notes=(), *, plan_shown: bool 
 def cmd_modules_set(mode: str, server: str | None = None) -> int:
     """`features setup <setup>`: `Setup: Weigh Station only.`, the plan and the apply. The Weigh Station only setup
     needs the Hub's address: `--hub`, or asked at a terminal."""
+    demo.stop()
     mode = modules.canonical_mode(mode)
     if not _require_root():
         return output.NEEDS_SUDO
@@ -6317,6 +6327,7 @@ def cmd_local_intake_install(tier: str | None, version: str | None, yes: bool, f
 def cmd_local_intake_remove(yes: bool, run=None) -> int:
     """Uninstall the reader installed by `local-intake install`, switch the module off (with whatever needs it only)
     and apply. A reader on another machine is not touched: then only the module goes off."""
+    demo.stop()
     from . import local_intake_install as lii
     if not _require_root():
         return output.NEEDS_SUDO
@@ -6792,6 +6803,9 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`backup create [--out DIR]`', 'Back up now', '{settings_backups_now}'),
  ('`backup list`', 'Backups on this Hub', '{settings_backups_list}'),
  ('`backup keep <days>`', 'Keep nightly backups for N days', '{settings_backups_keep}'),
+ ('`backup password [--remove \\| --show]`',
+  'Set the backup password (typed twice), remove it (asks) or print it; new backups are encrypted while one is set (root)',
+  '{settings_backups_password_set} / {settings_backups_password_change} / {settings_backups_password_remove}'),
  ('`restore <zip> \\| --uploaded`', 'Restore (asks for the typed word)', '{settings_restore_heading}'),
  ('`web status`', 'Access from outside: rows as in `status`', '{nav_settings} > {settings_group_network}'),
  ('`web passphrase`', 'Set or replace the web passphrase', '{settings_group_passphrase}'),
@@ -6800,6 +6814,9 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`setup-code [--new] [--revoke-trusted]`', 'Hub page address and setup code', '{unlock_field_label}, {devices_trusted_title}'),
  ('`port [<number>]`', "Show the Hub's port, or move the Hub to another", '{nav_settings} > {settings_group_network}, {port_row_label}'),
  ('`certificate`', "Make the Hub's certificate if missing; print its fingerprint", '(none)'),
+ ('`certificate --renew`',
+  'Make a new certificate for this Hub: every paired phone, PC and Weigh Station must trust it again or be paired again (root; asks)',
+  '(none)'),
  ('`spoolman fields`', "Make Spoolwarden's extra fields in Spoolman", '{nav_overview}, {overview_make_fields}'),
  ('`spoolman address [<url>]`',
   'Show or change the Spoolman in use (checked before saving)',
@@ -6822,6 +6839,8 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`local-intake status`', 'Does the local reader answer, which tiers it can use, the reader order', '(none)'),
  ('`local-intake install [--tier auto\\|cpu\\|gpu] [--version VERSION] [--planned] [-y]`',
   'Install or upgrade the local reader from its signed release on this machine (root; sizes are shown first)', '(none)'),
+ ('`local-intake update [--tier auto\\|cpu\\|gpu] [--version VERSION] [--planned] [-y]`',
+  'Upgrade the local reader to its latest signed release (root; sizes are shown first)', '(none)'),
  ('`local-intake share-corrections [on\\|off] [--delete-waiting] [--status]`',
   'Share corrections: `on` or `off` sets it (root); no word sets the reader to the saved value; `--status` shows both',
   '(none)'),
@@ -7229,7 +7248,7 @@ def _dispatch_recent(args) -> int:
     return cmd_recent_undo(args.record)
 
 
-def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
+def _build_parser():
     ap = _Parser(prog="spoolwarden")
     ap.grouped_help = True
     ap.add_argument("--version", action="version", version=f"Spoolwarden {__version__}", help=argparse.SUPPRESS)
@@ -7421,6 +7440,13 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     _add_yes(lii, "do not ask (the sizes are still printed)")
     lii.add_argument("--planned", action="store_true", help="the version and tier the last `local-intake plan` "
                                                             "saved (the setup page's job)")
+    liu = lisub.add_parser("update", help="upgrade the local reader to its latest signed release "
+                                          "(root; sizes are shown first)")
+    liu.add_argument("--tier", choices=["auto", "cpu", "gpu"], help="default: local_intake.tier (auto)")
+    liu.add_argument("--version", help="a release version instead of the latest")
+    _add_yes(liu, "do not ask (the sizes are still printed)")
+    liu.add_argument("--planned", action="store_true", help="the version and tier the last `local-intake plan` "
+                                                            "saved (the setup page's job)")
     lis = lisub.add_parser("share-corrections", help="Share corrections: `on` / `off` sets it (root); no word sets "
                                                      "the reader to the saved value (the setup page's job); "
                                                      "--status shows both")
@@ -7485,7 +7511,12 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                     help="forget every trusted computer, so each needs the setup code again (alone, or with --new)")
     _add_yes(sc)
     klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
-    history_cli.add_parser(sub)       # activity, undo, usage, export, import, report (HD2)
+    history_cli.add_parser(sub)       # activity, undo, usage, export, import, report
+    return ap, sub
+
+
+def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
+    ap, sub = _build_parser()
     args = ap.parse_args(argv)
     if args.cmd is None:                        # no command: the top-level help
         return _print_help(ap.format_help())
@@ -7735,7 +7766,7 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
     if args.cmd == "web":
         return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
     if args.cmd == "local-intake":
-        if args.li_cmd == "install":
+        if args.li_cmd in ("install", "update"):
             return cmd_local_intake_install(args.tier, args.version, args.yes, planned=args.planned)
         if args.li_cmd == "plan":
             return cmd_local_intake_plan()

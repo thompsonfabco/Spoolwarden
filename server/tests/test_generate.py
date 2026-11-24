@@ -346,7 +346,7 @@ def test_inapp_nil_or_vitrification_never_written(tmp_path):
     manifest, _ = build(tmp_path, SUNLU, line_set=ls, live=live, snapshot=snap, out="o2")
     new = read(tmp_path, name, "o2")
     assert new["filament_flow_ratio"] == ["0.95", "0.95"]
-    assert new["temperature_vitrification"] == ["60"]                 # ruling S16: his edit is kept
+    assert new["temperature_vitrification"] == ["60"]                 # his edit is kept
     assert any("temperature_vitrification" in e and "your in-app value, kept" in e for e in manifest["edits"])
     assert name in names(manifest)
     assert read(tmp_path, sunlu(H2D, "0.6"), "o2")["temperature_vitrification"] == ["45"]
@@ -492,7 +492,7 @@ def test_live_reads_presets_and_info(tmp_path):
     assert live.preset("Z") == (None, {})
 
 
-# ---------- ruling S27 / S28: in-app edits that last, partial installs ----------
+# ---------- / build-step: in-app edits that last, partial installs ----------
 
 def _install_build(tmp_path, out, manifest, live_from=None):
     """Install the build in `out`: the snapshot is its base/ + BUILD.json (as builds/<stamp>/ on the server); the

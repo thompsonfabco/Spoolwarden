@@ -157,7 +157,7 @@ def test_orca_native_with_fhs_install(tmp_path):
     assert got.system_bbl == cfg / "OrcaSlicer" / "system" / "BBL" / "filament"
     assert got.install is None and got.library_opc is None          # an AppImage: nothing installed
     (cfg / "OrcaSlicer" / "system" / "OrcaFilamentLibrary.opc").write_bytes(b"ZCRO")
-    assert _orca(lay).library_opc == cfg / "OrcaSlicer" / "system" / "OrcaFilamentLibrary.opc"   # Ruling L
+    assert _orca(lay).library_opc == cfg / "OrcaSlicer" / "system" / "OrcaFilamentLibrary.opc"   # 
     local = _fake_resources(tmp_path / "usr-local-share" / "OrcaSlicer")
     assert _orca(lay).install == local
     usr = _fake_resources(tmp_path / "usr-share" / "OrcaSlicer")

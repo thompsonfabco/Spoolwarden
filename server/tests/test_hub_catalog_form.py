@@ -1,4 +1,4 @@
-"""Tests for EV4d custom catalog entry form endpoints and library token removal."""
+"""Tests for custom catalog entry form endpoints and library token removal."""
 from __future__ import annotations
 
 from filament_kit import library, setup_helper

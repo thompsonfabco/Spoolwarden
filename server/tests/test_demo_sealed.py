@@ -1,16 +1,16 @@
-"""RC6: the demo's stops are complete. The Hub's kit app runs in demo with every way out of the
+"""the demo's stops are complete. The Hub's kit app runs in demo with every way out of the
 process recorded (sockets, name lookups, Spoolman's client, child processes) and the real state, config and backups
 folders compared before and after each request; every route is walked and anything that reaches outside or writes
 outside the demo's folder is a missing stop.
 
-What is proved here and what is not (the hooks live in files other steps hold; see the RC6 handoff):
+What is proved here and what is not (the hooks live in files other steps hold; see the handoff):
 - STOPPED today: Spoolman (the client answers from the demo inventory: no socket, no write to the real one), the
   pretend printers (no connection, no certificate, no Access Code), the demo's own folder holds what the demo writes.
 - MISSING today: `LEAKS` below lists, per route, what still gets out or lands outside the demo's folder in this tree. The
   test holds that list EXACTLY: a stop that lands makes its route fall out of the list, and the test then fails until
-  the list is cut, so the list can only shrink toward empty. It is empty since RC6c (the catalog, the registry, the
+  the list is cut, so the list can only shrink toward empty. It is empty since (the catalog, the registry, the
   per-printer and profiles folders follow the demo); a new leak fails the walk.
-- Since the seal brief (RC6d): the walk sends REAL bodies (`BODIES`: backup, restore, job (update, backup ...), flash, label
+- Since the seal brief: the walk sends REAL bodies (`BODIES`: backup, restore, job (update, backup ...), flash, label
   photos, the key check) and the printers are walked twice: the pretend families alone, and as `main()` wires them (a
   `Switch` over the real Bambu `Manager` and the real `KlipperFamily`, whose clients FAIL the test when made). Every fake
   that stands for the outside (Claude's client, the local reader, a printer's client, a push sender) records the call in
@@ -72,7 +72,7 @@ LEAKS: dict[str, str] = {}
 
 # what the per-printer page routes reach with a real body (the walk's empty bodies stop before they get there), for the
 # two Klipper printers and then the Bambu one: `POST /setup/api/printers/{serial}/test` calls Moonraker's /printer/info
-# (a Bambu printer: a TLS handshake with 192.0.2.40) in `setup_page.py printer_test` (RC9, Antigravity's file): it needs a
+# (a Bambu printer: a TLS handshake with 192.0.2.40) in `setup_page.py printer_test` (Antigravity's file): it needs a
 # 409 "Not in the demo." (`code=demo.NOT_IN_DEMO_CODE`) before `_moonraker_test` and before `tlspin.leaf_fp`. A route
 # listed here is held by `test_firmware_download_and_the_per_printer_routes_with_bodies_stay_inside` and left out of the
 # every-route walk; empty when the stop lands (the walk then covers it).
@@ -82,33 +82,24 @@ KLIPPER_ROUTE_LEAKS: dict[str, list[str]] = {}
 LEAKS_WITH_BODY: dict[str, str] = {}
 
 # TEMPORARY, NAMED: the three leaks below wait for stops in files the Server builder holds (api.py printer_add and
-# printer_test, setup_page.py key_check; the hunks are in the RC6d report). The Server builder applies them, empties this
+# printer_test, setup_page.py key_check; the hunks are in the report). The Server builder applies them, empties this
 # dict and then sets `demo.MOUNTABLE = True`; `test_the_demo_is_not_mountable_while_a_leak_list_is_not_empty` fails if the
 # demo is mountable while this or any other leak list here is not empty.
 # What still leaves the demo through a stop that belongs in a file another builder holds (api.py, cli.py, setup_page.py,
-# web/intake_app.py; the hunks are in the RC6d report). Per route, what a request with a real body reaches or writes. Such a
+# web/intake_app.py; the hunks are in the report). Per route, what a request with a real body reaches or writes. Such a
 # route is left out of the every-route walk and held by `test_routes_waiting_for_a_held_file_...`, exactly: when the stop
 # lands the route's entry must go (the test then fails until it does), so the dict can only shrink toward empty.
 ANSWERS_500 = "answers 500: the stop's NotInDemo is not mapped to the page's 409"
 # the page's route wrapper (setup_page.py `route`, held) answers every exception but `Refused` with "internal error" (500), so
 # a stop that fires below `printer_add`, `printer_code` and `printer_forget` (tlspin's, registry's) is no 409 "Not in the demo."
 # yet: the hunk is in the DPROOF report (one `except demo.DemoError` clause in `route`); the three leave when it lands
-TEMPORARY_HELD_ROUTE_LEAKS: dict[str, list[str]] = {
-    "POST /setup/api/printers": [ANSWERS_500],
-    "POST /setup/api/printers/{serial}/code": [ANSWERS_500],
-    "POST /setup/api/printers/{serial}/forget": [ANSWERS_500],
-}
+TEMPORARY_HELD_ROUTE_LEAKS: dict[str, list[str]] = {}
 
 # Command-line leaks found by the CLI walk (first run on testbox-linux, DPROOF-02): each needs a demo stop in cli.py (held) or
 # the module it calls. Held exactly like the route list: the test fails when a leak is gone (the entry must go) or a new one
 # appears, so the dict can only shrink toward empty. "write x" is a write outside the demo's folder, "never ends" a command that
 # waits for a pairing in the demo (no outside reach was recorded while it waited).
-TEMPORARY_HELD_CLI_LEAKS: dict[str, list[str]] = {
-    "never ends": ["pair"],
-    "write etc/config.json": ["features setup server", "local-intake remove --yes", "modules set server"],
-    "write etc/config.xml": ["features setup server", "local-intake remove --yes", "modules set server"],
-    "write state/alert-test": ["alerts test"],
-}
+TEMPORARY_HELD_CLI_LEAKS: dict[str, list[str]] = {}
 
 JPEG = bytes([0xFF, 0xD8, 0xFF, 0xE0]) + bytes(64)                  # a photo as far as the Hub checks one
 ZIP = b"PK" + bytes([3, 4]) + bytes(64)                             # an upload as far as the page checks one
@@ -664,7 +655,7 @@ def not_mountable_yet(mountable: bool, lists: dict[str, object]) -> list[str]:
 
 
 def test_the_demo_is_not_mountable_while_a_leak_list_is_not_empty():
-    """The seal is not complete while any leak list here is not empty: `demo.MOUNTABLE` (what RC9's
+    """The seal is not complete while any leak list here is not empty: `demo.MOUNTABLE` (what 's
     mount consults) stays False until they are all empty, and whoever flips it with a list left fails this test."""
     assert not_mountable_yet(demo.MOUNTABLE, leak_lists()) == [], "empty the leak lists before demo.MOUNTABLE = True"
 

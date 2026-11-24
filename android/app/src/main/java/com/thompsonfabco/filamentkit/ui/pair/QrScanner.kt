@@ -135,6 +135,7 @@ fun QrScanner(
             denied -> ScannerState.Denied
             else -> ScannerState.Asking
         }
+        val notLabelText = stringResource(R.string.label_scan_not_label)
         ScannerFrame(
             state = state,
             onClose = onClose,
@@ -142,7 +143,7 @@ fun QrScanner(
             onEnterAddress = onEnterAddress,
             modifier = modifier,
             labelMode = label != null,
-            notice = if (notLabelShown) LabelScan.NOT_LABEL_TEXT else label?.notice,
+            notice = if (notLabelShown) notLabelText else label?.notice,
         ) {
             CameraPreview(
                 onResult = { text ->
@@ -211,7 +212,7 @@ internal fun ScannerFrame(
             if (state == ScannerState.Scanning) {
                 Surface(shape = SpoolwardenTheme.shapes.r, color = colors.surface, contentColor = colors.text) {
                     Text(
-                        if (labelMode) LabelScan.HINT else stringResource(R.string.pair_scan_hint),
+                        stringResource(if (labelMode) R.string.label_scan_hint else R.string.pair_scan_hint),
                         Modifier.padding(horizontal = space.s3, vertical = space.s2),
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -237,11 +238,13 @@ internal fun ScanProblem(
     ) {
         Column(Modifier.padding(space.s4), verticalArrangement = Arrangement.spacedBy(space.s3)) {
             Text(
-                when {
-                    labelMode -> if (denied) LabelScan.DENIED else LabelScan.FAILED
-                    denied -> stringResource(R.string.pair_scan_denied)
-                    else -> stringResource(R.string.pair_scan_failed)
-                },
+                stringResource(
+                    when {
+                        labelMode -> if (denied) R.string.label_scan_denied else R.string.label_scan_failed
+                        denied -> R.string.pair_scan_denied
+                        else -> R.string.pair_scan_failed
+                    },
+                ),
                 style = MaterialTheme.typography.bodyMedium,
             )
             if (denied) {

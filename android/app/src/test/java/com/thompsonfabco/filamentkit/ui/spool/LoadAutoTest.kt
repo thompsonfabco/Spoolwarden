@@ -9,6 +9,8 @@ import com.thompsonfabco.filamentkit.net.LoadResult
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
 import com.thompsonfabco.filamentkit.net.PrinterStatus
+import com.thompsonfabco.filamentkit.ui.printers.Say
+import com.thompsonfabco.filamentkit.ui.printers.resolve
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -23,10 +25,18 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
 /** Automatic in the load steps (A5): offered and preselected only where the Hub says it is possible. */
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [android.os.Build.VERSION_CODES.S])
 class LoadAutoTest {
+    private fun Say.text() = resolve(RuntimeEnvironment.getApplication())
+
     private val dispatcher = StandardTestDispatcher()
     private val spool = spoolJson(214).toSpoolSummary()
 
@@ -105,7 +115,7 @@ class LoadAutoTest {
         val vm = LoadPreviewViewModel(spool, "X1A", AUTO_SLOT, b)
         advanceUntilIdle()
         assertEquals("Acme PLA", vm.state.value.autoPlan!!.replaces!!.name)
-        assertEquals("Replaces Acme PLA, which was waiting.", LoadTexts.replaces("Acme PLA"))
+        assertEquals("Replaces Acme PLA, which was waiting.", LoadTexts.replaces(LoadTexts.replacedName("Acme PLA", 7)).text())
     }
 
     @Test fun theRealLoadIsOneWriteAndTheResultSaysItIsWaiting() = runTest(dispatcher) {
@@ -118,24 +128,24 @@ class LoadAutoTest {
         assertEquals(SpoolResult.Waiting("Workshop X1", AUTO_SLOT, "Polymaker PolyTerra PLA Charcoal Black"), result)
         assertEquals(
             "Waiting for Polymaker PolyTerra PLA Charcoal Black to be loaded into any slot of Workshop X1.",
-            LoadTexts.waiting(result),
+            LoadTexts.waiting(result).text(),
         )
         assertEquals(listOf("auto:X1A:214:dry=true", "auto:X1A:214:dry=false"), b.calls)
         assertEquals("it survives the spool screen's saved state", result, SpoolResult.decode(result.encode()))
     }
 
     @Test fun aReplacedSpoolWithoutANameOrNumberIsTheSpool() {
-        assertEquals("Acme PLA", LoadTexts.replacedName("Acme PLA", 7))
-        assertEquals("Spool 7", LoadTexts.replacedName("", 7))
-        assertEquals("Replaces the spool, which was waiting.", LoadTexts.replaces(LoadTexts.replacedName("", null)))
+        assertEquals("Acme PLA", LoadTexts.replacedName("Acme PLA", 7).text())
+        assertEquals("Spool 7", LoadTexts.replacedName("", 7).text())
+        assertEquals("Replaces the spool, which was waiting.", LoadTexts.replaces(LoadTexts.replacedName("", null)).text())
     }
 
     @Test fun theShortAutoTextIsTheToastsAndTheFallbacksHaveNoHash() {
-        assertEquals("Waiting for the spool to be loaded.", LoadTexts.waitingIn(AUTO_SLOT))
+        assertEquals("Waiting for the spool to be loaded.", LoadTexts.waitingIn(AUTO_SLOT).text())
         assertEquals("Spool 214", spoolWords(spool.copy(brand = "", name = "")))
         assertEquals(
             "Waiting for the spool to be loaded into any slot of P.",
-            LoadTexts.waiting(SpoolResult.Waiting("P", AUTO_SLOT, "")),
+            LoadTexts.waiting(SpoolResult.Waiting("P", AUTO_SLOT, "")).text(),
         )
     }
 
@@ -147,13 +157,13 @@ class LoadAutoTest {
         advanceUntilIdle()
         assertEquals(listOf("load:X1A:A2:214:dry=true", "load:X1A:A2:214:dry=false"), b.calls)
         assertEquals(SpoolResult.Loaded("Workshop X1", "A2"), vm.state.value.finished)
-        assertEquals("Waiting for the spool to load in A2.", LoadTexts.waiting(SpoolResult.Waiting("P", "A2")))
+        assertEquals("Waiting for the spool to load in A2.", LoadTexts.waiting(SpoolResult.Waiting("P", "A2")).text())
     }
 
     @Test fun aWaitingResultWithoutASpoolNameStillReads() {
         assertEquals(
             "Waiting for the spool to be loaded into any slot of Workshop X1.",
-            LoadTexts.waiting(SpoolResult.Waiting("Workshop X1", AUTO_SLOT)),
+            LoadTexts.waiting(SpoolResult.Waiting("Workshop X1", AUTO_SLOT)).text(),
         )
         assertEquals(SpoolResult.Waiting("P", "A1"), SpoolResult.decode(SpoolResult.Waiting("P", "A1").encode()))
     }
@@ -169,7 +179,7 @@ class LoadAutoTest {
         b.failure = ApiError(409, "auto_not_possible", "")
         vm.check()
         advanceUntilIdle()
-        assertEquals(HubFailure.Message("This printer has no slots the Hub can watch. Choose a slot."), vm.state.value.failure)
+        assertEquals(HubFailure.AutoRefused, vm.state.value.failure)
     }
 
     @Test fun aRefusalAtTheWriteIsShownAndNotOfferedAgain() = runTest(dispatcher) {

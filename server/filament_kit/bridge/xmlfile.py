@@ -4,7 +4,7 @@ Each file has a bundled default (package data) and an optional override in `/etc
 element. Files are parsed with defusedxml (no DTD, no entities, no external references) and checked by a validator
 in code (`E` specs: allowed attributes with checkers, required attributes, child elements, text). Unknown elements
 and attributes are warnings; anything else is an error and refuses the whole file. An override is applied only when
-its root `version` is above the bundled file's (Ruling BT); a bad override keeps the last good data (`Cached`).
+its root `version` is above the bundled file's; a bad override keeps the last good data (`Cached`).
 
 Interfaces
 ----------
@@ -280,7 +280,7 @@ class Cached:
                 base_v, over_v = root_version(base_root), root_version(over_root)
                 if base_v is not None and (over_v is None or over_v <= base_v):
                     # a feed file left behind after an upgrade, or a hand-made one that never bumped its version:
-                    # applying it would shadow newer bundled data per element (final review I2, Ruling BT)
+                    # applying it would shadow newer bundled data per element (final review I2, )
                     warnings = warnings + [
                         f"{where_o}: override version {over_root.get('version', '').strip()} is not newer than "
                         f"the kit's own {base_root.get('version', '').strip()}: ignored (give it a version above "

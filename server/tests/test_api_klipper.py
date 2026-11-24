@@ -130,7 +130,7 @@ def test_add_klipper_bad_body(body):
 
 
 def test_printer_errors_name_their_field():
-    """S1.4: a refusal about one body key carries it as `field`, beside `error` and `message`."""
+    """a refusal about one body key carries it as `field`, beside `error` and `message`."""
     registry.add_klipper("SV08 MAX", "sv08.home.arpa")
     registry.upsert(registry.Printer("S1", "H2D", "H2D", "10.0.0.5", "12345678", True))
     c = _client()

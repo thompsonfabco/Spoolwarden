@@ -12,7 +12,7 @@ from __future__ import annotations
 import anyio
 
 try:
-    from .. import analytics as _analytics          # HD3's module; not in every build yet (see read())
+    from .. import analytics as _analytics          # 's module; not in every build yet (see read())
 except ImportError:
     _analytics = None
 
@@ -21,7 +21,7 @@ EMPTY = {"months": [], "insights": [], "notes": []}
 
 def read(months: int, printer: str | None) -> dict:
     """The kit's analytics for `months` months (one printer when `printer`), in the shape the Hub page reads. Until the kit has
-    its analytics module (HD3) the answer is the shape with nothing in it, which the page shows as "No usage yet"."""
+    its analytics module the answer is the shape with nothing in it, which the page shows as "No usage yet"."""
     view = getattr(_analytics, "view", None)
     return view(months=months, printer=printer) if callable(view) else dict(EMPTY)
 

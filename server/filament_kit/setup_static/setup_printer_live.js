@@ -54,9 +54,9 @@ function printerLive(p, ctx = {}) {
   const camBox = hx("div", { class: "plive__cam", hidden: true });
   const autoNotice = hx("div", { class: "result result--block plive__autonotice", role: "status" });
   const units = plE("div", "plive__units"), usageBox = plE("div", "plive__log"), usageMsg = hx("p", { class: "result", role: "status" });
-  // Download as CSV: GET export/usage.csv for this printer, unlocked as a file leaves the Hub
-  async function downloadUsage() {
-    const r = await fetch(`/setup/api/export/usage.csv?printer=${enc(p.serial)}`, { credentials: "same-origin", headers: { "X-Setup-Code": theCode() } });
+  // Download as CSV: GET export/usage.csv for this printer with days range, unlocked as a file leaves the Hub
+  async function downloadUsage(days) {
+    const r = await fetch(`/setup/api/export/usage.csv?printer=${enc(p.serial)}&days=${days}`, { credentials: "same-origin", headers: { "X-Setup-Code": theCode() } });
     if (!r.ok) { let d = {}; try { d = await r.json(); } catch { /* not JSON */ } throw hubError(r.status, d); }
     const m = /filename="([^"]+)"/.exec(r.headers.get("Content-Disposition") || "");
     const url = URL.createObjectURL(await r.blob());
@@ -69,8 +69,13 @@ function printerLive(p, ctx = {}) {
   function usageMenu() {
     if (typeof hubCanExport === "function" && !hubCanExport("usage")) return null;
     const more = SW.iconBtn("more", t("live_usage_more"), { cls: "plive__usagemore" });
-    SW.menu(more, () => [{ label: t("live_download_csv"), icon: "download", action: "download-csv",
-      run: () => needCode(async () => { try { await downloadUsage(); } catch (e) { if (e.locked) throw e; SW.toast(t("live_csv_failed", { reason: plHubText(e.message) }), "bad"); } }) }], { label: t("live_usage_more") });
+    SW.menu(more, () => [
+      { heading: t("live_download_csv") },
+      ...[7, 30, 365].map((days) => ({
+        label: t("activity_csv_" + days), icon: "download", action: "download-csv-" + days,
+        run: () => needCode(async () => { try { await downloadUsage(days); } catch (e) { if (e.locked) throw e; SW.toast(t("live_csv_failed", { reason: plHubText(e.message) }), "bad"); } }),
+      })),
+    ], { label: t("live_usage_more") });
     return plE("div", "actions plive__usagebar", more);
   }
   const titled = (key, ...kids) => { const id = SW.uid("pl"); return hx("section", { class: "plive__group", "aria-labelledby": id }, hx("h3", { class: "plive__title", id }, t(key)), ...kids); };

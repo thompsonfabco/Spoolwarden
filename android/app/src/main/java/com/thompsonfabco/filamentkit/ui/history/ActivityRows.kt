@@ -47,7 +47,7 @@ internal fun ActivityList(
     val space = SpoolwardenTheme.space
     Column(modifier, verticalArrangement = Arrangement.spacedBy(space.s2)) {
         Text(
-            HistoryTexts.ACTIVITY_TITLE, Modifier.semantics { heading() },
+            stringResource(R.string.history_activity_title), Modifier.semantics { heading() },
             style = MaterialTheme.typography.titleSmall, color = colors.muted,
         )
         SpoolPanel {

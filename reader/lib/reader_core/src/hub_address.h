@@ -19,8 +19,8 @@ static const uint32_t MDNS_TIMEOUT_MS = 2000;
 
 // The whole bound for opening the connection to the Hub: the mDNS lookup and the TCP connects of every candidate
 // address share it (connectSliceMs). The TLS handshake after a TCP connect has its own limit, HANDSHAKE_S.
-static const uint32_t HUB_CONNECT_BUDGET_MS = 5000;
-static const unsigned HANDSHAKE_S = 5;
+static const uint32_t HUB_CONNECT_BUDGET_MS = 10000;
+static const unsigned HANDSHAKE_S = 10;
 
 struct BaseParts {
   bool ok = false;

@@ -231,7 +231,7 @@ def test_the_hub_page_passes_the_audit_in_workbench_light_and_dark_at_three_widt
 def _workbench_allow(tmp_path):
     """The web app's allow-list (counts of the findings a later step removes, for 1280 and 320 px) as it reads for 1280, 768 and 320:
     a finding that is there at every width counts half as often again; one that Console's 40 px controls cause at 1280 px is not
-    there in Workbench (its controls are 44 px). It follows the shipped list, so a screen rebuilt by S3.8 or S3.10 lowers both."""
+    there in Workbench (its controls are 44 px). It follows the shipped list, so a screen rebuilt by or lowers both."""
     out = []
     for line in "".join(p.read_text(encoding="utf-8") for p in sorted(WEB_ALLOW.glob("*.txt"))).splitlines():
         if line.strip() and not line.startswith("#"):

@@ -1,4 +1,4 @@
-"""AF2 (d): the remote Label Reader's https rule and its pin at Test."""
+"""(d): the remote Label Reader's https rule and its pin at Test."""
 import json
 import ssl
 import threading

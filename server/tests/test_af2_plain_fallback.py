@@ -1,4 +1,4 @@
-"""AF2 fix: a station that cannot make its certificate serves plain HTTP and says so; the Hub calls a station it never
+"""fix: a station that cannot make its certificate serves plain HTTP and says so; the Hub calls a station it never
 pinned over plain HTTP, never downgrades one it pinned, and has the Checks row text for the first."""
 import http.client
 import json

@@ -293,6 +293,7 @@ chmod -R go-w "$OPT"
 
 # ---------- restore: the backup's modules and data instead of the questions below ----------
 if [ -n "${RESTORE:-}" ]; then
+    if [ "$OLD_NAME" -eq 1 ]; then renamed_note; fi
     if [ -n "${PASSWORD_FILE:-}" ]; then
         exec /usr/local/bin/spoolwarden restore --yes --password-file "$PASSWORD_FILE" "$RESTORE"
     fi
@@ -366,7 +367,7 @@ try:
     chosen, notes = modules.close_selection(os.environ["FK_MODULES"].split(","))
 except modules.ModuleError as e:
     names = ", ".join(modules.MODULES)
-    sys.exit(f"error: {e}\nfix: use module names from: {names}")
+    sys.exit(f"error: {e}\nfix: use features from: {names}")
 for note in notes:
     print(note, file=sys.stderr)
 print("," + ",".join(n for n in modules.MODULES if n in chosen))
@@ -470,7 +471,7 @@ if mode == "custom":
         chosen, notes = modules.close_selection(os.environ["FK_MODULES"].split(","))
     except modules.ModuleError as e:
         names = ", ".join(modules.MODULES)
-        sys.exit(f"error: {e}\nfix: use module names from: {names}")
+        sys.exit(f"error: {e}\nfix: use features from: {names}")
     for note in notes:
         print(note)
     on = set(chosen)

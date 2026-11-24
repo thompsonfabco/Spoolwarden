@@ -541,7 +541,7 @@ def test_cli_retry_needs_root(hub, capsys, monkeypatch):
     assert "sudo spoolwarden label-reader corrections retry abc" in capsys.readouterr().err
 
 
-# ---------- RC1d: a record kept under either name; no refusal carries `reason` ----------
+# ---------- a record kept under either name; no refusal carries `reason` ----------
 
 def test_a_kept_record_is_found_under_either_file_name(hub):
     _, data, _ = hub

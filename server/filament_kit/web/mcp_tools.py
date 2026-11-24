@@ -137,7 +137,7 @@ class Tools:
                    new_filaments_only_lines: bool = False, with_saved: bool = False, ai_note: bool = False) -> dict:
         """Add spools (vendor + name reuse an existing filament). `link_tag` (the web app): the tag a label read
         saw; it is linked to the one opened spool only while it is still the readers' last tap.
-        `new_filaments_only_lines` (the MCP path, Ruling AC): `line` / `bambu_parent` are dropped from items that
+        `new_filaments_only_lines` (the MCP path, ): `line` / `bambu_parent` are dropped from items that
         match an existing filament, so a routine add never moves that filament to another preset line (the web
         app sends the label read's own line, which is the filament's, and keeps them).
         `ai_note` (the MCP path): a dry run ends with the instruction to call again with dry_run=false, which is

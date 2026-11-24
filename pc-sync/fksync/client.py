@@ -259,9 +259,9 @@ class Client:
 
     def upload(self, kind: str, data: bytes, user_id: str | None = None, partial: str | None = None,
                fresh: bool = False) -> dict:
-        """`partial` (live and orca_live): the stamp of a build whose install stopped part-way in this folder (S28).
+        """`partial` (live and orca_live): the stamp of a build whose install stopped part-way in this folder.
         `fresh` (live only): the Bambu Studio folder changed; this is that folder's first sync.
-        `orca_live` / `orca_system` go to the same routes with `?target=orca` (no user id; Ruling O)."""
+        `orca_live` / `orca_system` go to the same routes with `?target=orca` (no user id; )."""
         if kind == "live":
             q = {k: v for k, v in (("user_id", user_id), ("partial", partial), ("fresh", "1" if fresh else None))
                  if v}
@@ -286,17 +286,17 @@ class Client:
     def rebuild(self, live_hash: str, orca_live_hash: str | None = None) -> dict:
         body = {"live_hash": live_hash}
         if orca_live_hash:
-            body["orca_live_hash"] = orca_live_hash      # Ruling O
+            body["orca_live_hash"] = orca_live_hash      # 
         return self._request("POST", "/api/sync/rebuild", json.dumps(body).encode(), "application/json")
 
     def build(self, stamp: str) -> bytes:
-        # format=xml: the manifest as BUILD.xml (RC1c); a Hub that does not know it answers with BUILD.json, which
+        # format=xml: the manifest as BUILD.xml; a Hub that does not know it answers with BUILD.json, which
         # unpack_build reads too
         return self._request("GET", f"/api/sync/build?{urllib.parse.urlencode({'stamp': stamp, 'format': 'xml'})}",
                              raw=True)
 
     def installed(self, stamp: str, trees: list[str] | None = None, written: dict | None = None) -> dict:
-        """Report an install; `trees` = what went in (Ruling AB): ["base"] or ["base", "orca"]; `written` = the
+        """Report an install; `trees` = what went in: ["base"] or ["base", "orca"]; `written` = the
         presets written per tree ({"base"|"orca": [names]}: new ones and accepted updates; the rest were kept)."""
         body = {"stamp": stamp} if trees is None else {"stamp": stamp, "trees": list(trees)}
         if written is not None:

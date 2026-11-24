@@ -22,7 +22,6 @@ import com.thompsonfabco.filamentkit.net.SlotSpool
 import com.thompsonfabco.filamentkit.net.UnloadResult
 import com.thompsonfabco.filamentkit.net.UsageMonth
 import com.thompsonfabco.filamentkit.net.autoText
-import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
 import com.thompsonfabco.filamentkit.ui.history.ActivityBackend
 import com.thompsonfabco.filamentkit.ui.history.UndoFlow
 import com.thompsonfabco.filamentkit.ui.history.UndoKinds
@@ -57,7 +56,7 @@ interface PrinterBackend : ActivityBackend {
 
     /** Adds a Bambu Lab printer by its typed [address] ([serial] optional); a backend without it answers like an older Hub. */
     suspend fun addPrinterByAddress(serial: String?, accessCode: String, name: String?, address: String): Printer =
-        throw ApiError(404, "not_found", PrinterTexts.CLEAR_UPDATE_HUB)
+        throw ApiError(404, "not_found", "not_found")
 
     /** Adds a Klipper printer with its Moonraker [apiKey] in the same request; a backend without it adds without the key. */
     suspend fun addKlipperPrinter(host: String, port: Int, name: String?, apiKey: String?): Printer =
@@ -74,7 +73,7 @@ interface PrinterBackend : ActivityBackend {
 
     /** Clear slot; a backend without it answers like an older Hub (404). */
     suspend fun clearSlot(id: String, label: String, dryRun: Boolean): ClearResult =
-        throw ApiError(404, "not_found", PrinterTexts.CLEAR_UPDATE_HUB)
+        throw ApiError(404, "not_found", "not_found")
 
     /** Stop waiting (A6); false means the Hub said nothing was cancelled. A backend without it answers like an older Hub (404). */
     suspend fun autoCancel(id: String): Boolean = throw ApiError(404, "not_found", "The Hub has no Auto.")
@@ -290,7 +289,7 @@ data class UnloadAsk(val label: String, val spool: String, val spoolId: Int?, va
  * The question before Clear slot, asked after its dry run said what would happen: [spool] is the recorded spool as the
  * question names it (null: none is recorded) and [place] where it goes back to.
  */
-data class ClearAsk(val label: String, val spool: String?, val place: String?, val note: String? = null)
+data class ClearAsk(val label: String, val spool: Say?, val place: String?, val note: Say? = null)
 
 /** A result line: what it says and whether it is good news. */
 data class Note(val say: Say, val ok: Boolean = true)
@@ -319,7 +318,7 @@ data class PrinterUiState(
     /** The last unload's or clear's result, or why it failed. */
     val slotNote: Note? = null,
     /** A second sentence of the result in [slotNote]: the waiting spool that is waiting no more. */
-    val slotAlso: String? = null,
+    val slotAlso: Say? = null,
     val clearAsk: ClearAsk? = null,
     /** The clear itself is being written: the question stays open and cannot be left. */
     val clearing: Boolean = false,
@@ -482,7 +481,7 @@ class PrinterViewModel(
                     _state.update { it.copy(clearAsk = ClearAsk(slot.label, spool, r.movedBack, note)) }
                 } catch (e: ApiError) {
                     if (e.status != NOT_FOUND) throw e
-                    _state.update { it.copy(slotNote = Note(Say.FromHub(PrinterTexts.CLEAR_UPDATE_HUB), ok = false)) }
+                    _state.update { it.copy(slotNote = Note(PrinterTexts.CLEAR_UPDATE_HUB, ok = false)) }
                 }
             }
             _state.update { it.copy(slotBusy = null) }
@@ -505,7 +504,7 @@ class PrinterViewModel(
                 val r = backend.clearSlot(id, ask.label, dryRun = false)
                 val note = PrinterTexts.clearNote(r.text, bambu = isBambu())
                 val text = PrinterTexts.clearDone(ask.label, ask.spool, r.movedBack ?: ask.place, r.waitingEnded, r.printerCleared, note)
-                _state.update { it.copy(slotNote = Note(Say.FromHub(text))) }
+                _state.update { it.copy(slotNote = Note(text)) }
                 done = true
                 // the event may name the spool or the printer: both are looked in
                 offerUndo(listOfNotNull(r.spool?.get("id")?.let { (it as? JsonPrimitive)?.contentOrNull }?.let { "spool:$it" }, "printer:$id"), UndoKinds.SLOT_CLEARED)
@@ -526,7 +525,7 @@ class PrinterViewModel(
                 try {
                     backend.autoCancel(id)
                 } catch (e: ApiError) {
-                    if (e.code != NOT_WAITING) throw autoError(e)
+                    if (e.code != NOT_WAITING) throw e
                 }
             }
             _state.update { it.copy(autoBusy = false) }
@@ -545,7 +544,7 @@ class PrinterViewModel(
                     val name = _state.value.printer?.name.orEmpty()
                     _state.update { it.copy(slotNote = Note(chooseResult(r, name, label))) }
                 } catch (e: ApiError) {
-                    if (e.code != NOTHING_TO_CHOOSE) throw autoError(e)
+                    if (e.code != NOTHING_TO_CHOOSE) throw e
                 }
             }
             _state.update { it.copy(autoBusy = false) }
@@ -608,8 +607,8 @@ class PrinterViewModel(
                     _state.update { it.copy(csvFile = target) }
                 } catch (e: ApiError) {
                     when {
-                        e.status == NOT_FOUND -> _state.update { it.copy(csvProblem = Say.FromHub(HistoryTexts.CSV_UPDATE_HUB)) }
-                        e.code == "storage" -> _state.update { it.copy(csvProblem = Say.FromHub(HistoryTexts.CSV_NOT_SAVED)) }
+                        e.status == NOT_FOUND -> _state.update { it.copy(csvProblem = Say.Words(R.string.history_csv_update_hub)) }
+                        e.code == "storage" -> _state.update { it.copy(csvProblem = Say.Words(R.string.history_csv_not_saved)) }
                         else -> throw e
                     }
                 }
@@ -663,23 +662,11 @@ class PrinterViewModel(
         private const val NOTHING_TO_CHOOSE = "nothing_to_choose"
         private const val AUTO_NOT_POSSIBLE = "auto_not_possible"
 
-        /**
-         * An Auto route's refusal carries the Hub's sentence as `message`: `auto_not_possible` is given the words the
-         * screen shows (the Hub's own, else the ruled one); any other error is unchanged.
-         */
-        internal fun autoError(e: ApiError): ApiError {
-            val text = e.autoText
-            return when {
-                e.code == AUTO_NOT_POSSIBLE -> ApiError(e.status, e.code, text ?: LoadTexts.AUTO_REFUSED, e.extra)
-                else -> e
-            }
-        }
-
         /** The answer of a named load into [label], as the line the printer's screen shows (the load screen's words). */
         internal fun chooseResult(r: LoadResult, printer: String, label: String): Say = when (val result = loadResult(r, printer, label)) {
             is SpoolResult.Loaded -> Say.Words(R.string.spool_result_loaded, listOf(result.printer, result.slot))
             is SpoolResult.LoadedUnconfirmed -> Say.Words(R.string.spool_load_unconfirmed)
-            else -> Say.FromHub(LoadTexts.waitingIn(label))
+            else -> LoadTexts.waitingIn(label)
         }
 
         /**

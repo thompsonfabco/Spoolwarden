@@ -14,7 +14,7 @@ folder is flat (no base/). The install dir (only needed for OrcaFilamentLibrary.
 `orca_install`, else the uninstall registry entry (HKLM/HKCU, DisplayName "OrcaSlicer...": InstallLocation,
 else the folder of DisplayIcon / UninstallString), else the newest `<Program Files>\\OrcaSlicer*` holding
 orca-slicer.exe; it may be missing. The packed library is `<install>\\resources\\profiles\\OrcaFilamentLibrary.opc`,
-else `%APPDATA%\\OrcaSlicer\\system\\OrcaFilamentLibrary.opc` (Ruling L).
+else `%APPDATA%\\OrcaSlicer\\system\\OrcaFilamentLibrary.opc`.
 
 Linux (a LinuxLayout instead of `appdata`; checked against the slicers' sources, see LinuxLayout): Bambu Studio's
 roots are $XDG_CONFIG_HOME (else ~/.config)/BambuStudio and .../BambuStudioBeta, and the same two names under the

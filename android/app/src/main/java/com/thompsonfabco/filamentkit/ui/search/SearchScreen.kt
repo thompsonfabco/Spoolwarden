@@ -58,6 +58,8 @@ import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.history.RecentFailure
+import com.thompsonfabco.filamentkit.ui.history.failureText
 import com.thompsonfabco.filamentkit.ui.pair.LabelScan
 import com.thompsonfabco.filamentkit.ui.components.SwCardDetail
 import com.thompsonfabco.filamentkit.ui.components.SwCollection
@@ -72,7 +74,6 @@ import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.rememberDetailPresentation
 import com.thompsonfabco.filamentkit.ui.components.requestDetailFocus
 import com.thompsonfabco.filamentkit.ui.history.CsvOutcome
-import com.thompsonfabco.filamentkit.ui.history.HistoryTexts
 import com.thompsonfabco.filamentkit.ui.history.csvFileName
 import com.thompsonfabco.filamentkit.ui.history.csvProblemText
 import com.thompsonfabco.filamentkit.ui.history.UndoFlow
@@ -80,10 +81,12 @@ import com.thompsonfabco.filamentkit.ui.history.UndoOffer
 import com.thompsonfabco.filamentkit.ui.history.UndoOutcome
 import com.thompsonfabco.filamentkit.ui.history.csvTarget
 import com.thompsonfabco.filamentkit.ui.history.showUndoable
-import com.thompsonfabco.filamentkit.ui.history.undoHoldMs
 import com.thompsonfabco.filamentkit.ui.history.shareCsv
+import com.thompsonfabco.filamentkit.ui.printers.Say
 import com.thompsonfabco.filamentkit.ui.spool.CheckedOutRules
-import com.thompsonfabco.filamentkit.ui.spool.CheckedOutTexts
+import com.thompsonfabco.filamentkit.ui.spool.CheckedOutSay
+import com.thompsonfabco.filamentkit.ui.spool.printerNotifiedFalse
+import com.thompsonfabco.filamentkit.ui.printers.resolve
 import com.thompsonfabco.filamentkit.ui.spool.HubFailure
 import com.thompsonfabco.filamentkit.ui.spool.HubFailureNotice
 import com.thompsonfabco.filamentkit.ui.spool.HubNoticeOf
@@ -130,7 +133,7 @@ data class SearchUi(
     /** The downloaded file, waiting for the screen to open the share sheet ([SearchViewModel.csvShown]). */
     val csvFile: File? = null,
     /** Why the download did not happen: the words for an older Hub or a full phone, or a failure the usual notices say. */
-    val csvProblem: String? = null,
+    val csvProblem: RecentFailure? = null,
     val csvFailure: HubFailure? = null,
     /** The "Checked out" filter; the chip's count is the `total` of the answer. */
     val checkedOnly: Boolean = false,
@@ -247,7 +250,7 @@ class SearchViewModel(
     }
 
     /** The screen opened the share sheet (or could not): the file is not offered again; [problem] says why not, if it did not open. */
-    fun csvShown(problem: String?) = _state.update { it.copy(csvFile = null, csvProblem = problem) }
+    fun csvShown(problem: RecentFailure?) = _state.update { it.copy(csvFile = null, csvProblem = problem) }
 
     /** The "Running low" chip: shows the list of low spools (least first, as the Hub gives it) instead of the search. */
     fun setLowOnly(on: Boolean) {
@@ -323,13 +326,14 @@ class SearchViewModel(
         _state.update { it.copy(returningId = spool.id, returnFailure = null) }
         viewModelScope.launch {
             try {
-                val where = send(spool.id).toSpoolSummary().location
+                val raw = send(spool.id)
+                val where = raw.toSpoolSummary().location
                 val event = undoFlow?.find(UndoOffer(listOf("spool:${spool.id}"), setOf(CheckedOutRules.RETURNED_KIND)))
                 _state.update { s ->
                     val left = s.checked.filter { it.id != spool.id }
                     s.copy(
                         returningId = null, checked = left, checkedCount = s.checkedCount?.let { n -> maxOf(n - 1, 0) },
-                        returnToast = ReturnToast(CheckedOutTexts.returned(where), event),
+                        returnToast = ReturnToast(CheckedOutSay.returned(where, raw.printerNotifiedFalse()), event),
                     )
                 }
             } catch (e: CancellationException) {
@@ -347,7 +351,7 @@ class SearchViewModel(
 
     /** The toast's Undo; the list is read again whatever came of it. */
     suspend fun undoReturn(event: ActivityEvent): UndoOutcome {
-        val flow = undoFlow ?: return UndoOutcome.Refused("")
+        val flow = undoFlow ?: return UndoOutcome.Refused(Say.FromHub(""))
         val outcome = flow.undo(event)
         loadCheckedOut()
         return outcome
@@ -437,7 +441,7 @@ fun SearchScreen(
     LaunchedEffect(returned) {
         if (returned == null) return@LaunchedEffect
         vm.returnToastShown()
-        toast?.showUndoable(returned.text, undoLabel, returned.event, undoHoldMs(context), vm::undoReturn)
+        toast?.showUndoable(returned.text.resolve(context), undoLabel, returned.event, context, vm::undoReturn)
     }
     // Download as CSV: the file goes to the system share sheet
     val csv = ui.csvFile
@@ -447,7 +451,7 @@ fun SearchScreen(
             vm.csvShown(
                 when (shareCsv(context, csv, csvSubject)) {
                     CsvOutcome.Opened -> null
-                    CsvOutcome.NoApp -> context.getString(R.string.printer_report_no_app)
+                    CsvOutcome.NoApp -> RecentFailure.Hub(context.getString(R.string.printer_report_no_app))
                 },
             )
         }
@@ -460,13 +464,13 @@ fun SearchScreen(
             Box {
                 SwIconButton(R.drawable.sw_ic_more, stringResource(R.string.common_more_actions), { open = true })
                 SwMenu(open, { open = false }) {
-                    if (spoolmanUrl != null) SwMenuItem(SearchTexts.OPEN_SPOOLMAN, { open = false; openInBrowser(context, spoolmanUrl) })
+                    if (spoolmanUrl != null) SwMenuItem(stringResource(R.string.spools_open_spoolman), { open = false; openInBrowser(context, spoolmanUrl) })
                     if (vm.canExport) SwMenuItem(
-                        if (ui.csvBusy) HistoryTexts.DOWNLOADING else HistoryTexts.DOWNLOAD_CSV,
+                        stringResource(if (ui.csvBusy) R.string.history_downloading else R.string.common_download_csv),
                         {
                             open = false
                             csvTarget(context, csvFileName("spoolman-spools", null))?.let(vm::downloadCsv)
-                                ?: vm.csvShown(HistoryTexts.CSV_NOT_SAVED)
+                                ?: vm.csvShown(RecentFailure.CsvNotSaved)
                         },
                         enabled = !ui.csvBusy,
                     )
@@ -540,7 +544,7 @@ fun SearchScreen(
                                     ToggleChip(stringResource(R.string.spools_sealed_only), ui.sealedOnly) { vm.setSealedOnly(!ui.sealedOnly) }
                                 // spools with a remembered place; no chip for a Hub without the filter
                                 SearchChip.CheckedOut ->
-                                    ToggleChip(CheckedOutTexts.chip(ui.checkedCount ?: 0), ui.checkedOnly) { vm.setCheckedOnly(!ui.checkedOnly) }
+                                    ToggleChip(stringResource(R.string.spools_chip_checked_out, ui.checkedCount ?: 0), ui.checkedOnly) { vm.setCheckedOnly(!ui.checkedOnly) }
                                 // the Hub's running-low list; no chip for a Hub that has none
                                 SearchChip.RunningLow ->
                                     ToggleChip(stringResource(R.string.running_low_chip, lowCount ?: ui.low.size), ui.lowOnly) { vm.setLowOnly(!ui.lowOnly) }
@@ -564,11 +568,11 @@ fun SearchScreen(
                     }
                     if (ui.query.isBlank() && !ui.lowOnly && !ui.checkedOnly) TagHint(nfc, onNfcSettings ?: { openNfcSettings(context) })
                     if (onScanLabel != null && ui.query.isBlank() && !ui.lowOnly && !ui.checkedOnly) {
-                        SwButton(LabelScan.SCAN_BUTTON, onScanLabel, Modifier.fillMaxWidth(), icon = R.drawable.sw_ic_camera)
+                        SwButton(stringResource(R.string.label_scan_button), onScanLabel, Modifier.fillMaxWidth(), icon = R.drawable.sw_ic_camera)
                     }
                     HubNoticeOf(ui.failure, onPairAgain)
                     HubNoticeOf(ui.csvFailure, onPairAgain)
-                    (ui.csvProblem ?: ui.csvFailure?.let { hubFailureText(it) })?.let { NoticeCard(NoticeKind.Bad, it) }
+                    (ui.csvProblem?.let { failureText(it) } ?: ui.csvFailure?.let { hubFailureText(it) })?.let { NoticeCard(NoticeKind.Bad, it) }
                     if (ui.lowOnly) LowSpoolsList(ui, openOrToggle, online, onTryAgain = vm::loadLowSpools)
                     if (ui.checkedOnly) CheckedOutList(ui, openOrToggle, online, onReturn = vm::returnToHome, onPairAgain = onPairAgain, onTryAgain = vm::loadCheckedOut)
                     val searched = ui.searched
@@ -750,7 +754,7 @@ private fun CheckedOutList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online:
         loaded = ui.checkedLoaded,
         loading = ui.busy,
         isEmpty = ui.checkedLoaded && ui.checked.isEmpty(),
-        empty = { Text(CheckedOutTexts.EMPTY, style = MaterialTheme.typography.bodyLarge) },
+        empty = { Text(stringResource(R.string.spools_empty_checked_out), style = MaterialTheme.typography.bodyLarge) },
         error = ui.failure?.let { hubFailureText(it) },
         onTryAgain = onTryAgain,
         offline = !online,
@@ -762,10 +766,11 @@ private fun CheckedOutList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online:
                 Column {
                     SpoolRow(spool, onClick = { onOpen(spool) })
                     CheckedOutRules.lines(spool).forEach {
-                        Text(it, color = colors.muted, style = MaterialTheme.typography.bodySmall)
+                        Text(com.thompsonfabco.filamentkit.ui.printers.sayText(it), color = colors.muted, style = MaterialTheme.typography.bodySmall)
                     }
                     SwButton(
-                        CheckedOutTexts.returnTo(spool.home), { onReturn(spool) },
+                        spool.home?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.spools_return_to, it) } ?: stringResource(R.string.spools_return),
+                        { onReturn(spool) },
                         kind = SwButtonKind.Quiet, enabled = ui.returningId == null, busy = ui.returningId == spool.id,
                     )
                 }

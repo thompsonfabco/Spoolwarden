@@ -1,4 +1,4 @@
-"""RC4's page scripts run in Node without a browser: Leave demo that fails, Remove on Corrections waiting, the not-queued
+"""'s page scripts run in Node without a browser: Leave demo that fails, Remove on Corrections waiting, the not-queued
 cards and their reasons, the thumbnails the page's policy lets through, Try again when the reader does not answer, the Corrections link,
 the Add spools line of the design, web app, the push subscription sent again in the language the page is in, the Klipper test's answer, and the
 service worker keeping a language's texts. The page's own functions are cut out of the scripts and given stubs for the DOM, `api` and `SW`."""

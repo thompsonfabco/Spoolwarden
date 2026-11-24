@@ -72,7 +72,8 @@ const spReturn = (id, button) => needCode(async () => {
   try {
     const r = await api(`spools/${id}/return`, { code: theCode() });
     view.update(r.spool);
-    spToast(r.location ? tx("spools_returned_to", { location: r.location }) : tx("spools_returned"), r, view);
+    const msg = r.location ? tx("spools_returned_to", { location: r.location }) : tx("spools_returned");
+    spToast(r.printer_notified === false ? `${msg} ${tx("spools_return_printer_not_told")}` : msg, r, view);
     view.events(true);
     spRecount();
   } catch (e) {
@@ -231,11 +232,13 @@ function spHeader() {
   if (st.url) meta.append(spX("a", { class: "btn btn--ghost spools-link", href: st.url, target: "_blank", rel: "noopener" }, tx("spools_open_spoolman")));
   const csv = [hubCanExport("spoolman-spools") ? spCsvItem("spoolman-spools", "spools_csv_spools") : null,
     hubCanExport("spoolman-filaments") ? spCsvItem("spoolman-filaments", "spools_csv_filaments") : null].filter(Boolean);
-  if (csv.length) {
-    const more = SW.iconBtn("more", tx("spools_more_actions"), { cls: "spools-more" });
-    SW.menu(more, [{ heading: tx("spools_download_csv") }, ...csv], { label: tx("spools_more_actions") });
-    meta.append(more);
-  }
+  const more = SW.iconBtn("more", tx("spools_more_actions"), { cls: "spools-more" });
+  SW.menu(more, () => [
+    ...(csv.length ? [{ heading: tx("spools_download_csv") }, ...csv, { separator: true }] : []),
+    { label: SW.t("csv_import_menu"), icon: "upload", action: "import-csv",
+      run: () => needCode(() => window.SW_CSV_IMPORT && window.SW_CSV_IMPORT({ kind: "spools", opener: more, onDone: () => spLoad() })) },
+  ], { label: tx("spools_more_actions") });
+  meta.append(more);
   return meta;
 }
 // ----- the selection: the checkboxes, the bar with "<n> selected", Print labels and Clear selection; Shift+click selects a range, Escape clears -----

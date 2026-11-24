@@ -1,4 +1,4 @@
-"""Plan step A2: the mounted kit routes (slot clear, local library form, reader seen, spool/hub/header fields)
+"""Plan the mounted kit routes (slot clear, local library form, reader seen, spool/hub/header fields)
 and the contract test keeping Android, web twins and CLI calls aligned with the Hub's route table."""
 from __future__ import annotations
 

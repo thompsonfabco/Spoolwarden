@@ -186,7 +186,7 @@ def installed_first_build(tmp_path, server, monkeypatch) -> tuple[Pc, str]:
 def test_full_cycle(tmp_path, server, monkeypatch):
     port, sm = server
 
-    # a build before any sync waits cleanly (S15)
+    # a build before any sync waits cleanly
     r = builds.run_build(sm)
     assert r["ok"] is False and r.get("waiting") is True and r["stamp"] is None
     assert builds.current() is None
@@ -351,7 +351,7 @@ def test_app_reset_keeps_the_owners_notes(tmp_path, server, monkeypatch):
     cfg = pc.preset(edited)
     cfg["filament_notes"] = cfg["filament_notes"].replace(IDS_LINE, "dry 8 h at 55 C\n" + IDS_LINE)
     pc.write(edited, cfg)
-    assert pc.run() == "uploaded"                   # notes alone never ask for a rebuild (S31); any later one
+    assert pc.run() == "uploaded"                   # notes alone never ask for a rebuild; any later one
     builds.request_rebuild("spoolman changed")
     build(sm)
     assert pc.run() == "installed"
@@ -516,7 +516,7 @@ def test_interrupted_install_values_are_not_inapp_edits(tmp_path, server, monkey
 
 
 def test_failed_reupload_after_a_reported_install_is_sent_next_run(tmp_path, server, monkeypatch):
-    """S32 + round 3: the install is reported, the live re-upload fails; builds wait for the PC's next sync, which
+    """build-step + round 3: the install is reported, the live re-upload fails; builds wait for the PC's next sync, which
     sends the owed live upload, and the build then runs with no false in-app edits."""
     _, sm = server
     pc, _ = installed_first_build(tmp_path, server, monkeypatch)
@@ -550,7 +550,7 @@ def test_failed_reupload_after_a_reported_install_is_sent_next_run(tmp_path, ser
 # ---------- uploads the server refuses ----------
 
 def test_unparsable_system_preset_is_a_problem_not_a_refusal(tmp_path, server, monkeypatch):
-    """Ruling S29a: the unmodified fixture folder holds broken.json; the server takes the system zip, keeps the
+    """the unmodified fixture folder holds broken.json; the server takes the system zip, keeps the
     file (the hashes agree, so it is not sent again) and the builds list it as a store problem."""
     port, sm = server
     pc = Pc(tmp_path / "pc1", port, BBL)

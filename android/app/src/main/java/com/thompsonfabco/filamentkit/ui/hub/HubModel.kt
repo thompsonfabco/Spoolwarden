@@ -1,7 +1,9 @@
 package com.thompsonfabco.filamentkit.ui.hub
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.GettingStarted
 import com.thompsonfabco.filamentkit.net.HubAnswer
 import com.thompsonfabco.filamentkit.net.HubCheckState
@@ -25,35 +27,35 @@ import java.util.Locale
 @Serializable data object HubGlanceRoute
 
 /** The groups of the Hub screen, in the order it shows them. */
-enum class HubGroup(val title: String) {
-    Status(HubTexts.GROUP_STATUS),
-    GettingStarted(HubTexts.GROUP_GETTING_STARTED),
-    Version(HubTexts.GROUP_VERSION),
-    Features(HubTexts.GROUP_FEATURES),
-    Catalog(HubTexts.GROUP_CATALOG),
-    Backups(HubTexts.GROUP_BACKUPS),
-    LabelReader(HubTexts.GROUP_LABEL_READER),
-    Devices(HubTexts.GROUP_DEVICES),
-    RecentlyAdded(HubTexts.GROUP_RECENTLY_ADDED),
+enum class HubGroup(@StringRes val title: Int) {
+    Status(R.string.devices_status_title),
+    GettingStarted(R.string.start_title),
+    Version(R.string.updates_version_title),
+    Features(R.string.nav_features),
+    Catalog(R.string.settings_group_catalog),
+    Backups(R.string.storage_use_item_backups),
+    LabelReader(R.string.settings_group_label_reader),
+    Devices(R.string.nav_devices),
+    RecentlyAdded(R.string.nav_recently_added),
 }
 
 /** Steps remain and the list is not hidden: the Getting started group and the line on Home are shown. */
 fun gettingStartedShown(g: GettingStarted?): Boolean = g != null && !g.hidden && !g.finished && g.total > 0 && g.done < g.total
 
 /** "Getting started on the Hub: 4 of 8 done" while [gettingStartedShown]; null (no line) otherwise. */
-fun gettingStartedLine(g: GettingStarted?): String? =
-    if (g != null && gettingStartedShown(g)) HubTexts.gettingStartedLine(g.done, g.total) else null
+fun gettingStartedLine(g: GettingStarted?): HubText? =
+    if (g != null && gettingStartedShown(g)) HubText.Words(R.string.hub_getting_started_line, listOf(g.done, g.total)) else null
 
 /** One line of a group. */
 sealed interface HubLine {
     /** A label over a value. */
-    data class Field(val label: String, val value: String) : HubLine
+    data class Field(val label: HubText, val value: HubText) : HubLine
 
     /** A row of Status: the Hub's own text and its fix line. */
     data class Check(val state: HubCheckState, val text: String, val fix: String?) : HubLine
 
     /** A sentence on its own. */
-    data class Note(val text: String) : HubLine
+    data class Note(val text: HubText) : HubLine
 }
 
 /** A group with what it shows. */
@@ -90,15 +92,21 @@ fun hubDay(raw: String?, zone: ZoneId = ZoneId.systemDefault(), locale: Locale =
     return format.format(at.atZone(zone))
 }
 
-internal fun deviceKindText(kind: String): String = when (kind) {
-    "phone" -> HubTexts.KIND_PHONE
-    "pc" -> HubTexts.KIND_PC
-    "station" -> HubTexts.KIND_STATION
-    "web" -> HubTexts.KIND_WEB
-    "reader" -> HubTexts.KIND_READER
-    "builtin" -> HubTexts.KIND_BUILTIN
-    else -> kind
+internal fun deviceKindText(kind: String): HubText = when (kind) {
+    "phone" -> HubText.Words(R.string.devices_kind_phone)
+    "pc" -> HubText.Words(R.string.devices_kind_pc)
+    "station" -> HubText.Words(R.string.devices_kind_station)
+    "web" -> HubText.Words(R.string.devices_kind_web)
+    "reader" -> HubText.Words(R.string.devices_kind_reader)
+    "builtin" -> HubText.Words(R.string.hub_kind_builtin)
+    else -> HubText.FromHub(kind)
 }
+
+private fun words(@StringRes id: Int) = HubText.Words(id)
+
+private fun fromHub(text: String) = HubText.FromHub(text)
+
+private fun onOff(on: Boolean) = words(if (on) R.string.status_on else R.string.status_off)
 
 /**
  * What the screen shows, group by group, in order. A group the Hub left out (no part, or an empty list) is not shown;
@@ -110,49 +118,52 @@ fun hubSections(h: HubAnswer, time: (String?) -> String? = { hubTime(it) }): Lis
     }
     val started = h.gettingStarted
     if (started != null && gettingStartedShown(started)) {
-        add(HubSection(HubGroup.GettingStarted, listOf(HubLine.Note(HubTexts.stepsDone(started.done, started.total)))))
+        add(HubSection(HubGroup.GettingStarted, listOf(HubLine.Note(HubText.Words(R.string.start_count, listOf(started.done, started.total))))))
     }
     add(HubSection(HubGroup.Version, buildList {
-        add(HubLine.Field(HubTexts.INSTALLED, h.version))
+        add(HubLine.Field(words(R.string.updates_installed), fromHub(h.version)))
         h.newest?.let { n ->
-            add(HubLine.Field(HubTexts.NEWEST, n.version))
-            time(n.checkedAt)?.let { add(HubLine.Field(HubTexts.LAST_CHECKED, it)) }
+            add(HubLine.Field(words(R.string.hub_newest), fromHub(n.version)))
+            time(n.checkedAt)?.let { add(HubLine.Field(words(R.string.updates_last_checked), fromHub(it))) }
         }
-        if (h.updateAvailable) add(HubLine.Note(HubTexts.UPDATE_AVAILABLE))
+        if (h.updateAvailable) add(HubLine.Note(words(R.string.hub_update_available)))
     }))
     if (h.features.isNotEmpty()) {
-        add(HubSection(HubGroup.Features, h.features.map { HubLine.Field(it.name, if (it.on) HubTexts.ON else HubTexts.OFF) }))
+        add(HubSection(HubGroup.Features, h.features.map { HubLine.Field(fromHub(it.name), onOff(it.on)) }))
     }
     h.catalog?.let { c ->
         add(HubSection(HubGroup.Catalog, listOf(
-            HubLine.Field(HubTexts.CATALOG_VERSION, c.version ?: HubTexts.NOT_KNOWN),
-            HubLine.Field(HubTexts.LAST_CHECKED, time(c.checkedAt) ?: HubTexts.NEVER),
+            HubLine.Field(words(R.string.updates_version_title), c.version?.let(::fromHub) ?: words(R.string.hub_not_known)),
+            HubLine.Field(words(R.string.updates_last_checked), time(c.checkedAt)?.let(::fromHub) ?: words(R.string.common_never)),
         )))
     }
     h.backup?.let { b ->
         add(HubSection(HubGroup.Backups, listOf(
-            HubLine.Field(HubTexts.LAST_BACKUP, time(b.lastAt) ?: HubTexts.NEVER),
-            HubLine.Field(HubTexts.NIGHTLY_BACKUP, if (b.nightly) HubTexts.ON else HubTexts.OFF),
+            HubLine.Field(words(R.string.hub_last_backup), time(b.lastAt)?.let(::fromHub) ?: words(R.string.common_never)),
+            HubLine.Field(words(R.string.settings_backups_nightly), onOff(b.nightly)),
         )))
     }
     h.reader?.let { r ->
         add(HubSection(HubGroup.LabelReader, listOf(
-            HubLine.Field(HubTexts.ENGINE, r.engine),
-            HubLine.Field(HubTexts.KEY, if (r.keySet) HubTexts.KEY_SET else HubTexts.KEY_NOT_SET),
+            HubLine.Field(words(R.string.hub_engine), fromHub(r.engine)),
+            HubLine.Field(words(R.string.hub_key), words(if (r.keySet) R.string.status_set else R.string.status_not_set)),
         )))
     }
     if (h.devices.isNotEmpty()) {
         add(HubSection(HubGroup.Devices, h.devices.map { d ->
             val parts = buildList {
                 if (d.kind.isNotBlank()) add(deviceKindText(d.kind))
-                add(d.version ?: HubTexts.VERSION_NOT_KNOWN)
-                time(d.lastSeen)?.let { add("${HubTexts.LAST_SEEN} $it") }
-                if (d.outOfDate) add(HubTexts.OUT_OF_DATE)
+                add(d.version?.let(::fromHub) ?: words(R.string.devices_version_unknown))
+                time(d.lastSeen)?.let { add(HubText.Words(R.string.hub_device_last_seen, listOf(it))) }
+                if (d.outOfDate) add(words(R.string.app_hub_out_of_date))
             }
-            HubLine.Field(if (d.thisOne) "${d.name} (${HubTexts.THIS_DEVICE})" else d.name, parts.joinToString(" · "))
+            HubLine.Field(
+                if (d.thisOne) HubText.Words(R.string.hub_device_this, listOf(d.name)) else fromHub(d.name),
+                HubText.Joined(parts),
+            )
         }))
     }
-    h.recordsKept?.let { add(HubSection(HubGroup.RecentlyAdded, listOf(HubLine.Field(HubTexts.RECORDS_KEPT, it.toString())))) }
+    h.recordsKept?.let { add(HubSection(HubGroup.RecentlyAdded, listOf(HubLine.Field(words(R.string.settings_reader_keep), fromHub(it.toString()))))) }
 }
 
 /** What the Hub screen and Home's line draw from: [hub] is the last answer, kept while a newer read fails. */

@@ -1,4 +1,4 @@
-"""Plan step A4: mounted label kit routes (/api/spools/{id}/label.svg, /s/{id}), Hub page labels_tab routes,
+"""Plan mounted label kit routes (/api/spools/{id}/label.svg, /s/{id}), Hub page labels_tab routes,
 and `spool label --out` CLI command."""
 from __future__ import annotations
 

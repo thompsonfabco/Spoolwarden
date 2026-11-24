@@ -115,6 +115,7 @@ function intakeTab() {
   const body = h("div"), at = recAddress();
   later(readRegion(body, "recent", async () => {
     await recentMedia;                               // the thumbnails' look is in before the section is drawn
+    await corrSaved();                               // whether Share corrections is on (setup_corrections.js): the notes
     const d = await api("intake/history");
     if (!at.id) return { d };
     try { return { d, rec: await api(histPath(at.id)) }; } catch (e) { if (e.status === 404) return { d, gone: true }; throw e; }
@@ -160,7 +161,7 @@ function listPage(body, d, page) {
   const settings = h("a", { class: "btn btn--ghost", href: "#settings/label-reader" }, SW.t("recent_meta_change"));
   const meta = h("p", { class: "page-head__meta" },
     h("span", {}, d.keep ? SW.t("recent_meta_kept", { count: d.keep, size: recSize(d.photo_bytes) }) : SW.t("recent_keep_none")), settings,
-    h("span", {}, SW.t("common_label_reader"), " ", SW.status(d.ai ? "on" : "off", { small: true })), recListMore());
+    h("span", {}, SW.t("common_label_reader"), " ", SW.status(d.ai ? "on" : "off", { small: true })), corrMeta(), recListMore());
   const filter = conf && all.length ? SW.segmented({ legend: SW.t("recent_col_filament"), legendSr: true, name: "recent-filter", value: recentFilter,
     options: [{ value: "all", label: SW.t("recent_filter_all", { count: all.length }) }, { value: "check", label: SW.t("recent_filter_check", { count: check }) }] }) : null;
   const list = h("div");
@@ -342,7 +343,7 @@ function recViewer(id, n, start, name, opener) {
 
 // ----- the fields (the design, Hub page "Fields") -----
 function recFields(rec, s, view, box, redraw) {
-  const reading = s ? recReading(rec, s.item) : null, changed = recChanged(rec);
+  const reading = s ? recReading(rec, s.item) : null, changed = recChanged(rec), shared = boxFor(`record:${view.id}:share`);
   const group = (key, name, rows) => h("div", { class: "recent__group" }, h("h4", { class: "kv__heading" }, SW.t(name)), rows);
   const card = (actions, ...kids) => h("section", { class: "card", "aria-labelledby": "recent-fields" },
     h("div", { class: "recent__cardhead" }, h("h3", { class: "detail__heading", id: "recent-fields" }, SW.t("recent_fields_title")), actions), ...kids);
@@ -358,7 +359,7 @@ function recFields(rec, s, view, box, redraw) {
           text == null ? h("span", { class: "muted" }, SW.t("common_field_empty_value")) : h("span", { class: kind === "brand" || kind === "name" || kind === "material" || kind === "line" ? "" : "mono" }, text),
           mark ? [" ", mark] : null));
     }));
-    return card(edit, note, h("div", { class: "kv kv--groups" }, REC_GROUPS.map(([g, name]) => group(g, name, rows(g)))), box);
+    return card(edit, note, h("div", { class: "kv kv--groups" }, REC_GROUPS.map(([g, name]) => group(g, name, rows(g)))), box, shared);
   }
   // editing: the same rows as fields; only the changed ones are sent (one request = one revision)
   const fields = {};
@@ -375,6 +376,7 @@ function recFields(rec, s, view, box, redraw) {
       if (mark) f.querySelector(".field__label").append(" ", mark);
       return f;
     })))),
+    corrOn ? corrNote("recent_corr_on") : null,
     h("div", { class: "recent__foot" }, box, h("div", { class: "actions" },
       SW.btn(SW.t("common_cancel"), { run: () => { view.editing = false; SW.result(box, null); redraw(rec); } }),
       SW.btn(SW.t("common_save_changes"), { type: "submit", cls: "btn--primary" }))));
@@ -393,9 +395,10 @@ function recFields(rec, s, view, box, redraw) {
       view.editing = false;
       redraw(r);
       say(box, recSaved(r, Object.keys(values)), true);
+      corrAfter(view.id, shared);
     }, view);
   };
-  return card(null, note, form);
+  return card(null, note, form, shared);
 }
 
 // "Saved 2 changes: Empty spool weight, Nozzle." and the filament sentences of the Hub
@@ -443,7 +446,7 @@ function recAsk(rec, s, view, box, redraw) {
   if (!s) return null;
   const note = SW.field({ type: "textarea", id: "recent-ask-note", label: SW.t("recent_ask_label"), name: "note", placeholder: SW.t("recent_ask_placeholder"), hint: SW.t("recent_ask_hint"), max: 500,
     value: view.note || "" });
-  const sug = h("div", { class: "recent__suggestion", role: "status" });
+  const sug = h("div", { class: "recent__suggestion", role: "status" }), shared = boxFor(`record:${view.id}:ask-share`);
   const ask = SW.btn(SW.t("recent_ask_button"), { run: () => {
     if (!note._control.value.trim()) { SW.fieldError(note, SW.t("recent_error_note")); note._control.focus(); return; }
     SW.fieldError(note, null);
@@ -464,20 +467,22 @@ function recAsk(rec, s, view, box, redraw) {
       recPost(box, histPath(view.id, "apply"), { proposal: p.proposal }, (r) => {
         redraw(r);
         say(box, [SW.t("changes_accepted", { count: recChanged1(r, p.changes).length, number: r.revisions.length }), ...recFilament(r)].join(" "), true);
+        corrAfter(view.id, shared);
         const t = document.getElementById("recent-ask-note"); if (t) t.focus();
       }, view, (e) => { if (e.data && (e.data.reason === "stale" || e.data.reason === "not_found")) { view.proposal = null; fill(sug); const t = document.getElementById("recent-ask-note"); if (t) t.focus(); } }).finally(() => { if (accept.isConnected) { SW.idle(accept); discard.disabled = false; } });
     } });
     const discard = SW.btn(SW.t("common_discard"), { run: () => { view.proposal = null; fill(sug); say(box, SW.t("recent_result_discarded"), "neutral"); } });
     fill(sug, h("section", { class: "changes", "aria-labelledby": "recent-suggest", "data-proposal": p.proposal }, title,
       p.no_photo ? h("p", { class: "muted" }, SW.t("recent_ask_no_photo")) : null,
-      recReread(p), p.note ? h("p", { class: "muted" }, p.note) : null, list, h("p", { class: "changes__note" }, SW.t("changes_note")), h("div", { class: "actions" }, discard, accept)));
+      recReread(p), p.note ? h("p", { class: "muted" }, p.note) : null, list, h("p", { class: "changes__note" }, SW.t("changes_note")),
+      corrOn ? corrNote("recent_corr_on") : null, h("div", { class: "actions" }, discard, accept)));
     if (view.editing) SW.disable(accept, SW.t("recent_accept_while_editing"));      // Accept writes the Hub's values over the form: what is typed is not lost without a word
     if (focus) accept.focus();           // when it arrives, not when the record is drawn again
   };
   // an answer that comes later: it takes the focus only when the focus is not in another control (an edit form that is open keeps it)
   view.dropped = () => { if (!view.proposal) fill(sug, h("p", { class: "muted" }, SW.t("recent_answer_dropped"))); };      // into the card as it is drawn now; never over a suggestion that is shown
   view.late = (p) => { const a = document.activeElement; showProposal(p, !a || a === document.body || card_el.contains(a)); };
-  const card_el = card(note, h("div", { class: "actions" }, ask), sug, box);
+  const card_el = card(note, h("div", { class: "actions" }, ask), sug, box, shared);
   if (view.proposal) showProposal(view.proposal);
   return card_el;
 }

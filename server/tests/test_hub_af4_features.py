@@ -1,4 +1,4 @@
-"""AF4 in the Features section of the Hub page (the design, Hub page): Label Reader: On this Hub lead-in in
+"""in the Features section of the Hub page (the design, Hub page): Label Reader: On this Hub lead-in in
 the preview drawer, Remote access port-443 conflict refusal with #settings/network link, "Not installed yet" row action,
 and apply completion / leave-early / failure lead-in behavior. Uses tests/page_drive.mjs and test_hub_page_audit.hub_app."""
 from __future__ import annotations
@@ -21,7 +21,7 @@ UNLOCK = f'SW.setLock("unlocked", {{ code: {CODE!r} }});\n'
 
 
 def test_af4_static_symbols_and_catalogue_keys():
-    """setup_features.js uses the AF5 catalogue keys and keeps no duplicate top-level JS symbols or innerHTML."""
+    """setup_features.js uses the catalogue keys and keeps no duplicate top-level JS symbols or innerHTML."""
     js = (STATIC / "setup_features.js").read_text(encoding="utf-8")
     for key in ("features_reader_lead_in", "features_reader_not_installed", "features_reader_finish",
                 "features_reader_switched_on", "port_remote_refusal", "common_open_settings"):

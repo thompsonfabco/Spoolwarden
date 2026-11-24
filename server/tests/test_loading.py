@@ -225,7 +225,7 @@ def test_no_unit_info_uses_nozzle_0(rig, sm, fil):
 
 @pytest.mark.parametrize("dry", [False, True])
 def test_active_slot_refused_mid_print(rig, sm, fil, dry):
-    """Ruling BK: the slot that feeds the running print is refused with SlotInUse (API: slot_in_use)."""
+    """the slot that feeds the running print is refused with SlotInUse (API: slot_in_use)."""
     m, printer, client = rig
     printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "1"}})      # legacy 1 = AMS 0 tray 1 = A2
     assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
@@ -247,9 +247,9 @@ def test_active_slot_by_extruder_snow_refused_mid_print(rig, sm, fil):
 
 
 def test_mid_print_load_into_another_slot_goes_through(rig, sm, fil):
-    """Ruling BK: a print does not block a load into a slot it is not feeding (the scanner's behaviour)."""
+    """a print does not block a load into a slot it is not feeding (the scanner's behaviour)."""
     m, printer, client = rig
-    # printing from A1 (the H2D has two nozzles and no snow here: the job's mapping names its slots, Ruling BM)
+    # printing from A1 (the H2D has two nozzles and no snow here: the job's mapping names its slots, )
     printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "0"}, "mapping": [0]})
     assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
     s = spool(sm, fil, "Rack 1")
@@ -259,7 +259,7 @@ def test_mid_print_load_into_another_slot_goes_through(rig, sm, fil):
 
 
 def test_dual_nozzle_without_snow_refuses_every_slot_of_the_job_mapping(rig, sm, fil):
-    """Ruling BM: on a model with two nozzles and no `snow`, tray_now shows one nozzle only; every slot in the
+    """on a model with two nozzles and no `snow`, tray_now shows one nozzle only; every slot in the
     running job's mapping is in use (HT-A here, on the other nozzle), a slot outside it is still free."""
     m, printer, client = rig
     printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "0"}, "mapping": [0, 128]})   # A1 + HT-A
@@ -323,7 +323,7 @@ def test_a_feeding_slot_refusal_asks_for_no_pushall(rig, sm, fil, monkeypatch):
 
 
 def test_unknown_model_counts_as_multi_nozzle(rig, sm, fil):
-    """Ruling BM for an unknown model: its nozzle count is not known, so without `snow` the job's mapping decides,
+    """for an unknown model: its nozzle count is not known, so without `snow` the job's mapping decides,
     and a job without a mapping refuses every slot, as on a dual-nozzle model."""
     m, printer, client = rig
     registry.upsert(Printer(SERIAL, NAME, "ZZ9", "10.0.0.5", "13572468", True))      # a code nobody knows
@@ -336,7 +336,7 @@ def test_unknown_model_counts_as_multi_nozzle(rig, sm, fil):
 
 @pytest.mark.parametrize("model", ["", "ZZ9", None])
 def test_unknown_model_takes_the_nozzle_count_from_the_report(model):
-    """Ruling BR: a hand-added printer (model "") or an unknown code: the report's extruder list says how many
+    """a hand-added printer (model "") or an unknown code: the report's extruder list says how many
     nozzles it has; only when the report does not say either is it guarded as more than one."""
     one = {"gcode_state": "RUNNING", "ams": {"tray_now": "0"},
            "device": {"extruder": {"info": [{"id": 0, "temp": 0}]}}}
@@ -762,7 +762,7 @@ def test_an_unload_writes_spool_unloaded(rig, sm, fil, evstore):
     assert e["data"]["before_location"] == LOC_A2 and e["data"]["after_location"] == "Rack 1" and e["data"]["batch"]
 
 
-# ---------- CO1: checked out (prev_location with `since`), the one send-back ----------
+# ---------- checked out (prev_location with `since`), the one send-back ----------
 
 SINCE = "2026-11-20T10:00:00Z"
 

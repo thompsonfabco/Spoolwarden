@@ -341,7 +341,7 @@ class AddProfileViewModelTest {
         advanceUntilIdle()
         assertEquals("one read for the form's materials, one for the list; closing and opening again adds none", 2, api.listCalls)
         vm.askRemove(vm.state.value.entries!![0])
-        assertEquals("Remove SUNLU PLA+ from your own entries? Slicer presets are rebuilt.", CatalogTexts.removeQuestion("SUNLU", "PLA+"))
+        assertEquals("SUNLU PLA+", CatalogTexts.entryLine("SUNLU", "PLA+"))
         assertTrue("nothing is removed until asked", api.removed.isEmpty())
         vm.cancelRemove()
         vm.confirmRemove()

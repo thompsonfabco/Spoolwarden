@@ -1,4 +1,4 @@
-"""S2.16 Flash a device on the Hub page (step S2.16): the section's audits, and its browser walk (tests/flash_walk.mjs) with a fake
+"""Flash a device on the Hub page: the section's audits, and its browser walk (tests/flash_walk.mjs) with a fake
 board and a fake Hub job. The fixtures and helpers are test_hub_page_audit.py's."""
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def test_the_pages_hub_step_names_are_the_ones_reader_setup_writes():
 
 
 def test_flash_a_device_audits_clean_at_each_address_without_an_allow_list(hub):
-    """S2.16 rebuilt the section on the shared components: no line of the allow-list is left for it, at its own address and at the
+    """rebuilt the section on the shared components: no line of the allow-list is left for it, at its own address and at the
     two devices' addresses (the design, Hub page: #flash/tag-reader, #flash/display), light and dark, 1280 and 320 px. The title is the section's at
     each address, so each address is a run of its own (the audit asks the views of one run to have different titles)."""
     for view in ("#flash", "#flash/tag-reader", "#flash/display"):

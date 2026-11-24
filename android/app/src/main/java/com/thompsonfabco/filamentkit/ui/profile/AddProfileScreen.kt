@@ -55,6 +55,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
+import com.thompsonfabco.filamentkit.ui.hub.hubDay
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.launch
 
@@ -110,8 +111,9 @@ fun AddProfileScreen(
                 // the optional values stay closed until asked for, or until the Hub names one of them
                 var more by rememberSaveable { mutableStateOf(false) }
                 val named = s.fieldProblems.keys.any { it.optional }
+                val moreText = stringResource(R.string.settings_catalog_more)
                 SwButton(
-                    CatalogTexts.MORE, { more = !more }, Modifier.semantics { contentDescription = CatalogTexts.MORE },
+                    moreText, { more = !more }, Modifier.semantics { contentDescription = moreText },
                     kind = SwButtonKind.Quiet,
                 )
                 if (more || named) {
@@ -145,14 +147,14 @@ fun AddProfileScreen(
                     FailureNotice(s.failure, s.message, onPairAgain)
                     // an add through the form says so; the form is empty again for the next one
                     if (s.added) {
-                        NoticeCard(NoticeKind.Ok, CatalogTexts.ADDED, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                        NoticeCard(NoticeKind.Ok, stringResource(R.string.settings_catalog_added), Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                     }
                     // the reason Save is off when the phone is not paired
                     if (!paired) HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
                 }
-                if (!s.filled) Text(CatalogTexts.FILL, style = MaterialTheme.typography.bodySmall)
+                if (!s.filled) Text(stringResource(R.string.catalog_fill_name), style = MaterialTheme.typography.bodySmall)
                 SwButton(
-                    if (s.saving) stringResource(R.string.common_saving) else CatalogTexts.ADD, vm::save,
+                    stringResource(if (s.saving) R.string.common_saving else R.string.common_add), vm::save,
                     Modifier.fillMaxWidth(), kind = SwButtonKind.Main, enabled = s.canSave && paired, busy = s.saving,
                 )
             }
@@ -184,12 +186,12 @@ fun AddProfileScreen(
 @Composable
 private fun labelOf(f: ProfileField): String = when (f) {
     ProfileField.Vendor -> stringResource(R.string.catalog_field_brand)
-    ProfileField.Line -> CatalogTexts.NAME
-    ProfileField.Material -> CatalogTexts.MATERIAL
-    ProfileField.NozzleMin -> CatalogTexts.NOZZLE_MIN
-    ProfileField.NozzleMax -> CatalogTexts.NOZZLE_MAX
-    ProfileField.BedMin -> CatalogTexts.BED_MIN
-    ProfileField.BedMax -> CatalogTexts.BED_MAX
+    ProfileField.Line -> stringResource(R.string.catalog_field_name)
+    ProfileField.Material -> stringResource(R.string.catalog_field_material)
+    ProfileField.NozzleMin -> stringResource(R.string.catalog_nozzle_from)
+    ProfileField.NozzleMax -> stringResource(R.string.catalog_nozzle_to)
+    ProfileField.BedMin -> stringResource(R.string.catalog_bed_from)
+    ProfileField.BedMax -> stringResource(R.string.catalog_bed_to)
     ProfileField.Density -> stringResource(R.string.catalog_field_density)
     ProfileField.MaxVolumetric -> stringResource(R.string.catalog_field_max_speed)
     ProfileField.Parent -> stringResource(R.string.common_field_bambu_parent)
@@ -202,7 +204,7 @@ private fun EntriesSection(s: AddProfileUiState, vm: AddProfileViewModel, onPair
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
     SwButton(
-        if (s.entriesOpen) CatalogTexts.HIDE_ENTRIES else CatalogTexts.SEE_ENTRIES, vm::toggleEntries,
+        stringResource(if (s.entriesOpen) R.string.catalog_hide_entries else R.string.settings_catalog_see_entries), vm::toggleEntries,
         kind = SwButtonKind.Quiet,
     )
     if (!s.entriesOpen) return
@@ -210,9 +212,9 @@ private fun EntriesSection(s: AddProfileUiState, vm: AddProfileViewModel, onPair
         FailureNotice(s.entriesFailure, s.entriesMessage, onPairAgain)
         val entries = s.entries
         when {
-            s.entriesUnavailable -> Text(CatalogTexts.ENTRIES_UPDATE_HUB, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
-            entries == null -> if (s.entriesLoading) Text(CatalogTexts.ENTRIES_LOADING, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
-            entries.isEmpty() -> Text(CatalogTexts.ENTRIES_EMPTY, style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+            s.entriesUnavailable -> Text(stringResource(R.string.catalog_entries_update_hub), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+            entries == null -> if (s.entriesLoading) Text(stringResource(R.string.catalog_entries_loading), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
+            entries.isEmpty() -> Text(stringResource(R.string.catalog_entries_empty), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
             else -> entries.forEach { EntryRow(it, vm) }
         }
     }
@@ -229,12 +231,15 @@ private fun EntryRow(entry: LocalEntry, vm: AddProfileViewModel) {
     ) {
         Column(Modifier.weight(1f)) {
             Text(line, style = MaterialTheme.typography.bodyLarge)
-            val detail = CatalogTexts.entryDetail(entry.material, entry.added)
+            val detail = listOfNotNull(
+                entry.material.ifBlank { null }, hubDay(entry.added)?.let { stringResource(R.string.app_catalog_entry_added, it) },
+            ).joinToString(" · ")
             if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodySmall, color = SpoolwardenTheme.colors.muted)
         }
+        val removeText = stringResource(R.string.catalog_remove_entry, line)
         SwButton(
-            CatalogTexts.REMOVE, { vm.askRemove(entry) },
-            Modifier.semantics { contentDescription = "${CatalogTexts.REMOVE} $line" }, kind = SwButtonKind.Plain,
+            stringResource(R.string.common_remove), { vm.askRemove(entry) },
+            Modifier.semantics { contentDescription = removeText }, kind = SwButtonKind.Plain,
         )
     }
 }
@@ -242,13 +247,13 @@ private fun EntryRow(entry: LocalEntry, vm: AddProfileViewModel) {
 @Composable
 private fun RemoveDialog(entry: LocalEntry, s: AddProfileUiState, vm: AddProfileViewModel) {
     SwDialog(
-        title = CatalogTexts.removeTitle(entry.brand, entry.name),
+        title = stringResource(R.string.catalog_remove_title, CatalogTexts.entryLine(entry.brand, entry.name)),
         onClose = vm::cancelRemove,
-        confirm = SwDialogButton(CatalogTexts.REMOVE, vm::confirmRemove, kind = SwButtonKind.DestructiveFilled, busy = s.removing),
+        confirm = SwDialogButton(stringResource(R.string.common_remove), vm::confirmRemove, kind = SwButtonKind.DestructiveFilled, busy = s.removing),
         cancel = SwAction(stringResource(R.string.common_cancel), vm::cancelRemove),
         cancelEnabled = !s.removing,
     ) {
-        Text(CatalogTexts.removeQuestion(entry.brand, entry.name), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.catalog_remove_question, CatalogTexts.entryLine(entry.brand, entry.name)), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -310,11 +315,12 @@ private const val BULLET = "• "
 private fun MaterialField(value: String, materials: List<String>, enabled: Boolean, onPick: (String) -> Unit, error: String?) {
     var other by rememberSaveable { mutableStateOf(value.isNotBlank() && value !in materials) }
     var open by remember { mutableStateOf(false) }
-    val shown = if (other) CatalogTexts.MATERIAL_OTHER else value
+    val otherText = stringResource(R.string.settings_catalog_other)
+    val shown = if (other) otherText else value
     ExposedDropdownMenuBox(expanded = open && enabled, onExpandedChange = { open = it }) {
         OutlinedTextField(
             value = shown, onValueChange = {}, readOnly = true, enabled = enabled, singleLine = true,
-            isError = error != null && !other, label = { Text(CatalogTexts.MATERIAL) },
+            isError = error != null && !other, label = { Text(stringResource(R.string.catalog_field_material)) },
             supportingText = error?.takeIf { !other }?.let { { Text(it) } },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) },
             modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
@@ -326,13 +332,13 @@ private fun MaterialField(value: String, materials: List<String>, enabled: Boole
             materials.forEach { m ->
                 SwMenuItem(m, { other = false; onPick(m); open = false }, checked = !other && m == value)
             }
-            SwMenuItem(CatalogTexts.MATERIAL_OTHER, { if (!other) onPick(""); other = true; open = false }, checked = other)
+            SwMenuItem(otherText, { if (!other) onPick(""); other = true; open = false }, checked = other)
         }
     }
     if (other) {
         OutlinedTextField(
             value = value, onValueChange = onPick, enabled = enabled, singleLine = true,
-            isError = error != null, label = { Text(CatalogTexts.MATERIAL_OTHER_FIELD) },
+            isError = error != null, label = { Text(stringResource(R.string.catalog_field_other_material)) },
             supportingText = error?.let { { Text(it) } },
             modifier = Modifier.fillMaxWidth(),
         )

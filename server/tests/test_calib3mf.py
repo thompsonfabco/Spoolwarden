@@ -261,7 +261,7 @@ def test_echoing_printer_is_consistent(fake_ftp, printer, tmp_path):
     assert r.consistent is True, r.problems
     assert r.problems == []
     # A3 is empty: not part of the job
-    # ruling BL: legacy numbers are sent; a printer echoing them back proves legacy (shift8 cannot place 128)
+    # legacy numbers are sent; a printer echoing them back proves legacy (shift8 cannot place 128)
     assert r.decoding == {"A1": 0, "A2": 1, "A4": 3, "HT-A": 128}
     assert r.scheme == "legacy" and r.tried == ["legacy"] and r.attempts == []
     assert r.skipped == ["A3"] and r.external == ["Ext"]     # an external holder is never part of the job
@@ -720,7 +720,7 @@ def jobs(m):
 
 
 def test_owner_h2d_first_job_is_the_scanners_command_and_proves_shift8(fake_ftp, printer):
-    """Ruling BL: the first job is exactly the scanner's verified H2D command: legacy `ams_mapping` [0, 2, 128, 129]
+    """the first job is exactly the scanner's verified H2D command: legacy `ams_mapping` [0, 2, 128, 129]
     with `ams_mapping2` beside it. The H2D answers in its own numbering, AMS 0 trays 0 / 2 -> 0 / 2, HT 128 / 129
     -> 32768 / 33024: shift8, one job."""
     m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())

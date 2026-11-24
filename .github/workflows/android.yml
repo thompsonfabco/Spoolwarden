@@ -96,3 +96,26 @@ jobs:
       # --no-build-cache: the Gradle cache restored above also holds Gradle's build cache, which hands back old test results
       # (":app:testDebugUnitTest FROM-CACHE") and runs no test at all
       - run: ./gradlew testDebugUnitTest assembleDebug --no-build-cache
+      - name: Verify executed unit tests
+        run: |
+          python3 - <<'EOF'
+          import glob, sys, xml.etree.ElementTree as ET
+          files = sorted(glob.glob("app/build/test-results/**/*.xml", recursive=True))
+          total = 0
+          for f in files:
+              root = ET.parse(f).getroot()
+              if root.tag == "testsuite":
+                  total += int(root.attrib.get("tests", 0))
+              else:
+                  for ts in root.findall(".//testsuite"):
+                      total += int(ts.attrib.get("tests", 0))
+          print(f"Executed Android unit tests: {total} (from {len(files)} XML files)")
+          if total <= 0:
+              sys.exit("error: zero Android unit tests executed")
+          EOF
+      - name: Upload unit test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: android-test-results
+          path: android/app/build/test-results/

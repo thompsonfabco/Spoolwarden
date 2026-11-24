@@ -175,6 +175,8 @@ internal fun failureText(f: RecentFailure): String = when (f) {
     RecentFailure.CloudDown -> stringResource(R.string.add_read_cloud)
     RecentFailure.Unreadable -> stringResource(R.string.add_read_unreadable)
     RecentFailure.NoPhoto -> stringResource(R.string.recent_error_no_photo)
+    RecentFailure.CsvUpdateHub -> stringResource(R.string.history_csv_update_hub)
+    RecentFailure.CsvNotSaved -> stringResource(R.string.history_csv_not_saved)
     is RecentFailure.Hub -> f.message
 }
 

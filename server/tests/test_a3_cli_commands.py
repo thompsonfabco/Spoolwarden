@@ -1,4 +1,4 @@
-"""Plan step A3: CLI command mounting (printer slots/usage/watch, devices show/set, catalog local/add --ask,
+"""Plan CLI command mounting (printer slots/usage/watch, devices show/set, catalog local/add --ask,
 Share corrections in config/status, non-sudo corrections list/package, and help --markdown table)."""
 from __future__ import annotations
 
@@ -214,6 +214,38 @@ def test_corrections_list_and_package_need_no_sudo_and_status_config_show_share_
     assert any("Delete the 2 corrections still waiting?" in s for s in menu.ui.said)
 
 
+def test_share_corrections_uses_singular_for_one_waiting(monkeypatch, tmp_path, capsys):
+    from filament_kit import share_corrections as sc
+    monkeypatch.setenv("FK_CONFIG", str(tmp_path / "cfg"))
+    cfg = config.load()
+    cfg.setdefault("modules", {})["local_intake"] = True
+    cfg.setdefault("label_reader", {})["share_corrections"] = True
+    config.save(cfg)
+    monkeypatch.setattr(sc, "state", lambda _cfg: {"saved": True, "actual": True, "reason": None, "differs": False, "count": 1})
+    monkeypatch.setattr(sc, "apply", lambda _cfg, say=None: {"want": False, "changed": True})
+
+    class _FakeUi:
+        def __init__(self):
+            self.said = []
+        def say(self, msg):
+            self.said.append(msg)
+        def error(self, msg):
+            self.said.append(msg)
+        def yesno(self, q):
+            self.said.append(q)
+            return False
+        def suspended(self):
+            import contextlib
+            return contextlib.nullcontext()
+
+    menu = cli._ConfigMenu(cfg, _FakeUi())
+    menu.edit(cli._ITEMS["share_corrections"])
+    assert any("Delete the 1 correction still waiting?" in s for s in menu.ui.said)
+    menu.save()
+    out, _ = capsys.readouterr()
+    assert "1 correction kept." in out
+
+
 # ---------- e: _COMMAND_TABLE & help --markdown ----------
 
 def test_help_markdown_includes_a3_and_previously_missing_commands(capsys):
@@ -247,3 +279,58 @@ def test_help_markdown_includes_a3_and_previously_missing_commands(capsys):
     for r in md.splitlines():
         if r.startswith("| `label-reader corrections [list]` |") or r.startswith("| `label-reader corrections package <file>` |"):
             assert "(root)" not in r
+
+
+def test_every_parser_command_appears_in_help_command_table(capsys):
+    import argparse
+    import re
+    assert cli.main(["help", "--markdown"]) == 0
+    md, _ = capsys.readouterr()
+    assert "| `backup password [--remove \\| --show]` |" in md and "| `certificate --renew` |" in md
+    ap, _ = cli._build_parser()
+    old_top = {"cert", "ensure-fields", "intake", "klipper", "library", "modules", "profiles", "reader", "station",
+               "sync", "unpair"}
+    aliases = {a for a, _ in cli._ALIASES} | old_top
+
+    def leaves(p, prefix=()):
+        subs = [a for a in p._actions if isinstance(a, argparse._SubParsersAction)]
+        if not subs:
+            yield prefix
+            return
+        if not subs[0].required and prefix:
+            yield prefix
+        for name, child in subs[0].choices.items():
+            if name == "help" or child is None:
+                continue
+            if not subs[0].required and name in ("list", "history"):
+                continue
+            cmd = " ".join(prefix + (name,))
+            if cmd in aliases:
+                continue
+            yield from leaves(child, prefix + (name,))
+
+    def table_matches(s: str, tc: str) -> bool:
+        words = s.split()
+        norm = tc.replace("\\|", "|").replace("[", "").replace("]", "").split()
+        if len(norm) < len(words):
+            return False
+        return all(w == n or w in n.split("|") for w, n in zip(words, norm))
+
+    table_spans = [re.sub(r"\s+", " ", sp) for row in cli._COMMAND_TABLE for sp in re.findall(r"`([^`]+)`", row[0])]
+    missing = []
+    for lf in leaves(ap):
+        s = " ".join(lf)
+        if s in aliases or s.startswith("help"):
+            continue
+        if not any(table_matches(s, tc) for tc in table_spans):
+            missing.append(s)
+    assert missing == [], f"parser commands missing from _COMMAND_TABLE: {missing}"
+    assert "certificate --renew" in table_spans
+    assert any(tc.startswith("local-intake update") for tc in table_spans)
+
+
+def test_local_intake_update_routes_to_cmd_local_intake_install(monkeypatch):
+    seen = []
+    monkeypatch.setattr(cli, "cmd_local_intake_install", lambda tier, version, yes, planned=False: seen.append((tier, version, yes, planned)) or 0)
+    assert cli.main(["local-intake", "update", "--tier", "cpu", "--version", "1.2.3", "-y"]) == 0
+    assert seen == [("cpu", "1.2.3", True, False)]

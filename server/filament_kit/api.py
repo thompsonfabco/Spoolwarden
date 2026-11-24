@@ -64,6 +64,11 @@ def _http_error(e: HTTPException) -> JSONResponse:
 
 
 def _to_response(e: Exception) -> JSONResponse:
+    from . import http_body
+    if isinstance(e, http_body.BodyTooLarge):
+        return _err(413, "too_large", http_body.too_large_text())
+    if isinstance(e, http_body.BadBody):
+        return _err(400, "bad_request", str(e))
     if isinstance(e, HTTPException):  # e.g. a malformed or oversized multipart body from request.form()
         return _http_error(e)
     if isinstance(e, demo.DemoError):      # a stop of the demo (409), or a demo refusal (400)
@@ -374,13 +379,11 @@ def _authed(fn):
 
 
 async def _json(request: Request) -> dict:
+    from . import http_body
     try:
-        body = await request.json()
-    except ValueError:
-        raise BadRequest("the request body must be JSON") from None
-    if not isinstance(body, dict):
-        raise BadRequest("the request body must be a JSON object")
-    return body
+        return await http_body.read_json_object(request, http_body.DEFAULT_JSON_CAP)
+    except http_body.BadBody as e:
+        raise BadRequest(str(e)) from None
 
 
 _KINDS = {bool: "true or false", float: "a number", str: "text"}
@@ -1265,7 +1268,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     def info_body() -> dict:
         return {"name": config.load()["server_name"], "version": __version__, "api": API_VERSION,
                 "apk_version": _apk_version(), "modules": sorted(on),
-                "look": config.look(config.load())}
+                "look": config.look(config.load()),
+                "hub_id": pairing.hub_id()}
 
     @_handle
     async def info(request: Request):
@@ -1280,7 +1284,9 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             return _err(401, "code_expired", str(e))
         except pairing.PairingError as e:
             return _err(401, "unauthorized", str(e))
-        return JSONResponse({"token": token})
+        dev_id = await run_in_threadpool(pairing.check, token)
+        role = await run_in_threadpool(pairing.role_of, dev_id) if dev_id else None
+        return JSONResponse({"token": token, "role": role})
 
     @_authed
     async def unpair(request: Request):
@@ -1299,7 +1305,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def intake_read(request: Request):
-        async with request.form() as form:
+        async with request.form(max_files=intake.MAX_PHOTOS, max_fields=10) as form:
             photos = []
             for i, f in enumerate(form.getlist("photo")):
                 if not isinstance(f, UploadFile):
@@ -1403,8 +1409,10 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return await run_in_threadpool(intake_history.get, request.path_params["hid"])
 
     async def history_photo(request: Request):
-        data = await run_in_threadpool(intake_history.photo, request.path_params["hid"], request.path_params["n"])
-        return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+        thumb = request.query_params.get("size") == "thumb"
+        fn = intake_history.photo_thumb if thumb else intake_history.photo
+        data = await run_in_threadpool(fn, request.path_params["hid"], request.path_params["n"])
+        return Response(data, media_type="image/jpeg", headers=intake_history.photo_headers(data, thumb=thumb))
 
     async def history_revise(request: Request):
         body = await _json(request)
@@ -1466,7 +1474,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return await run_in_threadpool(station_flow.tag_info, sm, request.path_params["uid"])
 
     async def station_recognize(request: Request):
-        async with request.form() as form:
+        async with request.form(max_files=intake.MAX_PHOTOS, max_fields=10) as form:
             f = form.get("image")
             if not isinstance(f, UploadFile):
                 raise station_flow.FlowError(400, "bad_request", "image must be a file upload",
@@ -1559,7 +1567,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             remaining=_opt(body, "remaining", float), location=_opt(body, "location", str),
             empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, True), rules=rules(),
             home=_opt(body, "home", str), auto_location=_opt(body, "auto_location", bool, False)))
-        return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added (S3.9); `home`: 409 not_checked_out
+        return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added; `home`: 409 not_checked_out
 
     def returner(spool_id: int, *, grams: float | None = None, dry: bool = False, gross: float | None = None) -> dict:
         """`inventory.return_spool`, or the Klipper family's when the spool sits in one of its printers' slots (the
@@ -1720,10 +1728,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     async def alerts_test(request: Request):
         """A test alert for the caller: nothing is stored; the caller's next `GET api/events` carries it as `test`
         (once, within 60 s). The caller is the Hub page's browser id (`client`) or the device of the token."""
-        try:
-            body = await request.json()
-        except ValueError:
-            body = {}
+        from . import http_body
+        body = await http_body.read_json_any(request, http_body.SMALL_JSON_CAP, default={})
         client = str(body.get("client") or "").strip()[:80] if isinstance(body, dict) else ""
         caller = f"client:{client}" if client else f"device:{request.state.device}"
         return JSONResponse({"ok": True, "test": await run_in_threadpool(alerts_api.queue_test, caller)})

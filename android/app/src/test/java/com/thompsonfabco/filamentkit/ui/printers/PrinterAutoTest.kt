@@ -12,6 +12,7 @@ import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
 import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.UnloadResult
+import com.thompsonfabco.filamentkit.ui.spool.LoadTexts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -78,21 +79,20 @@ class PrinterAutoTest {
 
     @Test fun theNoticeNamesTheSpoolAndThePrinterAndHasNoChoices() {
         val n = PrinterTexts.autoNotice(waiting(), "Workshop X1")
-        assertEquals("Waiting for Acme PLA Red to be loaded into any slot of Workshop X1.", n.text)
+        assertEquals(LoadTexts.waitingAuto(Say.FromHub("Acme PLA Red"), "Workshop X1"), n.text)
         assertTrue(n.choices.isEmpty())
-        assertEquals("Stop waiting", PrinterTexts.STOP_WAITING)
     }
 
     @Test fun inTheStateChooseTheNoticeAsksWhichSlotAndOffersThem() {
         val n = PrinterTexts.autoNotice(choosing(), "Workshop X1")
-        assertEquals("Two slots were loaded. Which one got Acme PLA Red?", n.text)
+        assertEquals(Say.Words(R.string.printer_auto_choose, listOf(Say.FromHub("Acme PLA Red"))), n.text)
         assertEquals(listOf("A1", "A3"), n.choices)
     }
 
     @Test fun aSpoolWithoutANameIsNamedByItsNumberOrAsTheSpool() {
-        assertEquals("Spool 12", PrinterTexts.autoSpool(waiting().copy(spool = null)))
-        assertEquals("Spool 12", PrinterTexts.autoSpool(waiting().copy(spool = spool.copy(name = " "))))
-        assertEquals("the spool", PrinterTexts.autoSpool(waiting().copy(spool = null, spoolId = null)))
+        assertEquals(Say.Words(R.string.spool_title, listOf(12)), PrinterTexts.autoSpool(waiting().copy(spool = null)))
+        assertEquals(Say.Words(R.string.spool_title, listOf(12)), PrinterTexts.autoSpool(waiting().copy(spool = spool.copy(name = " "))))
+        assertEquals(Say.Words(R.string.spool_load_the_spool), PrinterTexts.autoSpool(waiting().copy(spool = null, spoolId = null)))
     }
 
     @Test fun thePollReadsTheAutoAndItGoesWhenTheHubStopsSendingIt() = runTest(dispatcher) {
@@ -154,7 +154,7 @@ class PrinterAutoTest {
         val unconfirmed = PrinterViewModel.chooseResult(LoadResult(slot = LoadSlot("A3")), "Workshop X1", "A3")
         assertEquals(Say.Words(R.string.spool_load_unconfirmed), unconfirmed)
         val waiting = PrinterViewModel.chooseResult(LoadResult(slot = LoadSlot("A3"), pending = true), "Workshop X1", "A3")
-        assertEquals(Say.FromHub("Waiting for the spool to load in A3."), waiting)
+        assertEquals(Say.Words(R.string.live_load_waiting, listOf("A3")), waiting)
     }
 
     @Test fun choosingOnlyWorksInTheStateChoose() = runTest(dispatcher) {
@@ -187,7 +187,7 @@ class PrinterAutoTest {
         backend.failure = ApiError(409, "auto_not_possible", "", JsonObject(emptyMap()))
         vm.chooseAutoSlot("A1"); runCurrent()
         assertEquals(
-            Note(Say.FromHub("This printer has no slots the Hub can watch. Choose a slot."), ok = false),
+            Note(Say.Words(R.string.spool_load_auto_refused), ok = false),
             vm.state.value.slotNote,
         )
     }
