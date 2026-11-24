@@ -256,3 +256,31 @@ def test_the_last_backup_time_needs_no_code_and_shows_nothing_else(app):
     r = setup_helper.handle({"op": "backup_last"})     # the helper: no code either, and only the time
     assert set(r) == {"ok", "status", "last"}
     assert post(client(app), "backups/list", {}, code=None).status_code in (401, 403)
+
+
+def test_restore_upload_refuses_oversized_content_length_and_midstream_cutoff(app, monkeypatch):
+    from filament_kit.setup_console import backup_tab
+
+    monkeypatch.setattr(backup_tab, "MAX_UPLOAD", 64)
+    # 1) Declared Content-Length above MAX_UPLOAD is refused before touching disk
+    r_cl = client(app).post(
+        "/setup/api/restore/upload",
+        content=b"x" * 100,
+        headers={**H, "Content-Type": "application/zip", "X-Setup-Code": CODE},
+    )
+    assert r_cl.status_code == 413
+    assert not backup.uploaded().exists()
+
+    # 2) Chunked stream without Content-Length that crosses MAX_UPLOAD mid-stream is refused and cleaned up
+    def chunks():
+        yield b"a" * 40
+        yield b"b" * 40
+
+    r_stream = client(app).post(
+        "/setup/api/restore/upload",
+        content=chunks(),
+        headers={**H, "Content-Type": "application/zip", "X-Setup-Code": CODE},
+    )
+    assert r_stream.status_code == 413
+    assert not backup.uploaded().exists()
+    assert not backup.uploaded().parent.exists()
