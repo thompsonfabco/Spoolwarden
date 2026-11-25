@@ -273,7 +273,7 @@ def test_plants_are_found():
     assert catalogue_problems(raw, js, xml.replace("</resources>", '<string name="extra">x</string></resources>')) == \
         ["strings.xml: key 'extra' is only in strings.xml"]
     # a text that differs
-    assert len(catalogue_problems(raw, js.replace('"Back"', '"Go back"'), xml)) == 1
+    assert len(catalogue_problems(raw, js.replace('"Back"', '"Go back"', 1), xml)) == 1
     assert len(catalogue_problems(raw, js, xml.replace(">Cancel<", ">Stop<"))) == 1
     # a placeholder renamed in one file
     assert catalogue_problems(raw, js.replace("{hub}", "{box}", 1), xml)

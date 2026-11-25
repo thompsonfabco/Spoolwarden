@@ -354,8 +354,10 @@ def test_a_klipper_printer_that_does_not_answer_is_not_added_without_asking(tmp_
     which = _cut(pj, '      if (step === "which") {', '      } else if (step === "details") {')
     assert "family-bambu" not in which and "family-klipper" not in which       # no family choice
     assert which.index('"type-bambu"') < which.index('"type-klipper"')          # the two buttons, Bambu Lab first
-    assert "printer_guided_type_bambu: \"Type a Bambu Lab printer's address\"" in pj
-    assert "printer_guided_type_klipper: \"Type a Klipper printer's address\"" in pj
+    assert 'tg("printer_guided_type_bambu")' in which and 'tg("printer_guided_type_klipper")' in which
+    en = json.loads((STATIC.parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
+    assert en["printer_guided_type_bambu"] == "Type a Bambu Lab printer's address"
+    assert en["printer_guided_type_klipper"] == "Type a Klipper printer's address"
 
 
 def test_the_service_worker_keeps_a_languages_texts_for_offline(tmp_path):

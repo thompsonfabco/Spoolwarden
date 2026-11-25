@@ -62,7 +62,6 @@ server/filament_kit/setup_static/setup_settings.css | /* Settings (S2.19): the s
 server/filament_kit/setup_static/setup_settings.css | /* devices (S2.9) */ | 1 | 2026-11-22: parked file per Brief 30 Step 8
 server/filament_kit/web/static/app.js | try { v = localStorage.getItem(PLACE_KEY) || localStorage.getItem("tab"); } catch {}   // "tab" is the key before S3.3 | 1 | 2026-11-22: parked file per Brief 30 Step 8
 server/filament_kit/web/static/printers.js | try { want = localStorage.getItem(KEY) || localStorage.getItem("printer"); } catch (e) { /* none remembered */ }   // "printer" is the key before S3.3 | 1 | 2026-11-22: parked file per Brief 30 Step 8
-server/filament_kit/web/static/printers.js | // then "Map its slots now?". One sheet; Back keeps what was typed. The texts below are in the catalogue when EV2 lands (the keys file | 1 | 2026-11-22: parked file per Brief 30 Step 8
 server/filament_kit/web/static/printers.js | // on a Bambu Lab printer only the Hub's record changes; the Hub's answer carries the ruled sentence in `text`, in the plan and in the result | 1 | 2026-11-22: parked file per Brief 30 Step 8
 server/tests/data/library_snapshot/index.json | "product": "Nylon AF80 Aramid", | 1 | 2026-11-22: literal string or non-comment reference
 server/tests/data/library_snapshot/library/fillamentum/nylon-af80-aramid.json | "product": "Nylon AF80 Aramid", | 1 | 2026-11-22: literal string or non-comment reference

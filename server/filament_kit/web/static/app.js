@@ -1183,7 +1183,7 @@ function navigation() {
 // ----- Alerts: the banners at the top of the page, the Alerts list, a toast per new alert. The shared script
 // (shared/alerts.js, EA5) is loaded here so the page's own markup stays as it is; a Hub that does not serve it, or has no events
 // route yet, shows no banner and nothing else changes. -----
-const tt = (key, vars) => SW.t(key, vars);
+function tt(key, vars) { return SW.t(key, vars); }
 const alertHost = h("div", { class: "alert-host" });
 page.prepend(alertHost);
 if (document.body.dataset.demo === "1") {                   // every screen shows it, above the alert banners, with no Dismiss

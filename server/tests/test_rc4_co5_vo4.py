@@ -54,7 +54,15 @@ class HubError extends Error {
 }
 const calls = [], toasts = [], results = [];
 let answers = {};
-const SW = { HubError, t: (k) => k, icon: () => null, swatch: () => null, uid: (p) => p + Math.random().toString(36).slice(2, 7),
+const _EN = """ + (Path(__file__).resolve().parents[2] / "strings" / "en.json").read_text(encoding="utf-8") + """;
+const SW = { HubError,
+  t: (k, vars) => {
+    let f = _EN[k];
+    if (f == null) return k;
+    if (typeof f === "object") f = f[new Intl.PluralRules("en").select(Number(vars && vars.count))] || f.other;
+    return vars ? f.replace(/\\{([a-z][a-z0-9_]*)\\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : f;
+  },
+  icon: () => null, swatch: () => null, uid: (p) => p + Math.random().toString(36).slice(2, 7),
   busy: () => true, idle: () => {},
   result: (line, kind, text, o) => { results.push([kind, kind ? String(text) : null]); line.state = kind; line.said = kind ? String(text) : null; },
   toast: (text, kind, o) => { toasts.push([String(text), kind || "ok", o && o.action ? o.action.label : null]); },
