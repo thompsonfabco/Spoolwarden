@@ -61,6 +61,8 @@ _RECORD_LOCKS: dict[str, threading.Lock] = {}
 def _record_lock(rid: str) -> threading.Lock:
     """One lock per record for a change (apply, undo, a proposal): a slow Spoolman holds only that record, never the
     list, a record's view or a photo (their files are written atomically, so a read needs no lock)."""
+    if not isinstance(rid, str) or not ID.fullmatch(rid):
+        raise HistoryError(404, "not_found", "no such intake record")
     with _LOCK:
         return _RECORD_LOCKS.setdefault(rid, threading.Lock())
 
@@ -157,6 +159,7 @@ def prune(cfg: dict | None = None) -> list[str]:
         gone = _ids_newest_first()[n:]
         for rid in gone:
             shutil.rmtree(_root() / rid, ignore_errors=True)
+            _RECORD_LOCKS.pop(rid, None)
     if gone:
         log.info("intake history: %d old record(s) deleted (keeping %d)", len(gone), n)
     return gone

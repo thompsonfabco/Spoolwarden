@@ -558,3 +558,18 @@ def test_photo_thumb_bounds_size_and_sets_cache_headers(sm):
     with pytest.raises(intake_history.HistoryError) as bad:
         intake_history.photo_thumb(hid, 1)
     assert bad.value.status == 415 and bad.value.code == "bad_image"
+
+
+def test_record_locks_reject_invalid_ids_and_prune_removes_deleted_locks(sm, monkeypatch):
+    intake_history._RECORD_LOCKS.clear()
+    with pytest.raises(intake_history.HistoryError) as exc:
+        intake_history._record_lock("not-a-valid-rid!")
+    assert exc.value.status == 404 and "not-a-valid-rid!" not in intake_history._RECORD_LOCKS
+    _, hid1 = add(sm)
+    _, hid2 = add(sm)
+    intake_history._record_lock(hid1)
+    intake_history._record_lock(hid2)
+    assert hid1 in intake_history._RECORD_LOCKS and hid2 in intake_history._RECORD_LOCKS
+    monkeypatch.setattr(intake_history, "keep", lambda cfg=None: 1)
+    gone = intake_history.prune()
+    assert len(gone) == 1 and gone[0] not in intake_history._RECORD_LOCKS
