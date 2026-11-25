@@ -805,4 +805,4 @@ def test_wrong_scale_unit_says_set_scale_to_grams(rig):
     nfc.on_tag(LINKED)
     panel.on_line(b"P H")
     assert rig.step() == "weigh" and rig.row(4) == "Set scale to grams"
-    assert any("Set the scale to grams." in s for s in rig.spoken())
+    assert rig.said[-1] == "Set the scale to grams."

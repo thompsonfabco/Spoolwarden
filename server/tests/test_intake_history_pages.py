@@ -97,5 +97,5 @@ def test_spoolman_down_returns_503_instead_of_500(setup, monkeypatch):
     from filament_kit.spoolman import SpoolmanError
     app, _sm, hid, _sid = setup
     monkeypatch.setattr(intake_history, "apply", lambda *a, **k: (_ for _ in ()).throw(SpoolmanError("down")))
-    r = client(app).post(f"{BASE}/intake/history/{hid}/apply", json={"item": 0, "values": {"vendor": "X"}}, headers=H)
+    r = post(client(app), f"intake/history/{hid}/apply", {"item": 0, "values": {"vendor": "X"}})
     assert r.status_code == 503 and "Spoolman is not reachable" in r.json()["error"]
