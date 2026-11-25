@@ -282,8 +282,10 @@ def test_a_sheet_lays_its_labels_by_the_tables_margins_and_pitches():
     assert 'type: "select"' in js and "SW.segmented" not in js and 'tx("labels_size")' in js
     for size in FIVE:
         assert f'value: "{size}"' in js
-    assert "per: 24" in js and "per: 30" in js and "labels_actual_size" in js
-    assert "Print at actual size (100%), not fitted to the page." in js
+    assert "per: 24" in js and "per: 30" in js and 'tx("labels_actual_size")' in js
+    import json
+    en = json.loads((static.parents[3] / "strings" / "en.json").read_text(encoding="utf-8"))
+    assert en["labels_actual_size"] == "Print at actual size (100%), not fitted to the page."
     assert "root.dataset.address || location.origin" in js and 'setAttribute("aria-label"' in js and 'setAttribute("role", "img")' in js
     assert "sheet24" not in js and "sheet24" not in css
 
