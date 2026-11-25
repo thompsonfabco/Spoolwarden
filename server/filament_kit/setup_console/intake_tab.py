@@ -15,7 +15,7 @@ import anyio
 from starlette.responses import Response
 
 from .. import config, intake, intake_history
-from ..spoolman import Spoolman
+from ..spoolman import Spoolman, SpoolmanError
 
 
 def routes(page) -> list[tuple]:
@@ -39,6 +39,8 @@ def routes(page) -> list[tuple]:
             raise Refused(502, str(e)) from None
         except intake.CapReached as e:
             raise Refused(429, str(e)) from None
+        except SpoolmanError:
+            raise Refused(503, "Spoolman is not reachable") from None
 
     async def history(request, body):
         return await anyio.to_thread.run_sync(lambda: call(intake_history.list_records, ai_on()))
