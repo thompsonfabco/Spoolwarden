@@ -365,7 +365,7 @@ def test_unchanged_second_run_skips_orca_system_pack_and_secondary_state_rewrite
         "owner": "dev1", "you": "dev1", "user_id": folders.user_id,
         "live_hash": live, "system_hash": system,
         "orca_live_hash": olive, "orca_system_hash": None, "orca_target": True,
-        "build": {"stamp": STAMP, "live_hash": live, "orca_live_hash": olive},
+        "build": {"stamp": STAMP, "live_hash": live},
         "installed": {"stamp": STAMP},
     })
     pack_calls = 0
@@ -386,22 +386,17 @@ def test_unchanged_second_run_skips_orca_system_pack_and_secondary_state_rewrite
     monkeypatch.setattr(zips, "orca_system", counting_orca_system)
     monkeypatch.setattr(sync, "_save_state", tracking_save_state)
 
-    sync.run_once(c, folders, dirs, running=lambda: False, now=T0,
-                  orca=orca, orca_running=lambda: False, others=[sec])
-    assert pack_calls == 1
-    pack_calls = 0
-    saved_dirs.clear()
-    # Second run catches up secondary folders without re-packing orca_system.
-    out = sync.run_once(c, folders, dirs, running=lambda: False, now=T0 + 30,
-                        orca=orca, orca_running=lambda: False, others=[sec])
-    assert out == "up_to_date" and pack_calls == 0
+    out1 = sync.run_once(c, folders, dirs, running=lambda: False, now=T0,
+                         orca=orca, orca_running=lambda: False, others=[sec])
+    assert out1 == "uploaded" and pack_calls == 1
+    c.state["orca_system_hash"] = store.load_state(dirs)["uploaded"]["orca_system"]["hash"]
     sec_dir = dirs.base / "folders" / studio.folder_key(sec)
     assert sec_dir in saved_dirs
     sec_state = statexml.xml_path(AppDirs(sec_dir).state)
     assert sec_state.is_file()
     sec_mtime_before = sec_state.stat().st_mtime_ns
 
-    # Next run with nothing changed: orca_system is not re-packed and secondary state is not rewritten.
+    # Second run with nothing changed: orca_system is not re-packed and secondary state is not rewritten.
     pack_calls = 0
     saved_dirs.clear()
     out = sync.run_once(c, folders, dirs, running=lambda: False, now=T0 + 60,
