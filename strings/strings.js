@@ -4492,4 +4492,7 @@ window.SW_TEXT = Object.freeze({
   "labels_aria": "Label of spool {number}: {name}, {material}, {net}",
   "labels_aria_plain": "Label of spool {number}",
   "labels_net": "{grams} g",
+  "start_demo_lead": "Just looking?",
+  "start_demo_try": "Try the demo",
+  "demo_not_empty": "The demo is for an empty Hub. This Hub has real data.",
 });

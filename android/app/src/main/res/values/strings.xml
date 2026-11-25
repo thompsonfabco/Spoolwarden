@@ -6308,4 +6308,7 @@
     <string name="labels_aria_plain">Label of spool %1$s</string>
     <!-- 1=grams -->
     <string name="labels_net">%1$s g</string>
+    <string name="start_demo_lead">Just looking?</string>
+    <string name="start_demo_try">Try the demo</string>
+    <string name="demo_not_empty">The demo is for an empty Hub. This Hub has real data.</string>
 </resources>

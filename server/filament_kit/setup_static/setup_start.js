@@ -3,17 +3,6 @@
 (() => {
   "use strict";
 
-  // the texts of the demo, a stub table (key -> English) until the string catalogue has them (adds them)
-  const STUB = {
-    start_demo_lead: "Just looking?",
-    start_demo_try: "Try the demo",
-    demo_not_empty: "The demo is for an empty Hub. This Hub has real data.",
-    demo_banner: "Demo data. Nothing here is real.",
-    demo_leave: "Leave demo",
-    demo_leave_title: "Leave the demo?",
-    demo_leave_text: "Everything in it is deleted.",
-  };
-
   const ACTION_KEYS = {
     features: "start_go_features",
     printer: "printers_add",
@@ -57,10 +46,7 @@
 
   function t(key, vars) {
     const s = sw();
-    if (typeof s.t !== "function") return key;
-    const got = s.t(key, vars);
-    if (got !== key || !Object.hasOwn(STUB, key)) return got;
-    return STUB[key].replace(/\{(\w+)\}/g, (_, k) => (vars && vars[k] !== undefined ? vars[k] : `{${k}}`));
+    return typeof s.t === "function" ? s.t(key, vars) : key;
   }
 
   function button(label, opts) {
