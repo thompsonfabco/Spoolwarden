@@ -36,6 +36,8 @@ def routes(page) -> list[tuple]:
         except intake_history.HistoryError as e:
             raise Refused(e.status, str(e), reason=e.code) from None
         except intake.ReadError as e:
+            if e.refund is not None and e.code in ("unreachable", "api_error"):
+                e.refund()
             raise Refused(502, str(e)) from None
         except intake.CapReached as e:
             raise Refused(429, str(e)) from None

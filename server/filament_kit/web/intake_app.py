@@ -344,7 +344,7 @@ class IntakeApp:
         return Response(data, media_type="image/jpeg", headers=intake_history.photo_headers(data, thumb=thumb))
 
     async def history_revise(self, request: Request):
-        from .. import intake_history
+        from .. import intake, intake_history
         body = await self._body(request)
 
         def run() -> dict:
@@ -362,8 +362,13 @@ class IntakeApp:
                     cap.refund()
                 except Exception as e:  # noqa: BLE001 - best effort
                     log.warning("cap refund failed: %s", e)
-            return intake_history.revise(self.tools.sm, request.path_params["hid"], body.get("note"),
-                                         body.get("item"), client=self.claude, charge=charge)
+            try:
+                return intake_history.revise(self.tools.sm, request.path_params["hid"], body.get("note"),
+                                             body.get("item"), client=self.claude, charge=charge)
+            except intake.ReadError as e:
+                if e.refund is not None and e.code in ("unreachable", "api_error"):
+                    e.refund()
+                raise
         return await anyio.to_thread.run_sync(run)
 
     async def history_apply(self, request: Request):

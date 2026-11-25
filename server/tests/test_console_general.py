@@ -259,3 +259,36 @@ def test_the_one_key_form_is_unchanged(app, restarts, applies):
     assert r == {"ok": True, "restarts": True, "applies": False} and config.load()["reads_per_day"] == 7
     bad = _set(app, "reads_per_day", 0)
     assert bad.status_code == 400 and bad.json()["field"] == "value" and "errors" not in bad.json()
+
+
+def test_the_view_and_local_intake_health_hide_local_intake_url(app, monkeypatch):
+    cfg = config.load()
+    cfg["modules"]["local_intake"] = True
+    cfg["local_intake"] = {"url": "http://192.0.2.88:7915", "tier": "auto"}
+    config.save(cfg)
+    r = client(app).get("/setup/api/settings/general")
+    assert r.status_code == 200 and "192.0.2.88" not in r.text
+    assert r.json()["values"]["local_intake.url"] != "http://192.0.2.88:7915"
+    monkeypatch.setattr(general_tab.local_reader, "test", lambda c: {
+        "ok": False, "degraded": False, "url": "http://192.0.2.88:7915", "api_version": None,
+        "version": None, "tiers": {}, "revise": False, "auth_required": False, "last_read_at": None,
+        "error": "cannot reach http://192.0.2.88:7915", "capabilities": {}, "fp": None, "pin": None,
+        "https": False, "warning": None,
+    })
+    r2 = client(app).get("/setup/api/settings/local-intake")
+    assert r2.status_code == 200 and "192.0.2.88" not in r2.text
+
+
+def test_history_use_counts_valid_record_folders_without_parsing_json(app, monkeypatch):
+    from filament_kit import intake_history
+    from filament_kit.profiles import statexml
+    root = intake_history._root()
+    good = root / "abcdef012345"
+    good.mkdir(parents=True, exist_ok=True)
+    statexml.write(good / "record.json", {"id": "abcdef012345"}, mode=0o600, old_format={})
+    (good / "photo1.jpg").write_bytes(b"12345")
+    (root / "not_an_id_dir").mkdir(exist_ok=True)
+    (root / "111111111111").mkdir(exist_ok=True)  # missing record.json XML
+    monkeypatch.setattr(intake_history, "list_records", lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not parse")))
+    got = client(app).get("/setup/api/settings/general").json()["intake_history"]
+    assert got == {"count": 1, "photo_bytes": 5}

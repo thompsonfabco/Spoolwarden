@@ -99,3 +99,23 @@ def test_spoolman_down_returns_503_instead_of_500(setup, monkeypatch):
     monkeypatch.setattr(intake_history, "apply", lambda *a, **k: (_ for _ in ()).throw(SpoolmanError("down")))
     r = post(client(app), f"intake/history/{hid}/apply", {"item": 0, "values": {"vendor": "X"}})
     assert r.status_code == 503 and "Spoolman is not reachable" in r.json()["error"]
+
+
+def test_setup_and_webapp_revise_refund_cap_on_outage(setup, monkeypatch):
+    from filament_kit import intake
+    from filament_kit.profiles import statexml
+    app, _sm, hid, _sid = setup
+    reads = config.paths().state / "reads.json"
+
+    def fail_revise(*a, charge=None, **k):
+        refund = charge() if charge is not None else None
+        err = intake.ReadError("unreachable", "can't reach the Anthropic API")
+        err.refund = refund
+        raise err
+
+    monkeypatch.setattr(intake_history, "revise", fail_revise)
+    r = post(client(app), f"intake/history/{hid}/revise", {"note": "brand is X"})
+    assert r.status_code == 502 and statexml.read_list(reads) == []
+
+    r2 = client(app).post(f"/intake/api/history/{hid}/revise", json={"note": "brand is X"}, headers=H)
+    assert r2.status_code == 502 and statexml.read_list(reads) == []

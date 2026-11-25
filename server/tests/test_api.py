@@ -319,7 +319,7 @@ def test_read_error_502_then_retry(sm):
     assert r.status_code == 200 and r.json()["read_id"] == body["read_id"]
     r = c.post("/api/intake/retry/gone", headers=auth(tok))
     assert r.status_code == 404 and r.json()["error"] == "not_found"
-    assert len(statexml.read_list(config.paths().state / "reads.json")) == 2  # not_found took no read
+    assert len(statexml.read_list(config.paths().state / "reads.json")) == 1  # failed read refunded; not_found took none
 
 
 def test_retry_expired_read_costs_no_cap(sm, tmp_path):
@@ -414,10 +414,10 @@ def test_read_spoolman_down_503_refunds_cap(sm, dead_port):
     # retry of a kept read: a Spoolman outage gives the read back too
     fake.raises = anthropic.APIConnectionError(request=httpx.Request("POST", "https://x"))
     read_id = read(c, tok, [("a.jpg", JPEG)]).json()["read_id"]
-    assert len(statexml.read_list(reads)) == 2
+    assert len(statexml.read_list(reads)) == 1
     r = c_dead.post(f"/api/intake/retry/{read_id}", headers=auth(tok))
     assert r.status_code == 503 and r.json()["error"] == "spoolman_unreachable"
-    assert len(statexml.read_list(reads)) == 2
+    assert len(statexml.read_list(reads)) == 1
 
 
 def test_filaments_and_vendors_for_a_manual_add(sm):
@@ -684,3 +684,27 @@ def test_x_spoolwarden_client_records_home_assistant_kind(sm):
     assert len(devs) == 1
     assert devs[0]["kind"] == "home-assistant"
     assert devs[0]["version"] == "0.1.0"
+
+
+def test_read_retry_and_revise_refund_cap_on_outage(sm):
+    import anthropic
+    import httpx
+    from filament_kit import intake_history, inventory
+    reads = config.paths().state / "reads.json"
+    fake = FakeClaude(READ, raises=anthropic.APIConnectionError(request=httpx.Request("POST", "https://x")))
+    c = client(sm, fake)
+    tok = token()
+    r = read(c, tok, [("a.jpg", JPEG)])
+    assert r.status_code == 502 and r.json()["error"] == "unreachable"
+    assert len(statexml.read_list(reads)) == 0
+    rid = r.json()["read_id"]
+    fake.raises = anthropic.APIStatusError("bad", response=httpx.Response(500, request=httpx.Request("POST", "https://x")), body=None)
+    r2 = c.post(f"/api/intake/retry/{rid}", headers=auth(tok))
+    assert r2.status_code == 502 and r2.json()["error"] == "api_error"
+    assert len(statexml.read_list(reads)) == 0
+    item = {**READ["items"][0], "count": 1}
+    saved = inventory.add_and_link(sm, [item], rules=None, dry_run=False, tag_uid=None).saved
+    hid = intake_history.record_save(saved, source="phone")
+    r3 = c.post(f"/api/intake/history/{hid}/revise", headers=auth(tok), json={"note": "brand is X"})
+    assert r3.status_code == 502 and r3.json()["error"] == "api_error"
+    assert len(statexml.read_list(reads)) == 0

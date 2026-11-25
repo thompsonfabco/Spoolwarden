@@ -30,9 +30,16 @@ from .texts import say
 def _history_use() -> dict:
     """The intake history's records and photo bytes now, for the line beside its setting."""
     from .. import intake_history
+    from ..profiles import statexml
     try:
-        d = intake_history.list_records(False)
-        return {"count": d["count"], "photo_bytes": d["photo_bytes"]}
+        root = intake_history._root()
+        if not root.is_dir():
+            return {"count": 0, "photo_bytes": 0}
+        count = sum(
+            1 for d in root.iterdir()
+            if d.is_dir() and intake_history.ID.fullmatch(d.name) and statexml.exists(d / "record.json")
+        )
+        return {"count": count, "photo_bytes": intake_history._size()}
     except Exception:  # noqa: BLE001 - a line beside a setting
         return {"count": 0, "photo_bytes": 0}
 
@@ -40,9 +47,11 @@ def _history_use() -> dict:
 def _view() -> dict:
     cfg = config.load()
     on = modules.enabled(cfg)
+    known = redact.known_values()
     values = {k: setup_helper.general_value(cfg, k) for k in setup_helper.GENERAL}
     values["appearance.theme"] = config.look(cfg)       # an unknown stored value reads as Console, as the shells do
     values[share_corrections.KEY] = share_corrections.saved(cfg)       # off until it is set
+    values["local_intake.url"] = redact.text(str(values.get("local_intake.url") or ""), known)
     return {"values": values, "station_on": "station" in on, "remote_on": "remote" in on, "web_on": "web" in on,
             "ai_intake_on": "ai_intake" in on, "local_intake_on": "local_intake" in on,
             "local_intake_installed": local_intake_install.installed(),
@@ -50,7 +59,7 @@ def _view() -> dict:
             "port": int(cfg.get("port") or hubport.FALLBACK_PORT),
             "spoolman_external": "server" in on and "spoolman" not in on,
             "intake_history": _history_use(),
-            "spoolman_url": redact.text(str(cfg.get("spoolman_url") or ""), redact.known_values())}
+            "spoolman_url": redact.text(str(cfg.get("spoolman_url") or ""), known)}
 
 
 def _deleted(n: int | None) -> dict:
@@ -179,7 +188,11 @@ def routes(page) -> list[tuple]:
             cfg = config.load()
             if "local_intake" not in modules.enabled(cfg):
                 raise Refused(409, "the \"Label Reader: On this Hub\" Feature is off: turn it on in Features")
+            known = redact.known_values()
             h = local_reader.test(cfg)
+            h = {**h, "url": redact.text(str(h.get("url") or ""), known)}
+            if h.get("error"):
+                h["error"] = redact.text(str(h["error"]), known)
             return {**h, "share_corrections": share_corrections.state(cfg, h)}
         return await anyio.to_thread.run_sync(check)
 

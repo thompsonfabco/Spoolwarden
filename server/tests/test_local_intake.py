@@ -378,6 +378,7 @@ def test_status_rows(fake_reader, dead_url, monkeypatch):
 
 
 def test_the_setup_page_tests_the_reader(fake_reader, env):
+    from filament_kit import redact
     from test_setup_page import Helper, client, make
     url, _ = fake_reader
     setup(url, {"spoolman": True, "server": True, "local_intake": True})
@@ -385,7 +386,8 @@ def test_the_setup_page_tests_the_reader(fake_reader, env):
     r = client(app).get("/setup/api/settings/local-intake")
     assert r.status_code == 200 and r.json()["ok"] and r.json()["revise"] is True
     g = client(app).get("/setup/api/settings/general").json()
-    assert g["local_intake_on"] and not g["ai_intake_on"] and g["values"]["local_intake.url"] == url
+    assert g["local_intake_on"] and not g["ai_intake_on"]
+    assert g["values"]["local_intake.url"] == redact.text(url, redact.known_values())
     setup(url, {"spoolman": True, "server": True, "ai_intake": True})
     assert client(make(env, Helper())).get("/setup/api/settings/local-intake").status_code == 409
 
@@ -600,19 +602,20 @@ def _page(env):
 
 
 def test_a_saved_and_an_unsaved_address_answer_the_same(fake_reader, env):
+    from filament_kit import redact
     url, data = fake_reader
     setup(url, {"spoolman": True, "server": True, "local_intake": True})
     c = _page(env)
     saved = c.get("/setup/api/settings/local-intake").json()
-    assert saved["ok"]
-    assert _ask(c, {"url": url, "tier": "auto"}).json() == saved
+    assert saved["ok"] and saved["url"] == redact.text(url, redact.known_values())
+    assert _ask(c, {"url": url, "tier": "auto"}).json() == {**saved, "url": url}
     other = lrf.new_data()
     other["health"] = {**other["health"], "module_version": "9.9.9"}
     from conftest import _serve
     for url2 in _serve(lrf.app(other)):
         got = _ask(c, {"url": url2 + "/", "tier": "cpu"}).json()
         assert got["ok"] and got["version"] == "9.9.9" and got["url"] == url2
-    assert c.get("/setup/api/settings/local-intake").json()["url"] == url
+    assert c.get("/setup/api/settings/local-intake").json()["url"] == redact.text(url, redact.known_values())
 
 
 def test_an_unsaved_address_that_does_not_answer_or_answers_wrongly(fake_reader, dead_url, env):

@@ -1303,6 +1303,14 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             return lambda: intake.refund_quietly(cap, ticket, device)
         return take
 
+    def _refund_on_outage(fn):
+        try:
+            return fn()
+        except ReadError as e:
+            if e.refund is not None and e.code in ("unreachable", "api_error"):
+                e.refund()
+            raise
+
     @_authed
     async def intake_read(request: Request):
         async with request.form(max_files=intake.MAX_PHOTOS, max_fields=10) as form:
@@ -1322,7 +1330,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         def run() -> dict:
             ctx = intake.read_context(config.load(), sm, station_client(), app_tag=uid is not None)
             return intake.read_labels(sm, images, hint[:MAX_HINT], uid, claude, **ctx, charge=_charge(device))
-        return JSONResponse(await run_in_threadpool(run))
+        return JSONResponse(await run_in_threadpool(_refund_on_outage, run))
 
     @_authed
     async def intake_retry(request: Request):
@@ -1334,7 +1342,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                 return intake.retry(read_id, sm, claude)
             return intake.retry(read_id, sm, claude, charge=_charge(device), orders=intake.read_context(
                 config.load(), sm, None, app_tag=True)["orders"])
-        return JSONResponse(await run_in_threadpool(run))
+        return JSONResponse(await run_in_threadpool(_refund_on_outage, run))
 
     # ---------- the web unit's label reads: the kit's cap and order history, never its files ----------
     @_authed
@@ -1424,7 +1432,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         if not _ai_on():
             raise intake_history.HistoryError(409, "ai_off", "label reading (ai_intake or local_intake) is off on "
                                                              "this server: edit the values by hand")
-        return await run_in_threadpool(run)
+        return await run_in_threadpool(_refund_on_outage, run)
 
     async def history_apply(request: Request):
         body = await _json(request)

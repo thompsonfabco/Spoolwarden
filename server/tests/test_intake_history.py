@@ -247,6 +247,15 @@ def test_bad_values_change_nothing(sm, values, says):
     assert intake_history.get(hid)["revisions"] == []
 
 
+def test_check_values_matches_inventory_color_hex_and_temp_ranges():
+    got = intake_history._check_values({"color_hex": "#8a8c8eff", "nozzle": 500, "bed": 200})
+    assert got == {"color_hex": "8A8C8EFF", "nozzle": 500, "bed": 200}
+    for bad in ({"nozzle": 501}, {"bed": 201}, {"color_hex": "1234567"}):
+        with pytest.raises(intake_history.HistoryError) as e:
+            intake_history._check_values(bad)
+        assert e.value.status == 400
+
+
 def test_ai_revision_proposes_then_applies_as_shown(sm):
     rid = read(sm)["read_id"]
     _, hid = add(sm, read_id=rid)

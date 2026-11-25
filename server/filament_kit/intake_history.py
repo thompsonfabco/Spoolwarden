@@ -385,6 +385,10 @@ def photo_paths(rid: str) -> list[str]:
 
 # ---------------------------------------------------------------- values
 
+_HEX = re.compile(r"[0-9A-F]{6}(?:[0-9A-F]{2})?")
+_TEMP_RANGE = {"nozzle": (1, 500), "bed": (1, 200)}
+
+
 def _check_values(values: dict) -> dict:
     if not isinstance(values, dict) or not values:
         raise HistoryError(400, "bad_request", "give at least one field to change")
@@ -404,11 +408,12 @@ def _check_values(values: dict) -> dict:
         elif k == "color_hex":
             if v is not None:
                 v = str(v).lstrip("#").upper()
-                if not re.fullmatch(r"[0-9A-F]{6}", v):
-                    raise HistoryError(400, "bad_request", "color_hex must be 6 hex digits")
-        elif k in ("nozzle", "bed"):
-            if v is not None and (isinstance(v, bool) or not isinstance(v, int) or not 0 < v < 500):
-                raise HistoryError(400, "bad_request", f"{k} must be a whole number of degrees")
+                if not _HEX.fullmatch(v):
+                    raise HistoryError(400, "bad_request", "color_hex must be 6 or 8 hex digits")
+        elif k in _TEMP_RANGE:
+            lo, hi = _TEMP_RANGE[k]
+            if v is not None and (isinstance(v, bool) or not isinstance(v, int) or not lo <= v <= hi):
+                raise HistoryError(400, "bad_request", f"{k} must be a whole number between {lo} and {hi} degrees")
         else:   # net tare density price_per_kg
             if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or v <= 0):
                 raise HistoryError(400, "bad_request", f"{k} must be a positive number")
