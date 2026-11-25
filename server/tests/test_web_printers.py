@@ -693,8 +693,8 @@ def test_push_test_refuses_with_409_when_no_subscriptions_and_reports_partial_fa
     s2["subscription"]["endpoint"] = "https://fcm.googleapis.com/fcm/send/fail"
     assert c.post(P + "/push/subscribe", json=s1, headers=H).status_code == 200
     assert c.post(P + "/push/subscribe", json=s2, headers=H).status_code == 200
-    monkeypatch.setattr(pushapp, "sender", lambda info, payload, topic=None, ttl=None: (
-        201 if info["endpoint"].endswith("/ok") else 502))
+    monkeypatch.setattr(push.Push, "send_all", lambda self, *a, **k: {
+        "sent": 1, "failed": [{"endpoint": s2["subscription"]["endpoint"], "code": 502}], "gone": 0})
     r = c.post(P + "/push/test", headers=H)
     assert r.status_code == 200
     body = r.json()

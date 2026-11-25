@@ -237,7 +237,7 @@ def test_undo_goes_back_one_revision_at_a_time(sm):
 
 
 @pytest.mark.parametrize("values, says", [({}, "at least one"), ({"colour": "x"}, "unknown field"),
-                                          ({"nozzle": "hot"}, "whole number"), ({"color_hex": "red"}, "6 hex"),
+                                          ({"nozzle": "hot"}, "whole number"), ({"color_hex": "red"}, "hex digits"),
                                           ({"net": -1}, "positive"), ({"vendor": ""}, "text")])
 def test_bad_values_change_nothing(sm, values, says):
     r, hid = add(sm)

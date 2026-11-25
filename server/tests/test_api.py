@@ -703,7 +703,7 @@ def test_read_retry_and_revise_refund_cap_on_outage(sm):
     assert r2.status_code == 502 and r2.json()["error"] == "api_error"
     assert len(statexml.read_list(reads)) == 0
     item = {**READ["items"][0], "count": 1}
-    saved = inventory.add_and_link(sm, [item], rules=None, dry_run=False, tag_uid=None).saved
+    saved = inventory.add_and_link(sm, [item], {}, False, None).saved
     hid = intake_history.record_save(saved, source="phone")
     r3 = c.post(f"/api/intake/history/{hid}/revise", headers=auth(tok), json={"note": "brand is X"})
     assert r3.status_code == 502 and r3.json()["error"] == "api_error"

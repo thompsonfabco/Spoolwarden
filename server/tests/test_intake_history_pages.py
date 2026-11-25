@@ -117,5 +117,7 @@ def test_setup_and_webapp_revise_refund_cap_on_outage(setup, monkeypatch):
     r = post(client(app), f"intake/history/{hid}/revise", {"note": "brand is X"})
     assert r.status_code == 502 and statexml.read_list(reads) == []
 
+    from filament_kit.web.intake_app import IntakeApp
+    monkeypatch.setattr(IntakeApp, "_ai", lambda self: True)
     r2 = client(app).post(f"/intake/api/history/{hid}/revise", json={"note": "brand is X"}, headers=H)
     assert r2.status_code == 502 and statexml.read_list(reads) == []
