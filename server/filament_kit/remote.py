@@ -37,6 +37,9 @@ NGINX_DROPIN = "/etc/systemd/system/nginx.service.d/filament-kit-pair.conf"  # c
 NGINX_DROPIN_TEXT = ("# Before every nginx start, make sure the certificate and key match (filament-kit)\n"
                      "# The check goes first: the distro's own `nginx -t` fails on a mismatched pair and would stop"
                      " the start before the check could repair it, so that line is listed again after ours.\n"
+                     "# Targets Debian/Ubuntu's nginx.service only: clearing ExecStartPre= and restoring"
+                     " `/usr/sbin/nginx -t -q -g 'daemon on; master_process on;'` would drop other distros'"
+                     " ExecStartPre lines (e.g. Fedora/RHEL's `rm -f /run/nginx.pid`).\n"
                      f"[Service]\nExecStartPre=\nExecStartPre=-{HOOK} check\n"
                      "ExecStartPre=/usr/sbin/nginx -t -q -g 'daemon on; master_process on;'\n")
 DEPLOY_HOOK_FILE = "/etc/letsencrypt/renewal-hooks/deploy/filament-kit"

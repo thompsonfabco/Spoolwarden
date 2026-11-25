@@ -220,6 +220,30 @@ def manual_end(serial: str) -> None:
 _MAPPING_NOW: set[str] = set()     # serials whose automatic job runs in this process
 
 
+def _migrate_clash_labels(m: ams.SlotMap, labels) -> bool:
+    """Migrate legacy `#<id>` clash-suffixed slot labels (e.g. A1#1 -> A1-1) once when absent from `labels`
+    and the `-<id>` label is present."""
+    if not labels:
+        return False
+    renamed: dict[str, str] = {}
+    for old in list(m.slots):
+        head, sep, tail = old.rpartition("#")
+        if not (sep and head and tail.isdigit()):
+            continue
+        new = f"{head}-{tail}"
+        if old not in labels and new in labels and new not in m.slots:
+            renamed[old] = new
+    if not renamed:
+        return False
+    for old, new in renamed.items():
+        m.slots[new] = m.slots.pop(old)
+        if old in m.by_user and new not in m.by_user:
+            m.by_user[new] = m.by_user.pop(old)
+    if m.learned:
+        m.learned = {num: renamed.get(lab, lab) for num, lab in m.learned.items()}
+    return True
+
+
 def _keep_owner_entries(serial: str, smap, problems: list[str], model=None) -> None:
     """The owner's entries win over what a job found: kept, and a disagreement is said, never applied.
 
@@ -227,6 +251,7 @@ def _keep_owner_entries(serial: str, smap, problems: list[str], model=None) -> N
     gave the owner's address (proven when the map is calibrated), else the proven scheme's number for it, else none
     (as the job does for a slot it could not number). An uncalibrated map keeps the owner's entry's number."""
     old = ams.load_map(serial)
+    _migrate_clash_labels(old, smap.slots)
     hw = None
     for label, meta in old.by_user.items():
         mine = old.slots.get(label)
@@ -472,7 +497,8 @@ def _delete_leftover_job(serial: str) -> None:
         return
     problems = calib3mf.delete_leftover(serial)
     if problems:
-        log.warning("mapping on %s: the killed calibration's file was not deleted: %s", registry.log_label(serial), problems)
+        log.warning("mapping on %s: the killed calibration's file was not deleted: %s",
+                    registry.log_label(serial), calib3mf.scrub_problems(serial, problems))
     else:
         log.info("mapping on %s: deleted the file a killed calibration left on the printer", registry.log_label(serial))
 
@@ -642,7 +668,8 @@ class Mapper:
             _delete_leftover_job(serial)
             problems = snapshot.restore(self._m, serial)
             if problems:
-                log.warning("mapping on %s: restore from the slot snapshot not confirmed: %s", registry.log_label(serial), problems)
+                log.warning("mapping on %s: restore from the slot snapshot not confirmed: %s",
+                            registry.log_label(serial), calib3mf.scrub_problems(serial, problems))
                 _distrust(serial)
             else:
                 log.info("mapping on %s: slots restored from the slot snapshot", registry.log_label(serial))
@@ -688,7 +715,8 @@ class Mapper:
                     with _MANUAL_GUARD:
                         _MAPPING_NOW.discard(serial)
                     job.released.set()
-            log.info("mapping on %s: job %s %s; problems %s", registry.log_label(serial), job.id, job.state, job.problems)
+            log.info("mapping on %s: job %s %s; problems %s", registry.log_label(serial), job.id, job.state,
+                     calib3mf.scrub_problems(serial, job.problems))
 
     def _map(self, serial: str, job: _Job, step) -> None:
         def fail(problems: list[str], reason: str = "none") -> None:
@@ -999,6 +1027,7 @@ class LayoutWatch:
         m = ams.load_map(serial)
         if not m.slots:
             return False
+        migrated = _migrate_clash_labels(m, labels)
         same = m.fingerprint is None or layout.same_layout(m.fingerprint, fp)
         missing = sorted(k for k in m.slots if labels is not None and k not in labels)
         stale = not same or bool(missing)
@@ -1007,7 +1036,7 @@ class LayoutWatch:
             log.info("mapping on %s: the slot map adopted the printer's current layout", registry.log_label(serial))
         else:
             new_fp = _merge_fp(m.fingerprint, fp) if same else m.fingerprint
-        if new_fp == m.fingerprint and stale == m.stale:
+        if not migrated and new_fp == m.fingerprint and stale == m.stale:
             return stale or m.suspect
         if stale and not m.stale:
             log.warning("mapping on %s: the slot map is stale (%s)", registry.log_label(serial),

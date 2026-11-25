@@ -329,7 +329,7 @@ def test_a_banned_form_is_caught_in_any_case_and_the_bare_word_is_not(text, toke
 def test_readme_sections_a_user_needs():
     text = _readme()
     for h in ("## What you need", "## Install", "## What it does", "## Features", "## Supported printers",
-              "## The phone app", "## The reader",
+              "## The phone app", "## Tag Reader",
               "## Updates and rollback", "## The Filament Catalog", "## Where your data lives", "## Uninstall",
               "## Pair your PC"):        # the CLI says "see README: Pair your PC"
         assert h in text, h

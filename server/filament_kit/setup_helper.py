@@ -352,6 +352,26 @@ def _not_applying() -> None:
         raise Refused(409, _busy_text())
 
 
+def _sweep_stale_reader_pending() -> None:
+    """Drop any leftover reader-setup files when no reader_setup job is running."""
+    from . import reader_flash
+    etc = reader_flash.pending_path().parent
+    if not (reader_flash.pending_path().exists() or (etc / reader_flash.OLD_PENDING).exists()
+            or any(etc.glob(reader_flash.pending_path().stem + ".*"))):
+        return
+    with _job_lock():
+        if not _no_systemd():
+            try:
+                if "reader_setup" in _running_jobs():
+                    return
+            except CannotTell:
+                return
+        try:
+            reader_flash.drop_pending()
+        except OSError:
+            pass
+
+
 def _emit_settings_changed(**data: str) -> None:
     """settings.changed by whoever made the change (D8): the command line calls these functions inside its own
     `acting(cli)`; a request over the helper socket has no actor set, and it comes from the Hub page."""
@@ -1006,6 +1026,10 @@ def _reader_usb(req: dict) -> dict:
         raise Refused(400, str(e)) from None
     if reader_flash.bundled_image() is None:
         raise Refused(409, "this Hub has no Tag Reader firmware bundled; update Spoolwarden")
+    try:
+        reader_setup.reader_base(config.load())
+    except reader_setup.SetupError as e:
+        raise Refused(409, str(e)) from None
     ports = [r.port for r in reader_setup.find_readers()]
     port = req.get("port")
     if port is not None and port not in ports:
@@ -1018,7 +1042,7 @@ def _reader_usb(req: dict) -> dict:
     try:
         reader_flash.write_pending({"ssid": ssid, "pass": password, "buzzer": buzzer, "port": port or ports[0],
                                     "name": name, "printer": printer})
-        _start_job("reader_setup")
+        _start_job("reader_setup", checked=True)
     except BaseException:
         reader_flash.drop_pending()         # the Wi-Fi password is in the files: whatever failed, none stays
         raise
@@ -1196,6 +1220,7 @@ def handle(req) -> dict:
     """One request -> one reply {ok, status[, error][, ...]}. Never raises; the reply never holds a value, except
     trust_add's new token."""
     try:
+        _sweep_stale_reader_pending()
         if not isinstance(req, dict) or req.get("op") not in OPS:
             raise Refused(400, "unknown request")
         if req["op"] not in NO_CODE_OPS:
@@ -1266,6 +1291,12 @@ def run_job(name: str, cmd: list[str] | None = None) -> int:
         finally:
             if old is not None:
                 signal.signal(signal.SIGTERM, old)
+            if name == "reader_setup":
+                from . import reader_flash
+                try:
+                    reader_flash.drop_pending()
+                except OSError:
+                    pass
         fh.write(f"\n{FINISHED} {code})\n")
     # the page's own audit line says who started it; the page restarts during a job, so the end is logged here
     log.info("setup: job %s finished (exit %s)", name, code)

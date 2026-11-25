@@ -54,7 +54,7 @@ CHUNK = 2**20
 UPLOAD = "restore-upload"      # in the state folder: what the setup page received, until the restore job takes it
 # Relative to their root: left out, as install/backup.sh leaves them out.
 EXCLUDE = {
-    "etc/filament-kit": ("backup_password",),
+    "etc/filament-kit": ("backup_password", "reader-setup.json"),
     "var/lib/filament-kit": ("profiles/live/system", "library/versions", UPLOAD),
 }
 EXCLUDE_GLOB = {"var/lib/filament-kit": (re.compile(r"profiles/builds/[^/]+\.tmp(/.*)?"),)}

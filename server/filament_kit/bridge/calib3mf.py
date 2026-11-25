@@ -124,6 +124,23 @@ def remote_path(serial: str) -> str:
     return f"/cache/{job_name(serial)}.gcode.3mf"
 
 
+_CALIB_PATH_RE = re.compile(r"/cache/fk-calib-[^\s:;,)]+")
+_RUNNING_OTHER_RE = re.compile(r"running (?:r?'(?:[^'\\]|\\.)*'|r?\"(?:[^\"\\]|\\.)*\")")
+
+
+def scrub_problems(serial: str, problems: list[str]) -> list[str]:
+    """Return a copy of `problems` safe for logs: redact FTPS cache paths, other job filenames, and raw serials."""
+    label = registry.log_label(serial) if serial else "unknown printer"
+    out: list[str] = []
+    for p in problems:
+        s = _CALIB_PATH_RE.sub("/cache/fk-calib-<redacted>", p)
+        s = _RUNNING_OTHER_RE.sub("running <redacted>", s)
+        if serial:
+            s = s.replace(serial, label)
+        out.append(s)
+    return out
+
+
 @dataclass
 class CalibResult:
     decoding: dict[str, int] = field(default_factory=dict)   # label -> the global id the printer reported
@@ -639,6 +656,8 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
                          r.report_wanted or "no mapping", files[fi + 1])
                 fi += 1
                 continue
+            if answered is None and fi > 0 and _file_refused(r):
+                fi = 0
             break
         if r.skip:
             continue
@@ -798,7 +817,7 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
         if not res.other_job:   # another print's filament load is not ours to report
             _left_loaded(manager, serial, snap, res)
     log.info("%s: calibration %s; decoding %s; problems %s", registry.log_label(serial),
-             "consistent" if res.consistent else "not consistent", res.decoding, res.problems)
+             "consistent" if res.consistent else "not consistent", res.decoding, scrub_problems(serial, res.problems))
     return res
 
 

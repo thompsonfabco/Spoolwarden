@@ -106,7 +106,8 @@ def test_orders_needs_the_claude_reader():
     (BOTH, "cloud-then-local", ["cloud", "local"]),
     (BOTH, "cloud", ["cloud"]),
     (BOTH, "nonsense", ["local", "cloud"]),
-    ({**BOTH, "ai_intake": False}, "cloud", ["local"]),        # the named reader is off: the one that is on
+    ({**BOTH, "ai_intake": False}, "cloud", []),               # explicit single reader is off: no silent fallback
+    ({**BOTH, "local_intake": False}, "local", []),            # explicit single reader is off: no silent fallback
     ({**BOTH, "local_intake": False}, "auto", ["cloud"]),
     ({"spoolman": True, "server": True}, "auto", []),
 ])

@@ -50,7 +50,7 @@ LOCK_FILES = ("inventory.lock", "profiles/lines.lock", "profiles/live.lock", "pr
               "profiles/build.lock")
 RW_TREES = ()                              # no folder of the kit is writable by the web user
 RO_TREES = ("profiles", "library", "library-local", "reader-fw")
-ETC_FILES = ("config.xml", "config.json", "web_passphrase", "anthropic_key")
+ETC_FILES = ("config.xml", "config.json", "web_passphrase", "anthropic_key", "local_intake_token")
 WEB_ROLE = pairing.WEB_ROLE                # devices.json "role" of the web unit's pairing (the web-only routes)
 
 

@@ -25,8 +25,9 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           fetch-depth: 0
-      # a v* tag on a branch commit would run the jobs that hold the signing secrets; the repository variable
-      # FK_RELEASE_ANY_BRANCH=1 switches this check off
+      # In-workflow guard against accidental mis-tagging (stops a v* tag on a branch commit before the signing
+      # jobs run; FK_RELEASE_ANY_BRANCH=1 switches it off). Protecting signing secrets against an unauthorized
+      # branch or tag push requires GitHub Actions environment protection rules or a tag ruleset.
       - name: Check the tagged commit is on main
         env:
           ANY_BRANCH: ${{ vars.FK_RELEASE_ANY_BRANCH }}

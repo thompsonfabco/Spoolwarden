@@ -509,8 +509,7 @@ def reader_order(cfg: dict) -> list[str]:
     have = {r for r, m in (("cloud", "ai_intake"), ("local", "local_intake")) if m in on}
     want = str((cfg.get("intake") or {}).get("reader") or "auto")
     order = READER_ORDERS.get(want, READER_ORDERS["local-then-cloud"])
-    out = [r for r in order if r in have]
-    return out or [r for r in READER_ORDERS["local-then-cloud"] if r in have]
+    return [r for r in order if r in have]
 
 
 def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, client, *,
@@ -655,7 +654,7 @@ def _fallback_line(it: dict, lib) -> str:
 def read_labels(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, client=None,
                 read_id: str | None = None, *, orders: list[dict] | None = None,
                 station_state: dict | None = None, fresh_tag: dict | None = None,
-                readers: list[str] | None = None, charge=None) -> dict:
+                readers: list[str] | None = None, charge=None, stash: bool = True) -> dict:
     """Read label photos. On a ReadError the photos are kept under state/failed/<read_id> (error.read_id).
 
     `orders`: the order history (`load_orders`), None when the `orders` module is off. `station_state`: the intake
@@ -675,8 +674,9 @@ def read_labels(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | Non
         raise
     _forget(rid)
     out["read_id"] = rid
-    from . import intake_history
-    intake_history.stash_read(rid, images, out, hint, tag_uid or (fresh_tag or {}).get("nfc_id"))
+    if stash:
+        from . import intake_history
+        intake_history.stash_read(rid, images, out, hint, tag_uid or (fresh_tag or {}).get("nfc_id"))
     return out
 
 

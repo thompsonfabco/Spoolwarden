@@ -170,6 +170,7 @@ def write_token(token: str):
                     shutil.chown(tmp, user="root", group="filament-kit")
                 except (LookupError, OSError):
                     pass
+        config.grant_web_read(tmp)
         os.replace(tmp, dest)
     except BaseException:
         tmp.unlink(missing_ok=True)

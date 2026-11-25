@@ -759,7 +759,8 @@ class IntakeApp:
                     log.warning("cap refund failed: %s", e)
             ctx = intake.read_context(cfg, self.tools.sm, self._station(), orders_from=self._orders)
             try:
-                return intake.read_labels(self.tools.sm, images, hint, None, self.claude, **ctx, charge=charge)
+                return intake.read_labels(self.tools.sm, images, hint, None, self.claude, **ctx,
+                                          charge=charge, stash=bool(self.history))
             except intake.ReadError as e:
                 # Claude was the last reader and never answered: the read goes back, as the station's path does
                 if e.refund is not None and e.code in ("unreachable", "api_error"):

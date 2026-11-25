@@ -51,7 +51,7 @@ Then, on your phone:
 
 Optional afterwards: Slicer Sync for Slicer presets in Bambu Studio ([Pair your PC](#pair-your-pc)), a Weigh Station with
 a scale and a tag reader ([Weigh Station](docs/user-guide.md#intake-station)), and a
-[Tag Reader](#the-reader).
+[Tag Reader](#tag-reader).
 
 Your spool list is also in any web browser at home, at `http://<computer name>.local:7912` (the installer prints
 the address). Spoolman has no sign-in, so it answers only this computer and your home network (by default
@@ -117,11 +117,14 @@ Windows PC with Bambu Studio, run `sudo spoolwarden pair --slicer-sync` on the H
 the setup's console. It keeps both stable and Beta Bambu Studio current (v0.4.0). Step by step: [Pair your PC](docs/user-guide.md#pair-your-pc) in the guide. On Linux, use
 `filament-kit-sync-linux-x86_64-<version>.tar.gz` instead: [Slicer Sync on Linux](docs/user-guide.md#pc-sync-on-linux).
 
-## The reader
+<a id="the-reader"></a>
+## Tag Reader
 
 A Tag Reader is a small ESP32-C3 box next to the printer: tap a spool's tag, turn the knob to a slot, and the spool is loaded
-there. It talks to the `web` Feature: make its token with `sudo spoolwarden tag-reader new-token --name bench`. Its API and firmware build are in [reader/README.md](reader/README.md), and its parts and wiring in the
-[hardware guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/printer-station).
+there. It talks to the `web` Feature: make its token with `sudo spoolwarden tag-reader new-token --name printer-1`. For
+no-toolchain setup, run `sudo spoolwarden tag-reader setup` or use **Flash a device** on the Hub page (see
+[reader/README.md](reader/README.md)); its API and firmware build are in [reader/README.md](reader/README.md), and its
+parts and wiring in the [hardware guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/printer-station).
 
 ## Supported printers
 
