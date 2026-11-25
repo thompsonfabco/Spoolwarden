@@ -30,8 +30,9 @@ def parse_notify(data: bytes) -> dict | None:
         key, sep, value = line.partition(":")
         if sep:
             h[key.strip().lower()] = value.strip()
+    from . import registry
     serial, ip = h.get("usn", ""), h.get("location", "")
-    if not serial or not ip:
+    if not serial or not ip or not registry.SERIAL.fullmatch(serial):
         return None
     if "bambu" not in (h.get("nt", "bambu")).lower():
         return None

@@ -115,3 +115,10 @@ def test_loopback_rejected_by_default():
     assert not discovery.valid_ip("127.0.0.1")
     assert discovery.valid_ip("127.0.0.1", allow_loopback=True)
     assert discovery.valid_ip("192.168.1.50")
+
+
+def test_parse_notify_rejects_invalid_serial_usn():
+    for bad in ("bad serial", "../escape", "a.b", "A" * 65):
+        payload = NOTIFY.replace("01P00A123456789", bad).encode()
+        assert discovery.parse_notify(payload) is None, bad
+    assert discovery.parse_notify(NOTIFY.replace("01P00A123456789", "A" * 64).encode())["serial"] == "A" * 64
