@@ -205,12 +205,11 @@ def choose(presets, spool, current, remembered, slot=SLOT, published=None):
     listed = [p for p in presets if spool["filament_id"] in p["spoolman_ids"]]
     if len(listed) == 1:
         return listed[0]["name"], "Spoolman filament id in preset notes"
+    if listed:       # two or more presets list this filament id: the pick is among them, as the module notes say
+        presets = listed
     names = {p["name"] for p in presets}
     if remembered in names:
         return remembered, "remembered pick"
-
-    if listed:       # two or more presets list this filament id: the pick is among them, as the module notes say
-        presets = listed
 
     vendor_matches = [p for p in presets if related(p["vendor"], spool["vendor"])]
     pool, how = vendor_matches, "vendor + type"

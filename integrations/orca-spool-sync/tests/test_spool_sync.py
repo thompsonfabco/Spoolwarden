@@ -221,3 +221,11 @@ def test_two_presets_listing_the_filament_id_are_scored_among_themselves(plugin)
     presets = [p("Acme PLA Silk", {5}), p("Acme PLA", {5}), p("Acme PLA Silk tuned", set(), user=True)]
     # the unlisted user preset scores 4.5 over everything; the pick is still one that lists id 5
     assert plugin.choose(presets, spool, None, None)[0] == "Acme PLA Silk"
+
+
+def test_remembered_pick_outside_listed_presets_does_not_beat_listed_ids(plugin):
+    def p(name, ids):
+        return {"name": name, "label": name, "type": "PLA", "vendor": "Acme", "is_user": False, "spoolman_ids": ids}
+    spool = {"filament_id": 5, "material": "PLA", "vendor": "Acme", "name": "Silk"}
+    presets = [p("Acme PLA Silk", {5}), p("Acme PLA", {5}), p("Unlisted Pick", set())]
+    assert plugin.choose(presets, spool, None, "Unlisted Pick")[0] == "Acme PLA Silk"

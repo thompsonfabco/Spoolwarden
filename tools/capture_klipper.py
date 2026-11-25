@@ -58,7 +58,7 @@ def scrub_text(s: str, host: str | None = None) -> str:
     """An address-free copy of a string: the capture host, URL hosts, IPv4/IPv6 addresses, local-network host names
     (*.local, *.lan, *.arpa ...), the user in home paths."""
     if host:
-        s = re.sub(re.escape(host), HOST_OUT, s, flags=re.I)
+        s = re.sub(r"(?<![A-Za-z0-9_-])" + re.escape(host) + r"(?![A-Za-z0-9_-])", HOST_OUT, s, flags=re.I)
     s = _URL_HOST.sub(lambda m: m.group(1) + HOST_OUT, s)
     s = _IPV4.sub(IP_OUT, s)
     s = _IPV6.sub(_ipv6_out, s)

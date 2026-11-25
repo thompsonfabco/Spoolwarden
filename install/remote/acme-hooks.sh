@@ -66,7 +66,7 @@ case "$1" in
     elif take_pair "$T/previous" expired-ok; then
       echo "Spoolwarden: the saved certificate and key did not belong together and the only working pair has run out, so it is served anyway to keep the web server up; renew it with 'sudo certbot renew' (or 'sudo spoolwarden modules apply' for the kit's own certificate)."
     else
-      echo "Spoolwarden: the saved certificate and key do not belong together and no good copy was found; run 'spoolwarden apply' to make them again."
+      echo "Spoolwarden: the saved certificate and key do not belong together and no good copy was found; run 'sudo spoolwarden modules apply' to make them again."
     fi
     exit 0 ;;
   *) echo "usage: $0 pre|post|deploy|check"; exit 2 ;;

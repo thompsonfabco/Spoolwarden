@@ -185,6 +185,9 @@ def test_capture_scrubs_bare_ipv6_local_names_and_dict_keys():
     assert got["cors_domains"] == ["printer.example", "*.printer.example"]
     assert set(got) == {"trusted_clients", "cors_domains", "webcam printer.example", "spoolman printer.example"}
     assert cap.scrub({"webcam cam-box.local": 1}, None, addresses=False) == {"webcam cam-box.local": 1}
+    assert cap.scrub_text("PID_CALIBRATE http://pi:7125 pi.local", host="pi") == (
+        "PID_CALIBRATE http://printer.example:7125 printer.example"
+    )
 
 
 def test_capture_keep_addresses_leaves_them(moonraker, tmp_path):
