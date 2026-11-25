@@ -143,13 +143,14 @@ _cache: dict[str, tuple[tuple, list[dict]]] = {}       # month file -> (its size
 
 def _iso(t) -> str | None:
     """A time as the stored text (UTC, to the second): from a datetime or an ISO text, None for none."""
+    from . import iso_time
     if t is None or t == "":
         return None
     if isinstance(t, str):
-        try:
-            t = datetime.fromisoformat(t.strip().replace("Z", "+00:00"))
-        except ValueError:
+        parsed = iso_time.parse_utc(t)
+        if parsed is None:
             raise EventError(f"{t!r} is not a time. Use the form 2026-11-17T04:12:09Z.") from None
+        t = parsed
     return _utc(t).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -160,8 +161,8 @@ def _month_end(path: Path) -> datetime:
 
 
 def _utc(now: datetime | None) -> datetime:
-    now = now or datetime.now(timezone.utc)
-    return now.astimezone(timezone.utc) if now.tzinfo else now.replace(tzinfo=timezone.utc)
+    from . import iso_time
+    return iso_time.utc_now(now)
 
 
 # ---------------------------------------------------------------- elements

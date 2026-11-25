@@ -171,16 +171,10 @@ class SpoolChanged(UsageError):
 
 def _registered(spool) -> float | None:
     """A spool's `registered` time from Spoolman, in epoch seconds, or None when it can't be read."""
+    from .. import iso_time
     text = spool.get('registered') if isinstance(spool, dict) else None
-    if not isinstance(text, str):
-        return None
-    try:
-        when = dt.datetime.fromisoformat(text.replace('Z', '+00:00'))
-    except ValueError:
-        return None
-    if when.tzinfo is None:         # Spoolman's times are UTC
-        when = when.replace(tzinfo=dt.timezone.utc)
-    return when.timestamp()
+    when = iso_time.parse_utc(text)
+    return None if when is None else when.timestamp()
 
 
 def _same_spool(spoolman, rec: dict, at: float) -> None:
