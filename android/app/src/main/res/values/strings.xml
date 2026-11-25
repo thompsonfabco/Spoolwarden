@@ -6284,4 +6284,28 @@
     <!-- 1=brand 2=name -->
     <string name="catalog_remove_confirm">Remove %1$s %2$s from your own entries? Slicer presets are rebuilt.</string>
     <string name="catalog_removed">Removed.</string>
+    <string name="labels_title_one">Print a label</string>
+    <string name="labels_title_many">Print labels</string>
+    <string name="labels_size">Size</string>
+    <string name="labels_size_62x29">62 x 29 mm</string>
+    <string name="labels_size_50x30">50 x 30 mm</string>
+    <string name="labels_size_a4_63x34">A4 sheet of 24, 63.5 x 33.9 mm</string>
+    <string name="labels_size_a4_70x37">A4 sheet of 24, 70 x 37 mm</string>
+    <string name="labels_size_letter_66x25">Letter sheet of 30, 2-5/8 x 1 in</string>
+    <string name="labels_actual_size" formatted="false">Print at actual size (100%), not fitted to the page.</string>
+    <!-- 1=address -->
+    <string name="labels_address_note">The code holds this Hub\'s address, %1$s. If the Hub is renamed or moves to another port, old labels still open in the Spoolwarden app\'s scanner but not from a phone\'s camera.</string>
+    <string name="labels_print">Print</string>
+    <!-- 1=text -->
+    <string name="labels_error">Could not draw the labels. %1$s</string>
+    <!-- 1=id -->
+    <string name="labels_missing">Spool %1$s was not found.</string>
+    <string name="labels_try_again">Try again</string>
+    <string name="labels_loading">Drawing the labels…</string>
+    <!-- 1=number 2=name 3=material 4=net -->
+    <string name="labels_aria">Label of spool %1$s: %2$s, %3$s, %4$s</string>
+    <!-- 1=number -->
+    <string name="labels_aria_plain">Label of spool %1$s</string>
+    <!-- 1=grams -->
+    <string name="labels_net">%1$s g</string>
 </resources>

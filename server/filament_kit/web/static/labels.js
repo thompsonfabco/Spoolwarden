@@ -15,25 +15,7 @@ const $ = (s) => root.querySelector(s);
 const SIZES = [{ value: "62x29" }, { value: "50x30" }, { value: "a4-63x34", per: 24 }, { value: "a4-70x37", per: 24 }, { value: "letter-66x25", per: 30 }];
 const sizeOf = (v) => SIZES.find((s) => s.value === v) || SIZES[0];
 
-// Texts of this page that the string catalogue does not hold yet (the keys file lists them); the catalogue's own text wins.
-const STUB = {
-  labels_title_one: "Print a label", labels_title_many: "Print labels", labels_size: "Size",
-  labels_size_62x29: "62 x 29 mm", labels_size_50x30: "50 x 30 mm", labels_size_a4_63x34: "A4 sheet of 24, 63.5 x 33.9 mm",
-  labels_size_a4_70x37: "A4 sheet of 24, 70 x 37 mm", labels_size_letter_66x25: "Letter sheet of 30, 2-5/8 x 1 in",
-  labels_actual_size: "Print at actual size (100%), not fitted to the page.",
-  labels_address_note: "The code holds this Hub's address, {address}. If the Hub is renamed or moves to another port, old labels still open in the Spoolwarden app's scanner but not from a phone's camera.",
-  labels_print: "Print", labels_error: "Could not draw the labels. {text}", labels_missing: "Spool {id} was not found.",
-  labels_try_again: "Try again", labels_loading: "Drawing the labels…",
-  labels_aria: "Label of spool {number}: {name}, {material}, {net}", labels_aria_plain: "Label of spool {number}", labels_net: "{grams} g",
-  demo_banner: "Demo data. Nothing here is real.", demo_leave: "Leave demo", demo_leave_title: "Leave the demo?",
-  demo_leave_text: "Everything in it is deleted.",
-};
-function tx(key, vars) {
-  const v = SW.t(key, vars);
-  if (v !== key) return v;
-  const f = STUB[key];
-  return f == null ? key : vars ? f.replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : f;
-}
+const tx = (key, vars) => SW.t(key, vars);
 const el = (tag, props, ...kids) => { const e = Object.assign(document.createElement(tag), props || {}); e.append(...kids.filter((k) => k != null)); return e; };
 
 const title = tx(ids.length === 1 ? "labels_title_one" : "labels_title_many");
