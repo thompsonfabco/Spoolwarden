@@ -143,7 +143,7 @@ def routes(page) -> list[tuple]:
         stamp, names = body.get("stamp"), body.get("names")
         if not dry and not (isinstance(stamp, str) and isinstance(names, list) and names
                             and all(isinstance(n, str) for n in names)):
-            raise Refused(400, "accepting names what the list showed: stamp and names")
+            raise Refused(400, "accepting requires stamp and names")
 
         def run() -> dict:
             try:

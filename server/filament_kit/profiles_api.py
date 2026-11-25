@@ -546,7 +546,7 @@ def _accept_args(body: dict) -> tuple[str, set[str]]:
     stamp, names = body.get("stamp"), body.get("names")
     if not (isinstance(stamp, str) and 0 < len(stamp) <= 200 and isinstance(names, list) and names
             and len(names) <= MAX_ACCEPT and all(isinstance(n, str) and 0 < len(n) <= 400 for n in names)):
-        raise _bad("accepting names what the list showed: stamp (text) and names (a list of preset names)")
+        raise _bad("accepting requires stamp (text) and names (a list of preset names)")
     return stamp, set(names)
 
 

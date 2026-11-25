@@ -1263,7 +1263,6 @@ def update(url: str | None = None, *, opener=None, now: float | None = None, sch
                 note = (f"{base} is a folder URL: it is not signature-checked (only the hashes in its index.json "
                         "are)")
                 raw = fetch.get(base + "index.json", "index.json", INDEX_LIMIT)
-                step("Checking its signature")
             idx, rows = _parse_index(raw, cur_version)
             new_rows = {r["path"]: r["sha256"] for r in rows}
             # what this kit dropped from a signed library is on disk changed: compare with what was published, and this kit

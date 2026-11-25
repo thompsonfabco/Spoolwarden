@@ -253,3 +253,12 @@ def test_an_update_tells_its_download_check_and_install_steps(fresh, key):  # no
     r = library.update(URL, opener=release_web(key, tar_bytes(files)), step=told.append)
     assert r.error is None and not r.changed
     assert told == ["Downloading the Filament Catalog", "Checking its signature"]
+
+
+def test_folder_url_update_does_not_claim_signature_check(fresh):  # noqa: F811
+    told = []
+    files = _rehash(fixture_files())
+    r = library.update(URL, opener=folder_web(files), step=told.append)
+    assert r.error is None and r.changed
+    assert "Checking its signature" not in told
+    assert told == ["Downloading the Filament Catalog", "Putting it in place"]
