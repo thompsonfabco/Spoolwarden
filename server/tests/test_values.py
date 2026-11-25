@@ -271,3 +271,9 @@ def test_non_finite_values_never_clamped_or_written():
     apply(cfg, e, template={"nozzle_temperature": ["nan", "inf"]})
     assert "nozzle_temperature" not in cfg
     assert "nan" not in str(cfg)
+
+
+def test_color_words_does_not_split_pla_plus_joined_to_color():
+    import re
+    assert re.sub(V._COLOR_WORDS, "", "PLA+Red") == "PLA+Red"
+    assert re.sub(V._COLOR_WORDS, "", "PLA+ Red") == "Red"

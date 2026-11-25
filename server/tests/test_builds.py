@@ -864,3 +864,12 @@ def test_rebuild_request_carries_orca_live_hash(env):
     assert (view["live_hash"], view["orca_live_hash"]) == ("a" * 64, "b" * 64)
     builds.request_rebuild("pc sync", "a" * 64)
     assert builds.state_view("a")["rebuild_requested"]["orca_live_hash"] is None
+
+
+def test_tree_hash_matches_pc_sync_fixed_vector(tmp_path):
+    root = tmp_path / "tree"
+    (root / "base").mkdir(parents=True)
+    (root / "a.json").write_bytes(b"{}")
+    (root / "base" / "b.info").write_bytes(b"x")
+    (root / "c.txt").write_bytes(b"y")
+    assert builds.tree_hash(root) == "d4b6cceb14a5ca9c7aa614bd8c3aa58962ce081d8e8230bdd1c40bacee8af6ed"
