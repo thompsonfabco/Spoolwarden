@@ -225,38 +225,7 @@ function printersTab() {
     if (addedId) location.hash = "#printers/" + enc(addedId);
   }
 
-  // ----- adding a printer, guided: which printer (the found list first), its details, the test and the add,
-  // then "Map its slots now?". One sheet; Back keeps what was typed. The texts below are in the catalogue when EV2 lands (the keys file
-  // lists them); until then the English here is shown. -----
-  const GUIDED = {
-    printer_guided_title: "Add a printer", printer_guided_which: "Which printer?", printer_guided_found: "Found on your network",
-    printer_guided_looking: "Looking…", printer_guided_none: "None found. Type its address in the next step.", printer_guided_use: "Use this",
-    printer_guided_back: "Back", printer_guided_access_hint: "On the printer: Settings > Network/LAN > Access Code",
-    printer_guided_found_at: "Found on the network at {address}.",
-    printer_guided_type_bambu: "Type a Bambu Lab printer's address", printer_guided_type_klipper: "Type a Klipper printer's address",
-    printer_guided_testing: "Testing…", printer_guided_test_failed: "The Hub could not reach a Klipper printer at {address}.",
-    printer_guided_add_anyway: "Add anyway", printer_guided_try_again: "Try again",
-    printer_guided_map_title: "Map its slots now?", printer_guided_map_body: "Mapping tells the Hub which slot is which. Nothing heats or moves.",
-    printer_guided_map_later: "Later",
-    printer_clear_action: "Clear slot", printer_clear_title: "Clear slot {slot}?", printer_clear_body: "The Hub forgets the spool recorded here.",
-    printer_clear_goes_back: "{name} goes back to {location}.", printer_clear_goes_back_noplace: "{name} goes back to where it was before.",
-    printer_clear_line: "Slot {slot} cleared.", printer_clear_waiting_ended: "The spool that was waiting for slot {slot} is not waiting any more.",
-    printer_clear_still_shows: "The printer still shows the old filament for this slot until a spool is loaded.",
-    auto_load_any: "Load a spool", auto_option: "Automatic", auto_option_hint: "The slot where the spool appears.",
-    auto_plan: "{spool} goes into the slot where it appears ({slots}). The Hub waits up to 15 minutes.", auto_replaces: "Replaces {spool}, which was waiting.",
-    auto_waiting: "Waiting for {spool} to be loaded into any slot of {printer}.", auto_stop: "Stop waiting", auto_stopped: "Stopped waiting for {spool}.",
-    auto_choose: "Two slots were loaded. Which one got {spool}?", auto_chosen: "{spool} is loaded into {slot}.",
-    auto_started: "Waiting for {spool} to appear in a slot of {printer}.", auto_not_possible: "This printer has no slots the Hub can watch. Choose a slot.",
-    printer_used_by_month: "By month", printer_used_month_none: "No months to show yet.",
-    printer_used_col_month: "Month", printer_used_col_grams: "Grams", printer_used_col_prints: "Prints", printer_used_col_unfinished: "Did not finish",
-    printer_used_col_material: "Most used material",
-  };
-  function tg(key, vars) {
-    const v = t(key, vars);
-    if (v !== key) return v;
-    const f = GUIDED[key];
-    return f == null ? key : vars ? f.replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : f;
-  }
+  const tg = (key, vars) => t(key, vars);
   // After a load, unload or clear the toast offers Undo when the Hub can put the spool's last action back; else it is the plain toast
   function undoToast(spoolId, text, eventId) {
     const h2 = window.SW_HISTORY;

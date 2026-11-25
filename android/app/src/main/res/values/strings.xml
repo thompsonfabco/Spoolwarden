@@ -6079,4 +6079,29 @@
     <string name="devices_link_home_assistant">Link Home Assistant</string>
     <string name="devices_pair_instruction_home_assistant">In Home Assistant, add the Spoolwarden integration and type this pairing code when it asks. It can read the Hub and change nothing.</string>
     <string name="devices_kind_home_assistant">Home Assistant</string>
+    <string name="printer_guided_back">Back</string>
+    <!-- 1=address -->
+    <string name="printer_guided_found_at">Found on the network at %1$s.</string>
+    <string name="printer_guided_type_bambu">Type a Bambu Lab printer\'s address</string>
+    <string name="printer_guided_type_klipper">Type a Klipper printer\'s address</string>
+    <string name="printer_clear_action">Clear slot</string>
+    <!-- 1=slot -->
+    <string name="printer_clear_title">Clear slot %1$s?</string>
+    <string name="printer_clear_body">The Hub forgets the spool recorded here.</string>
+    <!-- 1=name 2=location -->
+    <string name="printer_clear_goes_back">%1$s goes back to %2$s.</string>
+    <!-- 1=name -->
+    <string name="printer_clear_goes_back_noplace">%1$s goes back to where it was before.</string>
+    <!-- 1=slot -->
+    <string name="printer_clear_line">Slot %1$s cleared.</string>
+    <!-- 1=slot -->
+    <string name="printer_clear_waiting_ended">The spool that was waiting for slot %1$s is not waiting any more.</string>
+    <string name="printer_clear_still_shows">The printer still shows the old filament for this slot until a spool is loaded.</string>
+    <string name="printer_used_by_month">By month</string>
+    <string name="printer_used_month_none">No months to show yet.</string>
+    <string name="printer_used_col_month">Month</string>
+    <string name="printer_used_col_grams">Grams</string>
+    <string name="printer_used_col_prints">Prints</string>
+    <string name="printer_used_col_unfinished">Did not finish</string>
+    <string name="printer_used_col_material">Most used material</string>
 </resources>
