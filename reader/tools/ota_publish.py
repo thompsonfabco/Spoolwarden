@@ -21,6 +21,7 @@ the READER_TOKEN environment variable). The token is sent as a header, never pri
 import argparse
 import base64
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -149,7 +150,7 @@ def live_problem(base, token, build):
     """Why the live check failed (a string), or None when the server reports `build`."""
     try:
         live = fetch_manifest(base, token)
-    except (OSError, ValueError) as e:   # URLError/HTTPError/timeouts are OSError; bad JSON is ValueError
+    except (OSError, ValueError, http.client.HTTPException) as e:   # URLError/HTTPError/timeouts are OSError; bad JSON is ValueError
         return f"{type(e).__name__}: {e}"
     reported = live.get("build") if isinstance(live, dict) else live
     if reported != build:

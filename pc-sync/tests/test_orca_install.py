@@ -56,9 +56,9 @@ def test_orca_system_hash_is_taken_while_packing_not_by_unpacking_again(tmp_path
     def only_writing(file, mode="r", *a, **k):
         assert mode == "w", "the zip was opened again to read it"
         return real(file, mode, *a, **k)
-    monkeypatch.setattr(zips.zipfile, "ZipFile", only_writing)
-    data, h = zips.orca_system(orca)
-    monkeypatch.undo()
+    with monkeypatch.context() as mp:
+        mp.setattr(zips.zipfile, "ZipFile", only_writing)
+        data, h = zips.orca_system(orca)
     out = tmp_path / "unpacked"
     real(io.BytesIO(data)).extractall(out)
     assert h == tree_hash(out)

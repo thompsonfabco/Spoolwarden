@@ -318,21 +318,17 @@ import unicodedata  # noqa: E402
 import tempfile  # noqa: E402
 
 
-def _case_sensitive_fs() -> bool:
-    """The host's file system, which the "windows"/"linux" layouts do not change (they only move the folders)."""
-    with tempfile.TemporaryDirectory() as d:
+def _case_sensitive_fs(root: Path) -> bool:
+    """Whether *root*'s file system is case-sensitive (the "windows"/"linux" layouts only move folders)."""
+    with tempfile.TemporaryDirectory(dir=root) as d:
         (Path(d) / "a").write_text("x")
         return not (Path(d) / "A").exists()
 
 
-needs_case_sensitive_fs = pytest.mark.skipif(
-    not _case_sensitive_fs(), reason="the regression is a case-sensitive file system's (Linux): a name differing "
-                                     "only by case is a second file there and the same file here")
-
-
-@needs_case_sensitive_fs
 @pytest.mark.parametrize("layout", LAYOUTS)
 def test_case_only_file_name_match_is_kept_and_never_blocks_later_installs(tmp_path, layout):
+    if not _case_sensitive_fs(tmp_path):
+        pytest.skip("the regression is a case-sensitive file system's (Linux): a name differing only by case is a second file there and the same file here")
     """I1: `acme pla @bbl h2d.json` holds the generated preset: kept, not in the snapshot (not ours to diff), and the
     next installs go through (on Linux the build-cased snapshot copy read as "deleted in Bambu Studio")."""
     e = Env(tmp_path, layout)
@@ -349,9 +345,10 @@ def test_case_only_file_name_match_is_kept_and_never_blocks_later_installs(tmp_p
     assert sorted(p.name for p in (e.dirs.installed / "base").glob("*.json")) == [f"{B}.json"]
 
 
-@needs_case_sensitive_fs
 @pytest.mark.parametrize("layout", LAYOUTS)
 def test_upper_case_suffix_of_a_kept_preset(tmp_path, layout):
+    if not _case_sensitive_fs(tmp_path):
+        pytest.skip("the regression is a case-sensitive file system's (Linux): a name differing only by case is a second file there and the same file here")
     """M5 + round 2: a kept `<name>.JSON` is "another file" (only an exact `<name>.json` is the preset's own): kept,
     no snapshot copy, and the next installs go through (on Linux a `<name>.json` snapshot copy read as "deleted in
     Bambu Studio")."""

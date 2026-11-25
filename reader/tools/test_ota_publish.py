@@ -219,6 +219,7 @@ def test_a_failed_upload_or_install_still_removes_the_stage(monkeypatch, tmp_pat
 
 
 def test_live_problem_reports_instead_of_raising(monkeypatch):
+    import http.client
     import urllib.error
 
     def boom(exc):
@@ -228,7 +229,7 @@ def test_live_problem_reports_instead_of_raising(monkeypatch):
 
     for exc in (urllib.error.HTTPError("u", 502, "Bad Gateway", {}, None),
                 urllib.error.URLError("refused"), TimeoutError("timed out"),
-                json.JSONDecodeError("bad", "x", 0)):
+                json.JSONDecodeError("bad", "x", 0), http.client.IncompleteRead(b"part")):
         monkeypatch.setattr(op, "fetch_manifest", boom(exc))
         msg = op.live_problem("https://h", "tok", 5)
         assert msg and type(exc).__name__ in msg
