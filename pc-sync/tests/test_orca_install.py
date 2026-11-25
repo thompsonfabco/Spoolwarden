@@ -389,7 +389,7 @@ def test_unchanged_second_run_skips_orca_system_pack_and_secondary_state_rewrite
     out1 = sync.run_once(c, folders, dirs, running=lambda: False, now=T0,
                          orca=orca, orca_running=lambda: False, others=[sec])
     assert out1 == "uploaded" and pack_calls == 1
-    c.state["orca_system_hash"] = sync.load_state(dirs)["uploaded"]["orca_system"]["hash"]
+    c.state["orca_system_hash"] = real_orca_system(orca)[1]
     sec_dir = dirs.base / "folders" / studio.folder_key(sec)
     assert sec_dir in saved_dirs
     sec_state = statexml.xml_path(AppDirs(sec_dir).state)
