@@ -37,12 +37,16 @@ class UndoError(Exception):
 
 
 def _utc(now: datetime | None = None) -> datetime:
-    now = now or datetime.now(timezone.utc)
-    return now.astimezone(timezone.utc) if now.tzinfo else now.replace(tzinfo=timezone.utc)
+    from . import iso_time
+    return iso_time.utc_now(now)
 
 
 def _parse_iso(ts: str) -> datetime:
-    return datetime.fromisoformat(ts.strip().replace("Z", "+00:00")).astimezone(timezone.utc)
+    from . import iso_time
+    dt = iso_time.parse_utc(ts)
+    if dt is None:
+        raise ValueError(f"Invalid isoformat string: {ts!r}")
+    return dt
 
 
 def _slots_of(ev: dict) -> set[str]:

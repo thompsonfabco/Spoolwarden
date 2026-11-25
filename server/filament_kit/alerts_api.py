@@ -530,14 +530,11 @@ def event_view(ev: dict, settings: dict | None = None) -> dict:
 
 def parse_time(text: str) -> str:
     """An ISO time (UTC `Z`, or with an offset) as the store writes times: `2026-11-17T04:00:00Z`."""
-    t = str(text).strip()
-    try:
-        dt = datetime.fromisoformat(t.replace("Z", "+00:00"))
-    except ValueError:
+    from . import iso_time
+    dt = iso_time.parse_utc(str(text))
+    if dt is None:
         raise ValueError(f"{text!r} is not a time (2026-11-17T04:00:00Z)") from None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def events_answer(*, since: int | None = None, since_at: str | None = None, wait: float = 0, kinds=None,

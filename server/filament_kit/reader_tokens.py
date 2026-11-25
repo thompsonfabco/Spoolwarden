@@ -242,13 +242,8 @@ def _utc(t: float) -> str:
 
 def parse_time(text) -> datetime.datetime | None:
     """An ISO 8601 time with an offset (UTC when it has none) as an aware datetime, else None."""
-    if not isinstance(text, str) or not text.strip():
-        return None
-    try:
-        d = datetime.datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)
+    from . import iso_time
+    return iso_time.parse_utc(text)
 
 
 class SeenBuffer:
