@@ -374,6 +374,13 @@ def main(argv: list[str] | None = None, *, client_factory: Callable[[str], Any] 
             check_leaf_name(der, serial)
             mode = "the --fingerprint given" if want else "trust on first use, for this run only"
             print(f"printer certificate SHA-256 {pin} (pin: {mode}); the access code goes only to this certificate")
+            if not want and sys.stdin is not None and sys.stdin.isatty():
+                try:
+                    ans = input("Send the access code to this certificate? [y/N] ").strip().lower()
+                except EOFError:
+                    ans = ""
+                if ans not in ("y", "yes"):
+                    raise CaptureError("aborted by user; the access code was not sent")
         if pin is None:
             print("certificate pin: OFF (--no-pin); the access code goes to whatever answers at the address")
         print(f"capturing from the printer for {args.seconds:g} s (pushall + get_version only) ...")

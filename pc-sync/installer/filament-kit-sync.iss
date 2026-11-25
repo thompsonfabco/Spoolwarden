@@ -141,25 +141,75 @@ begin
     RegisterTask;
 end;
 
+// Reads the paired device id from config.xml (or legacy config.json) before data deletion.
+function ReadDeviceId(Data: string): string;
+var
+  Raw: AnsiString;
+  S: string;
+  P, Q: Integer;
+begin
+  Result := '';
+  if FileExists(Data + '\config.xml') and LoadStringFromFile(Data + '\config.xml', Raw) then
+  begin
+    S := String(Raw);
+    P := Pos('<device>', S);
+    if P > 0 then
+    begin
+      Delete(S, 1, P + Length('<device>') - 1);
+      Q := Pos('</device>', S);
+      if Q > 0 then
+      begin
+        Result := Trim(Copy(S, 1, Q - 1));
+        if Result <> '' then
+          exit;
+      end;
+    end;
+  end;
+  if FileExists(Data + '\config.json') and LoadStringFromFile(Data + '\config.json', Raw) then
+  begin
+    S := String(Raw);
+    P := Pos('"device"', S);
+    if P > 0 then
+    begin
+      Delete(S, 1, P + Length('"device"') - 1);
+      P := Pos(':', S);
+      if P > 0 then
+      begin
+        Delete(S, 1, P);
+        S := Trim(S);
+        if (Length(S) >= 2) and (S[1] = '"') then
+        begin
+          Delete(S, 1, 1);
+          Q := Pos('"', S);
+          if Q > 0 then
+            Result := Trim(Copy(S, 1, Q - 1));
+        end;
+      end;
+    end;
+  end;
+end;
+
 // Asks whether to delete the sync's data (pairing token, settings, log, preset backups) in
 // %LOCALAPPDATA%\filament-kit-sync, as `uninstall.sh --purge` does on Linux. The default is to keep it (a reinstall
-// pairs again without a new link); a silent uninstall keeps it. Either way the unpair hint is shown.
+// pairs again without a new link); a silent uninstall keeps it. When a device id is present, the unpair hint is shown.
 procedure AskDeleteData;
 var
-  Data: string;
+  Data, DeviceId: string;
   Wipe: Boolean;
 begin
   Data := ExpandConstant('{localappdata}\filament-kit-sync');
   if not DirExists(Data) then
     exit;
+  DeviceId := ReadDeviceId(Data);
   Wipe := SuppressibleMsgBox('Also delete the sync''s data (pairing token, settings, log and the Bambu Studio and ' +
     'Orca Slicer preset backups) in' + #13#10 + Data + ' ?' + #13#10 + #13#10 +
     'Choose No to keep it; installing again then needs no new pairing.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2,
     IDNO) = IDYES;
   if Wipe then
     DelTree(Data, True, True, True);
-  SuppressibleMsgBox('This PC is still paired with the Hub. To free its place for another PC, run on the Hub:' + #13#10 +
-    'sudo spoolwarden unpair <id>' + #13#10 + '(the id is the "Device id" line of "filament-kit-sync status", run before uninstalling).', mbInformation, MB_OK, IDOK);
+  if DeviceId <> '' then
+    SuppressibleMsgBox('This PC is still paired with the Hub. To free its place for another PC, run on the Hub:' +
+      #13#10 + 'sudo spoolwarden unpair ' + DeviceId, mbInformation, MB_OK, IDOK);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

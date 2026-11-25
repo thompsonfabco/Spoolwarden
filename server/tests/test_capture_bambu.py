@@ -297,3 +297,39 @@ def test_module_serials_are_redacted_consistently(cap, tmp_path):
                      "ota": "SERIAL0000000000"}
     assert mods == {"n3s/128": "SN-redacted-2"}
     assert data["report"]["print"]["ams"]["ams"][0]["sn"] == "SN-redacted-1"
+
+
+def test_interactive_tty_prompts_before_sending_code(cap, tmp_path, monkeypatch, capsys):
+    """FA-161: interactive terminal without --fingerprint/--no-pin prints leaf fingerprint and asks y/N."""
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    seen = []
+
+    class Spy(FakeClient):
+        def username_pw_set(self, user, password):
+            seen.append(password)
+            super().username_pw_set(user, password)
+
+    # Declining (or empty Enter) aborts before sending the access code, after printing the fingerprint.
+    for reply in ("n", ""):
+        monkeypatch.setattr("builtins.input", lambda prompt="": reply)
+        rc, out, made = run(cap, tmp_path, factory=Spy)
+        io = capsys.readouterr()
+        assert rc == 1 and not made and not out.exists()
+        assert hashlib.sha256(LEAF).hexdigest() in io.out
+        assert CODE not in seen and CODE not in io.err
+
+    # Answering 'y' proceeds and writes the fixture.
+    monkeypatch.setattr("builtins.input", lambda prompt="": "y")
+    rc, out, (c,) = run(cap, tmp_path, factory=Spy)
+    assert rc == 0 and out.exists() and c.password == CODE
+    out.unlink()
+
+    # --fingerprint and --no-pin do not prompt even on a tty.
+    def no_prompt(prompt=""):
+        raise AssertionError("should not prompt")
+    monkeypatch.setattr("builtins.input", no_prompt)
+    rc, out, _ = run(cap, tmp_path, "--fingerprint", hashlib.sha256(LEAF).hexdigest())
+    assert rc == 0 and out.exists()
+    out.unlink()
+    rc, out, _ = run(cap, tmp_path, "--no-pin")
+    assert rc == 0 and out.exists()
