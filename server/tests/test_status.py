@@ -65,7 +65,7 @@ def test_summarize_stage_progress_eta_temps():
     assert s["temps"]["bed"] == {"current": 64, "target": 65}
     assert s["temps"]["chamber"] == {"current": 35, "target": 0}
     assert s["light"] == "on"
-    assert s["hms"] == [{"code": "0700_8200_0002_0001", "text": status.hms_text("0700_8200_0002_0001")}]
+    assert s["hms"] == [{"code": "0700_8200_0002_0001", "text": status.hms_text("0700_8200_0002_0001"), "help_url": status.HMS_URL}]
     assert s["updated"] == int(NOW - 3)
 
 
