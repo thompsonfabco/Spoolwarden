@@ -479,3 +479,15 @@ def test_server_setup_first_run_header_is_shown_with_quiet(tmp_path, monkeypatch
         output.configure(quiet=False)
     out = capsys.readouterr().out
     assert "==> First-time setup" in out and "Display name" in out and "==> Server certificate" not in out
+
+
+def test_remote_route_and_off_write_kit_routes_atomically(tmp_path):
+    from filament_kit import remote
+    ex = apply._Exec(Recorder(), _res(tmp_path), tmp_path)
+    book = apply._under(ex.root, remote.KIT_ROUTES)
+    apply._remote_route(ex, "spoolwarden", 8710)
+    assert book.read_text(encoding="utf-8") == "spoolwarden\n"
+    assert not book.with_name(book.name + ".tmp").exists()
+    apply._remote_off(ex, "spoolwarden")
+    assert book.read_text(encoding="utf-8") == ""
+    assert not book.with_name(book.name + ".tmp").exists()

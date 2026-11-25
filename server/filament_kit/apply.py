@@ -828,8 +828,7 @@ def _remote_route(ex: _Exec, name: str, port: int) -> None:
         if n != name and re.fullmatch(r"[a-z][a-z0-9-]{1,30}", n):
             ex.cmd([remote.MCP_ROUTE, "rm", n])  # mcp-route rm leaves files it did not write
     ex.cmd([remote.MCP_ROUTE, "add", name, str(port)])
-    book.parent.mkdir(parents=True, exist_ok=True)
-    book.write_text(name + "\n", encoding="utf-8")
+    ex.write(remote.KIT_ROUTES, (name + "\n").encode("utf-8"), 0o644)
 
 
 def _other_routes(ex: _Exec, name: str) -> list[str]:
@@ -857,7 +856,7 @@ def _remote_off(ex: _Exec, name: str) -> None:
             gone.append(f"the {name} route")
     if name in listed:
         # the kit no longer has this route: a stale entry would make a route put back later (the ops one) the kit's
-        book.write_text("".join(f"{n}\n" for n in listed if n != name), encoding="utf-8")
+        ex.write(remote.KIT_ROUTES, "".join(f"{n}\n" for n in listed if n != name).encode("utf-8"), 0o644)
     others = _other_routes(ex, name)
     files = [(remote.DEPLOY_HOOK_FILE, "the kit's certbot deploy hook"),
              (remote.NGINX_DROPIN, "the kit's nginx start check")]
