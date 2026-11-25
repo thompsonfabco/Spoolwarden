@@ -709,6 +709,24 @@ def test_pair_prints_the_qr_the_instruction_the_code_the_fingerprint_and_the_exp
     assert max(len(ln) for ln in tail) <= 79
 
 
+@pytest.mark.parametrize(("ips", "host"), [
+    (["192.0.2.5", "192.0.2.6"], "192.0.2.5"),
+    ([], "fkhost.local"),
+])
+def test_home_assistant_pairing_prints_a_copyable_address(capsys, monkeypatch, ips, host):
+    monkeypatch.setattr(pairing, "local_ips", lambda: ips)
+    config.save({"port": 9443})
+    rc, out, err = run(capsys, "pair", "--home-assistant", "--text", "--no-wait")
+    assert rc == 0 and not err
+    lines = out.splitlines()
+    address = lines.index(f"https://{host}:9443")
+    assert lines[address - 1].startswith("fkit://pair?")
+    assert re.fullmatch(r"Pairing code: \d{3} \d{3}", lines[address + 1])
+    assert lines[address + 2] == "Certificate fingerprint (check it matches the one Home Assistant shows):"
+    token = pairing.redeem_code(pending_code())
+    assert pairing.authorize(token)[1] == "viewer"
+
+
 def test_the_code_on_screen_is_the_code_that_pairs(capsys, waiting):
     seen = []
     waiting["steps"] = [lambda: seen.append(pending_code())]            # what the Hub holds while `pair` waits

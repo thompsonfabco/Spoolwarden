@@ -229,11 +229,16 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, home_assist
     else:
         print(_qr_text(pr.qr), flush=True)
         output.out("Open the Spoolwarden app and scan this code, or type the pairing code.")
-    output.out(f"Pairing code: {pr.code[:3]} {pr.code[3:]}")
-    if not (slicer_sync or weigh_station or home_assistant or text):
+    phone_qr = not (slicer_sync or weigh_station or home_assistant or text)
+    if home_assistant or phone_qr:
         ips = pairing.local_ips()
         host = ips[0] if ips else f"{pairing.short_hostname()}.local"
-        output.out(f"Hub address: https://{host}:{cfg['port']}")
+        address = f"https://{host}:{cfg['port']}"
+        if home_assistant:
+            output.out(address)
+    output.out(f"Pairing code: {pr.code[:3]} {pr.code[3:]}")
+    if phone_qr:
+        output.out(f"Hub address: {address}")
     output.out("Certificate fingerprint (" + ("the phone asks for two groups of it" if not (slicer_sync or weigh_station or home_assistant)
                else f"check it matches the one {'Home Assistant' if home_assistant else 'the Slicer Sync' if slicer_sync else 'the Weigh Station'} shows") + "):")
     output.out_lines(_fingerprint_lines(fp))
