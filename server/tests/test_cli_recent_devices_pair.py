@@ -304,7 +304,7 @@ def test_an_unknown_key_is_exit_2_with_the_list_of_keys_and_nothing_is_written(s
     (["nozzle=2.5"], "Nozzle must be whole degrees, like 210."), (["net-weight=lots"], "Net weight must be a number of grams"),
     (["density=x"], "Density must be a number in g/cm"), (["price-per-kg=cheap"], "Price per kg must be a number"),
     (["nozzle=230", "--spools", "x"], "--spools takes spool ids."), (["nozzle=230", "--item", "0"], "item numbers start at 1."),
-    (["colour=red"], "color_hex must be 6 hex digits"), (["brand="], "vendor must be text")])
+    (["colour=red"], "color_hex must be 6 or 8 hex digits"), (["brand="], "vendor must be text")])
 def test_a_bad_value_is_exit_2_and_changes_nothing(sm, capsys, argv, message):
     _, hid = add(sm)
     rc, out, err = run(capsys, "recent", "edit", hid, *argv)
