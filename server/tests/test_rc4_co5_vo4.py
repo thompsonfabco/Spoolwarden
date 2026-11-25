@@ -54,13 +54,13 @@ class HubError extends Error {
 }
 const calls = [], toasts = [], results = [];
 let answers = {};
-const _EN = """ + (Path(__file__).resolve().parents[2] / "strings" / "en.json").read_text(encoding="utf-8") + """;
+const _EN = %(en)s;
 const SW = { HubError,
   t: (k, vars) => {
     let f = _EN[k];
     if (f == null) return k;
     if (typeof f === "object") f = f[new Intl.PluralRules("en").select(Number(vars && vars.count))] || f.other;
-    return vars ? f.replace(/\\{([a-z][a-z0-9_]*)\\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : f;
+    return vars ? f.replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : f;
   },
   icon: () => null, swatch: () => null, uid: (p) => p + Math.random().toString(36).slice(2, 7),
   busy: () => true, idle: () => {},
@@ -297,7 +297,8 @@ def _node(tmp_path, script):
 
 
 def _parts(js: str) -> dict:
-    return {"tt": _cut(js, "function tt(key, vars) {", "const alertHost"),
+    return {"en": (Path(__file__).resolve().parents[2] / "strings" / "en.json").read_text(encoding="utf-8"),
+            "tt": _cut(js, "function tt(key, vars) {", "const alertHost"),
             "says": _cut(js, "function says(e, o = {}) {", "// Data that loads for a block"),
             "undo": _cut(js, "async function undoEvent(id) {", "function eventRow(e) {")}
 

@@ -355,7 +355,7 @@ def test_a_klipper_printer_that_does_not_answer_is_not_added_without_asking(tmp_
     assert "family-bambu" not in which and "family-klipper" not in which       # no family choice
     assert which.index('"type-bambu"') < which.index('"type-klipper"')          # the two buttons, Bambu Lab first
     assert 'tg("printer_guided_type_bambu")' in which and 'tg("printer_guided_type_klipper")' in which
-    en = json.loads((STATIC.parents[2] / "strings" / "en.json").read_text(encoding="utf-8"))
+    en = json.loads((STATIC.parents[3] / "strings" / "en.json").read_text(encoding="utf-8"))
     assert en["printer_guided_type_bambu"] == "Type a Bambu Lab printer's address"
     assert en["printer_guided_type_klipper"] == "Type a Klipper printer's address"
 
