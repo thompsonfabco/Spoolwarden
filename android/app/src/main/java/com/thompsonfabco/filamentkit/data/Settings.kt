@@ -66,7 +66,7 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
         prefs[KEY]?.let { text ->
             runCatching { json.decodeFromString<ServerConfig>(text) }
                 .onFailure { e ->
-                    Log.w(TAG, "Failed to decode stored ServerConfig", e)
+                    Log.w(Settings::class.java.simpleName, e)
                     _corruptServerConfig.value = true
                 }
                 .getOrNull()
@@ -150,7 +150,6 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     }
 
     companion object {
-        private const val TAG = "Settings"
         private const val RETRY_MS = 1000L
         private val KEY = stringPreferencesKey("server")
         private val APPEARANCE = stringPreferencesKey("appearance")

@@ -161,6 +161,7 @@
     <string name="home_draft_tag">tag %1$s</string>
     <string name="home_draft_discard_title">Discard this add?</string>
     <string name="home_draft_discard_body">Its photos and edits are removed from this phone.</string>
+    <string name="home_draft_discard_body_added_before">Its photos and edits are removed from this phone. Discarding also removes the \"may already be added\" warning.</string>
     <string name="home_draft_discarded">Add discarded.</string>
     <string name="home_draft_yesterday">Yesterday</string>
     <string name="home_printers_all">All printers</string>
@@ -2799,6 +2800,7 @@
     <string name="common_hint_leave_empty_full">Leave empty for a full spool.</string>
     <string name="common_open_settings">Open settings</string>
     <string name="common_option_automatic">Automatic</string>
+    <string name="profile_no_parents">No parents for this material</string>
     <string name="common_still_sealed">Still sealed (in its bag or box)</string>
     <!-- 1=tag -->
     <string name="common_tag">Tag %1$s</string>
@@ -2873,6 +2875,7 @@
     <string name="printer_add_name_placeholder">e.g. Workshop X1</string>
     <!-- 1=code -->
     <string name="printer_alert_code">Printer alert %1$s</string>
+    <string name="printer_alert_help">View help</string>
     <string name="printer_available_idle">Available when the printer is idle.</string>
     <string name="printer_camera_error_cert_changed">The printer\'s certificate changed. If you reset the printer or replaced its mainboard, forget its old certificate in Printer settings. If not, something else may be answering at the printer\'s address: check the printer\'s IP address first.</string>
     <string name="printer_camera_error_not_configured">Set up this printer first: enter its Access Code under Printers.</string>

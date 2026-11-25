@@ -424,10 +424,12 @@ private fun DraftRow(draft: Draft, now: Long, startOfToday: Long, onClick: () ->
             cancel = SwAction(stringResource(R.string.common_keep)) { confirming = false },
             returnFocusTo = opener,
         ) {
-            Text(stringResource(R.string.home_draft_discard_body))
-            if (draft.addedBefore != null) {
-                Text("Discarding also removes the \"may already be added\" warning.")
-            }
+            Text(
+                stringResource(
+                    if (draft.addedBefore != null) R.string.home_draft_discard_body_added_before
+                    else R.string.home_draft_discard_body,
+                ),
+            )
         }
     }
 }

@@ -360,15 +360,17 @@ private fun StatusPanel(printer: Printer, state: PrinterUiState, viewModel: Prin
         if (PrinterHelp.isPrinting(status.gcodeState)) PrintProgress(status)
         Text(temperatures(status), style = SpoolwardenTheme.type.data)
         val links = LocalUriHandler.current
+        val helpLabel = stringResource(R.string.printer_alert_help)
         status.hms.forEach { alert ->
             val raw = alert.text.ifBlank { stringResource(R.string.printer_alert_code, alert.code) }
-            val url = HMS_URL_REGEX.find(raw)?.value
-            val display = if (url != null) raw.replace(": see $url", "").replace(url, "").trim() else raw
+            val matcher = android.util.Patterns.WEB_URL.matcher(raw)
+            val url = if (matcher.find()) matcher.group() else null
+            val display = if (url != null) raw.substringBefore(url).substringBeforeLast(':').trim() else raw
             NoticeCard(
                 NoticeKind.Bad,
                 display,
                 actions = listOfNotNull(
-                    url?.let { SwAction("HMS help") { runCatching { links.openUri(it) } } },
+                    url?.let { SwAction(helpLabel) { runCatching { links.openUri(it) } } },
                 ),
             )
         }
@@ -1026,5 +1028,3 @@ private fun formatClock(iso: String): String? = try {
 } catch (_: Exception) {
     null
 }
-
-private val HMS_URL_REGEX = Regex("""https?://\S+""")

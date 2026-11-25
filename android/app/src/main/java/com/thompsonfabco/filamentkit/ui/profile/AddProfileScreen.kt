@@ -395,7 +395,7 @@ private fun CatalogParentField(
             SwMenuItem(automatic, { onPick(""); open = false }, checked = value.isEmpty())
             val items = parents?.parents.orEmpty()
             if (items.isEmpty()) {
-                SwMenuItem("No parents for this material", {}, enabled = false)
+                SwMenuItem(stringResource(R.string.profile_no_parents), {}, enabled = false)
             } else {
                 items.forEach { p -> SwMenuItem(p, { onPick(p); open = false }, checked = p == value) }
             }

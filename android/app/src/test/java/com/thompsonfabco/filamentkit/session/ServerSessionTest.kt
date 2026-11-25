@@ -9,6 +9,7 @@ import com.thompsonfabco.filamentkit.net.pinnedClient
 import com.thompsonfabco.filamentkit.net.serverCert
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -345,15 +346,15 @@ class ServerSessionTest {
     @Test fun aRecheckKeepsAChangedCertificateAndDoesNotOpenPair() {
         val other = serverCert("kit.local")
         val answering = httpsServer(other, "127.0.0.3").also { servers += it }
-        @Volatile var onDiscover: () -> Unit = {}
+        val onDiscover = AtomicReference<() -> Unit>({})
         val s = session(MutableStateFlow(config(listOf("127.0.0.3"), answering.port))) {
-            onDiscover()
+            onDiscover.get().invoke()
             emptyList()
         }
         await { s.connection.first { it is Connection.CertChanged } }
         val requests = router.requests.value
         val recheckDone = CountDownLatch(1)
-        onDiscover = { recheckDone.countDown() }
+        onDiscover.set { recheckDone.countDown() }
         s.recheck()
         assertTrue(recheckDone.await(5, TimeUnit.SECONDS))
         drainScope()

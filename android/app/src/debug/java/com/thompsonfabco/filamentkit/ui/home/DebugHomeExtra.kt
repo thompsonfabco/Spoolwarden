@@ -12,8 +12,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.tags.TagEvents
+import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 
 /** Debug builds only: emulator helper row rendered at the bottom of Home. */
 @Composable
@@ -25,7 +25,7 @@ internal fun DebugHomeExtra() {
 @Composable
 private fun SimulateTag() {
     var uid by remember { mutableStateOf("4:77:90:e") }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(horizontalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s2), verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
             value = uid,
             onValueChange = { uid = it },
