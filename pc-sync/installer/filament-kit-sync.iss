@@ -208,8 +208,8 @@ begin
   if Wipe then
     DelTree(Data, True, True, True);
   if DeviceId <> '' then
-    SuppressibleMsgBox('This PC is still paired with the Hub. To free its place for another PC, run on the Hub:' +
-      #13#10 + 'sudo spoolwarden unpair ' + DeviceId, mbInformation, MB_OK, IDOK);
+    SuppressibleMsgBox('This PC is still paired with the Hub. To free its place for another PC, run on the Hub:' + #13#10 +
+      'sudo spoolwarden unpair ' + DeviceId, mbInformation, MB_OK, IDOK);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
