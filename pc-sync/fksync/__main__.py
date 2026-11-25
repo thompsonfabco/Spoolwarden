@@ -470,7 +470,8 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
         _out("Last run:        none yet")
     if _task_registered() is False:
         _out(f"Scheduled task:  '{TASK_NAME}' is not registered, so nothing runs the sync by itself; run "
-             f"install_task.ps1 from the install folder (or install again)")
+             f"powershell -ExecutionPolicy Bypass -File install_task.ps1 -ExePath <install-folder>\\filament-kit-sync-task.exe "
+             f"from the install folder (or install again)")
     stamp = None
     stamp = (statexml.read(dirs.installed / "BUILD.json") or {}).get("stamp")
     _out(f"Installed build: {stamp or 'none yet'}")

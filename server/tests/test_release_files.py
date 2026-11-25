@@ -163,9 +163,11 @@ def test_task_runs_every_ten_minutes():
 
 def test_server_and_pc_sync_versions_match():
     assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.6.9"
-    # the wheel takes its version from pyproject; make_release.sh looks for the __version__ wheel
-    assert re.search(r'^version = "0\.6\.9"\s*$', _read("pc-sync/pyproject.toml"), re.M)
-    server = _read("server/pyproject.toml")        # the server's wheel reads __version__: one number, typed once
+    # both wheels read __version__: one number, typed once
+    pc_sync = _read("pc-sync/pyproject.toml")
+    assert not re.search(r'^version = ', pc_sync.split("[project.optional-dependencies]")[0], re.M)
+    assert 'dynamic = ["version"]' in pc_sync and 'version = {attr = "fksync.__version__"}' in pc_sync
+    server = _read("server/pyproject.toml")
     assert not re.search(r'^version = ', server.split("[project.optional-dependencies]")[0], re.M)
     assert 'dynamic = ["version"]' in server and 'version = {attr = "filament_kit.__version__"}' in server
 

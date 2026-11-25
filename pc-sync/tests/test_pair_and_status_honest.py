@@ -393,7 +393,9 @@ def test_status_says_when_the_scheduled_task_is_missing(paths, monkeypatch, caps
     from fksync import __main__ as cli
     monkeypatch.setattr(cli, "_task_registered", lambda: False)
     assert _main(paths, "status") == 0
-    assert "Scheduled task:  'filament-kit sync' is not registered" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Scheduled task:  'filament-kit sync' is not registered" in out
+    assert "-ExecutionPolicy Bypass" in out and "-ExePath" in out
     for known in (True, None):
         monkeypatch.setattr(cli, "_task_registered", lambda known=known: known)
         assert _main(paths, "status") == 0
