@@ -103,3 +103,16 @@ def test_paths_web_follows_the_state_folder_unless_told(monkeypatch, tmp_path):
     assert config.paths().web == tmp_path / "state-web"
     monkeypatch.setenv("FK_WEB_STATE", str(tmp_path / "elsewhere"))
     assert config.paths().web == tmp_path / "elsewhere"
+
+
+def test_save_sweeps_stale_temp_files(etc):
+    import os
+    import time
+    stale = etc / "config.xml.dead1.tmp"
+    fresh = etc / "config.xml.live1.tmp"
+    stale.write_text("old", encoding="utf-8")
+    fresh.write_text("new", encoding="utf-8")
+    old_t = time.time() - 120
+    os.utime(stale, (old_t, old_t))
+    config.save({"port": 8710})
+    assert not stale.exists() and fresh.exists()

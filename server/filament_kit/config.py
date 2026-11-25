@@ -7,6 +7,7 @@ import json
 import os
 import socket
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -257,6 +258,13 @@ def _write(f: Path, write) -> None:
         if tmp.exists():
             tmp.unlink()
         raise
+    cutoff = time.time() - 60
+    for old in f.parent.glob(f"{f.name}.*.tmp"):
+        try:
+            if old.stat().st_mtime < cutoff:
+                old.unlink()
+        except OSError:
+            pass
 
 
 KEEP_UNREADABLE = 5       # copies of a set-aside file kept: `.unreadable` (newest), `.unreadable.1` ... `.unreadable.4`
