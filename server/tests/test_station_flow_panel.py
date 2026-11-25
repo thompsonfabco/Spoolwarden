@@ -798,3 +798,11 @@ def test_a_device_with_no_reading_beats_the_panels_scale(rig):
     nfc.on_tag(LINKED)
     panel.on_line(b"P H")
     assert rig.step() == "weigh" and rig.row(4) == "Scale not settled"
+
+
+def test_wrong_scale_unit_says_set_scale_to_grams(rig):
+    st.state.update(scale={"grams": None, "status": "unit oz", "unit": 11, "stable": True}, scale_at=time.time())
+    nfc.on_tag(LINKED)
+    panel.on_line(b"P H")
+    assert rig.step() == "weigh" and rig.row(4) == "Set scale to grams"
+    assert any("Set the scale to grams." in s for s in rig.spoken())

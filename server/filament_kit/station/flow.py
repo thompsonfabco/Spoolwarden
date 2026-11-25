@@ -277,9 +277,10 @@ def on_yellow(long_press):
         if grams is None:
             with st.lock:
                 sc = scale_reading(computer)
-            go(step, seq, message="Scale unit?" if sc and sc["status"].startswith("unit ") else "Scale not settled")
+            bad_unit = bool(sc and sc["status"].startswith("unit "))
+            go(step, seq, message="Set scale to grams" if bad_unit else "Scale not settled")
             beep.beep("nothing")
-            speech.say("Put the spool on the scale and wait for it to settle.")
+            speech.say("Set the scale to grams." if bad_unit else "Put the spool on the scale and wait for it to settle.")
         else:
             go("ready", seq)
             beep.beep("hold")
