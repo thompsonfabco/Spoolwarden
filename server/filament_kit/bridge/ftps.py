@@ -134,6 +134,10 @@ class Client:
         try:
             self._do(f"download {path}", self._ftp.retrbinary, f"RETR {path}", take)
         except _TooBig:
+            try:
+                self._ftp.voidresp()
+            except ftplib.all_errors:
+                self.__exit__(None, None, None)
             raise FtpsError(f"download {path} on printer {self.printer.serial} failed: larger than {limit} bytes") from None
         return buf.getvalue()
 

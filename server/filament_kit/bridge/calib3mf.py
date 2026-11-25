@@ -554,9 +554,6 @@ def fits(hw: hardware.Hardware, mi: hardware.ModelInfo, scheme: str, value, ams_
         return False
 
 
-MAX_JOBS_PER_FILE = 2      # the job-file ladder: at most this many jobs per file type in one run
-
-
 def job_files(mi: hardware.ModelInfo, proven: str | None = None) -> list[str]:
     """The job-file ladder for a model (G3): the file this printer last answered (`proven`, kept in its slot map), else
     the model's hint (`job-file`), else minimal; then the other file. The project file only where the model has a
@@ -612,7 +609,6 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
     files = job_files(mi, getattr(slotmap, "job_file", None))
     fi = 0                              # the rung in use: moves on only while no file has got an answer
     answered: str | None = None
-    jobs_by_file: dict[str, int] = {}
     sent_keys: list[str] = []
     attempts: list[str] = []
     res: CalibResult | None = None
@@ -626,7 +622,6 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
                          file=file)
             if r.skip:
                 break
-            jobs_by_file[file] = jobs_by_file.get(file, 0) + 1
             if res is not None:         # the previous job proved no scheme (or its file got no answer): keep what it saw
                 attempts.append(f"numbering {res.sent_scheme}, {res.job_file} file: "
                                 + ("; ".join(res.problems) or "no scheme fits"))
@@ -639,8 +634,7 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
             # the job-file ladder (G3): the printer would not take or answer this file; the other one, same numbers,
             # once. Never after a trip, a stop, another job, a changed certificate or an unconfirmed restore.
             if (answered is None and fi + 1 < len(files) and _file_refused(r) and r.restored and not r.tripped
-                    and not r.other_job and not r.cert_changed and not stop
-                    and jobs_by_file.get(files[fi + 1], 0) < MAX_JOBS_PER_FILE):
+                    and not r.other_job and not r.cert_changed and not stop):
                 log.info("%s: the %s job file got no answer (%s); trying the %s file", registry.log_label(serial), file,
                          r.report_wanted or "no mapping", files[fi + 1])
                 fi += 1

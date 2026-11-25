@@ -95,6 +95,7 @@ def test_download_over_the_cap_is_an_ftps_error(fake, printer):
         assert c.download("/cache/big.gcode.3mf", 5000) == b"x" * 5000
         with pytest.raises(ftps.FtpsError, match="larger than 4999"):
             c.download("/cache/big.gcode.3mf", 4999)
+        assert "/cache/big.gcode.3mf" in c.nlst("/cache") or "big.gcode.3mf" in c.nlst("/cache")
 
 
 def test_errors_are_ftps_errors(fake, printer):
