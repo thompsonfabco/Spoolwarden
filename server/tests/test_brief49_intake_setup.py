@@ -105,7 +105,7 @@ async def test_fa130_intake_app_passes_stash_false_when_history_off(monkeypatch)
 
     app = object.__new__(intake_app.IntakeApp)
     app.history = False
-    app.kit = SimpleNamespace()
+    app._kit = SimpleNamespace()
     app.claude = None
     app.tools = SimpleNamespace(
         sm=None,
@@ -132,7 +132,7 @@ def test_fa124_setup_helper_sweeps_stale_reader_setup_when_idle(monkeypatch):
     stale_json.write_text('{"ssid": "net", "pass": "secret"}')
     monkeypatch.setattr(setup_helper, "_no_systemd", lambda: True)
 
-    reply = setup_helper.handle({"op": "check"})
+    reply = setup_helper.handle({"op": "backup_last"})
     assert reply["ok"] is True
     assert not stale_json.exists()
 
