@@ -371,3 +371,40 @@ def test_a_refused_later_subscribe_is_not_a_disconnect(moonraker):
         assert events == [] and sub.connected
     finally:
         sub.stop()
+
+
+@pytest.mark.parametrize("code", [401, 403])
+@pytest.mark.parametrize("body,expect_unauth", [
+    (b"<html><body>401 Unauthorized</body></html>", False),
+    (b'{"detail": "Forbidden"}', False),
+    (b'{"error": {"code": 401, "message": "Unauthorized"}}', True),
+])
+def test_non_moonraker_401_403_is_not_unauthorized_or_discovered(code, body, expect_unauth):
+    from filament_kit.bridge.klipper import discovery
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(code)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        c = mr.Moonraker("127.0.0.1", srv.server_port, timeout=2.0)
+        if expect_unauth:
+            with pytest.raises(mr.Unauthorized):
+                c.server_info()
+            assert discovery._is_moonraker("127.0.0.1", srv.server_port, 1.0) is True
+        else:
+            with pytest.raises(mr.MoonrakerError) as exc:
+                c.server_info()
+            assert not isinstance(exc.value, mr.Unauthorized)
+            assert discovery._is_moonraker("127.0.0.1", srv.server_port, 1.0) is False
+    finally:
+        srv.shutdown()
+        srv.server_close()

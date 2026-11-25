@@ -570,6 +570,9 @@ class PrintersApp:
         now = time.monotonic()
         if now - self.last_test < self.push.TEST_EVERY:
             raise Problem(f"wait {self.push.TEST_EVERY:.0f} s between test alerts")
+        if not await anyio.to_thread.run_sync(self.push_store.subs):
+            return JSONResponse({"error": "No phone is subscribed to alerts yet; turn notifications on first.",
+                                 "code": "no_subscriptions"}, 409)
         self.last_test = now
         r = await anyio.to_thread.run_sync(lambda: self.push.send_all(
             self.push_store, "Printers test", "Notifications are working.", "test", sender=self.sender,
@@ -581,7 +584,10 @@ class PrintersApp:
             raise Problem("the test alert was not delivered: " + "; ".join(r["failed"][:3])
                           + ". If the push service cannot be reached, the web service's network limits may block it "
                           "(user guide, Web Push).")
-        return {"ok": True, **r}
+        out = {"ok": True, **r}
+        if r["failed"]:
+            out["failed_count"] = len(r["failed"])
+        return out
 
 
 class _Relay(StreamingResponse):

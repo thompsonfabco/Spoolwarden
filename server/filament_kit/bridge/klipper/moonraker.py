@@ -99,8 +99,8 @@ class Moonraker:
             if 300 <= e.code < 400:     # Location is left out: it is the far side's text
                 raise MoonrakerError(f"Moonraker at {self.host}:{self.port} answered with a redirect ({e.code}), which "
                                      "the kit does not follow: give the printer's direct address") from None
-            msg = _error_message(e)
-            if e.code in (401, 403):
+            msg, is_moonraker = _parse_error(e)
+            if e.code in (401, 403) and is_moonraker:
                 raise Unauthorized(f"Moonraker at {self.host} wants an API key ({e.code})") from None
             if e.code == 404:
                 raise NotFound(msg) from None
@@ -179,15 +179,16 @@ class Moonraker:
         return f"ws://{_host_part(self.host)}:{self.port}/websocket"
 
 
-def _error_message(e: urllib.error.HTTPError) -> str:
+def _parse_error(e: urllib.error.HTTPError) -> tuple[str, bool]:
+    """Return (message, is_moonraker_json) from an HTTP error body."""
     try:
         body = json.loads(e.read(65536))
-        msg = (body.get("error") or {}).get("message")
-        if isinstance(msg, str) and msg:
-            return msg
     except Exception:  # noqa: BLE001 - not JSON
-        pass
-    return str(e.reason)
+        return str(e.reason), False
+    if not isinstance(body, dict) or not isinstance(body.get("error"), dict):
+        return str(e.reason), False
+    msg = body["error"].get("message")
+    return (msg if isinstance(msg, str) and msg else str(e.reason)), True
 
 
 def _reason(e: Exception) -> str:

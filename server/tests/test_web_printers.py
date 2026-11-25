@@ -681,6 +681,26 @@ def test_push_test_says_when_every_subscription_is_gone(pushapp, monkeypatch):
     assert r.status_code == 400 and "1 subscription(s) no longer exist" in r.json()["error"]
 
 
+def test_push_test_refuses_with_409_when_no_subscriptions_and_reports_partial_failures(pushapp, monkeypatch):
+    from filament_kit.web import push
+    c = signed(pushapp)
+    r = c.post(P + "/push/test", headers=H)
+    assert r.status_code == 409 and r.json()["code"] == "no_subscriptions"
+    # A 409 for 0 subscriptions must not trip the 30 s rate limit once a phone subscribes.
+    s1 = good_sub()
+    s1["subscription"]["endpoint"] = "https://fcm.googleapis.com/fcm/send/ok"
+    s2 = good_sub()
+    s2["subscription"]["endpoint"] = "https://fcm.googleapis.com/fcm/send/fail"
+    assert c.post(P + "/push/subscribe", json=s1, headers=H).status_code == 200
+    assert c.post(P + "/push/subscribe", json=s2, headers=H).status_code == 200
+    monkeypatch.setattr(pushapp, "sender", lambda info, payload, topic=None, ttl=None: (
+        201 if info["endpoint"].endswith("/ok") else 502))
+    r = c.post(P + "/push/test", headers=H)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True and body["sent"] == 1 and body["failed_count"] == 1 and len(body["failed"]) == 1
+
+
 def _two_subs_and_a_clock(monkeypatch):
     """A store with two subscriptions and a fake clock (patched into push) that moves only when told to."""
     import types

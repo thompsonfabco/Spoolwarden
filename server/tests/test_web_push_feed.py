@@ -282,6 +282,8 @@ def test_alerts_test_twin_sends_one_test_to_the_phones_only_with_push_on(env, mo
     monkeypatch.setattr(push, "available", lambda: True)
     monkeypatch.setattr(push, "webpush_sender", lambda subject: sent)
     c = signed(make_app(env, kit, push=True))
+    r0 = c.post("/intake/api/alerts/test", headers=H)
+    assert r0.status_code == 409 and r0.json()["code"] == "no_subscriptions"
     assert c.post("/intake/api/printers/push/subscribe", json={"subscription": sub()}, headers=H).status_code == 200
     r = c.post("/intake/api/alerts/test", headers=H)
     assert r.status_code == 200 and r.json()["sent"] == 1 and len(sent.payloads) == 1

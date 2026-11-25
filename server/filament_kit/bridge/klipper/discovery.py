@@ -88,7 +88,7 @@ def _is_moonraker(host: str, port: int, timeout: float) -> bool:
     try:
         info = Moonraker(host, port, timeout=max(timeout, INFO_TIMEOUT)).server_info()
     except Unauthorized:
-        return True         # Moonraker here, it wants an API key: adding the printer says so
+        return True         # Moonraker here (401/403 with Moonraker error JSON); adding the printer says so
     except MoonrakerError:
         return False
     return isinstance(info, dict) and "klippy_state" in info
