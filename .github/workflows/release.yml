@@ -175,8 +175,11 @@ jobs:
 
       - name: Tests
         run: |
-          pip install "./pc-sync[test]"
-          pytest -n auto -rfEs pc-sync/tests
+          python -m venv "$env:RUNNER_TEMP\venv-test"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:RUNNER_TEMP\venv-test\Scripts\python.exe" -m pip install "./pc-sync[test]"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:RUNNER_TEMP\venv-test\Scripts\pytest.exe" -n auto -rfEs pc-sync/tests
 
       - name: PyInstaller
         run: |
@@ -227,8 +230,9 @@ jobs:
 
       - name: Tests
         run: |
-          pip install "./pc-sync[test]"
-          pytest -n auto -rfEs pc-sync/tests
+          python -m venv "$RUNNER_TEMP/venv-test"
+          "$RUNNER_TEMP/venv-test/bin/python" -m pip install "./pc-sync[test]"
+          "$RUNNER_TEMP/venv-test/bin/pytest" -n auto -rfEs pc-sync/tests
 
       - name: PyInstaller and the Linux tarball
         run: |
