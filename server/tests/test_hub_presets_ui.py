@@ -157,7 +157,7 @@ def test_every_control_of_the_section_reaches_its_hub_route(hub, monkeypatch, tm
     assert page["parentShown"].startswith(T("common_field_bambu_parent") + "Generic PLA")
 
 
-WAIT = """const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+WAIT = r"""const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(look, what) { for (let i = 0; i < 300; i++) { const v = look(); if (v) return v; await sleep(100); } throw new Error("waited for " + what); }
 const $ = (s, root = document) => root.querySelector(s);
 const text = (el) => (el ? el.textContent.trim().replace(/\s+/g, " ") : null);
