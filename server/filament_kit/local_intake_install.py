@@ -287,10 +287,15 @@ def _manifest(raw: bytes, version: str) -> dict:
     kit_min = m.get("kit_min")
     if kit_min is not None:
         try:
-            if _kit_version() < release.parse_version(str(kit_min)):
-                raise InstallError(f"this reader release needs filament-kit {kit_min} or later: update the kit first")
+            need = release.parse_version(str(kit_min))
         except release.ReleaseError:
             raise InstallError(f"the release's kit_min {kit_min!r} is not a version") from None
+        try:
+            have = _kit_version()
+        except release.ReleaseError:
+            raise InstallError("the installed filament-kit version is not a release version") from None
+        if have < need:
+            raise InstallError(f"this reader release needs filament-kit {kit_min} or later: update the kit first")
     for t, d in m["tiers"].items():
         if not isinstance(d, dict) or not isinstance(d.get("assets"), list) or \
                 not all(isinstance(a, str) and _plain_name(a) for a in d["assets"]):

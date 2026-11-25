@@ -701,3 +701,13 @@ def test_installer_failure_leaves_nothing_installed(key, server):
     with pytest.raises(lii.InstallError, match="exit 2"):
         lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run(rc=2))
     assert lii.installed() is None
+
+
+def test_non_release_kit_version_is_not_blamed_on_kit_min(monkeypatch):
+    import filament_kit
+    monkeypatch.setattr(filament_kit, "__version__", "dev-local")
+    raw = json.dumps({"version": "0.2.2", "api_version": "1.0", "kit_min": "0.6.0",
+                      "tiers": {"cpu": {"assets": ["a.whl"]}}}).encode()
+    with pytest.raises(lii.InstallError) as exc:
+        lii._manifest(raw, "0.2.2")
+    assert "kit_min" not in str(exc.value) and "installed filament-kit version" in str(exc.value)
