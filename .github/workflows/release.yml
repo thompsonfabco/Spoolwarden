@@ -232,7 +232,7 @@ jobs:
         run: |
           python -m venv "$RUNNER_TEMP/venv-test"
           "$RUNNER_TEMP/venv-test/bin/python" -m pip install "./pc-sync[test]"
-          "$RUNNER_TEMP/venv-test/bin/pytest" -n auto -rfEs pc-sync/tests
+          "$RUNNER_TEMP/venv-test/bin/python" -m pytest -n auto -rfEs pc-sync/tests
 
       - name: PyInstaller and the Linux tarball
         run: |

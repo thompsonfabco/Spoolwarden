@@ -389,13 +389,19 @@ def test_unchanged_second_run_skips_orca_system_pack_and_secondary_state_rewrite
     sync.run_once(c, folders, dirs, running=lambda: False, now=T0,
                   orca=orca, orca_running=lambda: False, others=[sec])
     assert pack_calls == 1
+    pack_calls = 0
+    saved_dirs.clear()
+    # Second run catches up secondary folders without re-packing orca_system.
+    out = sync.run_once(c, folders, dirs, running=lambda: False, now=T0 + 30,
+                        orca=orca, orca_running=lambda: False, others=[sec])
+    assert out == "up_to_date" and pack_calls == 0
     sec_dir = dirs.base / "folders" / studio.folder_key(sec)
     assert sec_dir in saved_dirs
     sec_state = statexml.xml_path(AppDirs(sec_dir).state)
     assert sec_state.is_file()
     sec_mtime_before = sec_state.stat().st_mtime_ns
 
-    # Second run with nothing changed: orca_system is not re-packed and secondary state is not rewritten.
+    # Next run with nothing changed: orca_system is not re-packed and secondary state is not rewritten.
     pack_calls = 0
     saved_dirs.clear()
     out = sync.run_once(c, folders, dirs, running=lambda: False, now=T0 + 60,
