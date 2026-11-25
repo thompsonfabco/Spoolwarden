@@ -8,9 +8,10 @@ import pytest
 
 import orca_fixture
 import studio_fixture
-from fksync import client, installer, zips
+from fksync import client, installer, statexml, store, studio, sync, zips
 from fksync.store import AppDirs
 from fksync.treehash import tree_hash
+from test_sync import INFO, PRESET, STAMP, T0, FakeClient
 
 ORCA_INFO = {"sync_info": "", "user_id": orca_fixture.USER_ID, "setting_id": "", "base_id": "RcBNzytWgwRrwXXz",
              "updated_time": "1"}
@@ -344,3 +345,69 @@ def test_backups_keep_five_per_target(tmp_path):
         assert len(kept) == installer.KEEP_BACKUPS
         assert kept[-1] == "20261102-010006"    # the newest stays; the oldest are the ones pruned
         assert "20261102-010000" not in kept
+
+
+def test_unchanged_second_run_skips_orca_system_pack_and_secondary_state_rewrite(tmp_path, monkeypatch):
+    folders = studio_fixture.make(tmp_path / "appdata", base={"Acme PLA @BBL H2D": (PRESET, INFO)})
+    sec = studio_fixture.make(tmp_path / "appdata", variant="BambuStudio", user_id="9999999999",
+                              base={"Acme PLA @BBL H2D": (PRESET, INFO)})
+    orca = orca_fixture.make(tmp_path / "appdata", presets={N: (_orca_preset(N), ORCA_INFO)},
+                             install=tmp_path / "pf" / "OrcaSlicer 2.5.0",
+                             opc=orca_fixture.opc_blob(orca_fixture.LIBRARY))
+    dirs = AppDirs(tmp_path / "local" / "filament-kit-sync")
+    dirs.ensure()
+    live = tree_hash(folders.user_filament)
+    system = tree_hash(folders.system_filament)
+    olive = tree_hash(orca.user_filament)
+
+    # First run: build is already installed on primary, orca_system is not yet on server, secondary needs install.
+    c = FakeClient({
+        "owner": "dev1", "you": "dev1", "user_id": folders.user_id,
+        "live_hash": live, "system_hash": system,
+        "orca_live_hash": olive, "orca_system_hash": None, "orca_target": True,
+        "build": {"stamp": STAMP, "live_hash": live, "orca_live_hash": olive},
+        "installed": {"stamp": STAMP},
+    })
+    pack_calls = 0
+    real_orca_system = zips.orca_system
+
+    def counting_orca_system(*a, **kw):
+        nonlocal pack_calls
+        pack_calls += 1
+        return real_orca_system(*a, **kw)
+
+    saved_dirs = []
+    real_save_state = sync._save_state
+
+    def tracking_save_state(d, st):
+        saved_dirs.append(d.base)
+        return real_save_state(d, st)
+
+    monkeypatch.setattr(zips, "orca_system", counting_orca_system)
+    monkeypatch.setattr(sync, "_save_state", tracking_save_state)
+
+    sync.run_once(c, folders, dirs, running=lambda: False, now=T0,
+                  orca=orca, orca_running=lambda: False, others=[sec])
+    assert pack_calls == 1
+    sec_dir = dirs.base / "folders" / studio.folder_key(sec)
+    assert sec_dir in saved_dirs
+    sec_state = statexml.xml_path(AppDirs(sec_dir).state)
+    assert sec_state.is_file()
+    sec_mtime_before = sec_state.stat().st_mtime_ns
+
+    # Second run with nothing changed: orca_system is not re-packed and secondary state is not rewritten.
+    pack_calls = 0
+    saved_dirs.clear()
+    out = sync.run_once(c, folders, dirs, running=lambda: False, now=T0 + 60,
+                        orca=orca, orca_running=lambda: False, others=[sec])
+    assert out == "up_to_date"
+    assert pack_calls == 0
+    assert sec_dir not in saved_dirs
+    assert sec_state.stat().st_mtime_ns == sec_mtime_before
+
+    # Changing a system preset file invalidates the stat fingerprint and triggers a re-pack.
+    extra = orca.system_bbl / "Added PLA @BBL H2D.json"
+    extra.write_text('{"name": "Added PLA @BBL H2D"}\n', encoding="utf-8")
+    sync.run_once(c, folders, dirs, running=lambda: False, now=T0 + 120,
+                  orca=orca, orca_running=lambda: False, others=[sec])
+    assert pack_calls == 1

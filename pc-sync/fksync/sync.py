@@ -105,6 +105,7 @@ showing the wait. A heartbeat that fails is logged and never changes the outcome
 Every outcome and the stale-preset list are logged in one line each. Errors other than an install
 refusal, a rejected upload or `409 other_pc` propagate (the caller logs them; the next run retries).
 """
+import hashlib
 import os
 import shutil
 import tempfile
@@ -168,6 +169,21 @@ def _save_state(dirs: store.AppDirs, st: dict) -> None:
     statexml.write(dirs.state, st)
 
 
+def _orca_system_fingerprint(orca: OrcaFolders) -> str:
+    """Stat fingerprint of every file `zips.orca_system(orca)` reads: `(rel_path, mtime_ns, size)`."""
+    h = hashlib.sha256()
+    entries: list[tuple[str, Path]] = [
+        (f"BBL/filament/{rel}", p) for rel, p in zips.preset_files(orca.system_bbl)
+        if rel.casefold().endswith(".json")
+    ]
+    if orca.library_opc is not None:
+        entries.append((f"{zips.LIBRARY_INDEX}:{orca.library_opc.name}", orca.library_opc))
+    for rel, path in sorted(entries, key=lambda t: t[0]):
+        st = path.stat()
+        h.update(f"{rel}\0{st.st_mtime_ns}\0{st.st_size}\n".encode("utf-8"))
+    return h.hexdigest()
+
+
 def _read_bytes(path: Path) -> bytes | None:
     try:
         return path.read_bytes()
@@ -198,6 +214,15 @@ class _Run:
         self.change_reason = change_reason      # why the primary is not the recorded folder (studio.primary)
         self.fresh_sent = False     # this run sent the live folder as a first sync (a primary change)
         self.orca_on = False        # this run syncs Orca Slicer (set by uploads())
+        self._tree_cache: dict[Path, str] = {}
+        self._orca_system_fp: str | None = None
+
+    def _tree_hash(self, path: Path) -> str:
+        cached = self._tree_cache.get(path)
+        if cached is None:
+            cached = tree_hash(path)
+            self._tree_cache[path] = cached
+        return cached
 
     def log(self, msg: str) -> None:
         store.log(self.d, msg)
@@ -320,7 +345,10 @@ class _Run:
         (self.st.get("rejected") or {}).pop(kind, None)
         returned = res.get(f"{kind}_hash") if isinstance(res, dict) else None
         prev = (self.st.get("uploaded") or {}).get(kind) or {}
-        self.st.setdefault("uploaded", {})[kind] = {"local": here, "server": returned}
+        entry = {"local": here, "server": returned}
+        if kind == "orca_system" and self._orca_system_fp is not None:
+            entry["stat"] = self._orca_system_fp
+        self.st.setdefault("uploaded", {})[kind] = entry
         self.save()
         extra = self.f.variant + " user " + self.f.user_id if kind == "live" else ""
         self.log(f"uploaded the {label} ({len(data)} bytes{', ' + extra if extra else ''})")
@@ -328,12 +356,12 @@ class _Run:
             self.log(f"the server's hash of the {label} ({returned}) differs from this PC's ({here})")
 
     def upload_live(self) -> None:
-        here = tree_hash(self.f.user_filament)
+        here = self._tree_hash(self.f.user_filament)
         self._send("live", zips.pack(self.f.user_filament, LIVE_MAX), here)
         if self.orca_on and self.o is not None:
             h = None
             try:
-                h = tree_hash(self.o.user_filament)
+                h = self._tree_hash(self.o.user_filament)
                 data = zips.pack(self.o.user_filament, LIVE_MAX)
             except (zips.TooLarge, OSError) as e:   # orca_live_owed stays set, but backed off like a refusal
                 self._failed("orca_live", h, str(e))
@@ -377,8 +405,8 @@ class _Run:
         return True
 
     def uploads(self, server: dict) -> str:
-        here = tree_hash(self.f.user_filament)
-        system = tree_hash(self.f.system_filament)
+        here = self._tree_hash(self.f.user_filament)
+        system = self._tree_hash(self.f.system_filament)
         self.orca_on = self._orca_wanted(server)
         # all checked against the limits before any is sent
         owed = bool(self.st.get("live_owed") or self.st.get("fresh_owed"))   # an install was reported (or the
@@ -388,10 +416,11 @@ class _Run:
         sys_zip = (zips.pack(self.f.system_filament, SYSTEM_MAX)
                    if self._needs_upload("system", system, server.get("system_hash")) else None)
         orca = []
+        self._orca_system_fp = None
         if self.orca_on:
             kind, h = "orca_live", None
             try:
-                h = olive = tree_hash(self.o.user_filament)
+                h = olive = self._tree_hash(self.o.user_filament)
                 owed = self.st.get("orca_live_owed") and not self._backed_off("orca_live", olive)
                 if owed or self._needs_upload("orca_live", olive, server.get("orca_live_hash")):
                     orca.append(("orca_live", zips.pack(self.o.user_filament, LIVE_MAX), olive))
@@ -401,9 +430,29 @@ class _Run:
                              f"sent less than {UPLOAD_BACKOFF // 3600} h ago")
                 kind, h = "orca_system", None
                 if self.orca_on and not self._backed_off("orca_system", None):
-                    osys_zip, osys = zips.orca_system(self.o, SYSTEM_MAX)
-                    if self._needs_upload("orca_system", osys, server.get("orca_system_hash")):
-                        orca.append(("orca_system", osys_zip, osys))
+                    osys_fp = _orca_system_fingerprint(self.o)
+                    rec = (self.st.get("uploaded") or {}).get("orca_system") or {}
+                    rej = (self.st.get("rejected") or {}).get("orca_system")
+                    server_osys = server.get("orca_system_hash")
+                    cached_ok = (
+                        not rej
+                        and rec.get("stat") == osys_fp
+                        and isinstance(rec.get("local"), str)
+                        and (server_osys == rec["local"]
+                             or (rec.get("server") and rec.get("server") == server_osys))
+                    )
+                    if not cached_ok:
+                        osys_zip, osys = zips.orca_system(self.o, SYSTEM_MAX)
+                        if self._needs_upload("orca_system", osys, server_osys):
+                            self._orca_system_fp = osys_fp
+                            orca.append(("orca_system", osys_zip, osys))
+                        elif not rej and (server_osys == osys
+                                          or (rec.get("local") == osys and rec.get("server")
+                                              and rec.get("server") == server_osys)):
+                            self.st.setdefault("uploaded", {})["orca_system"] = {
+                                "local": osys, "server": server_osys, "stat": osys_fp,
+                            }
+                            self.save()
             except (zips.TooLarge, OSError) as e:   # an Orca problem (size, unreadable .opc or folder) must
                 self._failed(kind, h, str(e))       # not stop the Bambu Studio sync; backed off like a refusal
                 self.log(f"Orca Slicer not synced this run: {e}; not tried again for {UPLOAD_BACKOFF // 3600} h")
@@ -431,7 +480,7 @@ class _Run:
         """This PC's Orca live hashes a build may have been made from; None when Orca is not synced this run."""
         if not self.orca_on or self.o is None:
             return None
-        return self.accepted_hashes(tree_hash(self.o.user_filament), "orca_live")
+        return self.accepted_hashes(self._tree_hash(self.o.user_filament), "orca_live")
 
     # --- rebuild requests -----------------------------------------------------------------
 
@@ -439,7 +488,7 @@ class _Run:
         """Ask for a rebuild for `here` unless one was asked less than 15 min ago for the same live presets
         (Bambu Studio's, and Orca Slicer's when it is synced); True when sent."""
         req = self.st.get("requested") or {}
-        orca = tree_hash(self.o.user_filament) if self.orca_on and self.o is not None else None
+        orca = self._tree_hash(self.o.user_filament) if self.orca_on and self.o is not None else None
         if (req.get("live_hash") == here and req.get("orca_live_hash") == orca
                 and self.now - float(req.get("at") or 0) < REQUEST_RETRY):
             return False
@@ -524,10 +573,13 @@ class _Run:
                 return self.finish("studio_running", f"{app} started; build {stamp} not installed yet", app)
             self._clear_marker()
             detail = f"install of build {stamp} refused ({e.code}): {e.reason}"
-            if e.code == "stale_build" and self.request(tree_hash(self.f.user_filament)):
+            if e.code == "stale_build" and self.request(self._tree_hash(self.f.user_filament)):
                 detail += "; asked for a rebuild"     # server and PC disagree: only a new build can settle it
             return self.finish("refused", detail)
         # an OSError propagates with the marker kept: the next run resumes this install (or not, see run())
+        self._tree_cache.pop(self.f.user_filament, None)
+        if self.o is not None:
+            self._tree_cache.pop(self.o.user_filament, None)
         self._clear_marker()
         self._clear_partial()
         self.st["stale"] = list(res.stale)
@@ -772,10 +824,12 @@ class _Run:
                 sd = store.AppDirs(self.d.base / "folders" / studio.folder_key(f))
                 sd.ensure()
                 rec = load_state(sd)
+                before = dict(rec)
                 rec.update(variant=f.variant, user_id=f.user_id, root=str(f.root))
                 if accepted:
                     rec["owed_accept"] = sorted(set(rec.get("owed_accept") or []) | set(accepted))
-                _save_state(sd, rec)
+                if rec != before:
+                    _save_state(sd, rec)
                 marker = _read_marker(sd)
                 if (rec.get("installed") or {}).get("stamp") == stamp and not rec.get("owed_accept") and not marker:
                     continue
