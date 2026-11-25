@@ -58,6 +58,12 @@ def _bash_runs() -> bool:
 def test_uninstall_run_keeps_the_data_unless_purge(tmp_path):
     """The text checks above cannot see where `rm -rf "$data"` sits; run the script against a temp HOME."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("XDG_")}
+    stub_bin = tmp_path / "bin"
+    stub_bin.mkdir()
+    systemctl = stub_bin / "systemctl"
+    systemctl.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    systemctl.chmod(0o755)
+    env["PATH"] = f"{stub_bin}{os.pathsep}{env.get('PATH', '')}"
     home = tmp_path / "home"
     env["HOME"] = str(home)
     data = home / ".local" / "share" / "filament-kit-sync"

@@ -382,21 +382,29 @@ def test_an_older_full_report_never_lands_after_a_newer_write(rig, monkeypatch):
     m, printer, c = rig
     monkeypatch.setattr(connection, "PUSHALL_AFTER_COMMAND", 60)   # no later full report to hide it
     respond = printer.respond
+    entered = threading.Event()
     gate = threading.Event()
 
     def held(topic, body):
         out = respond(topic, body)
         if body.get("pushing", {}).get("command") == "pushall" and threading.current_thread() is not threading.main_thread():
+            entered.set()
             gate.wait(2)                                      # held after taking the report, before it is queued
         return out
     c.responder = held
     t = threading.Thread(target=c.publish, args=(f"device/{SERIAL}/request",
                                                  json.dumps({"pushing": {"sequence_id": "0", "command": "pushall"}})))
     t.start()
-    time.sleep(0.05)                                          # it has taken the report and is held
-    threading.Timer(0.2, gate.set).start()
-    m.set_slot(SERIAL, 0, 0, dict(original("A1"), tray_color="FA0100FF"))
-    t.join(5)
+    assert entered.wait(2), "pushall thread did not reach held()"
+    timer = threading.Timer(0.2, gate.set)
+    timer.start()
+    try:
+        m.set_slot(SERIAL, 0, 0, dict(original("A1"), tray_color="FA0100FF"))
+        t.join(5)
+    finally:
+        timer.cancel()
+        gate.set()
+        timer.join(2)
     deadline = time.monotonic() + 5
     while (c._outbox or c._sending) and time.monotonic() < deadline:
         time.sleep(0.02)
