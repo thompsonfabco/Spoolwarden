@@ -295,8 +295,9 @@ def _parts(js: str) -> dict:
         "function tt(key, vars) {\n"
         "  let f = _EN[key];\n"
         "  if (f == null) return key;\n"
-        '  if (typeof f === "object") f = f[new Intl.PluralRules("en").select(Number(vars && vars.count))] || f.other;\n'
-        "  return vars ? f.replace(/\\{([a-z][a-z0-9_]*)\\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : f;\n"
+        "  if (typeof f === \"object\") f = f[new Intl.PluralRules(\"en\").select(Number(vars && vars.count))] || f.other;\n"
+        '  const v = { command: "spoolwarden", product: "Spoolwarden", ...(vars || {}) };\n'
+        "  return f.replace(/\\{([a-z][a-z0-9_]*)\\}/g, (m, n) => (v[n] != null ? String(v[n]) : m));\n"
         "}\n"
     )
     return {"tt": tt_fn,
