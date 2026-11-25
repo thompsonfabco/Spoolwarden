@@ -393,7 +393,12 @@ private fun CatalogParentField(
             containerColor = SpoolwardenTheme.colors.surface, shape = SpoolwardenTheme.shapes.r,
         ) {
             SwMenuItem(automatic, { onPick(""); open = false }, checked = value.isEmpty())
-            parents?.parents.orEmpty().forEach { p -> SwMenuItem(p, { onPick(p); open = false }, checked = p == value) }
+            val items = parents?.parents.orEmpty()
+            if (items.isEmpty()) {
+                SwMenuItem("No parents for this material", {}, enabled = false)
+            } else {
+                items.forEach { p -> SwMenuItem(p, { onPick(p); open = false }, checked = p == value) }
+            }
         }
     }
 }

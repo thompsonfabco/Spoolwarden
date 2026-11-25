@@ -425,6 +425,9 @@ private fun DraftRow(draft: Draft, now: Long, startOfToday: Long, onClick: () ->
             returnFocusTo = opener,
         ) {
             Text(stringResource(R.string.home_draft_discard_body))
+            if (draft.addedBefore != null) {
+                Text("Discarding also removes the \"may already be added\" warning.")
+            }
         }
     }
 }

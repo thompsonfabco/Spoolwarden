@@ -33,6 +33,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * What is read from the settings store before the first screen: the appearance, whether a Hub is paired, the theme this
@@ -127,6 +129,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private val draftsMutex = Mutex()
     private val _draftList = MutableStateFlow<List<Draft>>(emptyList())
     val draftList: StateFlow<List<Draft>> = _draftList.asStateFlow()
 
@@ -168,27 +171,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** At start: delete expired, photo-less and unreadable drafts ([DraftStore.purge]), then show what is left. */
     private fun purgeDrafts() {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { drafts.purge(DraftStore.MAX_AGE_MS, open = addFlows.openIds()) }
-            refreshDrafts()
+            draftsMutex.withLock {
+                runCatching { drafts.purge(DraftStore.MAX_AGE_MS, open = addFlows.openIds()) }
+                updateDraftList()
+            }
         }
     }
 
     /** Home → Discard (confirmed): delete the draft and its photos. */
     fun discardDraft(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            addFlows.release(id)
-            runCatching { drafts.delete(id) }
-            refreshDrafts()
+            draftsMutex.withLock {
+                addFlows.release(id)
+                runCatching { drafts.delete(id) }
+                updateDraftList()
+            }
         }
     }
 
     fun refreshDrafts() {
         viewModelScope.launch(Dispatchers.IO) {
-            _draftList.value = try {
-                drafts.list().filter { it.hasContent }.sortedByDescending { it.created }
-            } catch (_: Exception) {
-                emptyList()
+            draftsMutex.withLock {
+                updateDraftList()
             }
+        }
+    }
+
+    private fun updateDraftList() {
+        _draftList.value = try {
+            drafts.list().filter { it.hasContent }.sortedByDescending { it.created }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

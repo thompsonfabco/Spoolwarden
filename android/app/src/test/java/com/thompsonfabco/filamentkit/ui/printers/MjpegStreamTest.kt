@@ -56,13 +56,18 @@ class MjpegStreamTest {
         accepted.countDown()
     }.apply { isDaemon = true; start() }
 
+    private val initialFrame = "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 4\r\n\r\n".toByteArray() +
+        byteArrayOf(1, 2, 3, 4) + "\r\n".toByteArray()
+
     @Test fun cancellingClosesTheConnectionPromptlyWhileTheServerIsSilent() = runBlocking {
-        serve()
+        serve(initialFrame)
+        val reading = CompletableDeferred<Unit>()
         val job = CoroutineScope(Dispatchers.Default + handler).launch {
-            streamMjpeg(OkHttpClient(), url(), mapOf("Authorization" to "Bearer t")) { }
+            streamMjpeg(OkHttpClient(), url(), mapOf("Authorization" to "Bearer t")) { reading.complete(Unit) }
         }
         assertTrue(accepted.await(5, TimeUnit.SECONDS))
-        Thread.sleep(200) // the client is now blocked reading a body that never comes
+        // Observable signal that the client parsed the header/frame and is now blocked on the silent open socket.
+        withTimeout(5000) { reading.await() }
         val t0 = System.nanoTime()
         job.cancel()
         withTimeout(2000) { job.join() }
@@ -85,12 +90,13 @@ class MjpegStreamTest {
         // the closer's call.cancel() can land before the read's coroutine is cancelled: cancel the call alone
         val call = CompletableDeferred<Call>()
         onStreamCall = { call.complete(it) }
-        serve()
+        serve(initialFrame)
+        val reading = CompletableDeferred<Unit>()
         val job = CoroutineScope(Dispatchers.Default + handler).launch {
-            streamMjpeg(OkHttpClient(), url(), emptyMap()) { }
+            streamMjpeg(OkHttpClient(), url(), emptyMap()) { reading.complete(Unit) }
         }
         assertTrue(accepted.await(5, TimeUnit.SECONDS))
-        Thread.sleep(200) // the client is now blocked reading a body that never comes
+        withTimeout(5000) { reading.await() }
         call.await().cancel()
         withTimeout(2000) { job.join() }
         assertTrue("a closed stream must not fail the job: $uncaught", uncaught.isEmpty())

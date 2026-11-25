@@ -35,12 +35,18 @@ def test_the_written_strings_compile_back_to_the_same_bytes(tmp_path):
 
 
 def test_secrets_h_has_every_setting_and_checks_them():
-    text = rs.secrets_h("Home", "pa\"ss", BASE, TOKEN, KEY)
-    assert 'WIFI_SSID = "Home";' in text and 'WIFI_PASS = "pa\\042ss";' in text
+    text = rs.secrets_h("Home", "pa\"ssword", BASE, TOKEN, KEY)
+    assert 'WIFI_SSID = "Home";' in text and 'WIFI_PASS = "pa\\042ssword";' in text
     assert f'READER_BASE = "{BASE}";' in text and f'READER_TOKEN = "{TOKEN}";' in text
     assert f'OTA_PUBKEY = R"KEY({KEY})KEY";' in text
-    for args, msg in [(("", "p", BASE, TOKEN, KEY), "Wi-Fi name"), (("x" * 33, "p", BASE, TOKEN, KEY), "Wi-Fi name"),
-                      (("H", "p" * 64, BASE, TOKEN, KEY), "password"), (("H", "p", BASE, "short", KEY), "token")]:
+    assert 'WIFI_PASS = "";' in rs.secrets_h("Home", "", BASE, TOKEN, KEY)
+    assert f'WIFI_PASS = "{"p" * 63}";' in rs.secrets_h("Home", "p" * 63, BASE, TOKEN, KEY)
+    for args, msg in [(("", "password", BASE, TOKEN, KEY), "Wi-Fi name"),
+                      (("x" * 33, "password", BASE, TOKEN, KEY), "Wi-Fi name"),
+                      (("H", "p", BASE, TOKEN, KEY), "8 to 63 characters, or empty"),
+                      (("H", "1234567", BASE, TOKEN, KEY), "8 to 63 characters, or empty"),
+                      (("H", "p" * 64, BASE, TOKEN, KEY), "8 to 63 characters, or empty"),
+                      (("H", "password", BASE, "short", KEY), "token")]:
         with pytest.raises(rs.SetupError, match=msg):
             rs.secrets_h(*args)
 
@@ -130,11 +136,11 @@ def test_home_settings_without_the_certificate_say_so(tmp_path, monkeypatch):
 
 
 def test_secrets_h_carries_the_hubs_certificate_and_address_only_when_given(hub):
-    text = rs.secrets_h("Home", "pw", BASE, TOKEN, KEY, home=rs.home_settings())
+    text = rs.secrets_h("Home", "password1", BASE, TOKEN, KEY, home=rs.home_settings())
     assert f'READER_ROOT_CA R"CERT({hub})CERT"' in text
     assert '#define READER_HUB_IP "192.0.2.7"\n' in text
     assert "READER_PRINTER" not in text
-    plain = rs.secrets_h("Home", "pw", BASE, TOKEN, KEY)
+    plain = rs.secrets_h("Home", "password1", BASE, TOKEN, KEY)
     assert "READER_ROOT_CA" not in plain
     assert "READER_HUB_IP" not in plain
 
@@ -233,13 +239,13 @@ def test_a_token_file_needs_no_root_and_makes_no_token(tmp_path, monkeypatch):
     (tmp_path / "key.pem").write_text(KEY)
     out = tmp_path / "secrets.h"
     assert cli.cmd_reader_setup(_args(out=str(out), token_file=str(tmp_path / "tok"), ota_pubkey=str(tmp_path / "key.pem")),
-                                ask_secret=_secret("p", "p")) == 0
+                                ask_secret=_secret("password1", "password1")) == 0
     assert TOKEN in out.read_text() and KEY in out.read_text() and reader_tokens.TokenStore().list() == []
 
 
 def test_without_root_or_a_token_file_nothing_happens(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: False)
-    assert cli.cmd_reader_setup(_args(out=str(tmp_path / "s.h")), ask_secret=_secret("p", "p")) == 3
+    assert cli.cmd_reader_setup(_args(out=str(tmp_path / "s.h")), ask_secret=_secret("password1", "password1")) == 3
     assert "administrator rights" in capsys.readouterr().err and not (tmp_path / "s.h").exists()
 
 
@@ -251,7 +257,7 @@ def test_two_different_passwords_change_nothing(tmp_path, monkeypatch):
 
 def test_a_bad_wifi_name_is_refused_before_a_token_is_made(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_is_root", lambda: True)
-    assert cli.cmd_reader_setup(_args(out=str(tmp_path / "s.h"), ssid="x" * 40), ask_secret=_secret("p", "p")) == 1
+    assert cli.cmd_reader_setup(_args(out=str(tmp_path / "s.h"), ssid="x" * 40), ask_secret=_secret("password1", "password1")) == 1
     assert reader_tokens.TokenStore().list() == []
 
 
@@ -259,7 +265,7 @@ def test_an_unknown_printer_is_exit_2_with_the_text_and_nothing_is_made(hub, tmp
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     monkeypatch.setattr(rs, "reader_base", lambda cfg: BASE)
     out = tmp_path / "secrets.h"
-    assert cli.cmd_reader_setup(_args(out=str(out), base=None, printer="nope"), ask_secret=_secret("p", "p")) == 2
+    assert cli.cmd_reader_setup(_args(out=str(out), base=None, printer="nope"), ask_secret=_secret("password1", "password1")) == 2
     assert rs.UNKNOWN_PRINTER in capsys.readouterr().err
     assert not out.exists() and reader_tokens.TokenStore().list() == []
 
@@ -290,7 +296,7 @@ def _flash_env(monkeypatch, tmp_path, rc, readers=1):
 def test_a_failed_flash_removes_the_token_nobody_holds(tmp_path, monkeypatch, capsys):
     calls = _flash_env(monkeypatch, tmp_path, rc=1)
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=lambda p: "y",
-                                ask_secret=_secret("p", "p")) == 1
+                                ask_secret=_secret("password1", "password1")) == 1
     assert calls and calls[0][0] == "/dev/ttyACM0"
     assert reader_tokens.TokenStore().list() == [] and "token was removed" in " ".join(capsys.readouterr().err.split())
 
@@ -298,16 +304,16 @@ def test_a_failed_flash_removes_the_token_nobody_holds(tmp_path, monkeypatch, ca
 def test_a_good_flash_keeps_the_token(tmp_path, monkeypatch, capsys):
     _flash_env(monkeypatch, tmp_path, rc=0)
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=lambda p: "y",
-                                ask_secret=_secret("p", "p")) == 0
+                                ask_secret=_secret("password1", "password1")) == 0
     assert len(reader_tokens.TokenStore().list()) == 1 and "Flashed. The reader joins Home" in capsys.readouterr().out
 
 
 def test_two_boards_need_a_port_and_none_says_check_the_cable(tmp_path, monkeypatch, capsys):
     _flash_env(monkeypatch, tmp_path, rc=0, readers=2)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p")) == 2
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("password1", "password1")) == 2
     assert "Fix: name the reader's board with --port" in " ".join(capsys.readouterr().err.split())
     _flash_env(monkeypatch, tmp_path, rc=0, readers=0)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p")) == 1
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("password1", "password1")) == 1
     assert "data cable" in capsys.readouterr().err and reader_tokens.TokenStore().list() == []
 
 
@@ -406,7 +412,7 @@ def test_setup_refuses_an_out_path_it_must_not_replace(tmp_path, monkeypatch, ca
         victim = tmp_path / ("d" * pad) / "hosts"
         victim.parent.mkdir(exist_ok=True)
         victim.write_text("127.0.0.1 localhost\n")
-        assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 1
+        assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("password1", "password1")) == 1
         assert victim.read_text() == "127.0.0.1 localhost\n" and reader_tokens.TokenStore().list() == []
         err = capsys.readouterr().err
         assert "not a file of yours" in " ".join(err.split())      # on one line or two
@@ -416,8 +422,8 @@ def test_setup_refuses_an_out_path_it_must_not_replace(tmp_path, monkeypatch, ca
 # ---------- the buzzer's trigger (reader/src/main.cpp: no line in secrets.h = the older low-triggered module) ----------
 
 def test_secrets_h_says_the_buzzer_trigger():
-    assert "#define READER_BUZZER_ACTIVE_LOW 0\n" in rs.secrets_h("Home", "p", BASE, TOKEN, KEY)
-    assert "#define READER_BUZZER_ACTIVE_LOW 1\n" in rs.secrets_h("Home", "p", BASE, TOKEN, KEY, buzzer_active_low=True)
+    assert "#define READER_BUZZER_ACTIVE_LOW 0\n" in rs.secrets_h("Home", "password1", BASE, TOKEN, KEY)
+    assert "#define READER_BUZZER_ACTIVE_LOW 1\n" in rs.secrets_h("Home", "password1", BASE, TOKEN, KEY, buzzer_active_low=True)
 
 
 @pytest.mark.parametrize("buzzer,line,said", [("high", "0", "high-triggered"), ("low", "1", "low-triggered")])
@@ -425,7 +431,7 @@ def test_setup_writes_the_buzzer_choice_and_says_it(tmp_path, monkeypatch, capsy
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     monkeypatch.delenv("SUDO_UID", raising=False)
     out = tmp_path / "secrets.h"
-    assert cli.cmd_reader_setup(_args(out=str(out), buzzer=buzzer), ask_secret=_secret("pw", "pw")) == 0
+    assert cli.cmd_reader_setup(_args(out=str(out), buzzer=buzzer), ask_secret=_secret("password1", "password1")) == 0
     assert f"#define READER_BUZZER_ACTIVE_LOW {line}\n" in out.read_text()
     assert f"Buzzer: {said}" in capsys.readouterr().out
 
@@ -439,7 +445,7 @@ def test_the_buzzer_option_defaults_to_high(monkeypatch):
 
 def _refused(monkeypatch, tmp_path, capsys, rc=1, **kw):
     calls = _flash_env(monkeypatch, tmp_path, rc=0)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p"), **kw) == rc
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("password1", "password1"), **kw) == rc
     assert calls == [] and reader_tokens.TokenStore().list() == []
     return capsys.readouterr()
 
@@ -465,7 +471,7 @@ def test_a_lone_board_with_no_terminal_and_no_yes_is_not_flashed_exit_2(tmp_path
 def test_yes_writes_a_lone_board_without_asking(tmp_path, monkeypatch, capsys):
     calls = _flash_env(monkeypatch, tmp_path, rc=0)
     monkeypatch.setattr(cli.output, "terminal", lambda: False)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), yes=True), ask_secret=_secret("p", "p")) == 0
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), yes=True), ask_secret=_secret("password1", "password1")) == 0
     assert calls and "[y/N]" not in capsys.readouterr().out
 
 
@@ -474,7 +480,7 @@ def test_a_lone_board_that_answers_as_the_panel_is_never_asked_about(tmp_path, m
     monkeypatch.setattr(cli, "_answers_as_panel", lambda port: True)
     def boom(prompt):
         raise AssertionError("asked")
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=boom, ask_secret=_secret("p", "p")) == 1
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=boom, ask_secret=_secret("password1", "password1")) == 1
     assert calls == [] and "button panel" in capsys.readouterr().err
 
 
@@ -483,12 +489,12 @@ def test_an_explicit_port_still_asks_at_a_terminal(tmp_path, monkeypatch, capsys
     monkeypatch.setattr(cli.output, "terminal", lambda: True)
     asked = []
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM0"),
-                                ask=lambda p: asked.append(p) or "n", ask_secret=_secret("p", "p")) == 5
+                                ask=lambda p: asked.append(p) or "n", ask_secret=_secret("password1", "password1")) == 5
     assert len(asked) == 1 and calls == []
     assert "Write the reader firmware to /dev/ttyACM0?" in " ".join(capsys.readouterr().out.split())
     assert reader_tokens.TokenStore().list() == []
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM0"),
-                                ask=lambda p: "y", ask_secret=_secret("p", "p")) == 0
+                                ask=lambda p: "y", ask_secret=_secret("password1", "password1")) == 0
     assert calls[0][0] == "/dev/ttyACM0"
 
 
@@ -496,10 +502,10 @@ def test_an_explicit_port_piped_without_yes_exits_2_with_yes_writes(tmp_path, mo
     calls = _flash_env(monkeypatch, tmp_path, rc=0)
     monkeypatch.setattr(cli.output, "terminal", lambda: False)
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM0"),
-                                ask_secret=_secret("p", "p")) == 2
+                                ask_secret=_secret("password1", "password1")) == 2
     assert calls == [] and "--yes" in capsys.readouterr().err and reader_tokens.TokenStore().list() == []
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM0", yes=True),
-                                ask_secret=_secret("p", "p")) == 0 and calls[0][0] == "/dev/ttyACM0"
+                                ask_secret=_secret("password1", "password1")) == 0 and calls[0][0] == "/dev/ttyACM0"
 
 
 def test_a_port_that_answers_as_the_panel_is_refused_first_exit_2(tmp_path, monkeypatch, capsys):
@@ -517,14 +523,14 @@ def test_a_port_that_answers_as_the_panel_is_refused_first_exit_2(tmp_path, monk
 
 def test_an_empty_port_is_an_error_exit_2(tmp_path, monkeypatch, capsys):
     calls = _flash_env(monkeypatch, tmp_path, rc=0)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="", yes=True), ask_secret=_secret("p", "p")) == 2
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="", yes=True), ask_secret=_secret("password1", "password1")) == 2
     assert calls == [] and "--port needs" in capsys.readouterr().err
 
 
 def test_a_port_written_with_dots_is_the_board_found(tmp_path, monkeypatch):
     calls = _flash_env(monkeypatch, tmp_path, rc=0, readers=2)
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/../dev/ttyACM1", yes=True),
-                                ask_secret=_secret("p", "p")) == 0 and calls[0][0] == "/dev/ttyACM1"
+                                ask_secret=_secret("password1", "password1")) == 0 and calls[0][0] == "/dev/ttyACM1"
 
 
 class _FakeSerial:
@@ -600,7 +606,7 @@ def test_the_station_is_stopped_around_the_probe_and_the_flash_and_restarted_aft
     monkeypatch.setattr(cli, "_answers_as_panel", lambda port: log.append("probe") or False)
     monkeypatch.setattr(rs, "flash", lambda *a, **k: log.append("flash") or 0)
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=lambda p: "y",
-                                ask_secret=_secret("p", "p")) == 0
+                                ask_secret=_secret("password1", "password1")) == 0
     assert log == ["is-active", "stop", "probe", "start", "is-active", "stop", "flash", "start"]
 
 
@@ -692,7 +698,7 @@ def test_a_lone_board_is_not_probed_or_flashed_when_the_station_will_not_stop(tm
     monkeypatch.setattr(cli, "_answers_as_panel", lambda port: log.append("probe"))
     def boom(prompt):
         raise AssertionError("asked")
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=boom, ask_secret=_secret("p", "p")) == 1
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=boom, ask_secret=_secret("password1", "password1")) == 1
     assert "probe" not in log and calls == [] and reader_tokens.TokenStore().list() == []
     assert "could not stop" in capsys.readouterr().err
 
@@ -702,7 +708,7 @@ def test_with_a_port_a_station_that_will_not_stop_makes_no_token(tmp_path, monke
     run, log = _systemctl(monkeypatch, stop_exc=OSError("denied"))
     monkeypatch.setattr(cli, "_station_stopped", lambda real=cli._station_stopped: real(run))
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM0"),
-                                ask_secret=_secret("p", "p")) == 1
+                                ask_secret=_secret("password1", "password1")) == 1
     err = capsys.readouterr().err
     assert calls == [] and reader_tokens.TokenStore().list() == []
     assert "could not stop" in err and "token" not in err        # the probe stops it first: no token was made
@@ -710,18 +716,18 @@ def test_with_a_port_a_station_that_will_not_stop_makes_no_token(tmp_path, monke
 
 def test_source_with_yes_and_several_boards_stops_and_names_port(tmp_path, monkeypatch, capsys):
     calls = _flash_env(monkeypatch, tmp_path, rc=0, readers=2)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), yes=True), ask_secret=_secret("p", "p")) == 2
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), yes=True), ask_secret=_secret("password1", "password1")) == 2
     assert "--port /dev/ttyACM0" in " ".join(capsys.readouterr().err.split()) and calls == []
 
 
 def test_source_port_that_is_no_found_board_flashes_nothing(tmp_path, monkeypatch, capsys):
     calls = _flash_env(monkeypatch, tmp_path, rc=0, readers=2)
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyUSB0", yes=True),
-                                ask_secret=_secret("p", "p")) == 2
+                                ask_secret=_secret("password1", "password1")) == 2
     err = " ".join(capsys.readouterr().err.split())
     assert "/dev/ttyUSB0" in err and "use one of: /dev/ttyACM0, /dev/ttyACM1." in err and calls == []
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM1", yes=True),
-                                ask_secret=_secret("p", "p")) == 0 and calls[0][0] == "/dev/ttyACM1"
+                                ask_secret=_secret("password1", "password1")) == 0 and calls[0][0] == "/dev/ttyACM1"
 
 
 def test_the_buzzer_options_read_bare_buzzer_and_buzzer_with_driver_board_everywhere():

@@ -11,6 +11,8 @@ import org.junit.Assert.fail
 import org.junit.Test
 import java.net.InetAddress
 import java.net.ServerSocket
+import java.net.Socket
+import java.util.concurrent.atomic.AtomicInteger
 
 /** All hosts share one port (as with the real server), so each test server binds its own loopback address. */
 class EndpointsTest {
@@ -75,21 +77,56 @@ class EndpointsTest {
     }
 
     @Test
-    fun aReachableSecondHostIsNotDelayedByAnUnreachableFirstOne() = runBlocking {
+    fun probesPreviousWinnerFirstWithoutProbingOtherHosts() = runBlocking {
         val good = server(pinned, "127.0.0.3")
-        // Accepts the connection and never answers: the old one-at-a-time probe waited out its timeout here.
-        val silent = ServerSocket(good.port, 1, InetAddress.getByName("127.0.0.5"))
-        try {
-            val endpoints = Endpoints(listOf("127.0.0.5", "127.0.0.3"), good.port)
+        val other = server(pinned, "127.0.0.2", good.port)
+        val endpoints = Endpoints(listOf("127.0.0.3", "127.0.0.2"), good.port)
 
-            val start = System.nanoTime()
+        val found = endpoints.firstReachable(client) { fail("discovery not needed"); emptyList() }
+
+        assertEquals("127.0.0.3", found)
+        assertEquals(listOf("127.0.0.3", "127.0.0.2"), endpoints.hosts)
+        assertEquals(1, good.requestCount)
+        assertEquals(0, other.requestCount)
+    }
+
+    @Test
+    fun parallelFallbackProbesRemainingHostsAndStickyWinnerSkipsSilentHostNextTime() = runBlocking {
+        val good = server(pinned, "127.0.0.3")
+        // Accepts the connection and never answers: parallel fallback cancels it once 127.0.0.3 wins,
+        // and the next call probes the sticky winner 127.0.0.3 first without touching 127.0.0.2.
+        val silent = ServerSocket(good.port, 4, InetAddress.getByName("127.0.0.2"))
+        val accepts = AtomicInteger(0)
+        val acceptedSockets = mutableListOf<Socket>()
+        val acceptor = Thread {
+            while (!silent.isClosed) {
+                try {
+                    val s = silent.accept()
+                    accepts.incrementAndGet()
+                    synchronized(acceptedSockets) { acceptedSockets += s }
+                } catch (_: Exception) {
+                    break
+                }
+            }
+        }.apply { isDaemon = true; start() }
+        try {
+            val endpoints = Endpoints(listOf("127.0.0.4", "127.0.0.2", "127.0.0.3"), good.port)
+
             val found = endpoints.firstReachable(client) { fail("discovery not needed"); emptyList() }
-            val tookMs = (System.nanoTime() - start) / 1_000_000
 
             assertEquals("127.0.0.3", found)
-            assertEquals(true, tookMs < 2_000)
+            assertEquals(listOf("127.0.0.3", "127.0.0.4", "127.0.0.2"), endpoints.hosts)
+            assertEquals(1, good.requestCount)
+
+            val acceptsBeforeSticky = accepts.get()
+            val second = endpoints.firstReachable(client) { fail("discovery not needed"); emptyList() }
+            assertEquals("127.0.0.3", second)
+            assertEquals(2, good.requestCount)
+            assertEquals(acceptsBeforeSticky, accepts.get())
         } finally {
             silent.close()
+            acceptor.join(1_000)
+            synchronized(acceptedSockets) { acceptedSockets.forEach { runCatching { it.close() } } }
         }
     }
 }

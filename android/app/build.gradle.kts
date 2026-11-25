@@ -46,7 +46,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            ndk {
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            }
             signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }

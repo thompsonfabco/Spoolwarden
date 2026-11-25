@@ -203,6 +203,7 @@ Settings cfg;              // what the reader runs with
 bool     configured = false;
 BootReport boot;           // how the last start went, for FK? (wifi ok / fail / -, server ok / fail / unauth / -)
 bool printerNew = false;   // the settings were just written over USB with a printer: start on it (see setup)
+bool pendingCompiledSave = false;   // compiled-in secrets adopted in RAM; persist only once OTA is confirmed
 
 const char* rootCa() { return cfg.rootCa.empty() ? DEFAULT_ROOT_CA : cfg.rootCa.c_str(); }
 
@@ -224,9 +225,9 @@ void loadSettings() {
   std::string savedStamp = p.getString("src_stamp", "").c_str();
   p.end();
 #ifdef HAVE_SECRETS
-  // The compiled-in settings go into flash (so a later image built without them still runs) when flash holds none,
-  // or when this build's differ from the ones last copied (a rebuilt secrets.h: new token, password, server, key).
-  // Settings written over USB afterwards keep the stamp, so they win until a build with other compiled ones.
+  // The compiled-in settings are adopted only when flash holds none, and persisted only after
+  // esp_ota_mark_app_valid_cancel_rollback() (or on a non-pending-verify boot) so a bad OTA
+  // build never writes its secrets.h over NVS before rolling back.
   Settings compiled;
   compiled.ssid = WIFI_SSID; compiled.pass = WIFI_PASS; compiled.base = READER_BASE; compiled.token = READER_TOKEN;
   compiled.otaKey = OTA_PUBKEY;
@@ -240,10 +241,7 @@ void loadSettings() {
   if (adoptCompiled(cfg, savedStamp, stamp)) {
     cfg = compiled;
     printerNew = false;
-    if (saveSettings(cfg)) {
-      Preferences w;
-      if (w.begin("fk-cfg", false)) { w.putString("src_stamp", stamp.c_str()); w.end(); }
-    }
+    pendingCompiledSave = true;
   }
 #endif
   configured = !cfg.base.empty() && !cfg.token.empty() && !cfg.ssid.empty();
@@ -841,6 +839,7 @@ uint32_t updCheckAt = 0;
 static const uint32_t UPD_CHECK_MS = 24UL * 3600 * 1000;
 void checkForUpdate() {
   updCheckAt = millis();
+  if (cfg.otaKey.empty()) { updateReady = false; return; }
   Manifest m;
   if (WiFi.status() == WL_CONNECTED && fetchManifest(m)) {
     updateReady = m.build > (long)FW_BUILD;
@@ -850,6 +849,7 @@ void checkForUpdate() {
 }
 
 void otaCheck() {
+  if (cfg.otaKey.empty()) { otaFail("no OTA key"); return; }
   if (WiFi.status() != WL_CONNECTED) { otaFail("no WiFi"); return; }
   showProgress("Firmware update", "checking...", -1);
 
@@ -912,6 +912,15 @@ void otaCheck() {
   ESP.restart();
 }
 
+void persistCompiledSettings() {
+  if (!pendingCompiledSave) return;
+  pendingCompiledSave = false;
+  if (saveSettings(cfg)) {
+    Preferences w;
+    if (w.begin("fk-cfg", false)) { w.putString("src_stamp", settingsStamp(cfg).c_str()); w.end(); }
+  }
+}
+
 // New OTA image: keep it only if it can reach the server's reader API.
 static const uint32_t CONFIRM_WINDOW_MS = 60000;   // how long to keep trying /healthz
 static const uint32_t CONFIRM_RETRY_MS  = 2000;
@@ -920,7 +929,7 @@ void confirmOtaImage() {
   esp_ota_img_states_t st;
   if (esp_ota_get_state_partition(run, &st) != ESP_OK) st = ESP_OTA_IMG_UNDEFINED;
   Serial.printf("running %s, OTA state %d\n", run->label, (int)st);
-  if (st != ESP_OTA_IMG_PENDING_VERIFY) return;
+  if (st != ESP_OTA_IMG_PENDING_VERIFY) { persistCompiledSettings(); return; }
   bool ok = false;
   showProgress("Firmware update", "checking update...", -1);   // this can wait up to CONFIRM_WINDOW_MS
   // A slow router or a server restarting right now must not roll back a healthy build:
@@ -936,6 +945,7 @@ void confirmOtaImage() {
 #endif
   if (ok) {
     esp_ota_mark_app_valid_cancel_rollback();
+    persistCompiledSettings();
     Serial.printf("OTA image build %ld confirmed\n", (long)FW_BUILD);
   } else {
     Serial.println("OTA image failed its health check -> rolling back");
@@ -1039,6 +1049,15 @@ void setup() {
 
   Serial.printf("firmware build %ld\n", (long)FW_BUILD);
   if (!configured) {
+    const esp_partition_t* run = esp_ota_get_running_partition();
+    esp_ota_img_states_t st;
+    if (esp_ota_get_state_partition(run, &st) == ESP_OK && st == ESP_OTA_IMG_PENDING_VERIFY) {
+      Serial.println("unconfigured OTA image pending verify -> rolling back");
+      showProgress("Firmware update", "unconfigured\nrolling back...", -1);
+      buzzError();
+      delay(1500);
+      esp_ota_mark_app_invalid_rollback_and_reboot();
+    }
     // A new board from the kit's image: nothing to join yet. Wait for the kit to write the settings over USB.
     display.clearDisplay();
     display.setCursor(0, 0);
@@ -1090,9 +1109,11 @@ bool swallowPress = false;  // this press woke a dark screen: ignore the rest of
 void handleAction(Action a) {
   switch (a) {
     case ACT_SLOT_MOVED:
-    case ACT_CURSOR_MOVED:
       buzzTick(); scrollStep = 0; redraw();
       settleAt = millis() + SETTLE_MS;        // re-armed by every detent
+      break;
+    case ACT_CURSOR_MOVED:
+      buzzTick(); scrollStep = 0; redraw();
       break;
     case ACT_RESEND:
       buzzTick();
@@ -1105,7 +1126,6 @@ void handleAction(Action a) {
       break;
     case ACT_OPEN_LIST:
       buzzTick(); scrollStep = 0; redraw();
-      settleAt = millis() + SETTLE_MS;
       break;
     case ACT_CLOSE_LIST:
       settleAt = 0; scrollStep = 0; redraw();
@@ -1165,7 +1185,9 @@ void loop() {
   // background refreshes (skipped while a result or the printer list is showing)
   if (!resultUntil && menu.mode == MODE_SLOTS && !settleAt) {
     if (listsDue(millis(), listsAt, serverOk, scr != SCR_OFF, LIST_REFRESH_MS, listRetryMs(listFails))) {
-      refreshLists(true); if (scr != SCR_OFF) redraw();   // always one short attempt: even the first failure of an outage
+      static int bgRefreshCount = 0;
+      bool quick = (++bgRefreshCount % LIST_FULL_EVERY) != 0;
+      refreshLists(quick); if (scr != SCR_OFF) redraw();
     }
     if (millis() - updCheckAt > UPD_CHECK_MS) { checkForUpdate(); if (scr != SCR_OFF) redraw(); }
   }

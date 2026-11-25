@@ -17,10 +17,11 @@ import kotlin.coroutines.resumeWithException
 
 /**
  * The server's candidate addresses, best first: as stored (mDNS name, last good host, each pairing `ip=`), then any
- * found by discovery. The stored hosts are probed in parallel (so is the
- * discovered set when none of them answers); the first to answer wins. A host is reachable when `GET https://<host>:<port>/api/info` returns 200 over the pinned
- * client, i.e. it presents the paired certificate. The winner moves to the front of [hosts] so it is tried first
- * next time (callers persist [hosts]).
+ * found by discovery. The first stored host (the previous winner) is probed first; only if it fails are the
+ * remaining stored hosts probed in parallel (and the discovered set in parallel when none of them answers); the first
+ * to answer wins. A host is reachable when `GET https://<host>:<port>/api/info` returns 200 over the pinned client,
+ * i.e. it presents the paired certificate. The winner moves to the front of [hosts] so it is tried first next time
+ * (callers persist [hosts]).
  */
 class Endpoints(stored: List<String>, private val port: Int) {
     private val order = stored.filter { it.isNotBlank() }.distinct().toMutableList()
@@ -71,7 +72,10 @@ class Endpoints(stored: List<String>, private val port: Int) {
             }
         }
 
-        val found = tryAll(hosts) ?: tryAll(discovered().filter { it.isNotBlank() })
+        val stored = hosts
+        val found = tryAll(stored.take(1))
+            ?: tryAll(stored.drop(1))
+            ?: tryAll(discovered().filter { it.isNotBlank() })
         if (found != null) {
             synchronized(order) {
                 order.remove(found)

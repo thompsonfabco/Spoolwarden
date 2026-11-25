@@ -9,14 +9,14 @@ knob for 4 s: it fetches <READER_BASE>/fw/manifest.json over HTTPS and, if the b
 is newer, downloads, verifies (size, SHA-256, ECDSA signature) and installs it.
 
 The signing key (ECDSA P-256) lives on the PC that builds (default
-~/.filament-kit/reader-ota-key.pem) and never leaves it; the reader has the matching
-public key compiled in (OTA_PUBKEY in src/secrets.h). The upload goes over ssh/scp to
---host, into --remote-dir, which the filament-kit server serves as <READER_BASE>/fw/
-behind the reader token (the image embeds the Wi-Fi password and the token, so it is
-installed mode 0640, not world-readable).
+~/.filament-kit/reader-ota-key.pem) and never leaves it; the reader receives the matching
+public key over USB via `spoolwarden reader setup --ota-pubkey`. The built OTA image is
+settings-free (src/secrets.h must not be present during build/publish). The upload goes
+over ssh/scp to --host, into --remote-dir, which the filament-kit server serves as
+<READER_BASE>/fw/ behind the reader token (installed mode 0640, not world-readable).
 
-The live check reads READER_BASE and READER_TOKEN from src/secrets.h (or --base-url and
-the READER_TOKEN environment variable). The token is sent as a header, never printed.
+The live check uses --base-url and the READER_TOKEN environment variable (or READER_BASE
+and READER_TOKEN from src/secrets.h if present). The token is sent as a header, never printed.
 """
 import argparse
 import base64
@@ -184,7 +184,7 @@ def parse_args(argv=None):
     ap.add_argument("--key", default=str(DEFAULT_KEY), help=f"signing key (default {DEFAULT_KEY})")
     ap.add_argument("--env", default=DEFAULT_ENV, help="PlatformIO environment")
     ap.add_argument("--init-key", action="store_true",
-                    help="create the signing key if missing and print the public key for secrets.h")
+                    help="create the signing key if missing and print the public key for `reader setup --ota-pubkey`")
     ap.add_argument("--dry-run", action="store_true", help="build + sign only, upload nothing")
     ap.add_argument("--no-verify", action="store_true", help="skip the live manifest check")
     args = ap.parse_args(argv)
@@ -197,9 +197,14 @@ def main(argv=None):
     args = parse_args(argv)
     if args.init_key:
         key = load_or_create_key(args.key, create=True)
-        print("Paste this into src/secrets.h as OTA_PUBKEY:\n")
+        print("Pass this to `spoolwarden reader setup --ota-pubkey` (or save as a .pem file):\n")
         print(public_pem(key))
         return
+
+    secrets_h = READER / "src" / "secrets.h"
+    if secrets_h.exists():
+        sys.exit(f"refusing to build an OTA image while {secrets_h} exists "
+                 "(it would compile credentials into firmware.bin); remove it or move it aside first")
 
     key = load_or_create_key(args.key, create=False)
     build_dir = READER / ".pio" / "build" / args.env

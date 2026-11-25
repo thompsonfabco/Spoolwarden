@@ -93,17 +93,19 @@ class DraftStore(private val dir: File) {
     }
 
     /**
-     * Housekeeping, run once when the app starts: deletes the draft folders whose `draft.json` cannot be read, drafts
-     * older than [maxAgeMs] and drafts with no photos (Home hides those, so nobody could discard them). A draft that
-     * holds [Draft.addedBefore] is kept: it carries the "may already be added" warning. Returns how many were deleted.
+     * Housekeeping, run once when the app starts: deletes the draft folders whose `draft.json` cannot be read (skipping
+     * folders younger than 60 seconds so a concurrent [create] that has not yet written `draft.json` is not removed),
+     * drafts older than [maxAgeMs] (30 days by default via [MAX_AGE_MS]), and drafts with no photos (Home hides those,
+     * so nobody could discard them). A draft that holds [Draft.addedBefore] is kept: it carries the "may already be
+     * added" warning. Returns how many were deleted.
      */
     fun purge(maxAgeMs: Long, now: Long = System.currentTimeMillis(), open: Set<String> = emptySet()): Int {
         var n = 0
         for (folder in dir.listFiles { f -> f.isDirectory }.orEmpty()) {
             val d = get(folder.name)
             val drop = when {
-                d == null -> true
                 folder.name in open -> false // an add that is open right now is never taken from under its screen
+                d == null -> kotlin.math.abs(now - folder.lastModified()) >= UNREADABLE_GRACE_MS
                 d.addedBefore != null -> false
                 // a draft with nothing in it goes after a day; one just created or restored is never touched
                 else -> now - d.created > maxAgeMs || (!d.hasContent && now - d.created > EMPTY_GRACE_MS)
@@ -146,11 +148,14 @@ class DraftStore(private val dir: File) {
     private fun photoIndex(f: File): Int = PHOTO.matchEntire(f.name)!!.groupValues[1].toInt()
 
     companion object {
-        /** Drafts older than this are deleted at start ([purge]). */
+        /** Drafts older than this (30 days) are deleted at start ([purge]). */
         const val MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000
 
         /** A draft with nothing in it is deleted at start only when it is older than this. */
         const val EMPTY_GRACE_MS = 24L * 60 * 60 * 1000
+
+        /** Unreadable draft folders younger than this are skipped so [purge] does not race with [create]. */
+        private const val UNREADABLE_GRACE_MS = 60_000L
         private const val DRAFT_FILE = "draft.json"
         private val PHOTO = Regex("""photo(\d+)\.jpg""")
     }

@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -358,10 +359,17 @@ private fun StatusPanel(printer: Printer, state: PrinterUiState, viewModel: Prin
         }
         if (PrinterHelp.isPrinting(status.gcodeState)) PrintProgress(status)
         Text(temperatures(status), style = SpoolwardenTheme.type.data)
+        val links = LocalUriHandler.current
         status.hms.forEach { alert ->
+            val raw = alert.text.ifBlank { stringResource(R.string.printer_alert_code, alert.code) }
+            val url = HMS_URL_REGEX.find(raw)?.value
+            val display = if (url != null) raw.replace(": see $url", "").replace(url, "").trim() else raw
             NoticeCard(
                 NoticeKind.Bad,
-                alert.text.ifBlank { stringResource(R.string.printer_alert_code, alert.code) },
+                display,
+                actions = listOfNotNull(
+                    url?.let { SwAction("HMS help") { runCatching { links.openUri(it) } } },
+                ),
             )
         }
         Controls(printer, state, viewModel)
@@ -1018,3 +1026,5 @@ private fun formatClock(iso: String): String? = try {
 } catch (_: Exception) {
     null
 }
+
+private val HMS_URL_REGEX = Regex("""https?://\S+""")

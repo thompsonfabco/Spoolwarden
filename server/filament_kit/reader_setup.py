@@ -189,8 +189,9 @@ def secrets_h(ssid: str, password: str, base: str, token: str, key_pem: str, buz
     None keeps the base's own (public) certificate."""
     if not ssid or len(ssid.encode()) > 32:
         raise SetupError("the Wi-Fi name must be 1 to 32 bytes")
-    if len(password.encode()) > 63:
-        raise SetupError("the Wi-Fi password must be at most 63 bytes")
+    pw_len = len(password.encode())
+    if pw_len and (pw_len < 8 or pw_len > 63):
+        raise SetupError("the Wi-Fi password must be 8 to 63 characters, or empty")
     if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", token):
         raise SetupError("that is not a reader token")
     return ("// Written by `spoolwarden reader setup`. It holds the reader's token and the Wi-Fi password: keep it\n"

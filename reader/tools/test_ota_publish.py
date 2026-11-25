@@ -239,3 +239,11 @@ def test_live_problem_reports_instead_of_raising(monkeypatch):
     assert op.live_problem("https://h", "tok", 5)
     monkeypatch.setattr(op, "fetch_manifest", lambda b, t: {"build": 5})
     assert op.live_problem("https://h", "tok", 5) is None
+
+
+def test_main_refuses_when_secrets_h_exists(monkeypatch, tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "secrets.h").write_text("// secret\n", encoding="utf-8")
+    monkeypatch.setattr(op, "READER", tmp_path)
+    with pytest.raises(SystemExit, match="secrets\\.h"):
+        op.main(["--dry-run"])

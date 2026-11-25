@@ -190,9 +190,9 @@ import com.thompsonfabco.filamentkit.ui.alerts.alertsPlaceTitle
 import com.thompsonfabco.filamentkit.ui.add.AddStep
 import com.thompsonfabco.filamentkit.ui.add.AddStepRoute
 import com.thompsonfabco.filamentkit.ui.add.text
-import com.thompsonfabco.filamentkit.ui.add.DebugPhotos
 import com.thompsonfabco.filamentkit.ui.add.IntakeApi
 import com.thompsonfabco.filamentkit.ui.add.TagTaps
+import com.thompsonfabco.filamentkit.ui.home.DebugHomeExtra
 import com.thompsonfabco.filamentkit.ui.components.AppearanceMenu
 import com.thompsonfabco.filamentkit.ui.components.HubFacts
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
@@ -1053,6 +1053,14 @@ internal fun FilamentKitApp(
                         PairTopBarOverflow(onSettings = openSettingsOverPairing)
                         val pairVm = pairViewModel(remember(it) { nav.getBackStackEntry<PairGraph>() }, app.settings)
                         val ui by pairVm.state.collectAsStateWithLifecycle()
+                        val trustFailed by app.trustFailed.collectAsStateWithLifecycle()
+                        val toast = LocalToast.current
+                        LaunchedEffect(ui.mismatch) { app.clearTrustFailed() }
+                        LaunchedEffect(trustFailed) {
+                            if (trustFailed) {
+                                toast?.show(context.getString(R.string.pair_cert_trust_failed))
+                            }
+                        }
                         // gone while the screen leaves: nothing is asked then
                         ui.mismatch?.let { m ->
                             PairCertificateScreen(
@@ -1116,6 +1124,13 @@ internal fun FilamentKitApp(
                         }
                         // read each time Home is shown while online; an older Hub (404) or a failed read shows no line
                         LaunchedEffect(api, online) { if (online && api != null) hubVm.refresh() }
+                        LaunchedEffect(presetsNote, presetsNoteIsError) {
+                            if (presetsNote != null && !presetsNoteIsError) {
+                                delay(CONNECTION_POLL_MS)
+                                presetsNote = null
+                                presetsReload++
+                            }
+                        }
                         HomeScreen(
                             connection = connection,
                             drafts = drafts,
@@ -1161,7 +1176,6 @@ internal fun FilamentKitApp(
                                             a.requestBuild()
                                             presetsNote = "A build was asked for. It finishes in a minute or two."
                                             presetsNoteIsError = false
-                                            presetsReload++
                                         } catch (e: kotlinx.coroutines.CancellationException) {
                                             throw e
                                         } catch (e: Exception) {
@@ -1180,7 +1194,7 @@ internal fun FilamentKitApp(
                             onPresetsChanged = { presetsReload++ },
                             onOpenPresets = { nav.navigate(PresetsRoute) },
                             localNetworkPanel = { LocalNetworkNotice(localNetwork) },
-                            extra = { if (BuildConfig.DEBUG) SimulateTag() },
+                            extra = { DebugHomeExtra() },
                         )
                     }
 
@@ -1775,22 +1789,6 @@ internal fun RememberHubLook(wire: String?, remember: (Look) -> Unit) {
 private fun HubNoticePage(onPair: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(SpoolwardenTheme.space.s4)) {
         HubNotice(HubNoticeKind.NoLongerPaired, onPair)
-    }
-}
-
-/** Debug builds only: type a UID (e.g. `4:77:90:e`) and emit it as if the tag had been tapped. */
-@Composable
-private fun SimulateTag() {
-    var uid by remember { mutableStateOf("4:77:90:e") }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
-            value = uid,
-            onValueChange = { uid = it },
-            label = { Text("Tag UID") },
-            singleLine = true,
-            modifier = Modifier.weight(1f),
-        )
-        Button(onClick = { TagEvents.emit(uid.trim()) }) { Text("Simulate tag") }
     }
 }
 

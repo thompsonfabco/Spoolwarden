@@ -7,8 +7,11 @@ import com.thompsonfabco.filamentkit.net.fingerprint
 import com.thompsonfabco.filamentkit.net.httpsServer
 import com.thompsonfabco.filamentkit.net.pinnedClient
 import com.thompsonfabco.filamentkit.net.serverCert
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,8 +31,11 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class ServerSessionTest {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
     private val servers = mutableListOf<MockWebServer>()
+
+    private fun drainScope() = runBlocking { scope.launch { }.join() }
     private val cert = serverCert("kit.local")
     private val saved = mutableListOf<ServerConfig>()
     private val built = mutableListOf<String>()
@@ -236,6 +242,25 @@ class ServerSessionTest {
         assertEquals(1, saved.size)
     }
 
+    @Test fun trustReReadsStoredConfigWhenCollectorTimesOut() {
+        var stored = config(listOf("127.0.0.9"), 1)
+        val newFp = "cd".repeat(32)
+        val s = ServerSession(
+            scope = scope,
+            configs = kotlinx.coroutines.flow.flow { emit(stored) },
+            save = { saved += it; stored = it },
+            discover = { emptyList() },
+            router = router,
+            clientFor = { fp: String -> pinnedClient(fp) },
+            trustWaitMs = 50,
+        )
+        await { s.config.first { it != null } }
+
+        assertTrue(await { s.trustCertificate(cert.fingerprint(), newFp) })
+
+        assertEquals(newFp, s.config.value?.fingerprint)
+    }
+
     @Test fun trustSavesNothingWhenThePairingNoLongerPinsThatCertificate() {
         val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.9"), 1))
         val s = session(configs)
@@ -313,18 +338,25 @@ class ServerSessionTest {
         await { s.connection.first { it == Connection.Online("127.0.0.3") } }
         val before = good.requestCount
         s.onServerAnswered()
-        Thread.sleep(200)
+        drainScope()
         assertEquals(before, good.requestCount)
     }
 
     @Test fun aRecheckKeepsAChangedCertificateAndDoesNotOpenPair() {
         val other = serverCert("kit.local")
         val answering = httpsServer(other, "127.0.0.3").also { servers += it }
-        val s = session(MutableStateFlow(config(listOf("127.0.0.3"), answering.port)))
+        @Volatile var onDiscover: () -> Unit = {}
+        val s = session(MutableStateFlow(config(listOf("127.0.0.3"), answering.port))) {
+            onDiscover()
+            emptyList()
+        }
         await { s.connection.first { it is Connection.CertChanged } }
         val requests = router.requests.value
+        val recheckDone = CountDownLatch(1)
+        onDiscover = { recheckDone.countDown() }
         s.recheck()
-        Thread.sleep(200)
+        assertTrue(recheckDone.await(5, TimeUnit.SECONDS))
+        drainScope()
         assertTrue(s.connection.value is Connection.CertChanged)
         assertEquals(requests, router.requests.value)
     }

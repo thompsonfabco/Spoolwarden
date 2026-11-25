@@ -100,6 +100,9 @@ uint32_t listRetryMs(int failures);
 // NFC loop for at most connect + read time (not the ~22 s of the normal 2 x 6 s).
 static const uint32_t LIST_QUICK_TIMEOUT_MS = 2000;   // connect and read, each
 static const uint32_t LIST_QUICK_BLOCK_MS   = 2 * LIST_QUICK_TIMEOUT_MS;   // worst case per failed refresh
+// Every Nth background refresh uses the full timeout instead of LIST_QUICK_TIMEOUT_MS
+// so a slow server (2-6 s) can recover instead of failing quick attempts indefinitely.
+static const int LIST_FULL_EVERY = 5;
 
 // One line describing what is in a slot ("PLA Polymaker Grey", "empty", "?").
 std::string slotContents(const SlotEntry& s);

@@ -56,6 +56,9 @@ internal fun MismatchNotice(expected: String, actual: String, onPairAgain: () ->
         val trustLabel = text.trustButton?.takeIf { trust?.canTrust(expected) == true }
         if (trustLabel == null) {
             Button(onClick = onPairAgain) { Text(text.button) }
+            if (trust?.failed == true) {
+                Text(stringResource(R.string.pair_cert_stored_trusted), color = SpoolwardenTheme.colors.ok)
+            }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(onClick = { trust?.trust?.invoke(expected, actual) }, modifier = Modifier.weight(1f)) {

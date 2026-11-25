@@ -1,6 +1,7 @@
 package com.thompsonfabco.filamentkit.data
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -12,9 +13,13 @@ import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.lookFromWire
 import com.thompsonfabco.filamentkit.ui.theme.wire
 import java.io.IOException
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.serialization.Serializable
@@ -48,10 +53,24 @@ interface SettingsStore {
  */
 class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     private val json = Json { ignoreUnknownKeys = true }
+    private val _corruptServerConfig = MutableStateFlow(false)
+
+    /** True when a stored [ServerConfig] failed to decode; cleared by [consumeCorruptServerConfig], [save], or [clear]. */
+    val corruptServerConfig: StateFlow<Boolean> = _corruptServerConfig.asStateFlow()
+
+    /** Returns whether a stored [ServerConfig] failed to decode and clears the one-time notice flag. */
+    fun consumeCorruptServerConfig(): Boolean = _corruptServerConfig.getAndUpdate { false }
 
     /** The paired server, or null when unpaired (or the stored value is unreadable). */
     val server: Flow<ServerConfig?> = store.data.map { prefs ->
-        prefs[KEY]?.let { text -> runCatching { json.decodeFromString<ServerConfig>(text) }.getOrNull() }
+        prefs[KEY]?.let { text ->
+            runCatching { json.decodeFromString<ServerConfig>(text) }
+                .onFailure { e ->
+                    Log.w(TAG, "Failed to decode stored ServerConfig", e)
+                    _corruptServerConfig.value = true
+                }
+                .getOrNull()
+        }
     }
 
     /** One read for the startup: the paired server, or null when unpaired or the store cannot be read. */
@@ -62,10 +81,12 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     }
 
     override suspend fun save(config: ServerConfig) {
+        _corruptServerConfig.value = false
         store.edit { it[KEY] = json.encodeToString(ServerConfig.serializer(), config) }
     }
 
     override suspend fun clear() {
+        _corruptServerConfig.value = false
         store.edit {
             it.remove(KEY)
             it.remove(HUB_LOOK) // the next Hub says its own
@@ -129,6 +150,7 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     }
 
     companion object {
+        private const val TAG = "Settings"
         private const val RETRY_MS = 1000L
         private val KEY = stringPreferencesKey("server")
         private val APPEARANCE = stringPreferencesKey("appearance")

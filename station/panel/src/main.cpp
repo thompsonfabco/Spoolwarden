@@ -346,7 +346,7 @@ struct Display {
   bool present = false, dirty = true, offline = true;
   bool seen = false;  // the station has talked to us since boot: until then the title says "Waiting for PC", not
                       // "offline" (the station may be about to reflash us, and an older firmware leaves the OLED as is)
-  uint32_t retry = 0, drawn = 0;
+  uint32_t retry = 0, drawn = 0, probeAt = 0;
   char rows[5][41] = {{0}};  // 0: title, 1-4: body
   bool netOn = false;        // set up for Wi-Fi and USB is quiet: while offline, say what the Wi-Fi link is doing
   panel::Screen net = {};
@@ -377,12 +377,23 @@ struct Display {
       if (Wire.endTransmission() != 0) return;
       u8g2.begin();
       present = dirty = true;
+      probeAt = now + 2000;
     }
     if (air.shownAt != airSeen) { airSeen = air.shownAt; dirty = true; }
-    if (!dirty || now - drawn < 100) return;  // at most 10 redraws a second
+    if (!dirty) {
+      if ((int32_t)(now - probeAt) < 0) return;
+      probeAt = now + 2000;
+      Wire.beginTransmission(0x3C);
+      if (Wire.endTransmission() != 0) {  // unplugged or reset: probe again (and u8g2.begin()) as at boot
+        present = false; retry = now + 2000;
+      }
+      return;
+    }
+    if (now - drawn < 100) return;  // at most 10 redraws a second
+    probeAt = now + 2000;
     Wire.beginTransmission(0x3C);
     if (Wire.endTransmission() != 0) {  // unplugged or reset: probe again (and u8g2.begin()) as at boot
-      present = false; retry = now;
+      present = false; retry = now + 2000;
       return;
     }
     dirty = false; drawn = now;

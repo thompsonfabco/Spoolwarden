@@ -45,7 +45,7 @@ bool parseSettings(const char* json, Settings& out, std::string& why) {
   s.printer = str(o["printer"]);
   while (!s.base.empty() && s.base.back() == '/') s.base.pop_back();
   if (s.ssid.empty() || s.ssid.size() > 32) { why = "ssid must be 1 to 32 bytes"; return false; }
-  if (s.pass.size() > 63) { why = "pass must be at most 63 bytes"; return false; }
+  if (!s.pass.empty() && (s.pass.size() < 8 || s.pass.size() > 63)) { why = "pass must be 8 to 63 characters, or empty"; return false; }
   if (s.base.rfind("https://", 0) != 0 || s.base.size() > 200) { why = "base must be an https address"; return false; }
   if (s.token.size() < 16 || s.token.size() > 128 || !tokenChars(s.token)) { why = "token is not a reader token"; return false; }
   if (!s.otaKey.empty() && !pem(s.otaKey, "PUBLIC KEY")) { why = "ota_key is not a PEM public key"; return false; }
@@ -93,7 +93,9 @@ std::string settingsStamp(const Settings& s) {
 }
 
 bool adoptCompiled(const Settings& flash, const std::string& savedStamp, const std::string& compiledStamp) {
-  return flash.base.empty() || savedStamp != compiledStamp;
+  (void)savedStamp;
+  (void)compiledStamp;
+  return flash.base.empty();
 }
 
 std::string startPrinter(const std::string& remembered, const std::string& provisioned, bool provisionedIsNew) {

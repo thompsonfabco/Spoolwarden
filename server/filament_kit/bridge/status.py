@@ -228,7 +228,7 @@ def summarize(report: dict, spools: list[dict], *, printer_name: str = '', updat
     hms = []
     for e in _l(p.get('hms')):
         code = hms_code(e)
-        hms.append({'code': code, 'text': hms_text(code)})
+        hms.append({'code': code, 'text': hms_text(code), 'help_url': HMS_URL})
     return {
         'gcode_state': gs,
         'stage': STAGES.get(stg, f"Stage {stg}") if active and 0 <= stg < 255 else '',

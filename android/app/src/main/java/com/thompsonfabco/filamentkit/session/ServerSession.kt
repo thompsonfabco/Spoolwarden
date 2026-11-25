@@ -44,7 +44,7 @@ sealed interface Connection {
  */
 class ServerSession(
     private val scope: CoroutineScope,
-    configs: Flow<ServerConfig?>,
+    private val configs: Flow<ServerConfig?>,
     private val save: suspend (ServerConfig) -> Unit,
     private val discover: suspend () -> List<String>,
     val router: PairRouter,
@@ -162,9 +162,17 @@ class ServerSession(
         val cfg = _config.value
         if (cfg == null || !cfg.canTrust(expected) || cfg.token == revokedToken) return false
         save(cfg.copy(fingerprint = actual))
-        return withTimeoutOrNull(trustWaitMs) {
+        val updated = withTimeoutOrNull(trustWaitMs) {
             _config.first { !it?.fingerprint.equals(expected, ignoreCase = true) }
-        } != null
+        }
+        if (updated != null) return true
+        // Timed out waiting for the collector: re-read the stored config in case the write landed without waking it.
+        val current = withTimeoutOrNull(trustWaitMs) { configs.first() }
+        if (current != null && !current.fingerprint.equals(expected, ignoreCase = true)) {
+            apply(current)
+            return true
+        }
+        return false
     }
 
     private fun apply(cfg: ServerConfig?) {

@@ -608,9 +608,9 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
 /** 9.3: the address and port of a Klipper printer's Moonraker, its name and, if Moonraker asks for one, its API key. */
 @Composable
 private fun AddKlipperDialog(d: KlipperDialog, onPairAgain: () -> Unit, viewModel: PrintersViewModel) {
-    var host by remember(d.host, d.port) { mutableStateOf(d.host) }
-    var port by remember(d.host, d.port) { mutableStateOf(d.port.toString()) }
-    var name by remember(d.host, d.port) { mutableStateOf("") }
+    var host by rememberSaveable(d.host, d.port) { mutableStateOf(d.host) }
+    var port by rememberSaveable(d.host, d.port) { mutableStateOf(d.port.toString()) }
+    var name by rememberSaveable(d.host, d.port) { mutableStateOf("") }
     var key by remember(d.host, d.port) { mutableStateOf("") }
     // once the printer is added only the key is left to set
     val fixed = d.busy || d.createdId != null

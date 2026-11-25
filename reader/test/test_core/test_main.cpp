@@ -630,7 +630,7 @@ void test_ota_sig_preimage_matches_publisher() {
 
 // ---- settings over USB (settings.h) -----------------------------------------------
 
-static const char* GOOD = R"({"ssid":"Home","pass":"pw","base":"https://kit.example.net/filament/reader/","token":"abcdefghijklmnop_-12"})";
+static const char* GOOD = R"({"ssid":"Home","pass":"password1","base":"https://kit.example.net/filament/reader/","token":"abcdefghijklmnop_-12"})";
 
 void test_settings_parse_the_required_ones() {
   Settings s; std::string why;
@@ -670,6 +670,27 @@ void test_settings_refused_leave_the_old_ones() {
   }
 }
 
+void test_settings_wifi_password_length() {
+  Settings s; s.ssid = "keep"; std::string why;
+  std::string base = R"(,"base":"https://k/r","token":"abcdefghijklmnop"})";
+  for (const char* pw : {"p", "1234567"}) {
+    why.clear();
+    std::string j = std::string(R"({"ssid":"H","pass":")") + pw + "\"" + base;
+    TEST_ASSERT_FALSE_MESSAGE(parseSettings(j.c_str(), s, why), pw);
+    TEST_ASSERT_TRUE_MESSAGE(why.find("8 to 63 characters, or empty") != std::string::npos, why.c_str());
+    TEST_ASSERT_EQUAL_STRING("keep", s.ssid.c_str());
+  }
+  std::string tooLong = std::string(R"({"ssid":"H","pass":")") + std::string(64, 'x') + "\"" + base;
+  why.clear();
+  TEST_ASSERT_FALSE(parseSettings(tooLong.c_str(), s, why));
+  TEST_ASSERT_TRUE(why.find("8 to 63 characters, or empty") != std::string::npos);
+  for (const std::string& pw : {std::string("12345678"), std::string(63, 'x')}) {
+    std::string j = std::string(R"({"ssid":"H","pass":")") + pw + "\"" + base;
+    TEST_ASSERT_TRUE_MESSAGE(parseSettings(j.c_str(), s, why), pw.c_str());
+    TEST_ASSERT_EQUAL_STRING(pw.c_str(), s.pass.c_str());
+  }
+}
+
 // ---- hub_ip, printer, the Hub's address, the start report ----------------------------
 
 void test_settings_hub_ip_and_printer() {
@@ -702,6 +723,27 @@ void test_settings_bad_hub_ip_and_printer_refused() {
     TEST_ASSERT_FALSE_MESSAGE(parseSettings(j, s, why), j);
     TEST_ASSERT_FALSE(why.empty());
     TEST_ASSERT_EQUAL_STRING("keep", s.ssid.c_str());
+  }
+}
+
+void test_settings_wifi_password_length() {
+  Settings s; s.ssid = "keep"; std::string why;
+  std::string base = R"(,"base":"https://k/r","token":"abcdefghijklmnop"})";
+  for (const char* pw : {"p", "1234567"}) {
+    why.clear();
+    std::string j = std::string(R"({"ssid":"H","pass":")") + pw + "\"" + base;
+    TEST_ASSERT_FALSE_MESSAGE(parseSettings(j.c_str(), s, why), pw);
+    TEST_ASSERT_TRUE_MESSAGE(why.find("8 to 63 characters, or empty") != std::string::npos, why.c_str());
+    TEST_ASSERT_EQUAL_STRING("keep", s.ssid.c_str());
+  }
+  std::string tooLong = std::string(R"({"ssid":"H","pass":")") + std::string(64, 'x') + "\"" + base;
+  why.clear();
+  TEST_ASSERT_FALSE(parseSettings(tooLong.c_str(), s, why));
+  TEST_ASSERT_TRUE(why.find("8 to 63 characters, or empty") != std::string::npos);
+  for (const std::string& pw : {std::string("12345678"), std::string(63, 'x')}) {
+    std::string j = std::string(R"({"ssid":"H","pass":")") + pw + "\"" + base;
+    TEST_ASSERT_TRUE_MESSAGE(parseSettings(j.c_str(), s, why), pw.c_str());
+    TEST_ASSERT_EQUAL_STRING(pw.c_str(), s.pass.c_str());
   }
 }
 
@@ -882,11 +924,11 @@ void test_compiled_settings_copied_again_when_they_change() {
   Settings empty;
   TEST_ASSERT_TRUE(adoptCompiled(empty, "", stamp));               // first start: flash holds nothing
   TEST_ASSERT_TRUE(adoptCompiled(empty, stamp, stamp));            // flash wiped but the stamp left: copy again
-  Settings usb = built; usb.token = "written_over_usb_1";        // FK-SET later; the stamp stays the build's
+  Settings usb = built; usb.token = "written_over_usb_1";        // FK-SET later; flash already holds settings
   TEST_ASSERT_FALSE(adoptCompiled(usb, stamp, stamp));             // same build again: USB settings win
   Settings rebuilt = built; rebuilt.token = "new_token_after_revoke";
-  TEST_ASSERT_TRUE(adoptCompiled(usb, stamp, settingsStamp(rebuilt)));   // new secrets.h: copied over them
-  TEST_ASSERT_TRUE(adoptCompiled(usb, "", stamp));                 // flash from before stamps: the build wins
+  TEST_ASSERT_FALSE(adoptCompiled(usb, stamp, settingsStamp(rebuilt)));  // even with new secrets.h: flash wins
+  TEST_ASSERT_FALSE(adoptCompiled(usb, "", stamp));                // flash from before stamps: flash still wins
   // every field counts, and fields don't run into each other
   Settings a = built; a.pass = "pw2"; TEST_ASSERT_TRUE(settingsStamp(a) != stamp);
   a = built; a.otaKey = "k"; TEST_ASSERT_TRUE(settingsStamp(a) != stamp);
@@ -999,6 +1041,7 @@ int main(int, char**) {
   RUN_TEST(test_settings_parse_the_required_ones);
   RUN_TEST(test_settings_optional_ones);
   RUN_TEST(test_settings_refused_leave_the_old_ones);
+  RUN_TEST(test_settings_wifi_password_length);
   RUN_TEST(test_compiled_settings_copied_again_when_they_change);
   RUN_TEST(test_compiled_hub_ip_is_copied_into_flash_but_a_stored_one_wins);
   RUN_TEST(test_settings_hub_ip_and_printer);

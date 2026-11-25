@@ -39,9 +39,15 @@ class ApkInstaller(context: Context) : ApkInstall {
         PendingConfirm.failure.value = null
         PendingConfirm.intent.value = null // a "Tap to install" of an abandoned session would open the old confirmation
         val installer = context.packageManager.packageInstaller
+        val previousId = PendingConfirm.activeSessionId
+        if (previousId != PackageInstaller.SessionInfo.INVALID_ID) {
+            PendingConfirm.activeSessionId = PackageInstaller.SessionInfo.INVALID_ID
+            runCatching { installer.abandonSession(previousId) }
+        }
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
             .apply { setAppPackageName(context.packageName) }
         val id = installer.createSession(params)
+        PendingConfirm.activeSessionId = id
         installer.openSession(id).use { session ->
             try {
                 session.openWrite("filament-kit.apk", 0, apk.length()).use { out ->
@@ -56,7 +62,10 @@ class ApkInstaller(context: Context) : ApkInstall {
                 )
                 session.commit(status.intentSender)
             } catch (e: Exception) {
-                session.abandon()
+                if (PendingConfirm.activeSessionId == id) {
+                    PendingConfirm.activeSessionId = PackageInstaller.SessionInfo.INVALID_ID
+                }
+                runCatching { session.abandon() }
                 throw e
             }
         }
@@ -68,6 +77,9 @@ class ApkInstaller(context: Context) : ApkInstall {
  * fail (or be blocked while the app is in the background), so Home offers "Tap to install" while it is set.
  */
 internal object PendingConfirm {
+    @Volatile
+    var activeSessionId: Int = PackageInstaller.SessionInfo.INVALID_ID
+
     val intent = MutableStateFlow<Intent?>(null)
 
     /** Why the session failed: kept for the update panel, because a toast is gone before it can be read. */
@@ -77,6 +89,11 @@ internal object PendingConfirm {
 /** Receives the install session's status: shows the system confirmation, or tells the user why it failed. */
 class InstallResultReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val sessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, PackageInstaller.SessionInfo.INVALID_ID)
+        val activeId = PendingConfirm.activeSessionId
+        if (activeId == PackageInstaller.SessionInfo.INVALID_ID || sessionId != activeId) {
+            return
+        }
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
@@ -89,9 +106,16 @@ class InstallResultReceiver : BroadcastReceiver() {
                     // not allowed from here; Home shows "Tap to install"
                 }
             }
-            PackageInstaller.STATUS_SUCCESS -> PendingConfirm.intent.value = null
-            PackageInstaller.STATUS_FAILURE_ABORTED -> PendingConfirm.intent.value = null // the user cancelled
+            PackageInstaller.STATUS_SUCCESS -> {
+                PendingConfirm.activeSessionId = PackageInstaller.SessionInfo.INVALID_ID
+                PendingConfirm.intent.value = null
+            }
+            PackageInstaller.STATUS_FAILURE_ABORTED -> {
+                PendingConfirm.activeSessionId = PackageInstaller.SessionInfo.INVALID_ID
+                PendingConfirm.intent.value = null // the user cancelled
+            }
             else -> {
+                PendingConfirm.activeSessionId = PackageInstaller.SessionInfo.INVALID_ID
                 PendingConfirm.intent.value = null
                 PendingConfirm.failure.value =
                     UpdateTexts.failureOf(status, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
