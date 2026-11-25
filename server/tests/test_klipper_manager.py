@@ -79,6 +79,22 @@ def test_state_connected_and_status_shape(moonraker, fam):
     assert (Path(registry.config.paths().state) / "printers" / pid / "detected.xml").exists()
 
 
+@pytest.mark.parametrize(("print_state", "gcode_state", "fault"), [
+    ("error", "FAILED", True),
+    ("cancelled", "FAILED", False),
+    ("printing", "RUNNING", False),
+])
+def test_status_distinguishes_print_faults(moonraker, fam, print_state, gcode_state, fault):
+    as_sv08(moonraker)
+    moonraker.status["print_stats"] = {"state": print_state, "filename": "part.gcode"}
+    pid = add(moonraker)
+    fam.start()
+    assert wait_for(lambda: (fam.status(pid) or {}).get("gcode_state") == gcode_state)
+    status = fam.status(pid)
+    assert status["print_fault"] is fault
+    assert status["print_error"] == ""
+
+
 def test_status_follows_push(moonraker, fam):
     as_sv08(moonraker)
     pid = add(moonraker)

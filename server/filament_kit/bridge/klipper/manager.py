@@ -602,6 +602,7 @@ class KlipperFamily(LoadsMixin):
             "layer": info.get("current_layer"), "total_layers": info.get("total_layer"),
             "remaining_min": _remaining(st), "eta": None, "temps": _temps(st), "ams": ams, "presence": "printer",
             "notes": notes, "hms": [], "print_error": "", "light": None,
+            "print_fault": state in ONLINE and ps.get("state") == "error",
             "updated": int(updated) if updated else None, "family": "klipper", "state": state,
         }
         with c.lock:
