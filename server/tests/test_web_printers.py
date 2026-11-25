@@ -694,7 +694,7 @@ def test_push_test_refuses_with_409_when_no_subscriptions_and_reports_partial_fa
     assert c.post(P + "/push/subscribe", json=s1, headers=H).status_code == 200
     assert c.post(P + "/push/subscribe", json=s2, headers=H).status_code == 200
     monkeypatch.setattr(push, "send_all", lambda *a, **k: {
-        "sent": 1, "failed": [{"endpoint": s2["subscription"]["endpoint"], "code": 502}], "gone": 0})
+        "sent": 1, "failed": [{"endpoint": s2["subscription"]["endpoint"], "code": 502}], "removed": 0})
     r = c.post(P + "/push/test", headers=H)
     assert r.status_code == 200
     body = r.json()
