@@ -14,7 +14,7 @@ import json
 import sys
 from datetime import datetime, timezone
 
-from . import alerts, alerts_api, demo, events, output
+from . import alerts, alerts_api, demo, events, iso_time, output
 from .alerts_api import say
 from .spoolman import SpoolmanError
 
@@ -160,11 +160,8 @@ def parse_since(text: str) -> tuple[int | None, str | None]:
 
 
 def _time(at: str) -> str:
-    try:
-        return datetime.strptime(at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=__import__("datetime").timezone.utc) \
-            .astimezone().strftime("%Y-%m-%d %H:%M")
-    except ValueError:
-        return at
+    dt = iso_time.parse_utc(at)
+    return dt.astimezone().strftime("%Y-%m-%d %H:%M") if dt else at
 
 
 def _subject(ev: dict) -> str:

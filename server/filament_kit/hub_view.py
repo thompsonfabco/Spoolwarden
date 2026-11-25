@@ -18,7 +18,7 @@ import logging
 import re
 import subprocess
 
-from . import __version__, config, modules, redact
+from . import __version__, config, iso_time, modules, redact
 
 log = logging.getLogger(__name__)
 
@@ -48,13 +48,8 @@ def iso(t) -> str | None:
             return datetime.datetime.fromtimestamp(float(t), datetime.timezone.utc).isoformat(timespec="seconds")
         except (OverflowError, OSError, ValueError):
             return None
-    if isinstance(t, str) and t.strip():
-        try:
-            d = datetime.datetime.fromisoformat(t.strip().replace("Z", "+00:00"))
-        except ValueError:
-            return None
-        return (d if d.tzinfo else d.replace(tzinfo=datetime.timezone.utc)).isoformat(timespec="seconds")
-    return None
+    dt = iso_time.parse_utc(t)
+    return dt.isoformat(timespec="seconds") if dt else None
 
 
 def version_tuple(v) -> tuple[int, ...] | None:
