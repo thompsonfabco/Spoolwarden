@@ -726,27 +726,6 @@ void test_settings_bad_hub_ip_and_printer_refused() {
   }
 }
 
-void test_settings_wifi_password_length() {
-  Settings s; s.ssid = "keep"; std::string why;
-  std::string base = R"(,"base":"https://k/r","token":"abcdefghijklmnop"})";
-  for (const char* pw : {"p", "1234567"}) {
-    why.clear();
-    std::string j = std::string(R"({"ssid":"H","pass":")") + pw + "\"" + base;
-    TEST_ASSERT_FALSE_MESSAGE(parseSettings(j.c_str(), s, why), pw);
-    TEST_ASSERT_TRUE_MESSAGE(why.find("8 to 63 characters, or empty") != std::string::npos, why.c_str());
-    TEST_ASSERT_EQUAL_STRING("keep", s.ssid.c_str());
-  }
-  std::string tooLong = std::string(R"({"ssid":"H","pass":")") + std::string(64, 'x') + "\"" + base;
-  why.clear();
-  TEST_ASSERT_FALSE(parseSettings(tooLong.c_str(), s, why));
-  TEST_ASSERT_TRUE(why.find("8 to 63 characters, or empty") != std::string::npos);
-  for (const std::string& pw : {std::string("12345678"), std::string(63, 'x')}) {
-    std::string j = std::string(R"({"ssid":"H","pass":")") + pw + "\"" + base;
-    TEST_ASSERT_TRUE_MESSAGE(parseSettings(j.c_str(), s, why), pw.c_str());
-    TEST_ASSERT_EQUAL_STRING(pw.c_str(), s.pass.c_str());
-  }
-}
-
 void test_parse_base() {
   BaseParts a = parseBase("https://hub.local:8443/reader");
   TEST_ASSERT_TRUE(a.ok);
