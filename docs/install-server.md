@@ -298,7 +298,7 @@ log (for example `setup: anthropic key replaced from 192.0.2.20`) without the va
 ### The sections (v0.4.3)
 
 From v0.4.3 the page has sections: **Overview**, **Features**, **Printers**, **Devices**, **Settings** and **Updates**
-(`https://<computer name>.local/setup#updates` opens one directly). v0.5.0 adds **Slicer presets** and **Logs**. **Flash a device** (between **Settings** and **Updates**) writes Spoolwarden's firmware to a Tag Reader or a Weigh Station display over USB ([the user guide](user-guide.md#flash-a-device)). The table above says what is on **Printers**,
+(`https://<computer name>.local/setup#updates` opens one directly). v0.5.0 adds **Slicer presets** and **Logs**, and v0.6.0 adds **Intake**. **Flash a device** (between **Settings** and **Updates**) writes Spoolwarden's firmware to a Tag Reader or a Weigh Station display over USB ([the user guide](user-guide.md#flash-a-device)). The table above says what is on **Printers**,
 **Devices** and **Settings**.
 
 - **Overview.** The installed version and Setup, with a note and a link to **Updates** when a newer release exists. Under

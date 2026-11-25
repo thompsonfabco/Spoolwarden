@@ -18,7 +18,7 @@ It only works **on your home network**. Away from home it says "Spoolwarden only
 There is no sign-in: anyone on your home Wi-Fi can use it.
 
 > **At home it needs no setup.** The Hub serves the web app itself at
-> `https://<server name>.local/intake` (the Hub page's **Devices** section shows the address and a QR code; a Hub that
+> `https://<computer name>.local/intake` (the Hub page's **Devices** section shows the address and a QR code; a Hub that
 > kept port 8710 has `:8710` after the name).
 > Safari warns once about the Hub's own certificate: accept it to go on. To avoid the warning, or to reach the
 > app with a name of your own, use one of the two ways below (the `web` Feature and a web server in front). None of
@@ -36,7 +36,7 @@ There is no sign-in: anyone on your home Wi-Fi can use it.
 
 | | The built-in address | Way A: home only, nginx | Way B: a public name |
 |---|---|---|---|
-| Address | `https://<server name>.local/intake` (`:8710` after the name on a Hub that kept that port) | `https://<computer name>.local/filament` | `https://filament.example.com/filament` (your own name) |
+| Address | `https://<computer name>.local/intake` (`:8710` after the name on a Hub that kept that port) | `https://<computer name>.local/filament` | `https://filament.example.com/filament` (your own name) |
 | What you need | nothing: the Hub serves it | the `web` and `remote` Features (Spoolwarden installs nginx) | a domain name, ports 80 and 443 forwarded to the Hub |
 | Safari | warns about the certificate (you accept it once) | warns about the certificate (you accept it once) | no warnings |
 | Also gives you | | an address without a port number | the Claude connector from outside |

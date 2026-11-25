@@ -24,7 +24,7 @@ fixed.
 ## iPhone web app
 
 6. **An https address on your own name needs nginx.** At home the Hub serves the web app itself, at
-   `https://<server name>.local/intake` (`:8710` after the name on a Hub that kept that port), with no setup (v0.5.1); Safari warns once about its own certificate.
+   `https://<computer name>.local/intake` (`:8710` after the name on a Hub that kept that port), with no setup (v0.5.1); Safari warns once about its own certificate.
    Only to avoid that warning or to use a name of your own, `web.public_url` must be `https://` and the
    web service (127.0.0.1 only) sits behind nginx: tick Web access and Remote access and accept nginx's
    self-signed placeholder certificate in Safari. The placeholder lasts 825 days and is made again by an apply within
