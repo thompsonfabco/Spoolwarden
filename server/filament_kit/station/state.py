@@ -35,6 +35,10 @@ def panel_port_from_env() -> int:
 VOICE_RANGES = {"speaker": (0, 903), "speed": (50, 200), "volume": (0, 100)}
 VOICE_SPEED_STEP = 10      # the speed goes in steps of 10: the station checks it again
 VOICE_KEYS = {"speech": "speech", "speaker": "voice_speaker", "speed": "voice_speed", "volume": "speaker_volume"}
+VOICE_CHOICES = {
+    "tts": ("auto", "espeak"),
+    "voice": ("en_US-libritts_r-medium", "en_US-ljspeech-medium"),
+}
 # the sentences of the voice routes' refusals (the string catalogue's, the English as the fallback: / RG1 add the keys)
 _t = _station_page.catalogue_text
 VOICE_TEXTS = {
@@ -49,6 +53,10 @@ VOICE_TEXTS = {
     "set_on_hub_note": _t("station_voice_set_on_hub_note",
                           "Speaking and volume are set on the Hub: Settings > Weigh Station voice."),
     "set_on_hub": _t("station_voice_set_on_hub", "Speaking and volume are set on the Hub."),
+}
+_VOICE_CHOICE_ERRORS = {
+    "tts": "tts must be auto or espeak.",
+    "voice": "voice must be en_US-libritts_r-medium or en_US-ljspeech-medium.",
 }
 
 
@@ -112,7 +120,8 @@ def voice_values() -> dict:
 
 def clean_voice(body: dict) -> tuple[dict, dict]:
     """`(values, problems)` of a voice request: the values that are valid (a whole number inside its range; speech a
-    true/false) and `{name: sentence}` for each that is not. Names the station does not know are left out."""
+    true/false; tts and voice from their allowed choices) and `{name: sentence}` for each that is not. Names the station
+    does not know are left out."""
     values, problems = {}, {}
     for name in VOICE_KEYS:
         if name not in body:
@@ -127,6 +136,14 @@ def clean_voice(body: dict) -> tuple[dict, dict]:
             values[name] = v
         else:
             problems[name] = VOICE_TEXTS["bad_" + name]
+    for name, choices in VOICE_CHOICES.items():
+        if name not in body:
+            continue
+        v = body[name]
+        if isinstance(v, str) and v in choices:
+            values[name] = v
+        else:
+            problems[name] = _VOICE_CHOICE_ERRORS[name]
     return values, problems
 
 

@@ -53,7 +53,7 @@ MESSAGES: dict[str, str | dict] = {
     "start_state_not_yet": "Not yet",
     "start_show": "Show",
     "start_hide": "Hide this list",
-    "start_all_set": "All set",
+    "start_all_set": "Completed!",
     "start_restore_row": "Moving from another computer? Restore its backup",
     "start_restore_button": "Restore a backup",
     "start_step_name": "Name this Hub",

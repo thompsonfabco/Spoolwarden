@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<languages version="1">
+  <language code="en" name="English" native="English" file="en.json" reviewed="true" complete="100" builtin="true"/>
+  <language code="de" name="German" native="Deutsch" file="de.json" reviewed="false" complete="100" builtin="false"/>
+  <language code="ru" name="Russian" native="Русский" file="ru.json" reviewed="false" complete="100" builtin="false"/>
+</languages>

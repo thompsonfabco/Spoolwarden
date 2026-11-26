@@ -356,7 +356,6 @@ PLAIN_NAME_EXCEPTIONS = [
     ("docs/android-app.md", "presets", "Bring back deleted presets", "the button's name in the app"),
     ("docs/user-guide.md", "presets", "`presets restore-deleted`", "a row of the command table, which is the output of `help --markdown`"),
     ("docs/user-guide.md", "module", "Module V3 in I2C mode", "the second line of the name of a hardware product (Elechouse NFC Module V3)"),
-    ("README.md", "filament-kit", "Spoolwarden was called filament-kit", "the one sentence about the old name"),
     ("docs/user-guide.md", "filament-kit", "Spoolwarden was called filament-kit", "the one sentence about the old name"),
 ]
 
@@ -387,7 +386,6 @@ def _prose(text: str) -> str:
 OLD_NAME_DOCS = PLAIN_NAME_DOCS + ("THIRD-PARTY.md", "release-notes/next.md")
 OLD_NAME_JOINED = re.compile(r"[/\_]|filament-kit-|filament-kit\.(?:apk|service|timer)\b|filament-kit\[|-filament-kit")
 OLD_NAME_LINES = [
-    ("README.md", "Spoolwarden was called filament-kit", "the one sentence about the old name"),
     ("docs/user-guide.md", "Spoolwarden was called filament-kit", "the one sentence about the old name"),
     ("release-notes/next.md", "`filament-kit` still works for a time", "the note about the old command"),
     ("docs/install-server.md", "OK   service filament-kit active", "a line the status check prints: the unit's name"),

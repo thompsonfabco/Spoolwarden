@@ -35,7 +35,7 @@ from .bridge.slottest import NoStatus, PrinterBusy
 from .bridge.models import camera_kind, model_name
 from .inventory import AddFailed, TagConflict
 from .profiles.errors import ProfileError
-from .setup_console import voice_tab
+from .setup_console import languages_tab, voice_tab
 from .spoolman import Spoolman, SpoolmanError
 from .station_client import StationClient, StationUnreachable
 
@@ -231,6 +231,8 @@ WEB_ROUTES = (
     ("GET", "/api/analytics"),
     ("GET", "/api/export/{set}.csv"),
     ("GET", "/api/hub"),
+    ("GET", "/api/languages"),
+    ("GET", "/api/strings/{name}"),
     ("GET", "/api/voice"),
     ("GET", "/api/spools/{id:int}/label.svg"),
     ("POST", "/api/spools/{id}/return"),    # the web app's Return (the spool-change rule: no printer switch)
@@ -1959,6 +1961,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/station/save", _flow(station_save), methods=["POST"]),
             Route("/api/station/return", _flow(station_return), methods=["POST"]),
             *voice_tab.kit_routes(_authed),
+            *languages_tab.kit_routes(_authed),
             *[Route(r.path, _authed(r.handler) if r.auth == "token" else r.handler, methods=[r.method])
               for r in labels.kit_routes(lambda: sm, config.load)],
             *_gated([*_printer_routes(printers), *_bridge_routes(printers, mapper, sm),

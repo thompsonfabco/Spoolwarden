@@ -64,7 +64,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import __version__, config, demo, getting_started, hostaddr, hubport, lan, modules, pairing, qr, reader_tokens, setup_code, shared_files, trusted
+from . import __version__, config, demo, getting_started, hostaddr, hubport, lan, languages, modules, pairing, qr, reader_tokens, setup_code, shared_files, trusted
 from .bridge import registry
 from .station_client import station_reach
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offline, Unauthorized
@@ -360,7 +360,8 @@ class SetupPage:
                  Route("/setup/esptool.bundle.js", self.asset, methods=["GET"]),
                  Route("/setup/setup.css", self.asset, methods=["GET"]),
                  *[Route(f"/setup/{n}", self.asset, methods=["GET"]) for n in CSS_SECTIONS],
-                 Route("/setup/shared/{name}", self.shared_asset, methods=["GET"])]
+                 Route("/setup/shared/{name}", self.shared_asset, methods=["GET"]),
+                 Route("/setup/api/strings/{name}", self.strings_asset, methods=["GET"])]
                 + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in table])
 
     # ---------- access ----------
@@ -536,14 +537,18 @@ class SetupPage:
         from .web.intake_app import _colours
         look = config.look(cfg)
         colours = _colours(self.shared)[look]
+        lang = await anyio.to_thread.run_sync(languages.language_for, request)
+        lang_tag = html.escape(lang)
+        lang_script = f"<script defer src='/setup/api/strings/{lang_tag}.js'></script>" if lang != "en" else ""
         return HTMLResponse(
-            f"<!doctype html><html lang=en data-look={look}><meta charset=utf-8>"
+            f"<!doctype html><html lang={lang_tag} data-look={look}><meta charset=utf-8>"
             "<meta name=viewport content='width=device-width,initial-scale=1'>"
             f"<meta name=theme-color content='{colours['light'][0]}' media='(prefers-color-scheme: light)'>"
             f"<meta name=theme-color content='{colours['dark'][0]}' media='(prefers-color-scheme: dark)'>"
             "<script src='/setup/shared/theme-init.js'></script><script defer src='/setup/shared/strings.js'></script>"
-            "<script defer src='/setup/shared/components.js'></script><script defer src='/setup/shared/hls.min.js'></script><script defer src='/setup/shared/components-lock.js'></script>"
-            "<script defer src='/setup/shared/components-jobs.js'></script><script defer src='/setup/shared/alerts.js'></script>"
+            + lang_script +
+            "<script defer src='/setup/shared/components.js'></script><script defer src='/setup/shared/components-lock.js'></script>"
+            "<script defer src='/setup/shared/components-jobs.js'></script><script defer src='/setup/shared/alerts.js'></script><script defer src='/setup/shared/hls.min.js'></script>"
             # the shell turns the title into "<Page title> · <Hub name>"; the Hub name is all it needs from here
             f"<title>{name}</title><link rel=stylesheet href='/setup/shared/tokens.css'>"
             "<link rel=stylesheet href='/setup/shared/components.css'><link rel=stylesheet href='/setup/shared/components-jobs.css'><link rel=stylesheet href='/setup/shared/alerts.css'>"
@@ -564,6 +569,23 @@ class SetupPage:
         if not self._lan(request):
             return Response(status_code=403)
         return shared_files.response(self.shared, request.path_params["name"])
+
+    async def strings_asset(self, request: Request):
+        if not self._lan(request) or not self._host_ok(request):
+            return Response(status_code=403)
+        name = request.path_params["name"]
+        code = name.removesuffix(".js") if name.endswith(".js") else ""
+        if not code:
+            return Response(status_code=404)
+        try:
+            data = await anyio.to_thread.run_sync(languages.strings_js, code)
+        except languages.LanguageError:
+            return Response(status_code=404)
+        return Response(
+            data,
+            media_type="text/javascript; charset=utf-8",
+            headers={"Cache-Control": "private, max-age=60", "X-Content-Type-Options": "nosniff"},
+        )
 
     # ---------- reads ----------
     def _printer_rows(self, *, unlocked: bool = True) -> list[dict]:

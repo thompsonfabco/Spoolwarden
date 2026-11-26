@@ -45,6 +45,11 @@ class Store:
         self._cache: dict[str, dict] = {}
         self._bad: set[str] = set()  # presets already reported in `problems` by `_try`
         self._names_by_base: dict[str, list[str]] | None = None  # base -> its instantiable names, sorted (FA-054)
+        self._aliases: dict[str, str] = {}
+        for key, j in self._raw.items():
+            jname = j.get("name")
+            if isinstance(jname, str) and jname and jname not in self._raw and jname not in self._aliases:
+                self._aliases[jname] = key
 
     @classmethod
     def load(cls, folder: Path) -> "Store":
@@ -98,31 +103,32 @@ class Store:
         return copy.deepcopy(self._resolve(name, ()))
 
     def _resolve(self, name: str, stack: tuple[str, ...]) -> dict:
-        if name in self._cache:
-            return self._cache[name]
-        if name in stack:
-            raise BblError(f"inheritance cycle: {' -> '.join(stack + (name,))}")
+        key = name if name in self._raw else self._aliases.get(name, name)
+        if key in self._cache:
+            return self._cache[key]
+        if key in stack:
+            raise BblError(f"inheritance cycle: {' -> '.join(stack + (key,))}")
         if len(stack) >= MAX_DEPTH:
             raise BblError(f"{stack[0]!r}: inheritance chain too deep (over {MAX_DEPTH} presets)")
-        if name not in self._raw:
+        if key not in self._raw:
             if stack:
                 raise BblError(f"{stack[-1]!r} refers to missing system preset {name!r}")
             raise BblError(f"unknown system preset {name!r}")
-        j = self._raw[name]
+        j = self._raw[key]
         parent = j.get("inherits")
         if parent is not None and not isinstance(parent, str):
-            raise BblError(f"{name!r}: inherits is not a string")
+            raise BblError(f"{key!r}: inherits is not a string")
         includes = j.get("include")
         if includes is not None and (not isinstance(includes, list)
                                      or not all(isinstance(i, str) for i in includes)):
-            raise BblError(f"{name!r}: include is not a list of names")
-        here = stack + (name,)
+            raise BblError(f"{key!r}: include is not a list of names")
+        here = stack + (key,)
         cfg = self._resolve(parent, here) if parent else {}
         for inc in includes or []:
             cfg = merge(self._resolve(inc, here), cfg)
         cfg = merge(j, cfg)
         cfg.pop("include", None)
-        self._cache[name] = cfg
+        self._cache[key] = cfg
         return cfg
 
     def _try(self, name: str) -> dict | None:

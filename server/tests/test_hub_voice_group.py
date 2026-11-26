@@ -24,7 +24,13 @@ api = async (path, body) => {
   if (path === "station/voice") {
     const { code, ...rest } = body;
     if (plan.save) { calls.push(["refused", rest]); throw hubError(400, { error: "no way", code: "bad_value", field: Object.keys(rest)[0] }); }
-    calls.push(["save", rest]); Object.assign(voice, rest); return { station: true, ...voice, remote: plan.remote };
+    calls.push(["save", rest]);
+    const { tts, voice: vname, ...other } = rest;
+    Object.assign(voice, other);
+    if (tts !== undefined || vname !== undefined) {
+      voice.voice = tts === "espeak" ? "espeak-ng, robotic, no download" : vname === "en_US-ljspeech-medium" ? "Piper, one clear speaker" : "Piper, many speakers";
+    }
+    return { station: true, ...voice, remote: plan.remote };
   }
   if (path === "settings/general" && body && body.values) {
     if (plan.save) { calls.push(["refused", body.values]); throw hubError(400, { error: "no way", field: "x" }); }
@@ -189,25 +195,44 @@ out.refused = { calls: calls.map((c) => c[0]), speed: sliders()[0].value, readou
     assert page["refused"] == {"calls": ["save", "refused", "refused"], "speed": "100", "readout": "100 %", "voice": "many", "speaker": True, "result": "No way."}
 
 
-def test_a_weigh_station_on_another_computer_shows_where_the_voice_is_chosen_and_keeps_the_other_rows(hub, tmp_path):
+def test_a_weigh_station_on_another_computer_renders_the_voice_select_and_saves_live(hub, tmp_path):
     page = _drive_voice(hub, tmp_path, r"""
 plan.remote = true;
 await redraw();
-out.line = text($("#set-voice .voice__remote"));
-out.select = $("#set-voice select") === null;
+out.remoteLine = $("#set-voice .voice__remote") === null;
+out.hasSelect = pickEl() !== null;
+out.hint = text($(".field__hint", pickEl().closest(".field")));
 out.labels = [...document.querySelectorAll("#set-voice .field__label, #set-voice .toggle__label")].map(text);
-out.speaker = shown(speakerEl());
+out.speakerStart = shown(speakerEl());
 change(sliders()[1], "10");
 await until(() => calls.length === 1, "the volume");
 await sleep(300);
+change(pickEl(), "one");
+await until(() => calls.length === 2, "the one-speaker voice");
+await sleep(300);
+out.speakerOne = shown(speakerEl());
+await redraw();
+out.keptOne = { voice: pickEl().value, speaker: shown(speakerEl()) };
+change(pickEl(), "espeak");
+await until(() => calls.length === 3, "the espeak voice");
+await sleep(300);
+out.speakerEspeak = shown(speakerEl());
+await redraw();
+out.keptEspeak = { voice: pickEl().value, speaker: shown(speakerEl()) };
 testBtn().click();
-await until(() => calls.length === 2 && resultText() === "Played on the Weigh Station.", "the test");
+await until(() => calls.length === 4 && resultText() === "Played on the Weigh Station.", "the test");
 out.calls = calls.slice();
 """)
-    assert page["line"] == "Chosen on the Weigh Station's own computer: spoolwarden config."
-    assert page["select"] is True
-    assert page["labels"] == ["Speak", "Speaker", "Speed", "Volume"] and page["speaker"] is True
-    assert page["calls"] == [["save", {"volume": 10}], ["test", {"speaker": 0, "speed": 100, "volume": 10}]]
+    assert page["remoteLine"] is True and page["hasSelect"] is True and page["hint"] is None
+    assert page["labels"] == ["Speak", "Voice", "Speaker", "Speed", "Volume"] and page["speakerStart"] is True
+    assert page["speakerOne"] is False and page["keptOne"] == {"voice": "one", "speaker": False}
+    assert page["speakerEspeak"] is False and page["keptEspeak"] == {"voice": "espeak", "speaker": False}
+    assert page["calls"] == [
+        ["save", {"volume": 10}],
+        ["save", {"tts": "auto", "voice": "en_US-ljspeech-medium"}],
+        ["save", {"tts": "espeak"}],
+        ["test", {"speed": 100, "volume": 10}],
+    ]
 
 
 def test_the_group_is_laid_out_without_sideways_scrolling_on_a_phone(hub, tmp_path):

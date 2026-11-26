@@ -490,7 +490,13 @@ function groupGeneral({ g }) {
 const SET_LANG_KEY = "spoolwarden.language";
 let setLangSeen = null;
 const setLangStored = () => { try { return localStorage.getItem(SET_LANG_KEY) || ""; } catch { return ""; } };
-const setLangKeep = (code) => { try { if (code) localStorage.setItem(SET_LANG_KEY, code); else localStorage.removeItem(SET_LANG_KEY); } catch { /* storage refused: the choice lasts until the page closes */ } };
+const setLangKeep = (code) => {
+  try {
+    if (code) localStorage.setItem(SET_LANG_KEY, code);
+    else localStorage.removeItem(SET_LANG_KEY);
+  } catch { /* storage refused: the choice lasts until the page closes */ }
+  document.cookie = code ? "spoolwarden_lang=" + encodeURIComponent(code) + "; path=/; SameSite=Lax" : "spoolwarden_lang=; path=/; max-age=0; SameSite=Lax";
+};
 const setLangName = (l) => (l.reviewed === false ? setT("settings_language_machine", { name: l.name }) : l.name);
 const setLangHave = (d) => [{ code: "en", name: "English", reviewed: true, installed: true, complete: 100 }, ...d.languages.filter((l) => l.installed && l.code !== "en")];
 // the code the page speaks: this browser's choice if installed, else (Automatic) the browser's language if installed, else the Hub's

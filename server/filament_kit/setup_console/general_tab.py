@@ -24,6 +24,7 @@ import anyio
 
 from .. import config, demo, getting_started, hubport, local_intake_install, local_reader, logging_cfg, modules, redact, remote, setup_helper, share_corrections
 from ..spoolman import Spoolman, SpoolmanError
+from . import voice_tab
 from .texts import say
 
 
@@ -51,8 +52,7 @@ def _view() -> dict:
     values = {k: setup_helper.general_value(cfg, k) for k in setup_helper.GENERAL}
     values["appearance.theme"] = config.look(cfg)       # an unknown stored value reads as Console, as the shells do
     values[share_corrections.KEY] = share_corrections.saved(cfg)       # off until it is set
-    values["local_intake.url"] = redact.text(str(values.get("local_intake.url") or ""), known)
-    return {"values": values, "station_on": "station" in on, "remote_on": "remote" in on, "web_on": "web" in on,
+    return {"values": values, "station_on": "station" in on or bool(voice_tab.station_url(cfg)), "remote_on": "remote" in on, "web_on": "web" in on,
             "ai_intake_on": "ai_intake" in on, "local_intake_on": "local_intake" in on,
             "local_intake_installed": local_intake_install.installed(),
             "reader_install_pending": getting_started.reader_install_pending(cfg),
@@ -194,9 +194,8 @@ def routes(page) -> list[tuple]:
                 raise Refused(409, "the \"Label Reader: On this Hub\" Feature is off: turn it on in Features")
             known = redact.known_values()
             h = local_reader.test(cfg)
-            h = {**h, "url": redact.text(str(h.get("url") or ""), known)}
             if h.get("error"):
-                h["error"] = redact.text(str(h["error"]), known)
+                h = {**h, "error": redact.text(str(h["error"]), known)}
             return {**h, "share_corrections": share_corrections.state(cfg, h)}
         return await anyio.to_thread.run_sync(check)
 

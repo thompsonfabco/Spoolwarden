@@ -17,7 +17,7 @@ import threading
 import time
 import wave
 
-from . import beep, wire
+from . import beep, voice, wire
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -47,6 +47,7 @@ def say(text, opts=None):
 
 
 piper = {}  # the loaded Piper voice, kept between phrases (loading takes ~1 s, a phrase ~0.1 s)
+_piper_path = [None]  # model path currently loaded into `piper`
 
 
 def piper_voice():
@@ -54,6 +55,9 @@ def piper_voice():
     path = st.settings["piper_voice"]
     if st.settings["tts"] == "espeak" or not os.path.exists(path):
         return None
+    if _piper_path[0] != path:
+        piper.clear()
+        _piper_path[0] = path
     if "voice" not in piper:
         try:
             from piper import PiperVoice  # the [station-tts] extra
@@ -208,6 +212,12 @@ def apply_voice(values):
     """Keep these (already checked) voice values live, over the drop-in's, with no restart. The C3 panel keeps its own
     volume, so it is told the new one."""
     st.live.update(values)
+    if "tts" in values:
+        st.settings["tts"] = values["tts"]
+    if "voice" in values:
+        st.settings["piper_voice"] = voice.model_path(name=values["voice"])
+        piper.clear()
+        _piper_path[0] = None
     if "volume" in values and st.ports["panel_chip"] == "esp32c3":
         from . import panel
         panel.send_volume()

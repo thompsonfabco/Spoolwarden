@@ -35,6 +35,9 @@ FILE = "voice.xml"
 VERSION = "1"
 MODE = 0o644
 FIELDS = ("speech", "speaker", "speed", "volume")
+VOICE_CHOICE_FIELDS = ("tts", "voice")
+TTS_CHOICES = ("auto", "espeak")
+VOICE_MODEL_CHOICES = ("en_US-libritts_r-medium", "en_US-ljspeech-medium")
 
 SPEAKER_MAX = 903                   # a many-speaker Piper voice: 904 speakers
 SPEED_MIN, SPEED_MAX, SPEED_STEP = 50, 200, 10
@@ -52,11 +55,32 @@ class BadValue(ValueError):
         self.field = field
 
 
-def many_speakers(cfg: dict) -> bool:
-    """Does the chosen voice (the Voice row: `station.tts`, `station.voice`) have many speakers."""
+def voice_selection(cfg: dict) -> tuple[str | None, str | None]:
+    """Read optional `tts` and `voice` overrides from `voice.xml`, returning `(None, None)` if missing or invalid."""
+    try:
+        raw = _read() or {}
+    except (OSError, ValueError):
+        return None, None
+    tts = raw.get("tts")
+    voice = raw.get("voice")
+    return (
+        tts if isinstance(tts, str) and tts in TTS_CHOICES else None,
+        voice if isinstance(voice, str) and voice in VOICE_MODEL_CHOICES else None,
+    )
+
+
+def _many_speakers_for(cfg: dict, tts: str | None, voice: str | None) -> bool:
     st = cfg.get("station")
     st = st if isinstance(st, dict) else {}
-    return st.get("tts") != "espeak" and st.get("voice") != ONE_CLEAR
+    eff_tts = tts if tts is not None else st.get("tts")
+    eff_voice = voice if voice is not None else st.get("voice")
+    return eff_tts != "espeak" and eff_voice != ONE_CLEAR
+
+
+def many_speakers(cfg: dict) -> bool:
+    """Does the chosen voice (voice.xml override, else `station.tts`, `station.voice`) have many speakers."""
+    tts, voice = voice_selection(cfg)
+    return _many_speakers_for(cfg, tts, voice)
 
 
 def speaker_range(cfg: dict) -> list | None:
@@ -80,19 +104,32 @@ def _problem(field: str, v, cfg: dict) -> str | None:
         return None if ok else f"must be from {SPEED_MIN} to {SPEED_MAX} in steps of {SPEED_STEP}"
     if field == "volume":
         return None if _whole(v) and 0 <= v <= 100 else "must be a whole number from 0 to 100"
+    if field == "tts":
+        return None if isinstance(v, str) and v in TTS_CHOICES else f"must be one of {', '.join(TTS_CHOICES)}"
+    if field == "voice":
+        return None if isinstance(v, str) and v in VOICE_MODEL_CHOICES else f"must be one of {', '.join(VOICE_MODEL_CHOICES)}"
     return "is not a voice value"
 
 
 def check(body, cfg: dict) -> dict:
     """The fields of a save or a test, checked against the chosen voice: `{field: value}` (a field not sent stays out;
-    a name that is not one of the four is ignored). BadValue for a value that is not allowed."""
+    a name that is not allowed is ignored). BadValue for a value that is not allowed."""
     if not isinstance(body, dict):
         raise BadValue("", "the request must be a JSON object")
+    allowed = FIELDS + VOICE_CHOICE_FIELDS
+    cur_tts, cur_voice = voice_selection(cfg)
+    eff_tts = body["tts"] if body.get("tts") in TTS_CHOICES else cur_tts
+    eff_voice = body["voice"] if body.get("voice") in VOICE_MODEL_CHOICES else cur_voice
+    eff_many = _many_speakers_for(cfg, eff_tts, eff_voice)
     out = {}
     for f, v in body.items():
-        if f not in FIELDS:
+        if f not in allowed:
             continue
-        why = _problem(f, v, cfg)
+        if f == "speaker":
+            top = SPEAKER_MAX if eff_many else 0
+            why = None if _whole(v) and 0 <= v <= top else f"must be a whole number from 0 to {top}"
+        else:
+            why = _problem(f, v, cfg)
         if why:
             raise BadValue(f, f"{f} {why}")
         out[f] = v
@@ -119,13 +156,16 @@ def _from_xml(data: bytes) -> dict:
     if root.tag != "voice":
         raise ValueError("not a voice file")
     got = {}
-    for f in FIELDS:
+    for f in FIELDS + VOICE_CHOICE_FIELDS:
         raw = root.get(f)
         if raw is None:
             continue
         raw = raw.strip()
         if f == "speech":
             got[f] = raw == "true" if raw in ("true", "false") else None
+        elif f in VOICE_CHOICE_FIELDS:
+            choices = TTS_CHOICES if f == "tts" else VOICE_MODEL_CHOICES
+            got[f] = raw if raw in choices else None
         else:
             got[f] = int(raw) if re.fullmatch(r"[0-9]{1,5}", raw) else None
     return got
@@ -151,8 +191,8 @@ def _read() -> dict | None:
         raise ValueError(f"{f.name} is not valid: {e}") from None
 
 
-def stored(cfg: dict) -> dict:
-    """The values the file holds that are allowed now; never raises. A broken file holds none."""
+def _stored_all(cfg: dict) -> dict:
+    """All valid attributes (the four voice values plus any `tts`/`voice` overrides) from voice.xml."""
     try:
         raw = _read() or {}
     except (OSError, ValueError) as e:
@@ -161,13 +201,32 @@ def stored(cfg: dict) -> dict:
     return {f: v for f, v in raw.items() if v is not None and _problem(f, v, cfg) is None}
 
 
+def stored(cfg: dict) -> dict:
+    """The values the file holds that are allowed now; never raises. A broken file holds none."""
+    return {f: v for f, v in _stored_all(cfg).items() if f in FIELDS}
+
+
 def values(cfg: dict) -> dict:
     """`{speech, speaker, speed, volume}`: the file's value where it has an allowed one, else the fallback."""
     return {**fallbacks(cfg), **stored(cfg)}
 
 
+def handover_values(cfg: dict) -> dict:
+    """`values(cfg)` plus `tts` / `voice` when set in `voice.xml`, for `hello_voice` and `hand_over`."""
+    out = values(cfg)
+    tts, voice = voice_selection(cfg)
+    if tts is not None:
+        out["tts"] = tts
+    if voice is not None:
+        out["voice"] = voice
+    return out
+
+
 def _to_xml(got: dict) -> str:
-    attrs = "".join(f" {f}={quoteattr(str(got[f]).lower())}" for f in FIELDS if f in got)
+    def fmt(v) -> str:
+        return str(v).lower() if isinstance(v, bool) else str(v)
+
+    attrs = "".join(f" {f}={quoteattr(fmt(got[f]))}" for f in FIELDS + VOICE_CHOICE_FIELDS if f in got)
     return f'<?xml version="1.0" encoding="UTF-8"?>\n<voice version={quoteattr(VERSION)}{attrs}/>\n'
 
 
@@ -206,7 +265,8 @@ def save(new: dict, cfg: dict) -> bool:
     try:
         with _LOCK:
             _set_aside()
-            _write({**stored(cfg), **{f: v for f, v in new.items() if f in FIELDS}})
+            allowed = FIELDS + VOICE_CHOICE_FIELDS
+            _write({**_stored_all(cfg), **{f: v for f, v in new.items() if f in allowed}})
         return True
     except OSError as e:
         log.warning("voice file not written: %s", e)

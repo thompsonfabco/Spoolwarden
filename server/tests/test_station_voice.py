@@ -416,3 +416,12 @@ def test_the_synthesis_config_fake_takes_only_what_piper_takes():
     assert Synth(speaker_id=3, length_scale=0.5).length_scale == 0.5
     with pytest.raises(TypeError):
         Synth(length_scal=0.5)
+
+
+def test_set_voice_updates_tts_and_piper_voice_live(piper_env):
+    speech.set_voice({"tts": "espeak"})
+    assert st.settings["tts"] == "espeak"
+
+    speech.set_voice({"tts": "auto", "voice": "en_US-ljspeech-medium"})
+    assert st.settings["tts"] == "auto"
+    assert Path(st.settings["piper_voice"]).name == "en_US-ljspeech-medium.onnx"

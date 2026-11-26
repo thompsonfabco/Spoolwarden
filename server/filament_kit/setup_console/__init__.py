@@ -10,7 +10,7 @@ import time
 
 from . import (
     alerts_tab, analytics_tab, backup_tab, corrections_tab, device_tab, flash_tab, general_tab, history_tab,
-    intake_tab, jobs, labels_tab, library_tab, logs_tab, modes, overview, presets_tab, printer_live_tab, printers_tab,
+    intake_tab, jobs, labels_tab, languages_tab, library_tab, logs_tab, modes, overview, presets_tab, printer_live_tab, printers_tab,
     spools_tab, start_tab, station_tab, storage_tab, trust_tab, updates_tab, voice_tab, webapp_tab,
 )
 
@@ -40,5 +40,5 @@ def routes(page) -> list[tuple]:
             + intake_tab.routes(page) + flash_tab.routes(page) + corrections_tab.routes(page) + storage_tab.routes(page)
             + alerts_tab.routes(page) + device_tab.routes(page) + spools_tab.routes(page) + start_tab.routes(page)
             + analytics_tab.routes(page) + history_tab.routes(page) + voice_tab.routes(page)
-            + labels_tab.routes(page)
+            + labels_tab.routes(page) + languages_tab.routes(page)
             + printer_live_tab.routes(page, sm=page.spoolman))

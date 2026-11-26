@@ -143,8 +143,6 @@ def test_a_route_listed_ahead_of_the_web_unit_is_not_yet_called_by_it():
 # refusal. The mount step lists the route in WEB_ROUTES and deletes its line here; the tests below make that so.
 UNDO_CALL = "/api/events/{quote(event, safe="
 CALLED_BEFORE_THE_HUB_MOUNTS_THEM = {
-    ("GET", "/api/languages"),                              # builds it, mounts it
-    ("GET", "/api/strings/{code}"),                         # the texts of a language, `<code>.js`
     ("POST", "/api/demo/leave"),                            # 
 }
 _CALLED_BEFORE_THE_HUB_MOUNTS_THEM_RX = [

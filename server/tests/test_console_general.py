@@ -261,14 +261,14 @@ def test_the_one_key_form_is_unchanged(app, restarts, applies):
     assert bad.status_code == 400 and bad.json()["field"] == "value" and "errors" not in bad.json()
 
 
-def test_the_view_and_local_intake_health_hide_local_intake_url(app, monkeypatch):
+def test_the_view_and_local_intake_health_show_local_intake_url(app, monkeypatch):
     cfg = config.load()
     cfg["modules"]["local_intake"] = True
     cfg["local_intake"] = {"url": "http://192.0.2.88:7915", "tier": "auto"}
     config.save(cfg)
     r = client(app).get("/setup/api/settings/general")
-    assert r.status_code == 200 and "192.0.2.88" not in r.text
-    assert r.json()["values"]["local_intake.url"] != "http://192.0.2.88:7915"
+    assert r.status_code == 200
+    assert r.json()["values"]["local_intake.url"] == "http://192.0.2.88:7915"
     monkeypatch.setattr(general_tab.local_reader, "test", lambda c: {
         "ok": False, "degraded": False, "url": "http://192.0.2.88:7915", "api_version": None,
         "version": None, "tiers": {}, "revise": False, "auth_required": False, "last_read_at": None,
@@ -276,7 +276,8 @@ def test_the_view_and_local_intake_health_hide_local_intake_url(app, monkeypatch
         "https": False, "warning": None,
     })
     r2 = client(app).get("/setup/api/settings/local-intake")
-    assert r2.status_code == 200 and "192.0.2.88" not in r2.text
+    assert r2.status_code == 200
+    assert r2.json()["url"] == "http://192.0.2.88:7915"
 
 
 def test_history_use_counts_valid_record_folders_without_parsing_json(app, monkeypatch):

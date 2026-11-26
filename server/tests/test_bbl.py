@@ -185,3 +185,50 @@ def test_try_records_unexpected_errors_once(tmp_path, monkeypatch):
     assert store.bases() == []
     assert [p for p in store.problems if "X @BBL H2D" in p] == [p for p in store.problems if "boom" in p]
     assert len([p for p in store.problems if "X @BBL H2D" in p]) == 1
+
+
+def test_resolve_alias_when_filename_differs_from_json_name(tmp_path):
+    base_dir = tmp_path / "base"
+    base_dir.mkdir()
+    _write(base_dir, "Bambu Support For PA PET @base", {
+        "name": "Bambu Support For PA/PET @base",
+        "instantiation": "false",
+        "filament_id": "GFS99",
+        "filament_type": ["PLA"],
+        "nozzle_temperature": ["220"],
+    })
+    _write(tmp_path, "Bambu Support For PA PET @BBL A1", {
+        "name": "Bambu Support For PA/PET @BBL A1",
+        "inherits": "Bambu Support For PA/PET @base",
+        "instantiation": "true",
+        "compatible_printers": ["Bambu Lab A1 0.4 nozzle"],
+    })
+    store = bbl.Store.load(tmp_path)
+
+    assert "Bambu Support For PA PET" in store.bases("PLA")
+    assert store.problems == []
+
+    by_stem = store.resolve("Bambu Support For PA PET @BBL A1")
+    by_json_name = store.resolve("Bambu Support For PA/PET @BBL A1")
+    assert by_stem["filament_id"] == "GFS99"
+    assert by_stem["nozzle_temperature"] == ["220"]
+    assert by_json_name == by_stem
+
+
+def test_include_resolves_by_json_name_alias(tmp_path):
+    _write(tmp_path, "Support Template @common", {
+        "name": "Support/Template @common",
+        "filament_retraction_length": ["0.6"],
+    })
+    _write(tmp_path, "Child @BBL A1", {
+        "name": "Child @BBL A1",
+        "include": ["Support/Template @common"],
+        "instantiation": "true",
+        "nozzle_temperature": ["215"],
+    })
+    store = bbl.Store.load(tmp_path)
+    cfg = store.resolve("Child @BBL A1")
+    assert cfg["filament_retraction_length"] == ["0.6"]
+    assert cfg["nozzle_temperature"] == ["215"]
+    assert "include" not in cfg
+    assert store.problems == []

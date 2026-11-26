@@ -77,22 +77,24 @@ def station_remote(cfg: dict) -> bool:
 
 def voice_name(cfg: dict) -> str:
     """The Voice row's choice, as shown."""
+    sel_tts, sel_voice = voice_state.voice_selection(cfg)
     st = cfg.get("station")
     st = st if isinstance(st, dict) else {}
-    if st.get("tts") == "espeak":
+    tts = sel_tts if sel_tts is not None else st.get("tts")
+    voice = sel_voice if sel_voice is not None else st.get("voice")
+    if tts == "espeak":
         return VOICE_ESPEAK
-    return VOICE_ONE if st.get("voice") == voice_state.ONE_CLEAR else VOICE_MANY
+    return VOICE_ONE if voice == voice_state.ONE_CLEAR else VOICE_MANY
 
 
 def voice_row(cfg: dict) -> dict:
-    """The Voice row for the Hub page: `{value, editable, text}`; a station on another computer chooses its voice there."""
-    remote = station_remote(cfg)
-    return {"value": voice_name(cfg), "editable": not remote, "text": TEXT_VOICE_REMOTE if remote else None}
+    """The Voice row for the Hub page: `{value, editable, text}`."""
+    return {"value": voice_name(cfg), "editable": True, "text": None}
 
 
 def hello_voice(cfg: dict) -> dict:
-    """`voice` in the answer of `GET /api/station/hello`: `{speech, speaker, speed, volume}` from voice.xml."""
-    return voice_state.values(cfg)
+    """`voice` in the answer of `GET /api/station/hello`: `{speech, speaker, speed, volume}` (and `tts`/`voice` when set) from voice.xml."""
+    return voice_state.handover_values(cfg)
 
 
 def hand_over(cfg: dict, only: tuple | list | None = None) -> bool:
@@ -101,7 +103,7 @@ def hand_over(cfg: dict, only: tuple | list | None = None) -> bool:
     url = station_url(cfg)
     if not url:
         return False
-    values = voice_state.values(cfg)
+    values = voice_state.handover_values(cfg)
     if only is not None:
         values = {k: v for k, v in values.items() if k in only}
     try:

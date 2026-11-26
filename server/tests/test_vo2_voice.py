@@ -14,7 +14,7 @@ from test_setup_page import client, env, post  # noqa: F401
 
 from filament_kit import config, setup_helper, station_client, voice_state
 from filament_kit.profiles import statexml
-from filament_kit.setup_console import voice_tab
+from filament_kit.setup_console import general_tab, voice_tab
 from filament_kit.setup_page import Refused
 from filament_kit.station_client import StationCallError
 
@@ -180,7 +180,7 @@ def test_a_remote_station_gets_the_values_and_the_voice_row_says_where_it_is_cho
     assert voice_tab.hand_over(remote) is True and station.calls[0][0] == "http://station.example:5003"
     assert station.calls[0][3]["speed"] == 80
     row = voice_tab.voice_row(remote)
-    assert row["editable"] is False and row["text"] == "Chosen on the Weigh Station's own computer: spoolwarden config."
+    assert row["editable"] is True and row["text"] is None
 
 
 @pytest.mark.parametrize("url", ["http://127.0.0.1:5003", "http://localhost:5003", "https://[::1]:5003",
@@ -589,3 +589,34 @@ def test_the_speaker_range_is_null_for_a_one_speaker_voice_and_the_station_false
     assert voice_tab.get_voice(_cfg(voice="en_US-ljspeech-medium"))["speaker_range"] is None
     assert voice_tab.get_voice(_cfg())["speaker_range"] == [0, 903]
     assert voice_tab.get_voice(_cfg(url=None)) == {"station": False}
+
+
+def test_remote_station_voice_persists_in_voice_xml_and_hands_over(env, station):  # noqa: F811
+    cfg = _cfg("http://station.example:5003")
+    config.save(cfg)
+
+    got = voice_tab.save_voice({"tts": "espeak"})
+    assert got["voice"] == voice_tab.VOICE_ESPEAK
+    assert got["remote"] is True and got["speaker_range"] is None
+    assert _file().exists() and voice_state.voice_selection(config.load())[0] == "espeak"
+    assert station.calls[-1] == ("http://station.example:5003", "POST", "/voice", {"tts": "espeak"})
+    assert voice_tab.hello_voice(config.load())["tts"] == "espeak"
+    assert voice_tab.get_voice(config.load())["voice"] == voice_tab.VOICE_ESPEAK
+
+    got = voice_tab.save_voice({"tts": "auto", "voice": "en_US-ljspeech-medium"})
+    assert got["voice"] == voice_tab.VOICE_ONE
+    assert got["speaker_range"] is None
+    assert voice_state.voice_selection(config.load()) == ("auto", "en_US-ljspeech-medium")
+    assert station.calls[-1] == (
+        "http://station.example:5003", "POST", "/voice", {"tts": "auto", "voice": "en_US-ljspeech-medium"}
+    )
+    hello = voice_tab.hello_voice(config.load())
+    assert hello["tts"] == "auto" and hello["voice"] == "en_US-ljspeech-medium"
+    assert voice_tab.get_voice(config.load())["voice"] == voice_tab.VOICE_ONE
+
+
+def test_general_view_station_on_is_true_when_station_url_is_set_with_station_module_off(env):  # noqa: F811
+    cfg = _cfg("http://station.example:5003")
+    cfg["modules"] = {**cfg.get("modules", {}), "station": False}
+    config.save(cfg)
+    assert general_tab._view()["station_on"] is True

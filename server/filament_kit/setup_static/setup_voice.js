@@ -17,9 +17,21 @@ const VOICE_CHOICES = [
   ["one", "settings_voice_choice_one", { "station.tts": "auto", "station.voice": "en_US-ljspeech-medium" }],
   ["espeak", "settings_voice_choice_espeak", { "station.tts": "espeak" }],
 ];
+const REMOTE_VOICE_PAYLOAD = {
+  many: { tts: "auto", voice: "en_US-libritts_r-medium" },
+  one: { tts: "auto", voice: "en_US-ljspeech-medium" },
+  espeak: { tts: "espeak" },
+};
 const SLIDING = "input";                                         // the event a slider moves with
 const VOICE_SPEAKERS = 903;                                      // the many-speaker voice has the speakers 0 to 903
-const voiceChoiceOf = (v) => (v["station.tts"] === "espeak" ? "espeak" : v["station.voice"] === "en_US-ljspeech-medium" ? "one" : "many");
+const voiceChoiceOf = (v, answerVoice, remote) => {
+  if (remote) {
+    if (answerVoice === "espeak-ng, robotic, no download") return "espeak";
+    if (answerVoice === "Piper, one clear speaker") return "one";
+    return "many";
+  }
+  return v["station.tts"] === "espeak" ? "espeak" : v["station.voice"] === "en_US-ljspeech-medium" ? "one" : "many";
+};
 const voiceNumber = (v, key, dflt) => (v[key] == null || v[key] === "" || Number.isNaN(Number(v[key])) ? dflt : Number(v[key]));
 // the speakers the answer's `speaker_range` [first, last] counts; the many-speaker voice's own when the answer has none
 const voiceSpeakerCount = (a) => (Array.isArray(a.speaker_range) ? a.speaker_range[1] - a.speaker_range[0] + 1 : VOICE_SPEAKERS + 1);
@@ -53,7 +65,7 @@ function voiceGroup({ g }) {
 // the Voice row shows the choice the settings values give, else the one the answer's voice name gives
 function voiceRows(v, a) {
   const remote = !!a.remote, box = sbox();
-  const saved = { choice: voiceChoiceOf({ "station.voice": a.voice, ...v }), speaker: voiceNumber(a, "speaker", 0), speed: voiceNumber(a, "speed", 100), volume: voiceNumber(a, "volume", 50) };
+  const saved = { choice: voiceChoiceOf({ "station.voice": a.voice, ...v }, a.voice, remote), speaker: voiceNumber(a, "speaker", 0), speed: voiceNumber(a, "speed", 100), volume: voiceNumber(a, "volume", 50) };
   // one write of the Voice row through settings/general; `back` puts the control back when it was refused or the code was not given
   const put = (values, back, after) => needCode(async () => {
     working(box, SW.t("common_saving"));
@@ -87,10 +99,9 @@ function voiceRows(v, a) {
       return SW.t("common_saved");
     } });
 
-  // the Voice row: a select of three, or on a Weigh Station on another computer the line that says where it is chosen
-  const pick = remote ? null : SW.field({ row: true, type: "select", label: SW.t("settings_voice_label"), value: saved.choice, hint: SW.t("settings_voice_restarts"),
+  // the Voice row: a select of three (a Weigh Station on another computer updates live, with no restart hint)
+  const pick = SW.field({ row: true, type: "select", label: SW.t("settings_voice_label"), value: saved.choice, hint: remote ? undefined : SW.t("settings_voice_restarts"),
     options: VOICE_CHOICES.map(([value, key]) => ({ value, label: SW.t(key) })) });
-  const remoteLine = remote ? h("p", { class: "voice__remote", textContent: SW.t("settings_voice_remote") }) : null;
 
   const speaker = SW.field({ row: true, type: "number", mono: true, label: SW.t("settings_voice_speaker"), hint: SW.t("voice_speaker_hint", { count: voiceSpeakerCount(a) }), value: String(saved.speaker) });
   speaker.classList.add("voice__speaker");
@@ -107,17 +118,22 @@ function voiceRows(v, a) {
   const volume = slider("settings_voice_volume", 0, 100, 1, saved.volume, "");
 
   const test = SW.btn(SW.t("settings_voice_test"), { action: "voice-test", run: () => press() });
-  const rows = [speak, pick, remoteLine, speaker, speed, volume, h("div", { class: "voice__test" }, test, box)].filter(Boolean);
+  const rows = [speak, pick, speaker, speed, volume, h("div", { class: "voice__test" }, test, box)];
 
-  const nowChoice = () => (pick ? pick._control.value : saved.choice);
+  const nowChoice = () => pick._control.value;
   const paint = () => { speaker.hidden = nowChoice() !== "many"; };
   paint();
 
   // each row applies when it changes; a refused one goes back to what was kept
-  if (pick) pick._control.addEventListener("change", () => {
+  pick._control.addEventListener("change", () => {
     const value = pick._control.value, was = saved.choice;
     paint();
-    put(VOICE_CHOICES.find((c) => c[0] === value)[2], () => { pick._control.value = was; paint(); }, () => { saved.choice = value; followApply(true); });
+    const back = () => { pick._control.value = was; paint(); };
+    if (remote) {
+      putVoice(REMOTE_VOICE_PAYLOAD[value], back, () => { saved.choice = value; });
+    } else {
+      put(VOICE_CHOICES.find((c) => c[0] === value)[2], back, () => { saved.choice = value; followApply(true); });
+    }
   });
   speaker._control.addEventListener("change", () => {
     const bad = voiceSpeaker(speaker._control.value);
