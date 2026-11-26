@@ -46,8 +46,8 @@ def on_line(line: bytes):
         kind, pin = line.split()
         if (pin == b"H") != st.settings["panel_swap"]:  # yellow: advance, a long press saves
             flow.on_yellow(kind == b"L")
-        else:  # red: cancel, short or long
-            flow.on_red()
+        else:  # red: cancel, short or long (long at weigh/ready rejects AI match)
+            flow.on_red(True) if kind == b"L" else flow.on_red()
     elif line.startswith(b"AIR "):
         air.on_air(line)
     elif line.startswith(b"W "):  # a scale on the panel
@@ -89,7 +89,7 @@ def on_scale(line: bytes):
     with st.lock:
         st.state.update(scale={"grams": round(grams, 1), "status": "stable" if settled else "moving", "unit": 2,
                                "stable": settled}, scale_at=now)
-        if settled and grams >= st.MIN_GRAMS:
+        if settled and grams >= st.settings.get("min_grams", st.MIN_GRAMS):
             st.state.update(last=round(grams, 1), last_at=now)
         st.panel_scale["on"] = True
     st.panel_dirty.set()

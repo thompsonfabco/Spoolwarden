@@ -60,7 +60,8 @@ def test_the_catalogue_has_the_expected_number_of_kinds():
 def test_every_condition_has_a_raising_and_a_clearing_kind():
     raises = {k.base for k in ek.KINDS.values() if k.condition == R}
     clears = {k.base for k in ek.KINDS.values() if k.condition == C and not k.key_from_data}
-    assert raises == clears == {"print-paused", "printer-offline", "spool-low", "storage-low", "device-down", "check"}
+    assert raises == clears == {"print-paused", "printer-offline", "spool-low", "storage-low", "device-down", "check",
+                              "humidity-high"}
 
 
 def test_severities_are_only_the_four_banner_kinds():

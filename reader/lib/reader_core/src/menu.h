@@ -42,29 +42,34 @@ class Button {
 };
 
 // ---- menu ---------------------------------------------------------------------
-enum Mode { MODE_SLOTS, MODE_PRINTERS };
+enum Mode { MODE_SLOTS, MODE_PRINTERS, MODE_ACTIONS };
 
 enum Action {
   ACT_NONE,
   ACT_SLOT_MOVED,    // show + (after settling) save the new slot
-  ACT_CURSOR_MOVED,  // redraw the printer list
+  ACT_CURSOR_MOVED,  // redraw the printer or action list
   ACT_RESEND,        // re-send the last tag to the shown slot
   ACT_OPEN_LIST,     // show the printer list
   ACT_CLOSE_LIST,    // back to the slot picker, printer unchanged
   ACT_PICK_PRINTER,  // a different printer was picked: save it, fetch its slots
   ACT_OTA,           // run the OTA check
   ACT_NO_PRINTERS,   // the list was asked for but there is nothing to show
+  ACT_OPEN_ACTIONS,  // show the slot quick-actions menu
+  ACT_ACTION_SP_INFO,// show spool info for the current slot
+  ACT_ACTION_UNLOAD, // unload the current slot
 };
 
-static const uint32_t LIST_TIMEOUT_MS = 20000;  // an untouched printer list closes itself
+static const uint32_t LIST_TIMEOUT_MS = 20000;  // an untouched printer/action list closes itself
 
 struct Menu {
   Mode mode = MODE_SLOTS;
-  int printer = 0;  // index into the printer list
-  int slot = 0;     // index into the selected printer's slots
-  int cursor = 0;   // highlighted printer while the list is open
+  int printer = 0;       // index into the printer list
+  int slot = 0;          // index into the selected printer's slots
+  int cursor = 0;        // highlighted printer while the list is open
+  int actionCursor = 0;  // highlighted quick action (0..2: Spool info, Unload slot, Back)
   uint32_t lastInput = 0;
 
+  Action openActions(uint32_t nowMs = 0);
   Action rotate(int detents, int nPrinters, int nSlots, uint32_t nowMs = 0);
   Action button(BtnEvent e, int nPrinters, uint32_t nowMs = 0);
   Action tick(uint32_t nowMs);

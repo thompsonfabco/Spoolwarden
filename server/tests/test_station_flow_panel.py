@@ -40,8 +40,8 @@ class FakeApi:
                          "display": ["Spool #123", "SUNLU PLA+ Black", "640 g left"]}
         return 200, {"known": False, "uid": uid, "display": ["New Tag Scanned"]}
 
-    def recognize(self, jpeg, uid=None):
-        self.calls.append(("recognize", jpeg, uid, flow.flow["step"]))
+    def recognize(self, photos, uid=None):
+        self.calls.append(("recognize", photos, uid, flow.flow["step"]))
         if self.during:
             self.during()
         if self.mode == "ok":
@@ -77,7 +77,7 @@ def rig(monkeypatch):
     with st.lock:
         saved_state, saved_flow = dict(st.state), dict(st.flow)
         st.state.update(tag=None, tag_at=None, scale=None, scale_at=None, last=None, last_at=None, held=None,
-                        held_at=None, blink_until=0, photo=None, photo_at=None)
+                        held_at=None, blink_until=0, photo=None, photo_at=None, photos=[])
         st.flow.update(step="idle", seq=0, spool=None, filament=None, display=[], message="", at=0.0)
     ser = Ser()
     monkeypatch.setitem(st.panel, "ser", ser)
@@ -137,7 +137,7 @@ def state_json():
 
 def recognised_and_weighed(rig, grams=1098.0):
     nfc.on_tag("4:bb:bb")
-    panel.on_line(b"P H")
+    panel.on_line(b"L H")
     scale(grams)
     panel.on_line(b"P H")
     assert rig.step() == "ready"
@@ -161,34 +161,70 @@ def test_yellow_with_no_tag_refused(rig):
 def test_new_tag_goes_to_the_camera(rig):
     nfc.on_tag("4:bb:bb")
     assert "B 2200 90" in rig.ser.lines and rig.step() == "camera"
-    assert rig.lamp() == "L 2 1" and rig.row(0) == "New Tag Scanned" and rig.row(3) == "press yellow"
+    assert rig.lamp() == "L 2 1" and rig.row(0) == "New Tag Scanned"
+    assert rig.row(1) == "Yellow: take photo" and rig.row(2) == "Hold yellow: AI" and rig.row(3) == ""
     assert rig.api.calls == [("tag", "4:bb:bb")]
     assert rig.said[-1] == "New tag. Show the spool to the camera."
 
 
 def test_long_press_outside_ready_does_nothing(rig):
-    nfc.on_tag("4:bb:bb")
+    nfc.on_tag(LINKED)
     panel.on_line(b"L H")
-    assert rig.step() == "camera" and not [c for c in rig.api.calls if c[0] != "tag"]
+    assert rig.step() == "weigh" and not [c for c in rig.api.calls if c[0] != "tag"]
+
+
+def test_short_press_yellow_at_camera_captures_and_accumulates_photos(rig):
+    nfc.on_tag("4:bb:bb")
+    panel.on_line(b"P H")
+    assert rig.step() == "camera" and len(st.state["photos"]) == 1 and st.state["photo"] == JPEG
+    assert rig.row(0) == "1 photo" and rig.row(1) == "Yellow: add photo" and rig.row(2) == "Hold yellow: AI"
+    assert rig.row(3) == "Red: cancel" and rig.row(4) == "1 photo - Hold: AI"
+    assert rig.said[-1] == "Photo 1. Press yellow for another, or hold yellow to recognise."
+    assert not [c for c in rig.api.calls if c[0] == "recognize"]
+
+    panel.on_line(b"P H")
+    assert rig.step() == "camera" and len(st.state["photos"]) == 2
+    assert rig.row(0) == "2 photos" and rig.row(4) == "2 photos - Hold: AI"
+    assert rig.said[-1] == "Photo 2. Press yellow for another, or hold yellow to recognise."
+
+    panel.on_line(b"L H")
+    (_, photos, uid, during), = [c for c in rig.api.calls if c[0] == "recognize"]
+    assert (photos, uid, during) == ([JPEG, JPEG], "4:bb:bb", "recognising")
+    assert rig.step() == "weigh"
+
+
+def test_camera_caps_at_max_station_photos(rig):
+    nfc.on_tag("4:bb:bb")
+    for _ in range(st.MAX_STATION_PHOTOS):
+        panel.on_line(b"P H")
+    assert rig.step() == "camera" and len(st.state["photos"]) == st.MAX_STATION_PHOTOS
+    panel.on_line(b"P H")
+    assert rig.step() == "camera" and len(st.state["photos"]) == st.MAX_STATION_PHOTOS
+    assert rig.row(4) == f"Max {st.MAX_STATION_PHOTOS} photos"
+    assert rig.said[-1] == "Maximum photos taken. Hold yellow to recognise."
+    assert "B 400 250" in rig.ser.lines
+    panel.on_line(b"L H")
+    (_, photos, _, _), = [c for c in rig.api.calls if c[0] == "recognize"]
+    assert len(photos) == st.MAX_STATION_PHOTOS and rig.step() == "weigh"
 
 
 def test_yellow_at_camera_recognises(rig):
     nfc.on_tag("4:bb:bb")
-    panel.on_line(b"P H")
-    (_, jpeg, uid, during), = [c for c in rig.api.calls if c[0] == "recognize"]
-    assert (jpeg, uid, during) == (JPEG, "4:bb:bb", "recognising")  # yellow rapid while it runs
+    panel.on_line(b"L H")
+    (_, photos, uid, during), = [c for c in rig.api.calls if c[0] == "recognize"]
+    assert (photos, uid, during) == ([JPEG], "4:bb:bb", "recognising")  # yellow rapid while it runs
     assert flow.STEP_LAMPS["recognising"] == (4, 1)
     assert rig.step() == "weigh"
     assert rig.row(0) == "Recognised" and rig.row(1) == "Elegoo PLA Galaxy Blu"  # cut to 21 characters
-    assert rig.row(3) == "Scale, then yellow" and rig.lamp() == "L 2 1"
-    assert rig.said[-1] == "Recognised Elegoo PLA Galaxy Blue. Put it on the scale."
+    assert rig.row(3) == "Scale+Yel/HoldRed:No" and rig.lamp() == "L 2 1"
+    assert rig.said[-1] == "Recognised Elegoo PLA Galaxy Blue. Put it on the scale, or hold red to reject."
     s = state_json()
     assert s["flow"]["step"] == "weigh" and s["flow"]["filament"] == FIL and s["photo"]["url"] == "/photo"
 
 
 def test_weighing_needs_a_settled_spool(rig):
     nfc.on_tag("4:bb:bb")
-    panel.on_line(b"P H")
+    panel.on_line(b"L H")
     panel.on_line(b"P H")
     assert rig.step() == "weigh" and rig.row(4) == "Scale not settled"
     scale(1098.0, "moving")
@@ -266,6 +302,40 @@ def test_red_when_idle_only_buzzes(rig):
     assert "B 400 250" in rig.ser.lines and rig.said == [] and rig.step() == "idle"
 
 
+def test_long_press_red_at_weigh_rejects_ai_match(rig):
+    nfc.on_tag("4:bb:bb")
+    panel.on_line(b"P H")
+    panel.on_line(b"L H")
+    assert rig.step() == "weigh" and flow.flow["filament"] == FIL and flow.flow["spool"] is None
+    panel.on_line(b"L D")
+    assert rig.step() == "camera" and rig.row(4) == "Match rejected, retry"
+    assert st.state["photos"] == [] and st.state["photo"] is None and st.state["held"] is None
+    assert flow.flow["filament"] is None and st.state["tag"] == "4:bb:bb"
+    assert rig.said[-1] == "Match rejected. Take new photos."
+
+
+def test_long_press_red_at_ready_rejects_ai_match(rig):
+    recognised_and_weighed(rig)
+    assert rig.step() == "ready" and st.state["held"] == 1098.0
+    panel.on_line(b"L D")
+    assert rig.step() == "camera" and rig.row(4) == "Match rejected, retry"
+    assert st.state["photos"] == [] and st.state["photo"] is None and st.state["held"] is None
+    assert flow.flow["filament"] is None and st.state["tag"] == "4:bb:bb"
+
+
+def test_short_press_red_on_ai_match_cancels_to_idle(rig):
+    recognised_and_weighed(rig)
+    panel.on_line(b"P D")
+    assert rig.step() == "idle" and st.state["tag"] is None and rig.said[-1] == "Cancelled."
+
+
+def test_long_press_red_on_known_spool_cancels_to_idle(rig):
+    nfc.on_tag(LINKED)
+    assert rig.step() == "weigh" and flow.flow["spool"]["id"] == 123
+    panel.on_line(b"L D")
+    assert rig.step() == "idle" and st.state["tag"] is None and rig.said[-1] == "Cancelled."
+
+
 def test_a_new_scan_restarts_the_flow(rig):
     recognised_and_weighed(rig)
     nfc.on_tag(LINKED)
@@ -278,17 +348,17 @@ def test_a_new_scan_restarts_the_flow(rig):
 def test_no_match_back_to_the_camera(rig):
     rig.api.mode = "no_match"
     nfc.on_tag("4:cc:cc")
-    panel.on_line(b"P H")
+    panel.on_line(b"L H")
     assert rig.step() == "camera" and rig.row(4) == "No match" and rig.said[-1] == "Not recognised. Try again."
     rig.api.mode = "down"
-    panel.on_line(b"P H")
+    panel.on_line(b"L H")
     assert rig.step() == "camera" and rig.row(4) == server_api.UNREACHABLE[0]
 
 
 def test_no_recognizer_says_use_phone(rig):
     rig.api.mode = "no_ai"
     nfc.on_tag("4:cc:cc")
-    panel.on_line(b"P H")
+    panel.on_line(b"L H")
     assert rig.step() == "phone" and rig.row(0) == "Use phone" and rig.row(1) == "No AI on server"
     assert rig.row(2) == "" and rig.row(3) == "Red: start over" and rig.lamp() == "L 0 1"  # "use phone" dropped
     panel.on_line(b"P H")
@@ -327,7 +397,7 @@ def test_not_paired_or_unreachable_says_use_phone(rig, monkeypatch, tmp_path):
 def test_a_late_recognition_after_red_is_dropped(rig):
     nfc.on_tag("4:ee:ee")
     rig.api.during = flow.on_red  # red pressed while the server reads the photo
-    panel.on_line(b"P H")
+    panel.on_line(b"L H")
     assert rig.step() == "idle" and flow.flow["filament"] is None and rig.said[-1] == "Cancelled."
 
 
@@ -415,7 +485,7 @@ def test_no_server_call_when_the_step_change_was_dropped(rig, monkeypatch):
     assert started == []
     with st.lock:
         st.flow["step"] = "camera"
-    panel.on_line(b"P H")
+    panel.on_line(b"L H")
     assert started == []
 
 
@@ -504,20 +574,20 @@ def test_tag_not_linked_keeps_the_spool_and_the_retry_sends_it(rig):
 def test_recognise_says_the_hubs_speak_text_when_there_is_one(rig, monkeypatch):
     real = rig.api.recognize
 
-    def with_speak(jpeg, uid=None):
-        status, r = real(jpeg, uid)
+    def with_speak(photos, uid=None):
+        status, r = real(photos, uid)
         return status, {**r, "speak": "Recognised Elegoo P L A Galaxy Blue"}
     monkeypatch.setattr(rig.api, "recognize", with_speak)
     nfc.on_tag("4:bb:bb")
-    panel.on_line(b"P H")
+    panel.on_line(b"L H")
     assert rig.row(1) == "Elegoo PLA Galaxy Blu"  # the screen keeps "PLA"
-    assert rig.said[-1] == "Recognised Elegoo P L A Galaxy Blue. Put it on the scale."
+    assert rig.said[-1] == "Recognised Elegoo P L A Galaxy Blue. Put it on the scale, or hold red to reject."
 
 
 def test_an_older_hub_without_speak_is_spoken_from_the_display_lines(rig):
     nfc.on_tag("4:bb:bb")
-    panel.on_line(b"P H")
-    assert rig.said[-1] == "Recognised Elegoo PLA Galaxy Blue. Put it on the scale."
+    panel.on_line(b"L H")
+    assert rig.said[-1] == "Recognised Elegoo PLA Galaxy Blue. Put it on the scale, or hold red to reject."
 
 
 # --- a checked-out spool opens the weigh step in returning mode ---------------------------------------------
@@ -761,7 +831,7 @@ def test_a_panel_scale_is_used_when_the_computer_has_none(rig, monkeypatch):
     panel_scale(1098.0)
     nfc.on_tag("4:ee:ee")
     assert rig.step() == "camera"  # a scale exists: the new tag is recognised as usual
-    panel.on_line(b"P H")
+    panel.on_line(b"L H")
     assert rig.step() == "weigh"
     panel_scale(12.0)  # an empty pan
     panel.on_line(b"P H")

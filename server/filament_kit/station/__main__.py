@@ -12,6 +12,7 @@ import sys
 import threading
 from http.server import ThreadingHTTPServer
 
+from .. import config, logging_cfg
 from . import beep, camera, flow, http, nfc, page, panel, scale, server_api, settings, speech
 from . import state as st
 
@@ -61,7 +62,11 @@ def make_server(port: int, handler):
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    try:
+        cfg = config.load()
+    except (OSError, ValueError):
+        cfg = {}
+    logging_cfg.configure(cfg, logger_name="intake-station")
     s = st.settings
     log.info("scan beep: %s", (s["beep_device"] or beep.beep_device() or "no speaker output found")
              if s["beep"] else "off")

@@ -146,8 +146,10 @@ def _move_marker(src: store.AppDirs, dst: store.AppDirs) -> None:
 REPORTED_FAILURES = {"no_studio": "error_no_studio", "server": "error_server", "crash": "error_crash"}
 
 
-def report_failure(dirs: store.AppDirs, c, outcome: str) -> None:
+def report_failure(dirs: store.AppDirs, c, outcome: str, role: str = "auto") -> None:
     """Tell the server once per failure kind, and again at most hourly; never changes the run."""
+    if role == "secondary":
+        return
     st = load_state(dirs)
     hb = st.get("heartbeat") or {}
     if hb.get("outcome") == outcome and time.time() - float(hb.get("at") or 0) < HEARTBEAT_EVERY:
@@ -200,15 +202,16 @@ ORCA_NO_TARGET = ("the server makes no Orca Slicer presets (no Orca printers are
 
 
 class _Run:
-    def __init__(self, client, folders: StudioFolders, dirs: store.AppDirs, running, install, now: float,
+    def __init__(self, client, folders: StudioFolders | None, dirs: store.AppDirs, running, install, now: float,
                  echo: Callable[[str], None] | None, orca: OrcaFolders | None = None,
                  orca_running: Callable[[], bool] | None = None, others: list[StudioFolders] | None = None,
-                 secondaries: bool = True, change_reason: str | None = None):
+                 secondaries: bool = True, change_reason: str | None = None, role: str = "auto"):
         self.c, self.f, self.d = client, folders, dirs
         self.running, self.install_fn, self.now, self.echo = running, install, now, echo
         self.o, self.orca_running = orca, orca_running or (lambda: False)
-        self.others = list(others or [])                        # the other usable Bambu Studio folders
-        self.sec = self.others if secondaries else []           # the ones installed into
+        self.others = list(others or []) if folders is not None else []   # the other usable Bambu Studio folders
+        self.sec = self.others if (secondaries and folders is not None) else []  # the ones installed into
+        self.role = role
         self.st = load_state(dirs)
         self.uploaded = False
         self.change_reason = change_reason      # why the primary is not the recorded folder (studio.primary)
@@ -267,6 +270,8 @@ class _Run:
     def _heartbeat(self, outcome: str, since: float | None, app: str | None) -> None:
         """Tell the server: at most one an hour while waiting, once when the wait is over. A heartbeat
         that cannot be sent is logged and never changes the run."""
+        if self.role == "secondary":
+            return
         hb = self.st.get("heartbeat") or {}
         if (outcome == "studio_running" and hb.get("outcome") == outcome
                 and self.now - float(hb.get("at") or 0) < HEARTBEAT_EVERY):
@@ -356,8 +361,9 @@ class _Run:
             self.log(f"the server's hash of the {label} ({returned}) differs from this PC's ({here})")
 
     def upload_live(self) -> None:
-        here = self._tree_hash(self.f.user_filament)
-        self._send("live", zips.pack(self.f.user_filament, LIVE_MAX), here)
+        if self.f is not None:
+            here = self._tree_hash(self.f.user_filament)
+            self._send("live", zips.pack(self.f.user_filament, LIVE_MAX), here)
         if self.orca_on and self.o is not None:
             h = None
             try:
@@ -404,17 +410,21 @@ class _Run:
             self.save()
         return True
 
-    def uploads(self, server: dict) -> str:
-        here = self._tree_hash(self.f.user_filament)
-        system = self._tree_hash(self.f.system_filament)
+    def uploads(self, server: dict) -> str | None:
+        if self.f is not None:
+            here = self._tree_hash(self.f.user_filament)
+            system = self._tree_hash(self.f.system_filament)
+            # all checked against the limits before any is sent
+            owed = bool(self.st.get("live_owed") or self.st.get("fresh_owed"))   # an install was reported (or the
+            # folder changed: its first sync); the live upload did not arrive yet
+            live_zip = (zips.pack(self.f.user_filament, LIVE_MAX)
+                        if owed or self._needs_upload("live", here, server.get("live_hash")) else None)
+            sys_zip = (zips.pack(self.f.system_filament, SYSTEM_MAX)
+                       if self._needs_upload("system", system, server.get("system_hash")) else None)
+        else:
+            here = system = None
+            live_zip = sys_zip = None
         self.orca_on = self._orca_wanted(server)
-        # all checked against the limits before any is sent
-        owed = bool(self.st.get("live_owed") or self.st.get("fresh_owed"))   # an install was reported (or the
-        # folder changed: its first sync); the live upload did not arrive yet
-        live_zip = (zips.pack(self.f.user_filament, LIVE_MAX)
-                    if owed or self._needs_upload("live", here, server.get("live_hash")) else None)
-        sys_zip = (zips.pack(self.f.system_filament, SYSTEM_MAX)
-                   if self._needs_upload("system", system, server.get("system_hash")) else None)
         orca = []
         self._orca_system_fp = None
         if self.orca_on:
@@ -484,7 +494,7 @@ class _Run:
 
     # --- rebuild requests -----------------------------------------------------------------
 
-    def request(self, here: str) -> bool:
+    def request(self, here: str | None) -> bool:
         """Ask for a rebuild for `here` unless one was asked less than 15 min ago for the same live presets
         (Bambu Studio's, and Orca Slicer's when it is synced); True when sent."""
         req = self.st.get("requested") or {}
@@ -492,11 +502,13 @@ class _Run:
         if (req.get("live_hash") == here and req.get("orca_live_hash") == orca
                 and self.now - float(req.get("at") or 0) < REQUEST_RETRY):
             return False
-        if orca is not None:
+        if here is None or orca is not None:
             self.c.rebuild(here, orca)
         else:
             self.c.rebuild(here)
-        self.st["requested"] = {"live_hash": here, "at": self.now}
+        self.st["requested"] = {"at": self.now}
+        if here is not None:
+            self.st["requested"]["live_hash"] = here
         if orca is not None:
             self.st["requested"]["orca_live_hash"] = orca
         self.save()
@@ -505,7 +517,7 @@ class _Run:
     # --- install --------------------------------------------------------------------------
 
     def report(self, stamp: str, trees: list[str] | None = None, written: dict | None = None) -> None:
-        trees = list(trees) if trees else ["base"]
+        trees = list(trees) if trees else (["base"] if self.f is not None else ["orca"])
         written = written if isinstance(written, dict) else None    # owed by an older PC sync: it wrote them all
         self.st["report"] = stamp
         self.st["report_trees"] = trees
@@ -546,6 +558,8 @@ class _Run:
         out = {}
         for tree in ("base", "orca"):
             names = acc.get(tree)
+            if tree == "base" and self.f is None:
+                continue
             if tree == "orca" and not self.orca_on:
                 continue
             if isinstance(names, list) and any(isinstance(n, str) for n in names):
@@ -560,6 +574,8 @@ class _Run:
         kw = {"orca": self.o, "orca_running": self.orca_running} if with_orca else {}
         if accept:
             kw["accept"] = accept
+        if self.role == "secondary":
+            kw["secondary"] = True
         try:
             res = self.install_fn(build_dir, self.f, self.d, running=self.running,
                                   stamp_now=time.strftime("%Y%m%d-%H%M%S", time.localtime(self.now)),
@@ -573,11 +589,13 @@ class _Run:
                 return self.finish("studio_running", f"{app} started; build {stamp} not installed yet", app)
             self._clear_marker()
             detail = f"install of build {stamp} refused ({e.code}): {e.reason}"
-            if e.code == "stale_build" and self.request(self._tree_hash(self.f.user_filament)):
+            if (e.code == "stale_build" and self.role != "secondary"
+                    and self.request(self._tree_hash(self.f.user_filament) if self.f is not None else None)):
                 detail += "; asked for a rebuild"     # server and PC disagree: only a new build can settle it
             return self.finish("refused", detail)
         # an OSError propagates with the marker kept: the next run resumes this install (or not, see run())
-        self._tree_cache.pop(self.f.user_filament, None)
+        if self.f is not None:
+            self._tree_cache.pop(self.f.user_filament, None)
         if self.o is not None:
             self._tree_cache.pop(self.o.user_filament, None)
         self._clear_marker()
@@ -588,19 +606,23 @@ class _Run:
         if self.o is not None:
             self.st["stale_orca"] = stale_orca
         self.st.pop("requested", None)
-        trees = ["base", "orca"] if with_orca and (build_dir / "orca").is_dir() else ["base"]
-        written = {"base": list(res.installed)}
+        trees = (["base"] if self.f is not None else []) + (["orca"] if with_orca and (build_dir / "orca").is_dir() else [])
+        written = {}
+        if "base" in trees:
+            written["base"] = list(res.installed)
         if "orca" in trees:
             written["orca"] = installed_orca
         kept = list(getattr(res, "kept", []) or []) + list(getattr(res, "kept_orca", []) or [])
         # orca_synced: Orca was synced and the build made from its presets (its orca/ in, or it had none)
         self.st["installed"] = {"stamp": stamp, "at": self.now, "trees": trees, "orca_synced": bool(with_orca)}
-        self.st["report"] = stamp
-        self.st["report_trees"] = trees
-        self.st["report_written"] = written
-        self.st["live_owed"] = True             # until upload_live() succeeds
-        if installed_orca:
-            self.st["orca_live_owed"] = True
+        if self.role != "secondary":
+            self.st["report"] = stamp
+            self.st["report_trees"] = trees
+            self.st["report_written"] = written
+            if self.f is not None:
+                self.st["live_owed"] = True             # until upload_live() succeeds
+            if installed_orca:
+                self.st["orca_live_owed"] = True
         self.st["differing"] = list(getattr(res, "differing", []) or [])
         self.save()
         if res.stale:
@@ -612,13 +634,20 @@ class _Run:
         if kept:
             self.log(f"{len(kept)} presets are already in the slicer and were left as they are (their updates, if "
                      "any, are listed on the Hub: spoolwarden profiles status)")
-        self._log_differing(self.f, stamp, self.st["differing"])
-        self.report(stamp, trees, written)  # first: a failed report must not leave the new live folder uploaded
-        self.upload_live()
+        if self.f is not None:
+            self._log_differing(self.f, stamp, self.st["differing"])
+        if self.role != "secondary":
+            self.report(stamp, trees, written)  # first: a failed report must not leave the new live folder uploaded
+            self.upload_live()
         self.secondaries(stamp, build_dir, (accept or {}).get("base"))
+        backup_name = (res.backup.name if res.backup is not None
+                       else (res.backup_orca.name if res.backup_orca is not None else "none"))
+        if self.f is None:
+            return self.finish("installed", f"installed build {stamp} ({len(installed_orca)} Orca Slicer presets "
+                                            f"written, {len(kept)} kept, backup {backup_name})")
         orca = f", {len(installed_orca)} Orca Slicer presets" if installed_orca else ""
         return self.finish("installed", f"installed build {stamp} ({len(res.installed)} presets{orca} written, "
-                                        f"{len(kept)} kept, backup {res.backup.name})")
+                                        f"{len(kept)} kept, backup {backup_name})")
 
     def install(self, stamp: str, accepted: set[str], accept: dict | None = None,
                 orca_extra: set | None = None, updates_only: bool = False) -> str:
@@ -630,7 +659,8 @@ class _Run:
             build_dir, meta = self._download(stamp, work)
             if build_dir is None:
                 return self.finish("refused", meta)
-            if meta.get("stamp") not in (None, stamp) or meta.get("live_hash") not in (None, *accepted):
+            if (meta.get("stamp") not in (None, stamp)
+                    or (self.f is not None and meta.get("live_hash") not in (None, *accepted))):
                 return self.finish("refused", f"build {stamp}: its BUILD.json does not match the server's state")
             orca_ok = self.orca_accepted()
             if orca_ok is not None and orca_extra:
@@ -639,6 +669,8 @@ class _Run:
             if not with_orca and self.o is not None and (build_dir / "orca").is_dir():
                 why = ("Orca Slicer is not synced this run" if orca_ok is None
                        else "the build was not made from your current Orca Slicer presets")
+                if self.f is None:
+                    return self.finish("refused", f"build {stamp}: {why}")
                 self.log(f"Orca presets not installed this run ({why}); Bambu Studio presets are")
             if accept and not with_orca:
                 accept = {t: v for t, v in accept.items() if t != "orca"} or None
@@ -667,16 +699,17 @@ class _Run:
                 self._clear_marker()
                 self.log(f"interrupted install not resumed: {meta}")
                 return None
-            backup = self.d.backups / str(marker.get("backup") or "\0missing")
-            live = self.f.user_filament / "base"
             edited = []
-            for p in sorted((build_dir / "base").glob("*.json")):
-                now = _read_bytes(live / p.name)
-                if now == p.read_bytes():
-                    continue
-                if backup.is_dir() and now == _read_bytes(backup / "base" / p.name):
-                    continue  # untouched since the backup (missing in both also matches)
-                edited.append(p.stem)
+            if self.f is not None:
+                backup = self.d.backups / str(marker.get("backup") or "\0missing")
+                live = self.f.user_filament / "base"
+                for p in sorted((build_dir / "base").glob("*.json")):
+                    now = _read_bytes(live / p.name)
+                    if now == p.read_bytes():
+                        continue
+                    if backup.is_dir() and now == _read_bytes(backup / "base" / p.name):
+                        continue  # untouched since the backup (missing in both also matches)
+                    edited.append(p.stem)
             edited_orca = []
             if self.o is not None and (build_dir / "orca").is_dir() and marker.get("orca", True) is not False:
                 obackup = self.d.orca_backups / str(marker.get("backup") or "\0missing")
@@ -731,10 +764,13 @@ class _Run:
     # --- the run --------------------------------------------------------------------------
 
     def run(self) -> str:
-        if self.running():
+        if self.f is not None and self.running():
             return self.finish("studio_running", "Bambu Studio is open; trying again next run")
-        self.check_folder()
+        if self.f is not None:
+            self.check_folder()
         server = self.c.state()
+        if self.role == "secondary":
+            return self._run_secondary(server)
         owner, you = server.get("owner"), server.get("you")
         if owner not in (None, you):
             return self._other_pc(f"the server's sync PC is device {owner}")
@@ -767,7 +803,7 @@ class _Run:
         stamp = build.get("stamp")
         installed = (server.get("installed") or {}).get("stamp")
         if installed == stamp:
-            done = self._orca_catch_up(stamp, build, here, server)
+            done = self._orca_catch_up(stamp, build, here, server) if self.f is not None else None
             if done is not None:
                 return done
             if self.changed_since_install():
@@ -783,12 +819,25 @@ class _Run:
                 # the owner accepted updates of this installed build (nothing changed in the app since): install it
                 # again with them; the presets it installed are unchanged, so its own live hashes count
                 self.log(f"writing {sum(len(v) for v in accept.values())} updates you accepted for build {stamp}")
-                return self.install(stamp, self.accepted_hashes(here) | {build.get("live_hash")}, accept,
+                accepted_set = (self.accepted_hashes(here) | {build.get("live_hash")}) if here is not None else set()
+                return self.install(stamp, accepted_set, accept,
                                     orca_extra={build.get("orca_live_hash")}, updates_only=True)
             self.secondaries(stamp)
             if self.uploaded:
                 return self.finish("uploaded", f"build {stamp} is installed; the server has your latest presets")
             return self.finish("up_to_date", f"build {stamp} is installed")
+        if self.f is None:
+            orca_ok = self.orca_accepted()
+            if orca_ok is None:
+                note = (self.st.get("orca") or {}).get("note") or "Orca Slicer is not synced this run"
+                return self.finish("uploaded" if self.uploaded else "up_to_date", note)
+            if build.get("orca_live_hash") not in orca_ok:
+                if self.request(here):
+                    return self.finish("rebuild_requested",
+                                       f"build {stamp} predates your latest {self._apps()} presets; asked for a rebuild")
+                return self.finish("waiting", f"waiting for the rebuild asked at "
+                                              f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.st['requested']['at']))}")
+            return self.install(stamp, set(), self.accepted(server, stamp))
         accepted = self.accepted_hashes(here)
         if build.get("live_hash") not in accepted:  # only Bambu Studio gates the install
             if self.request(here):
@@ -801,6 +850,52 @@ class _Run:
                 and self.request(here):
             self.log(f"build {stamp} predates your latest Orca Slicer presets; asked for a rebuild")
         return self.install(stamp, accepted, self.accepted(server, stamp))
+
+    def _run_secondary(self, server: dict) -> str:
+        """Pull-only sync for a secondary PC: never uploads, never asks for a rebuild, never reports installed or
+        heartbeats; tracks its own installed stamp locally in state.json['installed']."""
+        if self._orca_wanted(server) and self.orca_running():
+            return self.finish("studio_running", "Orca Slicer is open; trying again next run", ORCA)
+
+        marker = self._marker()
+        if marker is not None:
+            done = self.resume(marker)
+            if done is not None:
+                return done
+            server = self.c.state()
+
+        self.orca_on = self._orca_wanted(server)
+        build = server.get("build")
+        if not build:
+            return self.finish("no_build", "no build on the server yet")
+        stamp = build.get("stamp")
+        local_installed = (self.st.get("installed") or {}).get("stamp")
+        if local_installed == stamp:
+            if self.f is not None and self.orca_on and not self._orca_went_in(stamp):
+                return self._install_secondary(stamp, server)
+            self.secondaries(stamp)
+            return self.finish("up_to_date", f"build {stamp} is installed")
+        if self.f is None and not self.orca_on:
+            note = (self.st.get("orca") or {}).get("note") or "Orca Slicer is not synced this run"
+            return self.finish("up_to_date", note)
+        return self._install_secondary(stamp, server)
+
+    def _install_secondary(self, stamp: str, server: dict) -> str:
+        work = Path(tempfile.mkdtemp(prefix=".download.", suffix=".tmp", dir=self.d.base))
+        try:
+            build_dir, meta = self._download(stamp, work)
+            if build_dir is None:
+                return self.finish("refused", meta)
+            if meta.get("stamp") not in (None, stamp):
+                return self.finish("refused", f"build {stamp}: its BUILD.json does not match the server's state")
+            with_orca = self.orca_on and self.o is not None and (build_dir / "orca").is_dir()
+            if not with_orca and self.o is not None and (build_dir / "orca").is_dir() and self.f is None:
+                why = (self.st.get("orca") or {}).get("note") or "Orca Slicer is not synced this run"
+                return self.finish("refused", f"build {stamp}: {why}")
+            accept = self.accepted(server, stamp)
+            return self._install(stamp, build_dir, resuming=False, with_orca=with_orca, accept=accept)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
 
     # --- the other Bambu Studio folders -------------------------------------------
 
@@ -1029,14 +1124,16 @@ class _Run:
         return self.finish("waiting", f"waiting for the rebuild asked at {at}")
 
     def _apps(self) -> str:
-        return "Bambu Studio / Orca Slicer" if self.orca_on else "Bambu Studio"
+        if self.f is None:
+            return ORCA
+        return f"{BAMBU} / {ORCA}" if self.orca_on else BAMBU
 
     def changed_since_install(self, orca: bool = True) -> bool:
         """A generated preset of the installed build differs from its live copy by inapp.diff, or is gone (Orca's
         only when Orca is synced this run)."""
-        if self._changed(self.d.installed / "base", self.f.user_filament / "base"):
+        if self.f is not None and self._changed(self.d.installed / "base", self.f.user_filament / "base"):
             return True
-        return orca and self.orca_on and self.o is not None             and self._changed(self.d.installed / "orca", self.o.user_filament)
+        return orca and self.orca_on and self.o is not None and self._changed(self.d.installed / "orca", self.o.user_filament)
 
     @staticmethod
     def _changed(snap: Path, live: Path) -> bool:
@@ -1174,18 +1271,55 @@ def apply_folder_updates(dirs: store.AppDirs, key: str, names: list[str] | None,
     return 0
 
 
-def run_once(client, folders: StudioFolders, dirs: store.AppDirs, *, running: Callable[[], bool],
+def watch_on_close(
+    run_fn: Callable[[], object],
+    *,
+    is_running: Callable[[], bool],
+    sleep: Callable[[float], None] = time.sleep,
+    interval: float = 2.0,
+    settle: float = 1.5,
+    max_ticks: int | None = None,
+    once: bool = False,
+) -> int:
+    """Poll `is_running()` every `interval` seconds; on a True -> False transition (slicer exited), wait `settle`
+    seconds and invoke `run_fn()`. Returns the number of sync runs triggered."""
+    was_running = False
+    ticks = 0
+    runs = 0
+    while max_ticks is None or ticks < max_ticks:
+        ticks += 1
+        running_now = bool(is_running())
+        if was_running and not running_now:
+            if settle > 0:
+                sleep(settle)
+            run_fn()
+            runs += 1
+            was_running = False
+            if once:
+                break
+        else:
+            was_running = running_now
+        if max_ticks is not None and ticks >= max_ticks:
+            break
+        if interval > 0:
+            sleep(interval)
+    return runs
+
+
+def run_once(client, folders: StudioFolders | None, dirs: store.AppDirs, *, running: Callable[[], bool],
              install=installer.install, now: float, echo: Callable[[str], None] | None = None,
              orca: OrcaFolders | None = None, orca_running: Callable[[], bool] | None = None,
              others: list[StudioFolders] | None = None, secondaries: bool = True,
-             change_reason: str | None = None) -> str:
+             change_reason: str | None = None, role: str = "auto") -> str:
     """`orca`: this PC's Orca Slicer folders (None: Bambu Studio only); `orca_running` its running check.
     `others`: this PC's other usable Bambu Studio folders (studio.secondaries); `secondaries` (config, default on):
     install each build into them too (off: only `folders`, the primary, is written). `change_reason`: why `folders`
-    is not the recorded primary (studio.primary), for the log line."""
+    is not the recorded primary (studio.primary), for the log line. `role`: 'auto', 'primary', or 'secondary'."""
+    if role not in store.VALID_ROLES:
+        raise ValueError(f"invalid sync role {role!r}; expected one of {', '.join(store.VALID_ROLES)}")
     dirs.ensure()
     r = _Run(client, folders, dirs, running, install, now, echo, orca, orca_running, others, secondaries,
-             change_reason)
+             change_reason, role=role)
     try:
         return r.run()
     except ApiError as e:

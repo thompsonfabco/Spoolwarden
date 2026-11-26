@@ -23,7 +23,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from . import alerts, config, events, output
+from . import alerts, config, events, iso_time, output
 
 log = logging.getLogger("filament_kit.alerts_api")
 
@@ -60,6 +60,9 @@ MESSAGES = {
     "alert_text_device_down": "Last answer {time}.",
     "alert_title_offline": "{printer} is offline",
     "alert_text_offline": "Last seen {time}.",
+    "alert_title_humidity_high": "High humidity: {source}",
+    "alert_text_humidity_high": "Humidity is {rh} % (limit {threshold} %).",
+    "alert_humidity_unknown": "Dry box",
     "alert_open_printer": "Open the printer",
     "alert_show_storage": "Show storage use",
     "alert_show_low": "Show running low",
@@ -102,6 +105,8 @@ MESSAGES = {
     "event_text_storage_ok": "{free} free of {total}.",
     "event_title_device_up": "{device} is answering again",
     "event_text_device_up": "It answers again.",
+    "event_title_humidity_ok": "Humidity is back to normal: {source}",
+    "event_text_humidity_ok": "Humidity is {rh} % (under {threshold} %).",
     "event_title_check_failed": "A check needs a look",
     "event_title_check_ok": "A check is fine again",
     "event_title_condition_cleared": "An alert ended",
@@ -214,6 +219,7 @@ MESSAGES = {
     "alerts_type_running_low": "Spool running low",
     "alerts_type_device_down": "Device stopped answering",
     "alerts_type_device_down_hint": "A Weigh Station or a printer stopped answering.",
+    "alerts_type_humidity": "High humidity",
     # refusals of a change to the alert settings (the Hub page, the command line)
     "alerts_error_body": "Send the alert settings as named values.",
     "alerts_error_unknown": "{field} is not an alert setting.",
@@ -398,6 +404,14 @@ def words(ev: dict) -> tuple[str, str]:
                 say("alert_text_device_down", time=when(ev.get("at", ""))))
     if kind == "printer.offline":
         return say("alert_title_offline", printer=_printer(ev)), say("alert_text_offline", time=when(ev.get("at", "")))
+    if kind == "humidity.high":
+        src = _d(ev, "source") or sub.get("name") or sub.get("id") or say("alert_humidity_unknown")
+        return (say("alert_title_humidity_high", source=src),
+                say("alert_text_humidity_high", rh=number(_d(ev, "rh")), threshold=number(_d(ev, "threshold"))))
+    if kind == "humidity.ok":
+        src = _d(ev, "source") or sub.get("name") or sub.get("id") or say("alert_humidity_unknown")
+        return (say("event_title_humidity_ok", source=src),
+                say("event_text_humidity_ok", rh=number(_d(ev, "rh")), threshold=number(_d(ev, "threshold"))))
     if kind == "print.started":
         return say("event_title_print_started", printer=_printer(ev)), say("event_text_print_started", job=_job(ev))
     if kind == "print.resumed":
@@ -505,10 +519,13 @@ ACTION_LABELS = {"printer": "alert_open_printer", "storage-use": "alert_show_sto
 
 def action_of(ev: dict) -> dict | None:
     """{place, id} of the place that fixes the event, None for a kind with none."""
+    sub = ev.get("subject") or {}
+    if ev.get("kind") == "humidity.high":
+        place = "printer" if sub.get("type") == "printer" else "devices"
+        return {"place": place, "id": sub.get("id") or ""}
     place = _ACTION.get(ev.get("kind", ""))
     if place is None:
         return None
-    sub = ev.get("subject") or {}
     return {"place": place, "id": "" if place == "storage-use" else (sub.get("id") or "")}
 
 
@@ -582,7 +599,8 @@ _tlock = threading.Lock()
 
 
 def test_body() -> dict:
-    return {"title": say("alert_test_title"), "text": say("alert_test_text")}
+    return {"title": say("alert_test_title"), "text": say("alert_test_text"),
+            "at": iso_time.utc_now().strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 
 def queue_test(caller: str) -> dict:
@@ -645,11 +663,13 @@ def alerts_view(settings: dict | None = None) -> dict:
                        "description": say("alerts_type_device_down_hint") if k == "device_down" else ""}
                       for k, kinds, _on in alerts.TYPES],
             "last_spool_only": s["last_spool_only"], "running_low_g": s["running_low_g"],
-            "storage_warn_percent": s["storage_warn_percent"], "storage_bad_percent": s["storage_bad_percent"]}
+            "storage_warn_percent": s["storage_warn_percent"], "storage_bad_percent": s["storage_bad_percent"],
+            "humidity_high_pct": s["humidity_high_pct"]}
 
 
 _NUMBERS = {"running_low_g": (alerts.LOW_G_MIN, alerts.LOW_G_MAX), "storage_warn_percent": (1, 99),
-            "storage_bad_percent": (2, 100)}
+            "storage_bad_percent": (2, 100),
+            "humidity_high_pct": (alerts.HUMIDITY_PCT_MIN, alerts.HUMIDITY_PCT_MAX)}
 
 
 def whole(value, low: int, high: int, field: str | None = None) -> int:

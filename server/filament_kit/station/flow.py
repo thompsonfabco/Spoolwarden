@@ -98,9 +98,9 @@ def scale_reading(computer):
 
 
 def weight_now(computer):
-    """The scale's reading if it is a settled spool (stable, over MIN_GRAMS), else None (callers hold the lock)."""
+    """The scale's reading if it is a settled spool (stable, over min_grams), else None (callers hold the lock)."""
     sc = scale_reading(computer)
-    return sc["grams"] if sc and sc["status"] == "stable" and sc["grams"] >= st.MIN_GRAMS else None
+    return sc["grams"] if sc and sc["status"] == "stable" and sc["grams"] >= st.settings.get("min_grams", st.MIN_GRAMS) else None
 
 
 def on_tag(nfc_id):
@@ -108,7 +108,7 @@ def on_tag(nfc_id):
     with st.lock:
         flow["seq"] += 1
         seq = flow["seq"]
-        st.state.update(tag=nfc_id, tag_at=time.time(), held=None, held_at=None, photo=None, photo_at=None)
+        st.state.update(tag=nfc_id, tag_at=time.time(), held=None, held_at=None, photo=None, photo_at=None, photos=[])
         flow.update(spool=None, filament=None, display=[], returning=False)
     log.info("tag %s", nfc_id)
     beep.beep("scan")
@@ -138,11 +138,17 @@ def lookup(seq, nfc_id):
         speech.say("The server can't help. Use the phone.")
 
 
-def recognise(seq, nfc_id):
-    """Picture -> the server's recognition (Claude): the filament, or why not."""
+def capture_photo(seq):
+    """Take one spool photo and stay in camera so the user can add more or hold yellow to recognise."""
     with st.lock:
-        if seq != flow["seq"]:  # red or a new tag since yellow: nothing to recognise
+        if seq != flow["seq"] or flow["step"] != "camera":
             return
+        full = len(st.state.get("photos") or []) >= st.MAX_STATION_PHOTOS
+    if full:
+        go("camera", seq, message=f"Max {st.MAX_STATION_PHOTOS} photos")
+        beep.beep("nothing")
+        speech.say("Maximum photos taken. Hold yellow to recognise.")
+        return
     jpeg, err = camera.grab_photo()
     if not jpeg:
         if err == "no camera":
@@ -154,21 +160,56 @@ def recognise(seq, nfc_id):
     with st.lock:
         if seq != flow["seq"]:
             return
-        st.state.update(photo=jpeg, photo_at=time.time())
-    status, r = api().recognize(jpeg, nfc_id)
+        if not isinstance(st.state.get("photos"), list):
+            st.state["photos"] = []
+        st.state["photos"].append(jpeg)
+        st.state["photo"] = jpeg
+        st.state["photo_at"] = time.time()
+        n = len(st.state["photos"])
+    go("camera", seq, message=f"{n} photo{'s' if n != 1 else ''} - Hold: AI")
+    beep.beep("hold")
+    speech.say(f"Photo {n}. Press yellow for another, or hold yellow to recognise.")
+
+
+def recognise(seq, nfc_id):
+    """Picture(s) -> the server's recognition (Claude): the filament, or why not."""
+    with st.lock:
+        if seq != flow["seq"]:  # red or a new tag since yellow: nothing to recognise
+            return
+        photos = list(st.state.get("photos") or [])
+    if not photos:
+        jpeg, err = camera.grab_photo()
+        if not jpeg:
+            if err == "no camera":
+                go("phone", seq, display=["No camera"])
+            else:
+                go("camera", seq, message="Camera failed, retry")
+            beep.beep("nothing")
+            return
+        with st.lock:
+            if seq != flow["seq"]:
+                return
+            st.state.update(photo=jpeg, photo_at=time.time(), photos=[jpeg])
+            photos = [jpeg]
+    status, r = api().recognize(photos, nfc_id)
     d = r.get("display") or []
     if status == 200:  # low confidence too: its "?" is in the display, and the save still goes through
         if go("weigh", seq, filament=r.get("item"), display=d):
             beep.beep("hold")
             # the server's `speak` (the material spelled for the voice); an older Hub sends none: the display lines
             said = r.get("speak") or " ".join(d[:2])
-            speech.say(said + ". Put it on the scale." if said else "Recognised. Put it on the scale.")
+            speech.say((said + ". Put it on the scale, or hold red to reject.") if said
+                       else "Recognised. Put it on the scale, or hold red to reject.")
     elif status == 409:  # no recognizer: ai_intake is off
         if go("phone", seq, display=d):
             speech.say("No recognition available. Use the phone.")
-    elif go("camera", seq, message=d[0] if d else "No match, retry"):  # no match, failed, cap, unreachable
-        beep.beep("nothing")
-        speech.say("Not recognised. Try again.")
+    else:
+        with st.lock:
+            if seq == flow["seq"]:
+                st.state["photos"] = []
+        if go("camera", seq, message=d[0] if d else "No match, retry"):  # no match, failed, cap, unreachable
+            beep.beep("nothing")
+            speech.say("Not recognised. Try again.")
 
 
 def save(seq):
@@ -261,9 +302,11 @@ def on_yellow(long_press):
     elif long_press and step == "weigh" and back:  # a checked-out spool: skip weighing, return it
         if go("saving", seq):
             spawn(send_back, seq)
-    elif not long_press and step == "camera":
+    elif long_press and step == "camera":
         if go("recognising", seq):
             spawn(recognise, seq, nfc_id)
+    elif not long_press and step == "camera":
+        spawn(capture_photo, seq)
     elif not long_press and step in ("weigh", "ready") and not has_scale(computer_scale()):
         go(step, seq, message="No scale here")  # also in returning mode: the long press still returns it
         beep.beep("nothing")
@@ -294,16 +337,30 @@ def on_yellow(long_press):
 def reset():
     """Forget the scan, weight, picture and flow (callers hold the lock)."""
     flow["seq"] += 1
-    st.state.update(tag=None, tag_at=None, held=None, held_at=None, photo=None, photo_at=None)
+    st.state.update(tag=None, tag_at=None, held=None, held_at=None, photo=None, photo_at=None, photos=[])
     flow.update(spool=None, filament=None, display=[], returning=False)
 
 
-def on_red():
-    """Red: start over, from any step."""
+def on_red(long_press: bool = False):
+    """Red: start over, from any step; long press at weigh/ready after AI match rejects the match."""
     with st.lock:
-        busy = flow["step"] != "idle"
-        reset()
-        st.state["blink_until"] = time.time() + 0.7 if busy else 0
+        if long_press and flow["step"] in ("weigh", "ready") and flow.get("filament") and not flow.get("spool"):
+            flow["seq"] += 1
+            st.state.update(held=None, held_at=None, photo=None, photo_at=None, photos=[])
+            flow.update(filament=None, display=[])
+            st.state["blink_until"] = time.time() + 0.7
+            reject = True
+        else:
+            reject = False
+            busy = flow["step"] != "idle"
+            reset()
+            st.state["blink_until"] = time.time() + 0.7 if busy else 0
+    if reject:
+        log.info("red long: reject AI match")
+        go("camera", message="Match rejected, retry")
+        beep.beep("discard")
+        speech.say("Match rejected. Take new photos.")
+        return
     log.info("red: reset")
     go("idle")
     beep.beep("discard" if busy else "nothing")
@@ -382,6 +439,7 @@ def screen():
     paired = api().paired  # off the lock: it looks at the pairing files
     with st.lock:
         f, held = dict(flow), st.state["held"]
+        photo_count = len(st.state.get("photos") or [])
     what = f["spool"] or f["filament"] or {}
     d = [x for x in f["display"] if x] or [
         "Spool #%s" % what["id"] if f["spool"] and what.get("id") else "Recognised",
@@ -389,18 +447,24 @@ def screen():
     d += ["", "", "", ""]
     step, msg = f["step"], f["message"]
     back = bool(f.get("returning"))
+    ai_matched = bool(f.get("filament") and not f.get("spool"))
     from . import pair_request
     code = pair_request.status["code"]
+    camera_rows = (
+        [f"{photo_count} photo{'s' if photo_count != 1 else ''}", "Yellow: add photo", "Hold yellow: AI", "Red: cancel", msg]
+        if photo_count > 0 else
+        ["New Tag Scanned", "Yellow: take photo", "Hold yellow: AI", "", msg]
+    )
     rows = {
         "pairing": ["Pair code", f"{code[:3]} {code[3:]}" if code else "Asking...",
                     "Compare it on the" if code else "", "setup page: Devices" if code else "", msg],
         "idle": ["Ready", "Scan a spool's tag", "", "", msg] if paired else
                 ["Not paired", "Hold yellow to ask", "the kit server, or", "run: station pair", msg],
         "lookup": ["Tag scanned", "Looking it up...", "", "", ""],
-        "camera": ["New Tag Scanned", "Show the spool to", "the camera, then", "press yellow", msg],
+        "camera": camera_rows,
         "recognising": ["Recognising...", "Please wait", "", "", "Red cancels"],
         "weigh": ["Returning", d[0], d[1], "Yellow: weigh it", msg or "Hold: skip weighing"] if back else
-                 [d[0], d[1], d[2], "Scale, then yellow", msg],
+                 [d[0], d[1], d[2], "Scale+Yel/HoldRed:No" if ai_matched else "Scale, then yellow", msg],
         "ready": ["%.0f g" % held if held is not None else "-", d[0], d[1], "Hold yellow: save", msg],
         "saving": ["Saving...", d[0], d[1], "", ""],
         "done": [d[0], d[1], d[2], d[3] if back else "", ""],

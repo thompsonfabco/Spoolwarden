@@ -65,7 +65,8 @@ def _default_spoolman() -> Spoolman | None:
         return None
 
 
-def _spool_material(spool_id: Any, sm: Spoolman | None, cache: dict[int, str | None], state: dict) -> str | None:
+def _spool_info(spool_id: Any, sm: Spoolman | None, cache: dict[int, dict[str, Any]],
+                state: dict) -> dict[str, Any] | None:
     if not isinstance(spool_id, int) or isinstance(spool_id, bool):
         return None
     if spool_id in cache:
@@ -74,16 +75,32 @@ def _spool_material(spool_id: Any, sm: Spoolman | None, cache: dict[int, str | N
         return None
     try:
         spool = sm.get(f"spool/{spool_id}")
-        mat = ((spool.get("filament") or {}).get("material") or "").strip() or None
+        fil = spool.get("filament") or {}
+        mat = (fil.get("material") or "").strip() or None
+        raw_price = spool.get("price")
+        raw_weight = spool.get("initial_weight") or fil.get("weight")
+        if not (isinstance(raw_price, (int, float)) and not isinstance(raw_price, bool) and raw_price > 0):
+            raw_price = fil.get("price")
+            raw_weight = fil.get("weight") or spool.get("initial_weight")
+        ppg: float | None = None
+        if (isinstance(raw_price, (int, float)) and not isinstance(raw_price, bool) and raw_price > 0
+                and isinstance(raw_weight, (int, float)) and not isinstance(raw_weight, bool) and raw_weight > 0):
+            ppg = float(raw_price) / float(raw_weight)
+        info = {"material": mat, "price_per_g": ppg}
     except SpoolmanError as e:
         if e.status != 404:
             state["down"] = True
-        mat = None
+        info = {"material": None, "price_per_g": None}
     except Exception:  # noqa: BLE001
         state["down"] = True
-        mat = None
-    cache[spool_id] = mat
-    return mat
+        info = {"material": None, "price_per_g": None}
+    cache[spool_id] = info
+    return info
+
+
+def _spool_material(spool_id: Any, sm: Spoolman | None, cache: dict[int, Any], state: dict) -> str | None:
+    info = _spool_info(spool_id, sm, cache, state)
+    return info["material"] if info else None
 
 
 def _collect_entries(days: float, printer_filter: str | None) -> list[tuple[str, str, dict]]:
@@ -153,7 +170,7 @@ def view(months: int = 12, printer: str | None = None, *, sm: Spoolman | None = 
 
     raw_entries = _collect_entries(days, printer_filter)
     spool_client = sm if sm is not None else _default_spoolman()
-    spool_cache: dict[int, str | None] = {}
+    spool_cache: dict[int, dict[str, Any]] = {}
     sm_state: dict = {}
 
     buckets: dict[str, dict] = {
@@ -163,6 +180,8 @@ def view(months: int = 12, printer: str | None = None, *, sm: Spoolman | None = 
             "prints": 0,
             "unfinished_prints": 0,
             "unfinished_grams": 0.0,
+            "cost": 0.0,
+            "unfinished_cost": 0.0,
             "logged_only_grams": 0.0,
             "no_weight_prints": 0,
             "_printers": {},
@@ -194,7 +213,8 @@ def view(months: int = 12, printer: str | None = None, *, sm: Spoolman | None = 
             if job_name and (b["_biggest"] is None or g > b["_biggest"][0]):
                 b["_biggest"] = (g, job_name)
 
-        if e.get("outcome") in _UNFINISHED:             # an entry without an outcome (before it was kept) is not counted
+        is_unfinished = e.get("outcome") in _UNFINISHED
+        if is_unfinished:             # an entry without an outcome (before it was kept) is not counted
             b["unfinished_prints"] += 1
             b["unfinished_grams"] += g
 
@@ -203,9 +223,16 @@ def view(months: int = 12, printer: str | None = None, *, sm: Spoolman | None = 
         p_rec["grams"] += g
 
         if g > 0:
+            info = _spool_info(e.get("spool_id"), spool_client, spool_cache, sm_state)
+            ppg = info["price_per_g"] if info else None
+            if ppg is not None:
+                entry_cost = g * ppg
+                b["cost"] += entry_cost
+                if is_unfinished:
+                    b["unfinished_cost"] += entry_cost
             mat = (e.get("material") or "").strip() if isinstance(e.get("material"), str) else ""
             if not mat:
-                mat = _spool_material(e.get("spool_id"), spool_client, spool_cache, sm_state) or UNKNOWN_MATERIAL
+                mat = (info["material"] if info else None) or UNKNOWN_MATERIAL
             b["_materials"][mat] = b["_materials"].get(mat, 0.0) + g
 
     months_out: list[dict] = []
@@ -227,6 +254,8 @@ def view(months: int = 12, printer: str | None = None, *, sm: Spoolman | None = 
             "prints": b["prints"],
             "unfinished_prints": b["unfinished_prints"],
             "unfinished_grams": round(b["unfinished_grams"], 2),
+            "cost": round(b["cost"], 2),
+            "unfinished_cost": round(b["unfinished_cost"], 2),
             "logged_only_grams": round(b["logged_only_grams"], 2),
             "no_weight_prints": b["no_weight_prints"],
             "by_printer": by_printer,
@@ -284,4 +313,13 @@ def view(months: int = 12, printer: str | None = None, *, sm: Spoolman | None = 
     if no_weight_total > 0:
         notes.append(say("analytics_note_no_weight", count=no_weight_total))
 
-    return {"months": months_out, "insights": insights, "notes": notes}
+    totals = {
+        "grams": round(sum(m["grams"] for m in months_out), 2),
+        "prints": sum(m["prints"] for m in months_out),
+        "unfinished_prints": sum(m["unfinished_prints"] for m in months_out),
+        "unfinished_grams": round(sum(m["unfinished_grams"] for m in months_out), 2),
+        "cost": round(sum(m["cost"] for m in months_out), 2),
+        "unfinished_cost": round(sum(m["unfinished_cost"] for m in months_out), 2),
+    }
+
+    return {"months": months_out, "totals": totals, "insights": insights, "notes": notes}

@@ -270,6 +270,7 @@ class IntakeApp:
             # the twins of the Hub's events and alerts routes: answered by the Hub, through this app's channel
             ("/intake/api/events", self.api(self.events_twin), ["GET"]),
             ("/intake/api/alerts", self.api(self.alerts_twin), ["GET"]),
+            ("/intake/api/alerts", self.api(self.alerts_patch), ["PATCH"]),
             ("/intake/api/spools/low", self.api(self.spools_low_twin), ["GET"]),
             ("/intake/api/storage-use", self.api(self.storage_use_twin), ["GET"]),
             ("/intake/api/share-corrections", self.api(self.share_corrections_twin), ["GET"]),
@@ -967,6 +968,9 @@ class IntakeApp:
 
     async def alerts_twin(self, request: Request):
         return await self._hub_get("/api/alerts")
+
+    async def alerts_patch(self, request: Request):
+        return await self._voice_send(request, self.kit.patch, "/api/alerts")
 
     async def spools_low_twin(self, request: Request):
         return await self._hub_get("/api/spools/low")

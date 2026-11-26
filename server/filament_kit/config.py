@@ -77,6 +77,7 @@ DEFAULTS: dict = {
     "server_name": socket.gethostname(),
     "spoolman_url": "http://127.0.0.1:7912",
     "port": 8710,
+    "log_level": "info",
     "model": "claude-opus-5-5",
     "reads_per_day": 60,
     "locations": ["Sealed stock", "Rack 1", "Storage box", "Overflow"],

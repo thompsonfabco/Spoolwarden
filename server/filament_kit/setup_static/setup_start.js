@@ -241,6 +241,15 @@
       });
     }
 
+    function doneControl(step, errBox) {
+      if (step.state === "done") return null;
+      return button(t("start_i_did_this"), {
+        cls: "btn--ghost btn--small start__done",
+        action: "start-done-" + step.id,
+        run: (ev) => post({ done: step.id }, ev.currentTarget, errBox),
+      });
+    }
+
     // "Just looking? Try the demo": refused on a Hub with data (409 `not_empty`), said here; otherwise the page reads its state again
     function demoRow() {
       if (typeof S !== "undefined" && S && S.demo) return null;
@@ -285,6 +294,8 @@
       if (step.state !== "done") {
         const keep = keepControl(step, errBox);
         if (keep) acts.push(keep);
+        const done = doneControl(step, errBox);
+        if (done) acts.push(done);
         acts.push(actionControl(step));
       }
       return el(

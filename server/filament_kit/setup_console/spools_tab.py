@@ -12,6 +12,8 @@ changes the page makes to one (weight, place, tag, empty), each as a dry run fir
                                          true unless it is sent as false. 400 with `field` for a refusal, 404 for no such spool.
                                          `home: "<location>"` changes the home of a checked-out spool (409 not_checked_out)
     GET  spools/last-tag                 {tag: {uid, read_at, source}?}: the newest tag any reader knows. No code
+    GET  spools/reorder                  {threshold_g, window_days, orders_available, items}: running-low spools with
+                                         3-month burn rate (`days_left`) and last order seller/price. No code
     POST spools/{id}/link {code, tag, dry_run}   link the tag to the spool; answers {spool, before, dry}. 409 when the
                                          tag or the spool already has another one
     POST spools/{id}/return {code}       send a checked-out spool back: {spool, event, location}; 409 {error, code:
@@ -29,7 +31,7 @@ from urllib.parse import urlparse
 
 import anyio
 
-from .. import alerts, config, inventory, storage, tagsources, tags
+from .. import alerts, config, inventory, reorder, storage, tagsources, tags
 from ..bridge import registry, status
 from ..spoolman import Spoolman, SpoolmanError
 
@@ -247,6 +249,9 @@ def routes(page) -> list[tuple]:
     async def get_last_tag(request, body):
         return await anyio.to_thread.run_sync(run, last_tag)
 
+    async def get_reorder(request, body):
+        return await anyio.to_thread.run_sync(run, lambda: reorder.for_spoolman(sm()))
+
     async def post_link(request, body):
         sid = request.path_params["id"]
         r = await anyio.to_thread.run_sync(run, link, sid, body)
@@ -256,6 +261,7 @@ def routes(page) -> list[tuple]:
 
     return [("/spools", page.guard(get_list), "GET"),
             ("/spools/last-tag", page.guard(get_last_tag), "GET"),
+            ("/spools/reorder", page.guard(get_reorder), "GET"),
             ("/spools/{id:int}", page.guard(get_one), "GET"),
             ("/spools/{id:int}", page.guard(post_one, write=True), "POST"),
             ("/spools/{id:int}/link", page.guard(post_link, write=True), "POST"),

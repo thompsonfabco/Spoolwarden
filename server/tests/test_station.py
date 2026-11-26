@@ -112,6 +112,10 @@ def _ages_near(doc, expect):
     return out
 
 
+OTA_IDLE = {"state": "idle", "target_version": None, "started_at": None, "finished_at": None, "error": None,
+            "last_result": None}
+
+
 def test_state_and_last_tag_shapes():
     """Same output as filament-ops station/intake_station.py for the same state (shapes are a contract with the
     owner's filament-mcp)."""
@@ -122,7 +126,7 @@ def test_state_and_last_tag_shapes():
         code, st = _get(base + "/state")
         assert code == 200
         assert set(st) == {"tag", "scale", "last_weight", "panel", "panel_version", "panel_nfc", "air", "photo",
-                       "flow", "version", "settings_changed"}   # the last two
+                       "photo_count", "ota", "flow", "version", "settings_changed"}   # the last two
         iso = station_http.iso(now - 10)
         tag = {"status": "ok", "nfc_id": "a:b:c:d:e:f:1", "read_at": iso, "read_at_unix": now - 10, "held": False}
         _ages_near(st, {"tag": 10, "scale": 1, "last_weight": 2})
@@ -131,7 +135,7 @@ def test_state_and_last_tag_shapes():
             "scale": {"grams": 1000.0, "status": "stable", "unit": 2, "stable": True},
             "last_weight": {"grams": 1000.0, "held": False},
             "panel": "/dev/ttyUSB1", "panel_version": "2", "panel_nfc": True, "air": None, "photo": None,
-            "flow": IDLE, "version": __version__, "settings_changed": False}
+            "photo_count": 0, "ota": OTA_IDLE, "flow": IDLE, "version": __version__, "settings_changed": False}
         code, lt = _get(base + "/last-tag")
         assert code == 200
         assert abs(lt.pop("age_seconds") - 10) <= 2
@@ -158,7 +162,8 @@ def test_state_held_and_empty():
         assert st == {"tag": {"status": "ok", "nfc_id": None, "read_at": None, "read_at_unix": None,
                               "age_seconds": None, "held": False},
                       "scale": None, "last_weight": None, "panel": None, "panel_version": None, "panel_nfc": None, "air": None,
-                      "photo": None, "flow": IDLE, "version": __version__, "settings_changed": False}
+                      "photo": None, "photo_count": 0, "ota": OTA_IDLE, "flow": IDLE, "version": __version__,
+                      "settings_changed": False}
     finally:
         _stop(srv)
 

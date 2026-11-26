@@ -32,7 +32,7 @@ class Mgr:
 
 
 @pytest.fixture
-def app(env, monkeypatch):  # noqa: F811
+def app(env, home, monkeypatch):  # noqa: F811
     monkeypatch.setattr(rs, "find_readers", lambda: [BOARD])
     return make(env, Helper(), Mgr())
 
@@ -146,6 +146,7 @@ def test_provision_refuses_a_printer_the_hub_does_not_have_and_makes_no_token(ap
 
 
 def test_provision_without_the_hubs_certificate_makes_no_token(app, monkeypatch):
+    (config.paths().etc / "cert.pem").unlink(missing_ok=True)
     monkeypatch.setattr(rs.pairing, "short_hostname", lambda: "fkhub")
     r = post(client(app), "flash/provision", {})
     assert r.status_code == 409 and "certificate" in r.json()["error"]
@@ -159,7 +160,7 @@ ANSWERS = {"ssid": "Home", "pass": "wifi-secret-1", "buzzer": "low"}
 
 def test_the_server_way_leaves_the_answers_root_only_and_starts_the_job(app, monkeypatch):
     started = []
-    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="": started.append(name))
+    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="", **kw: started.append(name))
     assert post(client(app), "flash/server", ANSWERS, code=None).status_code in (401, 403)
     assert not rf.pending_path().exists()
     r = post(client(app), "flash/server", ANSWERS)
@@ -173,7 +174,7 @@ def test_the_server_way_leaves_the_answers_root_only_and_starts_the_job(app, mon
 
 
 def test_the_server_way_carries_the_chosen_printer_and_refuses_a_bad_one(app, monkeypatch):
-    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="": None)
+    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="", **kw: None)
     serial = _printer()
     assert post(client(app), "flash/server", {**ANSWERS, "printer": serial}).status_code == 200
     assert statexml.loads(rf.pending_path().read_bytes(), "reader-setup")["printer"] == serial
@@ -213,7 +214,7 @@ def test_a_klipper_only_hub_offers_its_printers_and_a_hub_with_neither_feature_n
 def test_all_three_ways_refuse_a_printer_the_hub_does_not_have_with_one_text(app, home, monkeypatch, usb, capsys):
     """The browser way (flash/provision), the Hub's USB (flash/server and the root helper's op) and the command line
     (`reader setup --pending` and `--printer`) all say reader_setup.UNKNOWN_PRINTER for an id the Hub has not."""
-    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="": None)
+    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="", **kw: None)
     text = rs.UNKNOWN_PRINTER
     assert post(client(app), "flash/provision", {"printer": "01P00A000000009"}).json()["error"] == text
     assert reader_tokens.TokenStore().list() == []
@@ -233,7 +234,7 @@ def test_all_three_ways_refuse_a_printer_the_hub_does_not_have_with_one_text(app
 
 
 def test_a_job_that_does_not_start_leaves_no_answers(app, monkeypatch):
-    def refuse(name, why=""):
+    def refuse(name, why="", **kw):
         raise setup_helper.Refused(500, "the job did not start")
     monkeypatch.setattr(setup_helper, "_start_job", refuse)
     assert post(client(app), "flash/server", ANSWERS).status_code == 500
@@ -247,18 +248,18 @@ def test_a_job_that_does_not_start_leaves_no_answers(app, monkeypatch):
     ({"ssid": "Home", "pass": "p" * 64}, 400, "password"),
     ({"ssid": "Home", "pass": "p", "buzzer": "loud"}, 400, "buzzer"),
     ({"ssid": "Home", "pass": "p", "name": "a/b"}, 400, "name"),
-    ({"ssid": "Home", "pass": "p", "port": "/dev/ttyACM9"}, 409, "no longer plugged in"),
+    ({"ssid": "Home", "pass": "password1", "port": "/dev/ttyACM9"}, 409, "no longer plugged in"),
     ({"pass": "p"}, 400, "Wi-Fi name"),
 ])
 def test_bad_answers_are_refused_and_nothing_is_left(app, monkeypatch, body, status, words):
-    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="": None)
+    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="", **kw: None)
     r = post(client(app), "flash/server", body)
     assert r.status_code == status and words in r.json()["error"]
     assert not rf.pending_path().exists()
 
 
 def test_no_board_or_several_without_a_pick_are_refused(app, monkeypatch):
-    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="": None)
+    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="", **kw: None)
     monkeypatch.setattr(rs, "find_readers", lambda: [])
     assert "no ESP32 board" in post(client(app), "flash/server", ANSWERS).json()["error"]
     monkeypatch.setattr(rs, "find_readers", lambda: [BOARD, rs.Reader("/dev/ttyACM1", None, "x")])
@@ -548,7 +549,7 @@ def _no_answers_of_any_form():
 
 @pytest.mark.parametrize("exc", [subprocess.TimeoutExpired("systemctl", 30), OSError("no systemctl")])
 def test_a_job_start_that_raises_anything_leaves_no_answers(app, monkeypatch, exc):
-    def boom(name, why=""):
+    def boom(name, why="", **kw):
         raise exc
     monkeypatch.setattr(setup_helper, "_start_job", boom)
     with pytest.raises(type(exc)):
@@ -560,7 +561,7 @@ def test_a_write_that_fails_after_the_xml_leaves_no_answers(app, monkeypatch):
     def boom(*a, **k):
         raise OSError("disk full")
     monkeypatch.setattr(rf.json, "dump", boom)              # the old-form file is written after the XML
-    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="": None)
+    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="", **kw: None)
     with pytest.raises(OSError):
         setup_helper._reader_usb(dict(ANSWERS))
     _no_answers_of_any_form()

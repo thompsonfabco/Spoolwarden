@@ -287,7 +287,7 @@ def test_the_api_key_is_write_only(both, manager, caplog):
     pid = r.json()["serial"]
     p = registry.load()[pid]
     assert p.api_key == KEY and p.port == 7130
-    st = c.get("/setup/api/state")
+    st = c.get("/setup/api/state", headers={"X-Setup-Code": CODE})
     row = next(x for x in st.json()["printers"]["list"] if x["serial"] == pid)
     assert row["api_key"] is True and KEY not in st.text and KEY not in caplog.text
     assert post(c, f"printers/{pid}/api_key", {"key": "with a space"}).status_code == 400
@@ -474,7 +474,8 @@ def test_scan_finds_and_lists_for_picking(both, scanned, caplog):
     assert r.status_code == 200 and scanned == ["192.168.1.0/24"]
     row = r.json()["found"][0]
     assert (row["host"], row["port"], row["configured"]) == ("192.0.2.50", 7125, False)
-    assert any(x["host"] == "192.0.2.50" and x["configured"] is False for x in c.get("/setup/api/state").json()["printers"]["list"])
+    assert any(x["host"] == "192.0.2.50" and x["configured"] is False
+               for x in c.get("/setup/api/state", headers={"X-Setup-Code": CODE}).json()["printers"]["list"])
     assert "1 found" in caplog.text
 
 
@@ -585,10 +586,10 @@ def test_a_running_mapping_is_followed_again_after_a_reload(mapped):
     fake.running = lambda serial: serial in fake.running_for
     _bambu()
     c = client(app)
-    rows = c.get("/setup/api/state").json()["printers"]["list"]
+    rows = c.get("/setup/api/state", headers={"X-Setup-Code": CODE}).json()["printers"]["list"]
     assert [r["mapping"] for r in rows if r["serial"] == SERIAL] == [False]
     fake.running_for.add(SERIAL)
-    rows = c.get("/setup/api/state").json()["printers"]["list"]
+    rows = c.get("/setup/api/state", headers={"X-Setup-Code": CODE}).json()["printers"]["list"]
     assert [r["mapping"] for r in rows if r["serial"] == SERIAL] == [True]
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
     assert "if (p.mapping) followMap(p, box);" in text
@@ -718,7 +719,8 @@ def test_the_row_says_when_a_report_would_help(mapped):
     d.mkdir(parents=True, exist_ok=True)
     (d / mapping.STATUS_FILE).write_text(json.dumps({"job_id": "x", "state": "done", "step": "", "problems": [],
                                                      "report_wanted": "no_scheme"}), encoding="utf-8")
-    row = next(p for p in client(app).get("/setup/api/state").json()["printers"]["list"] if p["serial"] == SERIAL)
+    row = next(p for p in client(app).get("/setup/api/state", headers={"X-Setup-Code": CODE}).json()["printers"]["list"]
+               if p["serial"] == SERIAL)
     assert row["report_why"]
     js = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
     assert "printers_collect_report" in js and "printers_saved_reports" in js and "function openReports(" in js and "report_why" in js
@@ -730,10 +732,13 @@ def test_the_states_read_says_which_bambu_printers_hold_a_slot_map(both, kl):
     from filament_kit.bridge import ams
     _bambu()
     c = client(both)
-    rows = {r["serial"]: r for r in c.get("/setup/api/printers/states").json()["printers"]}
+    locked = c.get("/setup/api/printers/states").json()
+    assert locked["printers_redacted"] is True
+    assert [r["serial"] for r in locked["printers"]] == ["locked-1", "locked-2"]
+    rows = {r["serial"]: r for r in c.get("/setup/api/printers/states", headers={"X-Setup-Code": CODE}).json()["printers"]}
     assert rows[SERIAL]["mapped"] is False and "mapped" not in rows[kl.serial]
     ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}))
-    rows = {r["serial"]: r for r in c.get("/setup/api/printers/states").json()["printers"]}
+    rows = {r["serial"]: r for r in c.get("/setup/api/printers/states", headers={"X-Setup-Code": CODE}).json()["printers"]}
     assert rows[SERIAL]["mapped"] is True
 
 

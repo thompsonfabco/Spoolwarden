@@ -80,7 +80,7 @@ class Refused(Exception):
 class InstallResult:
     installed: list[str]        # written this time (new, or an accepted update)
     stale: list[str]
-    backup: Path
+    backup: Path | None
     installed_orca: list[str] = field(default_factory=list)
     stale_orca: list[str] = field(default_factory=list)
     backup_orca: Path | None = None
@@ -88,6 +88,7 @@ class InstallResult:
     kept_orca: list[str] = field(default_factory=list)
     differing: list[str] = field(default_factory=list)     # kept Bambu Studio presets that differ from the build's
     skipped: list[str] = field(default_factory=list)       # secondary: deleted there since its install, not re-added
+    skipped_orca: list[str] = field(default_factory=list)  # secondary: deleted in Orca since its install, not re-added
 
 
 def read_info(path: Path) -> dict:
@@ -434,28 +435,30 @@ def _copy_in(t: _Target, own_user: str | None = None) -> None:
         write_preset(t.live, fname, t.stage / f"{name}.json", t.stage / f"{name}.info", own_user)
 
 
-def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
+def install(build_dir: Path, folders: StudioFolders | None, dirs: AppDirs, *,
             running: Callable[[], bool], stamp_now: str,
             before_write: Callable[[Path], None] | None = None,
             orca: OrcaFolders | None = None, orca_running: Callable[[], bool] | None = None,
             accept: dict | None = None, secondary: bool = False,
             trusted_extra: tuple[Path, ...] = ()) -> InstallResult:
     """before_write(backup_dir) runs after the backups and before the first live write (the sync
-    records it so an interrupted install can be told apart from later in-app edits). `orca`: this PC's
-    Orca Slicer folders (None: the build's orca/ tree is not installed). `accept`: the updates the owner accepted,
-    {"base"|"orca": [preset names]}: the only existing presets that are written over.
-    `secondary`: `folders` is another Bambu Studio folder of this PC (not the one the server builds from):
-    step 3 refuses nothing; a preset edited there since its last install is never written over (accepted or not)
-    and one deleted there is not written again (`skipped`). `trusted_extra`: more system preset folders whose G-code
-    is trusted (a secondary trusts the primary's: same PC, its Bambu Studio version may differ)."""
+    records it so an interrupted install can be told apart from later in-app edits). `folders`: None for
+    Orca-only mode. `orca`: this PC's Orca Slicer folders (None: the build's orca/ tree is not installed).
+    `accept`: the updates the owner accepted, {"base"|"orca": [preset names]}: the only existing presets that
+    are written over. `secondary`: `folders` is another Bambu Studio folder of this PC (not the one the server
+    builds from): step 3 refuses nothing; a preset edited there since its last install is never written over
+    (accepted or not) and one deleted there is not written again (`skipped`). `trusted_extra`: more system
+    preset folders whose G-code is trusted (a secondary trusts the primary's: same PC, its Bambu Studio version
+    may differ)."""
     build_dir = Path(build_dir)
     orca_running = orca_running or studio.orca_running
-    if running():
+    if folders is not None and running():
         raise Refused(STUDIO_RUNNING, "studio_running")
 
-    bambu = _Target(BAMBU, "base", build_dir / "base", folders.user_filament / "base", dirs.installed / "base",
-                    dirs.partial / "base", staged=_names(build_dir / "base"))
-    targets = [bambu]
+    bambu = (_Target(BAMBU, "base", build_dir / "base", folders.user_filament / "base", dirs.installed / "base",
+                     dirs.partial / "base", staged=_names(build_dir / "base"))
+             if folders is not None else None)
+    targets = [bambu] if bambu is not None else []
     o = None
     if orca is not None and (build_dir / "orca").is_dir():
         o = _Target(ORCA, "orca", build_dir / "orca", orca.user_filament, dirs.installed / "orca",
@@ -470,10 +473,11 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
 
     # 2. untrusted G-code, 3. edited / deleted after the build
     unsafe, stop = [], []
-    _check(bambu, trusted_gcode(folders.system_filament, bambu.snap, *trusted_extra), *_build_meta(build_dir),
-           unsafe, stop, secondary=secondary)
+    if bambu is not None:
+        _check(bambu, trusted_gcode(folders.system_filament, bambu.snap, *trusted_extra), *_build_meta(build_dir),
+               unsafe, stop, secondary=secondary)
     if o is not None:
-        _check(o, set(), *_build_meta(build_dir, "orca_"), unsafe, stop)   # Orca: only the live copy's G-code
+        _check(o, set(), *_build_meta(build_dir, "orca_"), unsafe, stop, secondary=secondary)   # Orca: only the live copy's G-code
     if unsafe:
         raise Refused(f"{len(unsafe)} presets carry G-code that is neither from a Bambu Studio system preset nor "
                       "already in your live copy (Orca Slicer presets: only the live copy's) (the build may have "
@@ -483,7 +487,7 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
         raise Refused(f"the build is older than your latest {apps} changes; a rebuild is asked for: "
                       + "; ".join(stop[:20]), "stale_build")
 
-    if not folders.user_filament.is_dir():
+    if folders is not None and not folders.user_filament.is_dir():
         raise Refused(f"the Bambu Studio user filament folder {folders.user_filament} does not exist; open Bambu "
                       "Studio once (and sign in, if you use an account), then run the sync again")
     if o is not None and not orca.user_filament.is_dir():
@@ -491,40 +495,55 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
                       "Slicer once, then run the sync again")
 
     for t in targets:                   # what step 6 writes and keeps (read before anything is written)
-        _plan(t, accept, root=folders.user_filament if t is bambu else None, secondary=secondary and t is bambu)
+        _plan(t, accept, root=folders.user_filament if t is bambu and folders is not None else None,
+              secondary=secondary)
 
     # 4. right before the first write
-    if running():
+    if folders is not None and running():
         raise Refused(STUDIO_RUNNING, "studio_running")
     if o is not None and orca_running():
         raise Refused(ORCA_RUNNING, "studio_running")
 
     # 5. backups (the Orca one under the same name, so a marker naming one finds both)
     #    old backups are pruned only once both exist, so a failed Orca backup costs no Bambu one
-    backup = _backup(folders.user_filament, dirs.backups, stamp_now, prune=False)
-    backup_orca = None
-    if o is not None:
-        shutil.rmtree(dirs.orca_backups / backup.name, ignore_errors=True)  # ours, from an attempt in the same second
-        try:
-            backup_orca = _backup(orca.user_filament, dirs.orca_backups, backup.name, prune=False)
-        except Refused:
-            shutil.rmtree(backup, ignore_errors=True)
-            raise
-        _prune(dirs.orca_backups)
-    _prune(dirs.backups)
-    if before_write is not None:
-        before_write(backup)
+    if folders is not None:
+        backup = _backup(folders.user_filament, dirs.backups, stamp_now, prune=False)
+        backup_orca = None
+        if o is not None:
+            shutil.rmtree(dirs.orca_backups / backup.name, ignore_errors=True)  # ours, from an attempt in the same second
+            try:
+                backup_orca = _backup(orca.user_filament, dirs.orca_backups, backup.name, prune=False)
+            except Refused:
+                shutil.rmtree(backup, ignore_errors=True)
+                raise
+            _prune(dirs.orca_backups)
+        _prune(dirs.backups)
+        if before_write is not None:
+            before_write(backup)
+    else:
+        backup = None
+        backup_orca = _backup(orca.user_filament, dirs.orca_backups, stamp_now, prune=True)
+        if before_write is not None:
+            before_write(backup_orca)
 
     # 6. copy the new presets and the accepted updates
     for t in targets:
-        _copy_in(t, folders.user_id if secondary and t is bambu else None)
+        _copy_in(t, folders.user_id if secondary and t is bambu and folders is not None else None)
 
-    # 7. nothing deleted; 8. snapshot (without an orca/ tree that was not installed here)
-    _replace_installed(build_dir, dirs, skip=() if o is not None else ("orca",), targets=targets)
-    return InstallResult(installed=list(bambu.write), stale=bambu.stale, backup=backup,
-                         installed_orca=list(o.write) if o else [], stale_orca=o.stale if o else [],
-                         backup_orca=backup_orca, kept=list(bambu.kept), kept_orca=list(o.kept) if o else [],
-                         differing=_differing(bambu), skipped=list(bambu.skipped))
+    # 7. nothing deleted; 8. snapshot (without any tree that was not installed here)
+    skip = tuple(t for t, present in (("base", bambu is not None), ("orca", o is not None)) if not present)
+    _replace_installed(build_dir, dirs, skip=skip, targets=targets)
+    return InstallResult(installed=list(bambu.write) if bambu else [],
+                         stale=bambu.stale if bambu else [],
+                         backup=backup,
+                         installed_orca=list(o.write) if o else [],
+                         stale_orca=o.stale if o else [],
+                         backup_orca=backup_orca,
+                         kept=list(bambu.kept) if bambu else [],
+                         kept_orca=list(o.kept) if o else [],
+                         differing=_differing(bambu) if bambu else [],
+                         skipped=list(bambu.skipped) if bambu else [],
+                         skipped_orca=list(o.skipped) if o else [])
 
 
 __all__ = ["Refused", "InstallResult", "install", "write_preset", "local_info", "KEEP_BACKUPS", "KEPT",

@@ -328,7 +328,8 @@ def test_list_json_is_the_hubs_printer_objects(capsys, hub):
     rows = doc(out)
     assert [r["serial"] for r in rows] == [X1, A1, "garage-voron", "mainsailos"]
     assert rows[0] == {"serial": X1, "name": "Workshop X1", "model": "X1C", "ip": "192.0.2.40", "configured": True,
-                       "state": "connected", "pinned": False, "family": "bambu", "mapping": False, "report_why": None}
+                       "state": "connected", "pinned": False, "family": "bambu", "mapping": False, "report_why": None,
+                       "redacted": False, "serial_hash": "5d5b5de362f94f86"}
     assert rows[2]["host"] == "voron.example" and rows[2]["port"] == 7125 and rows[2]["lane_data"] == "auto"
     assert rows[2]["api_key"] is False and rows[3]["configured"] is False
     assert "12345678" not in out

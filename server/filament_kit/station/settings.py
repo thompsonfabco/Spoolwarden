@@ -80,10 +80,38 @@ def specs() -> list[dict]:
     out += [_spec(f"lamp.{step}", _t("station_setting_lamp", "Lamp for: {step}", step=STEP_LABELS.get(step, step)),
                   "choice", choices=list(flow.LAMP_CHOICES), choice_labels=LAMP_LABELS)
             for step in flow.STEP_LAMPS]
+    out += [_spec("flow_timeout", _t("station_setting_flow_timeout", "Intake flow timeout (seconds)"), "number", min=30, max=3600),
+            _spec("recognise_timeout", _t("station_setting_recognise_timeout", "Spool recognition timeout (seconds)"), "number", min=15, max=300),
+            _spec("min_grams", _t("station_setting_min_grams", "Minimum spool weight (grams)"), "number", min=1, max=500),
+            _spec("camera", _t("station_setting_camera", "Camera"), "choice", choices=["auto", "off"],
+                  choice_labels={"auto": _t("station_camera_auto", "Automatic"), "off": _t("station_camera_off", "Off")}),
+            _spec("panel_flash", _t("station_setting_panel_flash", "Flash panel firmware automatically"), "switch"),
+            _spec("auto_ota", _t("station_setting_auto_ota", "Allow remote OTA updates"), "switch")]
     return out
 
 
-_KEYS = {"beep": "beep", "speech": "speech", "voice": "tts", "volume": "speaker_volume", "panel_swap": "panel_swap"}
+_KEYS = {
+    "beep": "beep",
+    "speech": "speech",
+    "voice": "tts",
+    "volume": "speaker_volume",
+    "panel_swap": "panel_swap",
+    "flow_timeout": "flow_timeout",
+    "recognise_timeout": "recognise_timeout",
+    "min_grams": "min_grams",
+    "camera": "camera",
+    "panel_flash": "panel_flash",
+    "auto_ota": "auto_ota",
+}
+
+_DEFAULTS = {
+    "min_grams": getattr(st, "MIN_GRAMS", 20),
+    "panel_flash": True,
+    "auto_ota": True,
+    "camera": "auto",
+    "flow_timeout": getattr(st, "FLOW_TIMEOUT", 600),
+    "recognise_timeout": getattr(st, "RECOGNISE_TIMEOUT", 90),
+}
 
 
 def clean(spec: dict, value):
@@ -200,7 +228,10 @@ class Store:
     def _installed(self, id_):
         if id_.startswith("lamp."):
             return flow.lamp_default(id_[5:])
-        return self.installed[_KEYS[id_]]
+        key = _KEYS[id_]
+        if key in self.installed:
+            return self.installed[key]
+        return _DEFAULTS[id_]
 
     def current(self, id_):
         return self.values[id_] if id_ in self.values else self._installed(id_)
@@ -278,3 +309,5 @@ def after_change(ids: set) -> None:
     if "volume" in ids:
         from . import panel
         panel.send_volume()
+    if "recognise_timeout" in ids:
+        flow._api["api"] = None

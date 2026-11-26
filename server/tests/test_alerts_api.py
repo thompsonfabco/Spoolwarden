@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from filament_kit import alerts, alerts_api, config, event_kinds, event_sink, events, inventory, pairing
+from filament_kit import alerts, alerts_api, config, event_kinds, event_sink, events, inventory, iso_time, pairing
 from filament_kit.alerts_api import AlertsRefused, say
 from filament_kit.api import create_app
 from filament_kit.event_sink import StoreSink
@@ -299,8 +299,12 @@ def test_wait_returns_at_once_for_news_and_after_the_time_for_none(hub, store):
 def test_a_test_alert_is_given_once_to_the_caller_that_asked_and_stores_nothing(hub, store):
     mine, other = phone(), phone()
     r = hub.post("/api/alerts/test", json={}, headers=mine)
-    assert r.status_code == 200 and r.json()["test"] == {"title": "Test alert",
-                                                          "text": "If you can read this, alerts reach this device."}
+    test = r.json()["test"]
+    assert r.status_code == 200
+    assert test["title"] == "Test alert"
+    assert test["text"] == "If you can read this, alerts reach this device."
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", test["at"])
+    assert iso_time.parse_utc(test["at"]) is not None
     assert hub.get("/api/events", headers=other).json()["test"] is None            # not to another device
     got = hub.get("/api/events", headers=mine).json()
     assert got["test"]["title"] == "Test alert" and got["events"] == []
@@ -340,12 +344,13 @@ def test_the_command_lines_test_goes_to_every_client_that_asks_within_60_seconds
 
 def test_alerts_view_is_the_contract(hub):
     body = hub.get("/api/alerts", headers=phone()).json()
-    assert list(body) == ["types", "last_spool_only", "running_low_g", "storage_warn_percent", "storage_bad_percent"]
+    assert list(body) == ["types", "last_spool_only", "running_low_g", "storage_warn_percent", "storage_bad_percent",
+                          "humidity_high_pct"]
     assert [t["key"] for t in body["types"]] == ["runout", "paused", "failed", "printer_error", "finished", "storage",
-                                                 "running_low", "device_down"]
+                                                 "running_low", "device_down", "humidity"]
     assert {t["key"]: t["on"] for t in body["types"]} == {
         "runout": True, "paused": True, "failed": True, "printer_error": True, "finished": False, "storage": True,
-        "running_low": True, "device_down": False}
+        "running_low": True, "device_down": False, "humidity": True}
     assert body["types"][0]["title"] == "Filament ran out" and body["types"][0]["events"] == ["print.runout"]
     assert body["types"][7]["description"] == "A Weigh Station or a printer stopped answering."
     assert body["types"][0]["description"] == ""
@@ -377,7 +382,7 @@ def test_save_changes_the_file_and_returns_the_view(env):
     ({"storage_warn_percent": 95}, "storage_warn_percent",
      "The storage warning must be lower than 95 % used, where storage counts as full."),
     ({"types": {"nope": True}}, "types", "nope is not an alert type. The types are: runout, paused, failed, "
-                                          "printer_error, finished, storage, running_low, device_down."),
+                                          "printer_error, finished, storage, running_low, device_down, humidity."),
     ({"types": {"runout": "yes"}}, "types", "runout must be on or off."),
     ({"last_spool_only": 1}, "last_spool_only", "last_spool_only must be on or off."),
     ({"surprise": 1}, "surprise", "surprise is not an alert setting."),

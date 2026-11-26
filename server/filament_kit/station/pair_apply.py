@@ -18,7 +18,7 @@ import stat
 import sys
 from pathlib import Path
 
-from .. import apply, config, modules
+from .. import apply, config, logging_cfg, modules
 from ..profiles import statexml
 from . import pair_request, server_api
 
@@ -126,7 +126,11 @@ def apply_drop(path: Path, *, refresh=apply.refresh_station) -> str:
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    try:
+        cfg = config.load()
+    except (OSError, ValueError):
+        cfg = {}
+    logging_cfg.configure(cfg, logger_name="intake-station")
     path = pair_request.drop_dir() / pair_request.REQUEST_FILE
     try:
         apply_drop(path)

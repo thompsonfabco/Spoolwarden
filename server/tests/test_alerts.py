@@ -20,11 +20,11 @@ def state(tmp_path, monkeypatch):
 def test_defaults_are_the_ruled_ones():
     s = alerts.load()
     assert s["types"] == {"runout": True, "paused": True, "failed": True, "printer_error": True, "finished": False,
-                          "storage": True, "running_low": True, "device_down": False}
+                          "storage": True, "running_low": True, "device_down": False, "humidity": True}
     assert (s["running_low_g"], s["last_spool_only"]) == (150, False)
     assert (s["storage_warn_percent"], s["storage_bad_percent"]) == (85, 95)
     assert list(s["types"]) == ["runout", "paused", "failed", "printer_error", "finished", "storage", "running_low",
-                                "device_down"]
+                                "device_down", "humidity"]
     assert alerts.problem() is None
 
 

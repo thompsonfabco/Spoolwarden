@@ -50,19 +50,19 @@ class AlertNotifier(private val context: Context) {
             when (a) {
                 is NotifyAction.Show -> show(a)
                 is NotifyAction.Cancel -> manager.cancel(a.tag, NOTIFICATION_ID)
-                is NotifyAction.ShowTest -> showText(TEST_TAG, a.test.title, a.test.text, null, null)
+                is NotifyAction.ShowTest -> showText(TEST_TAG, a.test.title, a.test.text, null, null, null)
             }
         }
     }
 
     private fun show(a: NotifyAction.Show) =
-        showText(a.tag, a.event.title, a.event.text, a.event.action.place, a.event.action.id)
+        showText(a.tag, a.event.title, a.event.text, a.event.action.place, a.event.action.id, a.event.atMillis)
 
     @SuppressLint("MissingPermission") // checked: nothing is posted while notifications are not allowed
-    private fun showText(tag: String, title: String, text: String, place: String?, placeId: String?) {
+    private fun showText(tag: String, title: String, text: String, place: String?, placeId: String?, atMillis: Long? = null) {
         if (!allowed()) return
         ensureChannels()
-        val notification = NotificationCompat.Builder(context, CHANNEL_ALERTS)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ALERTS)
             .setSmallIcon(R.drawable.sw_ic_spool)
             .setContentTitle(title)
             .setContentText(text)
@@ -70,7 +70,10 @@ class AlertNotifier(private val context: Context) {
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setContentIntent(open(place, placeId, tag.hashCode()))
-            .build()
+        if (atMillis != null) {
+            builder.setWhen(atMillis).setShowWhen(true)
+        }
+        val notification = builder.build()
         try {
             manager.notify(tag, NOTIFICATION_ID, notification)
         } catch (_: SecurityException) {

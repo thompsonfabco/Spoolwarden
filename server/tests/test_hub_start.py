@@ -64,12 +64,38 @@ def test_start_post_keeps_marks_and_rejects_bad_inputs(env, helper):
     assert after["steps"][0]["state"] == "done"
     assert after["steps"][1]["state"] == "next"
 
-    for bad in ({}, {"hide": "yes"}, {"keep": "unknown"}, {"hide": True, "keep": "name"}):
+    for bad in ({}, {"hide": "yes"}, {"keep": "unknown"}, {"done": "bogus"}, {"done": 123},
+                {"hide": True, "keep": "name"}, {"hide": True, "done": "printer"}, {"keep": "name", "done": "printer"}):
         res = post(c, "start", bad)
         assert res.status_code == 400 and "error" in res.json()
 
+    r_done = post(c, "start", {"done": "printer"})
+    assert r_done.status_code == 200
+    printer_step = next(s for s in r_done.json()["steps"] if s["id"] == "printer")
+    assert printer_step["state"] == "done" and printer_step["line"] == "Marked done"
+
     assert c.post("/setup/api/start", json={"hide": True}, headers={}).status_code == 403
     assert _start_client(helper, who=AWAY).get("/setup/api/start").status_code == 403
+
+
+def test_start_marking_all_steps_done_triggers_finish(env, helper):
+    assert firstrun.set_hidden(False)
+    c = _start_client(helper)
+    initial = c.get("/setup/api/start").json()
+    open_ids = [s["id"] for s in initial["steps"] if s["state"] != "done"]
+    assert len(open_ids) > 0
+
+    last_body = None
+    for sid in open_ids:
+        r = post(c, "start", {"done": sid})
+        assert r.status_code == 200
+        last_body = r.json()
+
+    assert last_body is not None
+    assert last_body["done"] == last_body["total"] > 0
+    assert firstrun.load().finished is True
+    after = c.get("/setup/api/start").json()
+    assert after["show"] is False and after["finished"] is True
 
 
 def test_start_calls_finish_once_when_all_steps_done(env, helper, monkeypatch):

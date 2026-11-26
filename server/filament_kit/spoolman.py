@@ -3,9 +3,13 @@ from __future__ import annotations
 
 import http.client
 import json
+import logging
+import time
 import urllib.error
 import urllib.request
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 EXTRA_FIELDS: list[tuple[str, str, str]] = [
     ("spool", "nfc_id", "text"),
@@ -41,15 +45,19 @@ class Spoolman:
             data = json.dumps(body).encode()
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
+        t0 = time.monotonic()
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 status = resp.status
                 raw = resp.read()
         except urllib.error.HTTPError as e:
+            log.debug("spoolman %s %s -> %d (%.1fms)", method, path, e.code, (time.monotonic() - t0) * 1000)
             detail = e.read().decode(errors="replace")[:500]
             raise SpoolmanError(f"spoolman {method} {path} -> {e.code}: {detail}", status=e.code) from e
         except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
+            log.debug("spoolman %s %s -> error=%s (%.1fms)", method, path, type(e).__name__, (time.monotonic() - t0) * 1000)
             raise SpoolmanError("spoolman_unreachable", status=None) from e
+        log.debug("spoolman %s %s -> %d (%.1fms)", method, path, status, (time.monotonic() - t0) * 1000)
         if not raw:
             return None
         try:

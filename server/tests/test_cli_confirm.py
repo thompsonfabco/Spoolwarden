@@ -13,10 +13,9 @@ import types
 
 import pytest
 
-from filament_kit import cli, modules, output, release, updates
+from filament_kit import cli, modules, output, reader_tokens, release, updates
 from filament_kit.bridge import registry
 from filament_kit.profiles import builds
-from filament_kit.web import reader as web_reader
 
 SERIAL = "01S00C111111111"
 
@@ -138,7 +137,7 @@ def _reader_revoke(m, rec, tmp_path):
         def revoke(self, ref):
             rec("revoke")()
             return True
-    m.setattr(web_reader, "TokenStore", Store)
+    m.setattr(reader_tokens, "TokenStore", Store)
     return (["tag-reader", "revoke", "tr3"], "Revoke the token tr3? A Tag Reader using it is refused from now on. Set it "
             "up again with sudo spoolwarden tag-reader flash to give it a new token.")
 

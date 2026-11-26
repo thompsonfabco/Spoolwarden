@@ -185,11 +185,13 @@ def parse_args(argv=None):
     ap.add_argument("--env", default=DEFAULT_ENV, help="PlatformIO environment")
     ap.add_argument("--init-key", action="store_true",
                     help="create the signing key if missing and print the public key for `reader setup --ota-pubkey`")
+    ap.add_argument("--export-pubkey", metavar="PATH",
+                    help="write the public key PEM to PATH and exit")
     ap.add_argument("--dry-run", action="store_true", help="build + sign only, upload nothing")
     ap.add_argument("--no-verify", action="store_true", help="skip the live manifest check")
     args = ap.parse_args(argv)
-    if not args.init_key and not args.dry_run and not args.host:
-        ap.error("--host is required unless --dry-run or --init-key")
+    if not args.init_key and not args.export_pubkey and not args.dry_run and not args.host:
+        ap.error("--host is required unless --dry-run, --init-key, or --export-pubkey")
     return args
 
 
@@ -199,6 +201,13 @@ def main(argv=None):
         key = load_or_create_key(args.key, create=True)
         print("Pass this to `spoolwarden reader setup --ota-pubkey` (or save as a .pem file):\n")
         print(public_pem(key))
+        return
+    if args.export_pubkey:
+        key = load_or_create_key(args.key, create=False)
+        out = Path(args.export_pubkey)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(public_pem(key), encoding="utf-8")
+        print(f"wrote {out}")
         return
 
     secrets_h = READER / "src" / "secrets.h"

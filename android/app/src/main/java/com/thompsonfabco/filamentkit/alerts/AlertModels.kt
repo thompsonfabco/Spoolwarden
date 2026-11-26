@@ -81,7 +81,14 @@ data class EventsQuery(
 /** `GET api/alerts`. */
 data class AlertType(val key: String, val title: String, val on: Boolean)
 
-data class AlertsConfig(val types: List<AlertType>, val runningLowG: Int?, val storageWarnPercent: Int?, val storageBadPercent: Int?)
+data class AlertsConfig(
+    val types: List<AlertType>,
+    val runningLowG: Int?,
+    val storageWarnPercent: Int?,
+    val storageBadPercent: Int?,
+    val lastSpoolOnly: Boolean = false,
+    val humidityHighPct: Int? = null,
+)
 
 /** One row of `GET api/spools/low`. */
 data class LowSpool(
@@ -146,6 +153,8 @@ object AlertParsing {
             runningLowG = o.long("running_low_g")?.toInt(),
             storageWarnPercent = o.long("storage_warn_percent")?.toInt(),
             storageBadPercent = o.long("storage_bad_percent")?.toInt(),
+            lastSpoolOnly = o.bool("last_spool_only") ?: false,
+            humidityHighPct = o.long("humidity_high_pct")?.toInt(),
         )
     }
 

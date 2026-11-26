@@ -335,7 +335,7 @@ def test_state_air_and_photo():
         assert s["air"] == {"temp_c": 21.43, "rh": 45.2, "hpa": 1013.25, "age_seconds": 2}
         assert s["photo"] == {"url": "/photo", "taken_at": station_http.iso(now - 1), "age_seconds": 1}
         assert set(s) == {"tag", "scale", "last_weight", "panel", "panel_version", "panel_nfc", "air", "photo",
-                      "flow", "version", "settings_changed"}        # the last two
+                      "photo_count", "ota", "flow", "version", "settings_changed"}        # the last two
         assert s["panel_version"] == "7"
         assert s["flow"] == {"step": "ready", "message": "", "spool": None, "filament": {"id": 45}}
         assert s["last_weight"] == {"grams": 1098.0, "age_seconds": 3, "held": True}
@@ -424,7 +424,7 @@ def test_buttons_and_lamps_follow_panel_swap(monkeypatch, swap):
     calls = []
     monkeypatch.setitem(st.settings, "panel_swap", swap)
     monkeypatch.setattr(panel.flow, "on_yellow", lambda long_press: calls.append(("yellow", long_press)))
-    monkeypatch.setattr(panel.flow, "on_red", lambda: calls.append(("red",)))
+    monkeypatch.setattr(panel.flow, "on_red", lambda *a: calls.append(("red",)))
     yellow, red = (b"D", b"H") if swap else (b"H", b"D")
     for line in (b"P " + yellow, b"L " + yellow, b"P " + red, b"L " + red):
         panel.on_line(line)

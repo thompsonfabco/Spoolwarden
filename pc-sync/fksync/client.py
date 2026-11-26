@@ -283,10 +283,12 @@ class Client:
         body = {"outcome": outcome, "waiting_since": waiting_since, "app": app}
         return self._request("POST", "/api/sync/heartbeat", json.dumps(body).encode(), "application/json")
 
-    def rebuild(self, live_hash: str, orca_live_hash: str | None = None) -> dict:
-        body = {"live_hash": live_hash}
+    def rebuild(self, live_hash: str | None, orca_live_hash: str | None = None) -> dict:
+        body = {}
+        if live_hash:
+            body["live_hash"] = live_hash
         if orca_live_hash:
-            body["orca_live_hash"] = orca_live_hash      # 
+            body["orca_live_hash"] = orca_live_hash      #
         return self._request("POST", "/api/sync/rebuild", json.dumps(body).encode(), "application/json")
 
     def build(self, stamp: str) -> bytes:

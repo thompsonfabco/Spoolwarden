@@ -21,6 +21,15 @@ const lockedNow = () => SW.lock.state === "locked";
 const rowKeys = new Map();
 const keyOf = (serial) => { if (!rowKeys.has(serial)) rowKeys.set(serial, "p" + (rowKeys.size + 1)); return rowKeys.get(serial); };
 const serialOfKey = (key) => { for (const [serial, k] of rowKeys) if (k === key) return serial; return null; };
+function serialHash(s) {
+  let h = 0xcbf29ce484222325n;
+  for (const b of new TextEncoder().encode(String(s))) {
+    h = ((h ^ BigInt(b)) * 0x100000001b3n) & 0xffffffffffffffffn;
+  }
+  return h.toString(16).padStart(16, "0");
+}
+const matchesId = (p, id) => !!id && (p.serial === id || (p.serial_hash && p.serial_hash === serialHash(id)));
+const serialToHash = new Map();
 // a Hub text with the printer's address and serial taken out while Locked
 const scrub = (p, text) => (lockedNow() ? [p.ip, p.host, p.serial].filter(Boolean).reduce((t, s) => t.split(s).join(SW.t("common_hidden_locked")), String(text)) : text);
 // the address of a row or drawer, as the person may see it: none while Locked
@@ -339,6 +348,10 @@ function pushAddress(p, what) { if (!lockedNow()) history.pushState(null, "", ad
 
 // ----- Saved reports -----
 async function openReports(p) {
+  if (S.printers_redacted && !lockedNow() && window._swFreshPrinters?.()) {
+    await window._swFreshPrinters();
+    p = (p.serial_hash && S.printers.list.find((x) => x.serial_hash === p.serial_hash)) || p;
+  }
   await closeDrawerAsync();
   if (location.hash !== `#printers/${encodeURIComponent(p.serial)}/reports`) pushAddress(p, "reports");
   const list = E("div"), never = E("p", "muted"), result = E("p", "result result--block", { role: "status" });
@@ -725,14 +738,15 @@ function printerTable(found, configured) {
       expanded.add(id);
     } else expanded.delete(id);
     // an address the person typed that already names this row stays as it is, also while Locked
-    if (!drawer && /^#printers(\/[^/]*)?$/.test(location.hash) && !(open && addressNow().id === id)) history.replaceState(null, "", open ? addressHash({ serial: id }) : "#printers");
+    const rowP = S.printers.list.find((x) => x.serial === id) || { serial: id };
+    if (!drawer && /^#printers(\/[^/]*)?$/.test(location.hash) && (open ? !matchesId(rowP, addressNow().id) : matchesId(rowP, addressNow().id))) history.replaceState(null, "", open ? addressHash({ serial: id }) : "#printers");
     setTitle(expandedTitle());
   });
   return table;
 }
 // the document title of an open row: "<name> · <hub>"
 function expandedTitle() {
-  const a = addressNow(), p = a.id && !a.what && S.printers.list.find((x) => x.serial === a.id);
+  const a = addressNow(), p = a.id && !a.what && S.printers.list.find((x) => matchesId(x, a.id));
   return p ? p.name : null;
 }
 let titleOverride = null;
@@ -805,6 +819,7 @@ function drawList(body, keepLive = false) {
 }
 function drawListNow(body) {
   const P = S.printers, found = P.list.filter((p) => klipperOf(p) && !p.configured), configured = P.list.filter((p) => !(klipperOf(p) && !p.configured));
+  for (const p of P.list) if (p.serial_hash) serialToHash.set(p.serial, p.serial_hash);
   stopRowLives(keptLives);
   rowViews = new Map();
   for (const o of watchers) o.disconnect();
@@ -860,6 +875,22 @@ function poll() {
 document.addEventListener("sw:lock", () => {
   if (tabNow() !== PRINTERS || !listEl || !listEl.isConnected || !listEl._drawn || lockedNow() === drawnLocked) return;
   drawList(listEl, true);
+});
+document.addEventListener("sw:state-printers", () => {
+  if (tabNow() !== PRINTERS || !listEl || !listEl.isConnected || !listEl._drawn) return;
+  const hashes = new Set();
+  for (const s of expanded) {
+    if (serialToHash.has(s)) hashes.add(serialToHash.get(s));
+    hashes.add(serialHash(s));
+  }
+  for (const p of S.printers.list) {
+    if (expanded.has(p.serial)) continue;
+    if ((p.serial_hash && (expanded.has(p.serial_hash) || hashes.has(p.serial_hash))) || [...expanded].some((s) => matchesId(p, s))) {
+      expanded.add(p.serial);
+    }
+  }
+  drawList(listEl, true);
+  api("printers/states").then((r) => paintLive(listEl, r), () => {});
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden || tabNow() !== PRINTERS || !listEl || !listEl.isConnected) return;
@@ -929,22 +960,24 @@ function openAddDrawer(opener) {
       const addr = kl ? hostPort(p) : p.ip || "";
       const sub = open && addr && p.name !== (kl ? p.host : p.ip) ? E("span", "coll__sub mono", addr) : null;
       return E("li", null, E("div", null, name, sub),
-        SW.btn(SW.t("printer_guided_use"), { name: SW.t("printers_use_name", { name }), run: () => SW.guard(SW.t("printer_guided_use").toLowerCase(), () => {
+        SW.btn(SW.t("printer_guided_use"), { name: SW.t("printers_use_name", { name }), run: () => SW.guard(SW.t("printer_guided_use").toLowerCase(), async () => {
+          if (S.printers_redacted && !lockedNow() && window._swFreshPrinters?.()) await window._swFreshPrinters();
+          const cur = (p.serial_hash && S.printers.list.find((x) => x.serial_hash === p.serial_hash)) || p;
           if (!form.isConnected || step !== 0) return;
           if (kl) {
             const previousHost = v(f.host).replace(/^\[(.*)\]$/, "$1");
-            if (previousHost.toLowerCase() !== p.host.toLowerCase() || Number(v(f.port)) !== p.port) f.api_key._control.value = "";
+            if (previousHost.toLowerCase() !== cur.host.toLowerCase() || Number(v(f.port)) !== cur.port) f.api_key._control.value = "";
             family = "klipper";
             if (type) type.querySelector('input[value="klipper"]').checked = true;
-            f.host._control.value = p.host;
-            f.port._control.value = p.port;
-            if (!f.name._control.value && p.name !== p.host) f.name._control.value = p.name;
+            f.host._control.value = cur.host;
+            f.port._control.value = cur.port;
+            if (!f.name._control.value && cur.name !== cur.host) f.name._control.value = cur.name;
           } else {
             family = "bambu";
             if (type) type.querySelector('input[value="bambu"]').checked = true;
-            f.address._control.value = p.ip || "";
-            f.serial._control.value = p.serial || "";
-            if (!f.name._control.value && p.name && p.name !== p.ip && p.name !== p.serial) f.name._control.value = p.name;
+            f.address._control.value = cur.ip || "";
+            f.serial._control.value = cur.serial || "";
+            if (!f.name._control.value && cur.name && cur.name !== cur.ip && cur.name !== cur.serial) f.name._control.value = cur.name;
           }
           show(1);
         }) }));
@@ -952,6 +985,7 @@ function openAddDrawer(opener) {
     found.hidden = !printers.length;
     noFound.hidden = !!printers.length;
   }
+  document.addEventListener("sw:state-printers", () => { if (form.isConnected) drawFound(!lockedNow()); });
   const noFound = E("p", "muted", SW.t("printer_guided_none"));
   const choose = E("div", "printers-add__step",
     P.klipper || P.bambu ? [E("h4", "printers-add__title", SW.t("printer_guided_found")), found, noFound, P.klipper ? E("div", "actions", scan) : null, P.klipper ? scanResult : null] : null,
@@ -1169,8 +1203,11 @@ function printersOff() {
 }
 // where the address points: a row open, a drawer on it; the address is read after the regions are in the page
 async function followAddress() {
+  if (S.printers_redacted && !lockedNow() && window._swFreshPrinters?.()) {
+    await window._swFreshPrinters();
+  }
   const a = addressNow(), wantsMap = !a.id && a.what === "map";
-  const p = wantsMap ? S.printers.list.find((x) => x.configured) : a.id && S.printers.list.find((x) => x.serial === a.id);
+  const p = wantsMap ? S.printers.list.find((x) => x.configured) : a.id && S.printers.list.find((x) => matchesId(x, a.id));
   const wantsAdd = a.id === "add";
   if (p) {
     expanded.add(p.serial);
@@ -1208,7 +1245,12 @@ function printersTab() {
   stopRowLives();
   if (!P.on) return [printersOff];
   const a = addressNow();
-  if (a.id && a.id !== "add" && a.id !== "find") { expanded.add(a.id); pendingScroll = a.what ? null : a.id; }
+  if (a.id && a.id !== "add" && a.id !== "find") {
+    const matched = P.list.find((x) => matchesId(x, a.id));
+    const target = matched ? matched.serial : a.id;
+    expanded.add(target);
+    pendingScroll = a.what ? null : target;
+  }
   poll();
   setTimeout(followAddress);
   return [printersList, toolCards, familyNote];

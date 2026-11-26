@@ -624,12 +624,12 @@ def test_long_slot_lists_are_cut_under_16_kb(app, token, kit):
 
 
 def test_reader_cli_without_web_packages(env, monkeypatch, capsys):
-    """M13: a missing [web] extra gives an install hint, not a traceback."""
+    """Reader token CLI commands use reader_tokens directly and do not require [web]."""
     import sys
     monkeypatch.delattr(sys.modules["filament_kit.web"], "reader", raising=False)
     monkeypatch.setitem(sys.modules, "filament_kit.web.reader", None)
-    assert cli.main(["reader", "tokens"]) == 1
-    assert "filament-kit[web]" in capsys.readouterr().err
+    assert cli.main(["reader", "tokens"]) == 0
+    assert capsys.readouterr().err == ""
 
 
 # ---------- final review M4, M5 ----------
@@ -877,3 +877,50 @@ def test_scan_auto_forwards_without_queueing_and_maps_errors(app, token, kit, qu
         kit.load_error = slots.SlotError("no preset", code="no_preset", http=409)
         assert scan(c, token, slot="auto").json()["status"] == "no_preset"
     assert queue.jobs() == {}
+
+
+def test_short_spool_includes_remaining_g_only_when_numeric():
+    assert reader._short_spool({"id": 5, "name": "PLA"}) == {"id": 5, "name": "PLA"}
+    assert reader._short_spool({"id": 5, "name": "PLA", "remaining_weight": None}) == {"id": 5, "name": "PLA"}
+    assert reader._short_spool({"id": 5, "name": "PLA", "remaining_weight": True}) == {"id": 5, "name": "PLA"}
+    assert reader._short_spool({"id": 5, "name": "PLA", "remaining_weight": 419.6}) == {
+        "id": 5, "name": "PLA", "remaining_g": 420,
+    }
+
+
+def test_unload_drops_queued_tap_and_posts_to_kit(app, token, kit, queue):
+    real_post = kit.post
+
+    def post(path, body):
+        if path == "/api/printers/SER1/slots/A1/unload":
+            with kit.lock:
+                kit.loads.append((path, body))
+            if kit.load_error is not None:
+                raise kit.load_error
+            return {"spool": {"id": 7, "name": "SUNLU PLA+ Grey"}, "location": "Shelf A"}
+        return real_post(path, body)
+    kit.post = post
+
+    queue.add("SER1", "A1", 7)
+    with client(app) as c:
+        r = c.post("/reader/unload", json={"printer": "SER1", "slot": "A1"}, headers={"X-Auth-Token": token})
+        assert r.status_code == 200
+        body = r.json()
+        assert body == {"status": "unloaded", "message": "A1 -> Shelf A", "filament": "SUNLU PLA+ Grey",
+                        "slot": "A1", "location": "Shelf A"}
+        assert queue.jobs() == {}
+        assert kit.loads == [("/api/printers/SER1/slots/A1/unload", {"dry_run": False})]
+
+        assert c.post("/reader/unload", json={"printer": "SER1", "slot": "auto"},
+                      headers={"X-Auth-Token": token}).status_code == 400
+        assert c.post("/reader/unload", json={"printer": "SER1", "slot": "Z9"},
+                      headers={"X-Auth-Token": token}).status_code == 404
+        assert c.post("/reader/unload", json={"printer": "SER2", "slot": "A1"},
+                      headers={"X-Auth-Token": token}).json()["status"] == "offline"
+
+
+def test_unload_refused_in_demo_mode(app, token, monkeypatch):
+    monkeypatch.setattr(reader.demo, "is_on", lambda: True)
+    with client(app) as c:
+        r = c.post("/reader/unload", json={"printer": "SER1", "slot": "A1"}, headers={"X-Auth-Token": token})
+    assert r.status_code == 409 and r.json()["status"] == "error"

@@ -30,7 +30,9 @@ def test_the_list_has_the_contract_ids_and_one_lamp_per_step(tmp_path):
     store, *_ = make(tmp_path)
     ids = [s["id"] for s in store.listing()]
     assert ids[:5] == ["beep", "speech", "voice", "volume", "panel_swap"]
-    assert ids[5:] == [f"lamp.{step}" for step in flow.STEP_LAMPS]
+    lamp_end = 5 + len(flow.STEP_LAMPS)
+    assert ids[5:lamp_end] == [f"lamp.{step}" for step in flow.STEP_LAMPS]
+    assert ids[lamp_end:] == ["flow_timeout", "recognise_timeout", "min_grams", "camera", "panel_flash", "auto_ota"]
     for s in store.listing():
         assert s["kind"] in ("switch", "choice", "number") and s["label"]
         assert ("choices" in s) == (s["kind"] == "choice") and ("min" in s) == (s["kind"] == "number")

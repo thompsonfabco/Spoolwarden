@@ -57,9 +57,10 @@ def fleet():
     return CountingManager(held), kl
 
 
-def _states(env, helper, mgr):
+def _states(env, helper, mgr, *, unlocked=True):
     app = make(env, helper, mgr, add=frozenset({"klipper"}))
-    return client(app).get("/setup/api/printers/states")
+    headers = {"X-Setup-Code": CODE} if unlocked else {}
+    return client(app).get("/setup/api/printers/states", headers=headers)
 
 
 def test_one_read_returns_every_printer_with_state_job_and_slots(env, helper, fleet):
@@ -97,17 +98,30 @@ def test_the_per_printer_replies_are_unchanged(env, helper, fleet):
     mgr, kl = fleet
     app = make(env, helper, mgr, add=frozenset({"klipper"}))
     c = client(app)
-    before = c.get("/setup/api/state").json()["printers"]["list"]
-    assert c.get("/setup/api/printers/states").status_code == 200
-    assert c.get("/setup/api/state").json()["printers"]["list"] == before
+    hdr = {"X-Setup-Code": CODE}
+    before = c.get("/setup/api/state", headers=hdr).json()["printers"]["list"]
+    assert c.get("/setup/api/printers/states", headers=hdr).status_code == 200
+    assert c.get("/setup/api/state", headers=hdr).json()["printers"]["list"] == before
     keys = {r["serial"]: set(r) for r in before}
-    assert keys[SERIAL] == {"serial", "name", "model", "ip", "configured", "state", "pinned", "family", "mapping",
-                            "report_why"}
-    assert keys[kl.serial] == {"serial", "name", "model", "ip", "configured", "state", "pinned", "family", "host",
-                               "port", "api_key", "lane_data"}
+    assert keys[SERIAL] == {"serial", "serial_hash", "name", "model", "ip", "configured", "state", "pinned", "family",
+                            "mapping", "report_why", "redacted"}
+    assert keys[kl.serial] == {"serial", "serial_hash", "name", "model", "ip", "configured", "state", "pinned", "family",
+                               "host", "port", "api_key", "lane_data", "redacted"}
     p = registry.load()[SERIAL]
     assert set(api._printer_view(p, mgr)) == {"id", "name", "model", "serial", "ip", "configured", "state", "camera",
                                               "model_name", "summary", "family", "pinned", "auto", "auto_possible"}
+
+
+def test_locked_state_and_printer_states_redact_identity_and_addresses(env, helper, fleet):
+    mgr, kl = fleet
+    r = _states(env, helper, mgr, unlocked=False)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["printers_redacted"] is True
+    assert [p["serial"] for p in body["printers"]] == ["locked-1", "locked-2", "locked-3"]
+    assert all(p["redacted"] is True for p in body["printers"])
+    for secret in (SERIAL, kl.serial, "0948ZZ0A0000002", "192.0.2.40", NAME):
+        assert secret not in r.text
 
 
 def test_printers_csv_requires_the_code_or_a_trusted_computer(env, helper, fleet):

@@ -61,7 +61,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, PlainTextResponse
 from starlette.routing import Route
 
-from .. import config, demo, inventory, tags
+from .. import config, demo, inventory, reader_config, reader_tokens, tags
 from ..spoolman import SpoolmanError
 from .. import lan
 from . import pages, slots
@@ -334,7 +334,11 @@ def _spool_name(s: dict) -> str:
 def _short_spool(v) -> dict | None:
     if not isinstance(v, dict) or v.get("id") is None:
         return None
-    return {"id": v["id"], "name": clip(v.get("name") or f"spool {v['id']}")}
+    out = {"id": v["id"], "name": clip(v.get("name") or f"spool {v['id']}")}
+    rw = v.get("remaining_weight")
+    if isinstance(rw, (int, float)) and not isinstance(rw, bool):
+        out["remaining_g"] = round(rw)
+    return out
 
 
 def reader_slots(rows: list[dict], printer: str = "") -> list[dict]:
@@ -402,6 +406,7 @@ class Reader:
             if tid is None:
                 return reply(401, "error", "unauthorized: run spoolwarden reader token")
             await run_in_threadpool(self._seen, tid, request.headers.get("x-reader-build"))
+            request.state.reader_tid = tid
             try:
                 return await fn(request)
             except slots.SlotError as e:
@@ -436,14 +441,48 @@ class Reader:
     def routes(self) -> list[Route]:
         return [Route("/reader/healthz", self._gated(self.healthz), methods=["GET"]),
                 Route("/reader/fw/{name}", self._gated(self.fw), methods=["GET"]),
+                Route("/reader/config", self._gated(self.config_get), methods=["GET"]),
+                Route("/reader/config/ack", self._gated(self.config_ack), methods=["POST"]),
                 Route("/reader/printers", self._gated(self.printers), methods=["GET"]),
                 Route("/reader/printers/{id}/slots", self._gated(self.slot_list), methods=["GET"]),
-                Route("/reader/scan", self._gated(self.scan), methods=["POST"])]
+                Route("/reader/scan", self._gated(self.scan), methods=["POST"]),
+                Route("/reader/unload", self._gated(self.unload), methods=["POST"])]
 
     # --- handlers ---
 
     async def healthz(self, request: Request):
         return PlainTextResponse("ok")
+
+    async def config_get(self, request: Request):
+        tid = request.state.reader_tid
+
+        def build() -> dict:
+            eff = reader_config.effective(tid)
+            pend = reader_config.pending(tid)
+            return {
+                **eff,
+                "config_version": pend["config_version"],
+                "ota_now": pend["ota_now"],
+                "reboot_now": pend["reboot_now"],
+                "offered_build": reader_tokens.offered_build(),
+            }
+
+        return JSONResponse(await run_in_threadpool(build))
+
+    async def config_ack(self, request: Request):
+        from .. import http_body
+        try:
+            body = await http_body.read_json_object(request, http_body.SMALL_JSON_CAP, allow_empty=True)
+        except http_body.BodyTooLarge:
+            return reply(413, "error", http_body.too_large_text())
+        except http_body.BadBody as e:
+            return reply(400, "error", str(e))
+        cmd = body.get("cmd")
+        if cmd not in reader_config.COMMANDS:
+            return reply(400, "error", "cmd must be 'ota' or 'reboot'")
+        tid = request.state.reader_tid
+        await run_in_threadpool(reader_config.ack_command, tid, cmd)
+        return JSONResponse({"ok": True, "cmd": cmd})
 
     async def fw(self, request: Request):
         if demo.is_on():                  # no firmware goes to a device in the demo (flash a device)
@@ -591,6 +630,56 @@ class Reader:
         if r and r.get("confirmed") is False:
             msg = "(not confirmed) " + msg          # first: the 40-byte cut must keep it
         return reply(200, "set", msg, filament=name, preset=preset.get("name"), slot=label)
+
+    async def unload(self, request: Request):
+        if demo.is_on():                  # an unload changes real printer/Spoolman state, never in demo
+            return reply(409, "error", demo.NOT_IN_DEMO)
+        from .. import http_body
+        try:
+            body = await http_body.read_json_object(request, http_body.SMALL_JSON_CAP, allow_empty=True)
+        except http_body.BodyTooLarge:
+            return reply(413, "error", http_body.too_large_text())
+        except http_body.BadBody as e:
+            return reply(400, "error", str(e))
+        printer, label = body.get("printer"), body.get("slot")
+        if isinstance(printer, int) and not isinstance(printer, bool):
+            printer = str(printer)
+        if not isinstance(printer, str) or not printer or not isinstance(label, str) or not label.strip():
+            return reply(400, "error", "printer and slot are required")
+        if label.strip().lower() == "auto":
+            return reply(400, "error", "auto cannot be unloaded")
+        res = await run_in_threadpool(self._unload, printer, label.strip())
+        log.info("reader unload printer=%s slot=%s status=%s", _safe(printer), _safe(label),
+                 json.loads(res.body).get("status"))
+        return res
+
+    def _unload(self, printer: str, slot: str) -> JSONResponse:
+        kit = self.tools.kit_bridge()
+        try:
+            view = kit.get(slots.printer_path(printer))
+        except slots.SlotError as e:
+            return _kit_error(e) if e.code != "not_found" else reply(404, "error", f"no printer {printer}")
+        pv = view.get("printer") or {}
+        pname = pv.get("name") or printer
+        if pv.get("state") in OFFLINE_STATES:
+            return reply(200, "offline", f"{pname} is {pv.get('state').replace('_', ' ')}")
+        found = slots.status_slots(view.get("status") or {})
+        try:
+            label = slots.kit_label(slot, [s["label"] for s in found])
+        except slots.SlotError:
+            return reply(404, "error", f"{pname} has no slot {slot}")
+        with self._printer_lock(printer):
+            self.queue.drop(printer, label)
+            r = kit.post(slots.unload_path(printer, label), {"dry_run": False})
+        sp = (r or {}).get("spool") if isinstance(r, dict) else None
+        filament = ((sp or {}).get("name") if isinstance(sp, dict) else None) or ""
+        if not filament:
+            cur = next((s for s in found if s["label"] == label), None)
+            if isinstance(cur, dict) and isinstance(cur.get("spool"), dict):
+                filament = cur["spool"].get("name") or ""
+        location = ((r or {}).get("location") if isinstance(r, dict) else None) or ""
+        msg = f"{label} -> {location}" if location else f"{label}: unloaded"
+        return reply(200, "unloaded", msg, filament=filament, slot=label, location=location)
 
 
 def _late(printer: str, label: str, fut: concurrent.futures.Future) -> None:

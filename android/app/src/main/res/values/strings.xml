@@ -1633,6 +1633,12 @@
     <string name="settings_network_hosts">Names for this page</string>
     <string name="settings_network_hosts_hint">Separate them with spaces. The Hub\'s own names and addresses always work, and so does a local name from your network (one word, .local, .lan, .home.arpa or your network\'s own domain) that points at this Hub. Add any other name here.</string>
     <string name="settings_network_hosts_placeholder">hub.example</string>
+    <string name="settings_network_lan">Local network ranges</string>
+    <string name="settings_network_lan_hint">CIDR ranges treated as local home access, separated by spaces.</string>
+    <string name="settings_network_lan_placeholder">192.168.0.0/16 10.0.0.0/8</string>
+    <string name="settings_network_spoolman_allow">Spoolman allowed ranges</string>
+    <string name="settings_network_spoolman_allow_hint">CIDR ranges allowed to reach Spoolman, separated by spaces. Leave empty for local ranges only.</string>
+    <string name="settings_network_spoolman_allow_placeholder">192.168.1.0/24</string>
     <string name="settings_network_public">Public address</string>
     <string name="settings_network_public_hint">The https address of the web app and Claude\'s connector.</string>
     <string name="settings_network_public_hint_off">Used when Web access is on.</string>
@@ -4593,6 +4599,7 @@
     <string name="start_go_devices">Go to Devices</string>
     <string name="start_open_web_app">Open the web app</string>
     <string name="start_do_from_phone">Do this from your phone.</string>
+    <string name="start_i_did_this">I did this</string>
     <!-- 1=name -->
     <string name="start_keep_name">Keep \"%1$s\"</string>
     <string name="start_keep_storage">Keep the defaults</string>
@@ -4637,6 +4644,7 @@
     <string name="start_line_spool_unknown">Spoolman did not answer.</string>
     <string name="start_line_backup_done">A backup exists.</string>
     <string name="start_line_backup_open">No backup yet.</string>
+    <string name="start_line_marked_done">Marked done</string>
     <string name="cli_start_done">done</string>
     <string name="cli_start_next">next</string>
     <string name="cli_start_not_yet">not yet</string>
@@ -5073,6 +5081,14 @@
     <string name="station_setting_panel_swap">Swap the yellow and red buttons and lamps</string>
     <!-- 1=step -->
     <string name="station_setting_lamp">Lamp for: %1$s</string>
+    <string name="station_setting_auto_ota">Allow remote OTA updates</string>
+    <string name="station_setting_camera">Camera</string>
+    <string name="station_setting_flow_timeout">Intake flow timeout (seconds)</string>
+    <string name="station_setting_min_grams">Minimum spool weight (grams)</string>
+    <string name="station_setting_panel_flash">Flash panel firmware automatically</string>
+    <string name="station_setting_recognise_timeout">Spool recognition timeout (seconds)</string>
+    <string name="station_camera_auto">Automatic</string>
+    <string name="station_camera_off">Off</string>
     <string name="station_voice_auto">Automatic</string>
     <string name="station_voice_espeak">eSpeak</string>
     <!-- 1=id -->
@@ -5150,6 +5166,7 @@
     <string name="hub_start_hide_bool">hide must be true or false</string>
     <string name="hub_start_not_saved">could not save the checklist state</string>
     <string name="hub_start_keep_which">keep must be name, storage, or features</string>
+    <string name="hub_start_done_which">Pick one of the Getting started steps.</string>
     <string name="kit_viewer_only_reads">a viewer token may only read Hub status, printers, spools and health</string>
     <string name="kit_auto_reserved">\'auto\' is a reserved slot label</string>
     <string name="kit_bad_hello">the certificate fingerprint, port or version is not valid, or this token is not a Weigh Station\'s</string>
@@ -6314,4 +6331,92 @@
     <string name="start_demo_lead">Just looking?</string>
     <string name="start_demo_try">Try the demo</string>
     <string name="demo_not_empty">The demo is for an empty Hub. This Hub has real data.</string>
+    <!-- 1=ago 2=time -->
+    <string name="alert_time_stamped">%1$s · %2$s</string>
+    <string name="set_log_level_label">Log level</string>
+    <string name="set_log_level_note">Controls how much detail is written to service logs. Use Debug when troubleshooting, then switch back to Info.</string>
+    <string name="set_log_level_error">Error</string>
+    <string name="set_log_level_warning">Warning</string>
+    <string name="set_log_level_info">Info (default)</string>
+    <string name="set_log_level_debug">Debug</string>
+    <string name="hub_log_level_invalid">Choose Error, Warning, Info, or Debug.</string>
+    <string name="spools_chip_reorder">Reorder</string>
+    <string name="spools_reorder_title">Reorder list</string>
+    <!-- 1=grams 2=days -->
+    <string name="spools_reorder_note">Opened spools at or under %1$s g, with %2$s-day use and last order details.</string>
+    <string name="spools_reorder_empty_title">Nothing to reorder</string>
+    <string name="spools_reorder_empty_text">No opened spools are running low right now.</string>
+    <string name="spools_reorder_col_burn">90-day use</string>
+    <string name="spools_reorder_col_days_left">Days left</string>
+    <string name="spools_reorder_col_stock">In stock</string>
+    <string name="spools_reorder_col_order">Last order</string>
+    <!-- 1=grams -->
+    <string name="spools_reorder_burn_rate">%1$s g/day</string>
+    <string name="spools_reorder_burn_none">No recent use</string>
+    <!-- 1=days -->
+    <string name="spools_reorder_days_left">%1$s d</string>
+    <string name="spools_reorder_days_unknown">Unknown</string>
+    <!-- 1=price -->
+    <string name="spools_reorder_price">$%1$s</string>
+    <string name="spools_reorder_order_none">No order found</string>
+    <string name="spools_reorder_error">Could not load the reorder list.</string>
+    <string name="recent_select_all">Select all shown</string>
+    <!-- 1=name -->
+    <string name="recent_select_name">Select %1$s</string>
+    <string name="recent_selection">Selected additions</string>
+    <!-- 1=count -->
+    <string name="recent_selected">%1$d selected</string>
+    <!-- 1=count -->
+    <plurals name="recent_selected_spools">
+        <item quantity="one">%1$d spool</item>
+        <item quantity="other">%1$d spools</item>
+    </plurals>
+    <!-- 1=records 2=spools -->
+    <string name="recent_selected_summary">%1$s · %2$s</string>
+    <string name="recent_print_labels">Print labels</string>
+    <string name="recent_print_no_spools">The selected additions have no spool numbers yet.</string>
+    <!-- 1=source -->
+    <string name="alert_title_humidity_high">High humidity: %1$s</string>
+    <!-- 1=rh 2=threshold -->
+    <string name="alert_text_humidity_high">Humidity is %1$s %% (limit %2$s %%).</string>
+    <string name="alert_humidity_unknown">Dry box</string>
+    <!-- 1=source -->
+    <string name="event_title_humidity_ok">Humidity is back to normal: %1$s</string>
+    <!-- 1=rh 2=threshold -->
+    <string name="event_text_humidity_ok">Humidity is %1$s %% (under %2$s %%).</string>
+    <string name="alerts_type_humidity">High humidity</string>
+    <string name="analytics_cost_title">Cost and waste</string>
+    <!-- 1=cost 2=waste 3=percent -->
+    <string name="analytics_cost_summary">Estimated filament cost: %1$s. Unfinished prints: %2$s (%3$s%%).</string>
+    <string name="analytics_cost_empty">No spool prices are recorded yet. Add a price to a spool to track print cost and waste.</string>
+    <string name="analytics_col_cost">Cost</string>
+    <string name="analytics_col_waste">Waste</string>
+    <!-- 1=amount -->
+    <string name="analytics_currency_amount">$%1$s</string>
+    <string name="analytics_orders_title">Order history</string>
+    <!-- 1=count 2=spools -->
+    <string name="analytics_orders_summary">%1$d orders saved (%2$s spools).</string>
+    <string name="analytics_orders_empty">No filament orders imported yet.</string>
+    <string name="analytics_orders_format">Format</string>
+    <string name="analytics_orders_format_auto">Detect automatically</string>
+    <string name="analytics_orders_format_csv">CSV</string>
+    <string name="analytics_orders_format_json">JSON</string>
+    <string name="analytics_orders_paste">Order data</string>
+    <string name="analytics_orders_placeholder">date,seller,material,weight_g,price,currency,qty</string>
+    <string name="analytics_orders_hint">Paste CSV rows or a JSON array of filament orders.</string>
+    <string name="analytics_orders_import_btn">Import orders</string>
+    <string name="analytics_orders_importing">Importing orders...</string>
+    <!-- 1=imported 2=skipped 3=total -->
+    <string name="analytics_orders_imported">Imported %1$s orders (%2$s already saved, %3$s total).</string>
+    <string name="analytics_orders_error_empty">Paste CSV or JSON order data first.</string>
+    <string name="alerts_rules_title">Hub alert rules</string>
+    <string name="alerts_rules_hint">Choose which events raise an alert on this Hub and when.</string>
+    <string name="alerts_running_low_g">Running low under</string>
+    <string name="alerts_last_spool_only">Only when it is the last spool of that filament</string>
+    <string name="alerts_storage_warn_pct">Storage warning at</string>
+    <string name="alerts_storage_bad_pct">Storage full at</string>
+    <string name="alerts_humidity_high_pct">High humidity at</string>
+    <string name="alerts_humidity_unit" formatted="false">% RH</string>
+    <string name="alerts_saved">Saved.</string>
+    <string name="alerts_save_failed">Could not save alert rules.</string>
 </resources>

@@ -963,6 +963,166 @@ void test_hello_line() {
                            helloLine(1731400000L, true, "ok", "unauth").c_str());
 }
 
+void test_slot_remaining_grams_and_spool_info() {
+  std::vector<SlotEntry> s;
+  TEST_ASSERT_TRUE(parseSlots(R"([
+    {"label":"A1","present":true,"type":"PLA","spool":{"id":12,"name":"Polymaker Grey","remaining_g":420}},
+    {"label":"A2","present":false,"type":"","spool":null},
+    {"label":"A3","present":true,"type":"PETG","spool":{"id":13,"name":"Prusament"}}
+  ])", s));
+  TEST_ASSERT_EQUAL(3, (int)s.size());
+  TEST_ASSERT_EQUAL(420, s[0].remainingGrams);
+  TEST_ASSERT_EQUAL(-1, s[1].remainingGrams);
+  TEST_ASSERT_EQUAL(-1, s[2].remainingGrams);
+  TEST_ASSERT_EQUAL_STRING("PLA Polymaker Grey\n420 g left", spoolInfoText(s[0]).c_str());
+  TEST_ASSERT_EQUAL_STRING("empty", spoolInfoText(s[1]).c_str());
+  TEST_ASSERT_EQUAL_STRING("PETG Prusament", spoolInfoText(s[2]).c_str());
+}
+
+void test_unload_body_and_scan_unloaded() {
+  TEST_ASSERT_EQUAL_STRING(R"({"printer":"SER1","slot":"A1"})", unloadBody("SER1", "A1").c_str());
+  ScanResult r = parseScanResult(200, R"({"status":"unloaded","message":"A1 -> Shelf A","filament":"PLA"})");
+  TEST_ASSERT_EQUAL(SCAN_UNLOADED, r.status);
+  TEST_ASSERT_EQUAL_STRING("A1 -> Shelf A", r.message.c_str());
+  TEST_ASSERT_EQUAL_STRING("PLA", r.filament.c_str());
+  TEST_ASSERT_EQUAL(FB_OK, feedbackFor(SCAN_UNLOADED));
+  TEST_ASSERT_EQUAL_STRING("Unloaded", headline(SCAN_UNLOADED));
+  TEST_ASSERT_EQUAL(SCAN_ERROR, parseScanResult(500, R"({"status":"unloaded"})").status);
+}
+
+void test_menu_quick_actions() {
+  Menu m;
+  TEST_ASSERT_EQUAL(ACT_OPEN_ACTIONS, m.openActions(100));
+  TEST_ASSERT_EQUAL(MODE_ACTIONS, m.mode);
+  TEST_ASSERT_EQUAL(0, m.actionCursor);
+
+  TEST_ASSERT_EQUAL(ACT_CURSOR_MOVED, m.rotate(1, 2, 4, 200));
+  TEST_ASSERT_EQUAL(1, m.actionCursor);
+  TEST_ASSERT_EQUAL(ACT_ACTION_UNLOAD, m.button(BTN_SHORT, 2, 300));
+  TEST_ASSERT_EQUAL(MODE_SLOTS, m.mode);
+
+  TEST_ASSERT_EQUAL(ACT_OPEN_ACTIONS, m.openActions(400));
+  TEST_ASSERT_EQUAL(ACT_ACTION_SP_INFO, m.button(BTN_SHORT, 2, 500));
+  TEST_ASSERT_EQUAL(MODE_SLOTS, m.mode);
+
+  TEST_ASSERT_EQUAL(ACT_OPEN_ACTIONS, m.openActions(600));
+  TEST_ASSERT_EQUAL(ACT_CURSOR_MOVED, m.rotate(-1, 2, 4, 700));
+  TEST_ASSERT_EQUAL(2, m.actionCursor);
+  TEST_ASSERT_EQUAL(ACT_CLOSE_LIST, m.button(BTN_SHORT, 2, 800));
+  TEST_ASSERT_EQUAL(MODE_SLOTS, m.mode);
+
+  TEST_ASSERT_EQUAL(ACT_OPEN_ACTIONS, m.openActions(1000));
+  TEST_ASSERT_EQUAL(ACT_NONE, m.tick(1000 + LIST_TIMEOUT_MS - 1));
+  TEST_ASSERT_EQUAL(ACT_CLOSE_LIST, m.tick(1000 + LIST_TIMEOUT_MS));
+  TEST_ASSERT_EQUAL(MODE_SLOTS, m.mode);
+}
+
+// ---- remote config ----------------------------------------------------------
+
+void test_parse_remote_config_full() {
+  RemoteConfig c;
+  const char* json = R"({
+    "config_version": 42,
+    "default_printer": "01P00A123456789",
+    "buzzer_enabled": false,
+    "buzzer_low": true,
+    "auto_ota": false,
+    "dim_after_s": 45,
+    "off_after_s": 300,
+    "scan_cooldown_ms": 1500,
+    "list_refresh_s": 30,
+    "ota_check_hours": 12,
+    "encoder_invert": true,
+    "ota_now": true,
+    "reboot_now": true,
+    "hub_ip": "192.168.1.50"
+  })";
+  TEST_ASSERT_TRUE(parseRemoteConfig(json, c));
+  TEST_ASSERT_EQUAL_UINT32(42, c.configVersion);
+  TEST_ASSERT_EQUAL_STRING("01P00A123456789", c.defaultPrinter);
+  TEST_ASSERT_FALSE(c.buzzerEnabled);
+  TEST_ASSERT_TRUE(c.buzzerLow);
+  TEST_ASSERT_FALSE(c.autoOta);
+  TEST_ASSERT_EQUAL_UINT16(45, c.dimAfterS);
+  TEST_ASSERT_EQUAL_UINT16(300, c.offAfterS);
+  TEST_ASSERT_EQUAL_UINT16(1500, c.scanCooldownMs);
+  TEST_ASSERT_EQUAL_UINT16(30, c.listRefreshS);
+  TEST_ASSERT_EQUAL_UINT16(12, c.otaCheckHours);
+  TEST_ASSERT_TRUE(c.encoderInvert);
+  TEST_ASSERT_TRUE(c.otaNow);
+  TEST_ASSERT_TRUE(c.rebootNow);
+  TEST_ASSERT_EQUAL_STRING("192.168.1.50", c.hubIp);
+}
+
+void test_parse_remote_config_partial_keeps_defaults() {
+  RemoteConfig c;
+  TEST_ASSERT_TRUE(parseRemoteConfig(R"({"config_version": 7, "buzzer_enabled": false})", c));
+  TEST_ASSERT_EQUAL_UINT32(7, c.configVersion);
+  TEST_ASSERT_FALSE(c.buzzerEnabled);
+  TEST_ASSERT_FALSE(c.buzzerLow);
+  TEST_ASSERT_TRUE(c.autoOta);
+  TEST_ASSERT_EQUAL_UINT16(120, c.dimAfterS);
+  TEST_ASSERT_EQUAL_UINT16(600, c.offAfterS);
+  TEST_ASSERT_EQUAL_UINT16(2500, c.scanCooldownMs);
+  TEST_ASSERT_EQUAL_UINT16(60, c.listRefreshS);
+  TEST_ASSERT_EQUAL_UINT16(24, c.otaCheckHours);
+  TEST_ASSERT_FALSE(c.encoderInvert);
+  TEST_ASSERT_FALSE(c.otaNow);
+  TEST_ASSERT_FALSE(c.rebootNow);
+  TEST_ASSERT_EQUAL_STRING("", c.defaultPrinter);
+  TEST_ASSERT_EQUAL_STRING("", c.hubIp);
+}
+
+void test_parse_remote_config_clamping() {
+  RemoteConfig c;
+  TEST_ASSERT_TRUE(parseRemoteConfig(R"({
+    "dim_after_s": 1,
+    "off_after_s": 5,
+    "scan_cooldown_ms": 100,
+    "list_refresh_s": 1,
+    "ota_check_hours": 0
+  })", c));
+  TEST_ASSERT_EQUAL_UINT16(10, c.dimAfterS);
+  TEST_ASSERT_EQUAL_UINT16(30, c.offAfterS);
+  TEST_ASSERT_EQUAL_UINT16(500, c.scanCooldownMs);
+  TEST_ASSERT_EQUAL_UINT16(10, c.listRefreshS);
+  TEST_ASSERT_EQUAL_UINT16(1, c.otaCheckHours);
+
+  TEST_ASSERT_TRUE(parseRemoteConfig(R"({
+    "dim_after_s": 9999,
+    "off_after_s": 99999,
+    "scan_cooldown_ms": 50000,
+    "list_refresh_s": 2000,
+    "ota_check_hours": 500
+  })", c));
+  TEST_ASSERT_EQUAL_UINT16(3600, c.dimAfterS);
+  TEST_ASSERT_EQUAL_UINT16(7200, c.offAfterS);
+  TEST_ASSERT_EQUAL_UINT16(10000, c.scanCooldownMs);
+  TEST_ASSERT_EQUAL_UINT16(600, c.listRefreshS);
+  TEST_ASSERT_EQUAL_UINT16(168, c.otaCheckHours);
+}
+
+void test_parse_remote_config_flags() {
+  RemoteConfig c;
+  TEST_ASSERT_TRUE(parseRemoteConfig(R"({"ota_now": true, "reboot_now": false})", c));
+  TEST_ASSERT_TRUE(c.otaNow);
+  TEST_ASSERT_FALSE(c.rebootNow);
+  TEST_ASSERT_TRUE(parseRemoteConfig(R"({"ota_now": false, "reboot_now": true})", c));
+  TEST_ASSERT_FALSE(c.otaNow);
+  TEST_ASSERT_TRUE(c.rebootNow);
+}
+
+void test_parse_remote_config_malformed() {
+  RemoteConfig c;
+  c.configVersion = 99;
+  c.dimAfterS = 200;
+  TEST_ASSERT_FALSE(parseRemoteConfig(nullptr, c));
+  TEST_ASSERT_FALSE(parseRemoteConfig("not json", c));
+  TEST_ASSERT_FALSE(parseRemoteConfig("[1,2,3]", c));
+  TEST_ASSERT_EQUAL_UINT32(99, c.configVersion);
+  TEST_ASSERT_EQUAL_UINT16(200, c.dimAfterS);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_parse_printers_basic);
@@ -1040,5 +1200,13 @@ int main(int, char**) {
   RUN_TEST(test_commands);
   RUN_TEST(test_line_reader_drops_cr_and_overlong_lines);
   RUN_TEST(test_hello_line);
+  RUN_TEST(test_slot_remaining_grams_and_spool_info);
+  RUN_TEST(test_unload_body_and_scan_unloaded);
+  RUN_TEST(test_menu_quick_actions);
+  RUN_TEST(test_parse_remote_config_full);
+  RUN_TEST(test_parse_remote_config_partial_keeps_defaults);
+  RUN_TEST(test_parse_remote_config_clamping);
+  RUN_TEST(test_parse_remote_config_flags);
+  RUN_TEST(test_parse_remote_config_malformed);
   return UNITY_END();
 }

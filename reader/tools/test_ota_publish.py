@@ -247,3 +247,11 @@ def test_main_refuses_when_secrets_h_exists(monkeypatch, tmp_path):
     monkeypatch.setattr(op, "READER", tmp_path)
     with pytest.raises(SystemExit, match="secrets\\.h"):
         op.main(["--dry-run"])
+
+
+def test_export_pubkey_writes_pem(tmp_path):
+    key = tmp_path / "k.pem"
+    pub = tmp_path / "sub" / "ota.pub"
+    k = op.load_or_create_key(key, create=True)
+    op.main(["--key", str(key), "--export-pubkey", str(pub)])
+    assert pub.read_text(encoding="utf-8") == op.public_pem(k)

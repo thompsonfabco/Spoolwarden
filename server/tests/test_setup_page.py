@@ -289,7 +289,7 @@ def test_anthropic_key_lands_where_the_cli_puts_it_and_is_never_shown(app, caplo
     r = post(c, "key", {"key": KEY})
     assert r.status_code == 200 and KEY not in r.text
     assert _etc(cli.KEY_FILE).read_text(encoding="utf-8") == KEY + "\n"
-    st = c.get("/setup/api/state")
+    st = c.get("/setup/api/state", headers={"X-Setup-Code": CODE})
     assert st.json()["anthropic"]["set"] is True and KEY not in st.text
     post(c, "key", {"key": KEY + "2"})
     post(c, "key/remove", {})
@@ -347,7 +347,7 @@ def test_reader_token_is_shown_once_and_only_its_hash_is_kept(app, caplog):
     assert r["id"] == "r1" and len(tok) > 20
     assert reader_tokens.TokenStore().check(tok)
     assert tok.encode() not in reader_tokens.token_file().read_bytes()
-    st = c.get("/setup/api/state")
+    st = c.get("/setup/api/state", headers={"X-Setup-Code": CODE})
     assert st.json()["readers"]["list"][0]["name"] == "bench" and tok not in st.text
     assert tok not in caplog.text and "setup: reader token r1 made from 192.0.2.20" in caplog.text
     assert post(c, "readers/r1/revoke", {}).status_code == 200
@@ -384,7 +384,7 @@ def test_printer_added_by_ip_with_the_serial_from_its_certificate(app, manager, 
     p = registry.load()[SERIAL]
     assert (p.ip, p.access_code, p.configured, p.name) == ("192.0.2.40", "12345678", True, "H2D")
     assert manager.synced == 1
-    st = c.get("/setup/api/state")
+    st = c.get("/setup/api/state", headers={"X-Setup-Code": CODE})
     assert st.json()["printers"]["list"][0]["serial"] == SERIAL and "12345678" not in st.text
     assert post(c, f"printers/{SERIAL}/code", {"access_code": "87654321"}).status_code == 200
     assert registry.load()[SERIAL].access_code == "87654321"
@@ -465,11 +465,16 @@ def test_klipper_only_install_lists_its_klipper_printers(env, helper, manager):
     k = _klipper(key="MOONRAKER-KEY-EXAMPLE")
     registry.upsert(registry.Printer(SERIAL, "H2D", "H2D", "192.0.2.40", "12345678", True))
     c = client(make(env, helper, manager, add={"klipper"}, drop={"printers"}))
-    st = c.get("/setup/api/state")
+    locked = c.get("/setup/api/state").json()
+    assert locked["printers_redacted"] is True
+    assert [(p["serial"], p["host"], p["port"], p["ip"], p["redacted"]) for p in locked["printers"]["list"]] == \
+        [("locked-1", "", None, "", True)]
+    st = c.get("/setup/api/state", headers={"X-Setup-Code": CODE})
+    assert st.json()["printers_redacted"] is False
     P = st.json()["printers"]
     assert (P["on"], P["bambu"], P["klipper"]) == (True, False, True)
-    assert [(p["serial"], p["family"], p["host"], p["port"]) for p in P["list"]] == \
-        [(k.serial, "klipper", "printer.example.com", 7125)]          # the Bambu entry: its module is off
+    assert [(p["serial"], p["family"], p["host"], p["port"], p["redacted"]) for p in P["list"]] == \
+        [(k.serial, "klipper", "printer.example.com", 7125, False)]          # the Bambu entry: its module is off
     assert P["list"][0]["state"] == "connected"
     assert "MOONRAKER-KEY-EXAMPLE" not in st.text and "12345678" not in st.text
     # Bambu writes stay refused: the printers module is off
@@ -483,9 +488,15 @@ def test_both_printer_modules_list_both_families(env, helper, manager):
     k = _klipper()
     registry.upsert(registry.Printer(SERIAL, "H2D", "H2D", "192.0.2.40", "12345678", True))
     c = client(make(env, helper, manager, add={"klipper"}))
-    P = c.get("/setup/api/state").json()["printers"]
+    locked = c.get("/setup/api/state").json()
+    assert locked["printers_redacted"] is True
+    assert [p["serial"] for p in locked["printers"]["list"]] == ["locked-1", "locked-2"]
+    P = c.get("/setup/api/state", headers={"X-Setup-Code": CODE}).json()["printers"]
     assert (P["on"], P["bambu"], P["klipper"]) == (True, True, True)
     assert {p["serial"]: p["family"] for p in P["list"]} == {SERIAL: "bambu", k.serial: "klipper"}
+    post_st = post(c, "state", {})
+    assert post_st.status_code == 200 and post_st.json()["printers_redacted"] is False
+    assert {p["serial"]: p["family"] for p in post_st.json()["printers"]["list"]} == {SERIAL: "bambu", k.serial: "klipper"}
 
 
 def test_a_klipper_printer_has_no_access_code_to_set(env, helper, manager):

@@ -39,8 +39,8 @@ const pad = (n) => String(n).padStart(2, "0");
 let clock = () => Date.now();
 const at = (e) => Date.parse(e.at) || 0;
 function stamp(ms) {
-  const d = new Date(ms), n = new Date(clock()), hm = pad(d.getHours()) + ":" + pad(d.getMinutes());
-  return d.toDateString() === n.toDateString() ? hm : d.toLocaleDateString(undefined, { day: "numeric", month: "short" }) + " " + hm;
+  const d = new Date(ms), hm = pad(d.getHours()) + ":" + pad(d.getMinutes());
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" }) + " " + hm;
 }
 function ago(ms) {
   const m = Math.max(0, Math.floor((clock() - ms) / 60000));
@@ -128,10 +128,11 @@ function actionEl(a, name, primary) {
   const href = hrefOf(a);
   return href ? h("a", { class: cls, href, "aria-label": `${a.label}: ${name}`, on: { click: () => { if (dlg && dlg.open) dlg.close(); } } }, a.label) : null;
 }
-const timeOf = (c) => (c.condition ? tx("alert_since", { time: stamp(c.at) }) : ago(c.at));
+const timeOf = (c) => (!c.at ? "" : c.condition ? tx("alert_since", { time: stamp(c.at) }) : tx("alert_time_stamped", { ago: ago(c.at), time: stamp(c.at) }));
 
 function makeBanner(c, late) {
   const d = describe(c.e), time = E("span", "alert__time", timeOf(c));
+  if (c.at) time.title = new Date(c.at).toLocaleString();
   const el = banner({ kind: d.kind === "bad" ? "bad" : "warn", title: d.title, text: [d.text, " ", time], late,
     actions: actionEl(d.action, d.title, true), dismiss: "alert." + c.key, version: c.ver });
   if (!el) return null;
@@ -154,6 +155,7 @@ function paint() {
     }
     const tm = s.el.querySelector(".alert__time"), now = timeOf(c);
     if (tm && tm.textContent !== now) tm.textContent = now;
+    if (tm && c.at) { const title = new Date(c.at).toLocaleString(); if (tm.title !== title) tm.title = title; }
     els.push(s.el);
   }
   if (vis.length > top.length) {
@@ -172,9 +174,11 @@ function paint() {
 function row(c) {
   const d = describe(c.e), name = d.title;
   const act = actionEl(d.action, name, false);
+  const time = E("span", "alert-row__time", timeOf(c));
+  if (c.at) time.title = new Date(c.at).toLocaleString();
   return h("li", { class: `alert-row alert-row--${d.kind}` }, icon(d.kind === "bad" ? "error" : d.kind === "ok" ? "check" : d.kind === "info" ? "info" : "warning"),
     E("div", "alert-row__body", E("b", "alert-row__title", d.title), d.text ? E("span", "alert-row__text", d.text) : null,
-      E("span", "alert-row__time", timeOf(c))), act);
+      time), act);
 }
 function listBody() {
   const raised = state.conditions.filter((c) => c.condition).map((c) => ({ key: c.condition.key, e: c, at: at(c), condition: true }))

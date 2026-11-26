@@ -32,10 +32,12 @@ TYPES = (("runout", ("print.runout",), True),
          ("finished", ("print.finished",), False),
          ("storage", ("storage.low",), True),
          ("running_low", ("spool.low",), True),
-         ("device_down", ("device.down", "printer.offline"), False))
+         ("device_down", ("device.down", "printer.offline"), False),
+         ("humidity", ("humidity.high",), True))
 KEYS = tuple(t[0] for t in TYPES)
 LOW_G_MIN, LOW_G_MAX, LOW_G = 10, 2000, 150
 WARN_PERCENT, BAD_PERCENT = 85, 95
+HUMIDITY_PCT_MIN, HUMIDITY_PCT_MAX, HUMIDITY_HIGH_PCT = 10, 95, 55
 GB = 1000 ** 3
 FREE_BAD_BYTES = GB                      # always bad under 1 GB free, whatever the percentages say
 
@@ -46,7 +48,8 @@ class AlertsError(ValueError):
 
 def defaults() -> dict:
     return {"types": {k: on for k, _kinds, on in TYPES}, "last_spool_only": False, "running_low_g": LOW_G,
-            "storage_warn_percent": WARN_PERCENT, "storage_bad_percent": BAD_PERCENT}
+            "storage_warn_percent": WARN_PERCENT, "storage_bad_percent": BAD_PERCENT,
+            "humidity_high_pct": HUMIDITY_HIGH_PCT}
 
 
 def _number(v, name: str, lo: int, hi: int) -> int:
@@ -77,6 +80,9 @@ def check(values: dict) -> dict:
         out["storage_warn_percent"] = _number(values["storage_warn_percent"], "storage_warn_percent", 1, 99)
     if "storage_bad_percent" in values:
         out["storage_bad_percent"] = _number(values["storage_bad_percent"], "storage_bad_percent", 2, 100)
+    if "humidity_high_pct" in values:
+        out["humidity_high_pct"] = _number(values["humidity_high_pct"], "humidity_high_pct",
+                                           HUMIDITY_PCT_MIN, HUMIDITY_PCT_MAX)
     if out["storage_warn_percent"] >= out["storage_bad_percent"]:
         raise AlertsError("The storage warning must be lower than the storage limit that makes it bad.")
     return out
@@ -89,6 +95,7 @@ def to_xml(values: dict) -> bytes:
     ET.SubElement(root, "running-low", grams=str(values["running_low_g"]),
                   **{"last-spool-only": "yes" if values["last_spool_only"] else "no"})
     ET.SubElement(root, "storage", warn=str(values["storage_warn_percent"]), bad=str(values["storage_bad_percent"]))
+    ET.SubElement(root, "humidity", high=str(values["humidity_high_pct"]))
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="utf-8", xml_declaration=True) + b"\n"
 
@@ -111,7 +118,7 @@ def from_xml(raw: bytes) -> dict:
                 if el.get("on") not in ("yes", "no"):
                     raise AlertsError(f"the alert type {k} must be yes or no")
                 out["types"][k] = el.get("on") == "yes"
-        low, st = root.find("running-low"), root.find("storage")
+        low, st, hum = root.find("running-low"), root.find("storage"), root.find("humidity")
         if low is not None:
             if low.get("last-spool-only") is not None:
                 out["last_spool_only"] = low.get("last-spool-only") == "yes"
@@ -122,6 +129,9 @@ def from_xml(raw: bytes) -> dict:
                 out["storage_warn_percent"] = int(st.get("warn"))
             if st.get("bad") is not None:
                 out["storage_bad_percent"] = int(st.get("bad"))
+        if hum is not None:
+            if hum.get("high") is not None:
+                out["humidity_high_pct"] = int(hum.get("high"))
     except ValueError as e:
         raise AlertsError(f"a value is not a number ({e})") from None
     return check(out)

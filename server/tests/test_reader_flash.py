@@ -261,9 +261,9 @@ def test_the_command_asks_three_things_and_prints_no_secret(usb, capsys):
 
 def test_an_empty_buzzer_answer_is_high_and_the_option_skips_the_question(usb):
     run, _ = _run()
-    assert cli._reader_setup_usb(_args(), _answers("Home", ""), _answers("p", "p"), run=run) == 0
+    assert cli._reader_setup_usb(_args(), _answers("Home", ""), _answers("password1", "password1"), run=run) == 0
     assert usb["settings"]["buzzer_low"] is False
-    assert cli._reader_setup_usb(_args(buzzer="low", ssid="Home"), _answers(), _answers("p", "p"), run=run) == 0
+    assert cli._reader_setup_usb(_args(buzzer="low", ssid="Home"), _answers(), _answers("password1", "password1"), run=run) == 0
     assert usb["settings"]["buzzer_low"] is True
 
 
@@ -274,7 +274,7 @@ def test_the_buzzer_question_says_bare_buzzer_or_driver_board(usb, answer, low):
     def ask(prompt=""):
         prompts.append(prompt)
         return "Home" if len(prompts) == 1 else answer
-    assert cli._reader_setup_usb(_args(), ask, _answers("p", "p"), run=_run()[0]) == 0
+    assert cli._reader_setup_usb(_args(), ask, _answers("password1", "password1"), run=_run()[0]) == 0
     assert "[b]are buzzer" in prompts[1] and "[d]river board" in prompts[1] and "3-pin" not in prompts[1]
     assert usb["settings"]["buzzer_low"] is low
 
@@ -282,7 +282,7 @@ def test_the_buzzer_question_says_bare_buzzer_or_driver_board(usb, answer, low):
 def test_a_failed_setup_removes_the_new_token(usb, capsys):
     usb["result"] = rf.Result(False, "the reader could not join the Wi-Fi network 'Home'")
     run, _ = _run()
-    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high"), _answers(), _answers("p", "p"), run=run) == 1
+    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high"), _answers(), _answers("password1", "password1"), run=run) == 1
     assert reader_tokens.TokenStore().list() == []
     assert "could not join" in capsys.readouterr().err
 
@@ -292,7 +292,7 @@ def test_a_board_that_answers_as_the_panel_is_never_written(usb, monkeypatch, ca
     asked = []
     monkeypatch.setattr(cli, "_answers_as_panel", lambda port: asked.append(port) or True)
     run, _ = _run()
-    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high"), _answers(), _answers("p", "p"), run=run) == 1
+    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high"), _answers(), _answers("password1", "password1"), run=run) == 1
     assert asked == ["/dev/ttyACM0"] and "settings" not in usb           # nothing flashed, no settings sent
     err = capsys.readouterr().err
     assert "answers as the intake station's button panel" in err and "nothing was written" in err
@@ -303,7 +303,7 @@ def test_two_boards_ask_which_and_none_says_plug_it_in(usb, monkeypatch, capsys)
     run, _ = _run()
     monkeypatch.setattr(rs, "find_readers", lambda: [rs.Reader("/dev/ttyACM0", None, "a"), rs.Reader("/dev/ttyACM1", None, "b")])
     monkeypatch.setattr(cli.output, "terminal", lambda: True)
-    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=False), _answers("2", "y"), _answers("p", "p"),
+    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=False), _answers("2", "y"), _answers("password1", "password1"),
                                  run=run) == 0
     assert usb["port"] == "/dev/ttyACM1"
     monkeypatch.setattr(rs, "find_readers", lambda: [])
@@ -317,7 +317,7 @@ def test_the_station_service_is_stopped_and_started_again(usb):
     def run(cmd, **kw):
         calls.append(cmd)
         return subprocess.CompletedProcess(cmd, 0, b"", b"")     # it runs
-    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high"), _answers(), _answers("p", "p"), run=run) == 0
+    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high"), _answers(), _answers("password1", "password1"), run=run) == 0
     assert ["systemctl", "stop", "filament-kit-station.service"] in calls
     assert calls[-1] == ["systemctl", "start", "filament-kit-station.service"]
 
@@ -427,7 +427,7 @@ def test_the_reader_command_writes_five_numbered_steps(env, monkeypatch, capsys)
         return subprocess.CompletedProcess(cmd, 3, "", "") if cmd[0] == "systemctl" else flasher(cmd, **kw)
     a = argparse.Namespace(source=None, out=None, secrets=None, pending=False, ssid="Home", port=None, buzzer="high",
                            name=None, base=BASE, ota_pubkey=None, token_file=None, reflash=False, yes=True)
-    assert cli._reader_setup_usb(a, lambda q: "", lambda q: "pw", run=run) == 0
+    assert cli._reader_setup_usb(a, lambda q: "", lambda q: "password1", run=run) == 0
     assert sentences(capsys.readouterr().out, 5) == [
         "Finding the board", "Writing the program", "Checking what was written", "Joining the Wi-Fi",
         "Reaching the Hub"]
@@ -441,20 +441,20 @@ def test_plain_setup_asks_before_it_overwrites_the_board(usb, monkeypatch, capsy
     for answer in ("n", ""):
         ask = _answers(answer)
         rc = cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=False), lambda p, a=ask: asked.append(p) or a(p),
-                                   _answers("p", "p"), run=run)
+                                   _answers("password1", "password1"), run=run)
         assert rc == 5 and "settings" not in usb and reader_tokens.TokenStore().list() == []
     assert len(asked) == 2 and all(" ".join(p.split()).endswith("replaced. [y/N]") for p in asked)
     said = " ".join(capsys.readouterr().out.split())
     assert said.count("Write the reader firmware to /dev/ttyACM0? What is on the board now is") == 2
     assert said.count("Nothing changed.") == 2
-    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=False), _answers("y"), _answers("p", "p"),
+    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=False), _answers("y"), _answers("password1", "password1"),
                                  run=run) == 0 and usb["port"] == "/dev/ttyACM0"
 
 
 def test_plain_setup_piped_without_yes_writes_nothing_and_exits_2(usb, monkeypatch, capsys):
     run, _ = _run()
     monkeypatch.setattr(cli.output, "terminal", lambda: False)
-    rc = cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=False), input, _answers("p", "p"), run=run)
+    rc = cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=False), input, _answers("password1", "password1"), run=run)
     out, err = capsys.readouterr()
     assert rc == 2 and "settings" not in usb and out.count("[y/N]") == 0 and "--yes" in err
 
@@ -463,7 +463,7 @@ def test_the_setup_pages_job_is_not_asked(usb, monkeypatch):
     """`reader setup --pending` runs without a terminal: the page asked."""
     run, _ = _run()
     monkeypatch.setattr(cli.output, "terminal", lambda: False)
-    monkeypatch.setattr(rf, "take_pending", lambda: {"ssid": "Home", "pass": "p", "buzzer": "high"})
+    monkeypatch.setattr(rf, "take_pending", lambda: {"ssid": "Home", "pass": "password1", "buzzer": "high"})
     assert cli._reader_setup_usb(_args(pending=True, yes=False), input, None, run=run) == 0 and "settings" in usb
 
 
@@ -475,7 +475,7 @@ def _two_boards(monkeypatch):
 @pytest.mark.parametrize("port", ["/dev/ttyUSB0", "/etc/passwd", "/dev/ttyACM7"])
 def test_port_that_is_no_found_board_writes_nothing_and_exits_2(usb, port, capsys):
     run, _ = _run()
-    rc = cli._reader_setup_usb(_args(ssid="Home", buzzer="high", port=port), _answers(), _answers("p", "p"), run=run)
+    rc = cli._reader_setup_usb(_args(ssid="Home", buzzer="high", port=port), _answers(), _answers("password1", "password1"), run=run)
     out, err = capsys.readouterr()
     assert rc == 2 and "settings" not in usb and reader_tokens.TokenStore().list() == []
     assert err.startswith("Error: ") and port in err and "Fix: use one of: /dev/ttyACM0." in " ".join(err.split())
@@ -491,7 +491,7 @@ def test_port_with_no_board_found_says_none_were_found(usb, monkeypatch, capsys)
 def test_port_that_is_a_found_board_is_written(usb, monkeypatch):
     _two_boards(monkeypatch)
     run, _ = _run()
-    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", port="/dev/ttyACM1"), _answers(), _answers("p", "p"),
+    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", port="/dev/ttyACM1"), _answers(), _answers("password1", "password1"),
                                  run=run) == 0 and usb["port"] == "/dev/ttyACM1"
 
 
@@ -502,7 +502,7 @@ def test_yes_with_several_boards_stops_and_names_port(usb, monkeypatch, capsys, 
     run, _ = _run()
     asked = []
     rc = cli._reader_setup_usb(_args(ssid="Home", buzzer="high", yes=True), lambda p: asked.append(p) or "1",
-                               _answers("p", "p"), run=run)
+                               _answers("password1", "password1"), run=run)
     out, err = capsys.readouterr()
     assert rc == 2 and asked == [] and "settings" not in usb and "[y/N]" not in out and "pick" not in out
     assert "Fix: name the reader's board with --port" in " ".join(err.split()) and "/dev/ttyACM1" in err
@@ -521,7 +521,7 @@ def test_a_port_that_answers_as_the_panel_is_refused_first_exit_2(usb, monkeypat
 
 def test_an_empty_port_is_an_error_exit_2(usb, capsys):
     run, _ = _run()
-    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", port=""), _answers(), _answers("p", "p"), run=run) == 2
+    assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", port=""), _answers(), _answers("password1", "password1"), run=run) == 2
     assert "settings" not in usb and "--port needs" in capsys.readouterr().err
 
 
@@ -529,7 +529,7 @@ def test_a_port_written_with_dots_is_the_board_found(usb, monkeypatch):
     _two_boards(monkeypatch)
     run, _ = _run()
     assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", port="/dev/../dev/ttyACM1"), _answers(),
-                                 _answers("p", "p"), run=run) == 0 and usb["port"] == "/dev/ttyACM1"
+                                 _answers("password1", "password1"), run=run) == 0 and usb["port"] == "/dev/ttyACM1"
 
 
 def test_an_explicit_port_still_asks_at_a_terminal(usb, monkeypatch):
@@ -537,7 +537,7 @@ def test_an_explicit_port_still_asks_at_a_terminal(usb, monkeypatch):
     monkeypatch.setattr(cli.output, "terminal", lambda: True)
     asked = []
     rc = cli._reader_setup_usb(_args(ssid="Home", buzzer="high", port="/dev/ttyACM0", yes=False),
-                               lambda p: asked.append(p) or "n", _answers("p", "p"), run=run)
+                               lambda p: asked.append(p) or "n", _answers("password1", "password1"), run=run)
     assert rc == 5 and len(asked) == 1 and "settings" not in usb
 
 
@@ -545,7 +545,7 @@ def test_an_explicit_port_piped_without_yes_exits_2_with_yes_writes(usb, monkeyp
     run, _ = _run()
     monkeypatch.setattr(cli.output, "terminal", lambda: False)
     rc = cli._reader_setup_usb(_args(ssid="Home", buzzer="high", port="/dev/ttyACM0", yes=False), input,
-                               _answers("p", "p"), run=run)
+                               _answers("password1", "password1"), run=run)
     assert rc == 2 and "settings" not in usb and "--yes" in capsys.readouterr().err
     assert cli._reader_setup_usb(_args(ssid="Home", buzzer="high", port="/dev/ttyACM0", yes=True), input,
-                                 _answers("p", "p"), run=run) == 0 and usb["port"] == "/dev/ttyACM0"
+                                 _answers("password1", "password1"), run=run) == 0 and usb["port"] == "/dev/ttyACM0"

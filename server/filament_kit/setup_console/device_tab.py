@@ -26,7 +26,7 @@ import urllib.parse
 import anyio
 from starlette.responses import Response
 
-from .. import __version__, config, pairing, reader_tokens, station_client
+from .. import __version__, config, pairing, reader_config, reader_tokens, station_client
 from ..station import panel_setup
 
 KINDS = ("phone", "pc", "station", "web", "reader", "home-assistant", "builtin")
@@ -60,6 +60,9 @@ def _phone_offer() -> str | None:
 
 
 def _reader_offer() -> str | None:
+    offered = reader_tokens.offered_build()
+    if offered is not None:
+        return str(offered)
     from .. import reader_flash
     got = reader_flash.bundled_image()
     return str(got[1]) if got else None
@@ -99,7 +102,7 @@ def _pairings() -> list[dict]:
 
 
 def _readers() -> list[dict]:
-    return reader_tokens.TokenStore().list()
+    return reader_tokens.readers()
 
 
 def _station_url(cfg: dict) -> str | None:
@@ -226,6 +229,8 @@ def routes(page) -> list[tuple]:
                 return out
             out["status"] = clean_status(status)
             out["photo"] = status.get("photo") is True
+            out["ota_capable"] = True
+            out["ota"] = clean_status(status.get("ota"))
             try:
                 got = station_client.call_json(url, "GET", "/settings")
             except station_client.StationCallError:
@@ -237,6 +242,14 @@ def routes(page) -> list[tuple]:
                 out["page_from"] = got["page_from"]     # says devices_station_allow_list_only under the link for `allowed`
             if dropped:
                 out["settings_dropped"] = True
+        elif row["kind"] == "reader":
+            tid = device_id.removeprefix("reader-")
+            pend = reader_config.pending(tid)
+            out["settings"] = reader_config.listing(tid)
+            out["ota_capable"] = True
+            out["pending_ota"] = pend["ota_now"]
+            out["pending_reboot"] = pend["reboot_now"]
+            out["offered_build"] = reader_tokens.offered_build()
         return out
 
     async def one(request, body):
@@ -260,6 +273,17 @@ def routes(page) -> list[tuple]:
 
     def change(device_id: str, body: dict) -> dict:
         row = find(device_id)
+        if row["kind"] == "reader":
+            tid = device_id.removeprefix("reader-")
+            values = {k: v for k, v in body.items() if k != "code"}
+            try:
+                if values.get("reset") is True and len(values) == 1:
+                    return {"settings": reader_config.reset(tid)}
+                if not values or len(values) > MAX_SETTINGS:
+                    raise Refused(400, "no settings to change")
+                return {"settings": reader_config.update(tid, values)}
+            except reader_config.ReaderConfigError as e:
+                raise Refused(400, str(e)) from None
         if not row["page"]:
             raise Refused(404, "this device has no settings")
         values = {k: v for k, v in body.items() if k != "code"}
@@ -311,7 +335,48 @@ def routes(page) -> list[tuple]:
         page.audit(request, f"Weigh Station {device_id} page opened")        # no ticket in the log
         return out
 
+    def trigger_ota(device_id: str, body: dict) -> dict:
+        row = find(device_id)
+        if row["kind"] == "station":
+            ver = body.get("version") if isinstance(body, dict) else None
+            try:
+                return station_client.trigger_ota(_station_for(device_id), ver)
+            except station_client.StationCallError as e:
+                raise Refused(e.status or 502, e.message) from None
+        if row["kind"] == "reader":
+            tid = device_id.removeprefix("reader-")
+            reader_config.queue_command(tid, "ota")
+            return {"ok": True, "queued": "ota"}
+        raise Refused(404, "this device does not support remote updates")
+
+    async def ota_route(request, body):
+        device_id = request.path_params["id"]
+        out = await anyio.to_thread.run_sync(trigger_ota, device_id, body)
+        page.audit(request, f"Device {device_id} OTA triggered")
+        return out
+
+    def trigger_restart(device_id: str) -> dict:
+        row = find(device_id)
+        if row["kind"] == "station":
+            try:
+                return station_client.restart_station(_station_for(device_id))
+            except station_client.StationCallError as e:
+                raise Refused(e.status or 502, e.message) from None
+        if row["kind"] == "reader":
+            tid = device_id.removeprefix("reader-")
+            reader_config.queue_command(tid, "reboot")
+            return {"ok": True, "queued": "reboot"}
+        raise Refused(404, "this device does not support remote restart")
+
+    async def restart_route(request, body):
+        device_id = request.path_params["id"]
+        out = await anyio.to_thread.run_sync(trigger_restart, device_id)
+        page.audit(request, f"Device {device_id} restart triggered")
+        return out
+
     return [("/devices", page.guard(listing), "GET"), ("/device/{id}", page.guard(one), "GET"),
             ("/device/{id}/photo", page.guard(photo_route), "GET"),
             ("/device/{id}/settings", page.guard(settings, write=True), "POST"),
-            ("/device/{id}/open", page.guard(open_route, write=True), "POST")]
+            ("/device/{id}/open", page.guard(open_route, write=True), "POST"),
+            ("/device/{id}/ota", page.guard(ota_route, write=True), "POST"),
+            ("/device/{id}/restart", page.guard(restart_route, write=True), "POST")]

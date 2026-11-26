@@ -19,6 +19,7 @@ and, once a day, the deletion of old month files (`events.keep_days`). No texts 
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 
@@ -391,6 +392,7 @@ class Watcher:
 EVERY = 300.0               # seconds between rounds
 PRUNE_EVERY = 86400.0       # old month files are deleted once a day
 FIRST_AFTER = 30.0          # seconds after the Hub starts until the first round (services are still starting)
+HUMIDITY_HYSTERESIS = 3     # % RH below humidity_high_pct before humidity.ok clears the condition
 
 
 def _raised(sink, base: str) -> dict:
@@ -480,6 +482,77 @@ def check_devices(sink, station_url: str | None, devices: list[dict]) -> None:
             sink.write("device.up", subject, HUB)
 
 
+def _finite_num(v) -> float | None:
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return None
+    f = float(v)
+    return f if math.isfinite(f) else None
+
+
+def _ams_rh(u: dict) -> float | None:
+    raw = _finite_num(u.get("humidity_raw"))
+    if raw is not None:
+        return raw
+    h = _finite_num(u.get("humidity"))
+    return h if h is not None and h > 5 else None
+
+
+def _humidity_step(sink, raised: dict, cond_suffix: str, subject: dict, rh: float, limit: int,
+                   source: str, unit: str | None = None) -> None:
+    data: dict = {"rh": round(rh, 1), "threshold": limit, "source": source}
+    if unit is not None:
+        data["unit"] = unit
+    if cond_suffix not in raised:
+        if rh >= limit:
+            sink.write("humidity.high", subject, HUB, data, key=cond_suffix)
+    elif rh <= limit - HUMIDITY_HYSTERESIS:
+        sink.write("humidity.ok", subject, HUB, data, key=cond_suffix)
+
+
+def check_humidity(sink, station_url: str | None = None, devices: list[dict] | None = None, *,
+                   bambu=None, settings: dict | None = None, station_state=None) -> None:
+    """humidity.high / humidity.ok with 3 % hysteresis for the Weigh Station's `air.rh` and Bambu AMS `humidity`."""
+    s = settings or alerts.load()
+    limit = s["humidity_high_pct"]
+    raised = _raised(sink, "humidity-high")
+    station_devs = [d for d in (devices or []) if d.get("type") == "station"]
+    if station_url and len(station_devs) == 1:
+        from .station_client import StationClient, StationUnreachable
+        dev = station_devs[0]
+        did = dev["id"]
+        try:
+            st = station_state(station_url) if station_state else StationClient(station_url, timeout=2, backoff=0).state()
+        except StationUnreachable as e:
+            log.debug("station humidity not read: %s", e)
+            st = None
+        if isinstance(st, dict):
+            air = st.get("air")
+            rh = _finite_num(air.get("rh")) if isinstance(air, dict) else None
+            if rh is not None:
+                _humidity_step(sink, raised, f"station:{did}",
+                               {"type": "device", "id": did, "name": dev.get("name") or ""},
+                               rh, limit, dev.get("name") or "Weigh Station")
+    if bambu is not None:
+        for pid, pr in registry.load().items():
+            if not pr.configured or pr.family != "bambu":
+                continue
+            st = bambu.status(pid)
+            if not isinstance(st, dict):
+                continue
+            pname = registry.display_name(pr)
+            subject = {"type": "printer", "id": pid, "name": pname}
+            for u in st.get("ams") or []:
+                if not isinstance(u, dict) or u.get("kind") == "ext":
+                    continue
+                rh = _ams_rh(u)
+                if rh is None:
+                    continue
+                uid = u.get("unit")
+                ulabel = u.get("label") or str(uid)
+                _humidity_step(sink, raised, f"ams:{pid}:{uid}", subject,
+                               rh, limit, f"{pname} AMS {ulabel}", unit=ulabel)
+
+
 def row_key(row) -> str:
     """The key of a Checks row: its own `key` (every status.Row has one: the same whether the row is OK or needs a
     look). A row-like object without one (a test's) gets the group and the first two words of its text without digits."""
@@ -518,9 +591,9 @@ class Loop:
     others still run. `rows()` gives the Checks rows (status.collect in the Hub), `devices()` the paired devices."""
 
     def __init__(self, sink=None, *, spoolman=None, watcher: Watcher | None = None, rows=None, devices=None,
-                 every: float = EVERY, first: float = FIRST_AFTER, clock=time.monotonic):
+                 bambu=None, every: float = EVERY, first: float = FIRST_AFTER, clock=time.monotonic):
         self._sink = sink
-        self.sm, self.watcher, self._rows, self._devices = spoolman, watcher, rows, devices
+        self.sm, self.watcher, self._rows, self._devices, self._bambu = spoolman, watcher, rows, devices, bambu
         self.every, self.first, self._clock = every, first, clock
         self._last_prune: float | None = None
         self._stop = threading.Event()
@@ -553,6 +626,7 @@ class Loop:
                  ("disk", lambda: check_disk(self.sink)),
                  ("spools", lambda: check_low(self.sm, self.sink) if self.sm is not None else None),
                  ("devices", self._check_devices),
+                 ("humidity", self._check_humidity),
                  ("checks", lambda: check_rows(self.sink, self._rows()) if self._rows else None),
                  ("prune", self._prune)]
         for name, step in steps:
@@ -565,6 +639,12 @@ class Loop:
         from . import pairing
         devs = self._devices() if self._devices else pairing.devices()
         check_devices(self.sink, (config.load().get("station") or {}).get("url"), devs)
+
+    def _check_humidity(self) -> None:
+        from . import pairing
+        devs = self._devices() if self._devices else pairing.devices()
+        bambu = self._bambu if self._bambu is not None else (self.watcher._bambu if self.watcher is not None else None)
+        check_humidity(self.sink, (config.load().get("station") or {}).get("url"), devs, bambu=bambu)
 
     def _prune(self) -> None:
         """Delete month files older than `events.keep_days` once a day (the only caller of the store's prune)."""

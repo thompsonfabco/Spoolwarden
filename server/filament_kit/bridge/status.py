@@ -180,7 +180,8 @@ def _ams(p: dict, spools: list[dict], printer_name: str, lay) -> list[dict]:
                           'present': sl.present, 'reading': sl.reading, 'rfid': _rfid(t),
                           'spool': _spool_view(spool) if spool else None})
         units.append({'unit': u.ams_id, 'label': u.label, 'kind': u.kind, 'type_name': u.type_name,
-                      'say': list(u.say), 'slots': slots})
+                      'say': list(u.say), 'humidity': u.humidity, 'humidity_raw': u.humidity_raw,
+                      'temp': u.temp, 'slots': slots})
     return units
 
 

@@ -168,6 +168,27 @@ def test_bad_photo_is_400(sm):
     assert r.status_code == 400 and r.json()["display"][0] == "Bad photo"
 
 
+def test_recognize_accepts_multiple_images(sm, monkeypatch):
+    from filament_kit import intake
+    seen_images = []
+    real_read = intake.read_labels
+
+    def spy_read(sm_arg, images, *args, **kwargs):
+        seen_images.append(list(images))
+        return real_read(sm_arg, images, *args, **kwargs)
+
+    monkeypatch.setattr(intake, "read_labels", spy_read)
+    img1 = b"\xff\xd8\xff\xe0" + b"a" * 100
+    img2 = b"\xff\xd8\xff\xe0" + b"b" * 100
+    r = client(sm, FakeClaude(read_reply())).post(
+        "/api/station/recognize",
+        headers=auth(),
+        files=[("image", ("s1.jpg", img1, "image/jpeg")), ("image", ("s2.jpg", img2, "image/jpeg"))],
+    )
+    assert r.status_code == 200, r.text
+    assert seen_images == [[img1, img2]]
+
+
 # ---------- save ----------
 
 def test_save_new_opened_spool_links_the_tag_and_places_it(sm):

@@ -509,7 +509,9 @@ def reader_order(cfg: dict) -> list[str]:
     have = {r for r, m in (("cloud", "ai_intake"), ("local", "local_intake")) if m in on}
     want = str((cfg.get("intake") or {}).get("reader") or "auto")
     order = READER_ORDERS.get(want, READER_ORDERS["local-then-cloud"])
-    return [r for r in order if r in have]
+    selected = [r for r in order if r in have]
+    log.debug("reader_order: want=%s have=%s -> %s", want, sorted(have), selected)
+    return selected
 
 
 def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, client, *,
@@ -531,6 +533,8 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
     demo.stop()                          # no label reader (Claude's cloud or the local one) is asked in the demo
     cfg = config.load()
     order = list(readers) if readers is not None else (reader_order(cfg) or ["cloud"])
+    log.debug("intake: reader order=%s (override=%s, photos=%d, revise=%s)",
+              order, readers is not None, len(images), revise is not None)
     fils, vendors = sm.get("/filament"), sm.get("/vendor")
     # the app's tag wins; else a fresh unknown tap on a reader (age known: say how long before the photos)
     tag = {"nfc_id": tag_uid} if tag_uid else (dict(fresh_tag) if fresh_tag and fresh_tag.get("nfc_id") else None)
@@ -543,11 +547,17 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
                 raw = _local(cfg, fils, vendors, images, hint, tag, orders, revise)
             except ReadError as e:
                 log.warning("local label reader: %s", e)
+                log.debug("intake: local reader failed (%s); %s",
+                          e.code, "falling back to next reader" if reader != order[-1] else "no more readers")
                 err, notes = err or e, notes + [f"local reader: {e}"]
                 continue
             raw["reader"] = "local"
             if not raw["unsure"] or reader == order[-1]:
+                log.debug("intake: local reader answered (unsure=%s, confidence=%s, tier=%s)",
+                          raw.get("unsure"), raw.get("confidence"), raw.get("tier"))
                 return _result(raw, fils, vendors, tag, station_state, notes)
+            log.debug("intake: local reader unsure (confidence=%s, tier=%s); keeping answer and trying next reader",
+                      raw.get("confidence"), raw.get("tier"))
             kept = raw
             continue
         refund = None
@@ -556,6 +566,8 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
                 refund = charge()
             raw = _cloud(cfg, fils, vendors, images, hint, tag, when, client, orders)
         except CapReached:
+            log.debug("intake: cloud reader cap reached (kept_local=%s, last=%s)",
+                      kept is not None, reader == order[-1])
             if kept is None and reader == order[-1]:
                 if err is None:
                     raise
@@ -564,6 +576,8 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
             continue
         except ReadError as e:
             e.refund = refund
+            log.debug("intake: cloud reader failed (%s, kept_local=%s, last=%s)",
+                      e.code, kept is not None, reader == order[-1])
             if kept is None and reader == order[-1]:
                 raise
             # the read goes on without Claude: a call that never reached it gives its read back, as the station's
@@ -573,9 +587,11 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
             log.warning("cloud label reader: %s", e)
             err, notes = err or e, notes + [f"cloud reader: {e}"]
             continue
+        log.debug("intake: cloud reader answered")
         raw.update(reader="cloud", confidence=None, unsure=False, tier=None)
         return _result(raw, fils, vendors, tag, station_state, notes)
     if kept is not None:
+        log.debug("intake: returning kept unsure local reader answer after fallback")
         return _result(kept, fils, vendors, tag, station_state, notes)
     raise err if err is not None else ReadError("api_error", "no label reader could read these photos")
 

@@ -278,7 +278,7 @@ function devRowFor(d) {
   // Open: the detail the Hub page draws itself, at #devices/<id>; a station's page is never served by the Hub
   const open = SW.btn(devT("devices_open"), { name: devT("devices_open_named", { name: d.name }), action: "open", run: () => devDetail(d) });
   const kindLine = devKindLine(d), ood = devOod(d);
-  return devRow(d.id, at, 4,
+  const rowEl = devRow(d.id, at, 4,
     devCell("title", 1, null, h("span", { class: "devices__name", textContent: d.name }),
       d.built_in ? [" ", SW.status("note", { text: SW.t("devices_built_in"), small: true }), h("span", { class: "coll__sub muted", textContent: SW.t("devices_built_in_line") })] : null,
       kindLine ? h("span", { class: "coll__sub muted", textContent: kindLine }) : null,
@@ -291,6 +291,15 @@ function devRowFor(d) {
       d.reachable === true ? SW.status("ok", { text: SW.t("devices_reach_ok"), small: true })
         : d.reachable === false ? SW.status("offline", { text: SW.t("devices_reach_down"), small: true }) : null),
     devCell("actions", 1, null, h("div", { class: "actions" }, open, unpair)));
+  if (d.page || d.kind === "reader") {
+    const mainRow = rowEl.firstElementChild;
+    mainRow.style.cursor = "pointer";
+    mainRow.addEventListener("click", (e) => {
+      if (e.target.closest("button, a, input, select")) return;
+      devDetail(d);
+    });
+  }
+  return rowEl;
 }
 function devPairedTable(list) {
   return list.length
@@ -347,9 +356,12 @@ function devSettingField(s) {
       : lo != null && hi != null ? devT("devices_setting_number", { min: lo, max: hi }) : devT("devices_setting_number_any"));
     return SW.field({ ...o, type: "number", value: s.value, check });
   }
+  if (s.kind === "text") {
+    return SW.field({ ...o, type: "text", value: s.value == null ? "" : String(s.value), placeholder: s.placeholder || undefined });
+  }
   return SW.field({ ...o, value: s.value == null ? "" : s.value });
 }
-const devSettingValue = (s, v) => (s.kind === "switch" ? v === "on" : s.kind === "number" ? Number(v) : v);
+const devSettingValue = (s, v) => (s.kind === "switch" ? v === "on" : s.kind === "number" ? Number(v) : String(v == null ? "" : v));
 
 // the form of a station's settings: Save previews the changes first, then goes through the lock; "Back to the installed values" asks
 function devSettingsForm(row, list, redo) {
@@ -426,6 +438,29 @@ function devOwnPage(d, address, pageFrom) {
     pageFrom === "allowed" ? h("p", { class: "muted", textContent: devT("devices_station_allow_list_only") }) : null, res);
 }
 
+function devOtaActions(row) {
+  const res = h("p", { class: "result", role: "status" });
+  const id = encodeURIComponent(row.id);
+  const otaBtn = SW.btn("Update now (OTA)", {
+    action: "device-ota",
+    run: () => coded(res, async () => {
+      SW.result(res, null);
+      await api(`device/${id}/ota`, { code: theCode() });
+      say(res, "OTA update queued.", true);
+    }),
+  });
+  const restartBtn = SW.btn("Restart", {
+    cls: "btn--ghost",
+    action: "device-restart",
+    run: () => coded(res, async () => {
+      SW.result(res, null);
+      await api(`device/${id}/restart`, { code: theCode() });
+      say(res, "Restart queued.", true);
+    }),
+  });
+  return h("div", { class: "devdetail__ota" }, h("div", { class: "actions" }, otaBtn, restartBtn), res);
+}
+
 function devDetail(d) {
   const body = h("div", { class: "devdetail" }), id = encodeURIComponent(d.id);
   history.replaceState(null, "", devAddress(d));
@@ -439,6 +474,7 @@ function devDetail(d) {
       const row = { ...d, ...r.device };
       const kids = [...devFacts(row)];
       if (row.kind === "reader") kids.push(devReaderLine());
+      if (r.ota_capable || row.ota_capable) kids.push(devOtaActions(row));
       if (row.page && !r.status && !r.settings) kids.push(SW.banner({ kind: "warn", inline: true, text: devT("devices_down") }));
       if (r.own_page) kids.push(devOwnPage(row, r.own_page, r.page_from));
       if (r.photo) {

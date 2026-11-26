@@ -126,6 +126,13 @@ no-toolchain setup, run `sudo spoolwarden tag-reader setup` or use **Flash a dev
 [reader/README.md](reader/README.md)); its API and firmware build are in [reader/README.md](reader/README.md), and its
 parts and wiring in the [hardware guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/printer-station).
 
+## Home Assistant
+
+Install the HACS-ready `spoolwarden-home-assistant` custom integration in Home Assistant to bring Hub health, printers,
+slots, cameras, and live alerts into your dashboards and automations. Run `sudo spoolwarden pair --home-assistant` on
+the Hub for a read-only `viewer` pairing, or add `--control` if you want Home Assistant services to pause, resume, or
+stop prints, toggle the chamber light, and load or unload spools.
+
 ## Supported printers
 
 Every Bambu Lab printer the hardware data file describes: H2D, H2D Pro, H2S, H2C, X2D, P2S, X1 Carbon, X1, X1E,

@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import logging
 import os
 import re
 import secrets
@@ -27,6 +28,8 @@ from pathlib import Path
 # open_lock ...) import without it: the release job's library build uses them with a plain Python.
 
 from . import config, event_sink
+
+log = logging.getLogger(__name__)
 
 try:
     import fcntl
@@ -391,6 +394,7 @@ def _load_devices() -> list:
     devs = _read("devices.json")
     kept = [d for d in devs if d.get("claimed") is not None or d.get("expires", 0) > now]
     if len(kept) != len(devs):
+        log.debug("pairing token expired: count=%d", len(devs) - len(kept))
         _write("devices.json", kept)
     return kept
 
@@ -437,6 +441,7 @@ def issue(device_hint: str = "", role: str | None = None, scope: str | None = No
         pending.append({"code": code, "device": device_id, "expires": expires, "attempts": 0})
         _write("pending.json", pending)
 
+    log.debug("pairing issued: device_id=%s kind=%s", device_id, scope or role or "phone")
     # server_name is only a display name; the phone finds the server by mDNS hostname or one of its IPs
     query = urllib.parse.urlencode(
         {"h": f"{short_hostname()}.local", "p": port, "t": token, "fp": fp, "ip": local_ips()},
@@ -449,8 +454,11 @@ def redeem_code(code: str) -> str:
     with _locked():
         now = time.time()
         allp = _read("pending.json")
+        expired_codes = [p["code"] for p in allp if p["expires"] <= now]
+        if expired_codes:
+            log.debug("pairing code expired: count=%d", len(expired_codes))
         pending = [p for p in allp if p["expires"] > now]
-        spent = _spent_add(_spent_read(now), [p["code"] for p in allp if p["expires"] <= now], now)
+        spent = _spent_add(_spent_read(now), expired_codes, now)
         well_formed = isinstance(code, str) and re.fullmatch(r"[0-9]{6}", code)
         match = None
         if well_formed:
@@ -460,11 +468,15 @@ def redeem_code(code: str) -> str:
             for p in pending:
                 p["attempts"] += 1
             dropped = [p["code"] for p in pending if p["attempts"] >= MAX_ATTEMPTS]
+            if dropped:
+                log.debug("pairing code lockout: count=%d", len(dropped))
             spent = _spent_add(spent, dropped, now)
             _write("pending.json", [p for p in pending if p["attempts"] < MAX_ATTEMPTS])
             _write("spent.json", spent)
             if well_formed and any(hmac.compare_digest(e["hash"], _hash(code)) for e in spent):
+                log.debug("pairing code rejected: reason=spent")
                 raise CodeSpent("pairing code expired or already used")
+            log.debug("pairing code rejected: reason=invalid")
             raise PairingError("invalid, expired or locked pairing code")
         pending.remove(match)
         _write("pending.json", pending)
@@ -477,9 +489,11 @@ def redeem_code(code: str) -> str:
                 d["paired"] = d["claimed"] = d["last_seen"] = now
                 _write("devices.json", devs)
                 kind = device_type(d) or d.get("role") or "phone"
+                log.debug("pairing code verified: device_id=%s kind=%s", d["id"], kind)
                 emit_args = ("device.paired", {"type": "device", "id": d["id"], "name": d.get("name", "")}, {"kind": kind})
                 break
         else:
+            log.debug("pairing code rejected: device_id=%s reason=device_missing", match["device"])
             raise PairingError("device for this code no longer exists")
     event_sink.emit(*emit_args)
     return token
@@ -540,11 +554,14 @@ def authorize(token: str, client: str | None = None) -> tuple[str, str | None] |
                 # a device paired as "station" before scopes existed is scoped too
                 if d.get("scope") or device_type(d) == "station":
                     result = (d["id"], d.get("scope") or "station")
-                elif d.get("role") in (WEB_ROLE, VIEWER_ROLE):
+                elif d.get("role") in (WEB_ROLE, VIEWER_ROLE, HA_CONTROL_ROLE):
                     result = (d["id"], d["role"])
                 else:
                     result = (d["id"], None)
+                log.debug("pairing token verified: device_id=%s kind=%s", result[0], result[1] or "phone")
                 break
+    if result is None:
+        log.debug("pairing token rejected: reason=unknown_or_expired")
     if emit_args is not None:
         event_sink.emit(*emit_args)
     return result
@@ -576,6 +593,7 @@ def revoke(device_id: str) -> bool:
 
 WEB_ROLE = "web"     # the web unit's pairing: the kit API's web-only routes (GET /api/intake/orders) serve it
 VIEWER_ROLE = "viewer"  # read-only integration pairing (Home Assistant)
+HA_CONTROL_ROLE = "ha-control"  # opt-in Home Assistant integration pairing with printer/slot control
 
 
 def role_of(device_id: str) -> str | None:
@@ -608,7 +626,7 @@ def device_type(d: dict) -> str | None:
     before scopes existed has no scope, only the name `pair --station` gave it, so the name counts as well."""
     if d.get("scope") == "station" or d.get("name") == "station":
         return "station"
-    if d.get("role") == VIEWER_ROLE:
+    if d.get("role") in (VIEWER_ROLE, HA_CONTROL_ROLE):
         return "home-assistant"
     return None
 

@@ -167,7 +167,7 @@ Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
 Adafruit_SSD1306 display(OLED_W, OLED_H, &Wire, -1);
 
 // URLs, built from the settings' base in setup()
-String urlPrinters, urlScan, urlHealthz, urlManifest, urlBin;
+String urlPrinters, urlScan, urlUnload, urlHealthz, urlManifest, urlBin, urlConfig, urlConfigAck;
 
 std::vector<PrinterEntry> printers;   // from GET printers
 SlotCache slotCache;                  // GET printers/<id>/slots, tagged with that printer's id
@@ -200,6 +200,7 @@ const SlotEntry* curSlot() {
 // async task ends each note at duty 0 and can detach the pin after we've parked it.
 // ---- settings (written over USB, kept in flash) ---------------------------------
 Settings cfg;              // what the reader runs with
+RemoteConfig g_rcfg;       // remote config pushed from the Hub (NVS "fk-rcfg")
 bool     configured = false;
 BootReport boot;           // how the last start went, for FK? (wifi ok / fail / -, server ok / fail / unauth / -)
 bool printerNew = false;   // the settings were just written over USB with a printer: start on it (see setup)
@@ -264,6 +265,48 @@ bool saveSettings(const Settings& s) {
   return ok;
 }
 
+void loadRemoteConfig() {
+  g_rcfg = RemoteConfig{};
+  g_rcfg.buzzerLow = cfg.buzzerLow;
+  Preferences p;
+  if (!p.begin("fk-rcfg", true)) return;
+  g_rcfg.configVersion = p.getUInt("ver", 0);
+  String dp = p.getString("def_printer", "");
+  strncpy(g_rcfg.defaultPrinter, dp.c_str(), sizeof(g_rcfg.defaultPrinter) - 1);
+  g_rcfg.defaultPrinter[sizeof(g_rcfg.defaultPrinter) - 1] = '\0';
+  g_rcfg.buzzerEnabled = p.getBool("buz_en", true);
+  g_rcfg.buzzerLow = p.getBool("buz_low", cfg.buzzerLow);
+  g_rcfg.autoOta = p.getBool("auto_ota", true);
+  g_rcfg.dimAfterS = p.getUShort("dim_s", 120);
+  g_rcfg.offAfterS = p.getUShort("off_s", 600);
+  g_rcfg.scanCooldownMs = p.getUShort("cool_ms", 2500);
+  g_rcfg.listRefreshS = p.getUShort("list_s", 60);
+  g_rcfg.otaCheckHours = p.getUShort("ota_h", 24);
+  g_rcfg.encoderInvert = p.getBool("enc_inv", false);
+  String hi = p.getString("hub_ip", "");
+  strncpy(g_rcfg.hubIp, hi.c_str(), sizeof(g_rcfg.hubIp) - 1);
+  g_rcfg.hubIp[sizeof(g_rcfg.hubIp) - 1] = '\0';
+  p.end();
+}
+
+void saveRemoteConfig(const RemoteConfig& c) {
+  Preferences p;
+  if (!p.begin("fk-rcfg", false)) return;
+  p.putUInt("ver", c.configVersion);
+  p.putString("def_printer", c.defaultPrinter);
+  p.putBool("buz_en", c.buzzerEnabled);
+  p.putBool("buz_low", c.buzzerLow);
+  p.putBool("auto_ota", c.autoOta);
+  p.putUShort("dim_s", c.dimAfterS);
+  p.putUShort("off_s", c.offAfterS);
+  p.putUShort("cool_ms", c.scanCooldownMs);
+  p.putUShort("list_s", c.listRefreshS);
+  p.putUShort("ota_h", c.otaCheckHours);
+  p.putBool("enc_inv", c.encoderInvert);
+  p.putString("hub_ip", c.hubIp);
+  p.end();
+}
+
 // FK? and FK-SET over USB (settings.h). Never echoes a setting.
 LineReader serialLines;
 void serialPoll() {
@@ -290,8 +333,9 @@ void serialPoll() {
   }
 }
 
-void buzzIdle() { pinMode(PIN_BUZZER, OUTPUT); digitalWrite(PIN_BUZZER, cfg.buzzerLow ? HIGH : LOW); }
+void buzzIdle() { pinMode(PIN_BUZZER, OUTPUT); digitalWrite(PIN_BUZZER, g_rcfg.buzzerLow ? HIGH : LOW); }
 void beep(int freq, int ms) {
+  if (!g_rcfg.buzzerEnabled) return;
   if (!ledcAttach(PIN_BUZZER, freq, 10))  // 10-bit keeps the divider legal down to ~300 Hz
     Serial.printf("beep: ledcAttach(%d Hz) failed\n", freq);
   ledcWrite(PIN_BUZZER, 512);            // 50% square wave (polarity-agnostic)
@@ -317,6 +361,7 @@ bool needsScroll() {
     for (auto& p : printers) if (p.name.size() > (size_t)OLED_COLS - 2) return true;
     return false;
   }
+  if (menu.mode == MODE_ACTIONS) return false;
   const PrinterEntry* p = curPrinter();
   const SlotEntry* s = curSlot();
   if (p && p->name.size() > (size_t)OLED_COLS - 6) return true;
@@ -403,8 +448,28 @@ void showPrinterList() {
   display.display();
 }
 
+void showActionList() {
+  static const char* const items[3] = {"Spool info", "Unload slot", "Back"};
+  const SlotEntry* s = curSlot();
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  header(s ? s->label.c_str() : "Slot", String(menu.actionCursor + 1) + "/3");
+  for (int i = 0; i < 3; i++) {
+    int y = 14 + i * 12;
+    bool on = i == menu.actionCursor;
+    if (on) display.fillRect(0, y - 1, OLED_W, 11, SSD1306_WHITE);
+    display.setTextColor(on ? SSD1306_BLACK : SSD1306_WHITE);
+    display.setCursor(2, y + 1);
+    display.print(items[i]);
+  }
+  display.setTextColor(SSD1306_WHITE);
+  display.display();
+}
+
 void redraw() {
-  if (menu.mode == MODE_PRINTERS) showPrinterList(); else showPicker();
+  if (menu.mode == MODE_PRINTERS) showPrinterList();
+  else if (menu.mode == MODE_ACTIONS) showActionList();
+  else showPicker();
 }
 
 // line1 on top, then either one big word (big2) or small wrapped text.
@@ -553,6 +618,7 @@ int apiRequest(const String& url, const char* body, String& resp, bool quick = f
     apiHttp.setConnectTimeout(connectMs);
     if (!apiHttp.begin(apiTls, url) || !hubConnect(apiTls, connectMs)) { apiHttp.end(); apiTls.stop(); continue; }
     apiHttp.addHeader("X-Auth-Token", cfg.token.c_str());
+    apiHttp.addHeader("X-Reader-Build", String(FW_BUILD));
     if (body) { apiHttp.addHeader("Content-Type", "application/json"); code = apiHttp.POST(body); }
     else      code = apiHttp.GET();
     if (code <= 0) {
@@ -735,6 +801,31 @@ void sendScan(const String& uid) {
       showResult(head, r.message.empty() ? headline(r.status) : r.message.c_str(), r.message.empty());
       buzzError();
       break;
+  }
+}
+
+// ---- POST an unload -----------------------------------------------------------
+void sendUnload() {
+  const PrinterEntry* p = curPrinter();
+  const SlotEntry* s = curSlot();
+  if (WiFi.status() != WL_CONNECTED) { showResult("Unload", "No WiFi", true); buzzError(); return; }
+  if (!p || !s) { showResult("Unload", "No slot", true); buzzError(); return; }
+  PrinterEntry printer = *p;
+  SlotEntry slot = *s;
+  std::string payload = unloadBody(printer.id, slot.label);
+  String resp;
+  int code = apiRequest(urlUnload, payload.c_str(), resp);
+  ScanResult r = parseScanResult(code, resp.c_str());
+  char head[48];
+  snprintf(head, sizeof(head), "%s  %s", slot.label.c_str(), headline(r.status));
+  if (r.status == SCAN_UNLOADED) {
+    const std::string& what = !r.message.empty() ? r.message : r.filament;
+    showResult(head, what.empty() ? "unloaded" : what.c_str(), false);
+    buzzOk();
+    listsAt = millis() - LIST_REFRESH_MS + LIST_AFTER_SET_MS;
+  } else {
+    showResult(head, r.message.empty() ? headline(r.status) : r.message.c_str(), r.message.empty());
+    buzzError();
   }
 }
 
@@ -956,6 +1047,38 @@ void confirmOtaImage() {
   }
 }
 
+uint32_t rcfgSyncAt = 0;
+void syncRemoteConfig() {
+  rcfgSyncAt = millis();
+  if (WiFi.status() != WL_CONNECTED) return;
+  String resp;
+  if (apiRequest(urlConfig, nullptr, resp, true) != 200) return;
+  RemoteConfig next;
+  if (!parseRemoteConfig(resp.c_str(), next)) return;
+  bool changed = next.configVersion != g_rcfg.configVersion;
+  bool buzzerLowChanged = next.buzzerLow != g_rcfg.buzzerLow;
+  g_rcfg = next;
+  if (changed) {
+    saveRemoteConfig(g_rcfg);
+    Serial.printf("remote config v%lu applied\n", (unsigned long)g_rcfg.configVersion);
+  }
+  if (buzzerLowChanged) buzzIdle();
+  if (g_rcfg.otaNow || (g_rcfg.autoOta && updateReady)) {
+    String ackResp;
+    apiRequest(urlConfigAck, R"({"cmd":"ota"})", ackResp, true);
+    otaCheck();
+    return;
+  }
+  if (g_rcfg.rebootNow) {
+    String ackResp;
+    apiRequest(urlConfigAck, R"({"cmd":"reboot"})", ackResp, true);
+    Serial.println("remote reboot requested");
+    Serial.flush();
+    delay(200);
+    ESP.restart();
+  }
+}
+
 // ---- screen sleep (OLED burn-in) --------------------------------------------
 // Dim after 2 min idle, off after 10. The first knob turn / press on a dark
 // screen only wakes it; a tag tap wakes it and is processed as usual.
@@ -974,8 +1097,10 @@ bool wake() {                       // returns true if the screen was off
 }
 void screenIdle() {
   uint32_t idle = millis() - lastActivity;
-  if (scr == SCR_ON  && idle > DIM_AFTER_MS) { display.dim(true); scr = SCR_DIM; }
-  if (scr == SCR_DIM && idle > OFF_AFTER_MS) { display.ssd1306_command(SSD1306_DISPLAYOFF); scr = SCR_OFF; }
+  uint32_t dimMs = (uint32_t)g_rcfg.dimAfterS * 1000UL;
+  uint32_t offMs = (uint32_t)g_rcfg.offAfterS * 1000UL;
+  if (scr == SCR_ON  && idle > dimMs) { display.dim(true); scr = SCR_DIM; }
+  if (scr == SCR_DIM && idle > offMs) { display.ssd1306_command(SSD1306_DISPLAYOFF); scr = SCR_OFF; }
 }
 
 // Print every I2C address that ACKs (PN532 = 0x24, OLED = 0x3C).
@@ -995,6 +1120,7 @@ void setup() {
   Serial.setRxBufferSize(MAX_LINE + 64);
   Serial.begin(115200);
   loadSettings();
+  loadRemoteConfig();
   pinMode(PIN_ENC_CLK, INPUT_PULLUP);
   pinMode(PIN_ENC_DT,  INPUT_PULLUP);
   pinMode(PIN_ENC_SW,  ENC_SW_TO_VCC ? INPUT_PULLDOWN : INPUT_PULLUP);
@@ -1006,9 +1132,12 @@ void setup() {
 
   urlPrinters = joinUrl(cfg.base.c_str(), "printers").c_str();
   urlScan     = joinUrl(cfg.base.c_str(), "scan").c_str();
+  urlUnload   = joinUrl(cfg.base.c_str(), "unload").c_str();
   urlHealthz  = joinUrl(cfg.base.c_str(), "healthz").c_str();
-  urlManifest = joinUrl(cfg.base.c_str(), "fw/manifest.json").c_str();
-  urlBin      = joinUrl(cfg.base.c_str(), "fw/firmware.bin").c_str();
+  urlManifest  = joinUrl(cfg.base.c_str(), "fw/manifest.json").c_str();
+  urlBin       = joinUrl(cfg.base.c_str(), "fw/firmware.bin").c_str();
+  urlConfig    = joinUrl(cfg.base.c_str(), "config").c_str();
+  urlConfigAck = joinUrl(cfg.base.c_str(), "config/ack").c_str();
 
   // Idle I2C lines must read HIGH (pulled up). LOW with no internal pull-up means
   // no pull-up resistors; LOW even with the pull-up means something holds it down.
@@ -1097,6 +1226,7 @@ void setup() {
     refreshLists(false, HUB_CHECK_MS);
   }
   checkForUpdate();
+  syncRemoteConfig();
   lastActivity = millis();
   redraw();
   if (WiFi.status() != WL_CONNECTED || !serverOk) buzzError();
@@ -1145,6 +1275,21 @@ void handleAction(Action a) {
       showResult("Printers", serverOk ? "none on the server" : "server unreachable", false);
       buzzError();
       break;
+    case ACT_OPEN_ACTIONS:
+      buzzTick(); scrollStep = 0; redraw();
+      break;
+    case ACT_ACTION_SP_INFO:
+      buzzTick();
+      if (curSlot()) {
+        showResult(curSlot()->label.c_str(), spoolInfoText(*curSlot()).c_str(), false);
+      } else {
+        redraw();
+      }
+      break;
+    case ACT_ACTION_UNLOAD:
+      buzzTick();
+      sendUnload();
+      break;
     default:
       break;
   }
@@ -1159,6 +1304,7 @@ void loop() {
   int16_t d;
   noInterrupts(); d = encDetents; encDetents = 0; interrupts();
   if (d) {
+    if (g_rcfg.encoderInvert) d = -d;
     if (wake()) redraw();                     // dark screen: this turn only wakes it
     else { resultUntil = 0; handleAction(menu.rotate(d, np, ns, now)); }
   }
@@ -1176,7 +1322,22 @@ void loop() {
     else if (swallowPress && ev != BTN_CUE) { swallowPress = false; ev = BTN_NONE; }
   }
   if (ev == BTN_CUE) { if (!swallowPress) buzzTick(); }
-  else if (ev != BTN_NONE) { resultUntil = 0; handleAction(menu.button(ev, np, millis())); }
+  else if (ev != BTN_NONE) {
+    static uint32_t lastShortAt = 0;
+    resultUntil = 0;
+    if (ev == BTN_SHORT && menu.mode == MODE_SLOTS) {
+      if (!lastUid.length() || (lastShortAt && (now - lastShortAt) <= 450)) {
+        lastShortAt = 0;
+        handleAction(menu.openActions(now));
+      } else {
+        lastShortAt = now;
+        handleAction(menu.button(ev, np, now));
+      }
+    } else {
+      lastShortAt = 0;
+      handleAction(menu.button(ev, np, now));
+    }
+  }
   if (menu.tick(millis()) == ACT_CLOSE_LIST) redraw();
 
   // revert from a result screen after the hold window
@@ -1184,12 +1345,18 @@ void loop() {
 
   // background refreshes (skipped while a result or the printer list is showing)
   if (!resultUntil && menu.mode == MODE_SLOTS && !settleAt) {
-    if (listsDue(millis(), listsAt, serverOk, scr != SCR_OFF, LIST_REFRESH_MS, listRetryMs(listFails))) {
+    uint32_t listRefreshMs = (uint32_t)g_rcfg.listRefreshS * 1000UL;
+    if (listsDue(millis(), listsAt, serverOk, scr != SCR_OFF, listRefreshMs, listRetryMs(listFails))) {
       static int bgRefreshCount = 0;
       bool quick = (++bgRefreshCount % LIST_FULL_EVERY) != 0;
       refreshLists(quick); if (scr != SCR_OFF) redraw();
     }
-    if (millis() - updCheckAt > UPD_CHECK_MS) { checkForUpdate(); if (scr != SCR_OFF) redraw(); }
+    if (millis() - updCheckAt > (uint32_t)g_rcfg.otaCheckHours * 3600000UL) {
+      checkForUpdate(); if (scr != SCR_OFF) redraw();
+    }
+    if (millis() - rcfgSyncAt > listRefreshMs) {
+      syncRemoteConfig();
+    }
   }
   // scroll long names/labels
   if (!resultUntil && scr != SCR_OFF && millis() - scrollAt > MARQUEE_STEP_MS) {
@@ -1203,10 +1370,10 @@ void loop() {
   if (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 80)) {
     String u = formatUid(uid, uidLen);
     uint32_t t = millis();
-    if (tagGate.accept(u.c_str(), t, SCAN_COOLDOWN_MS)) {
+    if (tagGate.accept(u.c_str(), t, (uint32_t)g_rcfg.scanCooldownMs)) {
       lastUid = u;
       wake();
-      if (menu.mode == MODE_PRINTERS) { menu.mode = MODE_SLOTS; }   // a tap closes the list
+      if (menu.mode == MODE_PRINTERS || menu.mode == MODE_ACTIONS) { menu.mode = MODE_SLOTS; }   // a tap closes the list
       Serial.printf("tag %s -> %s / %s\n", u.c_str(),
                     curPrinter() ? curPrinter()->id.c_str() : "-", curSlot() ? curSlot()->label.c_str() : "-");
       sendScan(u);

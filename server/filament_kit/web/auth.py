@@ -15,6 +15,7 @@ import hmac
 import itertools
 import html
 import json
+import logging
 import secrets
 import sys
 import threading
@@ -34,6 +35,8 @@ from starlette.routing import Route
 
 __all__ = ["AuthorizationParams", "CALLBACKS", "Lockout", "Provider", "Store", "auth_settings", "check_passphrase",
            "hash_passphrase", "is_lan", "lan_only", "login_routes", "parse_lan"]
+
+log = logging.getLogger(__name__)
 
 CALLBACKS = frozenset({"https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback"})
 ACCESS_TTL, REFRESH_TTL, CODE_TTL, PENDING_TTL = 3600, 60 * 86400, 300, 600
@@ -141,6 +144,7 @@ class Provider:
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         uris = {str(u) for u in client_info.redirect_uris or []}
         if not uris or not uris <= CALLBACKS:
+            log.debug("oauth register refused: invalid_redirect_uri")
             raise RegistrationError("invalid_redirect_uri", "only Claude's connector callback is accepted")
         st = self.store
         with st.lock:
@@ -156,6 +160,7 @@ class Provider:
             for k in drop:
                 del st.d["clients"][k]
             if len(st.d["clients"]) >= MAX_CLIENTS:
+                log.debug("oauth register refused: max_clients")
                 raise RegistrationError("invalid_client_metadata", "too many connected clients")
             st.d["clients"][client_info.client_id] = client_info.model_dump(mode="json")
             st.save()
@@ -165,6 +170,7 @@ class Provider:
         rid = secrets.token_urlsafe(24)
         st.pending = {k: v for k, v in st.pending.items() if v["t"] > now - PENDING_TTL}
         if len(st.pending) >= MAX_PENDING:
+            log.debug("oauth authorize refused: max_pending")
             raise AuthorizeError("temporarily_unavailable", "too many sign-ins in progress; try again in 10 minutes")
         st.pending[rid] = {"t": now, "client_id": client.client_id,
                            "client_name": client.client_name or "unknown client",
@@ -175,6 +181,7 @@ class Provider:
                                       authorization_code: str) -> AuthorizationCode | None:
         c = self.store.d["codes"].get(_h(authorization_code))
         if not c or c["client_id"] != client.client_id or c["expires_at"] < time.time():
+            log.debug("oauth code refused: missing_or_expired")
             return None
         return AuthorizationCode(code=authorization_code, **{k: v for k, v in c.items() if k != "code"})
 
@@ -193,6 +200,7 @@ class Provider:
                                           authorization_code: AuthorizationCode) -> OAuthToken:
         with self.store.lock:
             if self.store.d["codes"].pop(_h(authorization_code.code), None) is None:
+                log.debug("oauth code exchange refused: already_used")
                 raise TokenError("invalid_grant", "code already used")
             return self._issue(client.client_id, authorization_code.scopes, authorization_code.resource)
 
@@ -202,9 +210,13 @@ class Provider:
         if not r:
             used = st.d["used"].get(key)
             if used and time.time() - used["at"] > REUSE_GRACE:  # replayed: someone else holds a copy
+                log.debug("oauth refresh refused: replayed")
                 self._end_client(used["client_id"])
+            else:
+                log.debug("oauth refresh refused: unknown")
             return None
         if r["client_id"] != client.client_id or r["expires_at"] < time.time():
+            log.debug("oauth refresh refused: mismatch_or_expired")
             return None
         return RefreshToken(token=refresh_token, client_id=r["client_id"], scopes=r["scopes"],
                             expires_at=r["expires_at"], resource=r.get("resource"))
@@ -215,6 +227,7 @@ class Provider:
         with st.lock:
             old = st.d["refresh"].pop(_h(refresh_token.token), None)  # rotate
             if old is None:
+                log.debug("oauth refresh exchange refused: already_used")
                 raise TokenError("invalid_grant", "refresh token already used")
             st.d["access"].pop(old.get("access", ""), None)
             st.d["used"][_h(refresh_token.token)] = {"client_id": client.client_id, "at": time.time(),
@@ -234,6 +247,7 @@ class Provider:
     async def load_access_token(self, token: str) -> AccessToken | None:
         a = self.store.d["access"].get(_h(token))
         if not a or a["expires_at"] < time.time():
+            log.debug("oauth access token refused: missing_or_expired")
             return None
         return AccessToken(token=token, client_id=a["client_id"], scopes=a["scopes"], expires_at=a["expires_at"],
                            resource=a.get("resource"))
@@ -395,6 +409,7 @@ def lan_only(app: Any, lan_cidrs: Iterable[str]) -> Any:
     async def wrapped(scope, receive, send):
         path, client = scope.get("path", ""), (scope.get("client") or ("",))[0]
         if scope["type"] == "http" and _lan_path(path) and path not in public and not is_lan(client, nets):
+            log.debug("lan_only refused: non_lan_client")
             if path.rstrip("/") == "/intake" and scope.get("method") == "GET":     # the web app: its refusal page
                 page = HTMLResponse(pages.refusal(_shared(), _prefix(path), client), 403,
                                     headers={**PAGE_HEADERS, "Content-Security-Policy": REFUSAL_CSP})
@@ -415,25 +430,31 @@ def login_routes(store: Store, public_url: str, passphrase_file: Path | str, *, 
 
     async def login(request: Request) -> Response:
         if not is_lan(request.client.host if request.client else "", nets):
+            log.debug("login refused: non_lan_client")
             return _page(_home_only(request.client.host if request.client else ""), 403)
         if request.method == "POST" and request.headers.get("origin") != origin:  # another site posting via a browser
+            log.debug("login refused: bad_origin")
             return _page(_say("signin_elsewhere"), 403)
         form = await request.form() if request.method == "POST" else {}
         rid = str(form.get("req") or request.query_params.get("req", ""))
         pend = store.pending.get(rid)
         if not pend or pend["t"] < time.time() - PENDING_TTL:
+            log.debug("login refused: pending_expired")
             return _page(_say("signin_expired"), 400)
         ask = {"heading": _say("signin_heading", name=pend["client_name"])}
         if request.method == "GET":
             return _page(_say("signin_text"), **ask, form=_form(rid))
         attempt = lockout.attempt()             # counted before the check (A-M1)
         if attempt is None:
+            log.debug("login refused: lockout")
             return _page(_say("signin_too_many"), 429)
         ok = await anyio.to_thread.run_sync(check_passphrase, str(form.get("passphrase", "")), passphrase_file)
         if ok is None:
             lockout.release(attempt)
+            log.debug("login refused: passphrase_not_set")
             return _page(_say("signin_not_set"), 503)
         if not ok:
+            log.debug("login refused: wrong_passphrase")
             return _page(_say("signin_text"), 401, **ask, form=_form(rid, _say("signin_wrong")))
         lockout.release(attempt)
         store.pending.pop(rid, None)

@@ -398,10 +398,16 @@ class ServerApi:
     def tag_lookup(self, uid: str) -> tuple[int, dict]:
         return self._call("GET", "/api/station/tag/" + urllib.parse.quote(uid, safe=""))
 
-    def recognize(self, jpeg: bytes, uid: str | None = None) -> tuple[int, dict]:
+    def recognize(self, image: bytes | list[bytes] | tuple[bytes, ...], uid: str | None = None) -> tuple[int, dict]:
+        images = [bytes(image)] if isinstance(image, (bytes, bytearray)) else [bytes(x) for x in image]
         b = uuid.uuid4().hex
-        parts = [f"--{b}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"station.jpg\"\r\n"
-                 f"Content-Type: image/jpeg\r\n\r\n".encode() + jpeg + b"\r\n"]
+        parts = []
+        for i, jpeg in enumerate(images, 1):
+            fname = "station.jpg" if len(images) == 1 else f"station-{i}.jpg"
+            parts.append(
+                f"--{b}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{fname}\"\r\n"
+                f"Content-Type: image/jpeg\r\n\r\n".encode() + jpeg + b"\r\n"
+            )
         if uid:
             parts.append(f"--{b}\r\nContent-Disposition: form-data; name=\"uid\"\r\n\r\n{uid}\r\n".encode())
         body = b"".join(parts) + f"--{b}--\r\n".encode()

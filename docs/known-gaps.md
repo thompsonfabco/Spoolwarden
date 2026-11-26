@@ -36,11 +36,10 @@ fixed.
    `web.public_url`; without a terminal it still stops with `error: ... needs ...`.
 9. ~~`web status` showed `FAIL` without a passphrase.~~ Fixed in v0.3.0: it shows `--   sign-in passphrase not set`
    (exit 0); the passphrase is only for the Claude connector.
-10. **Home networks in 172.16.0.0/12 are not "home" by default** (it's left out because of Docker). Those users
-    must edit `web.lan` in `config.json` by hand; there is no menu or prompt for it. From v0.4.1 a `web.lan` edit also
-    widens Spoolman's own allow-list, unless `spoolman.allow` is set, which overrides it. A home network on
-    172.16.x.x, and Tailscale or Docker clients, must add their range (to `web.lan` or `spoolman.allow`) or Spoolman
-    stops answering them after the update.
+10. ~~Home networks in 172.16.0.0/12 have no menu or prompt for `web.lan`.~~ Fixed: the Hub page (**Settings**,
+    **Network**) now lets you edit the allowed home networks (`web.lan`) with the setup code instead of editing
+    `config.json` by hand. `172.16.0.0/12` is still left out by default because of Docker, and `spoolman.allow` still
+    overrides `web.lan` if set.
 
 ## Hub install
 
@@ -57,9 +56,8 @@ fixed.
     `sudo spoolwarden printer add --klipper`. Sovol SV08 MAX is verified; Sovol M1D is an unverified placeholder. The usage entries the Hub logs for a Klipper printer can't be undone
     from the Hub; correct the spool in Spoolman.
 
-16. **The Hub page's data still shows serials and addresses on the home network (v0.4.3).** The new Overview and job
-    log hide them until you give the setup code, but the page's older state (`/setup/api/state`) still lists printer
-    serial numbers and addresses to any device on the home network without it, until a later stage of the Hub page.
+16. ~~The Hub page's data still shows serials and addresses on the home network (v0.4.3).~~ Fixed: `/setup/api/state`
+    now redacts printer serial numbers and addresses until you give the setup code.
 17. **Going back from v0.4.3 leaves the Hub page's job unit.** `filament-kit-setup-job@.service` stays on disk, unused,
     after `sudo spoolwarden update --rollback` from v0.4.3; the earlier Hub page does not call it. From v0.5.0 a
     rollback removes the unit files the version it leaves introduced.
@@ -73,9 +71,9 @@ fixed.
     Hub page tab is open in it, and a tab in the background can be up to a minute late.
 19. ~~Alerts are not on the Hub page.~~ Fixed: the Hub page has the banner, the Alerts list, notifications in the
     browser, the **Running low** card and the **Storage use** panel; see [Alerts](user-guide.md#alerts).
-20. **The apps cannot change which alerts are on.** The Hub page (**Settings**, **Alerts**) and `sudo spoolwarden alerts
-    set` change the switches, the running-low limit and the storage warning; the apps show none of them. The limit at
-    which storage counts as full (95 %) cannot be changed anywhere.
+20. **The storage-full limit (95 %) cannot be changed anywhere.** The Hub page (**Settings**, **Alerts**), the mobile
+    apps (Android and the web app), and `sudo spoolwarden alerts set` now all let you view and change which alerts are
+    on, the running-low limit, and the storage warning limit; only the 95 % storage-full limit remains fixed.
 21. **Remote access and a Hub on port 443 exclude each other.** A new install takes 443 when it is free, and Remote access
     needs 443 for itself, so switching it on is refused. Choose Remote access in the installer to give the Hub 8710.
     An existing Hub keeps its port.
@@ -94,8 +92,9 @@ Things the pages and apps already show, or the other interfaces already do, that
 24. **Language offers no language besides English.** The choice is there; nothing else is in it.
 25. **Devices shows no kind and no version for a paired phone or PC until it next calls the Hub.** The app (Android) and
     Slicer Sync report them with their calls; until then the row says "Version not known".
-26. **There is no Home Assistant integration to install yet.** `spoolwarden pair --home-assistant` makes a pairing,
-    but nothing uses it.
+26. ~~There is no Home Assistant integration to install yet.~~ Fixed: `spoolwarden-home-assistant` is available as a
+    HACS-ready custom integration, supporting read-only `viewer` pairing by default and opt-in `ha-control` services
+    for printer commands and slot loading and unloading.
 
 ## How this was first checked (v0.2.0)
 

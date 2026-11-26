@@ -67,6 +67,7 @@ instance names show in systemctl and the journal. The job runs the same command 
 commands print neither the setup code nor a pairing link."""
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
@@ -90,7 +91,7 @@ try:
 except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
-from . import config, demo, events, modules, setup_code, trusted
+from . import config, demo, events, lan, logging_cfg, modules, setup_code, trusted
 
 log = logging.getLogger(__name__)
 
@@ -576,6 +577,39 @@ def _hosts(value) -> list[str]:
     return out
 
 
+def _cidrs(value, *, allow_empty: bool) -> list[str] | None:
+    """Validate IPv4/IPv6 CIDR ranges (1..32 entries, rejecting prefixlen 0)."""
+    if value is None:
+        if allow_empty:
+            return None
+        raise ValueError("must have at least one CIDR range")
+    if isinstance(value, str):
+        value = [v for v in re.split(r"[\s,]+", value) if v]
+    if not isinstance(value, list):
+        raise ValueError("must be a list of CIDR ranges")
+    if not value:
+        if allow_empty:
+            return None
+        raise ValueError("must have at least one CIDR range")
+    if len(value) > 32:
+        raise ValueError("must be at most 32 CIDR ranges")
+    out: list[str] = []
+    for v in value:
+        raw = v.strip() if isinstance(v, str) else ""
+        if not raw:
+            raise ValueError(f"{v!r} is not a CIDR range")
+        try:
+            net = ipaddress.ip_network(raw, strict=False)
+        except ValueError:
+            raise ValueError(f"{v!r} is not a CIDR range") from None
+        if net.prefixlen == 0:
+            raise ValueError(f"{v!r} is too broad (prefix length 0 is not allowed)")
+        text = str(net)
+        if text not in out:
+            out.append(text)
+    return out
+
+
 def _bool(value) -> bool:
     if not isinstance(value, bool):
         raise ValueError("must be true or false")
@@ -617,6 +651,15 @@ def _tts(value) -> str:
     return value
 
 
+def _log_level(value) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("invalid log level")
+    level = logging_cfg.normalize(value)
+    if level is None:
+        raise ValueError("invalid log level")
+    return level
+
+
 # What the page may write into config.json besides the two addresses in SETTINGS: key -> (check, then). Never in here:
 # port, station.allow, modules, or anything with a path. "restart": the server reads it once, when it starts.
 # "apply": `modules apply` acts on it.
@@ -629,12 +672,15 @@ GENERAL = {
     "appearance.theme": (_look, None),      # read on every page and api/info: no restart
     "setup.hosts": (_hosts, None),          # read on every request (setup_page.extra_hosts): no restart
     "web.printer_changes": (_bool, None),   # read on every request (printers_app.changes_allowed): no restart
+    "web.lan": (lambda v: _cidrs(v, allow_empty=False), "apply"),
+    "spoolman.allow": (lambda v: _cidrs(v, allow_empty=True), "apply"),
     # read on every label read (intake._call): no restart
     "intake.reader": (_reader, None),
     "local_intake.url": (_reader_url, None),
     "local_intake.tier": (_reader_tier, None),
     # read on every correction (V1.3); the job local_intake_share sets the reader the same way
     "label_reader.share_corrections": (_bool, None),
+    "log_level": (_log_level, None),
 }
 
 
@@ -661,6 +707,16 @@ def _share_refusal(cfg: dict, value) -> str | None:
     return share_corrections.refusal(cfg) if value is True else None
 
 
+def _lan_lockout_refusal(req: dict, new_lan: list[str]) -> str | None:
+    """Refuse a web.lan change that would lock out the caller's own non-loopback address."""
+    client = req.get("client")
+    if not isinstance(client, str) or not client.strip():
+        return None
+    if not lan.is_lan(client.strip(), lan.parse_lan(new_lan)):
+        return "would lock out your current address"
+    return None
+
+
 def _general(req: dict) -> dict:
     key = req.get("key")
     if not isinstance(key, str) or key not in GENERAL:
@@ -674,6 +730,10 @@ def _general(req: dict) -> dict:
     cfg = config.load()
     if key == SHARE_KEY:
         why = _share_refusal(cfg, value)
+        if why:
+            raise Refused(400, f"{key} {why}", field="value")
+    if key == "web.lan":
+        why = _lan_lockout_refusal(req, value)
         if why:
             raise Refused(400, f"{key} {why}", field="value")
     before = general_value(cfg, key)
@@ -727,6 +787,11 @@ def _general_group(req: dict) -> dict:
     if why:
         errors = {SHARE_KEY: f"{SHARE_KEY} {why}"}
         raise Refused(400, f"nothing was changed: {errors[SHARE_KEY]}", errors=errors)
+    if "web.lan" in checked:
+        why = _lan_lockout_refusal(req, checked["web.lan"])
+        if why:
+            errors = {"web.lan": f"web.lan {why}"}
+            raise Refused(400, f"nothing was changed: {errors['web.lan']}", errors=errors)
     for key, value in checked.items():
         parts = key.split(".")
         cur = cfg
@@ -1219,22 +1284,30 @@ NO_CODE_OPS = ("trust_status",      # it answers only about the token it was giv
 def handle(req) -> dict:
     """One request -> one reply {ok, status[, error][, ...]}. Never raises; the reply never holds a value, except
     trust_add's new token."""
+    t0 = time.monotonic()
+    op = req.get("op") if isinstance(req, dict) else None
+    op_label = op if isinstance(op, str) and op in OPS else "<unknown>"
     try:
         _sweep_stale_reader_pending()
-        if not isinstance(req, dict) or req.get("op") not in OPS:
+        if not isinstance(req, dict) or op not in OPS:
             raise Refused(400, "unknown request")
-        if req["op"] not in NO_CODE_OPS:
+        if op not in NO_CODE_OPS:
             _access(req)
-        if req["op"] != "check" and demo.is_on():       # demo: nothing is changed through the root helper
+        if op != "check" and demo.is_on():       # demo: nothing is changed through the root helper
             raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
-        if req["op"] in LOCKED_OPS:
+        if op in LOCKED_OPS:
             with _job_lock():
-                return {"ok": True, "status": 200, **OPS[req["op"]](req)}
-        return {"ok": True, "status": 200, **OPS[req["op"]](req)}
+                reply = {"ok": True, "status": 200, **OPS[op](req)}
+        else:
+            reply = {"ok": True, "status": 200, **OPS[op](req)}
+        log.debug("setup helper: op=%s status=200 elapsed_ms=%.1f", op_label, (time.monotonic() - t0) * 1000)
+        return reply
     except Refused as e:
+        log.debug("setup helper: op=%s refused status=%d reason=%s elapsed_ms=%.1f",
+                  op_label, e.status, e.message, (time.monotonic() - t0) * 1000)
         return {"ok": False, "status": e.status, "error": e.message, **e.extra}
     except Exception:  # noqa: BLE001 - logged (without values) to the journal, a plain refusal to the page
-        log.exception("setup helper: %s failed", req.get("op") if isinstance(req, dict) else "request")
+        log.exception("setup helper: %s failed", op_label)
         return {"ok": False, "status": 500, "error": "the setup helper failed; see: journalctl -u 'filament-kit-setup@*'"}
 
 
@@ -1380,10 +1453,7 @@ def _read_request(fd: int) -> bytes | None:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
-    logging.getLogger("filament_kit").addHandler(handler)
-    logging.getLogger("filament_kit").setLevel(logging.INFO)
+    logging_cfg.configure(config.load())
     if len(argv) == 2 and argv[0] == "job-run":
         return job_run(argv[1])
     if argv:

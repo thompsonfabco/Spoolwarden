@@ -86,16 +86,22 @@ class Client:
 
     def __enter__(self) -> Client:
         demo.stop()                  # no connection to a printer in the demo
+        label = registry.log_label(self.printer.serial)
         ftp = _ImplicitFTP_TLS(context=tlspin.context())
         try:
+            log.debug("ftps %s: connecting to %s:%s", label, self.printer.ip, PORT)
             ftp.connect(self.printer.ip, PORT, timeout=self.timeout)
             tlspin.check_socket(self.printer, ftp.sock)       # before USER/PASS: no code to a changed leaf
+            log.debug("ftps %s: TLS pin verified", label)
             ftp.login(USER, self.printer.access_code)
             ftp.prot_p()
-        except tlspin.CertChanged:
+            log.debug("ftps %s: logged in and PROT P enabled", label)
+        except tlspin.CertChanged as e:
+            log.debug("ftps %s: TLS pin check failed (%s)", label, type(e).__name__)
             ftp.close()
             raise
         except (ftplib.all_errors + (ValueError,)) as e:
+            log.debug("ftps %s: connect/login failed (%s)", label, type(e).__name__)
             ftp.close()
             raise FtpsError(f"cannot open FTPS to printer {self.printer.serial}: {_why(e)}") from None
         self._ftp = ftp
@@ -105,6 +111,7 @@ class Client:
         ftp, self._ftp = self._ftp, None
         if ftp is None:
             return
+        log.debug("ftps %s: closing session", registry.log_label(self.printer.serial))
         try:
             ftp.quit()
         except ftplib.all_errors:
@@ -115,9 +122,12 @@ class Client:
     def _do(self, what: str, fn, *a):
         if self._ftp is None:
             raise FtpsError("FTPS client is not open")
+        label = registry.log_label(self.printer.serial)
+        log.debug("ftps %s: %s", label, what)
         try:
             return fn(*a)
         except ftplib.all_errors as e:
+            log.debug("ftps %s: %s failed (%s)", label, what, type(e).__name__)
             raise FtpsError(f"{what} on printer {self.printer.serial} failed: {_why(e)}") from None
 
     def upload(self, path: str, data: bytes) -> None:
@@ -134,6 +144,7 @@ class Client:
         try:
             self._do(f"download {path}", self._ftp.retrbinary, f"RETR {path}", take)
         except _TooBig:
+            log.debug("ftps %s: download %s exceeded %s bytes", registry.log_label(self.printer.serial), path, limit)
             try:
                 self._ftp.voidresp()
             except ftplib.all_errors:

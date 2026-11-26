@@ -165,7 +165,7 @@ const rowOf = (name) => [...document.querySelectorAll(".coll--printers .coll__it
 const stopIn = (it) => it && [...it.querySelectorAll(".coll__row--note .result button")].find((b) => text(b) === "Stop");
 await until(() => $("main") && !$(".chip--lock .skeleton__line"), "the page and the lock");
 """
-UNLOCK = 'SW.setLock("unlocked", { code: "__CODE__" });\n'
+UNLOCK = 'SW.setLock("unlocked", { code: "__CODE__" }); await until(() => S && !S.printers_redacted, "unredacted printers"); await sleep(50);\n'
 
 
 def test_mapping_progress_and_stop_stay_through_a_test_result_and_leaving_the_section(printers_hub, mapper, tmp_path):
@@ -849,7 +849,7 @@ window.printerLive = function (p, ctx) {
   return el;
 };
 location.hash = "#printers";
-await until(() => rowOf("Workshop X1"), "the rows");
+await until(() => rowOf("Workshop X1") && !S.printers_redacted, "the rows");
 const x1 = rowOf("Workshop X1");
 const det = () => x1.querySelector(".detail");
 const liveCalls = () => calls.filter((c) => c === "GET printers/00M00A000000001/live").length;

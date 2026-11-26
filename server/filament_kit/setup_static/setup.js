@@ -23,6 +23,9 @@ function h(tag, props, ...kids) {
 async function api(path, body) {
   const init = { method: body === undefined ? "GET" : "POST", credentials: "same-origin", headers: {} };
   if (body !== undefined) { init.body = JSON.stringify(body); init.headers["Content-Type"] = "application/json"; }
+  if ((path === "state" || path === "printers/states") && SW.lock && SW.lock.state !== "locked" && theCode()) {
+    init.headers["X-Setup-Code"] = theCode();
+  }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort("timeout"), 30000);
   init.signal = ctrl.signal;
@@ -79,7 +82,25 @@ function whenOpen(el, paint) {
   places.add(p);
   p.paint();
 }
-document.addEventListener("sw:lock", () => { for (const p of places) if (p.el.isConnected) p.paint(); else places.delete(p); });
+let lockOpen = false;
+let stateRefresh = null;
+window._swFreshPrinters = () => stateRefresh;
+document.addEventListener("sw:lock", () => {
+  for (const p of places) if (p.el.isConnected) p.paint(); else places.delete(p);
+  const open = !!(SW.lock && SW.lock.state !== "locked");
+  if (open !== lockOpen) {
+    lockOpen = open;
+    if (open && S && S.printers_redacted) {
+      stateRefresh = api("state").then((fresh) => {
+        if (fresh && fresh.printers) {
+          S.printers = fresh.printers;
+          S.printers_redacted = fresh.printers_redacted;
+          document.dispatchEvent(new CustomEvent("sw:state-printers"));
+        }
+      }).catch(() => {}).finally(() => { stateRefresh = null; });
+    }
+  }
+});
 // Unlock to show: the unlock dialog as the chip opens it; the places then read by themselves
 const unlockToShow = () => SW.btn(SW.t("common_unlock_to_show"), { run: (e) => SW_LOCK.unlock(null, null, null, e.currentTarget) });
 // the locked placeholder (`key`: its sentence) and the hidden-values note ("lock_hidden_note")
@@ -360,7 +381,10 @@ function render() {
 // drawn again, and the one its builder names in `also`; without `at` (the page opens, a job ends) the whole section is.
 async function refresh(at, sent) {
   const r = at && regionOf(at);
-  try { S = await api("state"); } catch (e) {
+  try {
+    S = await api("state");
+    if (S.printers_redacted && SW.lock && SW.lock.state !== "locked" && theCode()) S = await api("state");
+  } catch (e) {
     if (!S) { hubName.parentElement.dataset.state = "error"; hubName.replaceChildren(SW.shape("s-octagon"), SW.t("topbar_hub_unreachable")); }
     if (!at) { const box = h("div"); readFailed(box, "overview_error", e, () => refresh()); sections.replaceChildren(box); shown = null; }
     return;

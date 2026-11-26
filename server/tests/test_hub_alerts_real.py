@@ -82,7 +82,7 @@ const r = await fetch("/setup/api/settings/alerts", { method: "POST", headers: {
 out.refused = [r.status, await r.json()];
 """)
     assert page["toast"] == "Test alert" and page["toasts"] == 1
-    assert page["saved"] == "Saved: Print finished, Running low under." and page["after"] == {"finished": True, "low": "300", "badge": "7 of 8 on"}
+    assert page["saved"] == "Saved: Print finished, Running low under." and page["after"] == {"finished": True, "low": "300", "badge": "8 of 8 on"}
     status, body = page["refused"]
     assert status == 400 and list(body["errors"]) == ["running_low_g"] and body["field"] == "running_low_g"
     assert alerts.load()["running_low_g"] == 300 and alerts.load()["types"]["finished"] is True

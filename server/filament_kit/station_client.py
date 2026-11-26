@@ -545,7 +545,8 @@ def _call(endpoint, method, path, body, cap=MAX_JSON, timeout=STATION_TIMEOUT):
     if body is not None:
         headers["Content-Type"] = "application/json"
     purpose = {("POST", "/ticket"): "ticket", ("POST", "/settings"): "settings", ("POST", "/voice"): "voice",
-               ("POST", "/voice/test"): "voice"}.get((method, path))
+               ("POST", "/voice/test"): "voice", ("POST", "/ota/update"): "ota",
+               ("POST", "/restart"): "restart"}.get((method, path))
     if purpose == "ticket" and fp is None:
         # D14: the page ticket is the way into the station's own page: the Hub never asks for one over plain HTTP, whatever the proof
         raise StationPinMissing(503, TEXT_STATION_NO_PIN)
@@ -574,13 +575,14 @@ def _call(endpoint, method, path, body, cap=MAX_JSON, timeout=STATION_TIMEOUT):
     return status, kind, data
 
 
-def call_json(url: str | None, method: str, path: str, body: dict | None = None) -> dict:
+def call_json(url: str | None, method: str, path: str, body: dict | None = None, *, preserve_409: bool = False) -> dict:
     """The JSON object a station answers with a 2xx: `application/json` only. A refusal of the station (4xx) is a
     StationCallError with its status and its own reason (`error` or `message`, at most 200 characters)."""
-    return _json_reply(*call(url, method, path, None if body is None else json.dumps(body).encode()))
+    return _json_reply(*call(url, method, path, None if body is None else json.dumps(body).encode()),
+                       preserve_409=preserve_409)
 
 
-def _json_reply(status: int, kind: str, data: bytes) -> dict:
+def _json_reply(status: int, kind: str, data: bytes, *, preserve_409: bool = False) -> dict:
     if kind.split(";")[0].strip().lower() != "application/json":
         raise StationCallError(502, _say("station_call_not_json"))
     try:
@@ -593,7 +595,8 @@ def _json_reply(status: int, kind: str, data: bytes) -> dict:
         raise StationSetOnHub(409, TEXT_STATION_SET_ON_HUB)
     if not 200 <= status < 300:
         why = out.get("message") or out.get("error")
-        raise StationCallError(status if status in (400, 403, 404, 429) else 502,
+        allowed = (400, 403, 404, 409, 429) if preserve_409 else (400, 403, 404, 429)
+        raise StationCallError(status if status in allowed else 502,
                                str(why)[:MAX_TEXT] if isinstance(why, str) and why else f"the Weigh Station answered {status}")
     return out
 
@@ -644,6 +647,22 @@ def voice_test(url: str | None, values: dict) -> tuple[int, str]:
         if isinstance(got, dict) and isinstance(got.get("error"), str):
             code = got["error"]
     return status, code
+
+
+def ota_status(url: str | None) -> dict:
+    """`GET /ota/status` over pinned TLS."""
+    return call_json(url, "GET", "/ota/status")
+
+
+def trigger_ota(url: str | None, target_version: str | None = None) -> dict:
+    """`POST /ota/update` with `X-Station-Proof` ("ota")."""
+    body = {"version": target_version} if target_version else {}
+    return call_json(url, "POST", "/ota/update", body, preserve_409=True)
+
+
+def restart_station(url: str | None) -> dict:
+    """`POST /restart` with `X-Station-Proof` ("restart")."""
+    return call_json(url, "POST", "/restart", {}, preserve_409=True)
 
 
 def read_photo(url: str | None) -> bytes:

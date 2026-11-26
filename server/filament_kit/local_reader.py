@@ -41,6 +41,7 @@ from __future__ import annotations
 import base64
 import http.client
 import json
+import logging
 import socket
 import time
 import urllib.error
@@ -48,6 +49,8 @@ import urllib.request
 from urllib.parse import quote, urlparse
 
 from . import config, demo, station_client
+
+log = logging.getLogger(__name__)
 
 DEFAULT_URL = "http://127.0.0.1:7915"
 API_MAJOR = 1                    # the reader API major version this kit speaks; any 1.x is accepted
@@ -196,13 +199,17 @@ def _token() -> str:
 def _reachable(url: str) -> None:
     """Connect once with a short timeout: an address that drops packets would otherwise hold a read for `timeout`."""
     u = urlparse(url)
+    port = None
     try:
-        socket.create_connection((u.hostname, u.port or (443 if u.scheme == "https" else 80)),
-                                 timeout=CONNECT_TIMEOUT).close()
+        port = u.port or (443 if u.scheme == "https" else 80)
+        log.debug("local reader probe %s:%s (timeout=%ss)", u.hostname, port, CONNECT_TIMEOUT)
+        socket.create_connection((u.hostname, port), timeout=CONNECT_TIMEOUT).close()
     except ValueError:      # a port outside 0-65535 or not a number
+        log.warning("local reader probe failed: invalid port in %s", u.netloc)
         raise LocalReaderError("unreachable", f"the local reader's address {u.netloc!r} is not usable: the port must "
                                               "be a number from 1 to 65535") from None
     except OSError as e:
+        log.warning("local reader probe %s:%s failed: %s", u.hostname, port, e)
         raise LocalReaderError("unreachable", f"the local reader at {u.netloc} does not answer ({e})") from None
 
 
@@ -282,25 +289,31 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False,
     if token:
         headers["Authorization"] = f"Bearer {token}"
     deadline = time.monotonic() + timeout
+    actual_method = method or ("GET" if body is None else "POST")
+    log.debug("local reader %s %s (timeout=%.1fs, auth=%s)", actual_method, url, timeout, bool(token))
     for attempt in (1, 2):
-        req = urllib.request.Request(url, data=data, method=method or ("GET" if body is None else "POST"),
-                                     headers=headers)
+        req = urllib.request.Request(url, data=data, method=actual_method, headers=headers)
         try:
             with opener.open(req, timeout=max(1.0, deadline - time.monotonic())) as resp:  # noqa: build-step
+                status = getattr(resp, "status", 200)
                 if raw_cap is None:
                     raw = resp.read()
                 else:
                     raw = resp.read(raw_cap + 1)
                     if len(raw) > raw_cap:
+                        log.warning("local reader %s %s -> HTTP %s exceeded %d bytes", actual_method, url, status, raw_cap)
                         raise LocalReaderError("too_large", f"the local reader's download is over {raw_cap // 1048576} "
                                                             "MB: not fetched")
+                log.debug("local reader %s %s -> HTTP %s (%d bytes)", actual_method, url, status, len(raw))
             if pin is not None and pin.fp is None and pin.seen:
+                log.debug("local reader %s: pinned TLS certificate (TOFU)", _origin(url))
                 station_client.pin_set(PIN_KIND, _origin(url), pin.seen)    # trust on first use
             break
         except urllib.error.HTTPError as e:
             code, msg = _error_of(e.read() or b"")
             what = f"the local reader answered HTTP {e.code}" + (f" ({code})" if code else "") + (
                 f": {msg}" if msg else "")
+            log.warning("local reader %s %s -> HTTP %s (code=%s)", actual_method, url, e.code, code or "-")
             if e.code == 401 or code == "unauthorized":
                 raise LocalReaderError("unauthorized", "the local reader's token is wrong or missing (set it on "
                                                        "the setup page or with sudo spoolwarden local-intake token)") from None
@@ -316,6 +329,7 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False,
                 except (TypeError, ValueError):
                     wait = 0
                 if 0 <= wait <= min(BUSY_WAIT_MAX, deadline - time.monotonic() - 1):
+                    log.debug("local reader %s %s -> 503 busy; retrying in %.1fs", actual_method, url, wait)
                     time.sleep(wait)
                     continue
             kind = ("refused" if code in REFUSALS or (not code and e.code in (400, 413, 415, 422))
@@ -324,8 +338,10 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False,
         except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
             reason = getattr(e, "reason", None) or e
             if isinstance(reason, station_client.PinMismatch):
+                log.warning("local reader %s %s: TLS pin mismatch", actual_method, urlparse(url).netloc)
                 raise LocalReaderError("cert_changed", f"{TEXT_CERT_CHANGED.format(address=urlparse(url).netloc)} "
                                                        f"{TEXT_CERT_FIX}") from None
+            log.warning("local reader %s %s failed: %s", actual_method, url, reason)
             raise LocalReaderError("unreachable", f"the local reader at {urlparse(url).netloc} does not answer "
                                                   f"({reason})") from None
     if raw_cap is not None:
@@ -333,8 +349,10 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False,
     try:
         out = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
+        log.warning("local reader %s %s: answer is not JSON", actual_method, url)
         raise LocalReaderError("bad_answer", "the local reader's answer is not JSON") from None
     if not isinstance(out, dict):
+        log.warning("local reader %s %s: answer is not a JSON object", actual_method, url)
         raise LocalReaderError("bad_answer", "the local reader's answer is not an object")
     return out
 
@@ -473,6 +491,8 @@ def health(cfg: dict, timeout: float = HEALTH_TIMEOUT) -> dict:
     if out["auth_required"] and out["ok"] and not _token():
         out["ok"], out["error"] = False, ("the local reader needs a token: set it on the setup page (Settings, Local "
                                           "label reader) or with sudo spoolwarden local-intake token")
+    log.debug("local reader health %s: ok=%s degraded=%s api=%s error=%s",
+              s["url"], out["ok"], out["degraded"], out["api_version"], out["error"])
     return out
 
 
@@ -491,13 +511,18 @@ def test(cfg: dict, timeout: float = HEALTH_TIMEOUT, trust: bool = False) -> dic
         known = station_client.pin_get(PIN_KIND, key)
         try:
             seen = station_client.peer_fingerprint(u.hostname, u.port or 443, CONNECT_TIMEOUT)
-        except OSError:
+        except OSError as e:
+            log.warning("local reader TLS fingerprint probe %s failed: %s", u.netloc, e)
             seen = None         # health below says it does not answer
         if seen:
             out["fp"] = seen
             if known is None or (known != seen and trust):
                 station_client.pin_set(PIN_KIND, key, seen)
             out["pin"] = "new" if known is None else "same" if known == seen else "replaced" if trust else "changed"
+            if out["pin"] == "changed":
+                log.warning("local reader TLS pin changed at %s (trust=%s)", u.netloc, trust)
+            else:
+                log.debug("local reader TLS pin %s at %s", out["pin"], u.netloc)
     return {**health(cfg, timeout), **out}
 
 
@@ -606,10 +631,22 @@ def _answer(cfg: dict, out: dict, vendors: list[dict], n_photos: int) -> dict:
         _complete(it, vendors, n_photos)
     per = [it["confidence"] for it in items if it["confidence"] is not None]
     conf = min(per) if per else _conf(out.get("confidence"))       # the least sure item decides
-    unsure = (out.get("unsure") is True or not items or conf is None or conf < s["min_confidence"]
-              or any(it["vendor"].lower() == "unknown" for it in items))
+    unsure_reasons = []
+    if out.get("unsure") is True:
+        unsure_reasons.append("reader_flagged")
+    if not items:
+        unsure_reasons.append("no_items")
+    if conf is None:
+        unsure_reasons.append("no_confidence")
+    elif conf < s["min_confidence"]:
+        unsure_reasons.append(f"conf<{s['min_confidence']}")
+    if any(it["vendor"].lower() == "unknown" for it in items):
+        unsure_reasons.append("unknown_vendor")
+    unsure = bool(unsure_reasons)
     reader = out.get("reader") if isinstance(out.get("reader"), dict) else {}
     tier = str(reader.get("tier_used") or out.get("tier") or s["tier"])
+    log.debug("local reader answer: items=%d conf=%s unsure=%s reasons=%s tier=%s escalated=%s",
+              len(items), conf, unsure, unsure_reasons or None, tier, reader.get("escalated") is True)
     usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
     ms = reader.get("latency_ms", usage.get("ms"))
     q = out.get("questions")

@@ -10,11 +10,13 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | 
 android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | events | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
 android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | filament | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
 android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | gap | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | humidity_high_pct | not text: JSON field of the alerts config
 android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | id | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
 android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | in_stock | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
 android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | key | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
 android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | kind | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
 android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | last_one | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
+android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | last_spool_only | not text: JSON field of the alerts config
 android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | location | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
 android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | material | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)
 android/app/src/main/java/com/thompsonfabco/filamentkit/alerts/AlertModels.kt | next | not text: a route, JSON field, storage key or log value of the alerts feature (EA8)

@@ -194,6 +194,8 @@ def view(cfg: dict | None = None, *, backup_done: bool | None = None) -> dict:
             log.warning("getting started step %s not read: %s", sid, e)
             got = (False, "")
         if got is not None:
+            if not got[0] and sid in fr.done:
+                got = (True, say("start_line_marked_done"))
             steps.append({"id": sid, "state": "done" if got[0] else "open", "line": got[1], "target": TARGETS[sid]})
     nxt = next((s for s in steps if s["state"] == "open"), None)
     if nxt:

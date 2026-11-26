@@ -289,6 +289,14 @@ def _host_of(host_header: str) -> str:
         return ""
 
 
+def _serial_hash(serial: str) -> str:
+    """FNV-1a 64-bit hex digest of a printer serial for locked deep-link matching."""
+    h = 0xCBF29CE484222325
+    for b in serial.encode("utf-8"):
+        h = ((h ^ b) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return f"{h:016x}"
+
+
 class SetupPage:
     def __init__(self, printers=None, *, families=None, helper=None, client_factory=None, hosts=None, mapper=None,
                  spoolman=None, camera_hub=None):
@@ -320,7 +328,7 @@ class SetupPage:
         w = lambda fn: self.guard(fn, write=True)  # noqa: E731
         hw = lambda fn: self.guard(fn, write="helper")  # noqa: E731
         table = [
-            ("/state", g(self.state), "GET"), ("/modules/preview", g(self.preview), "GET"),
+            ("/state", g(self.state), "GET"), ("/state", w(self.state), "POST"), ("/modules/preview", g(self.preview), "GET"),
             ("/apply", g(self.apply_get), "GET"),
             ("/key", hw(self.key_set), "POST"), ("/key/remove", hw(self.key_remove), "POST"),
             ("/key/check", g(self.key_check), "POST"), ("/code/check", g(self.code_check), "POST"),
@@ -409,6 +417,25 @@ class SetupPage:
         if not isinstance(code, str) or not code.strip():
             raise Refused(403, NEED_CODE, field="code")
         await self._helper({"op": "check", "code": code, "client": self._client_key(request)})
+
+    async def _is_unlocked(self, request: Request) -> bool:
+        """True when no setup code is set, a trusted-computer cookie verifies, or X-Setup-Code verifies."""
+        if not setup_code.is_set():
+            return True
+        check_body: dict = {"code": request.headers.get("x-setup-code", "")}
+        token = self._trusted_token(request, check_body)
+        code = check_body.get("code")
+        if not isinstance(code, str) or not code.strip():
+            return False
+        try:
+            await self._helper({"op": "check", "code": code.strip(), "client": self._client_key(request)})
+        except Refused as e:
+            if e.extra.get("trust_gone"):
+                request.state.clear_trust = True
+            return False
+        if token:
+            request.state.set_trust = token
+        return True
 
     @staticmethod
     def _trusted_token(request: Request, body: dict) -> str | None:
@@ -539,7 +566,7 @@ class SetupPage:
         return shared_files.response(self.shared, request.path_params["name"])
 
     # ---------- reads ----------
-    def _printer_rows(self) -> list[dict]:
+    def _printer_rows(self, *, unlocked: bool = True) -> list[dict]:
         out = []
         for p in registry.load().values():
             if p.family not in self.families:
@@ -558,6 +585,16 @@ class SetupPage:
                 row["report_why"] = _report.why((_mapping._load_status(p.serial) or {}).get("report_wanted"))
             if p.family == "klipper":
                 row.update(host=p.host, port=p.port, api_key=bool(p.api_key), lane_data=p.lane_data)   # never the key itself
+            row["serial_hash"] = _serial_hash(p.serial)
+            if unlocked:
+                row["redacted"] = False
+            else:
+                row["serial"] = f"locked-{len(out) + 1}"
+                row["ip"] = ""
+                if p.family == "klipper":
+                    row["host"] = ""
+                    row["port"] = None
+                row["redacted"] = True
             out.append(row)
         return out
 
@@ -569,7 +606,7 @@ class SetupPage:
         last = r.get("last") if r.get("ok") else None
         return last if isinstance(last, str) else None
 
-    def _state_body(self) -> dict:
+    def _state_body(self, *, unlocked: bool = True) -> dict:
         from . import cli
         cfg = config.load()
         on = modules.enabled(cfg)
@@ -591,7 +628,8 @@ class SetupPage:
             "history": self.history,
             "local_intake_token": {"set": _present("local_intake_token"), "on": "local_intake" in on},
             "printers": {"on": bool(self.families), "bambu": "bambu" in self.families,
-                         "klipper": "klipper" in self.families, "list": self._printer_rows()},
+                         "klipper": "klipper" in self.families, "list": self._printer_rows(unlocked=unlocked)},
+            "printers_redacted": not unlocked,
             "readers": {"list": readers, "error": readers_error},
             "devices": self._device_rows(cfg),
             # the public address as stored, for the Settings field (the Hub's report and logs still hide it: redact.py)
@@ -614,14 +652,15 @@ class SetupPage:
                  "last_seen": _fmt_time(d["last_seen"]), "reachable": reach.get(d["id"]),
                  "built_in": d["name"] in BUILT_IN_DEVICES} for d in devs]
 
-    def _state(self) -> dict:
+    def _state(self, *, unlocked: bool = True) -> dict:
         from .setup_console import summaries
-        out = self._state_body()
+        out = self._state_body(unlocked=unlocked)
         out["summaries"] = summaries.build(out, getattr(self, "overview_cache", None) and self.overview_cache.value)
         return out
 
     async def state(self, request: Request, body: dict):
-        return await anyio.to_thread.run_sync(self._state)
+        unlocked = True if request.method == "POST" else await self._is_unlocked(request)
+        return await anyio.to_thread.run_sync(lambda: self._state(unlocked=unlocked))
 
     async def preview(self, request: Request, body: dict):
         """What switching a module, or a mode preset, would do, in the checklist's words; changes nothing."""
@@ -867,12 +906,14 @@ class SetupPage:
         kind = body.get("kind", "phone")
         if kind not in KINDS:
             raise Refused(400, "kind must be phone, pc, station or home-assistant")
+        control = bool(body.get("control")) and kind == "home-assistant"
+        role = pairing.HA_CONTROL_ROLE if control else pairing.VIEWER_ROLE if kind == "home-assistant" else None
 
         def run() -> dict:
             try:
                 pr = pairing.issue(
                     device_hint=KINDS[kind],
-                    role="viewer" if kind == "home-assistant" else None,
+                    role=role,
                     scope="station" if kind == "station" else None,
                 )
             except pairing.PairingError as e:

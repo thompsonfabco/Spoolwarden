@@ -101,6 +101,7 @@ MESSAGES: dict[str, str | dict] = {
     "start_line_spool_unknown": "Spoolman did not answer.",
     "start_line_backup_done": "A backup exists.",
     "start_line_backup_open": "No backup yet.",
+    "start_line_marked_done": "Marked done",
     "cli_start_done": "done",
     "cli_start_next": "next",
     "cli_start_not_yet": "not yet",

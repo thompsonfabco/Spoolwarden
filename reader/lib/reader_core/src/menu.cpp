@@ -37,12 +37,23 @@ BtnEvent Button::update(bool pressed, uint32_t now) {
 
 static int wrap(int v, int n) { return ((v % n) + n) % n; }
 
+Action Menu::openActions(uint32_t now) {
+  lastInput = now;
+  mode = MODE_ACTIONS;
+  actionCursor = 0;
+  return ACT_OPEN_ACTIONS;
+}
+
 Action Menu::rotate(int d, int nPrinters, int nSlots, uint32_t now) {
   if (!d) return ACT_NONE;
   lastInput = now;
   if (mode == MODE_PRINTERS) {
     if (nPrinters <= 0) return ACT_NONE;
     cursor = wrap(cursor + d, nPrinters);
+    return ACT_CURSOR_MOVED;
+  }
+  if (mode == MODE_ACTIONS) {
+    actionCursor = wrap(actionCursor + d, 3);
     return ACT_CURSOR_MOVED;
   }
   if (nSlots <= 0) return ACT_NONE;
@@ -57,7 +68,7 @@ Action Menu::button(BtnEvent e, int nPrinters, uint32_t now) {
       mode = MODE_SLOTS;
       return ACT_OTA;
     case BTN_MENU:
-      if (mode == MODE_PRINTERS) {
+      if (mode == MODE_PRINTERS || mode == MODE_ACTIONS) {
         mode = MODE_SLOTS;
         return ACT_CLOSE_LIST;
       }
@@ -67,6 +78,12 @@ Action Menu::button(BtnEvent e, int nPrinters, uint32_t now) {
       return ACT_OPEN_LIST;
     case BTN_SHORT:
       if (mode == MODE_SLOTS) return ACT_RESEND;
+      if (mode == MODE_ACTIONS) {
+        mode = MODE_SLOTS;
+        if (actionCursor == 0) return ACT_ACTION_SP_INFO;
+        if (actionCursor == 1) return ACT_ACTION_UNLOAD;
+        return ACT_CLOSE_LIST;
+      }
       mode = MODE_SLOTS;
       if (cursor == printer) return ACT_CLOSE_LIST;
       printer = cursor;
@@ -78,7 +95,7 @@ Action Menu::button(BtnEvent e, int nPrinters, uint32_t now) {
 }
 
 Action Menu::tick(uint32_t now) {
-  if (mode == MODE_PRINTERS && now - lastInput >= LIST_TIMEOUT_MS) {
+  if ((mode == MODE_PRINTERS || mode == MODE_ACTIONS) && now - lastInput >= LIST_TIMEOUT_MS) {
     mode = MODE_SLOTS;
     return ACT_CLOSE_LIST;
   }

@@ -111,9 +111,10 @@ def _confidence(item: dict, questions: list) -> str:
     return "low" if unsure else "high"
 
 
-def recognize(sm, cfg: dict, image: bytes, claude=None, cap=None, device=None) -> dict:
-    """Read one spool photo with the first recogniser that answers. Raises FlowError (no recogniser, or the read
+def recognize(sm, cfg: dict, image: bytes | list[bytes], claude=None, cap=None, device=None) -> dict:
+    """Read spool photo(s) with the first recogniser that answers. Raises FlowError (no recogniser, or the read
     failed) and lets intake.CapReached through (the API answers 429)."""
+    images = [bytes(image)] if isinstance(image, (bytes, bytearray)) else [bytes(x) for x in image]
     order = intake.reader_order(cfg)
     if not order:
         raise FlowError(409, "no_recognizer", "no local reader (local_intake) and no Claude (ai_intake) on this server",
@@ -127,7 +128,7 @@ def recognize(sm, cfg: dict, image: bytes, claude=None, cap=None, device=None) -
     try:
         # no station weight and no reader tap: the photo alone decides sealed (the tap would force opened)
         ctx = intake.read_context(cfg, sm, None, app_tag=True)
-        out = intake.read_labels(sm, [image], "", None, claude, **ctx, readers=order, charge=charge)
+        out = intake.read_labels(sm, images, "", None, claude, **ctx, readers=order, charge=charge)
     except intake.ReadError as e:
         if e.refund is not None and e.code in ("unreachable", "api_error"):
             e.refund()

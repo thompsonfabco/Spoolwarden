@@ -24,6 +24,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [Build.VERSION_CODES.S], qualifiers = "w411dp-h8000dp")
@@ -50,13 +54,25 @@ class AlertBannerTest {
     private fun Themed(content: @Composable () -> Unit) = SpoolwardenTheme(Look.Console, Appearance.Light) { content() }
 
     @Test fun aBannerHasTheBoldTitleTheSentenceTheAgeOneActionAndDismiss() {
-        val state = bannerState(listOf(event(1, "Filament ran out on Workshop X1", key = "print-paused:p-3")), emptyList(), emptyMap(), now)
+        val ev = event(1, "Filament ran out on Workshop X1", key = "print-paused:p-3")
+        val state = bannerState(listOf(ev), emptyList(), emptyMap(), now)
+        val expectedStamp = Instant.ofEpochMilli(ev.atMillis!!).atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
         rule.setContent { Themed { AlertBanners(state, now, actions) } }
         rule.onNodeWithText("Filament ran out on Workshop X1").assertExists()
-        rule.onNodeWithText("Sentence of Filament ran out on Workshop X1. 3 min ago").assertExists()
+        rule.onNodeWithText("Sentence of Filament ran out on Workshop X1. 3 min ago \u00b7 $expectedStamp").assertExists()
         rule.onNodeWithText("Open the printer").performClick()
         rule.onNodeWithText("Dismiss").performClick()
         assertEquals(listOf("action Printer(id=p-3)", "dismiss print-paused:p-3"), calls)
+    }
+
+    @Test fun sentenceForFormatsAgeAndUtcStampDeterministically() {
+        val state = bannerState(listOf(event(1, "Filament ran out on Workshop X1", key = "print-paused:p-3")), emptyList(), emptyMap(), now)
+        val item = state.shown.single()
+        var formatted = ""
+        rule.setContent { Themed { formatted = item.sentenceFor(now, ZoneOffset.UTC) } }
+        rule.waitForIdle()
+        assertEquals("Sentence of Filament ran out on Workshop X1. 3 min ago \u00b7 2026-11-17 11:57", formatted)
     }
 
     @Test fun aPlaceTheAppHasNoScreenForOffersTheAlertsList() {

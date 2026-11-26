@@ -100,14 +100,16 @@ def scan_net(subnet):
     return net
 
 
-def printer_states(page, rows=None) -> list[dict]:
+def printer_states(page, rows=None, *, unlocked: bool = True) -> list[dict]:
     """One entry per listed printer: `serial`, `family`, `state` (as `G state` gives it), `job` (None while the Hub has
     no status: the printer's `gcode_state`, `name`, `percent`, `remaining_min`, `eta`, `layer`, `total_layers`) and
     `slots` (the units of the printer's status, None while there is none) and, for a Bambu printer, `mapped` (the
     server holds a slot map for it: the file only, no connection). Read from the managers' held reports and cached
     spool lists; no address or key, only the serial the list already shows."""
+    from ..setup_page import _serial_hash
+
     out = []
-    for row in page._printer_rows() if rows is None else rows:
+    for i, row in enumerate(page._printer_rows(unlocked=True) if rows is None else rows, 1):
         serial = row["serial"]
         st = None
         if row["configured"] and page.printers is not None:
@@ -120,8 +122,9 @@ def printer_states(page, rows=None) -> list[dict]:
             job = {"gcode_state": st["gcode_state"], "name": st["job"] or None, "percent": st["percent"],
                    "remaining_min": st["remaining_min"], "eta": st["eta"], "layer": st["layer"],
                    "total_layers": st["total_layers"]}
-        entry = {"serial": serial, "family": row["family"], "state": row["state"], "job": job,
-                 "slots": st["ams"] if st is not None else None}
+        entry = {"serial": serial if unlocked else f"locked-{i}", "serial_hash": _serial_hash(serial),
+                 "family": row["family"], "state": row["state"], "job": job,
+                 "slots": st["ams"] if st is not None else None, "redacted": not unlocked}
         if row["family"] == "bambu":
             entry["mapped"] = bool(row["configured"] and ams.load_map(serial).slots)
         out.append(entry)
@@ -496,7 +499,9 @@ def routes(page) -> list[tuple]:
 
     async def states(request, body):
         """Every printer's state, job and slots in one read: what the Hub already holds, no new connection."""
-        return {"printers": await anyio.to_thread.run_sync(lambda: printer_states(page))}
+        unlocked = await page._is_unlocked(request)
+        return {"printers": await anyio.to_thread.run_sync(lambda: printer_states(page, unlocked=unlocked)),
+                "printers_redacted": not unlocked}
 
     async def export_csv(request, body):
         from starlette.responses import Response

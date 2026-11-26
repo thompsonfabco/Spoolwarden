@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from filament_kit import alerts, alerts_api, cli, config, event_sink, events, inventory, output, status
+from filament_kit import alerts, alerts_api, cli, config, event_sink, events, inventory, iso_time, output, status
 
 RULES = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2, "overflow": "Overflow",
          "sealed_location": "Sealed stock"}
@@ -54,10 +54,10 @@ def spools(sm, *grams):
 def test_alerts_shows_the_switches_and_the_limits(capsys):
     rc, out, _ = run(capsys, "alerts")
     lines = out.splitlines()
-    assert rc == 0 and lines[0] == "Alerts - 6 of 8 on" or lines[0] == "Alerts · 6 of 8 on"
+    assert rc == 0 and lines[0] == "Alerts - 7 of 8 on" or lines[0] == "Alerts · 7 of 8 on"
     assert lines[1].split() == ["KEY", "ALERT", "EVENTS", "STATE"]
     assert lines[2].split()[0] == "runout" and lines[2].split()[-1] == "on"
-    assert [ln.split()[0] for ln in lines[2:10]] == list(alerts.KEYS)
+    assert [ln.split()[0] for ln in lines[2:11]] == list(alerts.KEYS)
     assert "device.down, printer.offline" in lines[9] and lines[9].split()[-1] == "off"
     assert "Spool running low only when it is the last spool of that filament: off" in out
     flat = " ".join(out.split())
@@ -91,8 +91,8 @@ def test_set_a_type_a_limit_and_the_storage_warning(capsys, env):
     (("storage-warning", "95"), "The storage warning must be lower than 95 % used, where storage counts as full.", None),
     (("runout", "maybe"), "runout must be on or off.", "Say on or off, or a number: alerts set runout on|off"),
     (("nope", "on"), "nope is not an alert type.",
-     "the types are: runout, paused, failed, printer_error, finished, storage, running_low, device_down, running-low, "
-     "storage-warning."),
+     "the types are: runout, paused, failed, printer_error, finished, storage, running_low, device_down, humidity, "
+     "running-low, storage-warning."),
 ])
 def test_a_wrong_change_is_an_error_with_exit_code_2_and_changes_nothing(capsys, argv, message, fix):
     rc, out, err = run(capsys, "alerts", "set", *argv)
@@ -117,7 +117,8 @@ def test_alerts_test_asks_every_client_for_a_minute(capsys, env):
     rc, out, _ = run(capsys, "alerts", "test")
     assert rc == 0 and out == "Test alert sent. Every device that asks in the next 60 seconds gets it.\n"
     assert (env / "state" / alerts_api.TEST_FILE).is_file()
-    assert alerts_api.take_test(["client:a"])["title"] == "Test alert"
+    got = alerts_api.take_test(["client:a"])
+    assert got["title"] == "Test alert" and iso_time.parse_utc(got["at"]) is not None
     assert alerts_api.take_test(["client:a"]) is None and alerts_api.take_test(["client:b"]) is not None
 
 
@@ -363,21 +364,21 @@ def menu(monkeypatch, script, *flags):
 def test_the_alerts_group_is_fourth_with_its_summary_and_eleven_rows(capsys, monkeypatch):
     assert menu(monkeypatch, "q\n") == 0
     out = capsys.readouterr().out
-    assert "4  Alerts" in out and "6 of 8 on - running low under 150 g - storage warning at 85 % used" in " ".join(
+    assert "4  Alerts" in out and "7 of 8 on - running low under 150 g - storage warning at 85 % used" in " ".join(
         out.replace("·", "-").split())
     assert menu(monkeypatch, "4\nq\nq\n") == 0
     out = capsys.readouterr().out
     assert "Settings > Alerts" in out
     labels = ["Filament ran out", "Print paused", "Print failed or stopped", "Printer error", "Print finished",
-              "Storage almost full", "Spool running low", "Device stopped answering",
+              "Storage almost full", "Spool running low", "Device stopped answering", "High humidity",
               "Only when it is the last spool of that filament", "Running low under", "Storage warning at"]
     rows = [ln for ln in out.split("Settings > Alerts")[1].splitlines() if ln[:4].strip().isdigit()]
-    assert [r.split("  ")[2].strip() for r in rows[:11]] == labels
+    assert [r.split("  ")[2].strip() for r in rows[:12]] == labels
 
 
 def test_changing_the_alerts_group_stages_then_saves_with_s_into_alerts_xml(capsys, monkeypatch, env):
-    # 4 Alerts: 5 Print finished (toggle), 1 Filament ran out (toggle), 10 Running low under 200, 11 Storage warning 70
-    assert menu(monkeypatch, "4\n5\n1\n10\n200\n11\n70\nq\ns\nq\n") == 0
+    # 4 Alerts: 5 Print finished (toggle), 1 Filament ran out (toggle), 11 Running low under 200, 12 Storage warning 70
+    assert menu(monkeypatch, "4\n5\n1\n11\n200\n12\n70\nq\ns\nq\n") == 0
     out = capsys.readouterr().out
     got = alerts.load()
     assert got["types"]["finished"] is True and got["types"]["runout"] is False
@@ -388,14 +389,14 @@ def test_changing_the_alerts_group_stages_then_saves_with_s_into_alerts_xml(caps
 
 
 def test_a_wrong_number_in_the_menu_is_refused_with_the_range(capsys, monkeypatch):
-    assert menu(monkeypatch, "4\n10\n5\n\nq\nq\n") == 0
+    assert menu(monkeypatch, "4\n11\n5\n\nq\nq\n") == 0
     err = capsys.readouterr().err
     assert "Enter a whole number, 10 to 2000." in err
     assert alerts.load() == alerts.defaults()
 
 
 def test_a_warning_at_or_over_the_bad_limit_is_refused_at_the_save_and_nothing_is_lost(capsys, monkeypatch):
-    assert menu(monkeypatch, "4\n11\n95\nq\ns\nq\nn\nq\ny\n") == 5                         # refused: still staged, so q asks
+    assert menu(monkeypatch, "4\n12\n95\nq\ns\nq\nn\nq\ny\n") == 5                         # refused: still staged, so q asks
     err = capsys.readouterr().err
     assert "nothing was saved: The storage warning must be lower than 95 % used" in " ".join(err.split())
     assert alerts.load() == alerts.defaults()
@@ -407,7 +408,7 @@ def test_config_show_prints_the_alerts_group_and_json_lists_it_without_a_key(cap
     doc = json.loads(run(capsys, "config", "show", "--json")[1])
     group = next(g for g in doc["groups"] if g["group"] == "Alerts")
     assert [i["label"] for i in group["items"]][:2] == ["Filament ran out", "Print paused"]
-    assert all(i["key"] is None for i in group["items"]) and group["items"][9]["value"] == 150
+    assert all(i["key"] is None for i in group["items"]) and group["items"][10]["value"] == 150
     assert not [k for k in doc["values"] if "alert" in k]
 
 

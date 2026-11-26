@@ -34,9 +34,29 @@ const AN_TEXT = {
   analytics_note_logged_only: "Includes {grams} g the Hub logged but took off no spool.",
   analytics_note_no_weight_one: "{count} print has no weight.",
   analytics_note_no_weight_other: "{count} prints have no weight.",
+  analytics_cost_title: "Cost and waste",
+  analytics_cost_summary: "Estimated filament cost: {cost}. Unfinished prints: {waste} ({percent}%).",
+  analytics_cost_empty: "No spool prices are recorded yet. Add a price to a spool to track print cost and waste.",
+  analytics_col_cost: "Cost",
+  analytics_col_waste: "Waste",
+  analytics_currency_amount: "${amount}",
+  analytics_orders_title: "Order history",
+  analytics_orders_summary: "{count} orders saved ({spools} spools).",
+  analytics_orders_empty: "No filament orders imported yet.",
+  analytics_orders_format: "Format",
+  analytics_orders_format_auto: "Detect automatically",
+  analytics_orders_format_csv: "CSV",
+  analytics_orders_format_json: "JSON",
+  analytics_orders_paste: "Order data",
+  analytics_orders_placeholder: "date,seller,material,weight_g,price,currency,qty",
+  analytics_orders_hint: "Paste CSV rows or a JSON array of filament orders.",
+  analytics_orders_import_btn: "Import orders",
+  analytics_orders_importing: "Importing orders...",
+  analytics_orders_imported: "Imported {imported} orders ({skipped} already saved, {total} total).",
+  analytics_orders_error_empty: "Paste CSV or JSON order data first.",
 };
 const anT = (key, vars) => (window.SW_TEXT && window.SW_TEXT[key] != null ? SW.t(key, vars)
-  : AN_TEXT[key].replace(/\{([a-z]+)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m)));
+  : AN_TEXT[key].replace(/\{([a-z0-9_]+)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m)));
 
 // the insights come in a fixed order, whatever order the Hub sends them in
 const AN_ORDER = ["total", "favourite_material", "busiest_printer", "unfinished", "biggest_print", "spools_finished"];
@@ -61,8 +81,9 @@ const anMonth = (key, long) => {
   return new Date(Date.UTC(y, m - 1, 15)).toLocaleDateString(undefined, { month: long ? "long" : "short", year: "numeric", timeZone: "UTC" });
 };
 const anGrams = (g) => (g >= 1000 ? anT("analytics_kilograms", { kg: (g / 1000).toFixed(2) }) : anT("analytics_grams", { grams: Math.round(g) }));
-const anBlank = (month) => ({ month, grams: 0, prints: 0, unfinished_prints: 0, unfinished_grams: 0, logged_only_grams: 0,
-  no_weight_prints: 0, by_printer: [], by_material: [] });
+const anMoney = (v) => anT("analytics_currency_amount", { amount: Number(v || 0).toFixed(2) });
+const anBlank = (month) => ({ month, grams: 0, prints: 0, unfinished_prints: 0, unfinished_grams: 0, cost: 0, unfinished_cost: 0,
+  logged_only_grams: 0, no_weight_prints: 0, by_printer: [], by_material: [] });
 
 // one bar per month: the grams above it in words, the bar itself an SVG that is told its length by --level (0 to 1) and is
 // laid out upright, or lengthwise when the room is narrow (setup_analytics.css)
@@ -138,9 +159,103 @@ function analyticsTab() {
     h("section", { class: "card an__months" }, h("h2", { textContent: anT("analytics_chart_title") }),
       h("div", { class: "an__controls" }, printerField, tableCheck), chartArea, notes),
     h("section", { class: "card an__by-material" }, h("h2", { textContent: anT("analytics_material_title") }), monthField, materials));
-  out.append(gate, main);
+
+  const costBody = h("div", { class: "an__cost-body" });
+  const costCard = h("section", { class: "card an__cost", hidden: true },
+    h("h2", { textContent: anT("analytics_cost_title") }), costBody);
+
+  const ordersSummary = h("p", { class: "muted an__orders-summary" });
+  const orderFormat = SW.field({
+    label: anT("analytics_orders_format"),
+    type: "select",
+    name: "order_format",
+    value: "auto",
+    options: [
+      { value: "auto", label: anT("analytics_orders_format_auto") },
+      { value: "csv", label: anT("analytics_orders_format_csv") },
+      { value: "json", label: anT("analytics_orders_format_json") },
+    ],
+  });
+  const orderData = SW.field({
+    label: anT("analytics_orders_paste"),
+    type: "textarea",
+    name: "order_data",
+    placeholder: anT("analytics_orders_placeholder"),
+    hint: anT("analytics_orders_hint"),
+  });
+  const orderResult = h("div", { class: "an__orders-result" });
+  const importBtn = SW.btn(anT("analytics_orders_import_btn"), {
+    action: "import-orders",
+    cls: "btn--primary",
+    run: async () => {
+      const raw = orderData._control.value;
+      if (!raw.trim()) {
+        SW.fieldError(orderData, anT("analytics_orders_error_empty"));
+        orderData._control.focus();
+        return;
+      }
+      SW.fieldError(orderData, null);
+      SW.result(orderResult, "run", anT("analytics_orders_importing"));
+      try {
+        let res;
+        await needCode(async () => {
+          res = await api("orders/import", { data: raw, format: orderFormat._control.value, code: theCode() });
+        });
+        orderData._control.value = "";
+        SW.result(orderResult, "ok", anT("analytics_orders_imported", {
+          imported: res.imported,
+          skipped: res.skipped,
+          total: res.total,
+        }));
+        if (data && res.summary) {
+          data.orders = res.summary;
+          drawOrders(res.summary);
+        }
+      } catch (e) {
+        if (e.locked) { SW.result(orderResult, null); throw e; }
+        SW.result(orderResult, "bad", hubText(e.message));
+      }
+    },
+  });
+  const ordersCard = h("section", { class: "card an__orders", hidden: true },
+    h("h2", { textContent: anT("analytics_orders_title") }),
+    ordersSummary,
+    orderFormat,
+    orderData,
+    h("p", {}, importBtn),
+    orderResult);
+
+  out.append(gate, main, costCard, ordersCard);
 
   let data = null, seq = 0;
+
+  const drawCost = (answer, rows) => {
+    const totals = answer.totals || {};
+    const totalCost = Number(totals.cost || rows.reduce((s, m) => s + (m.cost || 0), 0));
+    const totalWaste = Number(totals.unfinished_cost || rows.reduce((s, m) => s + (m.unfinished_cost || 0), 0));
+    const pricedRows = [...rows].reverse().filter((m) => (m.cost || 0) > 0 || (m.unfinished_cost || 0) > 0);
+    if (!totalCost && !totalWaste && !pricedRows.length) {
+      costBody.replaceChildren(h("p", { class: "muted", textContent: anT("analytics_cost_empty") }));
+      return;
+    }
+    const pct = totalCost > 0 ? Math.round((totalWaste / totalCost) * 100) : 0;
+    const summary = h("p", {
+      textContent: anT("analytics_cost_summary", { cost: anMoney(totalCost), waste: anMoney(totalWaste), percent: pct }),
+    });
+    const head = [anT("analytics_col_month"), anT("analytics_col_cost"), anT("analytics_col_waste")];
+    const table = anTable(anT("analytics_cost_title"), head, pricedRows.map((m) => [
+      anMonth(m.month, true), anMoney(m.cost), anMoney(m.unfinished_cost),
+    ]));
+    costBody.replaceChildren(summary, table);
+  };
+
+  const drawOrders = (summary) => {
+    if (!summary || !summary.count) {
+      ordersSummary.textContent = anT("analytics_orders_empty");
+      return;
+    }
+    ordersSummary.textContent = anT("analytics_orders_summary", { count: summary.count, spools: summary.total_spools || 0 });
+  };
 
   const syncPrinters = (answer) => {
     if (!anState.printer) for (const m of answer.months || []) for (const p of m.by_printer || []) anState.printers.set(String(p.id), p.name);
@@ -163,6 +278,8 @@ function analyticsTab() {
     insights.replaceChildren(...(lines.length ? [h("h2", { textContent: anT("analytics_insights_title") }),
       h("ul", { class: "an__list" }, lines.map((l) => h("li", { "data-key": l.key, textContent: l.text })))] : []));
     tableCheck.hidden = !used;
+    drawCost(answer, rows);
+    drawOrders(answer.orders);
     if (!used) {
       // nothing logged in these months: one calm line, not twelve empty bars
       chartArea.replaceChildren(SW.empty({ icon: "info", title: anT("analytics_empty_title"), text: anT("analytics_empty_text"), level: 3 }));
@@ -191,6 +308,8 @@ function analyticsTab() {
       syncPrinters(answer);
       gate.replaceChildren();
       main.hidden = false;
+      costCard.hidden = false;
+      ordersCard.hidden = false;
       draw();
     }, (e) => {
       if (mine !== seq) return;

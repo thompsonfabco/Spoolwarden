@@ -154,10 +154,34 @@ def check_printer(printer: str, cfg: dict | None = None) -> str:
     return printer
 
 
+def default_ota_pubkey() -> str | None:
+    """Default OTA public key PEM from the Hub's config, installed resources, or checkout, or None."""
+    paths = config.paths()
+    candidates = [
+        paths.etc / "reader-ota.pub",
+        paths.opt / "resources" / "reader" / "ota.pub",
+        Path(__file__).resolve().parents[2] / "reader" / "firmware" / "ota.pub",
+    ]
+    for p in candidates:
+        try:
+            if not p.is_file():
+                continue
+            pem, real = pubkey(p.read_text(encoding="utf-8"))
+            if real:
+                return pem
+        except (OSError, UnicodeDecodeError, SetupError):
+            continue
+    return None
+
+
 def home_settings(printer: str = "") -> dict:
     """The FK-SET fields that point a reader at the Hub's home address (the contract with the firmware): `root_ca`,
     `hub_ip` and `printer` ("" = chosen on the reader's knob; anything else must be one of the Hub's printers)."""
-    return {"root_ca": hub_root_ca(), "hub_ip": hub_ip(), "printer": check_printer(printer)}
+    out = {"root_ca": hub_root_ca(), "hub_ip": hub_ip(), "printer": check_printer(printer)}
+    key_pem = default_ota_pubkey()
+    if key_pem is not None:
+        out["ota_key"] = key_pem
+    return out
 
 
 def c_string(text: str) -> str:

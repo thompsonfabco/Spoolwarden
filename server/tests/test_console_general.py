@@ -292,3 +292,57 @@ def test_history_use_counts_valid_record_folders_without_parsing_json(app, monke
     monkeypatch.setattr(intake_history, "list_records", lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not parse")))
     got = client(app).get("/setup/api/settings/general").json()["intake_history"]
     assert got == {"count": 1, "photo_bytes": 5}
+
+
+@pytest.mark.parametrize("level,expected", [
+    ("error", "error"),
+    ("warning", "warning"),
+    ("info", "info"),
+    ("debug", "debug"),
+    (" DEBUG ", "debug"),
+])
+def test_log_level_saves_and_applies_live(app, restarts, applies, level, expected):
+    import logging
+    from filament_kit import logging_cfg
+
+    fk = logging.getLogger("filament_kit")
+    st = logging.getLogger("intake-station")
+    old_fk, old_st = fk.level, st.level
+    try:
+        r = _set(app, "log_level", level)
+        assert r.status_code == 200, r.text
+        assert r.json() == {"ok": True, "restarts": False, "applies": False}
+        assert not restarts and not applies
+        assert config.load()["log_level"] == expected
+        want = logging_cfg.to_int(expected)
+        assert fk.level == want and st.level == want
+    finally:
+        fk.setLevel(old_fk)
+        st.setLevel(old_st)
+
+
+@pytest.mark.parametrize("bad", ["trace", "", 123, None])
+def test_log_level_invalid_is_refused(app, restarts, applies, bad):
+    before = config.load()
+    assert _set(app, "log_level", bad).status_code == 400
+    assert config.load() == before and not restarts and not applies
+
+
+def test_log_level_in_group_saves_and_applies_live(app, restarts, applies):
+    import logging
+    from filament_kit import logging_cfg
+
+    fk = logging.getLogger("filament_kit")
+    st = logging.getLogger("intake-station")
+    old_fk, old_st = fk.level, st.level
+    try:
+        r = _group(app, {"log_level": "warning", "server_name": "Shop"})
+        assert r.status_code == 200, r.text
+        assert r.json() == {"ok": True, "keys": ["log_level", "server_name"], "restarts": False, "applies": False}
+        assert not restarts and not applies
+        c = config.load()
+        assert c["log_level"] == "warning" and c["server_name"] == "Shop"
+        assert fk.level == logging.WARNING and st.level == logging.WARNING
+    finally:
+        fk.setLevel(old_fk)
+        st.setLevel(old_st)

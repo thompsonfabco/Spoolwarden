@@ -240,7 +240,7 @@ try {
 
   await openUnlocked("#flash/tag-reader");
   await ev(`window.__fake.scenario = { wifi: "fail", server: "-" }; window.__fake.settings = null; window.__fake.wdelay = 20; window.__fake.events.length = 0`);
-  await fill3("Workshop", "x");
+  await fill3("Workshop", "hunter22");
   await click(".flash-write button", "Connect and write");
   check(await waitFor(`(document.querySelector('.flash-write .result') || {}).textContent?.includes('could not join')`, 40000), "this computer: a Wi-Fi failure is said");
   await sleep(600);
@@ -278,7 +278,7 @@ try {
   await fill3();
   await click(".flash-write button", "Connect and write");
   check(await waitFor(`!!document.querySelector('.flash-steps .progress')`, 10000), "Hub job elsewhere: the write from this computer runs");
-  await ev(`api("flash/server", { ssid: "Elsewhere", pass: "x", buzzer: "high", code: theCode() })`);
+  await ev(`api("flash/server", { ssid: "Elsewhere", pass: "hunter22", buzzer: "high", code: theCode() })`);
   await sleep(1500);
   await ev("render()");
   await sleep(1500);

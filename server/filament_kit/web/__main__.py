@@ -11,7 +11,7 @@ import sys
 
 import uvicorn
 
-from .. import config, modules
+from .. import config, logging_cfg, modules
 from . import slots
 from .app import NotConfigured, build_app
 
@@ -20,19 +20,10 @@ log = logging.getLogger("filament_kit.web")
 TRUSTED_PROXY = "127.0.0.1"
 
 
-def _log_to_journal() -> None:
-    app_log = logging.getLogger("filament_kit")
-    if not app_log.handlers:
-        handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
-        app_log.addHandler(handler)
-        app_log.propagate = False
-    app_log.setLevel(logging.INFO)
-
-
 def uvicorn_options(cfg: dict) -> dict:
     return {"host": "127.0.0.1", "port": int(cfg["web"]["port"]), "proxy_headers": True,
-            "forwarded_allow_ips": TRUSTED_PROXY, "server_header": False, "log_level": "info", "workers": 1,
+            "forwarded_allow_ips": TRUSTED_PROXY, "server_header": False,
+            "log_level": logging_cfg.normalize(cfg.get("log_level")), "workers": 1,
             "access_log": False}    # no request lines in the journal: see the kit server's serve_options
 
 
@@ -50,8 +41,8 @@ def kit_api_at_start(cfg: dict):
 
 
 def main() -> int:
-    _log_to_journal()
     cfg = config.load()
+    logging_cfg.configure(cfg)
     try:
         app = build_app(cfg, kit_api=kit_api_at_start(cfg))
     except NotConfigured as e:

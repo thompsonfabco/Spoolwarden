@@ -99,7 +99,7 @@ def test_cli_timer_commands_are_linux_only(monkeypatch, capsys):
     with pytest.raises(SystemExit):
         cli.main(["--help"])
     out = capsys.readouterr().out
-    assert "{pair,run,status,unpair,apply-updates}" in out and "timer" not in out   # Windows: no timer commands
+    assert "{pair,run,watch,status,unpair,apply-updates}" in out and "timer" not in out   # Windows: no timer commands
     monkeypatch.setattr(cli.sys, "platform", "linux")
     with pytest.raises(SystemExit):
         cli.main(["--help"])

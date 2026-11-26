@@ -9,6 +9,7 @@ import functools
 import http.server
 import json
 import os
+import re
 import subprocess
 import threading
 from pathlib import Path
@@ -74,8 +75,9 @@ def test_banners_show_content_and_limits(site, tmp_path):
     assert [b["title"] for b in first] == ["Print stopped on Study A1 mini", "Workshop X1 reports a problem"]
     assert [b["kind"] for b in first] == ["bad", "bad"]
     assert first[0]["text"].startswith("Print stopped on Study A1 mini gear.3mf stopped at 12 %. It was cancelled.")
-    assert first[0]["time"] == "3 minutes ago" and first[1]["time"] == "8 minutes ago"
-    assert first[1]["text"].endswith("The nozzle temperature is abnormal and the printer stopped. 8 minutes ago")
+    assert re.fullmatch(r"3 minutes ago · .+\d{2}:\d{2}", first[0]["time"])
+    assert re.fullmatch(r"8 minutes ago · .+\d{2}:\d{2}", first[1]["time"])
+    assert first[1]["text"].endswith(f"The nozzle temperature is abnormal and the printer stopped. {first[1]['time']}")
     assert all(b["action"] == "Open the printer" and b["href"] == "#printers" and b["dismiss"] for b in first)
     assert out["moreFirst"] == "3 more alerts"
     assert [b["role"] for b in first] == [None, None]          # present when the page opened: plain content
@@ -106,7 +108,7 @@ def test_dismiss_is_per_device_and_comes_back_if_worse_or_raised_again(site, tmp
 def test_conditions_clear_and_moments_stay_until_dismissed_for_24_hours(site, tmp_path):
     out = _drive(site, "conditions_and_moments", tmp_path)
     assert [t for t, _ in out["both"]] == ["Print stopped on Study A1 mini", "Filament ran out on Workshop X1"]   # bad before warn
-    assert out["both"][0][1] == "30 minutes ago" and out["both"][1][1].startswith("since ")
+    assert re.fullmatch(r"30 minutes ago · .+\d{2}:\d{2}", out["both"][0][1]) and out["both"][1][1].startswith("since ")
     assert out["condLeft"] == ["Print stopped on Study A1 mini"]             # the condition left by itself when it cleared
     assert out["at23h"] == 1 and out["at25h"] == 0                           # a moment lasts at most 24 hours
     assert out["errorShown"][0][0] == "Workshop X1 reports a problem" and "The chamber door is open." in out["errorShown"][0][1]
@@ -125,7 +127,9 @@ def test_alerts_list_order_age_and_empty_text(site, tmp_path):
     assert lay["rows"][1]["text"] == "Spool 214 has 92 g left. 2 more in stock."
     assert lay["rows"][0]["text"] == "3.2 GB free of 64 GB. Backups and new photos may fail."
     assert [r["action"] for r in lay["rows"]] == ["Show storage use", "Show running low", "Open the printer", "Open the printer", "Open the printer", "Open the printer"]
-    assert [r["time"] for r in lay["rows"]][3:] == ["3 minutes ago", "8 minutes ago", "5 hours ago"]
+    times = [r["time"] for r in lay["rows"]][3:]
+    for got, expected_ago in zip(times, ["3 minutes ago", "8 minutes ago", "5 hours ago"]):
+        assert re.fullmatch(rf"{re.escape(expected_ago)} · .+\d{{2}}:\d{{2}}", got)
     assert out["closed"] and out["focusBack"]
     assert out["empty"]["rows"] == [] and out["empty"]["empty"] == "No alerts in the last 7 days."
 

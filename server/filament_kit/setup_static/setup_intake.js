@@ -142,7 +142,29 @@ async function recDownloadCsv(set, fallback) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 // ----- Print labels: the Hub's print page for the record's spools opens in a new tab; open, so no code -----
-const recPrintAt = (ids) => window.open(`/setup/api/labels?${new URLSearchParams({ ids: ids.join(","), size: "62x29" })}`, "_blank", "noopener");
+const REC_LABEL_SIZES = [
+  ["62x29", "labels_size_62x29"],
+  ["50x30", "labels_size_50x30"],
+  ["a4-63x34", "labels_size_a4_63x34"],
+  ["a4-70x37", "labels_size_a4_70x37"],
+  ["letter-66x25", "labels_size_letter_66x25"],
+];
+const REC_PICK = "select";
+let recLabelSize = "62x29";
+const recChosen = new Set();
+let recLastPick = null;
+const recPrintAt = (ids, size = recLabelSize) => window.open(`/setup/api/labels?${new URLSearchParams({ ids: ids.join(","), size })}`, "_blank", "noopener");
+function recSizePicker() {
+  const field = SW.field({
+    type: "select",
+    label: SW.t("labels_size"),
+    name: "recent-label-size",
+    value: recLabelSize,
+    options: REC_LABEL_SIZES.map(([value, key]) => ({ value, label: SW.t(key) })),
+  });
+  field._control.addEventListener("change", (e) => { recLabelSize = e.target.value; });
+  return field;
+}
 function recListMore() {
   if (!hubCanExport("recent")) return null;
   const more = SW.iconBtn("more", SW.t("common_more_actions_for", { name: SW.t("nav_recently_added") }), { cls: "recent-listmore" });
@@ -153,9 +175,25 @@ function recListMore() {
 }
 
 // ----- the list -----
+function recSelectedSpoolIds(records) {
+  const seen = new Set();
+  const ids = [];
+  for (const r of records) {
+    if (!recChosen.has(r.id)) continue;
+    for (const s of r.spools || []) {
+      if (Number.isInteger(s.spool_id) && !seen.has(s.spool_id)) {
+        seen.add(s.spool_id);
+        ids.push(s.spool_id);
+      }
+    }
+  }
+  return ids;
+}
 function listPage(body, d, page) {
   recentAt = null;
   recentView = null;
+  recChosen.clear();
+  recLastPick = null;
   const all = d.records, conf = all.some((r) => r.confidence !== undefined), check = all.filter(recToCheck).length;
   if (!conf) recentFilter = "all";
   const settings = h("a", { class: "btn btn--ghost", href: "#settings/label-reader" }, SW.t("recent_meta_change"));
@@ -164,26 +202,76 @@ function listPage(body, d, page) {
     h("span", {}, SW.t("common_label_reader"), " ", SW.status(d.ai ? "on" : "off", { small: true })), corrMeta(), recListMore());
   const filter = conf && all.length ? SW.segmented({ legend: SW.t("recent_col_filament"), legendSr: true, name: "recent-filter", value: recentFilter,
     options: [{ value: "all", label: SW.t("recent_filter_all", { count: all.length }) }, { value: "check", label: SW.t("recent_filter_check", { count: check }) }] }) : null;
+  const selCount = h("span", { class: "spools-selcount recent-selcount" });
+  const selBar = h("div", { class: "spools-selbar recent-selbar", role: "group", "aria-label": SW.t("recent_selection"), hidden: true },
+    selCount,
+    recSizePicker(),
+    h("button", { class: "btn recent-print-multi", type: "button", on: { click: () => {
+      const ids = recSelectedSpoolIds(all);
+      if (ids.length) recPrintAt(ids, recLabelSize);
+      else SW.toast(SW.t("recent_print_no_spools"), "warn");
+    } } }, recT("recent_print_labels")),
+    h("button", { class: "btn btn--ghost recent-clearsel", type: "button", on: { click: () => {
+      recChosen.clear();
+      recLastPick = null;
+      syncSel(false);
+      SW.announce(SW.t("spools_selection_cleared"));
+    } } }, SW.t("spools_clear_selection")));
   const list = h("div");
+  let shownIds = [];
+  const syncSel = (say) => {
+    const el = list.querySelector(".coll--recent");
+    if (el) {
+      for (const b of el.querySelectorAll(".recent-pick")) {
+        const on = recChosen.has(b.dataset.id);
+        b.checked = on;
+        const it = b.closest(".coll__item");
+        if (on) it.dataset.selected = "true"; else delete it.dataset.selected;
+      }
+      const some = shownIds.some((id) => recChosen.has(id)), every = shownIds.length > 0 && shownIds.every((id) => recChosen.has(id)), pickAll = el.querySelector(".recent-pickall");
+      if (pickAll) { pickAll.checked = every; pickAll.indeterminate = some && !every; }
+    }
+    selBar.hidden = !recChosen.size;
+    const spoolCount = recSelectedSpoolIds(all).length;
+    selCount.textContent = SW.t("recent_selected_summary", {
+      records: SW.t("recent_selected", { count: recChosen.size }),
+      spools: SW.t("recent_selected_spools", { count: spoolCount }),
+    });
+    if (say && recChosen.size) SW.announce(selCount.textContent);
+  };
   if (filter) filter.addEventListener("change", (e) => { recentFilter = e.target.value; paint(); });
   const paint = () => {
     const recs = recentFilter === "check" ? all.filter(recToCheck) : all;
-    if (!all.length) { fill(list, SW.empty({ icon: "spool", title: SW.t("recent_empty_title"), text: SW.t("recent_empty_text") })); return; }
+    if (!all.length) { selBar.hidden = true; fill(list, SW.empty({ icon: "spool", title: SW.t("recent_empty_title"), text: SW.t("recent_empty_text") })); return; }
     const pages = Math.max(1, Math.ceil(recs.length / REC_PAGE)), now = Math.min(page, pages), shown = recs.slice((now - 1) * REC_PAGE, now * REC_PAGE);
-    const table = recCollection(shown, recs.length > REC_PAGE ? { total: recs.length, first: (now - 1) * REC_PAGE } : null);
+    shownIds = shown.map((r) => r.id);
+    const table = recCollection(shown, recs.length > REC_PAGE ? { total: recs.length, first: (now - 1) * REC_PAGE } : null, () => shownIds, syncSel);
     fill(list, table, pages > 1 ? SW.pager({ from: (now - 1) * REC_PAGE + 1, to: (now - 1) * REC_PAGE + shown.length, total: recs.length, page: now, pages,
       go: (p) => { location.hash = p > 1 ? "#recent?page=" + p : "#recent"; } }) : null);
+    syncSel(false);
   };
-  fill(body, meta, filter ? h("div", { class: "coll__toolbar" }, filter) : null, list);
+  fill(body, meta, filter ? h("div", { class: "coll__toolbar" }, filter) : null, selBar, list);
   paint();
   if (page > 1) { const a = list.querySelector(".coll__title"); if (a) a.focus({ preventScroll: true }); }      // another page: its first title
 }
 
-function recCollection(recs, paged) {
+function recStyleCheck(c) {
+  c.style.minWidth = "44px";
+  c.style.minHeight = "44px";
+  c.style.justifyContent = "center";
+  c._control.style.width = "18px";
+  c._control.style.flex = "none";
+  return c;
+}
+
+function recCollection(recs, paged, getIds, syncSel) {
   const head = (col, kids, o = {}) => h("div", { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": o.prio, "aria-sort": o.sort }, kids);
   const sorter = (col, name) => (paged ? name : h("button", { class: "coll__sort", type: "button", "data-sort": col }, name, SW.icon("chevron", "icon--s")));
+  const all = recStyleCheck(SW.check({ label: SW.t("recent_select_all"), sr: true }));
+  all._control.classList.add("recent-pickall");
   const el = h("div", { class: "coll coll--recent", role: "table", "aria-labelledby": "recent-title" },
     h("div", { class: "coll__head", role: "rowgroup" }, h("div", { class: "coll__row", role: "row" },
+      head(REC_PICK, all),
       head("visual", SW.t("recent_col_photo")),
       head("title", sorter("title", SW.t("recent_col_filament"))),
       head("added", sorter("added", SW.t("recent_col_added")), { prio: 2 }),
@@ -195,6 +283,20 @@ function recCollection(recs, paged) {
   el.setAttribute("aria-label", SW.t("nav_recently_added"));
   el.removeAttribute("aria-labelledby");
   SW.collection(el, paged ? { name: "recent", ...paged } : { name: "recent", sort: "added:descending" });
+  el.addEventListener("click", (e) => {
+    const box = e.target.closest(".recent-pick"), allBox = e.target.closest(".recent-pickall");
+    if (!box && !allBox) return;
+    const ids = getIds ? getIds() : recs.map((r) => r.id);
+    if (allBox) {
+      for (const id of ids) (allBox.checked ? recChosen.add(id) : recChosen.delete(id));
+    } else {
+      const id = box.dataset.id, a = ids.indexOf(recLastPick), b = ids.indexOf(id);
+      const span = e.shiftKey && a >= 0 ? ids.slice(Math.min(a, b), Math.max(a, b) + 1) : [id];
+      for (const x of span) (box.checked ? recChosen.add(x) : recChosen.delete(x));
+      recLastPick = id;
+    }
+    if (syncSel) syncSel(true);
+  });
   return el;
 }
 
@@ -208,7 +310,14 @@ function recRow(r) {
   const cell = (col, key, ...kids) => h("div", { class: "coll__cell", role: "cell", "data-col": col, "data-prio": { added: 2, spool: 3, confidence: 2 }[col] || 1,
     "data-sort": col === "added" ? r.at : null }, key ? h("span", { class: "coll__key", "aria-hidden": "true" }, key) : null, ...kids);
   const ids = r.spools.map((s) => s.spool_id), names = recNames(r.spools);
+  const pick = recStyleCheck(SW.check({ label: SW.t("recent_select_name", { name: names || SW.t("recent_no_spools") }), sr: true, checked: recChosen.has(r.id) }));
+  pick._control.classList.add("recent-pick");
+  pick._control.dataset.id = r.id;
+  const selCell = cell(REC_PICK, null, pick);
+  selCell.style.width = "auto";
+  selCell.style.flex = "none";
   return h("div", { class: "coll__item", role: "rowgroup", "data-id": r.id }, h("div", { class: "coll__row", role: "row" },
+    selCell,
     cell("visual", null, recThumb(r)),
     cell("title", null,
       h("a", { class: "coll__title" + (names ? "" : " muted"), href: "#recent/" + encodeURIComponent(r.id) }, names || SW.t("recent_no_spools")),

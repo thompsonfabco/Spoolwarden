@@ -1,0 +1,7 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/AlertsSettings.kt | humidity_high_pct | not text: JSON field of PATCH /api/alerts
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/AlertsSettings.kt | last_spool_only | not text: JSON field of PATCH /api/alerts
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/AlertsSettings.kt | running_low | not text: alert type key for running low
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/AlertsSettings.kt | running_low_g | not text: JSON field of PATCH /api/alerts
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/AlertsSettings.kt | storage_bad_percent | not text: JSON field of PATCH /api/alerts
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/AlertsSettings.kt | storage_warn_percent | not text: JSON field of PATCH /api/alerts
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/settings/AlertsSettings.kt | types | not text: JSON field of PATCH /api/alerts

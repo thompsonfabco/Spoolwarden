@@ -26,6 +26,7 @@ only given when it came from a module code, so a code arriving after the first r
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from typing import Any
 
 from . import hardware
@@ -62,6 +63,9 @@ class UnitInfo:
     module: str | None
     slots: tuple[SlotInfo, ...]
     typed: bool = False        # the type came from a module code
+    humidity: int | None = None
+    humidity_raw: int | None = None
+    temp: float | None = None
 
 
 @dataclass
@@ -82,6 +86,16 @@ def letters(n: int) -> str:
         n, r = divmod(n - 1, 26)
         out = chr(ord('A') + r) + out
     return out
+
+
+def _float(v: Any) -> float | None:
+    if isinstance(v, bool):
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
 
 
 def _hex(v: Any) -> int | None:
@@ -202,7 +216,7 @@ def build(report: dict, model=None, hw: hardware.Hardware | None = None) -> Layo
             if tid is not None and tid >= 0:
                 trays.append((tid, t))
         trays.sort(key=lambda x: x[0])
-        raw_units.append((uid, trays))
+        raw_units.append((uid, trays, u))
     raw_units.sort(key=lambda x: x[0])
 
     # presence: a bit per AMS slot, or the tray_type fallback for the whole printer
@@ -212,7 +226,7 @@ def build(report: dict, model=None, hw: hardware.Hardware | None = None) -> Layo
     bits: dict[tuple[int, int], int] | None = {} if pres is not None and exist is not None else None
     if bits is not None:
         seen: set[int] = set()
-        for uid, trays in raw_units:
+        for uid, trays, _u in raw_units:
             for tid, _t in trays:
                 b = pres.bit(uid, tid)
                 if b is None or b in seen:
@@ -232,7 +246,7 @@ def build(report: dict, model=None, hw: hardware.Hardware | None = None) -> Layo
         return (True if _s(t.get('tray_type')) else None), None
 
     units: list[UnitInfo] = []
-    for uid, trays in raw_units:
+    for uid, trays, raw_u in raw_units:
         code = mods.get(uid)
         count = len(trays) or None
         t = hw.ams_type(uid, code, mi, count)
@@ -246,7 +260,9 @@ def build(report: dict, model=None, hw: hardware.Hardware | None = None) -> Layo
         for tid, tr in trays:
             pr, rd = presence_of((uid, tid), tr)
             slots.append(SlotInfo(tid, _slot_label(ulabel, single, tid), (), pr, rd, tr))
-        units.append(UnitInfo(uid, t.key, t.name, ulabel, (), t.known, code, tuple(slots), typed=bool(code)))
+        units.append(UnitInfo(uid, t.key, t.name, ulabel, (), t.known, code, tuple(slots), typed=bool(code),
+                              humidity=_int(raw_u.get('humidity')), humidity_raw=_int(raw_u.get('humidity_raw')),
+                              temp=_float(raw_u.get('temp'))))
 
     exts = _externals(p)
     names = _ext_labels(sorted(exts), mi)
@@ -275,7 +291,7 @@ def _unique(units: list[UnitInfo]) -> list[UnitInfo]:
             suffix = f"-{u.ams_id}"   # fits the load/unload routes' label pattern (api.LABEL)
             u = UnitInfo(u.ams_id, u.kind, u.type_name, u.label + suffix, u.say, u.known, u.module,
                          tuple(SlotInfo(s.tray_id, s.label + suffix, s.say, s.present, s.reading, s.raw, s.alias)
-                               for s in u.slots), u.typed)
+                               for s in u.slots), u.typed, u.humidity, u.humidity_raw, u.temp)
         taken.update(s.label for s in u.slots)
         taken.add(u.label)
         out.append(u)
@@ -286,7 +302,8 @@ def _with_say(hw: hardware.Hardware, mi: ModelInfo, u: UnitInfo) -> UnitInfo:
     usay = u.say or tuple(hw.say(u.label, mi))
     slots = tuple(s if s.say else SlotInfo(s.tray_id, s.label, tuple(hw.say(s.label, mi)), s.present, s.reading,
                                            s.raw, s.alias) for s in u.slots)
-    return UnitInfo(u.ams_id, u.kind, u.type_name, u.label, usay, u.known, u.module, slots, u.typed)
+    return UnitInfo(u.ams_id, u.kind, u.type_name, u.label, usay, u.known, u.module, slots, u.typed,
+                    u.humidity, u.humidity_raw, u.temp)
 
 
 def kinds(report: dict, model=None) -> dict[int, str]:

@@ -1227,11 +1227,106 @@ function startAlerts() {
   document.head.append(link); document.body.append(script);
 }
 function alertsGroup(group) {
+  const home = !!HUB_PAGE;
   const panel = PUSH && typeof alertsPanel === "function" ? alertsPanel((e) => addToHome(e && e.currentTarget)) : null;
-  const home = panel && panel.querySelector('[data-action="home"]');         // the panel's "Add to Home Screen" button (an iPhone in the browser)
-  if (home) markInstall(home, home);
+  const homeBtn = panel && panel.querySelector('[data-action="home"]');         // the panel's "Add to Home Screen" button (an iPhone in the browser)
+  if (homeBtn) markInstall(homeBtn, homeBtn);
   const recent = window.SW_ALERTS ? SW.btn(tt("settings_alerts_recent"), { cls: "btn--ghost", action: "alerts-recent", run: (e) => SW_ALERTS.openList(e.currentTarget) }) : null;
-  return panel || recent ? group(SW.t("settings_alerts_title"), panel, recent) : null;
+  const as = alertsGroup.state || (alertsGroup.state = { last: null, at: 0, again: null });
+  if (!as.hooked) { as.hooked = true; hubBack.push(() => { if (as.again) as.again(); }); }
+  const rulesBox = hubGroup(h("div", { class: "alerts__rules" }), () => as.at);
+  const sec = group(SW.t("settings_alerts_title"), panel, recent, rulesBox);
+  const hasLocal = !!(panel || recent);
+  if (!hasLocal) sec.hidden = true;
+
+  let now = null;
+  const patch = async (body) => { const r = await api("alerts", { method: "PATCH", body }); now = r; as.last = r; return r; };
+  const mark = (c) => (home ? needsHub(c) : c);
+
+  function ruleToggle(label, hint, checked, apply) {
+    const tog = SW.toggle({ label, hint, checked: !!checked, disabled: !home, apply });
+    mark(tog._control).addEventListener("click", (e) => { if (hubGone) e.preventDefault(); });
+    return tog;
+  }
+
+  function numRow(key, labelKey, unitKey) {
+    const line = resultLine();
+    const f = SW.field({ type: "number", mono: true, label: tt(labelKey), unit: tt(unitKey),
+      value: now[key] != null ? String(now[key]) : "", disabled: !home, attrs: { "data-alert-rule": key } });
+    mark(f._control);
+    f._control.addEventListener("change", async () => {
+      const was = now[key], raw = f._control.value.trim(), v = Number(raw);
+      if (hubGone) { f._control.value = was != null ? String(was) : ""; return; }
+      if (!/^\d+$/.test(raw)) { f._control.value = was != null ? String(was) : ""; SW.fieldError(f, tt("alerts_save_failed")); return; }
+      SW.fieldError(f, null);
+      try { await patch({ [key]: v }); SW.result(line, "ok", tt("alerts_saved")); }
+      catch (e) { f._control.value = was != null ? String(was) : ""; SW.fieldError(f, says(e)); }
+    });
+    return h("div", { class: "alerts__rule-row" }, f, line);
+  }
+
+  function rows() {
+    const items = [
+      h("h3", { class: "settings__subtitle" }, tt("alerts_rules_title")),
+      h("p", { class: "muted" }, tt("alerts_rules_hint")),
+    ];
+    let addedLastSpool = false;
+    for (const item of now.types || []) {
+      items.push(ruleToggle(item.title || tt("alerts_type_" + item.key), item.description || undefined, item.on, async (on) => {
+        await patch({ types: { [item.key]: on } });
+        return tt("alerts_saved");
+      }));
+      if (item.key === "running_low") {
+        items.push(ruleToggle(tt("alerts_last_spool_only"), undefined, now.last_spool_only, async (on) => {
+          await patch({ last_spool_only: on });
+          return tt("alerts_saved");
+        }));
+        addedLastSpool = true;
+      }
+    }
+    if (!addedLastSpool && "last_spool_only" in now) {
+      items.push(ruleToggle(tt("alerts_last_spool_only"), undefined, now.last_spool_only, async (on) => {
+        await patch({ last_spool_only: on });
+        return tt("alerts_saved");
+      }));
+    }
+    items.push(
+      numRow("running_low_g", "alerts_running_low_g", "settings_alerts_running_low_unit"),
+      numRow("storage_warn_percent", "alerts_storage_warn_pct", "settings_alerts_storage_unit"),
+      numRow("storage_bad_percent", "alerts_storage_bad_pct", "settings_alerts_storage_unit"),
+      numRow("humidity_high_pct", "alerts_humidity_high_pct", "alerts_humidity_unit"),
+      home ? null : h("p", { class: "muted" }, tt("voice_at_home")),
+    );
+    return items;
+  }
+
+  let waiting = false;
+  function draw(v, isAway) {
+    now = v;
+    rulesBox.replaceChildren(...[isAway && !hubGone ? note("warn", SW.t("shell_hub_cannot_be_reached")) : null, ...rows()].filter(Boolean));
+    sec.hidden = false;
+  }
+  function away() {
+    waiting = true;
+    if (as.last) { draw(as.last, true); return; }
+    rulesBox.replaceChildren(note("warn", SW.t("shell_hub_cannot_be_reached")), h("p", {}, SW.btn(SW.t("common_try_again"), { action: "try-again", run: () => read() })));
+    sec.hidden = false;
+  }
+  async function read() {
+    let v;
+    try { v = await api("alerts"); }
+    catch (e) {
+      if (voiceAway(e)) { away(); return; }
+      as.last = null; waiting = false; rulesBox.replaceChildren();
+      if (!hasLocal) sec.hidden = true;
+      return;                                                // an older Hub (404) or read-only (403): no rules panel
+    }
+    waiting = false; as.last = v; as.at = Date.now();
+    draw(v, false);
+  }
+  as.again = () => { if (waiting && sec.isConnected) read(); };
+  if (hubGone) away(); else read();
+  return sec;
 }
 
 // ----- The Hub at a glance, Open Spoolman, the Hub page link. GET hub is the kit's overview of the Hub; a Hub

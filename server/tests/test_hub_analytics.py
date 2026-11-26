@@ -357,6 +357,11 @@ def test_without_the_kits_analytics_the_route_answers_the_ruled_shape_with_nothi
     monkeypatch.setattr(analytics_tab, "_analytics", None)
     running = _serve(AsHttps(hub_app[0]), hub_app[1])
     try:
-        assert httpx.get(running.url + "/setup/api/analytics").json() == {"months": [], "insights": [], "notes": []}
+        assert httpx.get(running.url + "/setup/api/analytics").json() == {
+            "months": [],
+            "insights": [],
+            "notes": [],
+            "orders": {"by_currency": {}, "count": 0, "recent": [], "total_spools": 0},
+        }
     finally:
         running.stop()

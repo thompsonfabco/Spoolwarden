@@ -616,7 +616,7 @@ READY = {
   startAlerts();
   await alertsUntil('the banner', () => $('.alert-host .banner'));
   need('the host is at the top of the page, before the heading', $('.page').firstElementChild === $('.alert-host'));
-  need('the banner names the alert, its sentence and the time', text('.alert-host .banner').includes('Filament ran out on Workshop X1') && text('.alert-host .banner').includes('bracket.3mf is paused at 41 %') && /since \d\d:\d\d/.test(text('.alert-host .banner')));
+  need('the banner names the alert, its sentence and the time', text('.alert-host .banner').includes('Filament ran out on Workshop X1') && text('.alert-host .banner').includes('bracket.3mf is paused at 41 %') && /since .*\d\d:\d\d/.test(text('.alert-host .banner')));
   need('one banner', $$('.alert-host .banner').length === 1);
   const more = [ev(6, 'print.failed', 'bad', 2, { job: 'cube.3mf', percent: 10, reason: 'cancelled' }), ev(7, 'storage.low', 'warn', 1, { free: 3e9, total: 20e9, percent: 85 }, 'storage-low')];
   answer = { events: [...mine, ...more], next: 7, conditions: [mine[0], more[1]] };

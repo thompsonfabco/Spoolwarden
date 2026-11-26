@@ -269,6 +269,7 @@ import com.thompsonfabco.filamentkit.ui.profile.ProfileField
 import com.thompsonfabco.filamentkit.ui.search.SearchScreen
 import com.thompsonfabco.filamentkit.ui.search.SearchViewModel
 import com.thompsonfabco.filamentkit.ui.settings.AlertsActions
+import com.thompsonfabco.filamentkit.ui.settings.AlertsConfigModel
 import com.thompsonfabco.filamentkit.ui.settings.AlertsFacts
 import com.thompsonfabco.filamentkit.ui.settings.HubPage
 import com.thompsonfabco.filamentkit.ui.settings.SettingsActions
@@ -407,6 +408,11 @@ internal fun FilamentKitApp(
     val notice by app.router.notice.collectAsStateWithLifecycle()
     val alertsUi by app.alerts.state.collectAsStateWithLifecycle()
     val alertsOn by app.alertsStore.on.collectAsStateWithLifecycle(initialValue = false)
+    val alertsRulesScope = rememberCoroutineScope()
+    val alertsConfigModel = remember(alertsRulesScope) {
+        AlertsConfigModel(alertsRulesScope, { app.session.api.value }, app.router::report)
+    }
+    val alertsConfigUi by alertsConfigModel.state.collectAsStateWithLifecycle()
     val voiceUi by app.voice.state.collectAsStateWithLifecycle()
     // each ask for Spools with the Running low filter on (Home's line, an alert's action) counts one up
     var lowRequest by rememberSaveable { mutableIntStateOf(0) }
@@ -459,6 +465,11 @@ internal fun FilamentKitApp(
     // The Weigh Station voice: read when the Hub answers, so the Settings list knows whether the group exists
     LaunchedEffect(api, online) {
         if (!inPairing && api != null && online) app.voice.refresh()
+    }
+    // Hub alert rules: read when connected so Settings > Alerts can show and edit them
+    LaunchedEffect(api, online, inPairing) {
+        if (api == null) alertsConfigModel.clear()
+        else if (!inPairing && online) alertsConfigModel.refresh()
     }
     // The banners, the Alerts list and the running-low count are read about every 10 s while the app is showing: a day
     // back for the banners, seven days for the list
@@ -1578,7 +1589,14 @@ internal fun FilamentKitApp(
                         update = update,
                         appVersion = BuildConfig.VERSION_NAME,
                         developer = BuildConfig.DEBUG,
-                        alerts = AlertsFacts(alertsOn, alertsUi.available, localNetwork.granted),
+                        alerts = AlertsFacts(
+                            on = alertsOn,
+                            available = alertsUi.available,
+                            localNetworkGranted = localNetwork.granted,
+                            config = alertsConfigUi.config,
+                            offline = alertsConfigUi.offline || !online,
+                            revision = alertsConfigUi.revision,
+                        ),
                         voice = voiceUi,
                     )
                     val settingsActions = SettingsActions(
@@ -1612,6 +1630,8 @@ internal fun FilamentKitApp(
                             onTest = app::sendTestAlert,
                             onRecent = { openAlertTarget(AlertTarget.AlertsList) },
                             requestLocalNetwork = localNetwork.request,
+                            onPatchConfig = alertsConfigModel::patch,
+                            said = alertsConfigModel.said,
                         ),
                         voice = VoiceActions(onSave = app.voice::save, onTest = app.voice::test, said = app.voice.said),
                     )

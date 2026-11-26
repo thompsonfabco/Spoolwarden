@@ -458,6 +458,16 @@ function groupGeneral({ g }) {
     check: (x) => (x.trim() ? null : SW.t("settings_general_name_required")) })];
   if (g.spoolman_external) fields.push(plainField({ name: "spoolman", label: SW.t("settings_general_spoolman"), mono: true, value: g.spoolman_url || "",
     placeholder: SW.t("settings_general_spoolman_placeholder"), hint: SW.t("settings_general_spoolman_hint"), effect: "applies" }));
+  fields.push(plainField({
+    name: "log_level",
+    type: "select",
+    label: SW.t("set_log_level_label"),
+    hint: SW.t("set_log_level_note"),
+    value: v.log_level || "info",
+    optional: false,
+    attrs: { "data-key": "log_level", "data-effect": "" },
+    options: ["error", "warning", "info", "debug"].map((lvl) => ({ value: lvl, label: SW.t("set_log_level_" + lvl) })),
+  }));
   fields.push(setLangBlock(), setDemoRow());
   const el = setGroup("general", { desc: SW.t("settings_general_desc"), save: SW.t("settings_general_save"), body: fields });
   const own = {
@@ -897,9 +907,14 @@ function openPortDialog(curPort, remoteOn, opener, portBox) {
 
 function groupNetwork({ g }) {
   const v = g.values, web = !!g.web_on, curPort = Number(g.port) || 8710, portBox = sbox();
+  const cidrs = (x) => x.split(/[\s,]+/).filter(Boolean);
   const fields = [
     plainField({ name: "web.public_url", mono: true, label: SW.t("settings_network_public"), value: S.web.public_url || "", placeholder: SW.t("settings_network_public_placeholder"),
       hint: SW.t(web ? "settings_network_public_hint" : "settings_network_public_hint_off"), effect: "applies" }),
+    plainField({ name: "web.lan", mono: true, label: SW.t("settings_network_lan"), value: (v["web.lan"] || []).join(" "), placeholder: SW.t("settings_network_lan_placeholder"),
+      hint: SW.t("settings_network_lan_hint"), effect: "applies" }),
+    plainField({ name: "spoolman.allow", mono: true, label: SW.t("settings_network_spoolman_allow"), value: (v["spoolman.allow"] || []).join(" "), placeholder: SW.t("settings_network_spoolman_allow_placeholder"),
+      hint: SW.t("settings_network_spoolman_allow_hint"), effect: "applies" }),
     plainField({ name: "station.url", mono: true, label: SW.t("settings_network_station"), value: S.station.url || "", placeholder: SW.t("settings_network_station_placeholder"),
       hint: SW.t("settings_network_station_hint"), effect: "applies" }),
     plainField({ name: "setup.hosts", mono: true, label: SW.t("settings_network_hosts"), value: (v["setup.hosts"] || []).join(" "), placeholder: SW.t("settings_network_hosts_placeholder"),
@@ -918,7 +933,8 @@ function groupNetwork({ g }) {
     return { applies: true };
   };
   const o = { send: null };
-  o.send = sender(() => el, () => o.group, { "web.public_url": one("web.public_url"), "station.url": one("station.url") }, { "setup.hosts": (x) => x.split(/[\s,]+/).filter(Boolean) });
+  o.send = sender(() => el, () => o.group, { "web.public_url": one("web.public_url"), "station.url": one("station.url") },
+    { "setup.hosts": cidrs, "web.lan": cidrs, "spoolman.allow": (x) => { const a = cidrs(x); return a.length ? a : null; } });
   wireGroup(el, "network", o);
   return el;
 }

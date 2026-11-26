@@ -287,6 +287,11 @@ def load_path(printer_id, label: str) -> str:
     return f"{printer_path(printer_id)}/slots/{urllib.parse.quote(str(label), safe='')}/load"
 
 
+def unload_path(printer_id, label: str) -> str:
+    """The kit API's unload URL for a slot; the label is quoted (layout's clash suffix "#<id>" is not a fragment)."""
+    return f"{printer_path(printer_id)}/slots/{urllib.parse.quote(str(label), safe='')}/unload"
+
+
 def status_slots(status: dict) -> list[dict]:
     """Every slot of a printer status (`GET /api/printers/{id}` "status"), in unit order, each with its unit's
     label (`unit`) and `kind` ("ams", "ams_2pro", "ams_ht", "ams_lite", "generic", or "ext" for a holder)."""

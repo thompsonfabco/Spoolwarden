@@ -77,6 +77,8 @@ def _kinds() -> dict[str, Kind]:
     add("location.renamed", "info", ("from", "to", "spools"))
     add("device.down", "warn", (), RAISES, "device-down")
     add("device.up", "ok", (), CLEARS, "device-down")
+    add("humidity.high", "warn", ("rh", "threshold", "source", "unit"), RAISES, "humidity-high")
+    add("humidity.ok", "ok", ("rh", "threshold", "source", "unit"), CLEARS, "humidity-high")
     add("check.failed", "warn", ("text",), RAISES, "check")
     add("check.ok", "ok", ("text",), CLEARS, "check")
     add("slot.cleared", "info", _SPOOL_CHANGE + ("slot",))

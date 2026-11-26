@@ -1,7 +1,7 @@
 """The Getting started card shown on Overview until every step is done or hidden.
 
     GET  start        the current step states, counts and any restore notice
-    POST start        {hide: bool} or {keep: "name"|"storage"|"features"}
+    POST start        {hide: bool}, {keep: "name"|"storage"|"features"}, or {done: <step id>}
 """
 from __future__ import annotations
 
@@ -25,12 +25,12 @@ def routes(page) -> list[tuple]:
         return await anyio.to_thread.run_sync(_view, page)
 
     async def write(request, body):
-        has_hide = "hide" in body
-        has_keep = "keep" in body
-        if has_hide == has_keep:
+        keys = [k for k in ("hide", "keep", "done") if k in body]
+        if len(keys) != 1:
             raise Refused(400, say("hub_start_hide_or_keep"))
 
-        if has_hide:
+        which = keys[0]
+        if which == "hide":
             hide = body["hide"]
             if not isinstance(hide, bool):
                 raise Refused(400, say("hub_start_hide_bool"))
@@ -44,17 +44,31 @@ def routes(page) -> list[tuple]:
             page.audit(request, "getting started list hidden" if hide else "getting started list shown")
             return view
 
-        keep = body["keep"]
-        if not isinstance(keep, str) or keep not in firstrun.MARKS:
-            raise Refused(400, say("hub_start_keep_which"))
+        if which == "keep":
+            keep = body["keep"]
+            if not isinstance(keep, str) or keep not in firstrun.MARKS:
+                raise Refused(400, say("hub_start_keep_which"))
+
+            def run() -> dict:
+                if not firstrun.mark(keep):
+                    raise Refused(500, say("hub_start_not_saved"))
+                return _view(page)
+
+            view = await anyio.to_thread.run_sync(run)
+            page.audit(request, f"getting started step kept ({keep})")
+            return view
+
+        done = body["done"]
+        if not isinstance(done, str) or done not in firstrun.DONE_STEPS:
+            raise Refused(400, say("hub_start_done_which"))
 
         def run() -> dict:
-            if not firstrun.mark(keep):
+            if done not in firstrun.mark_done(done).done:
                 raise Refused(500, say("hub_start_not_saved"))
             return _view(page)
 
         view = await anyio.to_thread.run_sync(run)
-        page.audit(request, f"getting started step kept ({keep})")
+        page.audit(request, f"getting started step marked done ({done})")
         return view
 
     return [("/start", page.guard(read), "GET"),

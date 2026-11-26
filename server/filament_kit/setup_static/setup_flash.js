@@ -261,7 +261,8 @@ async function flashHere(dev, a, sent) {
       return { ok: true, text: SW.t("flash_done_display", { version: dev.version }) };
     }
     const settings = { ssid: a.ssid, pass: a.pass, base: tok.base, token: tok.token, buzzer_low: a.buzzer === "older",
-      root_ca: tok.root_ca, hub_ip: tok.hub_ip, printer: tok.printer };
+      root_ca: tok.root_ca, hub_ip: tok.hub_ip, printer: tok.printer,
+      ...(tok.ota_key ? { ota_key: tok.ota_key } : {}) };
     const res = await provisionOverSerial(usb, settings, (name) => { runStep(name); if (name === "sending") sent(); });
     if (!res.ok) throw Object.assign(new Error(provisionText(res, a.ssid, tok.base + (tok.hub_ip ? " (" + tok.hub_ip + ")" : ""))), { said: true });
     flashRun.done = true;

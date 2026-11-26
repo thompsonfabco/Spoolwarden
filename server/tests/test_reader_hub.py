@@ -9,7 +9,7 @@ pytest.importorskip("mcp")
 
 from starlette.testclient import TestClient  # noqa: E402
 
-from filament_kit import config, modules, pairing  # noqa: E402
+from filament_kit import config, modules, pairing, reader_config  # noqa: E402
 from filament_kit.api import create_app  # noqa: E402
 from filament_kit.bridge import registry  # noqa: E402
 from filament_kit.web import reader, slots  # noqa: E402
@@ -90,3 +90,19 @@ def test_an_unknown_tag_and_a_missing_firmware_answer_as_the_web_unit_does(hub):
     r = c.post("/reader/scan", headers=h, json={"uid": "4:aa:bb:cc:dd:ee:ff", "printer": SERIAL, "slot": "A1"})
     assert r.status_code == 200 and r.json()["status"] == "unknown_tag"
     assert c.get("/reader/fw/firmware.bin", headers=h).status_code == 404
+
+
+def test_reader_config_and_ack_work_on_base_hub_without_web_feature(hub):
+    app, base = hub
+    tid, token = reader.TokenStore().issue("bench")
+    reader_config.update(tid, {"buzzer_low": True, "scan_cooldown_ms": 1500})
+    reader_config.queue_command(tid, "ota")
+    c = TestClient(app, base_url=base, client=HOME)
+    cfg_resp = c.get("/reader/config", headers={"X-Auth-Token": token})
+    assert cfg_resp.status_code == 200
+    body = cfg_resp.json()
+    assert body["buzzer_low"] is True and body["scan_cooldown_ms"] == 1500
+    assert body["ota_now"] is True and body["reboot_now"] is False
+    ack_resp = c.post("/reader/config/ack", headers={"X-Auth-Token": token}, json={"cmd": "ota"})
+    assert ack_resp.status_code == 200 and ack_resp.json() == {"ok": True, "cmd": "ota"}
+    assert reader_config.pending(tid)["ota_now"] is False

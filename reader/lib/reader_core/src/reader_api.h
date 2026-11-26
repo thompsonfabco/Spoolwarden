@@ -38,6 +38,7 @@ struct SlotEntry {
   Presence present = PRESENT_UNKNOWN;
   std::string type;   // filament type the printer reports ("PLA"), may be empty
   std::string spool;  // linked spool's display name ("#12" when it has no name), may be empty
+  int remainingGrams = -1;  // -1 when unknown
 };
 
 // Parse GET printers / GET printers/{id}/slots. On success `out` is replaced and
@@ -106,10 +107,13 @@ static const int LIST_FULL_EVERY = 5;
 
 // One line describing what is in a slot ("PLA Polymaker Grey", "empty", "?").
 std::string slotContents(const SlotEntry& s);
+// Multi-line spool info for the Quick Actions "Spool info" screen.
+std::string spoolInfoText(const SlotEntry& s);
 
 enum ScanStatus {
   SCAN_SET,
   SCAN_QUEUED,
+  SCAN_UNLOADED,
   SCAN_UNKNOWN_TAG,
   SCAN_UNKNOWN_SPOOL,
   SCAN_ARCHIVED_SPOOL,
@@ -136,10 +140,33 @@ const char* headline(ScanStatus s);  // short screen text ("Unknown tag")
 
 // {"uid":..,"printer":..,"slot":..} with JSON escaping (the server's dry_run defaults to false).
 std::string scanBody(const std::string& uid, const std::string& printer, const std::string& slot);
+// {"printer":..,"slot":..} with JSON escaping for POST /unload.
+std::string unloadBody(const std::string& printer, const std::string& slot);
 
 // Percent-encode one URL path segment (RFC 3986 unreserved characters pass).
 std::string urlEncode(const std::string& s);
 // base + "/" + path with exactly one slash between them.
 std::string joinUrl(const std::string& base, const std::string& path);
+
+struct RemoteConfig {
+  uint32_t configVersion = 0;
+  char defaultPrinter[33] = {0};
+  bool buzzerEnabled = true;
+  bool buzzerLow = false;
+  bool autoOta = true;
+  uint16_t dimAfterS = 120;
+  uint16_t offAfterS = 600;
+  uint16_t scanCooldownMs = 2500;
+  uint16_t listRefreshS = 60;
+  uint16_t otaCheckHours = 24;
+  bool encoderInvert = false;
+  bool otaNow = false;
+  bool rebootNow = false;
+  char hubIp[46] = {0};
+};
+
+// Parse GET /reader/config. On success `out` is replaced and true is returned;
+// on malformed input `out` is left untouched and false is returned.
+bool parseRemoteConfig(const char* json, RemoteConfig& out);
 
 }  // namespace reader

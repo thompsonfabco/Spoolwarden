@@ -60,6 +60,7 @@ def _err(status: int, code: str, message: str, **extra) -> JSONResponse:
 
 def _http_error(e: HTTPException) -> JSONResponse:
     code = {404: "not_found", 405: "method_not_allowed"}.get(e.status_code, "bad_request")
+    log.debug("http error status=%d code=%s", e.status_code, code)
     return _err(e.status_code, code, str(e.detail))
 
 
@@ -235,7 +236,7 @@ WEB_ROUTES = (
     ("POST", "/api/spools/{id}/return"),    # the web app's Return (the spool-change rule: no printer switch)
 )
 _WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+(?::int)?\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
-HOME_WEB_ROUTES = (("PATCH", "/api/voice"), ("POST", "/api/voice/test"))
+HOME_WEB_ROUTES = (("PATCH", "/api/voice"), ("POST", "/api/voice/test"), ("PATCH", "/api/alerts"))
 WEB_ONLY_PREFIX = "/api/profiles/web/"  # the web unit's preset writes: no phone or PC calls them
 WEB_ONLY_PATHS = ("/api/events/web", "/api/readers/web/seen")   # the web unit's hand-over of its spool events and seen readers
 
@@ -258,7 +259,19 @@ VIEWER_ROUTES = (
     ("GET", "/api/health"),
     ("GET", "/api/analytics"),
 )
-_VIEWER_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in VIEWER_ROUTES}
+def _compile_route_patterns(routes):
+    return {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in routes}
+
+
+_VIEWER_MATCH = _compile_route_patterns(VIEWER_ROUTES)
+HA_CONTROL_ROUTES = frozenset(VIEWER_ROUTES) | {
+    ("POST", "/api/printers/{id}/command"),
+    ("POST", "/api/printers/{id}/slots/{label}/load"),
+    ("POST", "/api/printers/{id}/slots/auto/load"),
+    ("POST", "/api/printers/{id}/slots/{label}/unload"),
+    ("POST", "/api/printers/{id}/slots/{label}/clear"),
+}
+_HA_CONTROL_MATCH = _compile_route_patterns(HA_CONTROL_ROUTES)
 
 
 MAX_IMPORT_BYTES = 5 * 1024 * 1024      # a CSV import's body, as on the Hub page (setup_console/history_tab.py)
@@ -321,6 +334,10 @@ def _viewer_may(method: str, path: str) -> bool:
     return any(m == method and rx.fullmatch(path) for m, rx in _VIEWER_MATCH)
 
 
+def _ha_control_may(method: str, path: str) -> bool:
+    return any(m == method and rx.fullmatch(path) for m, rx in _HA_CONTROL_MATCH)
+
+
 # The printer writes a web token may make (add, edit, forget). The kit's own phone web app (the built-in pairing
 # INTAKE_DEVICE, home network only) always may; the web module's (its public address) only while the owner's switch
 # "Allow printer changes from the public address" (config web.printer_changes) is on. The web module checks the same
@@ -360,8 +377,10 @@ def _authed(fn):
         if (scope == "web" and not _web_may(request.method, path)
                 and not (_home_web_may(request.method, path) and await run_in_threadpool(_is_intake_device, device))):
             return _err(403, "forbidden", "the web unit's token is for the web unit's routes only")
-        if scope == "viewer" and not _viewer_may(request.method, path):
+        if scope == pairing.VIEWER_ROLE and not _viewer_may(request.method, path):
             return _err(403, "forbidden", "a viewer token may only read Hub status, printers, spools and health")
+        if scope == pairing.HA_CONTROL_ROLE and not _ha_control_may(request.method, path):
+            return _err(403, "forbidden", "a Home Assistant control token may only read status and control printers")
         if (scope == "web" and _printer_write(request.method, path)
                 and not await run_in_threadpool(_web_printer_changes_ok, device)):
             return _err(403, "public_printer_changes_off", PUBLIC_PRINTER_CHANGES_OFF)
@@ -1483,17 +1502,22 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     async def station_recognize(request: Request):
         async with request.form(max_files=intake.MAX_PHOTOS, max_fields=10) as form:
-            f = form.get("image")
-            if not isinstance(f, UploadFile):
-                raise station_flow.FlowError(400, "bad_request", "image must be a file upload",
-                                             station_flow.lines("No photo", "try again"))
-            data = await f.read(intake.MAX_PHOTO_BYTES + 1)
+            files = form.getlist("image") or form.getlist("photo")
+            photos = []
+            for i, f in enumerate(files, 1):
+                if not isinstance(f, UploadFile):
+                    raise station_flow.FlowError(400, "bad_request", "image must be a file upload",
+                                                 station_flow.lines("No photo", "try again"))
+                photos.append((f.filename or f"station-{i}.jpg", await f.read(intake.MAX_PHOTO_BYTES + 1)))
+        if not photos:
+            raise station_flow.FlowError(400, "bad_request", "image must be a file upload",
+                                         station_flow.lines("No photo", "try again"))
         try:
-            (image,) = intake.check_photos([(f.filename or "station.jpg", data)])
+            images = intake.check_photos(photos)
         except PhotoError as e:
             raise station_flow.FlowError(400, "bad_photo", str(e), station_flow.lines("Bad photo", "try again")) from e
         return await run_in_threadpool(
-            lambda: station_flow.recognize(sm, config.load(), image, claude, cap,
+            lambda: station_flow.recognize(sm, config.load(), images, claude, cap,
                                            getattr(request.state, "device", None)))
 
     @_authed
@@ -1733,6 +1757,14 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return JSONResponse(await run_in_threadpool(alerts_api.alerts_view))
 
     @_authed
+    async def alerts_patch(request: Request):
+        body = await _json(request)
+        try:
+            return JSONResponse(await run_in_threadpool(alerts_api.save, body))
+        except alerts_api.AlertsRefused as e:
+            return JSONResponse({"error": "invalid", "message": str(e), "field": e.field}, 400)
+
+    @_authed
     async def alerts_test(request: Request):
         """A test alert for the caller: nothing is stored; the caller's next `GET api/events` carries it as `test`
         (once, within 60 s). The caller is the Hub page's browser id (`client`) or the device of the token."""
@@ -1914,6 +1946,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/import/spools", import_spools_route, methods=["POST"]),
             Route("/api/import/locations", import_locations_route, methods=["POST"]),
             Route("/api/alerts", alerts_get),
+            Route("/api/alerts", alerts_patch, methods=["PATCH"]),
             Route("/api/alerts/test", alerts_test, methods=["POST"]),
             Route("/app.apk", apk),
             Route("/api/station", station_state),

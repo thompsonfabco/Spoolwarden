@@ -92,10 +92,14 @@ class Moonraker:
         if data is not None:
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
+        log.debug("moonraker %s:%s %s %s", self.host, self.port, method, path)
         try:
             with _OPENER.open(req, timeout=self.timeout) as r:
                 raw = r.read(MAX_BODY + 1)
+                log.debug("moonraker %s:%s %s %s -> HTTP %s (%d bytes)",
+                          self.host, self.port, method, path, getattr(r, "status", 200), len(raw))
         except urllib.error.HTTPError as e:
+            log.debug("moonraker %s:%s %s %s -> HTTP %s", self.host, self.port, method, path, e.code)
             if 300 <= e.code < 400:     # Location is left out: it is the far side's text
                 raise MoonrakerError(f"Moonraker at {self.host}:{self.port} answered with a redirect ({e.code}), which "
                                      "the kit does not follow: give the printer's direct address") from None
@@ -108,12 +112,17 @@ class Moonraker:
                 raise GcodeError(msg) from None
             raise MoonrakerError(f"{method} {path}: {e.code} {msg}") from None
         except (urllib.error.URLError, OSError, TimeoutError, http.client.HTTPException) as e:     # the last: a reply cut off
+            log.debug("moonraker %s:%s %s %s offline (%s)", self.host, self.port, method, path, type(e).__name__)
             raise Offline(f"Moonraker at {self.host}:{self.port} is not answering ({_reason(e)})") from None
         if len(raw) > MAX_BODY:
+            log.debug("moonraker %s:%s %s %s -> answer larger than %d bytes",
+                      self.host, self.port, method, path, MAX_BODY)
             raise MoonrakerError(f"{method} {path}: answer larger than {MAX_BODY} bytes")
         try:
             return json.loads(raw)["result"]
         except (ValueError, KeyError, TypeError) as e:
+            log.debug("moonraker %s:%s %s %s -> invalid JSON (%s)",
+                      self.host, self.port, method, path, type(e).__name__)
             raise MoonrakerError(f"{method} {path}: not a Moonraker answer ({type(e).__name__})") from None
 
     # --- reads ---------------------------------------------------------------------------------------------------
@@ -243,6 +252,8 @@ class Subscriber:
         rid = next(self._ids)
         if later:
             self._later.add(rid)
+        log.debug("moonraker %s: ws subscribe id=%d later=%s objects=%d",
+                  self.client.host, rid, later, len(self.objects))
         ws.send(json.dumps({"jsonrpc": "2.0", "method": "printer.objects.subscribe",
                             "params": {"objects": self.objects}, "id": rid}))
         return rid
@@ -256,6 +267,7 @@ class Subscriber:
                 headers = {"X-Api-Key": self.client._key} if self.client._key else None
                 # Our own socket because websockets then refuses every redirect; left to itself it follows them,
                 # and on another host it would strip only its own credential headers, not X-Api-Key.
+                log.debug("moonraker %s: ws connecting to %s", self.client.host, self.client.ws_url())
                 sock = socket.create_connection((self.client.host.strip("[]"), self.client.port),
                                                 timeout=self.client.timeout)
                 sock.settimeout(None)
@@ -277,12 +289,15 @@ class Subscriber:
                         if msg.get("id") == sub_id and (msg.get("error") or {}).get("code") == 503:
                             # Klipper's host is away, and the event saying so may have gone before this socket came up.
                             # Only for this subscribe: set-up answers the event with set_objects, so that one must not.
+                            log.debug("moonraker %s: ws subscribe id=%d -> 503 (klippy disconnected)",
+                                      self.client.host, sub_id)
                             self.on_event("notify_klippy_disconnected", [])
                             continue
                         if msg.get("id") == sub_id and isinstance(msg.get("result"), dict):
                             delay = self.backoff[0]
                             self.on_status(dict(msg["result"].get("status") or {}))
                             self.connected = True          # after the snapshot is applied
+                            log.debug("moonraker %s: ws connected and subscribed (id=%d)", self.client.host, sub_id)
                             if self.on_connect is not None:
                                 try:
                                     self.on_connect()
@@ -296,17 +311,20 @@ class Subscriber:
                         elif method in EVENTS:
                             self.on_event(method, params)
                             if method == "notify_klippy_ready":
+                                log.debug("moonraker %s: notify_klippy_ready; re-subscribing", self.client.host)
                                 sub_id = self._subscribe(ws)
             except Exception as e:  # noqa: BLE001 - any failure: reconnect after a pause
                 if not self._stop.is_set():
                     log.info("moonraker %s: websocket %s; retry in %.0f s", self.client.host,
                              type(e).__name__, delay)
+                    log.debug("moonraker %s: ws error detail: %s", self.client.host, e)
             finally:
                 self._ws = None
                 self._later.clear()
                 if self.connected:
                     self.down_since = time.monotonic()
                     self.drops += 1
+                    log.debug("moonraker %s: ws disconnected (drops=%d)", self.client.host, self.drops)
                 self.connected = False
             if self._stop.wait(delay):
                 break

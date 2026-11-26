@@ -8,7 +8,7 @@ import anyio.to_thread
 import uvicorn
 from uvicorn.main import STARTUP_FAILURE
 
-from . import config, demo, event_sink, modules, watch
+from . import config, demo, event_sink, logging_cfg, modules, watch
 from .api import create_app
 from .bridge import camera, discovery, family, mapping, registry, usage
 from .bridge.connection import Manager
@@ -140,18 +140,6 @@ def serve(app, hub, **kw) -> None:
         sys.exit(STARTUP_FAILURE)
 
 
-def _log_to_journal() -> None:
-    """uvicorn configures only its own loggers, so ours (command audit lines, IP-change warnings) need a handler;
-    stderr goes to the systemd journal."""
-    app_log = logging.getLogger("filament_kit")
-    if not app_log.handlers:
-        handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
-        app_log.addHandler(handler)
-        app_log.propagate = False
-    app_log.setLevel(logging.INFO)
-
-
 def _browser(on_found):
     """The Klipper mDNS browser; in the demo (it is decided when the family starts) nothing listens on the network."""
     if demo.is_on():
@@ -182,8 +170,8 @@ def event_parts(sm, manager=None, klipper=None, mapper=None):
 
 
 def main() -> None:
-    _log_to_journal()
     cfg = config.load()
+    logging_cfg.configure(cfg)
     etc = config.paths().etc
     on = modules.enabled(cfg)
     sm = Spoolman(cfg["spoolman_url"])

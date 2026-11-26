@@ -60,11 +60,17 @@ class AlertParsingTest {
     @Test fun theAlertsAndLowSpoolsAnswersAreRead() {
         val c = AlertParsing.alerts(Json.parseToJsonElement(
             """{"types":[{"key":"runout","title":"Filament ran out","on":true},{"key":"finished","title":"x","on":false}],""" +
-                """"last_spool_only":false,"running_low_g":150,"storage_warn_percent":85,"storage_bad_percent":95}""",
+                """"last_spool_only":true,"running_low_g":150,"storage_warn_percent":85,"storage_bad_percent":95,"humidity_high_pct":65}""",
         ))
         assertEquals(listOf("runout" to true, "finished" to false), c.types.map { it.key to it.on })
+        assertTrue(c.lastSpoolOnly)
         assertEquals(150, c.runningLowG)
+        assertEquals(85, c.storageWarnPercent)
         assertEquals(95, c.storageBadPercent)
+        assertEquals(65, c.humidityHighPct)
+        val defaults = AlertParsing.alerts(Json.parseToJsonElement("""{"types":[]}"""))
+        assertFalse(defaults.lastSpoolOnly)
+        assertNull(defaults.humidityHighPct)
         val low = AlertParsing.lowSpools(Json.parseToJsonElement(
             """{"threshold_g":150,"spools":[{"id":7,"filament":"Prusament PLA","material":"PLA","color":"ff8800","remaining_g":96.5,""" +
                 """"location":"Shelf A","in_stock":2,"last_one":false},{"id":8,"filament":"x","last_one":true},{"filament":"no id"}]}""",

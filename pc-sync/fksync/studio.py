@@ -94,10 +94,32 @@ def _pick_root(roots: dict[str, Path], conf: str) -> str | None:
     return max(ranked)[1] if ranked else None
 
 
-def locate(appdata: Path | None, pin: dict | None = None, *, layout: "LinuxLayout | None" = None) -> StudioFolders:
-    """`layout`: this Linux PC's folders (then `appdata` is unused); None: Windows, appdata/<variant>."""
-    roots = dict(layout.studio_roots()) if layout else {v: Path(appdata) / v for v in VARIANTS}
+def _slicer_entries(raw_entries: list) -> list:
+    from . import paths_config
+
+    out = []
+    for item in raw_entries:
+        try:
+            out.append(paths_config.SlicerEntry.from_dict(item))
+        except (ValueError, TypeError):
+            continue
+    return out
+
+
+def locate(appdata: Path | None, pin: dict | None = None, *, layout: "LinuxLayout | MacLayout | None" = None) -> StudioFolders:
+    """`layout`: this Linux/macOS PC's folders (then `appdata` is unused); None: Windows, appdata/<variant>."""
     pin = pin or {}
+    if isinstance(pin.get("slicer_paths"), list):
+        from . import paths_config
+
+        for entry in _slicer_entries(pin["slicer_paths"]):
+            if entry.kind == "bambu" and entry.enabled:
+                resolved = paths_config.resolve_bambu_entry(entry, preferred_user_id=pin.get("user_id"))
+                if resolved is not None:
+                    return resolved
+        raise NotFound("No enabled Bambu Studio folder was found in the sync configuration.")
+
+    roots = dict(layout.studio_roots()) if layout else {v: Path(appdata) / v for v in VARIANTS}
     variant, user_id = pin.get("variant"), pin.get("user_id")
 
     if variant:
@@ -134,7 +156,7 @@ def locate(appdata: Path | None, pin: dict | None = None, *, layout: "LinuxLayou
 
 
 def primary(appdata: Path | None, pin: dict | None, recorded: dict | None, *,
-            layout: "LinuxLayout | None" = None) -> tuple[StudioFolders, str | None]:
+            layout: "LinuxLayout | MacLayout | None" = None) -> tuple[StudioFolders, str | None]:
     """(the primary folder, why it is not the recorded one or None). Once a primary is recorded (sync state
     `folder` {variant, user_id}) it stays that folder, whichever app was opened last. It changes only when the config
     pins another folder (`variant` / `user_id`), or when the recorded folder is gone or has no user filament folder
@@ -144,6 +166,11 @@ def primary(appdata: Path | None, pin: dict | None, recorded: dict | None, *,
     variant, user_id = rec.get("variant"), rec.get("user_id")
     if not (isinstance(variant, str) and isinstance(user_id, str)):
         return locate(appdata, pin, layout=layout), None
+    if isinstance(pin.get("slicer_paths"), list):
+        f = locate(appdata, pin, layout=layout)
+        if (f.variant, f.user_id) == (variant, user_id):
+            return f, None
+        return f, "the sync configuration changed (slicer_paths)"
     if pin.get("variant") or pin.get("user_id"):
         f = locate(appdata, pin, layout=layout)
         if (f.variant, f.user_id) == (variant, user_id):
@@ -161,10 +188,27 @@ def primary(appdata: Path | None, pin: dict | None, recorded: dict | None, *,
 
 
 def secondaries(appdata: Path | None, primary: StudioFolders, *,
-                layout: "LinuxLayout | None" = None) -> list[StudioFolders]:
+                layout: "LinuxLayout | MacLayout | None" = None,
+                pin: dict | None = None) -> list[StudioFolders]:
     """Every other usable Bambu Studio root: on Windows the other of BambuStudio / BambuStudioBeta, on
     Linux the other three of the four roots, in that order. Usable: it has a user/<id>/filament dir. Its user is the
     primary's id when that folder exists there, else its own newest (the pins pick the primary only)."""
+    if pin and isinstance(pin.get("slicer_paths"), list):
+        from . import paths_config
+
+        out = []
+        seen = {paths_config.normalize_path(primary.user_filament)}
+        for entry in _slicer_entries(pin["slicer_paths"]):
+            if entry.kind == "bambu" and entry.enabled:
+                resolved = paths_config.resolve_bambu_entry(entry, preferred_user_id=primary.user_id)
+                if resolved is None:
+                    continue
+                norm = paths_config.normalize_path(resolved.user_filament)
+                if norm not in seen:
+                    seen.add(norm)
+                    out.append(resolved)
+        return out
+
     roots = dict(layout.studio_roots()) if layout else {v: Path(appdata) / v for v in VARIANTS}
     out = []
     for variant, root in roots.items():
@@ -199,26 +243,62 @@ def _tasklist(image: str = "bambu-studio.exe") -> str:
     return r.stdout if r.returncode == 0 else image
 
 
-def _running(image: str, tasklist: Callable[[], str] | None, proc: Path | None, app: "_LinuxApp") -> bool:
-    if tasklist is None:
-        if proc is not None or sys.platform.startswith("linux"):
-            return _proc_running(app, PROC if proc is None else proc)
-        if sys.platform != "win32":
+def _mac_running(mac_name: str, runner: Callable[[list[str]], object] | None = None) -> bool:
+    """True when `mac_name` is running on macOS (pgrep -x, falling back to ps -Ao comm=)."""
+    run = runner or (lambda cmd: subprocess.run(cmd, capture_output=True, text=True))
+    try:
+        res = run(["pgrep", "-x", mac_name])
+    except OSError:
+        res = None
+    if res is not None:
+        if hasattr(res, "returncode"):
+            if res.returncode == 0:
+                return True
+            if res.returncode == 1:
+                return False
+        elif isinstance(res, str):
+            return bool(res.strip())
+    try:
+        res = run(["ps", "-Ao", "comm="])
+    except OSError:
+        return False
+    if hasattr(res, "returncode"):
+        if res.returncode != 0:
             return False
-        return image in (_tasklist(image) or "").lower()
-    return image in (tasklist() or "").lower()
+        out = res.stdout or ""
+    elif isinstance(res, str):
+        out = res
+    else:
+        return False
+    target = mac_name.casefold()
+    return any(Path(line.strip()).name.casefold() == target for line in out.splitlines() if line.strip())
 
 
-def running(tasklist: Callable[[], str] | None = None, *, proc: Path | None = None) -> bool:
-    """True when Bambu Studio is running: bambu-studio.exe on Windows, /proc on Linux (unsure: True).
-    Always False elsewhere unless a tasklist is given."""
-    return _running("bambu-studio.exe", tasklist, proc, _BAMBU_APP)
+def _running(image: str, tasklist: Callable[[], str] | None, proc: Path | None, app: "_LinuxApp",
+             mac_name: str, runner: Callable[[list[str]], object] | None = None) -> bool:
+    if tasklist is not None:
+        return image in (tasklist() or "").lower()
+    if proc is not None or sys.platform.startswith("linux"):
+        return _proc_running(app, PROC if proc is None else proc)
+    if runner is not None or sys.platform == "darwin":
+        return _mac_running(mac_name, runner)
+    if sys.platform != "win32":
+        return False
+    return image in (_tasklist(image) or "").lower()
 
 
-def orca_running(tasklist: Callable[[], str] | None = None, *, proc: Path | None = None) -> bool:
-    """True when Orca Slicer is running: orca-slicer.exe on Windows, /proc on Linux (unsure: True).
-    Always False elsewhere unless a tasklist is given."""
-    return _running("orca-slicer.exe", tasklist, proc, _ORCA_APP)
+def running(tasklist: Callable[[], str] | None = None, *, proc: Path | None = None,
+            runner: Callable[[list[str]], object] | None = None) -> bool:
+    """True when Bambu Studio is running: bambu-studio.exe on Windows, /proc on Linux (unsure: True),
+    pgrep/ps on macOS. Always False elsewhere unless a tasklist or runner is given."""
+    return _running("bambu-studio.exe", tasklist, proc, _BAMBU_APP, "BambuStudio", runner)
+
+
+def orca_running(tasklist: Callable[[], str] | None = None, *, proc: Path | None = None,
+                 runner: Callable[[list[str]], object] | None = None) -> bool:
+    """True when Orca Slicer is running: orca-slicer.exe on Windows, /proc on Linux (unsure: True),
+    pgrep/ps on macOS. Always False elsewhere unless a tasklist or runner is given."""
+    return _running("orca-slicer.exe", tasklist, proc, _ORCA_APP, "OrcaSlicer", runner)
 
 
 # --- Linux: the running check --------------------------------------------------------------------
@@ -391,11 +471,11 @@ def _orca_install(pin: str | None, program_files: Iterable[Path], registry: Call
     return max(found)[2] if found else None
 
 
-def _orca_install_linux(pin: str | None, layout: "LinuxLayout", flatpak_id: str | None) -> Path | None:
+def _orca_install_linux(pin: str | None, layout: "LinuxLayout | MacLayout", flatpak_id: str | None) -> Path | None:
     """The resources folder (holding profiles/) of the Orca Slicer that owns this data root, else of any install."""
     if pin:
         p = Path(pin)
-        for cand in (p, p / "resources"):
+        for cand in (p, p / "resources", p / "Contents" / "Resources"):
             if (cand / "profiles").is_dir():
                 return cand
         raise NotFound(f"Orca Slicer install folder {p} (orca_install in the sync config) has no profiles folder.")
@@ -407,10 +487,31 @@ def _orca_install_linux(pin: str | None, layout: "LinuxLayout", flatpak_id: str 
 
 def locate_orca(appdata: Path | None, pin: dict | None = None, *, program_files: Iterable[Path] = (),
                 registry: Callable[[], list[dict]] = _registry_entries,
-                layout: "LinuxLayout | None" = None) -> OrcaFolders | None:
+                layout: "LinuxLayout | MacLayout | None" = None) -> OrcaFolders | None:
     """This PC's Orca Slicer folders, or None when Orca Slicer has no user filament folder here.
     `layout`: this Linux PC's folders (then `appdata`, `program_files` and `registry` are unused)."""
     pin = pin or {}
+    if isinstance(pin.get("slicer_paths"), list):
+        from . import paths_config
+
+        entries = _slicer_entries(pin["slicer_paths"])
+        orca_entries = [e for e in entries if e.kind == "orca" and e.enabled]
+        if not orca_entries:
+            return None
+        install_entry = next((e for e in entries if e.kind == "orca_install" and e.enabled), None)
+        install_override = Path(install_entry.path) if install_entry is not None else None
+        for entry in orca_entries:
+            resolved = paths_config.resolve_orca_entry(
+                entry,
+                install_path=install_override,
+                layout=layout,
+                program_files=program_files,
+                registry=registry,
+            )
+            if resolved is not None:
+                return resolved
+        return None
+
     flatpak_id = None
     if layout is None:
         root = Path(appdata) / ORCA
@@ -514,3 +615,32 @@ class LinuxLayout:
             except OSError:
                 continue
         return out
+
+
+@dataclass(frozen=True)
+class MacLayout:
+    """This macOS user's slicer folders: ~/Library/Application Support/BambuStudio{,Beta},
+    ~/Library/Application Support/OrcaSlicer, and /Applications/OrcaSlicer.app/Contents/Resources."""
+    home: Path
+    applications: Path = Path("/Applications")
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str], **kw) -> "MacLayout":
+        home = Path(env.get("HOME") or Path.home())
+        return cls(home=home, **kw)
+
+    def _app_support(self) -> Path:
+        return self.home / "Library" / "Application Support"
+
+    def studio_roots(self) -> list[tuple[str, Path]]:
+        base = self._app_support()
+        return [(v, base / v) for v in VARIANTS]
+
+    def orca_roots(self) -> list[tuple[str, Path, str | None]]:
+        return [(ORCA, self._app_support() / ORCA, None)]
+
+    def orca_installs(self, flatpak_id: str | None = None) -> list[Path]:
+        return [
+            self.applications / f"{ORCA}.app" / "Contents" / "Resources",
+            self.home / "Applications" / f"{ORCA}.app" / "Contents" / "Resources",
+        ]

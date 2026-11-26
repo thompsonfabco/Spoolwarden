@@ -16,6 +16,8 @@ try:
 except ImportError:
     _analytics = None
 
+from .. import orders_import
+
 EMPTY = {"months": [], "insights": [], "notes": []}
 
 
@@ -23,7 +25,10 @@ def read(months: int, printer: str | None) -> dict:
     """The kit's analytics for `months` months (one printer when `printer`), in the shape the Hub page reads. Until the kit has
     its analytics module the answer is the shape with nothing in it, which the page shows as "No usage yet"."""
     view = getattr(_analytics, "view", None)
-    return view(months=months, printer=printer) if callable(view) else dict(EMPTY)
+    out = view(months=months, printer=printer) if callable(view) else dict(EMPTY)
+    if "orders" not in out:
+        out["orders"] = orders_import.summarize_orders()
+    return out
 
 
 def routes(page) -> list[tuple]:
@@ -40,4 +45,35 @@ def routes(page) -> list[tuple]:
         printer = (q.get("printer") or "").strip() or None
         return await anyio.to_thread.run_sync(read, months, printer)
 
-    return [("/analytics", page.guard(get), "GET")]
+    async def get_orders(request, body):
+        def _load():
+            items = orders_import.load_orders()
+            return {"orders": items, "summary": orders_import.summarize_orders(items)}
+        return await anyio.to_thread.run_sync(_load)
+
+    async def import_orders_route(request, body):
+        if not isinstance(body, dict) or not isinstance(body.get("data"), str):
+            raise Refused(400, "Order data is required", field="order_data")
+        fmt = body.get("format") or "auto"
+        if not isinstance(fmt, str):
+            raise Refused(400, "Invalid format", field="order_format")
+        replace = bool(body.get("replace", False))
+        try:
+            out = await anyio.to_thread.run_sync(
+                lambda: orders_import.import_orders(body["data"], fmt=fmt, replace=replace)
+            )
+        except orders_import.OrderImportError as e:
+            raise Refused(e.status, str(e), reason=e.code, field="order_data") from None
+        page.audit(request, f"imported {out['imported']} filament orders")
+        return {
+            "imported": out["imported"],
+            "skipped": out["skipped"],
+            "total": out["total"],
+            "summary": orders_import.summarize_orders(out["orders"]),
+        }
+
+    return [
+        ("/analytics", page.guard(get), "GET"),
+        ("/orders", page.guard(get_orders), "GET"),
+        ("/orders/import", page.guard(import_orders_route, write=True), "POST"),
+    ]

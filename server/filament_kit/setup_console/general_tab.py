@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import anyio
 
-from .. import config, demo, getting_started, hubport, local_intake_install, local_reader, modules, redact, remote, setup_helper, share_corrections
+from .. import config, demo, getting_started, hubport, local_intake_install, local_reader, logging_cfg, modules, redact, remote, setup_helper, share_corrections
 from ..spoolman import Spoolman, SpoolmanError
 from .texts import say
 
@@ -111,12 +111,16 @@ def routes(page) -> list[tuple]:
         if "values" in body:
             r, deleted = await _save_with_delete(page, body, {"op": "general_group", "code": body["code"],
                                                               "values": body["values"]})
+            if "log_level" in r.get("keys", ()):
+                logging_cfg.apply_level(body["values"]["log_level"])
             page.audit(request, f"settings {', '.join(r['keys'])} changed")
             return {"ok": True, "keys": r["keys"], "restarts": r["restarts"], "applies": r["applies"],
                     **({"jobs": r["jobs"]} if r.get("jobs") else {}), **_deleted(deleted)}
         key = body.get("key")
         r, deleted = await _save_with_delete(page, body, {"op": "general", "code": body["code"], "key": key,
                                                           "value": body.get("value")})
+        if r.get("key") == "log_level":
+            logging_cfg.apply_level(body.get("value"))
         page.audit(request, f"setting {r['key']} changed")
         return {"ok": True, "restarts": r["restarts"], "applies": r["applies"],
                 **({"jobs": r["jobs"]} if r.get("jobs") else {}), **_deleted(deleted)}

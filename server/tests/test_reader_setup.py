@@ -8,6 +8,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -743,4 +744,36 @@ def test_the_buzzer_options_read_bare_buzzer_and_buzzer_with_driver_board_everyw
         text = (root / rel).read_text(encoding="utf-8")
         assert "3-pin" not in text and "MOSFET" not in text, rel
     assert "a [b]are buzzer" in (root / "server/filament_kit/cli.py").read_text(encoding="utf-8")
+
+
+def test_default_ota_pubkey_precedence_and_home_settings(hub, tmp_path, monkeypatch):
+    opt = tmp_path / "opt"
+    (opt / "resources" / "reader").mkdir(parents=True)
+    (tmp_path / "etc").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "etc" / "cert.pem").write_text(hub, encoding="ascii")
+    monkeypatch.setattr(rs.config, "paths", lambda: types.SimpleNamespace(
+        etc=tmp_path / "etc", opt=opt, state=tmp_path / "state", web=tmp_path / "web",
+    ))
+    monkeypatch.setattr(rs, "hub_ip", lambda: "192.0.2.10")
+    assert rs.default_ota_pubkey() is None
+    assert "ota_key" not in rs.home_settings()
+
+    (opt / "resources" / "reader" / "ota.pub").write_text(KEY, encoding="utf-8")
+    assert rs.default_ota_pubkey() == KEY
+    assert rs.home_settings()["ota_key"] == KEY
+
+    # etc/reader-ota.pub takes precedence over opt/resources/reader/ota.pub
+    other = KEY.replace("A", "B", 1)
+    (tmp_path / "etc" / "reader-ota.pub").write_text(other, encoding="utf-8")
+    assert rs.default_ota_pubkey() == other
+
+
+def test_cli_reader_setup_falls_back_to_default_ota_pubkey(tmp_path, monkeypatch, capsys):
+    out = tmp_path / "secrets.h"
+    tok = tmp_path / "tok"
+    tok.write_text(TOKEN + "\n", encoding="utf-8")
+    monkeypatch.setattr(rs, "default_ota_pubkey", lambda: KEY)
+    assert cli.cmd_reader_setup(_args(out=str(out), token_file=str(tok)), ask_secret=_secret("password1", "password1")) == 0
+    assert KEY in out.read_text(encoding="utf-8")
+    assert "without --ota-pubkey" not in capsys.readouterr().out
 

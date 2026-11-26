@@ -103,7 +103,7 @@ const spCsvItem = (set, key) => ({ label: tx(key), icon: "download", action: `do
 const spPrintAt = (ids) => window.open(`/setup/api/labels?${new URLSearchParams({ ids: ids.join(","), size: "62x29" })}`, "_blank", "noopener");
 
 // ----- what the section knows -----
-const st = { q: "", filter: "", rows: [], total: 0, more: false, url: null, ready: false, filters: null, checked: null };
+const st = { q: "", filter: "", rows: [], total: 0, more: false, url: null, ready: false, filters: null, checked: null, reorder: null };
 const wanted = new Set();            // the rows that are open: kept across a new read
 const chosen = new Set();            // the spools selected for Print labels: kept by Show more, dropped by a new read
 let lastPick = null;                 // the spool whose checkbox was pressed last: Shift+click selects from it
@@ -273,12 +273,12 @@ function spSelectionBar() {
     spX("button", { class: "btn btn--ghost spools-clearsel", type: "button", on: { click: () => spClear(true) } }, tx("spools_clear_selection")));
   return bar;
 }
-const CHIPS = [["sealed", "common_sealed"], ["opened", "spool_state_opened"], ["loaded", "spools_chip_loaded"], ["low", "spools_chip_low"]];
+const CHIPS = [["sealed", "common_sealed"], ["opened", "spool_state_opened"], ["loaded", "spools_chip_loaded"], ["low", "spools_chip_low"], ["reorder", "spools_chip_reorder"]];
 // the chips: Checked out (<n>) comes only when the Hub says it applies the filter; <n> is the `total` of the list read with filter=checked_out
 const spChipText = (f, k) => (f === "checked_out" ? (st.checked == null ? tx("spools_chip_checked_out_plain") : tx("spools_chip_checked_out", { count: st.checked })) : tx(k));
 function spPaintChips() {
   const group = parts.chips;
-  group.replaceChildren(...(spCanCO() ? [...CHIPS.slice(0, 3), ["checked_out", "spools_chip_checked_out"], CHIPS[3]] : CHIPS).map(([f, k]) => spX("button", {
+  group.replaceChildren(...(spCanCO() ? [...CHIPS.slice(0, 3), ["checked_out", "spools_chip_checked_out"], ...CHIPS.slice(3)] : CHIPS).map(([f, k]) => spX("button", {
     class: "chip spools-chip", type: "button", "aria-pressed": String(st.filter === f), "data-filter": f,
     on: { click: () => { st.filter = st.filter === f ? "" : f; for (const b of group.children) b.setAttribute("aria-pressed", String(b.dataset.filter === st.filter)); reload(); } } }, spChipText(f, k))));
 }
@@ -296,8 +296,61 @@ function spToolbar() {
   return spE("div", "coll__toolbar spools-toolbar", search, parts.chips);
 }
 
+function paintReorder() {
+  const data = st.reorder;
+  const items = (data && data.items) || [];
+  views.clear();
+  chosen.clear();
+  spSync();
+  if (!items.length) {
+    parts.list.replaceChildren(SW.empty({ icon: "spool", title: tx("spools_reorder_empty_title"), text: tx("spools_reorder_empty_text") }));
+    parts.foot.replaceChildren();
+    return;
+  }
+  const cols = [
+    ["visual", "spools_col_colour", 1, true], ["number", "spools_col_number", 1], ["title", "spools_col_spool", 1],
+    ["material", "common_field_material", 2], ["left", "spools_col_left", 1], ["stock", "spools_reorder_col_stock", 2],
+    ["burn", "spools_reorder_col_burn", 3], ["days", "spools_reorder_col_days_left", 1], ["order", "spools_reorder_col_order", 2],
+  ];
+  const head = spE("div", "coll__head", { role: "rowgroup" }, spE("div", "coll__row", { role: "row" },
+    cols.map(([col, k, prio, hidden]) => spX("div", { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": prio },
+      hidden ? spE("span", "sr", tx(k)) : tx(k)))));
+  const rows = items.map((r) => {
+    const left = grams(r.remaining_g);
+    const stock = r.last_one
+      ? SW.status("needs_look", { small: true, text: tx("running_low_last_one") })
+      : spE("span", "muted", tx("running_low_in_stock", { count: r.in_stock || 0 }));
+    const burn = r.burn_rate_g_day != null
+      ? spE("span", "mono", tx("spools_reorder_burn_rate", { grams: r.burn_rate_g_day }))
+      : spE("span", "muted", tx("spools_reorder_burn_none"));
+    const days = r.days_left != null
+      ? spE("span", "mono", tx("spools_reorder_days_left", { days: r.days_left }))
+      : spE("span", "muted", tx("spools_reorder_days_unknown"));
+    const orderParts = [r.last_seller, r.last_price != null ? tx("spools_reorder_price", { price: r.last_price }) : null].filter(Boolean);
+    const order = orderParts.length
+      ? spE("span", "", orderParts.join(" · "))
+      : spE("span", "muted", tx("spools_reorder_order_none"));
+    return spX("div", { class: "coll__item", role: "rowgroup", "data-id": String(r.id) },
+      spE("div", "coll__row", { role: "row" },
+        spCell("visual", 1, SW.swatch(sphexOf({ color_hex: r.color }), {})),
+        spCell("number", 1, spE("span", "mono", `#${r.id}`)),
+        spCell("title", 1, spX("a", { class: "coll__title", href: spaddressOf(r.id) }, r.filament || tx("spools_unnamed"))),
+        spCell("material", 2, key("common_field_material"), r.material || null),
+        spCell("left", 1, key("spools_col_left"), left == null ? spE("span", "muted", tx("spools_not_weighed")) : spE("span", "mono", tx("common_grams", { grams: left }))),
+        spCell("stock", 2, key("spools_reorder_col_stock"), stock),
+        spCell("burn", 3, key("spools_reorder_col_burn"), burn),
+        spCell("days", 1, key("spools_reorder_col_days_left"), days),
+        spCell("order", 2, key("spools_reorder_col_order"), order)));
+  });
+  const el = spX("div", { class: "coll coll--spools coll--reorder", role: "table", "aria-label": tx("spools_reorder_title") }, head, rows);
+  SW.collection(el, { name: "spools-reorder", total: items.length, first: 0 });
+  parts.list.replaceChildren(el);
+  parts.foot.replaceChildren(spE("p", "muted spools-shown", tx("spools_reorder_note", { grams: data.threshold_g, days: data.window_days })));
+}
+
 function paint() {
   parts.head.replaceChildren(spHeader());
+  if (st.filter === "reorder") { paintReorder(); return; }
   if (!st.rows.length) {
     views.clear();
     const filtered = st.q || st.filter;
@@ -323,9 +376,20 @@ async function reload() {
   const mine = ++seq;
   parts.list.setAttribute("aria-busy", "true");
   try {
+    if (st.filter === "reorder") {
+      const r = await api("spools/reorder");
+      if (mine !== seq) return;
+      Object.assign(st, { reorder: r, rows: [], total: (r.items || []).length, more: false });
+      parts.list.removeAttribute("aria-busy");
+      chosen.clear();
+      lastPick = null;
+      paint();
+      SW.announce(tx("spools_count", { count: st.total }));
+      return;
+    }
     const r = await api(queryOf(0));
     if (mine !== seq) return;
-    Object.assign(st, { rows: r.spools, total: r.total, more: r.has_more, url: r.spoolman_url || null, ready: true, filters: r.filters || null });
+    Object.assign(st, { reorder: null, rows: r.spools, total: r.total, more: r.has_more, url: r.spoolman_url || null, ready: true, filters: r.filters || null });
     parts.list.removeAttribute("aria-busy");
     spPaintChips();
     spCount();

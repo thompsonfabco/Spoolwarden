@@ -115,7 +115,7 @@ def _settle_pair(dirs: store.AppDirs, cfg: dict, token: str, echo) -> tuple[dict
 
 
 def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str, appdata: Path | None = None,
-                 layout: studio.LinuxLayout | None = None) -> int:
+                 layout: studio.LinuxLayout | studio.MacLayout | None = None) -> int:
     """Save the new pairing and prove it, keeping the one in place until then: a stale or mistyped link must not break
     a setup that works. The caller holds the lock. Refused (a 4xx, another certificate): the old one comes back. Not
     reached, or a 5xx: the new one stays on trial, since a blip must not force a new link, and the old one stays aside
@@ -126,8 +126,8 @@ def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str, appdata: Path | Non
     except ValueError:
         pass
     had_old = store.pair_waiting(dirs) or (bool(old.get("host")) and dirs.token.exists())
-    for key in ("variant", "user_id", "orca_user_id", "orca_install", "secondaries"):  # survive re-pairing
-        if key in old:
+    for key in ("variant", "user_id", "orca_user_id", "orca_install", "secondaries", "role", "slicer_paths"):  # survive re-pairing
+        if key in old and key not in cfg:
             cfg[key] = old[key]
     store.set_pair_aside(dirs)
     store.save_config(dirs, cfg)
@@ -163,7 +163,9 @@ def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str, appdata: Path | Non
          "The sync runs every 10 minutes and waits while Bambu Studio (or Orca Slicer) is open "
          "('filament-kit-sync status' shows a wait).")
     owner = st.get("owner")
-    if owner and owner != st.get("you"):
+    if cfg.get("role") == "secondary":
+        _out("Role:            secondary (pull-only; will not upload or request rebuilds).")
+    elif owner and owner != st.get("you"):
         _out("Another pairing owns the sync for this Hub (another PC, or this PC's earlier pairing). On the Hub: "
              f"sudo spoolwarden unpair {owner}")
     if appdata is not None or layout is not None:   # information only: the pairing is done whatever this finds
@@ -171,11 +173,17 @@ def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str, appdata: Path | Non
             folders, _why = studio.primary(appdata, cfg, sync.load_state(dirs).get("folder"), layout=layout)
             _out(f"Bambu Studio folder: {folders.user_filament}")
         except studio.NotFound as e:
-            _out(e.message)
+            orca = _locate_orca(appdata, cfg, layout=layout)
+            if orca is not None:
+                _out(f"Orca Slicer folder: {orca.user_filament}")
+            else:
+                _out(e.message)
     return 0
 
 
-def cmd_pair(dirs: store.AppDirs, appdata: Path | None = None, layout: studio.LinuxLayout | None = None) -> int:
+def cmd_pair(dirs: store.AppDirs, appdata: Path | None = None,
+             layout: studio.LinuxLayout | studio.MacLayout | None = None,
+             secondary: bool = False) -> int:
     text = _ask_link()
     if not text:
         _out("Nothing entered.")
@@ -187,6 +195,8 @@ def cmd_pair(dirs: store.AppDirs, appdata: Path | None = None, layout: studio.Li
             _out(f"That link does not work: {e}.")
             return 1
         cfg = {"host": link.host, "port": link.port, "fp": link.fp, "ips": list(link.ips)}
+        if secondary:
+            cfg["role"] = "secondary"
         try:
             with store.single_instance(dirs):
                 store.recover_interrupted_pair(dirs)
@@ -218,6 +228,8 @@ def cmd_pair(dirs: store.AppDirs, appdata: Path | None = None, layout: studio.Li
         _out("The code is the 6 digits shown by 'sudo spoolwarden pair'. Not paired.")
         return 1
     cfg = {"host": host, "port": port, "fp": fp, "ips": [ip]}  # the IP connected to: fallback if the name stops resolving
+    if secondary:
+        cfg["role"] = "secondary"
     try:
         with store.single_instance(dirs):      # before the code is spent
             store.recover_interrupted_pair(dirs)
@@ -235,15 +247,18 @@ def cmd_pair(dirs: store.AppDirs, appdata: Path | None = None, layout: studio.Li
         return 1
 
 
-def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool, layout: studio.LinuxLayout | None = None) -> int:
+def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool,
+            layout: studio.LinuxLayout | studio.MacLayout | None = None,
+            secondary: bool = False) -> int:
     echo = None if quiet else _out
     dirs.ensure()
     try:
         with store.single_instance(dirs):
-            cfg, token = {}, None
+            cfg, token, role = {}, None, "secondary" if secondary else "auto"
             try:
                 store.recover_interrupted_pair(dirs)
                 cfg = store.load_config(dirs)
+                role = "secondary" if secondary else store.role_of(cfg)
                 token = store.load_token(dirs)
                 if cfg.get("host") and cfg.get("fp") and token:
                     cfg, token = _settle_pair(dirs, cfg, token, echo)
@@ -252,20 +267,27 @@ def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool, layout: stud
                     if echo:
                         echo(f"This PC is not paired; run '{APP} pair'.")
                     return 1
-                folders, why = studio.primary(appdata, cfg, sync.load_state(dirs).get("folder"), layout=layout)
-                others, on = _secondaries(appdata, cfg, folders, layout)
-                orca = _locate_orca(appdata, cfg, warn=lambda m: _warn(dirs, echo, m), layout=layout)
+                folders, why = None, None
+                try:
+                    folders, why = studio.primary(appdata, cfg, sync.load_state(dirs).get("folder"), layout=layout)
+                    others, on = _secondaries(appdata, cfg, folders, layout)
+                    orca = _locate_orca(appdata, cfg, warn=lambda m: _warn(dirs, echo, m), layout=layout)
+                except studio.NotFound as bambu_err:
+                    orca = _locate_orca(appdata, cfg, warn=lambda m: _warn(dirs, echo, m), layout=layout)
+                    if orca is None:
+                        return _fail(dirs, echo, bambu_err.message, "no_studio", cfg, token, role=role)
+                    others, on = [], False
                 c = client.Client(cfg, token, log=lambda m: store.log(dirs, m))
                 outcome = sync.run_once(c, folders, dirs, running=studio.running, now=time.time(), echo=echo,
                                         orca=orca, orca_running=studio.orca_running, others=others,
-                                        secondaries=on, change_reason=why)
+                                        secondaries=on, change_reason=why, role=role)
             except studio.NotFound as e:
-                return _fail(dirs, echo, e.message, "no_studio", cfg, token)
+                return _fail(dirs, echo, e.message, "no_studio", cfg, token, role=role)
             except client.ApiError as e:
                 if e.status == 401:
                     return _fail(dirs, echo, f"the Hub no longer accepts this PC (unpaired?); run '{APP} pair'",
-                                 "refused")
-                return _fail(dirs, echo, str(e), "server", cfg, token)
+                                 "refused", role=role)
+                return _fail(dirs, echo, str(e), "server", cfg, token, role=role)
             except client.Offline as e:  # the PC is away from home, the Hub is off: try next run
                 store.log(dirs, f"warning: {e}")
                 _remember_error(dirs, "offline", str(e))
@@ -273,9 +295,9 @@ def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool, layout: stud
                     echo(f"warning: {e}")
                 return 0
             except client.CertChanged as e:
-                return _fail(dirs, echo, str(e), "certificate")
+                return _fail(dirs, echo, str(e), "certificate", role=role)
             except Exception as e:  # noqa: BLE001 - the scheduled task logs it and retries next run
-                return _fail(dirs, echo, f"{type(e).__name__}: {e}", "crash", cfg, token)
+                return _fail(dirs, echo, f"{type(e).__name__}: {e}", "crash", cfg, token, role=role)
     except store.AlreadyRunning:
         if echo:
             echo("Another sync run is in progress.")
@@ -284,11 +306,30 @@ def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool, layout: stud
     return 0 if outcome in sync.OUTCOMES and outcome != "other_pc" else 1
 
 
+def cmd_watch(dirs: store.AppDirs, appdata: Path | None,
+              layout: studio.LinuxLayout | studio.MacLayout | None = None, *,
+              interval: float = 2.0, once: bool = False, secondary: bool = False,
+              quiet: bool = False, max_ticks: int | None = None) -> int:
+    """Poll until a running slicer exits, then run one sync; single_instance is acquired only inside cmd_run."""
+    dirs.ensure()
+    try:
+        sync.watch_on_close(
+            lambda: cmd_run(dirs, appdata, quiet, layout, secondary=secondary),
+            is_running=lambda: studio.running() or studio.orca_running(),
+            interval=interval,
+            once=once,
+            max_ticks=max_ticks,
+        )
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
 def _secondaries(appdata: Path | None, cfg: dict, primary: studio.StudioFolders,
-                 layout: studio.LinuxLayout | None = None) -> tuple[list[studio.StudioFolders], bool]:
+                 layout: studio.LinuxLayout | studio.MacLayout | None = None) -> tuple[list[studio.StudioFolders], bool]:
     """(this PC's other usable Bambu Studio folders, whether builds are installed there too: config `secondaries`,
     default on; off keeps the single-folder sync)."""
-    return studio.secondaries(appdata, primary, layout=layout), cfg.get("secondaries", True) is not False
+    return studio.secondaries(appdata, primary, layout=layout, pin=cfg), cfg.get("secondaries", True) is not False
 
 
 def _when(t) -> str:
@@ -318,7 +359,8 @@ def _program_files() -> list[Path]:
     return out
 
 
-def _locate_orca(appdata: Path | None, cfg: dict, warn=None, layout: studio.LinuxLayout | None = None):
+def _locate_orca(appdata: Path | None, cfg: dict, warn=None,
+                 layout: studio.LinuxLayout | studio.MacLayout | None = None):
     """This PC's Orca Slicer folders, or None (Bambu Studio only). A stale `orca_user_id` / `orca_install` pin
     (e.g. Orca upgraded into a new folder) is warned about and ignored: discovery runs without it."""
     kw = ({"layout": layout} if layout is not None
@@ -346,7 +388,8 @@ def _remember_error(dirs: store.AppDirs, kind: str, detail: str) -> None:
         sync._save_state(dirs, st)
 
 
-def _fail(dirs: store.AppDirs, echo, msg: str, kind: str, cfg: dict | None = None, token: str | None = None) -> int:
+def _fail(dirs: store.AppDirs, echo, msg: str, kind: str, cfg: dict | None = None, token: str | None = None,
+          role: str = "auto") -> int:
     """Log it, keep it for `status`, and when the Hub can be told, tell it the class: never `msg`, which can hold a
     path with the Bambu Studio user folder. `cfg`/`token` are left out for a failure that means it can't be told."""
     store.log(dirs, f"error: {msg}")
@@ -354,8 +397,8 @@ def _fail(dirs: store.AppDirs, echo, msg: str, kind: str, cfg: dict | None = Non
         echo(f"error: {msg}")
     _remember_error(dirs, kind, msg)
     outcome = sync.REPORTED_FAILURES.get(kind)
-    if outcome and cfg and cfg.get("host") and token:
-        sync.report_failure(dirs, client.Client(cfg, token, timeout=10), outcome)
+    if outcome and role != "secondary" and cfg and cfg.get("host") and token:
+        sync.report_failure(dirs, client.Client(cfg, token, timeout=10), outcome, role=role)
     return 1
 
 
@@ -374,7 +417,8 @@ def _task_registered() -> bool | None:
     return r.returncode == 0
 
 
-def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLayout | None = None) -> int:
+def cmd_status(dirs: store.AppDirs, appdata: Path | None,
+               layout: studio.LinuxLayout | studio.MacLayout | None = None) -> int:
     cfg, err, locked = {}, None, False
     with contextlib.suppress(store.AlreadyRunning):
         with store.single_instance(dirs):           # the read can rewrite the config: under the lock, as a run's is
@@ -400,6 +444,9 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
         _out(f"Fingerprint:     {_grouped(str(cfg.get('fp', '')))}")
         if cfg.get("device"):
             _out(f"Device id:       {cfg['device']}")
+        if cfg.get("role") and cfg["role"] != "auto":
+            desc = "secondary (pull-only)" if cfg["role"] == "secondary" else cfg["role"]
+            _out(f"Role:            {desc}")
         if store.pair_waiting(dirs):
             _out("Pairing:         not confirmed yet; the next run tries it, and if the Hub refuses it the previous "
                  "pairing comes back")
@@ -407,6 +454,7 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
         _out(f"Hub:             not paired; run '{APP} pair'")
     st = sync.load_state(dirs)
     f = None
+    bambu_err = None
     try:
         f, why = studio.primary(appdata, cfg, st.get("folder"), layout=layout)
         pin = " (pinned in the config)" if cfg.get("variant") or cfg.get("user_id") else ""
@@ -416,7 +464,18 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
              f"folder whichever app you open last; to use another, set \"variant\" (and \"user_id\") in "
              f"{dirs.config})" + (f"; changes at the next run because {why}" if why else ""))
     except studio.NotFound as e:
-        _out(f"Bambu Studio:    {e.message}")
+        bambu_err = e.message
+    o = None
+    orca_err = None
+    try:
+        o = _locate_orca(appdata, cfg, warn=lambda m: _out(f"Orca Slicer:     {m}"), layout=layout)
+    except studio.NotFound as e:
+        orca_err = e.message
+    if f is None:
+        if o is not None:
+            _out("Bambu Studio:    not found (syncing Orca Slicer only)")
+        else:
+            _out(f"Bambu Studio:    {bambu_err}")
     if f is not None:
         others, on = _secondaries(appdata, cfg, f, layout)
         if not others:
@@ -424,31 +483,29 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
         elif not on:
             _out("Also installs:   none (secondaries is off in the config; "
                  + "; ".join(f"{o.variant}, user {o.user_id}" for o in others) + " is not synced)")
-        for o in others if on else []:
-            rec = sync.load_state(store.AppDirs(dirs.base / "folders" / studio.folder_key(o)))
+        for sec in others if on else []:
+            rec = sync.load_state(store.AppDirs(dirs.base / "folders" / studio.folder_key(sec)))
             stamp = (rec.get("installed") or {}).get("stamp")
             err = f"; last try failed: {rec['error']}" if rec.get("error") else ""
-            _out(f"Also installs:   {o.variant}, user {o.user_id}: "
+            _out(f"Also installs:   {sec.variant}, user {sec.user_id}: "
                  + (f"build {stamp}" if stamp else "nothing installed yet") + err)
     w = st.get("waiting")
     if isinstance(w, dict) and w.get("since"):
         _out(f"Waiting:         for {w.get('app') or 'Bambu Studio'} to close since {_when(w['since'])} "
              f"({int(w.get('skipped_runs') or 0)} runs skipped)")
-    try:
-        o = _locate_orca(appdata, cfg, warn=lambda m: _out(f"Orca Slicer:     {m}"), layout=layout)
-        if o is None:
-            _out("Orca Slicer:     not found on this PC (only Bambu Studio is synced)")
-        else:
-            pin = " (pinned in the config)" if cfg.get("orca_user_id") == o.user_id else ""
-            _out(f"Orca Slicer:     user {o.user_id}{pin}")
-            _out(f"Orca folder:     {o.user_filament}")
-            _out(f"Orca install:    {o.install or 'not found'}"
-                 + ("" if o.library_opc else " (no OrcaFilamentLibrary.opc: its presets are not uploaded)"))
-            note = (st.get("orca") or {}).get("note")
-            if note:
-                _out(f"Orca Slicer:     {note}")
-    except studio.NotFound as e:
-        _out(f"Orca Slicer:     {e.message}")
+    if orca_err is not None:
+        _out(f"Orca Slicer:     {orca_err}")
+    elif o is None:
+        _out("Orca Slicer:     not found on this PC (only Bambu Studio is synced)")
+    else:
+        pin = " (pinned in the config)" if cfg.get("orca_user_id") == o.user_id else ""
+        _out(f"Orca Slicer:     user {o.user_id}{pin}")
+        _out(f"Orca folder:     {o.user_filament}")
+        _out(f"Orca install:    {o.install or 'not found'}"
+             + ("" if o.library_opc else " (no OrcaFilamentLibrary.opc: its presets are not uploaded)"))
+        note = (st.get("orca") or {}).get("note")
+        if note:
+            _out(f"Orca Slicer:     {note}")
     failed = st.get("last_error") if isinstance(st.get("last_error"), dict) else None
     if failed:
         when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(failed.get("at") or 0)))
@@ -548,6 +605,10 @@ def _linux() -> bool:
     return sys.platform.startswith("linux")
 
 
+def _macos() -> bool:
+    return sys.platform == "darwin"
+
+
 # --- entry ---------------------------------------------------------------------------------------
 
 def _parser() -> argparse.ArgumentParser:
@@ -555,11 +616,18 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"{APP} {__version__}")
     p.add_argument("--appdata", help=argparse.SUPPRESS)
     p.add_argument("--localappdata", help=argparse.SUPPRESS)
-    cmds = "pair,run,status,unpair,apply-updates" + (",install-timer,uninstall-timer" if _linux() else "")
+    cmds = "pair,run,watch,status,unpair,apply-updates" + (",install-timer,uninstall-timer" if _linux() else "")
     sub = p.add_subparsers(dest="cmd", required=True, metavar="{" + cmds + "}")
-    sub.add_parser("pair", help="pair this PC with the Hub (paste the link from 'sudo spoolwarden pair --pc')")
+    pr = sub.add_parser("pair", help="pair this PC with the Hub (paste the link from 'sudo spoolwarden pair --pc')")
+    pr.add_argument("--secondary", action="store_true", help="pair this PC as a secondary (pull-only) PC")
     r = sub.add_parser("run", help="run one sync now (the scheduled task runs this every 10 minutes)")
     r.add_argument("--quiet", action="store_true", help="print nothing (the log still gets every line)")
+    r.add_argument("--secondary", action="store_true", help="run in secondary (pull-only) mode")
+    w = sub.add_parser("watch", help="watch for a running slicer to close, then run one sync")
+    w.add_argument("--interval", type=float, default=2.0, help="poll interval in seconds (default: 2.0)")
+    w.add_argument("--once", action="store_true", help="exit after the first sync triggered by a slicer closing")
+    w.add_argument("--secondary", action="store_true", help="run in secondary (pull-only) mode")
+    w.add_argument("--quiet", action="store_true", help="print nothing (the log still gets every line)")
     sub.add_parser("status", help="show the Hub, the Bambu Studio folders (the one uploaded and the others it "
                                   "installs into) and Orca Slicer's, a wait for a slicer to close, the last run "
                                   "and the installed build")
@@ -585,15 +653,21 @@ def main(argv: list[str] | None = None) -> int:
     if _linux() and not args.appdata and not args.localappdata:
         layout = studio.LinuxLayout.from_env(os.environ)
         appdata, dirs = None, store.AppDirs(store.linux_data_dir(os.environ))
+    elif _macos() and not args.appdata and not args.localappdata:
+        layout = studio.MacLayout.from_env(os.environ)
+        appdata, dirs = None, store.AppDirs(store.mac_data_dir(os.environ))
     else:
         appdata = Path(args.appdata or os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
         local = Path(args.localappdata or os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
         dirs = store.AppDirs(local / APP)
     if args.cmd == "pair":
         dirs.ensure()
-        return cmd_pair(dirs, appdata, layout)
+        return cmd_pair(dirs, appdata, layout, secondary=args.secondary)
     if args.cmd == "run":
-        return cmd_run(dirs, appdata, args.quiet, layout)
+        return cmd_run(dirs, appdata, args.quiet, layout, secondary=args.secondary)
+    if args.cmd == "watch":
+        return cmd_watch(dirs, appdata, layout, interval=args.interval, once=args.once,
+                         secondary=args.secondary, quiet=args.quiet)
     if args.cmd == "status":
         return cmd_status(dirs, appdata, layout)
     if args.cmd == "apply-updates":

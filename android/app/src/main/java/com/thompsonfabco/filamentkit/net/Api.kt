@@ -328,6 +328,10 @@ class Api(
 
     suspend fun alertsConfig(): AlertsConfig = AlertParsing.alerts(call(request("api", "alerts").get()))
 
+    /** Saves the given keys of `types`, `last_spool_only`, `running_low_g`, `storage_warn_percent`, `storage_bad_percent` and `humidity_high_pct`. */
+    suspend fun patchAlerts(changes: JsonObject): AlertsConfig =
+        AlertParsing.alerts(call(request("api", "alerts").patch(changes.toBody())))
+
     /** Stores nothing: the Hub gives this phone one test alert in its next events answer, within 60 seconds. */
     suspend fun sendTestAlert() {
         call(request("api", "alerts", "test").post(ByteArray(0).toRequestBody(null)))

@@ -38,6 +38,8 @@ FILE = "firstrun.xml"
 VERSION = "1"
 MODE = 0o644
 MARKS = ("name", "storage", "features")         # the steps answered once (their ids in the panel's contract)
+DONE_STEPS = ("name", "storage", "features", "reader", "key", "printer", "slots", "phone", "passphrase", "pc", "spool",
+              "backup")
 
 _LOCK = locks.ProcessLock(lambda: config.paths().state / "firstrun.lock")
 
@@ -48,6 +50,7 @@ class FirstRun:
     finished: bool = False
     answered: frozenset = frozenset()
     present: bool = False            # the file exists and was read
+    done: frozenset[str] = frozenset()
 
     @property
     def shows(self) -> bool:
@@ -61,9 +64,10 @@ def _file() -> Path:
 
 def _to_xml(st: FirstRun) -> str:
     marks = "".join(f"<answered what={quoteattr(w)}/>" for w in MARKS if w in st.answered)
+    done_marks = "".join(f"<done what={quoteattr(w)}/>" for w in DONE_STEPS if w in st.done)
     return (f'<?xml version="1.0" encoding="UTF-8"?>\n<firstrun version={quoteattr(VERSION)} '
             f'hidden={quoteattr(str(st.hidden).lower())} finished={quoteattr(str(st.finished).lower())}>'
-            f"{marks}</firstrun>\n")
+            f"{marks}{done_marks}</firstrun>\n")
 
 
 def _from_xml(data: bytes) -> FirstRun:
@@ -72,8 +76,9 @@ def _from_xml(data: bytes) -> FirstRun:
         raise ValueError("not a firstrun file")
     flag = lambda v: str(v).strip().lower() == "true"          # noqa: E731
     marks = frozenset(e.get("what") for e in root.findall("answered") if e.get("what") in MARKS)
+    done = frozenset(e.get("what") for e in root.findall("done") if e.get("what") in DONE_STEPS)
     return FirstRun(hidden=flag(root.get("hidden")), finished=flag(root.get("finished")),
-                    answered=marks, present=True)
+                    answered=marks, present=True, done=done)
 
 
 def _read() -> FirstRun | None:
@@ -131,7 +136,7 @@ def _change(update, create: bool = False) -> bool:
             new = update(now or FirstRun(hidden=False, present=True))
             if new is None or new == now:
                 return now is not None
-            _write(FirstRun(new.hidden, new.finished, new.answered, True))
+            _write(FirstRun(new.hidden, new.finished, new.answered, True, new.done))
             return True
     except OSError as e:
         log.warning("first-run file not written: %s", e)
@@ -157,23 +162,31 @@ def mark(what: str) -> bool:
     """Step `what` (name, storage, features) is answered: saved on the page once, asked by the installer, or Keep."""
     if what not in MARKS:
         raise ValueError(f"unknown step {what!r}")
-    return _change(lambda s: FirstRun(s.hidden, s.finished, s.answered | {what}, True))
+    return _change(lambda s: FirstRun(s.hidden, s.finished, s.answered | {what}, True, s.done))
+
+
+def mark_done(what: str) -> FirstRun:
+    """Step `what` was marked done by the user."""
+    if what not in DONE_STEPS:
+        raise ValueError(f"unknown step {what!r}")
+    _change(lambda s: FirstRun(s.hidden, s.finished, s.answered, True, s.done | {what}))
+    return load()
 
 
 def set_hidden(hidden: bool) -> bool:
     """Hide this list (True) or Show (False)."""
-    return _change(lambda s: FirstRun(bool(hidden), s.finished, s.answered, True))
+    return _change(lambda s: FirstRun(bool(hidden), s.finished, s.answered, True, s.done))
 
 
 def finish() -> bool:
     """Every shown step is done and "All set" was said once: the panel is gone for good."""
-    return _change(lambda s: FirstRun(s.hidden, True, s.answered, True))
+    return _change(lambda s: FirstRun(s.hidden, True, s.answered, True, s.done))
 
 
 def hide_after_restore() -> bool:
     """A Hub restored from a backup starts hidden: the backup's file (if it carried one) is hidden, and a backup from
     before the panel gets a hidden file."""
-    return _change(lambda s: FirstRun(True, s.finished, s.answered, True), create=True)
+    return _change(lambda s: FirstRun(True, s.finished, s.answered, True, s.done), create=True)
 
 
 def _main(argv: list[str]) -> int:

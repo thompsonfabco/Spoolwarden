@@ -95,3 +95,22 @@ def test_the_file_is_in_the_state_folder_with_the_state_mode():
     assert f().parent == config.paths().state
     if os.name != "nt":
         assert (f().stat().st_mode & 0o777) == 0o644
+
+
+def test_mark_done_round_trip_and_invalid_step():
+    firstrun.install_first(["name"])
+    st = firstrun.mark_done("printer")
+    assert st.done == frozenset({"printer"})
+    assert '<done what="printer"/>' in f().read_text()
+
+    # Unknown <done> entries in XML are ignored on load; invalid step raises ValueError.
+    f().write_text('<?xml version="1.0" encoding="UTF-8"?>\n'
+                   '<firstrun version="1" hidden="false" finished="false">'
+                   '<answered what="name"/><done what="printer"/><done what="bogus"/></firstrun>\n')
+    reloaded = firstrun.load()
+    assert reloaded.answered == frozenset({"name"})
+    assert reloaded.done == frozenset({"printer"})
+    assert firstrun.set_hidden(True) and firstrun.load().done == frozenset({"printer"})
+
+    with pytest.raises(ValueError):
+        firstrun.mark_done("bogus")

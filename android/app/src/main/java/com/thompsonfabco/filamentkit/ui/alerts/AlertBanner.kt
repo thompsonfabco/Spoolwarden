@@ -20,6 +20,11 @@ import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.ageWords
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeFormatterBuilder
+import java.time.temporal.ChronoField
 
 /** What the alert banners can do: go to the fix, put one away on this phone, open the Alerts list. */
 internal class AlertBannerActions(
@@ -46,12 +51,14 @@ internal fun AlertTarget.labelRes(): Int = when (this) {
     AlertTarget.AlertsList, is AlertTarget.Spool, is AlertTarget.Record -> R.string.alerts_action_list
 }
 
-/** The sentence and, after it, how long ago it was ("3 min ago"); [nowMillis] is the time ages count from. */
+/** The sentence and, after it, how long ago it was and the local timestamp ("3 min ago · 2026-11-17 11:57"); [nowMillis] is the time ages count from. */
 @Composable
-internal fun AlertItem.sentenceFor(nowMillis: Long): String {
+internal fun AlertItem.sentenceFor(nowMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String {
     val at = event.atMillis ?: return event.text
     val age = ageWords(((nowMillis - at) / MS_PER_SECOND).coerceAtLeast(0))
-    return if (event.text.isBlank()) age else "${event.text} $age"
+    val stamp = Instant.ofEpochMilli(at).atZone(zone).format(STAMP_FORMAT)
+    val time = listOf(age, stamp).joinToString(" · ")
+    return listOfNotNull(event.text.takeIf { it.isNotBlank() }, time).joinToString(" ")
 }
 
 /**
@@ -85,3 +92,14 @@ internal fun AlertBanners(
 }
 
 private const val MS_PER_SECOND = 1000L
+private val STAMP_FORMAT: DateTimeFormatter = DateTimeFormatterBuilder()
+    .appendValue(ChronoField.YEAR, 4)
+    .appendLiteral('-')
+    .appendValue(ChronoField.MONTH_OF_YEAR, 2)
+    .appendLiteral('-')
+    .appendValue(ChronoField.DAY_OF_MONTH, 2)
+    .appendLiteral(' ')
+    .appendValue(ChronoField.HOUR_OF_DAY, 2)
+    .appendLiteral(':')
+    .appendValue(ChronoField.MINUTE_OF_HOUR, 2)
+    .toFormatter()

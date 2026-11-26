@@ -2,7 +2,7 @@
 ranges and the allow-list reach the program; the program decides, request by request, by the caller's address and cookie:
 
   caller                                        may ask
-  on the allow-list (the Hub)                   everything, plus POST /ticket, /voice, /voice/test (each with its proof)
+  on the allow-list (the Hub)                   everything, plus POST /ticket, /voice, /voice/test, /ota/update, /restart (each with its proof) and GET /ota/status
   other home address, no session                GET /, GET /static/*, POST /session
   other home address, with a session            also GET /state, GET /settings, POST /settings, GET /photo
   an address outside those ranges               nothing (the unit drops it first; this is the second line)

@@ -186,12 +186,16 @@ def _wait_for_device(device_id: str | None, expires: float, who: str, cmd: str) 
 
 
 def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, home_assistant: bool = False,
-             text: bool = False, wait: bool = True) -> int:
+             control: bool = False, text: bool = False, wait: bool = True) -> int:
     """`pair`: what the Hub page's pairing dialog shows, in its order (the QR code for a phone, the instruction,
     the pairing code, the certificate fingerprint, the expiry), then waits for the device. `--json` ends after the document."""
     demo.stop()
+    if control and not home_assistant:
+        output.error("--control is only for --home-assistant.")
+        return 2
     cmd = "sudo spoolwarden pair" + (
-        " --slicer-sync" if slicer_sync else " --weigh-station" if weigh_station else " --home-assistant" if home_assistant else ""
+        " --slicer-sync" if slicer_sync else " --weigh-station" if weigh_station else
+        (" --home-assistant --control" if control else " --home-assistant") if home_assistant else ""
     )
     cfg = config.load()                 # unreadable: main() says to run it with sudo
     if "server" not in modules.enabled(cfg):
@@ -203,7 +207,7 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, home_assist
     try:
         pr = pairing.issue(
             device_hint="pc" if slicer_sync else "station" if weigh_station else "home-assistant" if home_assistant else "",
-            role="viewer" if home_assistant else None,
+            role=(pairing.HA_CONTROL_ROLE if control else pairing.VIEWER_ROLE) if home_assistant else None,
             scope="station" if weigh_station else None,
         )
     except pairing.PairingError as e:
@@ -5768,7 +5772,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
         if not base.startswith("https://"):
             raise rs.SetupError("--base must be an https address plus /reader")
         home = None if a.base else rs.home_settings(getattr(a, "printer", None) or "")
-        key_pem, real_key = rs.pubkey(Path(a.ota_pubkey).read_text(encoding="utf-8") if a.ota_pubkey else None)
+        key_pem, real_key = rs.pubkey(Path(a.ota_pubkey).read_text(encoding="utf-8") if a.ota_pubkey else rs.default_ota_pubkey())
         token = Path(a.token_file).read_text(encoding="utf-8").strip() if a.token_file else None
     except rs.UnknownPrinter as e:
         _err_line(str(e))
@@ -5927,7 +5931,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         if not base.startswith("https://"):
             raise rs.SetupError("--base must be an https address plus /reader")
         home = None if a.base else rs.home_settings(getattr(a, "printer", None) or "")
-        key_pem, real_key = rs.pubkey(Path(a.ota_pubkey).read_text(encoding="utf-8") if a.ota_pubkey else None)
+        key_pem, real_key = rs.pubkey(Path(a.ota_pubkey).read_text(encoding="utf-8") if a.ota_pubkey else rs.default_ota_pubkey())
         token = Path(a.token_file).read_text(encoding="utf-8").strip() if a.token_file else None
     except rs.UnknownPrinter as e:
         _err_line(str(e))
@@ -6133,22 +6137,16 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None, yes
     """`tag-reader new-token [--name X]` (root): a new Tag Reader token, printed once (only its sha256 is kept);
     `tag-reader list`: the tokens (id, name, made); `tag-reader revoke <id|name>` (root). The actions keep their old
     names (token, tokens, revoke) in here."""
-    try:
-        from .web import reader  # needs the [web] extra
-    except ImportError as e:
-        _err_line(f"the Tag Reader commands need the kit's [web] packages ({e.name or e} is missing); install them "
-                  "into the kit's Python: <venv>/bin/python -m pip install 'filament-kit[web]' (or re-run the "
-                  "installer, which adds them)")
-        return 1
-    store = reader.TokenStore()
+    from . import reader_tokens
+    store = reader_tokens.TokenStore()
     if action in ("token", "revoke") and not _is_root():
         return output.need_sudo(_sudo_command(f"sudo spoolwarden tag-reader {'new-token' if action == 'token' else action}"))
     try:
         if action == "token":
             tid, tok = store.issue(name)
             _hub_audit(f"reader token {tid} made")
-            output.emit({"ok": True, "id": tid, "name": reader._clean_name(name), "token": tok})
-            output.out(f"New Tag Reader token {tid} ({reader._clean_name(name)}):")
+            output.emit({"ok": True, "id": tid, "name": reader_tokens._clean_name(name), "token": tok})
+            output.out(f"New Tag Reader token {tid} ({reader_tokens._clean_name(name)}):")
             output.out_lines([tok])         # alone on its line, never wrapped
             output.out("Shown only this once. tag-reader flash puts it on the reader for you.")
             return 0
@@ -6179,7 +6177,7 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None, yes
         output.error(f'"{ref}" does not name one Tag Reader token.', "use an ID or a name from:",
                      cmd="sudo spoolwarden tag-reader list")
         return output.USAGE
-    except reader.TokenFileError as e:
+    except reader_tokens.TokenFileError as e:
         _err_line(f"{e}; nothing was changed")
         return 1
     except PermissionError as e:
@@ -7285,6 +7283,8 @@ def _build_parser():
                        help="pair a Weigh Station on another computer: print the link")
     pkind.add_argument("--home-assistant", dest="home_assistant", action="store_true",
                        help="pair Home Assistant (viewer role): print the code and link")
+    pp.add_argument("--control", action="store_true",
+                    help="with --home-assistant, allow printer and slot control (ha-control role)")
     pp.add_argument("--no-wait", action="store_true", help="show the code and end without waiting for the device")
     _add_weigh_station(sub, "weigh-station", alias=False)
     _add_weigh_station(sub, "station", alias=True)
@@ -7671,7 +7671,8 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return cmd_status(client_factory or _default_client, station_pairing=args.station_pairing)
     if args.cmd == "pair":
         return cmd_pair(slicer_sync=args.slicer_sync, weigh_station=args.weigh_station,
-                        home_assistant=args.home_assistant, text=args.text, wait=not args.no_wait)
+                        home_assistant=args.home_assistant, control=args.control,
+                        text=args.text, wait=not args.no_wait)
     if args.cmd == "weigh-station" and args.station_cmd == "pair" and args.local:
         return cmd_station_pair_local()
     if args.cmd == "weigh-station" and args.station_cmd == "flash-display":

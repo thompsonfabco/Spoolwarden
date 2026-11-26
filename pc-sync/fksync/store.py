@@ -20,6 +20,7 @@ from . import statexml
 ENTROPY = b"filament-kit-sync"
 LOG_MAX = 1024 * 1024
 _CRYPTPROTECT_UI_FORBIDDEN = 0x1
+VALID_ROLES = ("auto", "primary", "secondary")
 
 
 class AlreadyRunning(Exception):
@@ -52,6 +53,12 @@ def linux_data_dir(env: Mapping[str, str]) -> Path:
     """The sync's own folder on Linux: $XDG_DATA_HOME/filament-kit-sync, else ~/.local/share/filament-kit-sync."""
     data = env.get("XDG_DATA_HOME")
     return (Path(data) if data else Path(env.get("HOME") or Path.home()) / ".local" / "share") / "filament-kit-sync"
+
+
+def mac_data_dir(env: Mapping[str, str]) -> Path:
+    """The sync's own folder on macOS: ~/Library/Application Support/filament-kit-sync."""
+    home = Path(env.get("HOME") or Path.home())
+    return home / "Library" / "Application Support" / "filament-kit-sync"
 
 
 def _write_atomic(path: Path, data: bytes, mode: int = 0o600) -> None:
@@ -177,6 +184,16 @@ def load_config(dirs: AppDirs) -> dict:
 def save_config(dirs: AppDirs, cfg: dict) -> None:
     """Both forms, XML first: an older Sync that is put back after a rollback still finds its pairing."""
     statexml.write_both(dirs.config, cfg)
+
+
+def role_of(cfg: Mapping) -> str:
+    """Configured sync role ('auto', 'primary', or 'secondary'); defaults to 'auto'."""
+    role = cfg.get("role")
+    if role is None:
+        return "auto"
+    if role not in VALID_ROLES:
+        raise ValueError(f"invalid sync role {role!r}; expected one of {', '.join(VALID_ROLES)}")
+    return role
 
 
 # --- the pairing kept aside while a new one is proven ---------------------------------------------

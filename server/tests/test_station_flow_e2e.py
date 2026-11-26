@@ -67,7 +67,7 @@ def station(monkeypatch):
     with st.lock:
         saved_state, saved_flow = dict(st.state), dict(st.flow)
         st.state.update(tag=None, tag_at=None, scale=None, held=None, held_at=None, photo=None, photo_at=None,
-                        blink_until=0)
+                        photos=[], blink_until=0)
         st.flow.update(step="idle", seq=0, spool=None, filament=None, display=[], message="", at=0.0)
     ser = Ser()
     monkeypatch.setitem(st.panel, "ser", ser)
@@ -100,10 +100,26 @@ def test_new_spool_from_tag_to_spoolman(kit, station):
         panel.refresh(seen, time.time())
         return seen.rows
 
+    def wait_photos(n, secs=5):
+        end = time.time() + secs
+        while len(st.state.get("photos") or []) < n and time.time() < end:
+            time.sleep(0.02)
+        return len(st.state.get("photos") or [])
+
     nfc.on_tag(UID)  # the real threads: lookup runs off the reader thread
     assert wait_step("camera") == "camera", flow.flow
     assert rows()[0] == "New Tag Scanned"
-    panel.on_line(b"P H")
+    panel.on_line(b"P H")  # short press captures a photo and stays in camera
+    assert wait_photos(1) == 1 and flow.flow["step"] == "camera" and rows()[0] == "1 photo"
+    panel.on_line(b"P H")  # second short press accumulates another photo
+    assert wait_photos(2) == 2 and flow.flow["step"] == "camera" and rows()[0] == "2 photos"
+    panel.on_line(b"L H")  # long press sends all photos for recognition
+    assert wait_step("weigh") == "weigh", flow.flow
+    assert rows()[0] == "PETG Black" and flow.flow["filament"]["vendor"] == "OVERTURE"
+    panel.on_line(b"L D")  # long press red rejects the AI match and returns to camera
+    assert flow.flow["step"] == "camera" and st.state["photos"] == [] and flow.flow["filament"] is None
+    assert st.state["tag"] == UID
+    panel.on_line(b"L H")  # long press with no photos captures 1 and recognises
     assert wait_step("weigh") == "weigh", flow.flow
     assert rows()[0] == "PETG Black" and flow.flow["filament"]["vendor"] == "OVERTURE"
     with st.lock:

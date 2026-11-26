@@ -52,6 +52,10 @@ VOICE_TEXTS = {
 }
 
 
+MIN_GRAMS = 20  # an empty pan reads 0; anything under this isn't a spool
+MAX_STATION_PHOTOS = 8
+
+
 def settings_from_env() -> dict:
     return {
         "port": int(os.environ.get("STATION_PORT", "5003")),
@@ -82,6 +86,8 @@ def settings_from_env() -> dict:
         # may take this long. The server's address and token come from the pairing files (server_api).
         "flow_timeout": int(os.environ.get("STATION_FLOW_TIMEOUT", "600")),
         "recognise_timeout": int(os.environ.get("STATION_RECOGNISE_TIMEOUT", "90")),
+        "min_grams": MIN_GRAMS,
+        "auto_ota": True,
     }
 
 
@@ -124,12 +130,10 @@ def clean_voice(body: dict) -> tuple[dict, dict]:
     return values, problems
 
 
-MIN_GRAMS = 20  # an empty pan reads 0; anything under this isn't a spool
-
 lock = threading.Lock()
 state = {"tag": None, "tag_at": None, "scale": None, "scale_at": None, "last": None, "last_at": None,
          "held": None, "held_at": None, "blink_until": 0, "air": None, "air_at": None,
-         "photo": None, "photo_at": None,
+         "photo": None, "photo_at": None, "photos": [],
          "panel_scale": None,  # the panel's last `W` line: {"grams": float, "status": "settled"|"unsettled", "unit": "g"} or None
          "flash_notice": None}  # a sentence the station says after a flash (the panel lost its Wi-Fi set-up), or None
 notice_link = {"ser": None}  # the Wi-Fi panel link that was current when that notice was set (it does not prove the set-up is back)
