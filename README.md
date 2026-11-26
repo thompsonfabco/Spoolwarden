@@ -3,7 +3,7 @@ This project will forever be free - but if you want to give me money, I'll take 
 # Spoolwarden
 
 Spoolwarden keeps track of your 3D printer filament. It runs on a small computer at home, keeps every spool you
-own in [Spoolman](https://github.com/Donkie/Spoolman), and connects those spools to your Bambu Lab printers: add
+own in [Spoolman](https://github.com/Donkie/Spoolman), and connects those spools to your printers: add
 a spool from your phone, load it into a printer slot, and the printer gets the right filament setting while the
 filament it uses comes off that spool. It also builds Slicer presets for every filament you own.
 
@@ -12,9 +12,24 @@ the Features you want and says what each one needs, AI is optional, every Bambu 
 printers work through Moonraker; Prusa printers are planned), the facts about printers live in data files you can correct yourself, and it
 can keep itself up to date. The whole of Spoolwarden is free software (GPL-3.0).
 
-Spoolwarden was called filament-kit until version 0.6.1; the command `filament-kit` still works and says so.
+## Designed so you can be lazy
+
+Spoolwarden has all the automation you could want: A fully-realized installation with all the optional features enabled can read your spool with a camera and use local and/or cloud AI to figure out what it is. After it's identified and you confirm, the manufacturer's suggested temperatures are pulled from the local filament catalog and used to automatically build a filament profile. This profile can then be automatically synced to your slicer via a small client program, and all you're left to do manually is select it from the list. Ready to load a spool into your printer? Simply scan it on the Tag Reader attached to your printer and stick it in an AMS slot - the software will figure out which one and automatically configure it just like a Bambu spool, but with a full inventory system behind it. Plus: Support to take that same spool over to your Klipper-based printer, tap it against a simple USB RFID reader, and get all the same benefits as on your Bambu printer.
 
 ![Spoolwarden architecture showing the Hub, App on Android, Web app, Hub page, Slicer Sync, Home Assistant, Label Reader, Weigh Station, Tag Reader, and Bambu Lab and Klipper printers](docs/images/spoolwarden-architecture.svg)
+
+## Track everything
+
+Use the hub as your one-stop information clearinghouse. You can see camera feeds from your printers all on the same page, regardless of brand. You can see what filaments are currently loaded in each of your printers. The analytics page lets you capture all sorts of interesting information, such as how much filament you've used in the past month, and your spend for that filament. **Nothing** is shared outside of your network. No telemetry; no cloud. Totally local and yours, free, forever.
+
+## Security-minded, without being obnoxious
+
+I've worked a 20-year career in IT and understand that security - even for something like your printer filament inventory - is important for even a home user, and paramount for business. The system has been designed with network security and privacy in mind: From two-way pairing confirmation for devices to HTTPS as the default for all communications, this system is built to help protect your data by default. That said, perhaps you're a home user and aren't worried about others getting on your network. No problem: Many of Spoolwarden's security features are toggleable right from the Hub settings. Turn some off and make your life easier. 
+
+## Business use A-OK
+
+Spoolwarden is always free. Use it in your business - I don't mind. 
+Plus: Are you a print farm owner and you're worried about having several employees access the system? Install the optional Enterprise feature to add in multi-user login support and role-based security. (In testing / not released)
 
 ## What you need
 
