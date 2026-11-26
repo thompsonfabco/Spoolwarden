@@ -21,7 +21,7 @@ VENV="$OPT/venv"
 say() { printf '\n==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 # get.sh deletes its unpacked folder, so telling people to rerun this script would point at nothing
-AGAIN='curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh'
+AGAIN='curl -fsSLO https://github.com/thompsonfabco/Spoolwarden/releases/latest/download/get.sh && sudo bash get.sh'
 usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP] [--restore BACKUP.zip|.enc [--password-file FILE]]" >&2; exit 2; }
 # one host name or address: station.allow never takes a range
 bad_addr() { case "$1" in "" | */* | *"*"* | *" "*) return 0 ;; esac; return 1; }
@@ -503,7 +503,7 @@ if os.environ.get("FK_STATION_PORT"):
 try:
     modules.validate(cfg)
 except modules.ModuleError as e:
-    sys.exit(f"error: {e}\nfix: choose again by running the install command again: curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh")
+    sys.exit(f"error: {e}\nfix: choose again by running the install command again: curl -fsSLO https://github.com/thompsonfabco/Spoolwarden/releases/latest/download/get.sh && sudo bash get.sh")
 config.save(cfg)
 print("Install mode: " + mode)
 '

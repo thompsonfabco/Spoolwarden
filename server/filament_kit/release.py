@@ -30,7 +30,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path, PurePosixPath
 
-REPO = "thompsonfabco/filament-kit"
+REPO = "thompsonfabco/Spoolwarden"
 API = "https://api.github.com"
 # The release public key: ed25519, the raw 32 bytes in base64. Empty until the owner runs
 # `tools/sign_release.py keygen` then `tools/sign_release.py set-pubkey <key>`; nothing verifies without it.

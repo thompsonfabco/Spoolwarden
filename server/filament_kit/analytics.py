@@ -209,9 +209,8 @@ def view(months: int = 12, printer: str | None = None, *, sm: Spoolman | None = 
             b["grams"] += g
             if _is_logged_only(e):
                 b["logged_only_grams"] += g
-            job_name = (e.get("job") or e.get("file") or "").strip()
-            if job_name and (b["_biggest"] is None or g > b["_biggest"][0]):
-                b["_biggest"] = (g, job_name)
+            if b["_biggest"] is None or g > b["_biggest"]:
+                b["_biggest"] = g
 
         is_unfinished = e.get("outcome") in _UNFINISHED
         if is_unfinished:             # an entry without an outcome (before it was kept) is not counted
@@ -236,7 +235,7 @@ def view(months: int = 12, printer: str | None = None, *, sm: Spoolman | None = 
             b["_materials"][mat] = b["_materials"].get(mat, 0.0) + g
 
     months_out: list[dict] = []
-    cur_biggest: tuple[float, str] | None = None
+    cur_biggest: float | None = None
     for k in keys:
         b = buckets[k]
         by_printer = sorted(
@@ -297,9 +296,8 @@ def view(months: int = 12, printer: str | None = None, *, sm: Spoolman | None = 
                                      total=cur["prints"], used=_fmt_weight(cur["unfinished_grams"]))})
 
     if cur_biggest is not None:
-        bg, bname = cur_biggest
         insights.append({"key": "biggest_print",
-                         "text": say("analytics_insight_biggest", job=bname, used=_fmt_weight(bg))})
+                         "text": say("analytics_insight_biggest", used=_fmt_weight(cur_biggest))})
 
     finished_spools = _spools_finished_in_month(cur["month"])
     if finished_spools > 0:

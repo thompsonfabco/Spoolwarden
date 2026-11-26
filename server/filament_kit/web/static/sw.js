@@ -7,7 +7,7 @@ const CACHE = "fk-shell-" + VERSION;
 const BASE = new URL(self.registration.scope).pathname.replace(/\/+$/, "");
 const SHELL = [BASE, ...["app.css", "app.js", "printers.js", "icon.png", "icon-512.png", "manifest-light.webmanifest",
   "manifest-dark.webmanifest", "shared/theme-init.js", "shared/tokens.css", "shared/components.css", "shared/strings.js",
-  "shared/components.js", "shared/alerts.js", "shared/alerts.css", "shared/sprite.svg"].map((f) => BASE + "/" + f)];
+  "shared/components.js", "shared/hls.min.js", "shared/alerts.js", "shared/alerts.css", "shared/sprite.svg"].map((f) => BASE + "/" + f)];
 self.addEventListener("install", (event) => {
   // a file the Hub does not serve (printers.js without the Printers tab) is skipped, not fatal; so is an answer that was
   // redirected (to the sign-in page): it is not the shell

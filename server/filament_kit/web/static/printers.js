@@ -595,10 +595,14 @@ function printersTab() {
       text: job ? t("printer_stop_dialog_body", { job, printer }) : t("printer_stop_dialog_body_nojob", { printer }), cancel: t("printer_stop_keep"), confirm: t("printer_stop") });
     if (go && page === g) cmd("stop", true, button);
   }
+  function destroyHls(g) {
+    if (g && g.hls) { g.hls.destroy(); g.hls = null; }
+  }
   function camera(on) {
     const g = page;
     if (!g) return;
     const kind = g.camKind();
+    destroyHls(g);
     for (const m of g.camBox.querySelectorAll("img, video")) { m.removeAttribute("src"); if (m.load) m.load(); }   // drops the connection: the camera stops
     g.camBox.replaceChildren();
     if (!kind) on = false;
@@ -617,20 +621,35 @@ function printersTab() {
     }
     const v = h("video", { class: "cam", playsInline: true, muted: true, autoplay: true, controls: true, "aria-label": t("printer_camera_alt", { printer: nameOf(g.id) }) });
     v.muted = true;
-    if (!v.canPlayType("application/vnd.apple.mpegurl")) { g.camBox.replaceChildren(h("p", { class: "pcam__text" }, t("printer_camera_no_hls"))); return; }
+    const hlsJs = !!(window.Hls && window.Hls.isSupported());
+    const nativeHls = !hlsJs && !!v.canPlayType("application/vnd.apple.mpegurl");
+    if (!hlsJs && !nativeHls) { g.camBox.replaceChildren(h("p", { class: "pcam__text" }, t("printer_camera_no_hls"))); return; }
     v.addEventListener("playing", up);
     v.addEventListener("error", () => camFail(`${base}/camera/index.m3u8`));
     g.camBox.append(v);
-    v.src = `${base}/camera/index.m3u8`;
+    const src = `${base}/camera/index.m3u8`;
+    if (nativeHls) {
+      v.src = src;
+    } else {
+      const hls = new window.Hls({ enableWorker: false, lowLatencyMode: false, xhrSetup: (xhr) => { xhr.withCredentials = true; } });
+      g.hls = hls;
+      hls.on(window.Hls.Events.ERROR, (_ev, data) => {
+        if (data && data.fatal) { destroyHls(g); camFail(src); }
+      });
+      hls.loadSource(src);
+      hls.attachMedia(v);
+    }
     v.play().catch(() => {});
   }
   // The picture did not come. A request tells too many views (429) from the rest; its body is dropped at once.
   async function camFail(url) {
     const g = page;
     if (!g || !g.camOn) return;
+    destroyHls(g);
     let many = false;
     try { const stop = new AbortController(), r = await fetch(url, { credentials: "same-origin", signal: stop.signal }); many = r.status === 429; stop.abort(); } catch (e) { /* the general text */ }
     if (page !== g || !g.camOn) return;
+    destroyHls(g);
     for (const m of g.camBox.querySelectorAll("img, video")) { m.removeAttribute("src"); if (m.load) m.load(); }
     g.camBox.replaceChildren(h("div", { class: "pcam__text" }, h("p", {}, t(many ? "printer_camera_too_many" : "printer_camera_failed")),
       SW.btn(t("common_try_again"), { action: "try-again", run: () => camera(true) })));

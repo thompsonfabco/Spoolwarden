@@ -977,3 +977,75 @@ const none = [...region.querySelectorAll(".printers-add__step p.muted")].find((e
 return { foundHidden: ul.hidden, noneText: none ? text(none) : null, noneHidden: none ? none.hidden : null };
 """)
     assert page == {"foundHidden": True, "noneText": none_text, "noneHidden": False}, page
+
+
+def test_hls_camera_uses_hls_js_in_chromium(printers_hub, tmp_path):
+    """In Chromium (no native application/vnd.apple.mpegurl, window.Hls.isSupported() === true), HLS live view
+    uses hls.js after fetching the camera ticket and destroys the Hls instance on stop."""
+    url, _ = printers_hub
+    no_hls_text = T("printer_camera_no_hls")
+    page = _drive(url, tmp_path, PRE + UNLOCK + """
+const realFetch = window.fetch.bind(window);
+const events = [];
+const livePayload = {
+  summary: { gcode_state: "IDLE", percent: 0 },
+  state: "connected", family: "bambu", name: "Workshop X1",
+  camera: { kind: "hls" }, controls: { light: true },
+  status: { gcode_state: "IDLE", job: "", percent: 0, layer: 0, total_layers: 0,
+    remaining_min: 0, temps: { nozzle: [{ current: 25, target: 0 }], bed: { current: 25, target: 0 } },
+    ams: [], hms: [], print_error: "", light: "off", notes: [] }
+};
+window.fetch = async (u, init) => {
+  const s = String(u), m = (init && init.method) || "GET";
+  if (/\\/setup\\/api\\/printers\\/[^/]+\\/(live|usage|camera\\/ticket|camera\\/close)/.test(s)) {
+    events.push(m + " " + s.replace(/^.*\\/setup\\/api\\//, ""));
+    if (s.includes("/live")) return Response.json(livePayload);
+    if (s.includes("/usage")) return Response.json({ entries: [] });
+    if (s.includes("/camera/ticket")) return Response.json({ ticket: "t1", expires_in: 60 });
+    if (s.includes("/camera/close")) return Response.json({ closed: true });
+  }
+  return realFetch(u, init);
+};
+const hlsLoaded = typeof window.Hls === "function";
+const hlsSupported = hlsLoaded && window.Hls.isSupported();
+const nativeHls = document.createElement("video").canPlayType("application/vnd.apple.mpegurl");
+const hlsCalls = { opts: null, src: null, attachedToVideo: false, destroyed: 0, withCredentials: false };
+const RealHls = window.Hls;
+window.Hls = class extends RealHls {
+  constructor(opts) {
+    super(opts);
+    hlsCalls.opts = { enableWorker: opts.enableWorker, lowLatencyMode: opts.lowLatencyMode };
+    if (typeof opts.xhrSetup === "function") {
+      const fakeXhr = { withCredentials: false };
+      opts.xhrSetup(fakeXhr);
+      hlsCalls.withCredentials = fakeXhr.withCredentials;
+    }
+  }
+  loadSource(src) { events.push("hls.loadSource"); hlsCalls.src = src; }
+  attachMedia(el) { events.push("hls.attachMedia"); hlsCalls.attachedToVideo = !!(el && el.tagName === "VIDEO"); }
+  destroy() { events.push("hls.destroy"); hlsCalls.destroyed++; super.destroy(); }
+};
+location.hash = "#printers";
+await until(() => rowOf("Workshop X1") && !S.printers_redacted, "the rows");
+const x1 = rowOf("Workshop X1");
+x1.querySelector(".coll__expand").click();
+await until(() => { const b = x1.querySelector(".plive [data-action='camera']"); return b && !b.hidden; }, "camera button");
+const plive = x1.querySelector(".plive");
+$('[data-action="camera"]', plive).click();
+await until(() => hlsCalls.src !== null && hlsCalls.attachedToVideo, "hls.js attached");
+const camBox = $(".plive__cam", plive);
+const videoMounted = !!camBox.querySelector("video.plive__video");
+const noHlsShown = camBox.textContent.includes(""" + repr(no_hls_text) + """);
+$('[data-action="camera"]', plive).click();
+await until(() => hlsCalls.destroyed === 1 && events.includes("POST printers/00M00A000000001/camera/close"), "hls destroyed and session closed");
+return { hlsLoaded, hlsSupported, nativeHls, hlsCalls, videoMounted, noHlsShown, events };
+""")
+    assert page["hlsLoaded"] is True, page
+    assert page["hlsSupported"] is True, page
+    assert page["nativeHls"] in ("", "maybe"), page
+    assert page["videoMounted"] is True and page["noHlsShown"] is False, page
+    assert page["hlsCalls"]["opts"] == {"enableWorker": False, "lowLatencyMode": False}, page
+    assert page["hlsCalls"]["withCredentials"] is True, page
+    assert page["hlsCalls"]["src"].endswith("/setup/api/printers/00M00A000000001/camera/index.m3u8?ticket=t1"), page
+    assert page["hlsCalls"]["attachedToVideo"] is True and page["hlsCalls"]["destroyed"] == 1, page
+    assert page["events"].index("POST printers/00M00A000000001/camera/ticket") < page["events"].index("hls.loadSource"), page

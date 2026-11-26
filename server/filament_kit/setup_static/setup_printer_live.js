@@ -43,7 +43,7 @@ const plHubText = (m) => (typeof hubText === "function" ? hubText(m) : String(m 
 function printerLive(p, ctx = {}) {
   const path = (what) => (ctx.path ? ctx.path(what) : `printers/${enc(p.serial)}/${what}`);
   const call = ctx.api || api;
-  const S = { live: null, usage: null, sig: {}, ctl: "", camOn: false, busy: false, timer: 0, tries: 0, seen: false, wasActive: false,
+  const S = { live: null, usage: null, sig: {}, ctl: "", camOn: false, hls: null, busy: false, timer: 0, tries: 0, seen: false, wasActive: false,
     noLight: false, results: new Map(), undone: new Map() };
   const head = plE("div", "plive__state"), job = plE("div", "plive__job"), bar = SW.progress({ value: 0, name: t("printer_progress_name") });
   const pct = plE("span", "plive__pct mono"), prog = plE("div", "plive__prog", bar, pct), detail = plE("p", "plive__detail muted"), temps = plE("p", "plive__temps mono");
@@ -218,7 +218,11 @@ function printerLive(p, ctx = {}) {
     // keepalive: it still goes when the page is being left; the answer is of no interest
     fetch("/setup/api/" + path("camera/close"), { method: "POST", credentials: "same-origin", keepalive: true, headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
   }
+  function destroyHls() {
+    if (S.hls) { S.hls.destroy(); S.hls = null; }
+  }
   function cameraStop() {
+    destroyHls();
     for (const m of camBox.querySelectorAll("img, video")) { m.removeAttribute("src"); if (m.load) m.load(); }   // drops the connection: the camera stops
     camBox.replaceChildren();
     camBox.hidden = true;
@@ -227,11 +231,13 @@ function printerLive(p, ctx = {}) {
     closeSession();
   }
   function cameraFail(text) {
+    destroyHls();
     camBox.hidden = false;
     camBox.replaceChildren(plE("div", "plive__camtext", plE("p", "", text), SW.btn(t("common_try_again"), { action: "try-again", run: () => cameraStart() })));
   }
   async function cameraStart() {
     const kind = S.live && S.live.camera && S.live.camera.kind, name = p.name || (S.live && S.live.name) || "";
+    destroyHls();
     closeSession();                                          // Try again: the old session goes before a new ticket is asked
     S.camOn = true;
     camBtn.replaceChildren(SW.icon("camera", "icon--s"), t("printer_camera_hide"));
@@ -240,12 +246,26 @@ function printerLive(p, ctx = {}) {
     try {
       if (kind === "hls") {
         const v = hx("video", { class: "plive__video", playsInline: true, muted: true, autoplay: true, controls: true, "aria-label": t("printer_camera_alt", { printer: name }) });
-        if (!v.canPlayType("application/vnd.apple.mpegurl")) { cameraFail(t("printer_camera_no_hls")); return; }
+        const hlsJs = !!(window.Hls && window.Hls.isSupported());
+        const nativeHls = !hlsJs && !!v.canPlayType("application/vnd.apple.mpegurl");
+        if (!hlsJs && !nativeHls) { cameraFail(t("printer_camera_no_hls")); return; }
         const src = await firstAddress("camera/index.m3u8");
         if (!S.camOn) return;
         v.addEventListener("error", () => { if (S.camOn) cameraFail(t("printer_camera_failed")); });
-        v.src = src;                                         // its segments are asked with the session's cookie
-        camBox.replaceChildren(v);
+        if (nativeHls) {
+          v.src = src;                                       // its segments are asked with the session's cookie
+          camBox.replaceChildren(v);
+        } else {
+          const hls = new window.Hls({ enableWorker: false, lowLatencyMode: false, xhrSetup: (xhr) => { xhr.withCredentials = true; } });
+          S.hls = hls;
+          hls.on(window.Hls.Events.ERROR, (_ev, data) => {
+            if (data && data.fatal && S.camOn) { destroyHls(); cameraFail(t("printer_camera_failed")); }
+          });
+          camBox.replaceChildren(v);
+          hls.loadSource(src);
+          hls.attachMedia(v);
+          v.play().catch(() => {});
+        }
         return;
       }
       const src = await firstAddress("camera.mjpeg");

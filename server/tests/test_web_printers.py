@@ -167,8 +167,8 @@ def test_csp_adds_only_media_src_self_with_the_printers_tab(app, env, kit):
     from filament_kit.web import intake_app
     base = intake_app.HEADERS["Content-Security-Policy"]
     csp = signed(app).get("/intake").headers["content-security-policy"]
-    assert "media-src 'self';" in csp and "unsafe" not in csp
-    assert csp.replace(" media-src 'self';", "") == base
+    assert "media-src 'self' blob:;" in csp and "unsafe" not in csp
+    assert csp.replace(" media-src 'self' blob:;", "") == base
     assert "default-src 'none'" in csp and "script-src 'self'" in csp and "frame-ancestors 'none'" in csp
     cfg = config.load()
     cfg["modules"]["printers"] = False
@@ -180,9 +180,12 @@ def test_csp_adds_only_media_src_self_with_the_printers_tab(app, env, kit):
 def test_camera_branches_on_the_kit_kind_in_the_script():
     src = (STATIC / "printers.js").read_text(encoding="utf-8")
     for needle in ('"mjpeg"', '"hls"', 'canPlayType("application/vnd.apple.mpegurl")', "playsInline", "autoplay",
-                   'removeAttribute("src")', ".load()", "camera/index.m3u8"):
+                   'removeAttribute("src")', ".load()", "camera/index.m3u8",
+                   "window.Hls", "window.Hls.isSupported()", "xhr.withCredentials = true",
+                   "hls.loadSource(src)", "hls.attachMedia(v)", "g.hls.destroy()", "window.Hls.Events.ERROR"):
         assert needle in src, needle
     assert "g.camBtn.hidden = !kind" in src      # no kind, no button
+    assert '"shared/hls.min.js"' in (STATIC / "sw.js").read_text(encoding="utf-8")
 
 
 def test_list_carries_the_kit_camera_kind(app):

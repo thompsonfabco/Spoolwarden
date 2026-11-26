@@ -643,3 +643,26 @@ out.digits = !!$(".pairing__digits", dlg());
 return out;
 """)
     assert page["title"] == _T("devices_link_home_assistant") and page["digits"] is True
+
+
+def test_devices_has_single_ellipsis_menu_when_web_enabled(devices_hub, tmp_path):
+    page = _page_drive(devices_hub, tmp_path, DEVICES_PRELUDE + """
+S.passphrase = { ...(S.passphrase || {}), web: "https://kit.example.net/filament" };
+await render();
+out.webEnabled = !!(S && S.passphrase && S.passphrase.web);
+out.pageMenus = $$(".page-head__actions [data-page-menu]").length;
+out.moreButtons = $$('.page-head__actions button[aria-haspopup="menu"]').map((b) => b.dataset.action || null);
+const trigger = $('.page-head__actions [data-action="pair-more"]');
+out.hasPageMenuAttr = !!(trigger && trigger.dataset.pageMenu === "1");
+trigger.click();
+await until(() => $('[data-action="link-ha"]'), "the merged pair-more menu");
+out.items = $$('[role="menu"] [role="menuitem"]').map((el) => text(el));
+return out;
+""")
+    assert page["webEnabled"] is True
+    assert page["pageMenus"] == 1
+    assert page["moreButtons"] == ["pair-more"]
+    assert page["hasPageMenuAttr"] is True
+    assert _T("devices_link_station") in page["items"]
+    assert _T("devices_link_home_assistant") in page["items"]
+    assert _T("start_open_web_app") in page["items"]

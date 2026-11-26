@@ -83,10 +83,12 @@ function devHeader() {
   const phone = SW.btn(SW.t("devices_pair_phone"), { cls: "btn--primary", icon: "plus", action: "pair-phone", run: () => devPair("phone") });
   const sync = SW.btn(SW.t("devices_link_sync"), { action: "link-sync", run: () => devPair("pc") });
   const more = SW.iconBtn("more", SW.t("common_more_actions"), { action: "pair-more" });
+  more.dataset.pageMenu = "1";
   const here = S.modules.some((m) => m.name === "station" && m.on);       // the Weigh Station feature is on
-  SW.menu(more, [{ label: SW.t("devices_link_station"), action: "link-station", run: () => devPair("station") },
+  SW.menu(more, () => [{ label: SW.t("devices_link_station"), action: "link-station", run: () => devPair("station") },
     { label: devT("devices_link_home_assistant"), action: "link-ha", run: () => devPair("home-assistant") },
-    ...(here ? [{ label: SW.t("devices_pair_station_here"), action: "pair-here", run: () => devPairHere() }] : [])],
+    ...(here ? [{ label: SW.t("devices_pair_station_here"), action: "pair-here", run: () => devPairHere() }] : []),
+    ...(S?.passphrase?.web ? [{ separator: true }, hubWebMenuItem()] : [])],
   { label: SW.t("common_more_actions") });
   devMetaEl = h("p", { class: "page-head__meta" });
   devMeta();

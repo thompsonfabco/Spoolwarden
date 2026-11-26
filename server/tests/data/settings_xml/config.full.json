@@ -31,7 +31,7 @@
   "events": {"keep_days": 400},
   "backup": {"keep_days": 14},
   "updates": {"schedule": "weekly", "token_file": "/etc/filament-kit/github_token",
-              "repo": "thompsonfabco/filament-kit", "api": "https://api.github.com"},
+              "repo": "thompsonfabco/Spoolwarden", "api": "https://api.github.com"},
   "setup": {"hosts": ["hub.example.lan"]},
   "slot_service": {"token_file": "/etc/filament-kit/slot_token"},
   "modules": {"server": true, "spoolman": true, "printers": true, "station": false, "ai_intake": true}

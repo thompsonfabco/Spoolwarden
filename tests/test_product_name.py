@@ -85,7 +85,7 @@ def test_the_product_is_spoolwarden_in_every_visible_text():
 
 def test_the_rule_tells_the_product_from_the_command():
     for ok in ("sudo filament-kit update", "run: filament-kit apply", "/etc/filament-kit", "filament-kit-setup.socket",
-               "github.com/thompsonfabco/filament-kit/releases", "`filament-kit backup create`", "filament-kit.apk"):
+               "github.com/thompsonfabco/Spoolwarden/releases", "`filament-kit backup create`", "filament-kit.apk"):
         assert product_name_uses(ok) == [], ok
     for bad in ("Installing filament-kit 1.2", "filament-kit: the saved certificate", "filament-kit is not installed",
                 "removed filament-kit.", "Welcome to filament-kit"):

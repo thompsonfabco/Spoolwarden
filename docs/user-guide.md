@@ -28,7 +28,7 @@ Step by step, with every question and what you see: [Install the Hub](install-se
 Ubuntu computer:
 
 ```
-curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
+curl -fsSLO https://github.com/thompsonfabco/Spoolwarden/releases/latest/download/get.sh && sudo bash get.sh
 ```
 
 Options go after `get.sh` (or after `./install.sh` from an unpacked release): `--mode hub|weigh-station|hub-with-weigh-station`,

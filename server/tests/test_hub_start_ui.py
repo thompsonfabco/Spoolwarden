@@ -66,3 +66,31 @@ out.count = text($(".start__count"));
     assert page2["printerState"] == "done"
     assert page2["printerBtn"] == 0
     assert page2["count"] == page1["afterCount"]
+
+
+def test_completing_last_step_shows_completed_then_hides_card(hub_stub, monkeypatch, tmp_path):
+    assert firstrun.set_hidden(False)
+    monkeypatch.setattr(getting_started, "_printers", lambda: [])
+    open_ids = [s["id"] for s in getting_started.view()["steps"] if s["state"] != "done"]
+    assert open_ids
+    for sid in open_ids[:-1]:
+        firstrun.mark_done(sid)
+    last_id = open_ids[-1]
+
+    page1 = drive(hub_stub, tmp_path, f"""
+await until(() => $(".start__steps .start__step"), "Getting started steps");
+unlock();
+$('[data-action="start-done-{last_id}"]').click();
+await until(() => $(".start--allset"), "All set banner");
+out.allSetText = text($(".start__allset"));
+out.stepsCount = $$(".start__steps").length;
+await until(() => !$(".start"), "Getting started card removed");
+out.cardPresentAfterWait = Boolean($(".start"));
+""")
+
+    assert "Completed!" in page1["allSetText"]
+    assert page1["stepsCount"] == 0
+    assert page1["cardPresentAfterWait"] is False
+
+    page2 = drive(hub_stub, tmp_path, 'out.start = $(".start");')
+    assert page2["start"] is None

@@ -80,7 +80,7 @@ def labels_body(prefix: str, ids: str, size: str, strings_src: str | None, files
             "<div class=labels__sheet></div>"
             "<footer class=labels__chrome><p class=labels__note></p><p class=labels__error role=alert hidden></p>"
             "<button class='btn btn--primary labels__print' type=button></button></footer></main>"
-            + strings_scripts(prefix, strings_src) + f"<script src='{p}/shared/components.js'></script>"
+            + strings_scripts(prefix, strings_src) + f"<script src='{p}/shared/components.js'></script><script src='{p}/shared/hls.min.js'></script>"
             f"<script src='{p}/labels.js'></script></body>")
 
 

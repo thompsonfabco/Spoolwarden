@@ -1646,7 +1646,7 @@
   },
   "printer_camera_alt": "Camera of {printer}",
   "printer_camera_failed": "The camera did not start. Check that the printer is on, LAN mode live view is on, and not too many views are open.",
-  "printer_camera_no_hls": "This browser cannot play this printer's camera. Use Safari on iPhone or Mac.",
+  "printer_camera_no_hls": "This browser cannot play this printer's camera.",
   "printer_camera_starting": "Starting the camera…",
   "printer_camera_too_many": "Too many camera views are open (4 at most). Close one on another phone or tab.",
   "add_card_chip_count": "x{count}",
@@ -3576,7 +3576,7 @@
   "start_state_not_yet": "Not yet",
   "start_show": "Show",
   "start_hide": "Hide this list",
-  "start_all_set": "All set",
+  "start_all_set": "Completed!",
   "start_restore_row": "Moving from another computer? Restore its backup",
   "start_restore_button": "Restore a backup",
   "start_step_name": "Name this Hub",
@@ -4137,7 +4137,7 @@
     "other": "{printer} did the most work this month ({used}, {count} prints)."
   },
   "analytics_insight_unfinished": "{count} of {total} prints did not finish this month ({used}).",
-  "analytics_insight_biggest": "The biggest print this month was {job} ({used}).",
+  "analytics_insight_biggest": "The biggest print this month used {used}.",
   "analytics_insight_finished": {
     "one": "You finished {count} spool this month.",
     "other": "You finished {count} spools this month."

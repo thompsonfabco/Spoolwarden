@@ -168,7 +168,9 @@
 
   function gettingStartedCard(mount, opts) {
     const options = opts || {};
+    const completeDelayMs = typeof options.completeDelayMs === "number" ? options.completeDelayMs : 3000;
     let busy = false;
+    let hideTimer = null;
 
     function notify(data) {
       if (typeof options.onChange === "function") options.onChange(data);
@@ -323,6 +325,10 @@
     }
 
     function paint(data) {
+      if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
       if (!data) {
         mount.replaceChildren();
         return;
@@ -368,7 +374,7 @@
       const doneBanner = allSet
         ? el("div", { class: "start__allset" }, statusTag("ok", t("start_all_set")))
         : null;
-      const list = el("ol", { class: "start__steps" }, ...steps.map((s) => stepRow(s, phoneOpen, errBox)));
+      const list = allSet ? null : el("ol", { class: "start__steps" }, ...steps.map((s) => stepRow(s, phoneOpen, errBox)));
       const card = el(
         "section",
         { class: allSet ? "card start start--allset" : "card start", "aria-label": t("start_title") },
@@ -380,6 +386,12 @@
         allSet ? null : demoRow()
       );
       mount.replaceChildren(card);
+      if (allSet) {
+        hideTimer = setTimeout(() => {
+          hideTimer = null;
+          mount.replaceChildren();
+        }, completeDelayMs);
+      }
     }
 
     async function load() {

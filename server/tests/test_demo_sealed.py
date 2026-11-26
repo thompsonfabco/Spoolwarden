@@ -72,7 +72,7 @@ LEAKS: dict[str, str] = {}
 
 # what the per-printer page routes reach with a real body (the walk's empty bodies stop before they get there), for the
 # two Klipper printers and then the Bambu one: `POST /setup/api/printers/{serial}/test` calls Moonraker's /printer/info
-# (a Bambu printer: a TLS handshake with 192.0.2.40) in `setup_page.py printer_test` (Antigravity's file): it needs a
+# (a Bambu printer: a TLS handshake with 192.0.2.40) in `setup_page.py printer_test`: it needs a
 # 409 "Not in the demo." (`code=demo.NOT_IN_DEMO_CODE`) before `_moonraker_test` and before `tlspin.leaf_fp`. A route
 # listed here is held by `test_firmware_download_and_the_per_printer_routes_with_bodies_stay_inside` and left out of the
 # every-route walk; empty when the stop lands (the walk then covers it).

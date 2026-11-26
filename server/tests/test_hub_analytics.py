@@ -58,7 +58,7 @@ ALL = {
     # sent in the wrong order on purpose: the page keeps its own order
     "insights": [
         {"key": "spools_finished", "text": "You finished 3 spools this month."},
-        {"key": "biggest_print", "text": "The biggest print this month was Benchy (210 g)."},
+        {"key": "biggest_print", "text": "The biggest print this month used 210 g."},
         {"key": "unfinished", "text": "2 of 12 prints did not finish this month (310 g)."},
         {"key": "busiest_printer", "text": "Workshop X1 did the most work this month (1.1 kg, 7 prints)."},
         {"key": "favourite_material", "text": "Your favourite material this month was PLA (1200 g)."},

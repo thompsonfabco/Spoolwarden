@@ -78,11 +78,20 @@ async function presetsDownloadCsv(set, fallback) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 function presetsHeadMore() {
-  if (!hubCanExport("lines")) return null;
+  const canCsv = hubCanExport("lines"), canWeb = !!S?.passphrase?.web;
+  if (!canCsv && !canWeb) return null;
   const more = SW.iconBtn("more", SW.t("common_more_actions_for", { name: SW.t("presets_lines_title") }), { cls: "presets-headmore" });
-  SW.menu(more, () => [{ label: presetsT("presets_download_csv"), icon: "download", action: "download-csv",
-    run: () => needCode(async () => { try { await presetsDownloadCsv("lines", "lines.csv"); } catch (e) { if (e.locked) throw e; SW.toast(presetsT("presets_csv_failed", { reason: hubText(e.message) }), "bad"); } }) }],
-  { label: SW.t("common_actions_for", { name: SW.t("presets_lines_title") }) });
+  more.dataset.pageMenu = "1";
+  SW.menu(more, () => {
+    const items = [];
+    if (hubCanExport("lines")) items.push({ label: presetsT("presets_download_csv"), icon: "download", action: "download-csv",
+      run: () => needCode(async () => { try { await presetsDownloadCsv("lines", "lines.csv"); } catch (e) { if (e.locked) throw e; SW.toast(presetsT("presets_csv_failed", { reason: hubText(e.message) }), "bad"); } }) });
+    if (S?.passphrase?.web) {
+      if (items.length) items.push({ separator: true });
+      items.push(hubWebMenuItem());
+    }
+    return items;
+  }, { label: SW.t("common_actions_for", { name: SW.t("presets_lines_title") }) });
   return more;
 }
 

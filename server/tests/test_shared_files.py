@@ -17,12 +17,12 @@ TYPES = {"tokens.css": "text/css", "theme-init.js": "text/javascript", "strings.
          "sprite.svg": "image/svg+xml"}
 # Today's page headers (the CSP the pages had before ), compared whole
 SETUP_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
-             "connect-src 'self'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'")
+             "connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; form-action 'none'; base-uri 'none'")
 INTAKE_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
               "connect-src 'self'; manifest-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'")
 
 # with the Printers tab the intake CSP also allows media-src (IntakeApp.headers)
-INTAKE_CSP_PRINTERS = INTAKE_CSP.replace("connect-src 'self';", "connect-src 'self'; media-src 'self';")
+INTAKE_CSP_PRINTERS = INTAKE_CSP.replace("connect-src 'self';", "connect-src 'self'; media-src 'self' blob:;")
 
 
 def expected():

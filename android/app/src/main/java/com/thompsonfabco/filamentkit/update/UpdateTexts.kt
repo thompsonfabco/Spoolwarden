@@ -28,7 +28,7 @@ enum class UpdateFailure(@StringRes val text: Int) {
 
 /** Texts of the Home update banner (until its screen step) and of a failed install. */
 object UpdateTexts {
-    const val REFUSED_GUIDE_URL = "https://github.com/thompsonfabco/filament-kit/blob/main/docs/install-android-app.md#update-refused"
+    const val REFUSED_GUIDE_URL = "https://github.com/thompsonfabco/Spoolwarden/blob/main/docs/install-android-app.md#update-refused"
 
     /** The banner is showing the refusal of a differently signed update. */
     fun refused(ui: UpdateUi): Boolean = ui.failure == UpdateFailure.Signature

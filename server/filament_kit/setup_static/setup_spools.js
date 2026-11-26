@@ -233,12 +233,14 @@ function spHeader() {
   const csv = [hubCanExport("spoolman-spools") ? spCsvItem("spoolman-spools", "spools_csv_spools") : null,
     hubCanExport("spoolman-filaments") ? spCsvItem("spoolman-filaments", "spools_csv_filaments") : null].filter(Boolean);
   const more = SW.iconBtn("more", tx("spools_more_actions"), { cls: "spools-more" });
+  more.dataset.pageMenu = "1";
   SW.menu(more, () => [
     ...(csv.length ? [{ heading: tx("spools_download_csv") }, ...csv, { separator: true }] : []),
     { label: SW.t("csv_import_menu"), icon: "upload", action: "import-csv",
       run: () => needCode(() => window.SW_CSV_IMPORT && window.SW_CSV_IMPORT({ kind: "spools", opener: more, onDone: () => spLoad() })) },
+    ...(S?.passphrase?.web ? [{ separator: true }, hubWebMenuItem()] : []),
   ], { label: tx("spools_more_actions") });
-  meta.append(more);
+  pageHead(null, spX("div", { class: "page-head__actions" }, more));
   return meta;
 }
 // ----- the selection: the checkboxes, the bar with "<n> selected", Print labels and Clear selection; Shift+click selects a range, Escape clears -----

@@ -166,11 +166,20 @@ function recSizePicker() {
   return field;
 }
 function recListMore() {
-  if (!hubCanExport("recent")) return null;
+  const canCsv = hubCanExport("recent"), canWeb = !!S?.passphrase?.web;
+  if (!canCsv && !canWeb) return null;
   const more = SW.iconBtn("more", SW.t("common_more_actions_for", { name: SW.t("nav_recently_added") }), { cls: "recent-listmore" });
-  SW.menu(more, () => [{ label: recT("recent_download_csv"), icon: "download", action: "download-csv",
-    run: () => needCode(async () => { try { await recDownloadCsv("recent", "recent.csv"); } catch (e) { if (e.locked) throw e; SW.toast(recT("recent_csv_failed", { reason: hubText(e.message) }), "bad"); } }) }],
-  { label: SW.t("common_actions_for", { name: SW.t("nav_recently_added") }) });
+  more.dataset.pageMenu = "1";
+  SW.menu(more, () => {
+    const items = [];
+    if (hubCanExport("recent")) items.push({ label: recT("recent_download_csv"), icon: "download", action: "download-csv",
+      run: () => needCode(async () => { try { await recDownloadCsv("recent", "recent.csv"); } catch (e) { if (e.locked) throw e; SW.toast(recT("recent_csv_failed", { reason: hubText(e.message) }), "bad"); } }) });
+    if (S?.passphrase?.web) {
+      if (items.length) items.push({ separator: true });
+      items.push(hubWebMenuItem());
+    }
+    return items;
+  }, { label: SW.t("common_actions_for", { name: SW.t("nav_recently_added") }) });
   return more;
 }
 
@@ -199,7 +208,9 @@ function listPage(body, d, page) {
   const settings = h("a", { class: "btn btn--ghost", href: "#settings/label-reader" }, SW.t("recent_meta_change"));
   const meta = h("p", { class: "page-head__meta" },
     h("span", {}, d.keep ? SW.t("recent_meta_kept", { count: d.keep, size: recSize(d.photo_bytes) }) : SW.t("recent_keep_none")), settings,
-    h("span", {}, SW.t("common_label_reader"), " ", SW.status(d.ai ? "on" : "off", { small: true })), corrMeta(), recListMore());
+    h("span", {}, SW.t("common_label_reader"), " ", SW.status(d.ai ? "on" : "off", { small: true })), corrMeta());
+  const more = recListMore();
+  pageHead(null, more ? h("div", { class: "page-head__actions" }, more) : null);
   const filter = conf && all.length ? SW.segmented({ legend: SW.t("recent_col_filament"), legendSr: true, name: "recent-filter", value: recentFilter,
     options: [{ value: "all", label: SW.t("recent_filter_all", { count: all.length }) }, { value: "check", label: SW.t("recent_filter_check", { count: check }) }] }) : null;
   const selCount = h("span", { class: "spools-selcount recent-selcount" });

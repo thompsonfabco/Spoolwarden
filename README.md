@@ -29,13 +29,13 @@ Spoolwarden was called filament-kit until version 0.6.1; the command `filament-k
 On the Ubuntu computer, open a Terminal, paste this line and press Enter:
 
 ```bash
-curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
+curl -fsSLO https://github.com/thompsonfabco/Spoolwarden/releases/latest/download/get.sh && sudo bash get.sh
 ```
 
 If it says `curl` is not found, use this line instead:
 
 ```bash
-wget -q https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
+wget -q https://github.com/thompsonfabco/Spoolwarden/releases/latest/download/get.sh && sudo bash get.sh
 ```
 
 It downloads the installer (`get.sh`) and runs it. The installer fetches the newest release, checks its

@@ -71,7 +71,7 @@ def grant_web_read(path) -> None:
 
 
 # The one install line (README). It also repairs an install: get.sh fetches the release, unlike an ./install.sh it deleted.
-GET_COMMAND = "curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh"
+GET_COMMAND = "curl -fsSLO https://github.com/thompsonfabco/Spoolwarden/releases/latest/download/get.sh && sudo bash get.sh"
 
 DEFAULTS: dict = {
     "server_name": socket.gethostname(),

@@ -54,7 +54,7 @@
   <appearance theme="console"/>
   <events keep-days="400"/>
   <backup keep-days="14"/>
-  <updates schedule="weekly" token-file="/etc/filament-kit/github_token" repo="thompsonfabco/filament-kit" api="https://api.github.com"/>
+  <updates schedule="weekly" token-file="/etc/filament-kit/github_token" repo="thompsonfabco/Spoolwarden" api="https://api.github.com"/>
   <setup>
     <hosts as="list">
       <item>hub.example.lan</item>

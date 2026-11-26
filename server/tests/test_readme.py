@@ -26,7 +26,7 @@ def test_readme_opens_with_the_goal_then_the_one_command_install():
     assert "## What you need" in text[:install]
     # download-then-run, not `curl | sudo bash`: piped into sudo, the installer hangs at apt (no controlling tty)
     section = text[install:text.index("\n## ", install + 1)]
-    assert "curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh" \
+    assert "curl -fsSLO https://github.com/thompsonfabco/Spoolwarden/releases/latest/download/get.sh && sudo bash get.sh" \
         in section
     assert "| sudo bash" not in section
 
@@ -117,8 +117,11 @@ PUBLIC_DOCS = ["README.md", "THIRD-PARTY.md", "reader/README.md"] + sorted(
     p.relative_to(ROOT).as_posix() for p in [*(ROOT / "docs").rglob("*.md"), *(ROOT / "release-notes").glob("*.md")])
 # the repository paths: filament-kit (README, get.sh), the filament-library repo that release.yml builds from, the app's
 # package name, and the owner's support link: the one allowed mention of the owner's account
-ALLOWED_REPO_PATHS = ("github.com/thompsonfabco/filament-kit", "-R thompsonfabco/filament-kit",
-                      "thompsonfabco/filament-kit", "github.com/thompsonfabco/filament-library",
+ALLOWED_REPO_PATHS = ("github.com/thompsonfabco/Spoolwarden", "-R thompsonfabco/Spoolwarden",
+                      "thompsonfabco/Spoolwarden", "github.com/thompsonfabco/filament-kit-hardware",
+                      "thompsonfabco/filament-kit-hardware", "github.com/thompsonfabco/filament-kit",
+                      "-R thompsonfabco/filament-kit", "thompsonfabco/filament-kit",
+                      "github.com/thompsonfabco/filament-library",
                       "thompsonfabco/filament-library", "com.thompsonfabco.filamentkit", "com/thompsonfabco/filamentkit",
                       "ko-fi.com/thompsonfabco",
                       # the reader's repository, from the constant (no owner value typed here)

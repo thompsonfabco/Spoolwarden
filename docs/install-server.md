@@ -28,13 +28,13 @@ guest network.
 2. Copy this line, paste it into the Terminal (Ctrl+Shift+V) and press Enter:
 
    ```bash
-   curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
+   curl -fsSLO https://github.com/thompsonfabco/Spoolwarden/releases/latest/download/get.sh && sudo bash get.sh
    ```
 
    If it says `curl` is not found, use this line instead:
 
    ```bash
-   wget -q https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
+   wget -q https://github.com/thompsonfabco/Spoolwarden/releases/latest/download/get.sh && sudo bash get.sh
    ```
 
 3. Type your password when asked and press Enter. Nothing shows while you type. That is normal.
@@ -196,7 +196,7 @@ Giving `--mode`, `--modules`, `--set` or `--hub` also skips the Guided Setup que
 For example:
 
 ```bash
-curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh --mode hub-with-weigh-station
+curl -fsSLO https://github.com/thompsonfabco/Spoolwarden/releases/latest/download/get.sh && sudo bash get.sh --mode hub-with-weigh-station
 ```
 
 ## What you see at the end

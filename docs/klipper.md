@@ -114,7 +114,7 @@ The Hub talks to Moonraker without installing anything on the printer. The Klipp
 `sudo spoolwarden klipper add-on` prints the commands to run on the printer (as its normal user, not root). They
 fetch the add-on of the same version as your Hub, and check it before anything runs:
 
-    curl -fsSLo fk-printer-pack.tar.gz https://github.com/thompsonfabco/filament-kit/releases/download/v<version>/fk-printer-pack.tar.gz
+    curl -fsSLo fk-printer-pack.tar.gz https://github.com/thompsonfabco/Spoolwarden/releases/download/v<version>/fk-printer-pack.tar.gz
     echo "<sha256>  fk-printer-pack.tar.gz" | sha256sum -c - && tar xzf fk-printer-pack.tar.gz && sh fk-printer-pack/fk-printer-pack.sh install
 
 The checksum comes from the release's signed checksum list, which the Hub verifies first. That's the same check

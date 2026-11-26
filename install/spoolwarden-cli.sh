@@ -24,7 +24,7 @@ kit_installing() {
     pgrep -f '(^|/)install\.sh' >/dev/null 2>&1
 }
 if [ -d "$KIT_OPT" ] && [ ! -f "$KIT_OPT/.fk-installed" ] && ! kit_installing; then
-    repair='curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh'
+    repair='curl -fsSLO https://github.com/thompsonfabco/Spoolwarden/releases/latest/download/get.sh && sudo bash get.sh'
     # the state as the program reads it: the kit's own Python, through statexml.read as updates.py does, so a
     # state.json that an older release changed wins; the state.json of an earlier release when that cannot
     earlier=""; xml_read=0

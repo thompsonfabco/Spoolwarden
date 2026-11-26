@@ -56,7 +56,7 @@ try:
 except ImportError:  # Windows dev PCs: no cross-process lock (the service only runs on Linux)
     fcntl = None
 
-DEFAULT_LIBRARY_URL = "https://github.com/thompsonfabco/filament-kit/releases/latest/download/library.tar.gz"
+DEFAULT_LIBRARY_URL = "https://github.com/thompsonfabco/Spoolwarden/releases/latest/download/library.tar.gz"
 BUNDLED = Path(__file__).parent / "library_data"   # schema + an empty index; the entries are downloaded
 SCHEMA_VERSION = 1
 

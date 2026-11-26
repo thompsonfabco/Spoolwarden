@@ -2033,7 +2033,7 @@
     <!-- 1=printer -->
     <string name="printer_camera_alt">Camera of %1$s</string>
     <string name="printer_camera_failed">The camera did not start. Check that the printer is on, LAN mode live view is on, and not too many views are open.</string>
-    <string name="printer_camera_no_hls">This browser cannot play this printer\'s camera. Use Safari on iPhone or Mac.</string>
+    <string name="printer_camera_no_hls">This browser cannot play this printer\'s camera.</string>
     <string name="printer_camera_starting">Starting the camera…</string>
     <string name="printer_camera_too_many">Too many camera views are open (4 at most). Close one on another phone or tab.</string>
     <!-- 1=count -->
@@ -4579,7 +4579,7 @@
     <string name="start_state_not_yet">Not yet</string>
     <string name="start_show">Show</string>
     <string name="start_hide">Hide this list</string>
-    <string name="start_all_set">All set</string>
+    <string name="start_all_set">Completed!</string>
     <string name="start_restore_row">Moving from another computer? Restore its backup</string>
     <string name="start_restore_button">Restore a backup</string>
     <string name="start_step_name">Name this Hub</string>
@@ -5274,8 +5274,8 @@
     </plurals>
     <!-- 1=count 2=total 3=used -->
     <string name="analytics_insight_unfinished">%1$d of %2$s prints did not finish this month (%3$s).</string>
-    <!-- 1=job 2=used -->
-    <string name="analytics_insight_biggest">The biggest print this month was %1$s (%2$s).</string>
+    <!-- 1=used -->
+    <string name="analytics_insight_biggest">The biggest print this month used %1$s.</string>
     <!-- 1=count -->
     <plurals name="analytics_insight_finished">
         <item quantity="one">You finished %1$d spool this month.</item>

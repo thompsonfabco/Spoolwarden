@@ -436,17 +436,17 @@ class IntakeApp:
             # "<Page title> · <Hub name>")
             + body + ((pages.strings_scripts(self.base, strings_src)       # English first, then the language in use
                        + f"<script src='{b}/shared/components.js'></script>"
-                       + ("" if not self.printers else f"<script src='{b}/printers.js'></script>")
+                       + ("" if not self.printers else f"<script src='{b}/shared/hls.min.js'></script><script src='{b}/printers.js'></script>")
                        + f"<script src='{b}/app.js'></script>") if app else ""),
             status_code=status, headers=self.headers())
 
     def headers(self) -> dict:
-        """The page headers. With the Printers tab the CSP also allows `media-src 'self'` (the HLS camera in a
-        <video>); without it the CSP is exactly the intake app's."""
+        """The page headers. With the Printers tab the CSP also allows `media-src 'self' blob:;` (the HLS camera in a
+        <video> via MediaSource); without it the CSP is exactly the intake app's."""
         h = dict(HEADERS)
         if self.printers:
             h["Content-Security-Policy"] = h["Content-Security-Policy"].replace(
-                "connect-src 'self';", "connect-src 'self'; media-src 'self';")
+                "connect-src 'self';", "connect-src 'self'; media-src 'self' blob:;")
         return h
 
     def _hub_page(self, request: Request) -> str:

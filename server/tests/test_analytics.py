@@ -286,7 +286,7 @@ def test_analytics_view_full_aggregation_insights_and_notes(monkeypatch):
     assert "PA6 (1.21 kg)" in insight_map["favourite_material"]
     assert "SV08 did the most work this month" in insight_map["busiest_printer"]
     assert "2 of 4 prints did not finish this month (38 g)." == insight_map["unfinished"]
-    assert "klipper_part.gcode (1.00 kg)" in insight_map["biggest_print"]
+    assert "The biggest print this month used 1.00 kg." == insight_map["biggest_print"]
     assert "You finished 1 spool this month." == insight_map["spools_finished"]
 
     assert "Includes 38 g the Hub logged but took off no spool." in res["notes"]

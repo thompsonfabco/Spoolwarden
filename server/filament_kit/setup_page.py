@@ -84,7 +84,7 @@ SHELL_SCRIPTS = (
 )
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
-                               "connect-src 'self'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'",
+                               "connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; form-action 'none'; base-uri 'none'",
     "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff"}
 HOME_ONLY = "the setup page only answers the home network"
@@ -542,7 +542,7 @@ class SetupPage:
             f"<meta name=theme-color content='{colours['light'][0]}' media='(prefers-color-scheme: light)'>"
             f"<meta name=theme-color content='{colours['dark'][0]}' media='(prefers-color-scheme: dark)'>"
             "<script src='/setup/shared/theme-init.js'></script><script defer src='/setup/shared/strings.js'></script>"
-            "<script defer src='/setup/shared/components.js'></script><script defer src='/setup/shared/components-lock.js'></script>"
+            "<script defer src='/setup/shared/components.js'></script><script defer src='/setup/shared/hls.min.js'></script><script defer src='/setup/shared/components-lock.js'></script>"
             "<script defer src='/setup/shared/components-jobs.js'></script><script defer src='/setup/shared/alerts.js'></script>"
             # the shell turns the title into "<Page title> · <Hub name>"; the Hub name is all it needs from here
             f"<title>{name}</title><link rel=stylesheet href='/setup/shared/tokens.css'>"

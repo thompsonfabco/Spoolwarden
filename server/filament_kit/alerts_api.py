@@ -172,7 +172,7 @@ MESSAGES = {
     "analytics_insight_busiest": {"one": "{printer} did the most work this month ({used}, {count} print).",
                                   "other": "{printer} did the most work this month ({used}, {count} prints)."},
     "analytics_insight_unfinished": "{count} of {total} prints did not finish this month ({used}).",
-    "analytics_insight_biggest": "The biggest print this month was {job} ({used}).",
+    "analytics_insight_biggest": "The biggest print this month used {used}.",
     "analytics_insight_finished": {"one": "You finished {count} spool this month.",
                                    "other": "You finished {count} spools this month."},
     "analytics_note_logged": "Includes {grams} g the Hub logged but took off no spool.",
