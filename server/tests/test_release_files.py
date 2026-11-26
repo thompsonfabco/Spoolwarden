@@ -162,7 +162,7 @@ def test_task_runs_every_ten_minutes():
 
 
 def test_server_and_pc_sync_versions_match():
-    assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.6.10"
+    assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.6.11"
     # both wheels read __version__: one number, typed once
     pc_sync = _read("pc-sync/pyproject.toml")
     assert not re.search(r'^version = ', pc_sync.split("[project.optional-dependencies]")[0], re.M)
