@@ -14,6 +14,8 @@ can keep itself up to date. The whole of Spoolwarden is free software (GPL-3.0).
 
 Spoolwarden was called filament-kit until version 0.6.1; the command `filament-kit` still works and says so.
 
+![Spoolwarden architecture showing the Hub, App on Android, Web app, Hub page, Slicer Sync, Home Assistant, Label Reader, Weigh Station, Tag Reader, and Bambu Lab and Klipper printers](docs/images/spoolwarden-architecture.svg)
+
 ## What you need
 
 - A computer running **Ubuntu 24.04 or newer** on your home network that stays on (an old laptop or a mini PC).
