@@ -1,4 +1,4 @@
-If you enjoy what I do, consider supporting me! Every little bit means the world! https://ko-fi.com/thompsonfabco
+This project will forever be free - but if you want to give me money, I'll take it. https://ko-fi.com/thompsonfabco
 
 # Spoolwarden printer pack (Klipper)
 
