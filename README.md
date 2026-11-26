@@ -14,7 +14,9 @@ can keep itself up to date. The whole of Spoolwarden is free software (GPL-3.0).
 
 ## Designed so you can be lazy
 
-Spoolwarden has all the automation you could want: A fully-realized installation with all the optional features enabled can read your spool with a camera and use local and/or cloud AI to figure out what it is. After it's identified and you confirm, the manufacturer's suggested temperatures are pulled from the local filament catalog and used to automatically build a filament profile. This profile can then be automatically synced to your slicer via a small client program, and all you're left to do manually is select it from the list. Ready to load a spool into your printer? Simply scan it on the Tag Reader attached to your printer and stick it in an AMS slot - the software will figure out which one and automatically configure it just like a Bambu spool, but with a full inventory system behind it. Plus: Support to take that same spool over to your Klipper-based printer, tap it against a simple USB RFID reader, and get all the same benefits as on your Bambu printer.
+Spoolwarden has all the automation you could want: A fully-realized installation with all the optional features enabled can read your spool with a camera and use local and/or cloud AI to figure out what it is. After it's identified and you confirm, the manufacturer's suggested temperatures are pulled from the local filament catalog and used to automatically build a filament profile. This profile can then be automatically synced to your slicer via a small client program, and all you're left to do manually is select it from the list. 
+
+Ready to load a spool into your printer? Simply scan it on the Tag Reader attached to your printer and stick it in an AMS slot - the software will figure out which one and automatically configure it just like a Bambu spool, but with a full inventory system behind it. Plus: Support to take that same spool over to your Klipper-based printer, tap it against a simple USB RFID reader, and get all the same benefits as on your Bambu printer.
 
 ![Spoolwarden architecture showing the Hub, App on Android, Web app, Hub page, Slicer Sync, Home Assistant, Label Reader, Weigh Station, Tag Reader, and Bambu Lab and Klipper printers](docs/images/spoolwarden-architecture.svg)
 
@@ -28,7 +30,8 @@ I've worked a 20-year career in IT and understand that security - even for somet
 
 ## Business use A-OK
 
-Spoolwarden is always free. Use it in your business - I don't mind. 
+Spoolwarden is always free. Use it in your business - I don't mind.
+
 Plus: Are you a print farm owner and you're worried about having several employees access the system? Install the optional Enterprise feature to add in multi-user login support and role-based security. (In testing / not released)
 
 ## What you need
