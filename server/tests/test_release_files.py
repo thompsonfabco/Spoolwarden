@@ -77,7 +77,9 @@ def test_release_workflow_pins_every_action_by_commit():
 def test_pc_sync_workflow():
     text = _read(".github/workflows/pc-sync.yml")
     assert "windows-2022" in text
-    assert "pyinstaller==6.11.1" in text
+    assert "--require-hashes" in text
+    assert "-r tools/release-sync-requirements.txt" in text
+    assert "-r tools/release-sync-linux-requirements.txt" in text
     assert "pc-sync/**" in text
 
 
@@ -162,7 +164,7 @@ def test_task_runs_every_ten_minutes():
 
 
 def test_server_and_pc_sync_versions_match():
-    assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.6.11"
+    assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.6.12"
     # both wheels read __version__: one number, typed once
     pc_sync = _read("pc-sync/pyproject.toml")
     assert not re.search(r'^version = ', pc_sync.split("[project.optional-dependencies]")[0], re.M)
@@ -1285,7 +1287,7 @@ def test_install_restore_prints_once_only_rename_notice_and_uses_features_wordin
 
 def test_android_workflow_checks_nonzero_test_count_and_uploads_results():
     wf = (ROOT / ".github" / "workflows" / "android.yml").read_text(encoding="utf-8")
-    assert "- run: ./gradlew testDebugUnitTest assembleDebug --no-build-cache\n" in wf
+    assert "- run: timeout 25m ./gradlew --no-daemon testDebugUnitTest assembleDebug --no-build-cache\n" in wf
     assert "app/build/test-results/**/*.xml" in wf
     assert "total <= 0" in wf
     assert "uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in wf
