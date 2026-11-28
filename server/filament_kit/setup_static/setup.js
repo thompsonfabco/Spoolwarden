@@ -436,12 +436,7 @@ function paintEnterpriseUser() {
     h("span", { class: "ent__user-name", textContent: SW.t("ent_user_badge", { user: label }) }),
     SW.btn(SW.t("ent_sign_out"), { cls: "btn--ghost", run: async () => {
       try {
-        const r = await fetch("/auth/logout", { method: "POST", credentials: "same-origin" });
-        if (!r.ok) {
-          let msg = `HTTP ${r.status}`;
-          try { const d = await r.json(); if (d && d.error) msg = d.error; } catch {}
-          throw new Error(msg);
-        }
+        await api("auth/logout", {});
         SW.toast(SW.t("ent_signed_out"));
         await refresh();
       } catch (e) {

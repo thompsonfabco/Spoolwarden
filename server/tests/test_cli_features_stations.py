@@ -36,12 +36,12 @@ def flat(text: str) -> str:
 def test_every_feature_has_one_key_and_the_titles_are_the_hub_pages():
     assert list(cli._FEATURE_KEYS) == ["spoolman", "hub", "label-reader", "label-reader-local", "printers", "klipper",
                                        "presets", "catalog", "backups", "weigh-station", "web", "remote", "orders",
-                                       "updates"]
+                                       "updates", "enterprise"]
     assert sorted(cli._FEATURE_KEYS.values()) == sorted(modules.MODULES)             # each module has exactly one key
     assert [modules.MODULES[old].title for old in cli._FEATURE_KEYS.values()] == [
         "Spoolman", "Hub service", "Label Reader: Cloud (Claude)", "Label Reader: On this Hub", "Bambu Lab printers",
         "Klipper printers", "Slicer presets", "Filament Catalog", "Nightly backup", "Weigh Station", "Web access",
-        "Remote access", "Order history", "Automatic updates"]
+        "Remote access", "Order history", "Automatic updates", "Enterprise"]
 
 
 def test_a_key_the_old_name_or_the_title_names_the_same_feature(applied, capsys):

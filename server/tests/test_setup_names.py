@@ -17,7 +17,7 @@ TITLES = {
     "local_intake": "Label Reader: On this Hub", "printers": "Bambu Lab printers", "klipper": "Klipper printers",
     "presets": "Slicer presets", "library": "Filament Catalog", "backup": "Nightly backup",
     "station": "Weigh Station", "web": "Web access", "remote": "Remote access", "orders": "Order history",
-    "updates": "Automatic updates",
+    "updates": "Automatic updates", "enterprise": "Enterprise",
 }
 
 

@@ -43,7 +43,7 @@ def test_features_lists_the_setup_and_every_feature_with_its_key_state_and_needs
     lines = out.splitlines()
     assert lines[0] == "Setup: Hub" and lines[1] == ""
     assert lines[2].split() == ["FEATURE", "KEY", "STATE", "NEEDS"]
-    cells = [re.split(r"\s{2,}", ln.strip()) for ln in lines[3:17]]
+    cells = [re.split(r"\s{2,}", ln.strip()) for ln in lines[3:18]]
     rows = {c[0]: c for c in cells}
     assert rows["Spoolman"][:3] == ["Spoolman", "spoolman", "● on"]
     assert rows["Hub service"] == ["Hub service", "hub", "● on", "Spoolman"]

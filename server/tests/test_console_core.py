@@ -1012,13 +1012,14 @@ def test_every_tab_the_shell_lists_has_its_view():
     # the catalogue; the old addresses #modules and #intake lead to their new names
     assert re.findall(r"^  (\w+): \[", block, re.M) == [
         "overview", "printers", "spools", "analytics", "recent", "devices",
-        "presets", "features", "settings", "flash", "updates", "logs",
+        "presets", "features", "settings", "flash", "updates", "logs", "enterprise",
     ]
-    assert '["everyday", "nav_everyday", 0, 7], ["system", "nav_system", 7, 12]' in block
+    assert '["everyday", "nav_everyday", 0, 7], ["system", "nav_system", 7, 13]' in block
     assert 'modules: "features", intake: "recent"' in block
     assert re.findall(r'^  \w+: \["(nav_\w+)"', block, re.M) == [
         "nav_overview", "nav_printers", "nav_spools", "nav_analytics", "nav_recently_added", "nav_devices",
         "nav_slicer_presets", "nav_features", "nav_settings", "nav_flash_device", "nav_updates", "nav_logs",
+        "nav_enterprise",
     ]
     for fn in re.findall(r"(\w+(?:Card|Tab))\(\)", block):
         assert f"function {fn}(" in every or f"window.{fn} =" in every, fn
@@ -1038,7 +1039,10 @@ def test_helper_ops_are_the_closed_list():
     assert set(setup_helper.OPS) == {"check", "key_set", "key_remove", "passphrase_set",
                                      "local_intake_token_set", "local_intake_token_remove", "module", "setting", "general", "general_group", "spoolman_url", "apply", "mode", "job", "journal", "backup_keep", "backup_list", "backup_last", "backup_open", "backup_password_set", "backup_password_remove", "restore_pin", "restore_password", "restore_forget", "station_pairing",
                                      "trust_status", "trust_add", "trust_list", "trust_rename", "trust_revoke",
-                                     "trust_revoke_all", "trust_enabled", "reader_usb", "port_change", "report_open"}
+                                     "trust_revoke_all", "trust_enabled", "reader_usb", "port_change", "report_open",
+                                     "enterprise_get", "enterprise_policy_set", "enterprise_user_op",
+                                     "enterprise_role_op", "enterprise_secret_set", "enterprise_auth_local",
+                                     "cert_info", "cert_renew_self", "cert_csr", "cert_upload", "cert_ca_bundle"}
     assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair", "library_update",
                                       "library_rollback", "remote_issue",
                                       "backup", "restore", "report", "local_intake_plan", "local_intake_install", "local_intake_remove", "local_intake_share", "corrections_send", "reader_setup", "port_change"}

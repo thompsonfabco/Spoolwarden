@@ -171,7 +171,7 @@ def test_the_registry_mounts_the_section_routes_and_assets_once(app):
     assert c.get("/setup/api/start").status_code == c.get("/setup/api/devices").status_code == 200
     assert post(c, "start", {"hide": True}, code=None).status_code == 403
     assert c.get("/setup/api/state").json()["history"] == {
-        "exports": ["activity", "lines", "locations", "printers", "recent", "spoolman-filaments",
+        "exports": ["activity", "enterprise_activity", "lines", "locations", "printers", "recent", "spoolman-filaments",
                     "spoolman-spools", "usage"], "event_undo": True, "activity": True, "report": True,
     }
 

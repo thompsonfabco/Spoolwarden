@@ -68,7 +68,7 @@ def test_state_reports_the_cloud_reads_used_and_the_limit(app, owned):
 def test_state_has_one_summary_for_each_navigation_section(app, owned):
     sums = _state(app)["summaries"]
     assert list(sums) == ["overview", "printers", "recent", "devices", "presets", "features", "settings", "flash",
-                          "updates", "logs"]
+                          "updates", "logs", "enterprise"]
     assert all(v is None or (isinstance(v, str) and v) for v in sums.values())
     assert sums["printers"] == "1 connected · 0 offline"
     assert sums["devices"] == "0 paired · 0 Tag Readers"

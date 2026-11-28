@@ -58,7 +58,7 @@ function enterpriseSignInCard() {
     if (!u || !p) { say(box, SW.t("ent_signin_error_empty"), false); return; }
     SW.busy(submitBtn, SW.t("common_working"));
     try {
-      const r = await fetch("/auth/login", {
+      const r = await fetch("/setup/api/auth/login", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },

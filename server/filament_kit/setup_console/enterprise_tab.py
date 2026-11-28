@@ -764,11 +764,11 @@ def routes(page) -> list[tuple]:
         ("/enterprise/certs/upload", w(certs_upload), "POST"),
         ("/enterprise/certs/ca", w(certs_ca), "POST"),
         ("/enterprise/activity", g(activity), "GET"),
-    ]
+    ] + _auth_endpoints(page)
 
 
-def auth_routes(page) -> list[Route]:
-    """Root-level `/auth/*` routes mounted by setup_page.py, with LAN/Host/Origin guards."""
+def _auth_endpoints(page) -> list[tuple]:
+    """Auth endpoints mounted both at root (`/auth/*`) and under `/setup/api/auth/*`."""
     from ..setup_page import BAD_HOST, HEADERS, HOME_ONLY, MAX_BODY, Refused
 
     def guard_auth(fn, *, check_origin: bool = False):
@@ -962,14 +962,10 @@ def auth_routes(page) -> list[Route]:
 
     async def saml_acs(request: Request):
         demo.stop()
-        chunks: list[bytes] = []
-        total = 0
-        async for chunk in request.stream():
-            total += len(chunk)
-            if total > _MAX_SAML_BYTES:
-                raise Refused(413, "SAML response too large")
-            chunks.append(chunk)
-        raw_body = b"".join(chunks)
+        try:
+            raw_body = await http_body.read_bytes(request, _MAX_SAML_BYTES)
+        except http_body.BodyTooLarge:
+            raise Refused(413, "SAML response too large") from None
         try:
             form_text = raw_body.decode("utf-8")
             form = parse_qs(form_text, keep_blank_values=True)
@@ -1041,13 +1037,18 @@ def auth_routes(page) -> list[Route]:
         return resp
 
     return [
-        Route("/auth/login", guard_auth(login_page), methods=["GET"]),
-        Route("/auth/login", guard_auth(login_post, check_origin=True), methods=["POST"]),
-        Route("/auth/logout", guard_auth(logout_post, check_origin=True), methods=["POST"]),
-        Route("/auth/me", guard_auth(me_get), methods=["GET"]),
-        Route("/auth/client-login", guard_auth(client_login), methods=["GET"]),
-        Route("/auth/saml/metadata.xml", guard_auth(saml_metadata), methods=["GET"]),
-        Route("/auth/saml/login", guard_auth(saml_login), methods=["GET"]),
-        Route("/auth/saml/acs", guard_auth(saml_acs, check_origin=False), methods=["POST"]),
-        Route("/auth/saml/logout", guard_auth(saml_logout, check_origin=True), methods=["POST"]),
+        ("/auth/login", guard_auth(login_page), "GET"),
+        ("/auth/login", guard_auth(login_post, check_origin=True), "POST"),
+        ("/auth/logout", guard_auth(logout_post, check_origin=True), "POST"),
+        ("/auth/me", guard_auth(me_get), "GET"),
+        ("/auth/client-login", guard_auth(client_login), "GET"),
+        ("/auth/saml/metadata.xml", guard_auth(saml_metadata), "GET"),
+        ("/auth/saml/login", guard_auth(saml_login), "GET"),
+        ("/auth/saml/acs", guard_auth(saml_acs, check_origin=False), "POST"),
+        ("/auth/saml/logout", guard_auth(saml_logout, check_origin=True), "POST"),
     ]
+
+
+def auth_routes(page) -> list[Route]:
+    """Root-level `/auth/*` routes mounted by setup_page.py, with LAN/Host/Origin guards."""
+    return [Route(path, fn, methods=[method]) for path, fn, method in _auth_endpoints(page)]

@@ -6977,7 +6977,16 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`label-reader corrections package <file>`',
   'Save the exact zip that `send` would send, to look at it first', '(none)'),
  ('`label-reader corrections send`',
-  'Ask the Label Reader to send the corrections waiting (it does the upload)', '(none)')]
+  'Ask the Label Reader to send the corrections waiting (it does the upload)', '(none)'),
+ ('`enterprise status`', 'Enterprise status, login policy, user and session counts', '(none)'),
+ ('`enterprise create-admin <username> [--display-name NAME]`',
+  'Create an enterprise admin user (root; password typed twice, hidden)', '(none)'),
+ ('`enterprise reset-password <username>`',
+  "Reset a local user's password (root; typed twice, hidden)", '(none)'),
+ ('`enterprise disable-login [-y]`',
+  'Disable login requirement in enterprise policy (root)', '(none)'),
+ ('`enterprise emergency-unlock [-y]`',
+  'Emergency recovery: disable login and revoke sessions (root)', '(none)')]
 
 _ALIASES = [('pair --pc', 'pair --slicer-sync'),
  ('pair --station', 'pair --weigh-station'),

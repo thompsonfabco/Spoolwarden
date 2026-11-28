@@ -77,8 +77,9 @@ class Cap:
 # ---------- the module entry ----------
 
 def test_the_module_is_opt_in_last_and_newer():
-    assert list(modules.MODULES)[-1] == "local_intake" and list(modules.MODULES).index("klipper") == 12
+    assert list(modules.MODULES)[-2] == "local_intake" and list(modules.MODULES)[-1] == "enterprise" and list(modules.MODULES).index("klipper") == 12
     assert "local_intake" in modules.OPT_IN and modules.NEWER["local_intake"] == (0, 5, 3)
+    assert "enterprise" in modules.OPT_IN and modules.NEWER["enterprise"] == (0, 7, 0)
     assert all("local_intake" not in s for s in modules.MODES.values())
     assert modules.MODULES["local_intake"].optional_ai
 

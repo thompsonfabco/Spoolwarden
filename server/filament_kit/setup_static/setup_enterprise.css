@@ -21,7 +21,7 @@
 .ent__signin { max-width: var(--column-max); margin: var(--s5) auto; }
 .ent__user-chip { display: inline-flex; align-items: center; gap: var(--s2); min-width: 0; }
 .ent__user-name { font-size: var(--fs-s); line-height: var(--lh-title); font-weight: var(--fw-label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(var(--s7) * 3); }
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .ent__grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 600px) {

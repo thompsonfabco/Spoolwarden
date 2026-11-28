@@ -242,7 +242,7 @@ def _android_calls() -> set[tuple[str, str]]:
     out: set[tuple[str, str]] = set()
     # Match `request("api", ...).<method>(` or `request("api", ...) { ... }.<method>(`
     for m in re.finditer(r'request\(([^)]+)\)(?:\s*\{[^}]*\})?\s*\.(get|post|put|patch|delete)\b', text):
-        parts = [p.strip() for p in m.group(1).split(",") if "auth" not in p]
+        parts = [p.strip() for p in m.group(1).split(",") if not re.match(r"auth\s*=", p.strip())]
         segs = [p[1:-1] if p.startswith('"') and p.endswith('"') else "{x}" for p in parts]
         path = "/" + "/".join(segs)
         if path.startswith("/api/"):

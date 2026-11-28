@@ -120,6 +120,7 @@ remote access, orders, the Filament Catalog and automatic updates are off until 
 | `updates` | Automatic updates: a daily check for a new signed release; installs it and keeps the one before | nothing |
 | `klipper` | Klipper printers through Moonraker: discovery, spool loads, usage log, camera ([docs/klipper.md](docs/klipper.md)) | `server`, a Klipper printer with Moonraker |
 | `local_intake` | **Optional AI**: Label Reader: On this Hub, a label reader on your own network reads spool photos, no cloud | `server`, the local reader service (local_intake.url) |
+| `enterprise` | Multi-user logins, custom roles, LDAP/LDAPS and SAML SSO, user activity tracking, and certificate management | `server` |
 
 ## The phone app
 
