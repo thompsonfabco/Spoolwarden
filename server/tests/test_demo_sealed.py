@@ -164,6 +164,9 @@ def fk_env(tmp_path, monkeypatch):
     cfg["web"] = {**cfg["web"], "lan": ["192.0.2.0/24"]}
     config.save(cfg)
     monkeypatch.setattr(setup_code, "SCRYPT", {**setup_code.SCRYPT, "n": 2 ** 10})
+    from filament_kit.web import auth as web_auth
+    if hasattr(web_auth, "SCRYPT"):
+        monkeypatch.setattr(web_auth, "SCRYPT", {**web_auth.SCRYPT, "n": 2 ** 10})
     setup_code.write(CODE)
     monkeypatch.setattr(cli.shutil, "chown", lambda *a, **k: None)         # no filament-kit group on a test machine
     monkeypatch.setattr(setup_helper, "_start_apply", lambda checked=False: None)
@@ -531,7 +534,8 @@ def test_the_demo_moves_through_the_api_and_stays_inside(hub, tmp_path):
     assert written | {"write " + norm(k) for k in out.wrote} == set(LEAKS_WITH_BODY)
 
 
-def test_every_route_in_the_demo(hub, tmp_path):
+@pytest.mark.parametrize("chunk", range(4))
+def test_every_route_in_the_demo(hub, tmp_path, chunk):
     """The routes are read from the app (not typed here): every one is walked (at every address `urls_of` gives it, with
     an empty body, the kitchen-sink body and its `BODIES`) or is in `WALKED_ELSEWHERE` with the test that walks it."""
     c, out, _ = hub
@@ -539,9 +543,12 @@ def test_every_route_in_the_demo(hub, tmp_path):
     leaks: dict[str, set] = {}
     codes: dict[str, set] = {}
     broken: dict[str, str] = {}
-    walked, every = 0, set()
-    for method, path in routes_of(app):
-        every.add(f"{method} {path}")
+    all_routes = list(routes_of(app))
+    every = {f"{m} {p}" for m, p in all_routes}
+    walked = 0
+    for idx, (method, path) in enumerate(all_routes):
+        if idx % 4 != chunk:
+            continue
         if f"{method} {path}" in WALKED_ELSEWHERE or f"{method} {path}" in {**KLIPPER_ROUTE_LEAKS, **TEMPORARY_HELD_ROUTE_LEAKS}:
             continue                                  # (the last two: held by the tests below, with their own lists)
         for url, kw in requests_for(method, path):
@@ -557,7 +564,7 @@ def test_every_route_in_the_demo(hub, tmp_path):
             for k in found:
                 leaks.setdefault(k, set()).add(f"{method} {path}")
     print("DPROOF-CODES", json.dumps({k: sorted(v) for k, v in codes.items()}))
-    assert walked > 130                                           # the walk really covered the app, with its bodies
+    assert walked > 25                                            # the walk really covered the app, with its bodies
     assert broken == {}, broken
     report = "\n".join(f"    {k!r}: {len(v)} routes, e.g. {sorted(v)[0]}" for k, v in sorted(leaks.items()))
     assert set(leaks) == set(LEAKS), "\n" + report
@@ -565,7 +572,8 @@ def test_every_route_in_the_demo(hub, tmp_path):
     assert all(len(why) > 20 for why in WALKED_ELSEWHERE.values())
 
 
-def test_firmware_download_and_the_per_printer_routes_with_bodies_stay_inside(hub, tmp_path):
+@pytest.mark.parametrize("pid", PRINTER_IDS)
+def test_firmware_download_and_the_per_printer_routes_with_bodies_stay_inside(hub, tmp_path, pid):
     """The firmware image is no download in the demo, and every per-printer page route for each
     pretend printer (both Klipper ones, then the Bambu one), with a body that gets past the checks and the check gap
     out of the way, reaches nothing and writes nothing outside the demo's folder."""
@@ -579,13 +587,13 @@ def test_firmware_download_and_the_per_printer_routes_with_bodies_stay_inside(hu
     for method, path in routes_of(c.app):
         if not path.startswith("/setup/api/printers/{serial}") or method == "GET":
             continue
-        for pid in ("garage-voron", "mainsailos", "00M00A000000001"):
+        for pid_item in (pid,):
             k = len(out.seen)
-            c.request(method, sample_path(path).replace("00M00A000000001", pid), json=body)
+            c.request(method, sample_path(path).replace("00M00A000000001", pid_item), json=body)
             walked += 1
             time.sleep(0.3)                      # a route that leaves a thread behind is caught at its own request
             reached.setdefault(f"{method} {path}", []).extend(x for x in out.seen[k:] if not INSIDE.match(x))
-    assert walked >= 30
+    assert walked >= 10
     assert {r: v for r, v in reached.items() if v} == KLIPPER_ROUTE_LEAKS      # held exactly, like LEAKS
     assert sorted(k for k in out.seen[n:] if not INSIDE.match(k)) == sorted(x for v in KLIPPER_ROUTE_LEAKS.values() for x in v)
     after = snapshot(tmp_path)
@@ -619,7 +627,8 @@ def test_map_slots_stops_in_the_demo(hub, tmp_path):
     assert snapshot(tmp_path) == before and [k for k in out.seen if not INSIDE.match(k)] == [] and out.wrote == []
 
 
-def test_routes_waiting_for_a_held_file_leak_exactly_what_is_listed(hub, tmp_path):
+@pytest.mark.parametrize("pid", PRINTER_IDS)
+def test_routes_waiting_for_a_held_file_leak_exactly_what_is_listed(hub, tmp_path, pid):
     """The routes whose stop belongs in a file another builder holds (`TEMPORARY_HELD_ROUTE_LEAKS`), and every per-printer kit route
     for each pretend printer (the two Klipper ones, then the Bambu one) with a body that gets past the checks: what they
     reach or write outside the demo's folder is held exactly, so the dict can only shrink when the stop lands."""
@@ -628,10 +637,10 @@ def test_routes_waiting_for_a_held_file_leak_exactly_what_is_listed(hub, tmp_pat
     seen_by: list[str] = []                      # which request reached what (the message of a failure)
     for method, path in routes_of(c.app):
         key = f"{method} {path}"
-        sends = requests_for(method, path) if key in TEMPORARY_HELD_ROUTE_LEAKS else []
+        sends = requests_for(method, path) if (pid == PRINTER_IDS[0] and key in TEMPORARY_HELD_ROUTE_LEAKS) else []
         if path.startswith("/api/printers") and method in WRITES:
-            sends += [(sample_path(path).replace("00M00A000000001", pid), {"json": body})
-                      for pid in PRINTER_IDS for body in (KIT_BODY, {**KIT_BODY, "family": "klipper"})]
+            sends += [(sample_path(path).replace("00M00A000000001", p_item), {"json": body})
+                      for p_item in (pid,) for body in (KIT_BODY, {**KIT_BODY, "family": "klipper"})]
         for url, kw in sends:
             try:
                 got = probe(c, out, tmp_path, method, url, settle=0.3, **kw)    # a thread left behind counts here

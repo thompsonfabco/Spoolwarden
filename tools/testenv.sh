@@ -169,7 +169,7 @@ parallel() {
     local name=$1 dir=$2 ids passed why kept first
     local first_out=$RUN/$name.outcomes again_out=$RUN/$name.outcomes-again
     shift 2
-    run "$name" "$dir" "${PYTEST[@]}" -p fk_outcomes --fk-outcomes="$first_out" -n "$WORKERS" --basetemp="$RUN/t-$name" "$@"
+    run "$name" "$dir" "${PYTEST[@]}" -p fk_outcomes --fk-outcomes="$first_out" -n "$WORKERS" --dist=worksteal --basetemp="$RUN/t-$name" "$@"
     case "${LAST_RC:-0}:$RETRY" in 0:*|1:1) ;; *) return 0 ;; esac    # exit 0 must have reached every test as well
     if ! why=$("${OUTCOMES[@]}" complete "$first_out"); then     # what wasn't reached can't pass by what was: no second try
         FAILED=1
