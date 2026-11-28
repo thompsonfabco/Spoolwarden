@@ -5192,7 +5192,8 @@ def _tty_confirm(text: str) -> bool:
 _FEATURE_KEYS = {"spoolman": "spoolman", "hub": "server", "label-reader": "ai_intake",
                  "label-reader-local": "local_intake", "printers": "printers", "klipper": "klipper",
                  "presets": "presets", "catalog": "library", "backups": "backup", "weigh-station": "station",
-                 "web": "web", "remote": "remote", "orders": "orders", "updates": "updates"}
+                 "web": "web", "remote": "remote", "orders": "orders", "updates": "updates",
+                 "enterprise": "enterprise"}
 _KEY_OF = {old: new for new, old in _FEATURE_KEYS.items()}
 # What a feature needs besides other features, as the table shows it (the registry's longer sentence is for the checklist).
 _NEEDS_SHOWN = {"server": ["Spoolman"], "ai_intake": ["API key"]}
@@ -6084,6 +6085,108 @@ def cmd_web_passphrase() -> int:
         return 1
     output.result("Passphrase saved.")
     return 0
+
+
+def _ask_new_password(prompt: str = "New password: ") -> str | int:
+    """Read a hidden password twice; returns the password string or a CLI exit code."""
+    try:
+        first = secret_input.ask(prompt)
+        second = secret_input.ask("Confirm password: ")
+    except EOFError:
+        return _input_ended()
+    if first != second:
+        _err_line("the two passwords do not match.")
+        return 1
+    return first
+
+
+def cmd_enterprise(args) -> int:
+    """`spoolwarden enterprise` subcommands: status, create-admin, reset-password, disable-login, emergency-unlock."""
+    from .enterprise import policy, sessions, users
+
+    sub = args.enterprise_cmd
+    if sub == "status":
+        on = "enterprise" in modules.enabled(config.load())
+        pol = policy.load_policy()
+        user_list = users.list_users()
+        sess_list = sessions.list_sessions()
+        multiuser = bool(pol.get("toggles", {}).get("multiuser_login", False))
+        data = {"enabled": on, "policy": pol, "users": len(user_list), "active_sessions": len(sess_list)}
+        output.emit(data)
+        output.out(f"Enterprise: {'on' if on else 'off'}")
+        output.out(f"Login required: {'yes' if multiuser else 'no'}")
+        output.out(f"Users: {len(user_list)}")
+        output.out(f"Active sessions: {len(sess_list)}")
+        return 0
+
+    if not _is_root():
+        return output.need_sudo(_sudo_command(f"sudo spoolwarden enterprise {sub}"))
+
+    if sub == "create-admin":
+        pw = _ask_new_password("Admin password: ")
+        if isinstance(pw, int):
+            return pw
+        try:
+            user = users.create_user(
+                args.username,
+                "administrator",
+                password=pw,
+                display_name=getattr(args, "display_name", None) or args.username,
+            )
+        except (users.UserError, ValueError, KeyError) as e:
+            _err_line(f"{e}; nothing was changed")
+            return 1
+        output.emit({"username": args.username, "role": "administrator", "user": user})
+        output.result(f"Admin user {args.username!r} created.")
+        return 0
+
+    if sub == "reset-password":
+        target = users.get_by_username(args.username)
+        if target is None:
+            _err_line(f"User {args.username!r} not found; nothing was changed")
+            return 1
+        pw = _ask_new_password("New password: ")
+        if isinstance(pw, int):
+            return pw
+        try:
+            min_len = int(policy.load_policy()["password"].get("min_length", 12))
+            users.set_password(target["id"], pw, min_length=min_len)
+        except (users.UserError, ValueError, KeyError) as e:
+            _err_line(f"{e}; nothing was changed")
+            return 1
+        output.emit({"username": args.username, "reset": True})
+        output.result(f"Password updated for {args.username!r}.")
+        return 0
+
+    if sub == "disable-login":
+        stop = _confirm("Disable login requirement for the Hub?", "disabling enterprise login", yes=getattr(args, "yes", False))
+        if stop is not None:
+            return stop
+        pol = policy.load_policy()
+        pol["toggles"]["multiuser_login"] = False
+        policy.save_policy(pol)
+        output.emit({"multiuser_login": False})
+        output.result("Enterprise login requirement disabled.")
+        return 0
+
+    if sub == "emergency-unlock":
+        stop = _confirm("Unlock all lockouts, revoke active sessions, and disable login requirement?",
+                        "emergency unlock", yes=getattr(args, "yes", False))
+        if stop is not None:
+            return stop
+        pol = policy.load_policy()
+        pol["toggles"]["multiuser_login"] = False
+        policy.save_policy(pol)
+        if hasattr(sessions, "revoke_all_sessions"):
+            sessions.revoke_all_sessions()
+        else:
+            for sess in sessions.list_sessions():
+                sessions.revoke_session(sess["id"])
+        output.emit({"unlocked": True})
+        output.result("Emergency unlock complete.")
+        return 0
+
+    return output.USAGE
 
 
 def cmd_setup_code(new: bool, revoke_trusted: bool = False, yes: bool = False) -> int:
@@ -7530,6 +7633,18 @@ def _build_parser():
     _add_yes(sc)
     klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
     history_cli.add_parser(sub)       # activity, undo, usage, export, import, report
+    ent = sub.add_parser("enterprise", help="multi-user logins, roles, and recovery (enterprise module)")
+    entsub = ent.add_subparsers(dest="enterprise_cmd", required=True)
+    entsub.add_parser("status", help="show enterprise status, login policy, user and session counts")
+    ent_ca = entsub.add_parser("create-admin", help="create an admin user (root; password typed twice, hidden)")
+    ent_ca.add_argument("username", help="username for the new admin")
+    ent_ca.add_argument("--display-name", help="optional display name")
+    ent_rp = entsub.add_parser("reset-password", help="reset a local user's password (root; typed twice, hidden)")
+    ent_rp.add_argument("username", help="username whose password to reset")
+    ent_dl = entsub.add_parser("disable-login", help="disable login requirement in enterprise policy (root)")
+    _add_yes(ent_dl)
+    ent_eu = entsub.add_parser("emergency-unlock", help="emergency recovery: disable login and revoke sessions (root)")
+    _add_yes(ent_eu)
     return ap, sub
 
 
@@ -7605,7 +7720,7 @@ def _sub_of(a) -> str | None:
     """The word after the command: `backup create` is `create`."""
     for name in ("station_cmd", "recent_cmd", "devices_cmd", "printer_cmd", "library_cmd", "presets_cmd", "features_cmd",
                  "web_cmd", "li_cmd", "lr_cmd", "tag_reader_cmd", "backup_cmd", "remote_cmd", "klipper_cmd",
-                 "config_cmd", "spoolman_cmd", "loc_cmd", "alerts_cmd", "spool_cmd"):
+                 "config_cmd", "spoolman_cmd", "loc_cmd", "alerts_cmd", "spool_cmd", "enterprise_cmd"):
         if hasattr(a, name):
             return getattr(a, name)
     return None
@@ -7864,6 +7979,8 @@ def _dispatch(args, *, client_factory=None, manager_factory=None, sm_factory=Non
         return cmd_modules_apply(pair=not args.no_pair)
     if args.cmd == "setup-code":
         return cmd_setup_code(args.new, args.revoke_trusted, yes=args.yes)
+    if args.cmd == "enterprise":
+        return cmd_enterprise(args)
     if args.cmd == "port":
         return address_cli.cmd_port(args.number, yes=args.yes)
     return cmd_ensure_fields()

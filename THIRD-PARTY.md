@@ -82,6 +82,15 @@ From v0.3.0, for the station's speech (`station` extra in the same venv):
 | onnxruntime | MIT |
 | Piper voice model, downloaded at install time | see [Speech voice](#speech-voice) |
 
+From v0.7.0, for the Enterprise module (`enterprise` extra in the same venv, all GPL-3.0-or-later compatible):
+
+| Component | Licence |
+|---|---|
+| ldap3 | LGPL-3.0-only |
+| pyasn1 | BSD-2-Clause |
+| signxml | Apache-2.0 |
+| lxml | BSD-3-Clause |
+
 ## The Android app
 
 Built by the release workflow and shipped as `filament-kit.apk`. Everything below is compiled into it.

@@ -2,6 +2,7 @@ package com.thompsonfabco.filamentkit
 
 import android.app.UiModeManager
 import android.graphics.Color as AndroidColor
+import android.net.Uri
 import android.os.Build
 import android.content.Intent
 import android.os.Bundle
@@ -192,6 +193,8 @@ import com.thompsonfabco.filamentkit.ui.add.AddStepRoute
 import com.thompsonfabco.filamentkit.ui.add.text
 import com.thompsonfabco.filamentkit.ui.add.IntakeApi
 import com.thompsonfabco.filamentkit.ui.add.TagTaps
+import com.thompsonfabco.filamentkit.ui.auth.EnterpriseLoginScreen
+import com.thompsonfabco.filamentkit.ui.auth.EnterpriseLoginViewModel
 import com.thompsonfabco.filamentkit.ui.home.DebugHomeExtra
 import com.thompsonfabco.filamentkit.ui.components.AppearanceMenu
 import com.thompsonfabco.filamentkit.ui.components.HubFacts
@@ -319,6 +322,7 @@ import com.thompsonfabco.filamentkit.ui.theme.resolveLook
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
@@ -326,6 +330,14 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val app: AppViewModel by viewModels()
+    private val samlCallbackUri = MutableStateFlow<Uri?>(null)
+
+    private fun handleSamlIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme == "spoolwarden" && data.host == "auth" && data.path?.startsWith("/callback") == true) {
+            samlCallbackUri.value = data
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // The system splash stays on the --bg ground until the stored pairing and appearance are read.
@@ -334,7 +346,10 @@ class MainActivity : ComponentActivity() {
         splash.setKeepOnScreenCondition { app.startup.value == null }
         appEdgeToEdge()
         // a tapped alert notification names the place it opens; a recreated activity has used it already
-        if (savedInstanceState == null) app.openAlert(AlertNotifier.targetOf(intent))
+        if (savedInstanceState == null) {
+            app.openAlert(AlertNotifier.targetOf(intent))
+            handleSamlIntent(intent)
+        }
         setContent {
             val startup by app.startup.collectAsStateWithLifecycle()
             // Nothing is drawn (the splash shows) until the stored pairing and appearance have been read.
@@ -356,7 +371,7 @@ class MainActivity : ComponentActivity() {
                 val topBarActions = remember { TopBarActions() }
                 LookedAppFrame(appearance, start, app.settings.lookChoice, app.settings.hubLook) { look ->
                     CompositionLocalProvider(LocalToast provides toast, LocalTopBarActions provides topBarActions) {
-                        FilamentKitApp(app, start.paired, appearance, look, toast, topBarActions)
+                        FilamentKitApp(app, start.paired, appearance, look, toast, topBarActions, samlCallbackUri)
                     }
                 }
             }
@@ -367,6 +382,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         app.openAlert(AlertNotifier.targetOf(intent))
+        handleSamlIntent(intent)
     }
 
     override fun onResume() {
@@ -387,7 +403,13 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun FilamentKitApp(
-    app: AppViewModel, paired: Boolean, appearance: Appearance, look: Look, toast: SwToastState, topBarActions: TopBarActions,
+    app: AppViewModel,
+    paired: Boolean,
+    appearance: Appearance,
+    look: Look,
+    toast: SwToastState,
+    topBarActions: TopBarActions,
+    samlCallbackUri: MutableStateFlow<Uri?> = MutableStateFlow(null),
 ) {
     // API 37: every LAN socket needs ACCESS_LOCAL_NETWORK. Asked once at start; the session waits for it.
     val localNetwork = rememberLocalNetworkAccess(autoRequest = true, onGranted = app.session::refresh)
@@ -532,6 +554,20 @@ internal fun FilamentKitApp(
             app.handledPairRequests = pairAgainRequests
             if (!nav.currentDestination.inPairing()) pushPairing()
         }
+    }
+
+    var showEnterpriseLogin by rememberSaveable { mutableStateOf(false) }
+    var handledLoginRequests by rememberSaveable { mutableIntStateOf(0) }
+    val loginRequests by app.router.loginRequests.collectAsStateWithLifecycle()
+    LaunchedEffect(loginRequests) {
+        if (loginRequests > handledLoginRequests) {
+            handledLoginRequests = loginRequests
+            if (!nav.currentDestination.inPairing()) showEnterpriseLogin = true
+        }
+    }
+    val pendingSamlUri by samlCallbackUri.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingSamlUri) {
+        if (pendingSamlUri != null && api != null) showEnterpriseLogin = true
     }
 
     // Pairing or trusting worked: back to the screen pairing was opened over, else (first start) to Home; the toast says so.
@@ -1662,6 +1698,37 @@ internal fun FilamentKitApp(
                 settingsUpdate = update.available != null,
             )
         }
+    }
+
+    val loginApi = api
+    if (showEnterpriseLogin && loginApi != null) {
+        val loginVm: EnterpriseLoginViewModel = viewModel(
+            key = "enterprise-login:$hubKey",
+            factory = viewModelFactory {
+                initializer {
+                    EnterpriseLoginViewModel(
+                        api = loginApi,
+                        session = app.session,
+                        settings = app.settings,
+                        handle = createSavedStateHandle(),
+                        getString = context::getString,
+                    )
+                }
+            },
+        )
+        LaunchedEffect(pendingSamlUri) {
+            val uri = pendingSamlUri ?: return@LaunchedEffect
+            samlCallbackUri.value = null
+            loginVm.handleSamlCallback(uri) {
+                showEnterpriseLogin = false
+            }
+        }
+        EnterpriseLoginScreen(
+            viewModel = loginVm,
+            hubBaseUrl = app.session.baseUrl(),
+            sessionExpiredNotice = notice is PairNotice.SessionExpired,
+            onSignedIn = { showEnterpriseLogin = false },
+        )
     }
 
     if (sheetOpen && !inPairing && !settingsOverPairing) {

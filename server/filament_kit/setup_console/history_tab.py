@@ -12,6 +12,10 @@
 """
 from __future__ import annotations
 
+import csv
+import datetime
+import io
+
 import anyio
 from starlette.responses import Response, StreamingResponse
 
@@ -24,11 +28,20 @@ EXPORT_SETS = (
     "locations",
     "recent",
     "activity",
+    "enterprise_activity",
     "printers",
     "lines",
     "spoolman-spools",
     "spoolman-filaments",
 )
+CATEGORY_KINDS = {
+    "auth": "auth.",
+    "enterprise": "enterprise.",
+    "cert": "cert.",
+    "inventory": "spool.,slot.,location.,catalog.,record.",
+    "printers": "printer.,usage.",
+    "system": "hub.,backup.,device.,settings.",
+}
 MAX_IMPORT_BYTES = 5 * 1024 * 1024
 
 
@@ -83,7 +96,64 @@ def _call_undo(page, event_id: int, actor: dict) -> dict:
     return undo.undo_event(event_id, _spoolman(page), actor=actor)
 
 
+def _safe_csv_cell(value) -> str:
+    text = "" if value is None else str(value)
+    if text.startswith(("=", "+", "-", "@", "\t", "\r", "\n")):
+        return "'" + text
+    return text
+
+
+def _export_enterprise_activity(*, days: float = 30) -> str:
+    try:
+        days_val = float(days)
+    except (TypeError, ValueError):
+        raise csv_io.CsvError(alerts_api.say("csv_days_number"), status=400, code="bad_request") from None
+    if days_val <= 0:
+        raise csv_io.CsvError(alerts_api.say("csv_days_above_zero"), status=400, code="bad_request")
+
+    since_dt = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days_val)
+    all_events: list[dict] = []
+    since_id = 0
+    while True:
+        page = events.read(
+            since=since_id,
+            limit=1000,
+            kinds=("auth.", "enterprise.", "cert."),
+            since_at=since_dt,
+            activity=True,
+        )
+        batch = page.get("events") or []
+        if not batch:
+            break
+        all_events.extend(batch)
+        last_id = batch[-1]["id"]
+        if len(batch) < 1000 or last_id <= since_id:
+            break
+        since_id = last_id
+
+    all_events.reverse()
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(("id", "at", "kind", "actor_name", "subject_name", "details"))
+    for ev in all_events:
+        actor = ev.get("actor") or {}
+        subject = ev.get("subject") or {}
+        title, text = alerts_api.words(ev)
+        details = text or title
+        writer.writerow((
+            _safe_csv_cell(ev.get("id", "")),
+            _safe_csv_cell(ev.get("at", "")),
+            _safe_csv_cell(ev.get("kind", "")),
+            _safe_csv_cell(actor.get("name") or actor.get("id") or actor.get("type") or ""),
+            _safe_csv_cell(subject.get("name") or subject.get("id") or ""),
+            _safe_csv_cell(details),
+        ))
+    return buf.getvalue()
+
+
 def _call_export(page, set_name: str, params: dict) -> str | bytes:
+    if set_name == "enterprise_activity":
+        return _export_enterprise_activity(**params)
     if set_name.startswith("spoolman-") and "sm" not in params:
         params = {**params, "sm": _spoolman(page)}
     return csv_io.export_csv(set_name, **params)
@@ -114,6 +184,9 @@ def routes(page) -> list[tuple]:
         subject = (q.get("subject") or "").strip() or None
         actor = (q.get("actor") or "").strip() or None
         kinds = (q.get("kinds") or "").strip() or None
+        category = (q.get("category") or "").strip().lower()
+        if category and not kinds:
+            kinds = CATEGORY_KINDS.get(category, "__none__")
         return await anyio.to_thread.run_sync(
             lambda: _call_events_answer(since=since, kinds=kinds, limit=limit, subject=subject, actor=actor)
         )

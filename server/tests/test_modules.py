@@ -15,12 +15,12 @@ def test_missing_modules_is_server_mode():
 def test_registry_order_and_modes():
     assert list(MODULES) == ["spoolman", "server", "ai_intake", "printers",
                              "presets", "library", "backup", "station", "web", "remote", "orders",
-                             "updates", "klipper", "local_intake"]
+                             "updates", "klipper", "local_intake", "enterprise"]
     assert MODES["station"] == frozenset({"station"})
     assert MODES["all-in-one"] == frozenset(MODULES) - {"ai_intake", "web", "remote", "orders", "library",
-                                                        "updates", "klipper", "local_intake"}
+                                                        "updates", "klipper", "local_intake", "enterprise"}
     assert MODES["server"] == frozenset(MODULES) - {"station", "ai_intake", "web", "remote", "orders", "library",
-                                                    "updates", "klipper", "local_intake"}
+                                                    "updates", "klipper", "local_intake", "enterprise"}
 
 
 def test_mode_of_custom():

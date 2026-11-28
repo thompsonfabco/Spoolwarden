@@ -1262,6 +1262,300 @@ def _apply(req: dict) -> dict:
     return {}
 
 
+def _strip_hash(user: dict) -> dict:
+    return {k: v for k, v in user.items() if k != "password_hash"} if isinstance(user, dict) else user
+
+
+def _emit_enterprise_event(kind: str, **data: str) -> None:
+    from . import event_sink
+    actor = event_sink.current_actor_or("page")
+    try:
+        events.write(kind, "hub", actor, {k: v for k, v in data.items() if v is not None})
+    except (events.EventError, OSError):
+        pass
+
+
+def _enterprise_get(req: dict) -> dict:
+    from .enterprise import certs, policy, rbac, sessions, users
+    try:
+        cert = certs.cert_info()
+    except certs.CertError:
+        cert = None
+    return {
+        "policy": policy.load_policy(),
+        "users": [_strip_hash(u) for u in users.list_users()],
+        "roles": rbac.list_roles(),
+        "sessions": sessions.list_sessions(),
+        "cert_info": cert,
+    }
+
+
+def _enterprise_policy_set(req: dict) -> dict:
+    from .enterprise import policy, users
+    section_keys = ("toggles", "sessions", "password", "ldap", "saml")
+    updates: dict[str, dict] = {}
+    pol_arg = req.get("policy")
+    if pol_arg is not None:
+        if not isinstance(pol_arg, dict):
+            raise Refused(400, "policy must be an object", field="policy")
+        for key in section_keys:
+            if key in pol_arg and pol_arg[key] is not None:
+                if not isinstance(pol_arg[key], dict):
+                    raise Refused(400, f"{key} must be an object", field=key)
+                updates[key] = dict(pol_arg[key])
+    for key in section_keys:
+        if key in req and req[key] is not None:
+            if not isinstance(req[key], dict):
+                raise Refused(400, f"{key} must be an object", field=key)
+            updates[key] = {**updates.get(key, {}), **req[key]}
+    if not updates:
+        raise Refused(400, "at least one policy section is required", field="policy")
+    demo.stop()
+    cur = policy.load_policy()
+    new_pol = {key: dict(cur.get(key, {})) for key in section_keys}
+    for key, val in updates.items():
+        new_pol[key].update(val)
+    try:
+        policy.validate_policy_change(new_pol, users.list_users())
+        saved = policy.save_policy(new_pol)
+    except (policy.PolicyError, ValueError) as e:
+        raise Refused(400, str(e)) from e
+    _emit_enterprise_event("enterprise.policy_changed")
+    return {"policy": saved}
+
+
+def _resolve_enterprise_user_id(users_mod, req: dict) -> str:
+    uid = req.get("user_id")
+    if isinstance(uid, str) and uid.strip():
+        return uid.strip()
+    uname = req.get("username")
+    if isinstance(uname, str) and uname.strip():
+        found = users_mod.get_by_username(uname.strip())
+        if found is None:
+            raise Refused(404, f"user {uname.strip()!r} not found", field="username")
+        return found["id"]
+    raise Refused(400, "user_id or username is required", field="user_id")
+
+
+def _enterprise_user_op(req: dict) -> dict:
+    from .enterprise import policy, users
+    action = _text(req, "action", 32, word=True)
+    if action not in ("list", "create", "update", "delete", "set_password"):
+        raise Refused(400, f"unknown user action {action!r}", field="action")
+    if action == "list":
+        return {"users": [_strip_hash(u) for u in users.list_users()]}
+    demo.stop()
+    try:
+        if action == "create":
+            username = _text(req, "username", 128, word=True)
+            pw = req.get("password")
+            if pw is not None and not isinstance(pw, str):
+                raise Refused(400, "password must be a string", field="password")
+            res = users.create_user(
+                username,
+                req.get("role") or "viewer",
+                password=pw,
+                display_name=req.get("display_name") or "",
+                email=req.get("email") or "",
+                source=req.get("source") or "local",
+                external_id=req.get("external_id") or "",
+                must_change_password=bool(req.get("must_change_password", False)),
+            )
+            active = req.get("active") if "active" in req else req.get("enabled")
+            if active is False:
+                res = users.update_user(res["id"], active=False)
+            return {"user": _strip_hash(res)}
+        uid = _resolve_enterprise_user_id(users, req)
+        if action == "update":
+            active = req.get("active") if "active" in req else req.get("enabled")
+            res = users.update_user(
+                uid,
+                role=req.get("role"),
+                display_name=req.get("display_name"),
+                email=req.get("email"),
+                active=active,
+                must_change_password=req.get("must_change_password"),
+            )
+            return {"user": _strip_hash(res)}
+        if action == "delete":
+            users.delete_user(uid)
+            return {}
+        pw = req.get("password")
+        if not isinstance(pw, str) or not pw:
+            raise Refused(400, "password is required", field="password")
+        min_len = int(policy.load_policy()["password"].get("min_length", 12))
+        users.set_password(uid, pw, min_length=min_len)
+        return {}
+    except (users.UserError, ValueError, KeyError) as e:
+        raise Refused(400, str(e)) from e
+
+
+def _enterprise_role_op(req: dict) -> dict:
+    from .enterprise import rbac, users
+    action = _text(req, "action", 32, word=True)
+    if action not in ("list", "create", "update", "delete"):
+        raise Refused(400, f"unknown role action {action!r}", field="action")
+    if action == "list":
+        return {"roles": rbac.list_roles()}
+    raw_id = req.get("id") if req.get("id") is not None else req.get("role_id")
+    if not isinstance(raw_id, str) or not raw_id.strip():
+        raise Refused(400, "role id is required", field="id")
+    role_id = raw_id.strip()
+    demo.stop()
+    try:
+        if action == "create":
+            name = req.get("name")
+            if name is not None and not isinstance(name, str):
+                raise Refused(400, "name must be a string", field="name")
+            sections = req.get("sections")
+            if sections is not None and not isinstance(sections, dict):
+                raise Refused(400, "sections must be an object", field="sections")
+            functions = req.get("functions") if req.get("functions") is not None else req.get("overrides")
+            if functions is not None and not isinstance(functions, dict):
+                raise Refused(400, "functions must be an object", field="functions")
+            res = rbac.create_role(role_id, name or role_id, sections=sections, functions=functions)
+            return {"role": res}
+        if action == "update":
+            sections = req.get("sections")
+            if sections is not None and not isinstance(sections, dict):
+                raise Refused(400, "sections must be an object", field="sections")
+            functions = req.get("functions") if "functions" in req else req.get("overrides")
+            if functions is not None and not isinstance(functions, dict):
+                raise Refused(400, "functions must be an object", field="functions")
+            res = rbac.update_role(role_id, name=req.get("name"), sections=sections, functions=functions)
+            return {"role": res}
+        in_use = {u["role"] for u in users.list_users() if u.get("role")}
+        rbac.delete_role(role_id, in_use_roles=in_use)
+        return {}
+    except (rbac.RoleError, ValueError, KeyError) as e:
+        raise Refused(400, str(e)) from e
+
+
+_ENTERPRISE_SECRETS = frozenset({"ldap_bind_pw", "saml_sp_key", "saml_sp_cert", "ca_bundle"})
+
+
+def _enterprise_secret_set(req: dict) -> dict:
+    from .enterprise import users
+    name = _text(req, "name", 64, word=True)
+    if name not in _ENTERPRISE_SECRETS:
+        raise Refused(400, f"unknown enterprise secret {name!r}", field="name")
+    demo.stop()
+    try:
+        if req.get("delete") or req.get("value") is None:
+            users.delete_secret(name)
+        else:
+            val = req.get("value")
+            if not isinstance(val, str) or not val:
+                raise Refused(400, "value must be a non-empty string", field="value")
+            users.set_secret(name, val)
+    except (users.UserError, ValueError) as e:
+        raise Refused(400, str(e)) from e
+    return {}
+
+
+def _enterprise_auth_local(req: dict) -> dict:
+    from .enterprise import users
+    username = _text(req, "username", 128, word=True)
+    pw = req.get("password")
+    if not isinstance(pw, str) or not pw:
+        raise Refused(400, "password is required", field="password")
+    try:
+        user = users.authenticate_local(username, pw)
+    except users.AuthError as e:
+        raise Refused(401, str(e)) from e
+    except users.UserError as e:
+        raise Refused(400, str(e)) from e
+    return {"user": _strip_hash(user)}
+
+
+def _cert_info(req: dict) -> dict:
+    from .enterprise import certs
+    try:
+        return {"cert": certs.cert_info()}
+    except certs.CertError as e:
+        raise Refused(400, str(e)) from e
+
+
+def _cert_renew_self(req: dict) -> dict:
+    from .enterprise import certs
+    extra_dns = req.get("extra_dns") if req.get("extra_dns") is not None else req.get("hosts")
+    if extra_dns is None:
+        extra_dns = ()
+    elif not isinstance(extra_dns, (list, tuple)):
+        raise Refused(400, "extra_dns must be a list", field="extra_dns")
+    days = req.get("days")
+    if days is None:
+        days_val = 3650
+    elif isinstance(days, int) and not isinstance(days, bool) and days >= 1:
+        days_val = days
+    else:
+        raise Refused(400, "days must be a positive integer", field="days")
+    demo.stop()
+    try:
+        info = certs.cert_renew_self(extra_dns=extra_dns, days=days_val)
+    except (certs.CertError, ValueError) as e:
+        raise Refused(400, str(e)) from e
+    _restart_kit()
+    return {"cert": info}
+
+
+def _cert_csr(req: dict) -> dict:
+    from .enterprise import certs
+    sans = req.get("sans")
+    if sans is None:
+        sans = ()
+    elif not isinstance(sans, (list, tuple)):
+        raise Refused(400, "sans must be a list", field="sans")
+    key_type = req.get("key_type") or "ec256"
+    if not isinstance(key_type, str):
+        raise Refused(400, "key_type must be a string", field="key_type")
+    demo.stop()
+    try:
+        csr = certs.cert_csr(req.get("cn") or "", sans=sans, key_type=key_type)
+    except (certs.CertError, ValueError) as e:
+        raise Refused(400, str(e)) from e
+    return {"csr": csr}
+
+
+def _cert_upload(req: dict) -> dict:
+    from .enterprise import certs
+    cert_pem = req.get("cert")
+    key_pem = req.get("key")
+    chain_pem = req.get("chain")
+    if not isinstance(cert_pem, str) or not cert_pem.strip():
+        raise Refused(400, "cert must be PEM text", field="cert")
+    if key_pem is not None:
+        if not isinstance(key_pem, str):
+            raise Refused(400, "key must be PEM text", field="key")
+        if not key_pem.strip():
+            key_pem = None
+    if chain_pem is not None and not isinstance(chain_pem, str):
+        raise Refused(400, "chain must be PEM text", field="chain")
+    demo.stop()
+    try:
+        info = certs.cert_upload(cert_pem, key_pem=key_pem, chain_pem=chain_pem)
+    except (certs.CertError, ValueError) as e:
+        raise Refused(400, str(e)) from e
+    _restart_kit()
+    return {"cert": info}
+
+
+def _cert_ca_bundle(req: dict) -> dict:
+    from .enterprise import certs
+    demo.stop()
+    try:
+        if req.get("delete") or req.get("bundle") is None:
+            certs.cert_ca_bundle(None)
+        else:
+            bundle = req.get("bundle")
+            if not isinstance(bundle, str) or not bundle.strip():
+                raise Refused(400, "bundle must be PEM text", field="bundle")
+            certs.cert_ca_bundle(bundle)
+    except (certs.CertError, ValueError) as e:
+        raise Refused(400, str(e)) from e
+    return {}
+
+
 OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
        "local_intake_token_set": _local_intake_token_set, "local_intake_token_remove": _local_intake_token_remove,
        "module": _module, "setting": _setting, "general": _general, "general_group": _general_group, "backup_last": lambda req: _backup_last(), "spoolman_url": _spoolman_url, "apply": _apply, "mode": _mode, "job": _job,
@@ -1272,13 +1566,19 @@ OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphr
        "restore_forget": _restore_forget, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
        "trust_list": _trust_list, "trust_rename": _trust_rename, "trust_revoke": _trust_revoke,
        "trust_revoke_all": _trust_revoke_all, "trust_enabled": _trust_enabled, "reader_usb": _reader_usb,
-       "port_change": _port_change}
+       "port_change": _port_change,
+       "enterprise_get": _enterprise_get, "enterprise_policy_set": _enterprise_policy_set,
+       "enterprise_user_op": _enterprise_user_op, "enterprise_role_op": _enterprise_role_op,
+       "enterprise_secret_set": _enterprise_secret_set, "enterprise_auth_local": _enterprise_auth_local,
+       "cert_info": _cert_info, "cert_renew_self": _cert_renew_self, "cert_csr": _cert_csr,
+       "cert_upload": _cert_upload, "cert_ca_bundle": _cert_ca_bundle}
 
 
 # what may save a setting and start a job: these run under _job_lock, whole
 LOCKED_OPS = ("module", "setting", "general", "general_group", "spoolman_url", "mode", "backup_keep", "apply", "job", "reader_usb", "port_change")
-NO_CODE_OPS = ("trust_status",      # it answers only about the token it was given
-               "backup_last")       # the time of the newest backup, and nothing else (N12)
+NO_CODE_OPS = ("trust_status",          # it answers only about the token it was given
+               "backup_last",           # the time of the newest backup, and nothing else (N12)
+               "enterprise_auth_local") # kit server verifies local user passwords without reading scrypt hashes
 
 
 def handle(req) -> dict:

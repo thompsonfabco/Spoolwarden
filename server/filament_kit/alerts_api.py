@@ -157,6 +157,12 @@ MESSAGES = {
     "event_record_changed": "changed",
     "event_title_location_renamed": "Storage location renamed",
     "event_text_location_renamed": "{from} is now {to}. {spools} spools were updated.",
+    "event_auth_login": "{user} signed in ({method}).",
+    "event_auth_login_failed": "Failed sign-in for {user} ({method}).",
+    "event_auth_logout": "{user} signed out.",
+    "event_enterprise_user_changed": "User {user} was {action}.",
+    "event_enterprise_policy_changed": "Enterprise policy {policy} was updated.",
+    "event_cert_changed": "Certificate was {action}.",
     # undo (the history: what undoing says, and why it cannot)
     "undo_why_changed_since": "This changed again since, so it cannot be undone.",
     "undo_why_too_old": "This is older than 7 days, so it cannot be undone.",
@@ -370,6 +376,13 @@ def _spool_name(ev: dict) -> str:
     return s.get("name") or f"Spool {s.get('id', '')}".strip()
 
 
+def _actor_name(ev: dict) -> str:
+    a = ev.get("actor") or {}
+    if a.get("type") == "user":
+        return a.get("name") or a.get("id") or "user"
+    return a.get("name") or a.get("id") or a.get("type") or ""
+
+
 def words(ev: dict) -> tuple[str, str]:
     """(title, sentence) of an event in the Hub's language."""
     kind, sev = ev.get("kind", ""), ev.get("severity", "")
@@ -507,6 +520,35 @@ def words(ev: dict) -> tuple[str, str]:
     if kind == "record.changed":
         what = _d(ev, "what") or say("event_record_changed")
         return say("event_title_record_changed"), say("event_text_record_changed", what=what)
+    if kind == "auth.login":
+        user = _actor_name(ev)
+        method, ip, surface = _d(ev, "method"), _d(ev, "ip"), _d(ev, "surface")
+        title = say("event_auth_login", user=user, method=method)
+        return title, ", ".join(p for p in (user, method, surface, ip) if p)
+    if kind == "auth.login_failed":
+        username = _d(ev, "username") or _actor_name(ev)
+        method, ip, reason = _d(ev, "method"), _d(ev, "ip"), _d(ev, "reason")
+        title = say("event_auth_login_failed", user=username, method=method)
+        return title, ", ".join(p for p in (username, method, reason, ip) if p)
+    if kind == "auth.logout":
+        user = _actor_name(ev)
+        surface = _d(ev, "surface")
+        title = say("event_auth_logout", user=user)
+        return title, ", ".join(p for p in (user, surface) if p)
+    if kind == "enterprise.user_changed":
+        target = _d(ev, "target") or sub.get("name") or sub.get("id") or ""
+        action, role = _d(ev, "action"), _d(ev, "role")
+        title = say("event_enterprise_user_changed", user=target, action=action)
+        return title, ", ".join(p for p in (target, action, role) if p)
+    if kind == "enterprise.policy_changed":
+        setting, state = _d(ev, "setting"), _d(ev, "state")
+        title = say("event_enterprise_policy_changed", policy=setting)
+        return title, ", ".join(p for p in (setting, state) if p)
+    if kind == "cert.changed":
+        action, subject = _d(ev, "action"), _d(ev, "subject")
+        expires = _d(ev, "expires")
+        title = say("event_cert_changed", action=action)
+        return title, ", ".join(p for p in (action, subject, expires) if p)
     return kind, ""
 
 

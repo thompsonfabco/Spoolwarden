@@ -1,0 +1,30 @@
+/* Enterprise section */
+.ent__nav { margin: 0 0 var(--s3); }
+.ent__panel { display: grid; gap: var(--s3); min-width: 0; }
+.ent__toggles { display: grid; gap: var(--s2); min-width: 0; }
+.ent__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); align-items: start; }
+.ent__grid > .card { margin: 0; }
+.ent__form { display: grid; gap: var(--s3); min-width: 0; }
+.ent__actions { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
+.ent__roles { display: grid; gap: var(--s3); min-width: 0; }
+.ent__role-card { display: grid; gap: var(--s3); border: var(--hairline) solid var(--border); border-radius: var(--r); padding: var(--s3); background: var(--surface); }
+.ent__role-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
+.ent__role-name { font-size: var(--fs-b); font-weight: var(--fw-label); line-height: var(--lh-title); margin: 0; }
+.ent__section { display: grid; gap: var(--s2); padding-top: var(--s2); border-top: var(--hairline) solid var(--border); }
+.ent__section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
+.ent__section-title { font-size: var(--fs-m); font-weight: var(--fw-label); line-height: var(--lh-title); margin: 0; }
+.ent__funcs { display: grid; gap: var(--s2); padding-left: var(--s4); }
+.ent__func-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
+.ent__func-name { font-size: var(--fs-s); line-height: var(--lh-body); color: var(--muted); }
+.ent__table-wrap { min-width: 0; overflow-x: auto; }
+.ent__filters { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s3); }
+.ent__signin { max-width: var(--column-max); margin: var(--s5) auto; }
+.ent__user-chip { display: inline-flex; align-items: center; gap: var(--s2); min-width: 0; }
+.ent__user-name { font-size: var(--fs-s); line-height: var(--lh-title); font-weight: var(--fw-label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(var(--s7) * 3); }
+@media (max-width: 900px) {
+  .ent__grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 600px) {
+  .ent__funcs { padding-left: var(--s2); }
+  .ent__filters { display: grid; align-items: stretch; }
+}

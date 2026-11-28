@@ -202,7 +202,7 @@ class Outbox:
     @staticmethod
     def body(item: dict) -> dict:
         out = {"kind": item["kind"], "at": item["at"], "subject": item["subject"], "data": item["data"]}
-        if item["actor"].get("type") in ("device", "connector"):    # no actor: the Hub names the unit's own pairing
+        if item["actor"].get("type") in ("device", "connector", "user"):    # no actor: the Hub names the unit's own pairing
             out["actor"] = item["actor"]
         return out
 

@@ -27,6 +27,11 @@ sealed interface PairNotice {
 
     /** The server presents a certificate other than the paired one; never accepted without the user's tap. */
     data class CertChanged(val expected: String, val actual: String) : PairNotice
+
+    /** The Enterprise user session expired (401 `session_expired`); preserve Hub URL & cert pin and re-authenticate. */
+    data class SessionExpired(val token: String? = null) : PairNotice {
+        override fun toString() = "SessionExpired" // never log the token
+    }
 }
 
 /**
@@ -57,12 +62,22 @@ class PairRouter {
     /** Increases by one each time the user asks to pair again; the only signal that opens the pairing graph. */
     val pairAgainRequests: StateFlow<Int> = _pairAgainRequests.asStateFlow()
 
+    private val _loginRequests = MutableStateFlow(0)
+    /** Increases by one when an Enterprise session expires (401 `session_expired`), routing to EnterpriseLoginScreen. */
+    val loginRequests: StateFlow<Int> = _loginRequests.asStateFlow()
+
     @Volatile private var lastMismatch: FingerprintMismatch? = null
 
-    /** Routes to Pair for `unauthorized` and a certificate change; anything else is the screen's to show. */
+    /** Routes to Pair for `unauthorized` and a certificate change, or to EnterpriseLogin for `session_expired`; 403 keeps token. */
     fun report(e: Throwable) {
         when {
             e is FingerprintMismatch -> if (!stale(e)) route(PairNotice.CertChanged(e.expected, e.actual))
+            e is ApiError && e.status == 403 -> Unit // permission error: keep token, screen shows refusal
+            e is ApiError && e.code == "session_expired" && !stale(e.sentToken) -> {
+                val tok = e.sentToken ?: (_notice.value as? PairNotice.SessionExpired)?.token
+                route(PairNotice.SessionExpired(tok))
+                _loginRequests.update { it + 1 }
+            }
             // Keep the token a call already reported (StateFlow conflation must not hide it from the session).
             e is ApiError && e.code == "unauthorized" && !stale(e.sentToken) ->
                 route(PairNotice.Unpaired((_notice.value as? PairNotice.Unpaired)?.token))
@@ -72,6 +87,14 @@ class PairRouter {
     /** The server answered 401 to a request sent with [sentToken]; ignored when that is no longer the token. */
     fun unauthorized(sentToken: String) {
         if (!stale(sentToken)) route(PairNotice.Unpaired(sentToken))
+    }
+
+    /** The server answered 401 `session_expired` to a request sent with [sentToken]; preserves Hub URL & cert pin. */
+    fun sessionExpired(sentToken: String) {
+        if (!stale(sentToken)) {
+            route(PairNotice.SessionExpired(sentToken.ifBlank { null }))
+            _loginRequests.update { it + 1 }
+        }
     }
 
     /** [sent] is a token other than the current one (a re-pair replaced it, or it was already revoked). */
@@ -132,7 +155,15 @@ class SessionWatcher(
         }
         onAnswer()
         val auth = request.header("Authorization")
-        if (response.code == 401 && auth != null) router.unauthorized(auth.removePrefix("Bearer ").trim())
+        if (response.code == 401 && auth != null) {
+            val sent = auth.removePrefix("Bearer ").trim()
+            val bodyPeek = runCatching { response.peekBody(4096).string() }.getOrNull().orEmpty()
+            if ("\"session_expired\"" in bodyPeek) {
+                router.sessionExpired(sent)
+            } else {
+                router.unauthorized(sent)
+            }
+        }
         return response
     }
 }

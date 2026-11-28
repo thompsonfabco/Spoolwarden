@@ -381,6 +381,8 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve,
     # Remote off: remove the router route this kit made; nginx, certbot and other routes stay.
     if "remote" not in on and "remote" in configured:
         acts.append(A("remote_off", remote.route_name(cfg)))
+    if "enterprise" in on:
+        acts.append(A("enterprise_deps"))
     acts.append(A("daemon_reload"))
 
     # Phase 2: start things, Spoolman first.
@@ -925,6 +927,41 @@ def _station_voice(ex: _Exec, name: str) -> None:
     ex.ok(["chmod", "-R", "a+rX,go-w", vdir])   # the station's user reads it whatever root's umask was
 
 
+def _enterprise_requirements() -> list[str]:
+    """The [enterprise] extra's requirements, from the installed package's metadata (pyproject is the one pin)."""
+    try:
+        reqs = importlib.metadata.requires("filament-kit") or []
+    except importlib.metadata.PackageNotFoundError:
+        return []
+    return [r.split(";")[0].strip() for r in reqs if "enterprise" in r.split(";", 1)[-1]]
+
+
+def _enterprise_deps(ex: _Exec) -> None:
+    """Install [enterprise] optional dependencies into this venv using constraints of already-installed packages."""
+    try:
+        import ldap3  # noqa: F401
+        import signxml  # noqa: F401
+        import lxml  # noqa: F401
+        return
+    except ImportError:
+        pass
+    print("\n==> Enterprise dependencies")
+    reqs = _enterprise_requirements()
+    if not reqs:
+        print("note: this kit's package has no [enterprise] extra (reinstall it); LDAP and SAML need ldap3, signxml, lxml")
+        return
+    pins = sorted({f"{d.metadata['Name']}=={d.version}" for d in importlib.metadata.distributions()
+                   if d.metadata["Name"]})
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        f.write("".join(p + "\n" for p in pins))
+    try:
+        if not ex.ok([sys.executable, "-m", "pip", "install", "-q", "-c", f.name, *reqs]):
+            print("warning: could not install [enterprise] dependencies (offline, or conflict with installed packages); "
+                  "LDAP and SAML will be unavailable until installed")
+    finally:
+        os.unlink(f.name)
+
+
 def _station_pairing_owner(ex: _Exec) -> None:
     """A pairing kept across a plain uninstall (it keeps /etc/filament-kit-station, it removes the user): the
     reinstalled station user may have another uid, so hand the folder and token to the user there is now."""
@@ -1027,6 +1064,11 @@ def _step(ex: _Exec, a: Action) -> None:
             _station_voice(ex, arg)
         except Exception as e:  # noqa: BLE001
             print(f"warning: the Piper voice step failed ({type(e).__name__}: {e}); the panel speaks with espeak-ng")
+    elif k == "enterprise_deps":
+        try:
+            _enterprise_deps(ex)
+        except Exception as e:  # noqa: BLE001
+            print(f"warning: the Enterprise dependency step failed ({type(e).__name__}: {e})")
     elif k == "first_build":
         # Before the PC sync has uploaded the Bambu Studio presets this only prints what to do next;
         # it never stops apply.

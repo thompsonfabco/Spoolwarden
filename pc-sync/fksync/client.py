@@ -230,7 +230,7 @@ class Client:
             try:
                 body = json.loads(data)
                 if isinstance(body, dict):
-                    code = str(body.get("error") or code)
+                    code = str(body.get("code") or body.get("error") or code)
                     message = str(body.get("message") or "")
             except ValueError:
                 pass
@@ -246,6 +246,52 @@ class Client:
 
     def info(self) -> dict:
         return self._request("GET", "/api/info", auth=False)
+
+    def enterprise_info(self) -> dict:
+        res = self.info()
+        ent = res.get("enterprise") if isinstance(res, dict) else None
+        if isinstance(ent, dict):
+            return {
+                "enabled": bool(ent.get("enabled")),
+                "login_required": bool(ent.get("login_required")),
+                "methods": list(ent.get("methods") or ()),
+            }
+        return {"enabled": False, "login_required": False, "methods": []}
+
+    def login_required(self) -> bool:
+        return bool(self.enterprise_info().get("login_required"))
+
+    def login_password(self, username: str, password: str, client: str = "fksync") -> dict:
+        res = self._request(
+            "POST",
+            "/api/auth/login",
+            json.dumps({"username": username, "password": password, "client": client}).encode(),
+            "application/json",
+            auth=False,
+        )
+        token = res.get("token") if isinstance(res, dict) else None
+        if not isinstance(token, str) or not token:
+            raise ApiError(200, "bad_response", "the Hub did not return a token")
+        return res
+
+    def exchange_pkce(self, code: str, verifier: str) -> dict:
+        res = self._request(
+            "POST",
+            "/api/auth/exchange",
+            json.dumps({"code": code, "code_verifier": verifier}).encode(),
+            "application/json",
+            auth=False,
+        )
+        token = res.get("token") if isinstance(res, dict) else None
+        if not isinstance(token, str) or not token:
+            raise ApiError(200, "bad_response", "the Hub did not return a token")
+        return res
+
+    def me(self) -> dict:
+        return self._request("GET", "/api/auth/me")
+
+    def logout(self) -> dict:
+        return self._request("POST", "/api/auth/logout", b"{}", "application/json")
 
     def pair(self, code: str) -> str:
         res = self._request("POST", "/api/pair", json.dumps({"code": code}).encode(), "application/json", auth=False)

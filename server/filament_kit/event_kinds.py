@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 SEVERITIES = ("info", "ok", "warn", "bad")
 SUBJECT_TYPES = ("printer", "spool", "device", "location", "hub")
-ACTOR_TYPES = ("hub", "device", "page", "cli", "connector")
+ACTOR_TYPES = ("hub", "device", "page", "cli", "connector", "user")
 RAISES, CLEARS = "raises", "clears"
 
 
@@ -97,6 +97,12 @@ def _kinds() -> dict[str, Kind]:
         choices=(("what", ("entry_added", "entry_removed", "updated", "rolled_back")),))
     add("usage.undone", "info", ("printer", "job", "spool", "grams", "entry"))
     add("record.changed", "info", ("record", "what"), choices=(("what", ("revised", "undone")),))
+    add("auth.login", "info", ("method", "ip", "surface"))
+    add("auth.login_failed", "warn", ("username", "method", "ip", "reason"))
+    add("auth.logout", "info", ("surface",))
+    add("enterprise.user_changed", "info", ("target", "action", "role"))
+    add("enterprise.policy_changed", "info", ("setting", "state"))
+    add("cert.changed", "ok", ("action", "subject", "expires", "fingerprint"))
     return out
 
 
@@ -114,6 +120,9 @@ ACTIVITY_KINDS: frozenset[str] = frozenset({
     "printer.added", "printer.changed", "printer.removed",
     "catalog.changed",
     "record.changed",
+    "auth.login", "auth.login_failed", "auth.logout",
+    "enterprise.user_changed", "enterprise.policy_changed",
+    "cert.changed",
 })
 
 

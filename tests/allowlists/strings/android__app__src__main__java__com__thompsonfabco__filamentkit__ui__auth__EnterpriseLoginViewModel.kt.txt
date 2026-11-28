@@ -1,0 +1,12 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/auth/EnterpriseLoginViewModel.kt | $cleanBase/auth/saml/login | enterprise SAML auth endpoint URL, never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/auth/EnterpriseLoginViewModel.kt | Enter your username and password. | fallback ViewModel validation error, moves to catalogue in follow-up
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/auth/EnterpriseLoginViewModel.kt | S256 | wire identifier (PKCE code_challenge_method), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/auth/EnterpriseLoginViewModel.kt | SHA-256 | JCA digest algorithm name, never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/auth/EnterpriseLoginViewModel.kt | Sign-in failed. | fallback ViewModel sign-in error, moves to catalogue in follow-up
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/auth/EnterpriseLoginViewModel.kt | code | wire identifier (OAuth/SAML callback query parameter), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/auth/EnterpriseLoginViewModel.kt | code_challenge | wire identifier (PKCE query parameter), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/auth/EnterpriseLoginViewModel.kt | code_challenge_method | wire identifier (PKCE query parameter), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/auth/EnterpriseLoginViewModel.kt | error | wire identifier (OAuth/SAML callback query parameter), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/auth/EnterpriseLoginViewModel.kt | pending_pkce_verifier | SavedStateHandle key for PKCE verifier, never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/auth/EnterpriseLoginViewModel.kt | redirect_uri | wire identifier (PKCE query parameter), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/auth/EnterpriseLoginViewModel.kt | spoolwarden://auth/callback | Android deep-link callback URI, never shown

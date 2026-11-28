@@ -43,6 +43,13 @@
                 <data android:scheme="spoolwarden" android:host="spools" />
                 <data android:scheme="spoolwarden" android:host="recent" />
             </intent-filter>
+            <!-- Enterprise SAML PKCE callback: spoolwarden://auth/callback?code=... -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="spoolwarden" android:host="auth" android:pathPrefix="/callback" />
+            </intent-filter>
         </activity>
         <receiver
             android:name=".update.InstallResultReceiver"

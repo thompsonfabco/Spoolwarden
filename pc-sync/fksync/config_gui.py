@@ -186,12 +186,14 @@ def run_gui(controller: ConfigController) -> int:
     hub_var = tk.StringVar(value="Hub: checking...")
     sync_var = tk.StringVar(value="Last sync: checking...")
     task_var = tk.StringVar(value="Schedule: checking...")
+    auth_var = tk.StringVar(value="Account: checking...")
 
     banner_info = ttk.Frame(banner)
     banner_info.pack(side="left", fill="x", expand=True)
     ttk.Label(banner_info, textvariable=hub_var).pack(anchor="w")
     ttk.Label(banner_info, textvariable=sync_var).pack(anchor="w")
     ttk.Label(banner_info, textvariable=task_var).pack(anchor="w")
+    ttk.Label(banner_info, textvariable=auth_var).pack(anchor="w")
 
     banner_btns = ttk.Frame(banner)
     banner_btns.pack(side="right", anchor="e")
@@ -199,6 +201,8 @@ def run_gui(controller: ConfigController) -> int:
     sync_btn.pack(side="left", padx=(0, 6))
     pair_btn = ttk.Button(banner_btns, text="Pair...")
     pair_btn.pack(side="left", padx=(0, 6))
+    auth_btn = ttk.Button(banner_btns, text="Sign In...")
+    auth_btn.pack(side="left", padx=(0, 6))
     log_btn = ttk.Button(banner_btns, text="Open Log")
     log_btn.pack(side="left")
 
@@ -249,6 +253,7 @@ def run_gui(controller: ConfigController) -> int:
         except ValueError:
             cfg = {}
         tok = store.load_token(controller.dirs)
+        user_sess = store.load_user_session(controller.dirs)
         if tok and cfg.get("host"):
             port = cfg.get("port", "")
             dev = cfg.get("device") or ""
@@ -257,6 +262,14 @@ def run_gui(controller: ConfigController) -> int:
         else:
             hub_var.set("Hub: Not paired")
             pair_btn.configure(text="Pair...")
+        if user_sess:
+            uname = user_sess.get("username") or "user"
+            urole = user_sess.get("role") or "user"
+            auth_var.set(f"Account: Signed in as {uname} ({urole})")
+            auth_btn.configure(text="Sign Out")
+        else:
+            auth_var.set("Account: Not signed in (device token)" if tok else "Account: Not signed in")
+            auth_btn.configure(text="Sign In...")
 
         st = sync.load_state(controller.dirs)
         w = st.get("waiting")
@@ -292,6 +305,7 @@ def run_gui(controller: ConfigController) -> int:
         state = "disabled" if val else "normal"
         sync_btn.configure(state=state)
         pair_btn.configure(state=state)
+        auth_btn.configure(state=state)
         if msg:
             status_var.set(msg)
 
@@ -361,8 +375,104 @@ def run_gui(controller: ConfigController) -> int:
         if not _open_log_file(controller.dirs.log_file):
             messagebox.showinfo("Open Log", f"No log file yet at:\n{controller.dirs.log_file}", parent=root)
 
+    def on_sign_in_or_out() -> None:
+        if busy[0]:
+            return
+        sess = store.load_user_session(controller.dirs)
+        if sess:
+            if messagebox.askyesno("Sign Out", f"Sign out {sess.get('username') or 'current user'}?", parent=root):
+                set_busy(True, "Signing out...")
+                def _work_logout() -> None:
+                    tok = sess.get("token")
+                    if tok:
+                        try:
+                            cfg = store.load_config(controller.dirs)
+                        except ValueError:
+                            cfg = {}
+                        if cfg.get("host") and cfg.get("fp"):
+                            from fksync import client
+                            try:
+                                client.Client(cfg, tok, timeout=5).logout()
+                            except Exception:  # noqa: BLE001 - best-effort remote logout
+                                pass
+                    store.clear_user_session(controller.dirs)
+                    def _done_logout() -> None:
+                        set_busy(False, "Signed out.")
+                        refresh_status_banner(check_task=False)
+                    root.after(0, _done_logout)
+                threading.Thread(target=_work_logout, daemon=True).start()
+            return
+        try:
+            cfg = store.load_config(controller.dirs)
+        except ValueError:
+            cfg = {}
+        if not cfg.get("host") or not cfg.get("fp"):
+            messagebox.showinfo("Sign In", "Pair this PC with a Hub first before signing in.", parent=root)
+            return
+
+        dlg = tk.Toplevel(root)
+        dlg.title("Sign In to Spoolwarden")
+        dlg.transient(root)
+        dlg.grab_set()
+        frm = ttk.Frame(dlg, padding=14)
+        frm.pack(fill="both", expand=True)
+        ttk.Label(frm, text="Username:").grid(row=0, column=0, sticky="w", pady=(0, 6))
+        user_var = tk.StringVar()
+        ttk.Entry(frm, textvariable=user_var, width=28).grid(row=0, column=1, sticky="ew", pady=(0, 6))
+        ttk.Label(frm, text="Password:").grid(row=1, column=0, sticky="w", pady=(0, 8))
+        pass_var = tk.StringVar()
+        ttk.Entry(frm, textvariable=pass_var, show="*", width=28).grid(row=1, column=1, sticky="ew", pady=(0, 8))
+        err_var = tk.StringVar(value="")
+        ttk.Label(frm, textvariable=err_var, foreground="red").grid(row=2, column=0, columnspan=2, sticky="w")
+
+        def _finish_auth(res: dict) -> None:
+            u = res.get("user") or {}
+            uname = u.get("username") if isinstance(u, dict) else str(u or user_var.get().strip())
+            store.save_user_session(controller.dirs, {
+                "token": res["token"],
+                "username": uname,
+                "role": res.get("role"),
+                "permissions": res.get("permissions") or [],
+            })
+            dlg.destroy()
+            refresh_status_banner(check_task=False)
+            status_var.set(f"Signed in as {uname}.")
+
+        def _do_pw() -> None:
+            uname, pw = user_var.get().strip(), pass_var.get()
+            if not uname or not pw:
+                err_var.set("Enter username and password.")
+                return
+            err_var.set("Signing in...")
+            def _work() -> None:
+                from fksync import client
+                try:
+                    res = client.Client(cfg, None).login_password(uname, pw)
+                    root.after(0, lambda: _finish_auth(res))
+                except Exception as exc:  # noqa: BLE001
+                    root.after(0, lambda msg=str(exc): err_var.set(msg))
+            threading.Thread(target=_work, daemon=True).start()
+
+        def _do_sso() -> None:
+            err_var.set("Opening browser for SSO...")
+            def _work() -> None:
+                from fksync import __main__ as cli_main, client
+                try:
+                    res = cli_main._loopback_sso_login(cfg, client.Client(cfg, None))
+                    root.after(0, lambda: _finish_auth(res))
+                except Exception as exc:  # noqa: BLE001
+                    root.after(0, lambda msg=str(exc): err_var.set(msg))
+            threading.Thread(target=_work, daemon=True).start()
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=3, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        ttk.Button(btns, text="Sign In", command=_do_pw).pack(side="left", padx=(0, 6))
+        ttk.Button(btns, text="Sign in with SSO", command=_do_sso).pack(side="left", padx=(0, 6))
+        ttk.Button(btns, text="Cancel", command=dlg.destroy).pack(side="left")
+
     sync_btn.configure(command=on_sync_now)
     pair_btn.configure(command=on_pair_or_unpair)
+    auth_btn.configure(command=on_sign_in_or_out)
     log_btn.configure(command=on_open_log)
 
     def update_selection_highlight() -> None:

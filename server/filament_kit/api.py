@@ -361,41 +361,121 @@ def _web_printer_changes_ok(device: str) -> bool:
     return any(d["id"] == device and d["name"] == INTAKE_DEVICE for d in pairing.devices())
 
 
+def _enterprise_info(cfg: dict, on: frozenset[str]) -> dict:
+    """Enterprise auth capabilities for `GET /api/info`."""
+    if "enterprise" not in on:
+        return {"enabled": False, "login_required": False, "methods": []}
+    from . import enterprise
+    toggles = enterprise.policy.get_toggles()
+    methods: list[str] = []
+    if toggles.get("local_accounts"):
+        methods.append("local")
+    if toggles.get("ldap_sso"):
+        methods.append("ldap")
+    if toggles.get("saml_sso"):
+        methods.append("saml")
+    return {
+        "enabled": True,
+        "login_required": bool(toggles.get("multiuser_login")),
+        "methods": methods,
+    }
+
+
+def _verify_enterprise_token(token: str) -> tuple[dict | None, str | None]:
+    """Verify an Enterprise user Bearer token. Returns `(user, None)` or `(None, error_code)`."""
+    if "enterprise" not in modules.enabled(config.load()):
+        return None, None
+    from . import enterprise
+    sess = enterprise.sessions.validate_session(token)
+    if sess is None:
+        # User tokens issued by enterprise.sessions are `fks_` / `fk_`; if a token was sent to an
+        # enterprise-enabled Hub and failed pairing.authorize, treat expired/missing user sessions cleanly.
+        return None, "session_expired" if token.startswith(("fks_", "fk_")) else "unauthorized"
+    u = enterprise.users.get_user(sess["user_id"])
+    if u is None or u.get("active") is not True:
+        return None, "session_expired"
+    role_id = u.get("role") or sess["role"]
+    perms = enterprise.rbac.effective_permissions(role_id)
+    return {
+        "id": u["id"],
+        "username": u["username"],
+        "role": role_id,
+        "permissions": [k for k, lvl in perms.items() if lvl > 0],
+        "session_id": sess["id"],
+    }, None
+
+
+def _rbac_denied(user: dict, method: str, path: str) -> str | None:
+    """When `rbac` is on, return the required permission name if `user` lacks it, else None."""
+    from . import enterprise
+    if not enterprise.policy.get_toggles().get("rbac"):
+        return None
+    req = enterprise.rbac.route_permission(method, path)
+    if req is None:
+        return None
+    fn_key, need_level = req
+    if enterprise.rbac.allows(user.get("role", ""), fn_key, need_level):
+        return None
+    return fn_key
+
+
 def _authed(fn):
     @functools.wraps(fn)
     async def wrapper(request: Request):
         header = request.headers.get("authorization", "")
         scheme, _, tok = header.partition(" ")
+        raw_tok = tok.strip() if scheme.lower() == "bearer" and tok.strip() else None
         got = None
-        if scheme.lower() == "bearer" and tok.strip():
-            got = await run_in_threadpool(pairing.authorize, tok.strip(), request.headers.get("x-spoolwarden-client"))
-        if got is None:
-            return _err(401, "unauthorized", "pair this phone with the server first (missing or revoked token)")
-        device, scope = got
-        if scope == "station" and not request.url.path.startswith(STATION_PREFIX):
-            return _err(403, "forbidden", "the intake station's token is for the station's routes only")
+        if raw_tok:
+            got = await run_in_threadpool(pairing.authorize, raw_tok, request.headers.get("x-spoolwarden-client"))
         # the path the router matched, not the URL's raw text
         path = request.scope["path"]
-        if (scope == "web" and not _web_may(request.method, path)
-                and not (_home_web_may(request.method, path) and await run_in_threadpool(_is_intake_device, device))):
-            return _err(403, "forbidden", "the web unit's token is for the web unit's routes only")
-        if scope == pairing.VIEWER_ROLE and not _viewer_may(request.method, path):
-            return _err(403, "forbidden", "a viewer token may only read Hub status, printers, spools and health")
-        if scope == pairing.HA_CONTROL_ROLE and not _ha_control_may(request.method, path):
-            return _err(403, "forbidden", "a Home Assistant control token may only read status and control printers")
-        if (scope == "web" and _printer_write(request.method, path)
-                and not await run_in_threadpool(_web_printer_changes_ok, device)):
-            return _err(403, "public_printer_changes_off", PUBLIC_PRINTER_CHANGES_OFF)
-        if scope != "web" and (path.startswith(WEB_ONLY_PREFIX) or path in WEB_ONLY_PATHS):
-            return _err(403, "forbidden", "this route is for the web unit only")
-        request.state.device = device
-        # what this request changes is written as an event done by this device; only a change writes one
-        # the name is looked up when an event is written, not for every request (pairing.devices() reads a file)
-        actor = {"type": "device", "id": device}
-        if request.method not in ("GET", "HEAD", "OPTIONS"):
-            actor["name"] = functools.partial(_actor_name, actor, device)
-        with event_sink.acting(actor):
-            return await fn(request)
+        if got is not None:
+            device, scope = got
+            if scope == "station" and not request.url.path.startswith(STATION_PREFIX):
+                return _err(403, "forbidden", "the intake station's token is for the station's routes only")
+            if (scope == "web" and not _web_may(request.method, path)
+                    and not (_home_web_may(request.method, path) and await run_in_threadpool(_is_intake_device, device))):
+                return _err(403, "forbidden", "the web unit's token is for the web unit's routes only")
+            if scope == pairing.VIEWER_ROLE and not _viewer_may(request.method, path):
+                return _err(403, "forbidden", "a viewer token may only read Hub status, printers, spools and health")
+            if scope == pairing.HA_CONTROL_ROLE and not _ha_control_may(request.method, path):
+                return _err(403, "forbidden", "a Home Assistant control token may only read status and control printers")
+            if (scope == "web" and _printer_write(request.method, path)
+                    and not await run_in_threadpool(_web_printer_changes_ok, device)):
+                return _err(403, "public_printer_changes_off", PUBLIC_PRINTER_CHANGES_OFF)
+            if scope != "web" and (path.startswith(WEB_ONLY_PREFIX) or path in WEB_ONLY_PATHS):
+                return _err(403, "forbidden", "this route is for the web unit only")
+            request.state.device = device
+            # what this request changes is written as an event done by this device; only a change writes one
+            # the name is looked up when an event is written, not for every request (pairing.devices() reads a file)
+            actor = {"type": "device", "id": device}
+            if request.method not in ("GET", "HEAD", "OPTIONS"):
+                actor["name"] = functools.partial(_actor_name, actor, device)
+            with event_sink.acting(actor):
+                return await fn(request)
+
+        if raw_tok:
+            user, err_code = await run_in_threadpool(_verify_enterprise_token, raw_tok)
+            if err_code == "session_expired":
+                return JSONResponse(
+                    {"error": "session_expired", "code": "session_expired", "message": "your session has expired; sign in again"},
+                    status_code=401,
+                )
+            if user is not None:
+                if path.startswith(WEB_ONLY_PREFIX) or path in WEB_ONLY_PATHS:
+                    return _err(403, "forbidden", "this route is for the web unit only")
+                denied = await run_in_threadpool(_rbac_denied, user, request.method, path)
+                if denied is not None:
+                    return _err(403, "forbidden", f"permission denied: {denied} required")
+                request.state.user = user
+                request.state.device = f"user:{user['id']}"
+                request.state.token = raw_tok
+                actor = {"type": "user", "id": user["id"], "name": user["username"]}
+                with event_sink.acting(actor):
+                    return await fn(request)
+
+        return _err(401, "unauthorized", "pair this phone with the server first (missing or revoked token)")
     return _handle(wrapper)
 
 
@@ -1287,14 +1367,135 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return storage.current()
 
     def info_body() -> dict:
-        return {"name": config.load()["server_name"], "version": __version__, "api": API_VERSION,
+        c = config.load()
+        return {"name": c["server_name"], "version": __version__, "api": API_VERSION,
                 "apk_version": _apk_version(), "modules": sorted(on),
-                "look": config.look(config.load()),
-                "hub_id": pairing.hub_id()}
+                "look": config.look(c),
+                "hub_id": pairing.hub_id(),
+                "enterprise": _enterprise_info(c, on)}
 
     @_handle
     async def info(request: Request):
         return JSONResponse(await run_in_threadpool(info_body))
+
+    @_handle
+    async def auth_login(request: Request):
+        if "enterprise" not in on:
+            return _module_off("enterprise")
+        body = await _json(request)
+        username = body.get("username")
+        password = body.get("password")
+        client = _opt(body, "client", str, "api")
+        if not isinstance(username, str) or not username.strip():
+            raise BadRequest("username is required", "username")
+        if not isinstance(password, str) or not password:
+            raise BadRequest("password is required", "password")
+        from . import enterprise
+
+        def _do_login() -> dict:
+            pol = enterprise.policy.load_policy()
+            toggles = pol.get("toggles") or {}
+            uname = username.strip()
+            user = None
+            auth_method = "local"
+            if toggles.get("local_accounts"):
+                try:
+                    user = enterprise.users.authenticate_local(uname, password, policy=pol)
+                except demo.DemoError:
+                    raise
+                except Exception as local_err:  # noqa: BLE001 - fall back to LDAP if enabled
+                    if not toggles.get("ldap_sso"):
+                        raise local_err
+            elif not toggles.get("ldap_sso"):
+                raise enterprise.users.UserError("Local and LDAP login are disabled")
+
+            if user is None:
+                ldap_cfg = pol.get("ldap") or {}
+                bind_pw = enterprise.users.get_secret("ldap_bind_pw") or ""
+                ca_pem = enterprise.users.get_secret("ca_bundle") or ""
+                ext = enterprise.ldap_auth.authenticate_ldap(
+                    uname, password, ldap_cfg, bind_pw=bind_pw, ca_pem=ca_pem,
+                )
+                user = enterprise.users.upsert_external_user(
+                    "ldap",
+                    ext["external_id"],
+                    ext["username"],
+                    ext["role"],
+                    display_name=ext.get("display_name", ""),
+                    email=ext.get("email", ""),
+                )
+                auth_method = "ldap"
+            raw_token, _sess = enterprise.sessions.create_session(user, kind="client", auth_method=auth_method)
+            perms = enterprise.rbac.effective_permissions(user["role"])
+            return {
+                "token": raw_token,
+                "user": {"id": user["id"], "username": user["username"]},
+                "role": user["role"],
+                "permissions": [k for k, lvl in perms.items() if lvl > 0],
+                "client": client,
+            }
+
+        try:
+            res = await run_in_threadpool(_do_login)
+        except demo.DemoError as e:
+            return _err(409, e.code, e.message)
+        except Exception as e:  # noqa: BLE001 - auth errors return 401
+            code = getattr(e, "code", None) or "invalid_credentials"
+            return _err(401, str(code), str(e) or "invalid username or password")
+        return JSONResponse(res)
+
+    @_handle
+    async def auth_exchange(request: Request):
+        if "enterprise" not in on:
+            return _module_off("enterprise")
+        body = await _json(request)
+        code = body.get("code")
+        verifier = body.get("code_verifier")
+        if not isinstance(code, str) or not code.strip():
+            raise BadRequest("code is required", "code")
+        if not isinstance(verifier, str) or not verifier.strip():
+            raise BadRequest("code_verifier is required", "code_verifier")
+        from . import enterprise
+
+        def _do_exchange() -> dict:
+            raw_token, sess = enterprise.sessions.exchange_pkce_code(code.strip(), verifier.strip())
+            perms = enterprise.rbac.effective_permissions(sess["role"])
+            return {
+                "token": raw_token,
+                "user": {"id": sess["user_id"], "username": sess["username"]},
+                "role": sess["role"],
+                "permissions": [k for k, lvl in perms.items() if lvl > 0],
+            }
+
+        try:
+            res = await run_in_threadpool(_do_exchange)
+        except Exception as e:  # noqa: BLE001
+            err_code = getattr(e, "code", None) or "invalid_code"
+            return _err(401, str(err_code), str(e) or "invalid or expired authorization code")
+        return JSONResponse(res)
+
+    @_authed
+    async def auth_logout(request: Request):
+        if "enterprise" not in on:
+            return _module_off("enterprise")
+        user = getattr(request.state, "user", None)
+        if user and user.get("session_id"):
+            from . import enterprise
+            await run_in_threadpool(enterprise.sessions.revoke_session, user["session_id"])
+        return JSONResponse({"logged_out": True})
+
+    @_authed
+    async def auth_me(request: Request):
+        user = getattr(request.state, "user", None)
+        if user is not None:
+            return JSONResponse({
+                "user": {"id": user["id"], "username": user["username"]},
+                "role": user.get("role"),
+                "permissions": list(user.get("permissions") or ()),
+            })
+        dev_id = getattr(request.state, "device", None)
+        role = await run_in_threadpool(pairing.role_of, dev_id) if dev_id else None
+        return JSONResponse({"device": dev_id, "role": role, "permissions": []})
 
     @_handle
     async def pair(request: Request):
@@ -1910,6 +2111,10 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     return Starlette(
         routes=[
             Route("/api/info", info),
+            Route("/api/auth/login", auth_login, methods=["POST"]),
+            Route("/api/auth/exchange", auth_exchange, methods=["POST"]),
+            Route("/api/auth/logout", auth_logout, methods=["POST"]),
+            Route("/api/auth/me", auth_me),
             Route("/api/hub", hub_get),
             Route("/api/pair", pair, methods=["POST"]),
             Route("/api/pair", unpair, methods=["DELETE"]),

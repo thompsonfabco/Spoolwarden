@@ -49,10 +49,20 @@ data class ServerConfig(
     val name: String,
 )
 
+/** Authenticated Enterprise user role and permissions, persisted encrypted via [ServerCipher]. */
+@Serializable
+data class UserSession(
+    val username: String,
+    val role: String,
+    val permissions: List<String> = emptyList(),
+)
+
 /** What the pairing screens need from [Settings]; lets JVM tests pass a fake. */
 interface SettingsStore {
     suspend fun save(config: ServerConfig)
     suspend fun clear()
+    suspend fun saveUserSession(session: UserSession) {}
+    suspend fun clearUserSession() {}
 
     /** The user chose to skip the fingerprint check when pairing with a new server by address. */
     suspend fun skipsFingerprintCheck(): Boolean = false
@@ -101,8 +111,25 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
         _corruptServerConfig.value = false
         store.edit {
             it.remove(KEY)
+            it.remove(USER_SESSION)
             it.remove(HUB_LOOK) // the next Hub says its own
         }
+    }
+
+    /** Encrypted Enterprise user role and permissions, or null when not signed in. */
+    val userSession: Flow<UserSession?> = store.data.map { prefs ->
+        prefs[USER_SESSION]?.let { text ->
+            runCatching { json.decodeFromString<UserSession>(ServerCipher.decrypt(text)) }.getOrNull()
+        }
+    }
+
+    override suspend fun saveUserSession(session: UserSession) {
+        val encoded = json.encodeToString(UserSession.serializer(), session)
+        store.edit { it[USER_SESSION] = ServerCipher.encrypt(encoded) }
+    }
+
+    override suspend fun clearUserSession() {
+        store.edit { it.remove(USER_SESSION) }
     }
 
     /** Off unless the user turned it on. It belongs to the phone, so forgetting a server leaves it as it is. */
@@ -164,6 +191,7 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     companion object {
         private const val RETRY_MS = 1000L
         private val KEY = stringPreferencesKey("server")
+        private val USER_SESSION = stringPreferencesKey("user_session")
         private val APPEARANCE = stringPreferencesKey("appearance")
         private val LOOK = stringPreferencesKey("look")
         private val HUB_LOOK = stringPreferencesKey("hub_look")

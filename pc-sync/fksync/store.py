@@ -32,6 +32,7 @@ class AppDirs:
         self.base = Path(base)
         self.config = self.base / "config.json"
         self.token = self.base / "token.bin"
+        self.user_session = self.base / "user_session.bin"
         self.log_file = self.base / "sync.log"
         self.backups = self.base / "backups"
         self.orca_backups = self.base / "backups-orca"   # the Orca Slicer folder, same backup names
@@ -151,6 +152,51 @@ def load_token(dirs: AppDirs) -> str | None:
     except UnicodeDecodeError:
         return None
     return token or None
+
+
+def save_user_session(dirs: AppDirs, session: dict) -> None:
+    """Persist user-scoped Enterprise session (token, username, role, permissions) with DPAPI / 0600."""
+    payload = {
+        "token": str(session.get("token") or ""),
+        "username": str(session.get("username") or ""),
+        "role": session.get("role"),
+        "permissions": list(session.get("permissions") or ()),
+    }
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    _write_atomic(dirs.user_session, _dpapi_protect(raw) if sys.platform == "win32" else raw)
+
+
+def load_user_session(dirs: AppDirs) -> dict | None:
+    """Load the stored user-scoped Enterprise session, or None when absent/unreadable."""
+    try:
+        raw = dirs.user_session.read_bytes()
+    except FileNotFoundError:
+        return None
+    if sys.platform == "win32":
+        try:
+            raw = _dpapi_unprotect(raw)
+        except OSError:
+            return None
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict) or not data.get("token"):
+        return None
+    return data
+
+
+def clear_user_session(dirs: AppDirs) -> None:
+    """Remove the stored user-scoped Enterprise session."""
+    dirs.user_session.unlink(missing_ok=True)
+
+
+def active_token(dirs: AppDirs) -> str | None:
+    """Prefer an Enterprise user session token when present, else fall back to the device pairing token."""
+    sess = load_user_session(dirs)
+    if sess and isinstance(sess.get("token"), str) and sess["token"]:
+        return sess["token"]
+    return load_token(dirs)
 
 
 # --- config ------------------------------------------------------------------------------------

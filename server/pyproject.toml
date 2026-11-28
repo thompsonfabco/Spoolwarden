@@ -27,6 +27,7 @@ station = ["nfcpy==1.0.4", "pyserial>=3.5", "esptool==5.6.0"]
 station-tts = ["piper-tts==1.8.0"]
 web = ["mcp==2.3.0"]  # exact: the web unit imports SDK internals and install.sh upgrades; the server process never imports it
 push = ["pywebpush>=2.0,<3"]  # only for config web.push (Printers tab alerts); the sender imports it when used
+enterprise = ["ldap3>=2.9", "signxml>=4.0", "lxml>=5.0"]
 
 [project.scripts]
 spoolwarden = "filament_kit.cli:main"

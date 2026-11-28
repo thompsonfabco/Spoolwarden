@@ -66,6 +66,7 @@ from starlette.routing import Route
 
 from . import __version__, config, demo, getting_started, hostaddr, hubport, lan, languages, modules, pairing, qr, reader_tokens, setup_code, shared_files, trusted
 from .bridge import registry
+from .enterprise import policy, rbac, sessions, users
 from .station_client import station_reach
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offline, Unauthorized
 
@@ -74,13 +75,14 @@ log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "setup_static"
 # one stylesheet per section, linked after setup.css (the shell) in this order, which is the cascade order: a section adds
 # its own file here and never appends to another's
-CSS_SECTIONS = tuple(f"setup_{n}.css" for n in ("updates", "features", "printers", "overview", "printers_add", "settings", "flash", "intake", "alerts", "analytics", "spools", "printer_live", "start", "corrections"))
+CSS_SECTIONS = tuple(f"setup_{n}.css" for n in ("updates", "features", "printers", "overview", "printers_add", "settings", "flash", "intake", "alerts", "analytics", "spools", "printer_live", "start", "corrections", "enterprise"))
 SHELL_SCRIPTS = (
     "setup.js", "setup_history.js", "setup_alertbar.js", "setup_overview_alerts.js", "setup_alerts.js",
     "setup_tabs.js", "setup_start.js", "setup_overview.js", "setup_features.js", "setup_updates.js",
     "setup_settings.js", "setup_devices.js", "setup_printer_live.js", "setup_printers.js", "setup_trust.js",
     "setup_presets.js", "setup_backup.js", "setup_storage.js", "setup_logs.js", "setup_intake.js",
     "setup_spools.js", "setup_analytics.js", "setup_flash.js", "setup_voice.js", "setup_corrections.js",
+    "setup_enterprise.js",
 )
 HEADERS = {
     "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
@@ -342,6 +344,15 @@ class SetupPage:
             ("/pair", w(self.pair), "POST"), ("/devices/{id}/revoke", w(self.device_revoke), "POST"),
             ("/modules", hw(self.module), "POST"), ("/settings", hw(self.setting), "POST"),
             ("/apply", hw(self.apply_start), "POST")] + setup_console.routes(self)
+        try:
+            from .setup_console import enterprise_tab
+        except ImportError:
+            enterprise_tab = None
+        auth_routes = (
+            enterprise_tab.auth_routes(self)
+            if enterprise_tab is not None and hasattr(enterprise_tab, "auth_routes")
+            else []
+        )
         from .setup_console.history_tab import EXPORT_SETS
         exports = {p.removeprefix("/export/").removesuffix(".csv") for p, _, method in table
                    if method == "GET" and p.startswith("/export/") and p.endswith(".csv")}
@@ -362,7 +373,8 @@ class SetupPage:
                  *[Route(f"/setup/{n}", self.asset, methods=["GET"]) for n in CSS_SECTIONS],
                  Route("/setup/shared/{name}", self.shared_asset, methods=["GET"]),
                  Route("/setup/api/strings/{name}", self.strings_asset, methods=["GET"])]
-                + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in table])
+                + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in table]
+                + auth_routes)
 
     # ---------- access ----------
     @staticmethod
@@ -458,6 +470,31 @@ class SetupPage:
     def _clear_trust(resp: Response) -> None:
         resp.delete_cookie(trusted.COOKIE, path="/setup", secure=True, httponly=True, samesite="strict")
 
+    @staticmethod
+    def _verify_session(sid: str) -> dict | None:
+        if not sid:
+            return None
+        sess = sessions.validate_session(sid)
+        if sess is None:
+            return None
+        u = users.get_user(sess["user_id"])
+        if u is None or u.get("active") is not True:
+            return None
+        return u
+
+    @staticmethod
+    def _rbac_allowed(user: dict | None, method: str, path: str) -> bool:
+        if user is None:
+            return False
+        perm = rbac.route_permission(method, path)
+        if perm is None:
+            return False
+        fn_key, need = perm
+        role = user.get("role")
+        if not role:
+            return False
+        return bool(rbac.allows(role, fn_key, need))
+
     def guard(self, fn, write: bool | str = False, raw: bool = False):
         """`write`: True = a change the server makes itself (the helper's `check` first); "helper" = a change the
         helper makes, which checks the code in the same request. Either way a trusted computer's cookie may stand in for
@@ -469,6 +506,24 @@ class SetupPage:
             if not self._host_ok(request):
                 return JSONResponse({"error": bad_host_text()}, 403)
             try:
+                cfg = await anyio.to_thread.run_sync(config.load)
+                ent_on = "enterprise" in modules.enabled(cfg)
+                toggles = await anyio.to_thread.run_sync(policy.get_toggles) if ent_on else {}
+                multiuser = ent_on and bool(toggles.get("multiuser_login"))
+                rbac_on = ent_on and bool(toggles.get("rbac"))
+                code_fallback = bool(toggles.get("setup_code_fallback", True))
+
+                user = None
+                if multiuser:
+                    sid = request.cookies.get("fk_session")
+                    if sid:
+                        user = await anyio.to_thread.run_sync(self._verify_session, sid)
+                    request.state.enterprise_user = user
+
+                path = request.url.path
+                is_auth_route = path.startswith("/setup/api/auth/")
+                is_state_get = request.method == "GET" and path == "/setup/api/state"
+
                 body = {}
                 token = None
                 if request.method == "POST":
@@ -476,14 +531,39 @@ class SetupPage:
                         return JSONResponse({"error": "bad origin"}, 403)
                     # raw: the body is a file the route reads itself; the code comes in a header
                     body = {"code": request.headers.get("x-setup-code", "")} if raw else await self._body(request)
-                    if write:
+
+                if multiuser and user is not None:
+                    if rbac_on and not is_auth_route and not is_state_get:
+                        if not await anyio.to_thread.run_sync(self._rbac_allowed, user, request.method, path):
+                            return JSONResponse({"error": "insufficient permission"}, 403)
+                elif multiuser and not is_auth_route and not is_state_get:
+                    if not code_fallback:
+                        return JSONResponse({"error": "login_required", "login_required": True}, 401)
+                    if request.method == "POST" and write:
                         token = self._trusted_token(request, body)
-                    if write == "helper":
-                        if not isinstance(body.get("code"), str) or not body["code"].strip():
-                            raise Refused(403, NEED_CODE, field="code")
-                    elif write:
-                        await self._code_ok(request, body)
-                res = await fn(request, body)
+                        if write == "helper":
+                            if not isinstance(body.get("code"), str) or not body["code"].strip():
+                                raise Refused(403, NEED_CODE, field="code")
+                        else:
+                            await self._code_ok(request, body)
+                    elif not await self._is_unlocked(request):
+                        return JSONResponse({"error": "login_required", "login_required": True}, 401)
+                else:
+                    if request.method == "POST" and write:
+                        token = self._trusted_token(request, body)
+                        if write == "helper":
+                            if not isinstance(body.get("code"), str) or not body["code"].strip():
+                                raise Refused(403, NEED_CODE, field="code")
+                        else:
+                            await self._code_ok(request, body)
+
+                if user is not None:
+                    from . import event_sink
+                    actor = {"type": "user", "id": user.get("username") or "", "name": user.get("display_name") or user.get("username") or ""}
+                    with event_sink.acting(actor):
+                        res = await fn(request, body)
+                else:
+                    res = await fn(request, body)
                 if isinstance(res, Response):           # a download
                     res.headers["Cache-Control"] = "no-store"
                     resp = res
@@ -628,10 +708,18 @@ class SetupPage:
         last = r.get("last") if r.get("ok") else None
         return last if isinstance(last, str) else None
 
-    def _state_body(self, *, unlocked: bool = True) -> dict:
+    def _state_body(self, *, unlocked: bool = True, user: dict | None = None) -> dict:
         from . import cli
         cfg = config.load()
         on = modules.enabled(cfg)
+        ent_on = "enterprise" in on
+        toggles = policy.get_toggles() if ent_on else {}
+        multiuser = ent_on and bool(toggles.get("multiuser_login"))
+        rbac_on = ent_on and bool(toggles.get("rbac"))
+        permissions = None
+        if rbac_on and user is not None:
+            role_id = user.get("role") or ""
+            permissions = rbac.effective_permissions(role_id) if role_id else user.get("permissions")
         try:
             readers, readers_error = reader_tokens.TokenStore().list(), None
         except reader_tokens.TokenFileError as e:
@@ -639,6 +727,15 @@ class SetupPage:
         from .setup_console import jobs
         return {
             "server_name": cfg["server_name"], "address": setup_code.page_url(cfg), "code_set": setup_code.is_set(),
+            "enterprise": {
+                "enabled": ent_on,
+                "login_required": multiuser and user is None,
+                "rbac": rbac_on,
+                "saml_sso": bool(toggles.get("saml_sso")),
+                "user": user,
+                "permissions": permissions,
+            },
+            "enterprise_user": user,
             "appearance": {"theme": config.look(cfg)},      # the theme for new devices; Console when unknown
             "version": __version__, "mode": modules.mode_of(on),
             "modes": [{"name": n, "modules": sorted(m), "here": "server" in m} for n, m in modules.MODES.items()],
@@ -674,15 +771,16 @@ class SetupPage:
                  "last_seen": _fmt_time(d["last_seen"]), "reachable": reach.get(d["id"]),
                  "built_in": d["name"] in BUILT_IN_DEVICES} for d in devs]
 
-    def _state(self, *, unlocked: bool = True) -> dict:
+    def _state(self, *, unlocked: bool = True, user: dict | None = None) -> dict:
         from .setup_console import summaries
-        out = self._state_body(unlocked=unlocked)
+        out = self._state_body(unlocked=unlocked, user=user)
         out["summaries"] = summaries.build(out, getattr(self, "overview_cache", None) and self.overview_cache.value)
         return out
 
     async def state(self, request: Request, body: dict):
         unlocked = True if request.method == "POST" else await self._is_unlocked(request)
-        return await anyio.to_thread.run_sync(lambda: self._state(unlocked=unlocked))
+        user = getattr(request.state, "enterprise_user", None)
+        return await anyio.to_thread.run_sync(lambda: self._state(unlocked=unlocked, user=user))
 
     async def preview(self, request: Request, body: dict):
         """What switching a module, or a mode preset, would do, in the checklist's words; changes nothing."""

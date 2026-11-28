@@ -30,11 +30,11 @@ import anyio
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from .. import (__version__, config, demo, hubport, intake, inventory, lan, modules, pairing, shared_files, storage, storage_api,
-                tagsources)
+from .. import (__version__, config, demo, event_sink, hubport, intake, inventory, lan, modules, pairing, shared_files,
+                storage, storage_api, tagsources)
 from ..intake import CapReached, ReadError
 from ..spoolman import SpoolmanError
 from ..station_client import StationClient
@@ -550,10 +550,60 @@ class IntakeApp:
         data = self._cached_kit("hub", "/api/hub", 10)      # the Hub's own object carries `demo`; the web token may read it
         return isinstance(data, dict) and data.get("demo") is True
 
+    def _enterprise_login_required(self) -> bool:
+        cfg = self.tools.cfg()
+        if "enterprise" not in modules.enabled(cfg):
+            return False
+        from .. import enterprise
+        return bool(enterprise.policy.get_toggles().get("multiuser_login"))
+
+    @staticmethod
+    def _session_user(request: Request) -> dict | None:
+        tok = request.cookies.get("fk_session")
+        if not tok:
+            return None
+        try:
+            from ..enterprise import sessions, users
+            sess = sessions.validate_session(tok)
+            if sess is None:
+                return None
+            u = users.get_user(sess["user_id"])
+            if u is None or u.get("active") is not True:
+                return None
+            return {"id": u["id"], "username": u["username"], "role": u["role"]}
+        except Exception:  # noqa: BLE001 - invalid/expired session cookie -> None
+            return None
+
+    @staticmethod
+    def _rbac_denied(user: dict, method: str, path: str) -> bool:
+        from ..enterprise import policy, rbac
+        if not policy.get_toggles().get("rbac"):
+            return False
+        perm = rbac.route_permission(method, path)
+        if perm is None:
+            return True
+        fn_key, need = perm
+        return not rbac.allows(user.get("role", ""), fn_key, need)
+
+    @staticmethod
+    def _login_redirect(request: Request) -> RedirectResponse:
+        target = request.url.path + (("?" + request.url.query) if request.url.query else "")
+        return RedirectResponse(f"/auth/login?next={quote(target or '/intake', safe='/')}", status_code=302)
+
     async def page(self, request: Request):
         if not self._lan(request):
             return self._refusal(request)
+        user = None
+        if self._enterprise_login_required():
+            user = await anyio.to_thread.run_sync(self._session_user, request)
+            if user is None:
+                return self._login_redirect(request)
+            request.state.user = user
         lang = await anyio.to_thread.run_sync(self._language_for, request)
+        if user is not None:
+            with event_sink.acting({"type": "user", "id": user["id"], "name": user["username"]}):
+                return self._html(await anyio.to_thread.run_sync(self._shell, request), app=True, lang=lang,
+                                  strings_src=self._strings_src(lang))
         return self._html(await anyio.to_thread.run_sync(self._shell, request), app=True, lang=lang,
                           strings_src=self._strings_src(lang))
 
@@ -561,6 +611,12 @@ class IntakeApp:
         """The print page: the size choice, the labels the Hub draws, the line about the printed address and Print."""
         if not self._lan(request):
             return self._refusal(request)
+        user = None
+        if self._enterprise_login_required():
+            user = await anyio.to_thread.run_sync(self._session_user, request)
+            if user is None:
+                return self._login_redirect(request)
+            request.state.user = user
         ids, size = request.query_params.get("ids", ""), request.query_params.get("size", "62x29")
         if not self.LABEL_IDS.fullmatch(ids) or size not in self.LABEL_SIZES:
             text = self._say("labels_bad_ids" if not self.LABEL_IDS.fullmatch(ids) else "labels_bad_size")
@@ -683,8 +739,21 @@ class IntakeApp:
                 return JSONResponse({"error": "home network only"}, 403)
             if request.method in ("POST", "PATCH") and not self._origin_ok(request):
                 return JSONResponse({"error": "bad origin"}, 403)
+            user = None
+            if self._enterprise_login_required():
+                user = await anyio.to_thread.run_sync(self._session_user, request)
+                if user is None:
+                    return JSONResponse({"error": "session_expired", "code": "session_expired",
+                                         "message": "sign in required"}, 401)
+                if await anyio.to_thread.run_sync(self._rbac_denied, user, request.method, request.scope["path"]):
+                    return JSONResponse({"error": "forbidden", "message": "insufficient permission"}, 403)
+                request.state.user = user
             try:
-                res = await fn(request)
+                if user is not None:
+                    with event_sink.acting({"type": "user", "id": user["id"], "name": user["username"]}):
+                        res = await fn(request)
+                else:
+                    res = await fn(request)
                 if isinstance(res, Response):      # a stream or a binary (the Printers tab's camera and events)
                     return res
                 return JSONResponse(res, headers={"Cache-Control": "no-store"})

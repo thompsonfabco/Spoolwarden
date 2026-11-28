@@ -10,6 +10,8 @@ import com.thompsonfabco.filamentkit.ui.settings.acceptLanguage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -18,7 +20,6 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -42,6 +43,27 @@ import java.util.concurrent.TimeUnit
 
 /** What the client says for an error reply that carries no `message` of its own ([ApiError.notFromHub] knows it). */
 internal fun apiStandIn(status: Int) = "The Hub returned an error ($status)"
+
+@Serializable
+data class EnterpriseCapabilities(
+    val enabled: Boolean = false,
+    @SerialName("login_required") val loginRequired: Boolean = false,
+    val methods: List<String> = emptyList(),
+)
+
+@Serializable
+data class EnterpriseUser(
+    val id: String = "",
+    val username: String = "",
+)
+
+@Serializable
+data class AuthSessionResult(
+    val token: String,
+    val user: EnterpriseUser? = null,
+    val role: String = "",
+    val permissions: List<String> = emptyList(),
+)
 
 /**
  * The filament-kit server's JSON API.
@@ -68,11 +90,47 @@ class Api(
 ) {
     /** The Hub's own language from its latest `api/info` or `api/hub`: what Automatic falls back to ([acceptLanguage]). */
     @Volatile private var hubLanguage: String? = null
+    @Volatile var enterprise: EnterpriseCapabilities = EnterpriseCapabilities()
+        private set
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    suspend fun info(): ServerInfo =
-        decode<ServerInfo>(call(request("api", "info", auth = false).get())).also { it.language?.let { l -> hubLanguage = l } }
+    suspend fun info(): ServerInfo {
+        val raw = call(request("api", "info", auth = false).get())
+        val entEl = raw.jsonObject["enterprise"]
+        if (entEl != null && entEl !is JsonNull) {
+            runCatching { decode<EnterpriseCapabilities>(entEl) }.onSuccess { enterprise = it }
+        } else {
+            enterprise = EnterpriseCapabilities()
+        }
+        return decode<ServerInfo>(raw).also { it.language?.let { l -> hubLanguage = l } }
+    }
+
+    suspend fun enterpriseCapabilities(): EnterpriseCapabilities {
+        info()
+        return enterprise
+    }
+
+    suspend fun login(username: String, password: String): AuthSessionResult {
+        val body = buildJsonObject {
+            put("username", username)
+            put("password", password)
+            put("client", "android")
+        }
+        val res = decode<AuthSessionResult>(call(request("api", "auth", "login", auth = false).post(body.toBody())))
+        if (res.token.isBlank()) throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a token")
+        return res
+    }
+
+    suspend fun exchangePkce(code: String, verifier: String): AuthSessionResult {
+        val body = buildJsonObject {
+            put("code", code)
+            put("code_verifier", verifier)
+        }
+        val res = decode<AuthSessionResult>(call(request("api", "auth", "exchange", auth = false).post(body.toBody())))
+        if (res.token.isBlank()) throw ApiError(200, ApiError.BAD_RESPONSE, "The Hub did not return a token")
+        return res
+    }
 
     suspend fun pair(code: String): String {
         val body = buildJsonObject { put("code", code) }
@@ -887,7 +945,13 @@ class Api(
         } catch (_: Exception) {
             null
         }
-        val code = if (status == 401) "unauthorized" else obj?.get("error")?.jsonPrimitive?.contentOrNull ?: genericCode(status)
+        val rawCode = obj?.get("code")?.jsonPrimitive?.contentOrNull
+            ?: obj?.get("error")?.jsonPrimitive?.contentOrNull
+        val code = when (status) {
+            401 -> if (rawCode == "session_expired") "session_expired" else "unauthorized"
+            403 -> rawCode ?: "forbidden"
+            else -> rawCode ?: genericCode(status)
+        }
         val message = obj?.get("message")?.jsonPrimitive?.contentOrNull ?: apiStandIn(status)
         val extra = JsonObject(obj.orEmpty().filterKeys { it != "error" && it != "message" })
         val sent = if (status == 401) auth?.removePrefix("Bearer ")?.trim()?.ifBlank { null } else null

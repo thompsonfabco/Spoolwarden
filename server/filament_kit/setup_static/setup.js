@@ -353,8 +353,9 @@ const TABS = {
   flash: ["nav_flash_device", "flash", () => [flashTab]],
   updates: ["nav_updates", "updates", () => [updatesTab]],
   logs: ["nav_logs", "logs", () => [logsTab]],
+  enterprise: ["nav_enterprise", "shield", () => [enterpriseTab]],
 };
-const GROUPS = [["everyday", "nav_everyday", 0, 7], ["system", "nav_system", 7, 12]];
+const GROUPS = [["everyday", "nav_everyday", 0, 7], ["system", "nav_system", 7, 13]];
 const BAR = new Set(["overview", "printers", "recent", "settings"]);   // the phone bottom bar; the rest are in More
 const MOVED = { modules: "features", intake: "recent" };              // the tabs' old addresses
 // the document title: the section's name, and a place inside it (a Settings group) first
@@ -371,6 +372,11 @@ function render() {
   shown = now;
   pageHead();
   page.dataset.section = now;
+  if (S && S.enterprise && S.enterprise.login_required && typeof enterpriseSignInCard === "function") {
+    pageTitle.textContent = SW.t("ent_signin_title");
+    sections.replaceChildren(draw(enterpriseSignInCard, "signin"));
+    return;
+  }
   pageTitle.textContent = SW.t(TABS[now][0]);
   const regions = TABS[now][2]().filter(Boolean).map((m, i) => draw(m, m.name || "#" + i)).filter(Boolean);
   sections.replaceChildren(...regions);
@@ -396,6 +402,7 @@ async function refresh(at, sent) {
   hubReadHistorySummaries();
   window.startDemoBar(S.demo === true, page.parentElement);    // setup_start.js: the demo banner with Leave demo on every section
   setLangApply();                                       // setup_settings.js: the page's `lang`, from the Language choice
+  paintEnterpriseUser();
   if (!at) render();
   else if (r && r.isConnected) {
     const also = r._make.also && [...sections.children].find((x) => x._make === r._make.also);
@@ -413,7 +420,35 @@ const hubName = h("span", {}, h("span", { class: "skeleton__line", "aria-hidden"
 const pageTitle = h("h1", { class: "page-head__title", tabindex: "-1" });
 const page = h("section", { class: "page" }, h("header", { class: "page-head" }, h("div", { class: "page-head__text" }, pageTitle)));
 const navEl = h("nav", { class: "nav" });
+const entUserChip = h("span", { class: "ent__user-chip", hidden: true });
 let shellView = null;
+
+function paintEnterpriseUser() {
+  const eu = S && (S.enterprise_user || (S.enterprise && S.enterprise.user));
+  if (!eu) {
+    entUserChip.hidden = true;
+    entUserChip.replaceChildren();
+    return;
+  }
+  const label = typeof eu === "string" ? eu : (eu.display_name || eu.username || "");
+  entUserChip.hidden = false;
+  entUserChip.replaceChildren(
+    h("span", { class: "ent__user-name", textContent: SW.t("ent_user_badge", { user: label }) }),
+    SW.btn(SW.t("ent_sign_out"), { cls: "btn--ghost", run: async () => {
+      try {
+        const r = await fetch("/auth/logout", { method: "POST", credentials: "same-origin" });
+        if (!r.ok) {
+          let msg = `HTTP ${r.status}`;
+          try { const d = await r.json(); if (d && d.error) msg = d.error; } catch {}
+          throw new Error(msg);
+        }
+        SW.toast(SW.t("ent_signed_out"));
+        await refresh();
+      } catch (e) {
+        SW.toast(e.message, "bad");
+      }
+    } }));
+}
 
 function topBar() {
   const hub = h("span", { class: "topbar__hub" }, h("span", { "aria-hidden": "true" }, "/"), " ", hubName);
@@ -421,7 +456,7 @@ function topBar() {
     h("a", { class: "topbar__brand", href: "#overview" }, SW.h("svg", { class: "topbar__mark", "aria-hidden": "true", focusable: "false" }, SW.h("use", { href: "#i-spoolwarden" })),
       h("span", { class: "topbar__name" }, SW.t("app_name")), " ", hub),
     hubVersion,
-    h("div", { class: "topbar__tools" }, hubJobs().chip, SW_LOCK.lockChip({ loading: true }), appearanceControl(), appearanceButton()));
+    h("div", { class: "topbar__tools" }, entUserChip, hubJobs().chip, SW_LOCK.lockChip({ loading: true }), appearanceControl(), appearanceButton()));
 }
 
 function navigation() {
@@ -495,7 +530,11 @@ document.addEventListener("DOMContentLoaded", () => {
     h("div", { class: "toasts", "aria-live": "polite" }), h("div", { class: "sr", id: "announcer", "aria-live": "polite" }));
   pageTitle.textContent = SW.t(TABS[tabNow()][0]);
   shellView = SW.shell({ hub: document.title, home: "overview", titleOf: documentTitle,
-    off: () => !S ? [] : [!S.printers.on && "printers", S.modules && S.modules.some((m) => m.name === "presets" && !m.on) && "presets"].filter(Boolean),
+    off: () => !S ? [] : [
+      !S.printers.on && "printers",
+      S.modules && S.modules.some((m) => m.name === "presets" && !m.on) && "presets",
+      (!S.modules || !S.modules.some((m) => m.name === "enterprise" && m.on)) && "enterprise",
+    ].filter(Boolean),
     onSection: () => {
     settleAddress();
     const now = tabNow();

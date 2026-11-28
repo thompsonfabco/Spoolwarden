@@ -71,7 +71,7 @@ def test_severities_are_only_the_four_banner_kinds():
 
 def test_subject_and_actor_types_are_the_ruled_ones():
     assert ek.SUBJECT_TYPES == ("printer", "spool", "device", "location", "hub")
-    assert ek.ACTOR_TYPES == ("hub", "device", "page", "cli", "connector")
+    assert ek.ACTOR_TYPES == ("hub", "device", "page", "cli", "connector", "user")
 
 
 def test_condition_keys():

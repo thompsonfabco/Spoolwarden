@@ -70,6 +70,9 @@ class ServerSession(
     private val _connection = MutableStateFlow<Connection>(Connection.Unpaired)
     val connection: StateFlow<Connection> = _connection.asStateFlow()
 
+    private val _sessionExpired = MutableStateFlow(false)
+    val sessionExpired: StateFlow<Boolean> = _sessionExpired.asStateFlow()
+
     private val lock = Any()
     @Volatile private var fingerprint: String? = null
     @Volatile private var pinned: OkHttpClient? = null
@@ -86,7 +89,15 @@ class ServerSession(
         router.currentToken = ::currentToken
         router.currentFingerprint = { _config.value?.fingerprint }
         scope.launch { configs.collect(::apply) }
-        scope.launch { router.notice.collect { if (it is PairNotice.Unpaired && it.token != null) forgetToken(it.token) } }
+        scope.launch {
+            router.notice.collect {
+                when (it) {
+                    is PairNotice.Unpaired -> if (it.token != null) forgetToken(it.token)
+                    is PairNotice.SessionExpired -> if (it.token != null) expireSession(it.token)
+                    else -> Unit
+                }
+            }
+        }
     }
 
     /** `https://<host>:<port>` of the server: the last reachable host, else the best stored one. */
@@ -152,6 +163,27 @@ class ServerSession(
     }
 
     /**
+     * [sent] was rejected as an expired Enterprise session: stop sending it, mark [sessionExpired] true,
+     * and preserve the stored token so [isPaired] remains true on cold start (routing to EnterpriseLoginScreen
+     * instead of PairScreen).
+     */
+    private fun expireSession(sent: String) {
+        if (sent.isBlank()) return
+        revokedToken = sent
+        _sessionExpired.value = true
+    }
+
+    /** Store a newly acquired Enterprise user Bearer token while preserving the Hub URL and pinned cert fingerprint. */
+    suspend fun applyUserToken(token: String) {
+        val cfg = _config.value ?: return
+        if (token.isBlank()) return
+        revokedToken = null
+        _sessionExpired.value = false
+        save(cfg.copy(token = token))
+        router.clear()
+    }
+
+    /**
      * The user trusts the certificate they were shown: pin exactly [actual] in place of [expected] and keep the token
      * and addresses. False when [expected] is no longer what this pairing pins (nothing saved), or when the stored
      * config does not show the new pin within [trustWaitMs] (the new pin was already saved and may yet take effect).
@@ -180,7 +212,10 @@ class ServerSession(
         synchronized(lock) {
             _config.value = cfg
             val token = cfg?.token?.takeIf { it.isNotBlank() }
-            if (token != null && token != pairedToken) _pairings.value += 1
+            if (token != null && token != pairedToken) {
+                _pairings.value += 1
+                _sessionExpired.value = false
+            }
             pairedToken = token
             if (cfg == null) {
                 resolveJob?.cancel()
@@ -189,6 +224,7 @@ class ServerSession(
                 endpoints = null
                 host = null
                 _api.value = null
+                _sessionExpired.value = false
                 _connection.value = Connection.Unpaired
                 return
             }
@@ -227,7 +263,7 @@ class ServerSession(
             _connection.value = Connection.Online(found)
             val cfg = _config.value
             if (cfg != null && endpoints === eps && cfg.endpoints != eps.hosts) {
-                save(cfg.copy(endpoints = eps.hosts, token = if (cfg.token == revokedToken) "" else cfg.token))
+                save(cfg.copy(endpoints = eps.hosts, token = if (cfg.token == revokedToken && !_sessionExpired.value) "" else cfg.token))
             }
         } catch (e: CancellationException) {
             throw e

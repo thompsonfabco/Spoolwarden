@@ -273,9 +273,11 @@ def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool,
                 store.recover_interrupted_pair(dirs)
                 cfg = store.load_config(dirs)
                 role = "secondary" if secondary else store.role_of(cfg)
-                token = store.load_token(dirs)
-                if cfg.get("host") and cfg.get("fp") and token:
-                    cfg, token = _settle_pair(dirs, cfg, token, echo)
+                token = store.active_token(dirs)
+                if cfg.get("host") and cfg.get("fp") and store.load_token(dirs):
+                    cfg, dev_tok = _settle_pair(dirs, cfg, store.load_token(dirs), echo)
+                    if not store.load_user_session(dirs):
+                        token = dev_tok
                 if not cfg.get("host") or not cfg.get("fp") or not token:
                     store.log(dirs, f"error: this PC is not paired; run '{APP} pair'")
                     if echo:
@@ -299,6 +301,10 @@ def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool,
                 return _fail(dirs, echo, e.message, "no_studio", cfg, token, role=role)
             except client.ApiError as e:
                 if e.status == 401:
+                    if e.code == "session_expired":
+                        store.clear_user_session(dirs)
+                        return _fail(dirs, echo, f"your session has expired; run '{APP} login'",
+                                     "refused", role=role)
                     return _fail(dirs, echo, f"the Hub no longer accepts this PC (unpaired?); run '{APP} pair'",
                                  "refused", role=role)
                 return _fail(dirs, echo, str(e), "server", cfg, token, role=role)
@@ -588,6 +594,7 @@ def cmd_unpair(dirs: store.AppDirs, yes: bool = False) -> int:
             except ValueError:
                 cfg = {}
             dirs.token.unlink(missing_ok=True)
+            store.clear_user_session(dirs)
             slicer_paths = cfg.get("slicer_paths")
             if slicer_paths:
                 store.save_config(dirs, {"slicer_paths": slicer_paths})
@@ -635,15 +642,142 @@ def _macos() -> bool:
 
 # --- entry ---------------------------------------------------------------------------------------
 
+def _pkce_pair() -> tuple[str, str]:
+    import base64
+    import hashlib
+    import secrets
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
+    return verifier, challenge
+
+
+def _loopback_sso_login(cfg: dict, cl: client.Client, timeout: float = 120.0) -> dict:
+    import http.server
+    import secrets
+    import threading
+    import urllib.parse
+    import webbrowser
+
+    verifier, challenge = _pkce_pair()
+    expected_state = secrets.token_urlsafe(24)
+    result_box: dict = {}
+    done = threading.Event()
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            parsed = urllib.parse.urlparse(self.path)
+            if parsed.path != "/callback":
+                self.send_response(404)
+                self.end_headers()
+                return
+            qs = urllib.parse.parse_qs(parsed.query)
+            cb_state = (qs.get("state") or [None])[0]
+            if not cb_state or not secrets.compare_digest(cb_state, expected_state):
+                result_box["error"] = "invalid_state"
+                self.send_response(400)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"<h3>Sign-in failed (state mismatch). Return to the terminal.</h3>")
+                done.set()
+                return
+            code = (qs.get("code") or [None])[0]
+            err = (qs.get("error") or [None])[0]
+            result_box["code"] = code
+            result_box["error"] = err
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            msg = ("<h3>Signed in to Spoolwarden. You may close this window.</h3>"
+                   if code else "<h3>Sign-in failed. Return to the terminal.</h3>")
+            self.wfile.write(msg.encode("utf-8"))
+            done.set()
+
+        def log_message(self, format, *args):  # noqa: A002
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    port = srv.server_address[1]
+    redirect_uri = f"http://127.0.0.1:{port}/callback"
+    host = cfg["host"]
+    hub_port = cfg.get("port", client.DEFAULT_PORT)
+    auth_url = (f"https://{_at(host, hub_port)}/auth/saml/login?"
+                + urllib.parse.urlencode({"redirect_uri": redirect_uri,
+                                          "code_challenge": challenge,
+                                          "code_challenge_method": "S256",
+                                          "state": expected_state}))
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        _out(f"Opening browser for SSO sign-in: {auth_url}")
+        webbrowser.open(auth_url)
+        if not done.wait(timeout):
+            raise client.ApiError(408, "timeout", "SSO sign-in timed out")
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    if result_box.get("error") or not result_box.get("code"):
+        raise client.ApiError(401, "sso_failed", result_box.get("error") or "no authorization code received")
+    return cl.exchange_pkce(result_box["code"], verifier)
+
+
+def cmd_login(dirs: store.AppDirs, username: str | None = None, sso: bool = False) -> int:
+    import getpass
+    dirs.ensure()
+    cfg = store.load_config(dirs)
+    if not cfg.get("host") or not cfg.get("fp"):
+        _out(f"This PC is not paired with a Hub yet; run '{APP} pair' first.")
+        return 1
+    cl = client.Client(cfg, None)
+    try:
+        ent = cl.enterprise_info()
+    except (client.Offline, client.CertChanged, client.ApiError) as e:
+        _out(f"Could not reach Hub: {e}")
+        return 1
+    if not ent.get("enabled"):
+        _out("Enterprise authentication is not enabled on this Hub.")
+        return 1
+    methods = ent.get("methods") or []
+    use_sso = sso or (username is None and "saml" in methods and "local" not in methods and "ldap" not in methods)
+    try:
+        if use_sso:
+            res = _loopback_sso_login(cfg, cl)
+        else:
+            user = username or _ask("Username: ").strip()
+            if not user:
+                _out("Username is required.")
+                return 1
+            pw = getpass.getpass("Password: ")
+            res = cl.login_password(user, pw)
+    except (client.Offline, client.CertChanged) as e:
+        _out(f"Could not reach Hub: {e}")
+        return 1
+    except client.ApiError as e:
+        _out(f"Sign-in failed: {e}")
+        return 1
+    u = res.get("user") or {}
+    uname = u.get("username") if isinstance(u, dict) else str(u or username or "")
+    store.save_user_session(dirs, {
+        "token": res["token"],
+        "username": uname,
+        "role": res.get("role"),
+        "permissions": res.get("permissions") or [],
+    })
+    _out(f"Signed in as {uname} (role: {res.get('role') or 'user'}).")
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog=APP, description="Sync Bambu Studio (and Orca Slicer) filament presets with Spoolwarden.")
     p.add_argument("--version", action="version", version=f"{APP} {__version__}")
     p.add_argument("--appdata", help=argparse.SUPPRESS)
     p.add_argument("--localappdata", help=argparse.SUPPRESS)
-    cmds = "pair,run,watch,status,unpair,config,apply-updates" + (",install-timer,uninstall-timer" if _linux() else "")
+    cmds = "pair,login,run,watch,status,unpair,config,apply-updates" + (",install-timer,uninstall-timer" if _linux() else "")
     sub = p.add_subparsers(dest="cmd", required=True, metavar="{" + cmds + "}")
     pr = sub.add_parser("pair", help="pair this PC with the Hub (paste the link from 'sudo spoolwarden pair --pc')")
     pr.add_argument("--secondary", action="store_true", help="pair this PC as a secondary (pull-only) PC")
+    lg = sub.add_parser("login", help="sign in with an Enterprise user account (local/LDAP or SSO)")
+    lg.add_argument("--username", help="username for local/LDAP sign-in")
+    lg.add_argument("--sso", action="store_true", help="sign in via browser SSO (SAML PKCE)")
     r = sub.add_parser("run", help="run one sync now (the scheduled task runs this every 10 minutes)")
     r.add_argument("--quiet", action="store_true", help="print nothing (the log still gets every line)")
     r.add_argument("--secondary", action="store_true", help="run in secondary (pull-only) mode")
@@ -689,6 +823,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "pair":
         dirs.ensure()
         return cmd_pair(dirs, appdata, layout, secondary=args.secondary)
+    if args.cmd == "login":
+        return cmd_login(dirs, username=args.username, sso=args.sso)
     if args.cmd == "run":
         return cmd_run(dirs, appdata, args.quiet, layout, secondary=args.secondary)
     if args.cmd == "watch":

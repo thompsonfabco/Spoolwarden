@@ -11,7 +11,7 @@ import time
 
 from .. import config, intake_history, modules, reader_flash, setup_helper, updates
 
-SECTIONS = ("overview", "printers", "recent", "devices", "presets", "features", "settings", "flash", "updates", "logs")
+SECTIONS = ("overview", "printers", "recent", "devices", "presets", "features", "settings", "flash", "updates", "logs", "enterprise")
 SETUPS = {"server": "Hub", "all-in-one": "Hub with Weigh Station", "station": "Weigh Station only", "custom": "Custom"}
 SETTINGS_GROUPS = 9                     # the design, Hub page: Appearance, General, Storage locations, Label Reader, Backups and restore, ...
 FLASH_NAMES = {"printer-station": "Tag Reader", "intake-panel": "Weigh Station display"}
@@ -81,6 +81,26 @@ def _updates() -> str:
     return f"{st['latest']} is available" if st["newer"] else f"{st['installed']} · up to date"
 
 
+def _enterprise(cfg: dict) -> str | None:
+    if "enterprise" not in modules.enabled(cfg):
+        return None
+    ent = cfg.get("enterprise") if isinstance(cfg.get("enterprise"), dict) else {}
+    users = ent.get("users") if isinstance(ent.get("users"), list) else []
+    sso = bool(ent.get("sso") or ent.get("oidc") or ent.get("saml"))
+    try:
+        from .. import enterprise as ent_mod
+        if hasattr(ent_mod, "summary_status"):
+            return ent_mod.summary_status(cfg) or "Enabled"
+        if hasattr(ent_mod, "list_users"):
+            users = ent_mod.list_users()
+    except Exception:  # noqa: BLE001
+        pass
+    parts = [f"{len(users)} user{'' if len(users) == 1 else 's'}"] if users else []
+    if sso:
+        parts.append("SSO on")
+    return " · ".join(parts) if parts else "Enabled"
+
+
 def build(state: dict, overview_rows: list[dict] | None) -> dict[str, str | None]:
     """`state` is the reply of `G state` so far; `overview_rows` the last Overview read's rows (None: none yet)."""
     cfg = config.load()
@@ -96,6 +116,7 @@ def build(state: dict, overview_rows: list[dict] | None) -> dict[str, str | None
         "flash": _flash(),
         "updates": _updates(),
         "logs": f"{len(units)} services",
+        "enterprise": _enterprise(cfg),
     }
     assert tuple(out) == SECTIONS
     return out

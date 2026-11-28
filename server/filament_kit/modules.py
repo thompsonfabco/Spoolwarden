@@ -74,13 +74,15 @@ MODULES: dict[str, Module] = {m.name: m for m in (
     # 1-13 keep their meaning in the checklist.
     _m("local_intake", "Label Reader: On this Hub", "A label reader on your own network reads spool photos, no cloud",
        depends=("server",), needs_text="the local reader service (local_intake.url)", optional_ai=True),
+    _m("enterprise", "Enterprise", "Multi-user logins, custom roles, LDAP/LDAPS and SAML SSO, user activity tracking, and certificate management.",
+       depends=("server",)),
 )}
 
 # Switched on by hand (modules set / config menu, the installer's question), never by a mode: a mode is the kit
 # as it was. ai_intake (spec R 2.4): AI is optional, so a new install has it off; one that had it keeps it. The
 # library is not bundled: switching it on downloads it; one without the key has none until asked. klipper is for
 # owners of Klipper printers only (Klipper spec: opt-in, runs inside filament-kit.service).
-OPT_IN = frozenset({"ai_intake", "web", "remote", "orders", "library", "updates", "klipper", "local_intake"})
+OPT_IN = frozenset({"ai_intake", "web", "remote", "orders", "library", "updates", "klipper", "local_intake", "enterprise"})
 
 MODES: dict[str, frozenset[str]] = {
     "server": frozenset(MODULES) - {"station"} - OPT_IN,
@@ -116,7 +118,7 @@ def enabled(cfg: dict) -> frozenset[str]:
 
 # Modules newer than an earlier release, with the version that added them. That release's `validate` refuses the
 # name even when false, and `update --rollback` ends in its `modules apply`.
-NEWER: dict[str, tuple[int, int, int]] = {"klipper": (0, 4, 0), "local_intake": (0, 5, 3)}
+NEWER: dict[str, tuple[int, int, int]] = {"klipper": (0, 4, 0), "local_intake": (0, 5, 3), "enterprise": (0, 7, 0)}
 
 
 def module_map(on, before: dict | None = None) -> dict[str, bool]:
