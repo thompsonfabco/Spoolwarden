@@ -163,6 +163,7 @@ def fk_env(tmp_path, monkeypatch):
     (tmp_path / "etc" / "anthropic_key").write_text("sk-ant-api03-test\n", encoding="utf-8")
     cfg["web"] = {**cfg["web"], "lan": ["192.0.2.0/24"]}
     config.save(cfg)
+    monkeypatch.setattr(setup_code, "SCRYPT", {**setup_code.SCRYPT, "n": 2 ** 10})
     setup_code.write(CODE)
     monkeypatch.setattr(cli.shutil, "chown", lambda *a, **k: None)         # no filament-kit group on a test machine
     monkeypatch.setattr(setup_helper, "_start_apply", lambda checked=False: None)
