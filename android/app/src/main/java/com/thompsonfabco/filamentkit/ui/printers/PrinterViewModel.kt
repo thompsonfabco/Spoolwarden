@@ -205,6 +205,8 @@ object PrinterHelp {
 
     fun isPrinting(gcodeState: String): Boolean = gcodeState in PRINTING
 
+    fun isConnected(state: String?): Boolean = state == "connected" || state == "unknown_model"
+
     /** The list line while printing: "job · percent · time left" (", paused" when paused); null when idle. */
     fun jobLine(s: PrinterSummary?): String? {
         if (s == null) return null
@@ -310,8 +312,9 @@ data class PrinterUiState(
     val confirmStop: Boolean = false,
     val unauthorized: Boolean = false,
     val mismatch: Pair<String, String>? = null,
-    /** The slot whose unload is being checked (the dry run). */
+    /** The slot whose unload or clear is being checked (the dry run). */
     val slotBusy: String? = null,
+    val slotBusyAction: String? = null,
     val unloadAsk: UnloadAsk? = null,
     /** The unload itself is being written: the question stays open and cannot be left. */
     val unloading: Boolean = false,
@@ -341,11 +344,12 @@ data class PrinterUiState(
 ) {
     val loaded: Boolean get() = printer != null
     val paused: Boolean get() = status?.gcodeState == "PAUSE"
+    val running: Boolean get() = status?.gcodeState == "RUNNING"
     val printing: Boolean get() = status?.let { PrinterHelp.isPrinting(it.gcodeState) } == true
     val lightOn: Boolean get() = status?.light == "on"
 
     /** Commands are offered only to a connected printer, one at a time. */
-    val controlsEnabled: Boolean get() = printer?.state == "connected" && !commandBusy
+    val controlsEnabled: Boolean get() = PrinterHelp.isConnected(printer?.state) && !commandBusy
 }
 
 /**
@@ -427,7 +431,7 @@ class PrinterViewModel(
     fun askUnload(slot: AmsSlot) {
         val spool = slot.spool ?: return
         if (_state.value.slotBusy != null || _state.value.unloading) return
-        _state.update { it.copy(slotBusy = slot.label, slotNote = null, slotAlso = null, unloadAsk = null) }
+        _state.update { it.copy(slotBusy = slot.label, slotBusyAction = "unload", slotNote = null, slotAlso = null, unloadAsk = null) }
         viewModelScope.launch {
             guard(onError = { p -> _state.update { it.copy(slotNote = Note(p.say(), ok = false)) } }) {
                 val r = backend.unload(id, slot.label, dryRun = true)
@@ -436,7 +440,7 @@ class PrinterViewModel(
                     it.copy(unloadAsk = UnloadAsk(slot.label, PrinterHelp.spoolName(spool), spool.id, where))
                 }
             }
-            _state.update { it.copy(slotBusy = null) }
+            _state.update { it.copy(slotBusy = null, slotBusyAction = null) }
         }
     }
 
@@ -471,7 +475,7 @@ class PrinterViewModel(
     /** Asks what clearing [slot] would do (dry run), then opens the question. An older Hub (404) is told to update. */
     fun askClear(slot: AmsSlot) {
         if (_state.value.slotBusy != null || _state.value.unloading || _state.value.clearing) return
-        _state.update { it.copy(slotBusy = slot.label, slotNote = null, slotAlso = null, clearAsk = null) }
+        _state.update { it.copy(slotBusy = slot.label, slotBusyAction = "clear", slotNote = null, slotAlso = null, clearAsk = null) }
         viewModelScope.launch {
             guard(onError = { p -> _state.update { it.copy(slotNote = Note(p.say(), ok = false)) } }) {
                 try {
@@ -484,7 +488,7 @@ class PrinterViewModel(
                     _state.update { it.copy(slotNote = Note(PrinterTexts.CLEAR_UPDATE_HUB, ok = false)) }
                 }
             }
-            _state.update { it.copy(slotBusy = null) }
+            _state.update { it.copy(slotBusy = null, slotBusyAction = null) }
         }
     }
 

@@ -386,11 +386,15 @@ function drawFlash(body, F, J) {
   // 4 write
   const goHere = SW.btn(SW.t("flash_connect_write"), { cls: "btn--primary" });
   const goHub = SW.btn(SW.t("flash_write_hub"), { cls: "btn--primary" });
+  const flashStub = { flash_refresh_boards: "Refresh boards", flash_hub_running_hint: "Flashing on the Hub runs to completion and cannot be stopped mid-write." };
+  const flashT = (k) => { const v = SW.t(k); return v !== k ? v : (flashStub[k] || k); };
+  const refreshBoardsBtn = SW.btn(flashT("flash_refresh_boards"), { cls: "btn--ghost", action: "refresh-boards" });
   const stop = SW.btn(SW.t("common_stop"));
   const hint = h("p", { class: "muted", textContent: SW.t("flash_connect_hint") });
+  const hubRunningHint = h("p", { class: "muted", textContent: flashT("flash_hub_running_hint") });
   const displayHub = h("p", { textContent: SW.t("flash_display_hub") });
   flashHost = h("div", { class: "flash-run" });
-  const writeEl = h("div", { class: "flash-write" }, displayHub, h("div", { class: "row" }, goHere, goHub, stop, hint), flashHost, box);
+  const writeEl = h("div", { class: "flash-write" }, displayHub, h("div", { class: "row" }, goHere, goHub, refreshBoardsBtn, stop, hint, hubRunningHint), flashHost, box);
 
   const answers = () => {
     const bad = [[ssid, ssid._check()], [again, again._check()]].filter(([f, e]) => (SW.fieldError(f, e), e));
@@ -443,9 +447,11 @@ function drawFlash(body, F, J) {
     for (const i of [...buzzer.elements, ...settingsEl.querySelectorAll(".field__control")]) i.disabled = busy;
     goHere.hidden = !here;
     goHub.hidden = here || !tag;
+    refreshBoardsBtn.hidden = here || !tag || busy;
     stop.hidden = !(here && busy);
     stop.disabled = !!(flashRun && flashRun.stop);
     hint.hidden = !here || busy;
+    hubRunningHint.hidden = here || !tag || !(busy || (flashRun && flashRun.hub && flashRun.running) || hubBusy());
     displayHub.hidden = here || tag;
     flashHost.hidden = !(here || tag);
     // a reason stays beside its button only while the button shows
@@ -468,15 +474,30 @@ function drawFlash(body, F, J) {
   flashClear = () => { pass._control.value = again._control.value = ""; };
   fill(body, h("p", { class: "muted", textContent: SW.t("flash_intro") }), stepsEl);
   sync();
-  // the Hub's boards, read again every 3 s while a Tag Reader on the Hub waits for one
+  const refreshBoards = async (manual = false) => {
+    if (manual) SW.busy(refreshBoardsBtn, SW.t("common_working"));
+    try {
+      const f = await api("firmware");
+      const next = f.server_boards || [];
+      if (JSON.stringify(next) === JSON.stringify(boards())) return;
+      F.server_boards = next;
+      const prev = board._control.value;
+      board._control.replaceChildren(...next.map((b) => h("option", { value: b.port, textContent: SW.t("flash_board_option", { port: b.port, product_name: b.product }) })));
+      if (next.some((b) => b.port === prev)) board._control.value = prev;
+      sync();
+    } catch (e) {
+      if (manual) say(box, hubText(e.message), false);
+    } finally {
+      if (manual) SW.idle(refreshBoardsBtn);
+    }
+  };
+  refreshBoardsBtn.addEventListener("click", () => refreshBoards(true));
+  // the Hub's boards, read again every 3 s while a Tag Reader on the Hub is selected and idle
   const poll = setInterval(async () => {
     if (!body.isConnected) { clearInterval(poll); return; }
     const { dev, here } = state();
-    if (here || dev.id !== "printer-station" || boards().length || running()) return;
-    try { const f = await api("firmware"); F.server_boards = f.server_boards; } catch { return; }
-    if (!boards().length) return;
-    board._control.replaceChildren(...boards().map((b) => h("option", { value: b.port, textContent: SW.t("flash_board_option", { port: b.port, product_name: b.product }) })));
-    sync();
+    if (here || dev.id !== "printer-station" || running()) return;
+    await refreshBoards(false);
   }, 3000);
   if (flashRun && flashRun.hub && flashRun.running || J && J.running && J.name === "reader_setup") followHubJob();
 }

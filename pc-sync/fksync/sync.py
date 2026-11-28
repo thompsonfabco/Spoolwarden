@@ -615,6 +615,20 @@ class _Run:
         kept = list(getattr(res, "kept", []) or []) + list(getattr(res, "kept_orca", []) or [])
         # orca_synced: Orca was synced and the build made from its presets (its orca/ in, or it had none)
         self.st["installed"] = {"stamp": stamp, "at": self.now, "trees": trees, "orca_synced": bool(with_orca)}
+        if self.role == "secondary":
+            prev_acc = self.st.get("local_accepted") or {}
+            same_stamp = isinstance(prev_acc, dict) and prev_acc.get("stamp") == stamp
+            merged_acc: dict[str, list[str]] = {}
+            for tree in ("base", "orca"):
+                names = set(prev_acc.get(tree) or []) if same_stamp else set()
+                if accept and tree in trees:
+                    names.update(accept.get(tree) or [])
+                if names:
+                    merged_acc[tree] = sorted(names)
+            if merged_acc:
+                self.st["local_accepted"] = {"stamp": stamp, **merged_acc}
+            else:
+                self.st.pop("local_accepted", None)
         if self.role != "secondary":
             self.st["report"] = stamp
             self.st["report_trees"] = trees
@@ -873,6 +887,18 @@ class _Run:
         if local_installed == stamp:
             if self.f is not None and self.orca_on and not self._orca_went_in(stamp):
                 return self._install_secondary(stamp, server)
+            accept = self.accepted(server, stamp)
+            if accept:
+                done = self.st.get("local_accepted") or {}
+                done_for_stamp = done if isinstance(done, dict) and done.get("stamp") == stamp else {}
+                unapplied = {
+                    tree: [n for n in names if n not in set(done_for_stamp.get(tree) or ())]
+                    for tree, names in accept.items()
+                }
+                unapplied = {tree: names for tree, names in unapplied.items() if names}
+                if unapplied:
+                    self.log(f"writing {sum(len(v) for v in unapplied.values())} updates you accepted for build {stamp}")
+                    return self._install_secondary(stamp, server, accept=unapplied)
             self.secondaries(stamp)
             return self.finish("up_to_date", f"build {stamp} is installed")
         if self.f is None and not self.orca_on:
@@ -880,7 +906,7 @@ class _Run:
             return self.finish("up_to_date", note)
         return self._install_secondary(stamp, server)
 
-    def _install_secondary(self, stamp: str, server: dict) -> str:
+    def _install_secondary(self, stamp: str, server: dict, accept: dict | None = None) -> str:
         work = Path(tempfile.mkdtemp(prefix=".download.", suffix=".tmp", dir=self.d.base))
         try:
             build_dir, meta = self._download(stamp, work)
@@ -892,7 +918,8 @@ class _Run:
             if not with_orca and self.o is not None and (build_dir / "orca").is_dir() and self.f is None:
                 why = (self.st.get("orca") or {}).get("note") or "Orca Slicer is not synced this run"
                 return self.finish("refused", f"build {stamp}: {why}")
-            accept = self.accepted(server, stamp)
+            if accept is None:
+                accept = self.accepted(server, stamp)
             return self._install(stamp, build_dir, resuming=False, with_orca=with_orca, accept=accept)
         finally:
             shutil.rmtree(work, ignore_errors=True)

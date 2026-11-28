@@ -26,7 +26,7 @@ import urllib.parse
 import anyio
 from starlette.responses import Response
 
-from .. import __version__, config, pairing, reader_config, reader_tokens, station_client
+from .. import __version__, config, demo, pairing, reader_config, reader_tokens, station_client
 from ..station import panel_setup
 
 KINDS = ("phone", "pc", "station", "web", "reader", "home-assistant", "builtin")
@@ -305,6 +305,8 @@ def routes(page) -> list[tuple]:
         return {"settings": settings, **({"settings_dropped": True} if dropped else {})}
 
     async def settings(request, body):
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         device_id = request.path_params["id"]
         out = await anyio.to_thread.run_sync(change, device_id, body)
         page.audit(request, f"Weigh Station {device_id} settings changed")
@@ -330,6 +332,8 @@ def routes(page) -> list[tuple]:
         return {"address": address}
 
     async def open_route(request, body):
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         device_id = request.path_params["id"]
         out = await anyio.to_thread.run_sync(open_page, device_id, _host_of(request.headers.get("host", "")))
         page.audit(request, f"Weigh Station {device_id} page opened")        # no ticket in the log
@@ -350,6 +354,8 @@ def routes(page) -> list[tuple]:
         raise Refused(404, "this device does not support remote updates")
 
     async def ota_route(request, body):
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         device_id = request.path_params["id"]
         out = await anyio.to_thread.run_sync(trigger_ota, device_id, body)
         page.audit(request, f"Device {device_id} OTA triggered")
@@ -369,6 +375,8 @@ def routes(page) -> list[tuple]:
         raise Refused(404, "this device does not support remote restart")
 
     async def restart_route(request, body):
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         device_id = request.path_params["id"]
         out = await anyio.to_thread.run_sync(trigger_restart, device_id)
         page.audit(request, f"Device {device_id} restart triggered")

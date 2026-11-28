@@ -7,6 +7,8 @@ import android.nfc.NfcAdapter
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -172,7 +174,13 @@ class SearchViewModel(
 
     /** A pause in typing searches by itself once two letters are typed; clearing the box clears the results. */
     fun setQuery(q: String) {
-        _state.update { it.copy(query = q) }
+        _state.update {
+            it.copy(
+                query = q,
+                lowOnly = if (q.isNotEmpty()) false else it.lowOnly,
+                checkedOnly = if (q.isNotEmpty()) false else it.checkedOnly,
+            )
+        }
         typing?.cancel()
         if (q.isBlank()) {
             job?.cancel()
@@ -186,7 +194,7 @@ class SearchViewModel(
     }
 
     fun setSealedOnly(on: Boolean) {
-        _state.update { it.copy(sealedOnly = on) }
+        _state.update { it.copy(sealedOnly = on, lowOnly = false, checkedOnly = false) }
         if (_state.value.query.isNotBlank()) search()
     }
 
@@ -197,7 +205,7 @@ class SearchViewModel(
         if (q.isEmpty()) return
         typing?.cancel()
         job?.cancel()
-        _state.update { it.copy(busy = true) }
+        _state.update { it.copy(busy = true, lowOnly = false, checkedOnly = false) }
         job = viewModelScope.launch {
             try {
                 val found = search(q, s.sealedOnly).map { it.toSpoolSummary() }
@@ -536,7 +544,8 @@ fun SearchScreen(
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalArrangement = Arrangement.spacedBy(space.s2)) {
                         // Sealed only, Checked out, Running low: the order TalkBack reads (searchChipOrder)
                         searchChipOrder(hasChecked = ui.checkedCount != null, hasLow = lowCount != null || ui.lowOnly).forEach { chip ->
                             when (chip) {
@@ -566,6 +575,19 @@ fun SearchScreen(
                             else -> onOpenSpool(spool)
                         }
                     }
+                    val cardDetail: (@Composable (SpoolSummary) -> Unit)? = if (useCardDetail) {
+                        { spool ->
+                            val close = {
+                                expandedIds = expandedIds - spool.id
+                                returnFocusId = spool.id
+                            }
+                            SwCardDetail(onClose = close) {
+                                spoolDetail(spool, true, close)
+                            }
+                        }
+                    } else {
+                        null
+                    }
                     if (ui.query.isBlank() && !ui.lowOnly && !ui.checkedOnly) TagHint(nfc, onNfcSettings ?: { openNfcSettings(context) })
                     if (onScanLabel != null && ui.query.isBlank() && !ui.lowOnly && !ui.checkedOnly) {
                         SwButton(stringResource(R.string.label_scan_button), onScanLabel, Modifier.fillMaxWidth(), icon = R.drawable.sw_ic_camera)
@@ -573,8 +595,8 @@ fun SearchScreen(
                     HubNoticeOf(ui.failure, onPairAgain)
                     HubNoticeOf(ui.csvFailure, onPairAgain)
                     (ui.csvProblem?.let { failureText(it) } ?: ui.csvFailure?.let { hubFailureText(it) })?.let { NoticeCard(NoticeKind.Bad, it) }
-                    if (ui.lowOnly) LowSpoolsList(ui, openOrToggle, online, onTryAgain = vm::loadLowSpools)
-                    if (ui.checkedOnly) CheckedOutList(ui, openOrToggle, online, onReturn = vm::returnToHome, onPairAgain = onPairAgain, onTryAgain = vm::loadCheckedOut)
+                    if (ui.lowOnly) LowSpoolsList(ui, openOrToggle, online, onTryAgain = vm::loadLowSpools, expandedIds = expandedIds.toSet(), cardDetail = cardDetail)
+                    if (ui.checkedOnly) CheckedOutList(ui, openOrToggle, online, onReturn = vm::returnToHome, onPairAgain = onPairAgain, onTryAgain = vm::loadCheckedOut, expandedIds = expandedIds.toSet(), cardDetail = cardDetail)
                     val searched = ui.searched
                     // the states every Hub screen has: the progress line, the error card, offline
                     if (!ui.lowOnly && !ui.checkedOnly) ScreenState(
@@ -710,7 +732,14 @@ internal fun LowSpool.toSummary(): SpoolSummary = SpoolSummary(
 
 /** The running-low list: least filament first, each row with "Last one" or "<n> more in stock" under it. */
 @Composable
-private fun LowSpoolsList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: Boolean, onTryAgain: () -> Unit) {
+private fun LowSpoolsList(
+    ui: SearchUi,
+    onOpen: (SpoolSummary) -> Unit,
+    online: Boolean,
+    onTryAgain: () -> Unit,
+    expandedIds: Set<Int> = emptySet(),
+    cardDetail: (@Composable (SpoolSummary) -> Unit)? = null,
+) {
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
     ScreenState(
@@ -725,8 +754,9 @@ private fun LowSpoolsList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: 
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
             ui.low.forEach { spool ->
+                val summary = spool.toSummary()
                 Column {
-                    SpoolRow(spool.toSummary(), onClick = { onOpen(spool.toSummary()) })
+                    SpoolRow(summary, onClick = { onOpen(summary) })
                     Text(
                         if (spool.lastOne) {
                             stringResource(R.string.running_low_last_one)
@@ -736,6 +766,7 @@ private fun LowSpoolsList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: 
                         color = if (spool.lastOne) colors.warn else colors.muted,
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    if (cardDetail != null && summary.id in expandedIds) cardDetail(summary)
                 }
             }
         }
@@ -747,7 +778,16 @@ private fun LowSpoolsList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: 
  * under it. The Hub's refusal of a Return shows under the list in its own words.
  */
 @Composable
-private fun CheckedOutList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online: Boolean, onReturn: (SpoolSummary) -> Unit, onPairAgain: () -> Unit, onTryAgain: () -> Unit) {
+private fun CheckedOutList(
+    ui: SearchUi,
+    onOpen: (SpoolSummary) -> Unit,
+    online: Boolean,
+    onReturn: (SpoolSummary) -> Unit,
+    onPairAgain: () -> Unit,
+    onTryAgain: () -> Unit,
+    expandedIds: Set<Int> = emptySet(),
+    cardDetail: (@Composable (SpoolSummary) -> Unit)? = null,
+) {
     val space = SpoolwardenTheme.space
     val colors = SpoolwardenTheme.colors
     ScreenState(
@@ -773,6 +813,7 @@ private fun CheckedOutList(ui: SearchUi, onOpen: (SpoolSummary) -> Unit, online:
                         { onReturn(spool) },
                         kind = SwButtonKind.Quiet, enabled = ui.returningId == null, busy = ui.returningId == spool.id,
                     )
+                    if (cardDetail != null && spool.id in expandedIds) cardDetail(spool)
                 }
             }
         }

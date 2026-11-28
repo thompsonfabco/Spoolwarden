@@ -572,9 +572,9 @@ def test_a_module_that_is_off_says_how_to_turn_it_on(capsys):
     for argv in (["add", "--klipper", "--address", "127.0.0.1", "--port", "9"], ["scan", "--subnet", "192.0.2.0/24"]):
         rc, out, err = run(capsys, "printer", *argv)
         assert rc == 1 and "the klipper module is off on this server" in err
-        assert squash(err).endswith("Fix: sudo spoolwarden modules enable klipper")
+        assert squash(err).endswith("Fix: sudo spoolwarden features on klipper")
     d = doc(run(capsys, "printer", "scan", "--json")[1])
-    assert d["ok"] is False and d["fix"] == "sudo spoolwarden modules enable klipper"
+    assert d["ok"] is False and d["fix"] == "sudo spoolwarden features on klipper"
 
 
 @pytest.mark.parametrize("argv", [["list"], ["show", "garage"], ["detect", "garage"], ["add", "--klipper", "--address",

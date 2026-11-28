@@ -49,16 +49,17 @@ private data class DraftJson(
  */
 class DraftStore(private val dir: File) {
     private val json = Json { ignoreUnknownKeys = true }
+    private val lock = Any()
 
-    fun create(manual: Boolean = false): Draft {
+    fun create(manual: Boolean = false): Draft = synchronized(lock) {
         val id = UUID.randomUUID().toString()
         val draft = Draft(id, emptyList(), "", null, null, true, null, null, System.currentTimeMillis(), manual = manual) // "Still sealed" starts on
         folder(id).mkdirs()
         write(draft)
-        return draft
+        draft
     }
 
-    fun addPhoto(id: String, jpeg: ByteArray): File {
+    fun addPhoto(id: String, jpeg: ByteArray): File = synchronized(lock) {
         val folder = folder(id)
         require(File(folder, DRAFT_FILE).isFile) { "no such draft: $id" }
         val next = (photoFiles(folder).maxOfOrNull { photoIndex(it) } ?: 0) + 1
@@ -66,25 +67,26 @@ class DraftStore(private val dir: File) {
         val tmp = File(folder, "photo$next.jpg.tmp")
         tmp.writeBytes(jpeg)
         move(tmp, target)
-        return target
+        target
     }
 
-    fun update(draft: Draft) {
+    fun update(draft: Draft) = synchronized(lock) {
         require(folder(draft.id).isDirectory) { "no such draft: ${draft.id}" }
         write(draft)
     }
 
-    fun list(): List<Draft> =
+    fun list(): List<Draft> = synchronized(lock) {
         (dir.listFiles { f -> f.isDirectory } ?: emptyArray())
             .mapNotNull { get(it.name) }
             .sortedBy { it.created }
+    }
 
     /** Null when the draft is missing or its `draft.json` is unreadable. */
-    fun get(id: String): Draft? {
+    fun get(id: String): Draft? = synchronized(lock) {
         val folder = folder(id)
         val file = File(folder, DRAFT_FILE)
         if (!file.isFile) return null
-        return try {
+        try {
             val d = json.decodeFromString<DraftJson>(file.readText())
             Draft(id, photoFiles(folder), d.hint, d.tag, d.weightGrams, d.sealed, d.readResult, d.editedItems, d.created, d.addedBefore, d.manual)
         } catch (e: Exception) {
@@ -99,7 +101,7 @@ class DraftStore(private val dir: File) {
      * so nobody could discard them). A draft that holds [Draft.addedBefore] is kept: it carries the "may already be
      * added" warning. Returns how many were deleted.
      */
-    fun purge(maxAgeMs: Long, now: Long = System.currentTimeMillis(), open: Set<String> = emptySet()): Int {
+    fun purge(maxAgeMs: Long, now: Long = System.currentTimeMillis(), open: Set<String> = emptySet()): Int = synchronized(lock) {
         var n = 0
         for (folder in dir.listFiles { f -> f.isDirectory }.orEmpty()) {
             val d = get(folder.name)
@@ -112,10 +114,10 @@ class DraftStore(private val dir: File) {
             }
             if (drop && folder.deleteRecursively()) n++
         }
-        return n
+        n
     }
 
-    fun delete(id: String) {
+    fun delete(id: String): Unit = synchronized(lock) {
         folder(id).deleteRecursively()
     }
 

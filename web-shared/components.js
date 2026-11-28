@@ -1,7 +1,3 @@
-// Spoolwarden shared components (the design, components 1.4): the one script the Hub page and the web app load
-// after strings/strings.js, holding the element builder, the Hub request helper, guard(), profile(), announce(), the
-// dialog, the toast, the inline result and the behaviour of the other components; their markup is as 02 shows it.
-// Texts come from window.SW_TEXT or the caller; text from the Hub goes in as textContent, never as markup.
 (() => {
 "use strict";
 const doc = document, root = doc.documentElement;
@@ -19,7 +15,6 @@ function t(key, vars) {
   return vars ? v.replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : v;
 }
 const NS = "http://www.w3.org/2000/svg", SVG = new Set(["svg", "use", "circle"]);
-// h(tag, props, ...kids): props are properties or attributes; text = textContent, data = dataset, on = listeners
 function h(tag, props, ...kids) {
   const svg = SVG.has(tag), el = svg ? doc.createElementNS(NS, tag) : doc.createElement(tag);
   for (const [k, v] of Object.entries(props || {})) {
@@ -36,7 +31,7 @@ function h(tag, props, ...kids) {
 const E = (tag, cls, ...kids) => h(tag, { class: cls }, ...kids);
 const $ = (s, r = doc) => r.querySelector(s), $$ = (s, r = doc) => [...r.querySelectorAll(s)];
 const on = (el, ev, fn, o) => el.addEventListener(ev, fn, o);
-const up = (e, s) => e.target.closest && e.target.closest(s);   // the event target's nearest s
+const up = (e, s) => e.target.closest && e.target.closest(s);
 const attr = (el, k, v) => (v == null ? el.removeAttribute(k) : el.setAttribute(k, v));
 let seq = 0;
 const uid = (p) => `sw-${p}-${++seq}`;
@@ -85,7 +80,6 @@ const WORDS = {
   high: ["s-filled", "ok", "confidence_high"], medium: ["s-triangle", "warn", "confidence_medium"],
   low: ["s-octagon", "bad", "confidence_low"], not_on_label: ["s-hollow", "muted", "confidence_not_on_label"],
 };
-// status(word, {small, cls, text, count, prefix}): a word of the vocabulary or a confidence level
 function status(word, o = {}) {
   const [id, kind, key] = WORDS[word];
   return E("span", `status status--${kind}${o.small ? " status--s" : ""}${o.cls ? " " + o.cls : ""}`, shape(id),
@@ -124,7 +118,6 @@ function iconBtn(name, label, o = {}) {
   tooltip(b, label);
   return b;
 }
-// busy(b, "Saving…"): the loading form; the width is kept (--btn-min)
 function busy(b, label) {
   if (b.getAttribute("aria-busy") === "true") return false;
   b.style.setProperty("--btn-min", b.offsetWidth + "px");
@@ -141,7 +134,6 @@ function idle(b) {
   attr(b, "aria-busy", null); attr(b, "aria-disabled", k.was); attr(b, "aria-label", k.name);
   b.style.removeProperty("--btn-min");
 }
-// disable(b, reason): aria-disabled with its reason shown beside it; reason null enables it
 function disable(b, reason) {
   let r = b._reason;
   const ids = (b.getAttribute("aria-describedby") || "").split(" ").filter((x) => x && (!r || x !== r.id));
@@ -155,10 +147,14 @@ function disable(b, reason) {
   r.textContent = reason;
   attr(b, "aria-disabled", "true"); attr(b, "aria-describedby", ids.concat(r.id).join(" "));
 }
-// a press on an aria-disabled control does nothing but call its _refused()
 on(doc, "click", (e) => {
   const b = up(e, '[aria-disabled="true"]');
   if (b && b.matches("button, a, [role^=menuitem]")) { e.preventDefault(); e.stopImmediatePropagation(); if (b._refused) b._refused(); }
+  else if (b && b.matches("select, input[type=checkbox], input[type=radio]")) { e.preventDefault(); e.stopImmediatePropagation(); }
+}, true);
+on(doc, "keydown", (e) => {
+  const c = up(e, 'select[aria-disabled="true"], input[type=checkbox][aria-disabled="true"], input[type=radio][aria-disabled="true"]');
+  if (c && e.key !== "Tab" && e.key !== "Escape") { e.preventDefault(); e.stopImmediatePropagation(); }
 }, true);
 
 // ----- the Hub request helper: api(path, {method, body, form, code, signal}) -----
@@ -191,7 +187,6 @@ async function api(path, o = {}) {
 
 // ----- the inline result (8.6) -----
 const pending = new WeakMap();
-// result(el, kind run|ok|bad|warn|info|neutral|null, content, {action: {label, name, run}, bar, barText})
 function result(el, kind, content, o = {}) {
   clearTimeout(pending.get(el));
   el.replaceChildren();
@@ -202,14 +197,13 @@ function result(el, kind, content, o = {}) {
   const d = new Date(), kids = [kind === "run" ? spinner() : shape(KIND_SHAPE[kind] || "s-hollow"), E("span", "result__text", content)];
   if (o.bar != null) kids.push(progress({ value: o.bar, valuetext: o.barText, name: o.barText }));
   if (kind !== "run") {
-    const tm = h("time", { class: "result__time muted", datetime: d.toISOString() }, " · " + hm(d));
+    const tm = h("time", { class: "result__time muted", tabindex: "0", datetime: d.toISOString() }, " · " + hm(d));
     kids.push(tooltip(tm, `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hm(d)}`));
   }
   if (o.action) kids.push(btn(o.action.label, { name: o.action.name, run: o.action.run }));
   pending.set(el, setTimeout(() => el.append(...kids), 30));
   return el;
 }
-// results are cleared when the person leaves the section
 const sec = (u) => (u.split("#")[1] || "").split(/[/?]/)[0];
 on(window, "hashchange", (e) => {
   if (sec(e.oldURL) !== sec(e.newURL)) for (const r of $$(".result[data-state]")) result(r, null);
@@ -217,15 +211,14 @@ on(window, "hashchange", (e) => {
 
 // ----- the toast (8.7): toast(text, kind, {action: {label, name, run}}) -----
 function toast(text, kind = "ok", o = {}) {
-  let box = $(".toasts"), timer = 0, left = o.action ? 10000 : 5000, started = 0;
+  let box = $(".toasts"), timer = 0, left = o.action || kind === "bad" ? 10000 : 5000, started = 0;
   if (!box) doc.body.append(box = h("div", { class: "toasts", "aria-live": "polite" }));
   const close = () => { clearTimeout(timer); el.remove(); };
   const el = h("div", { class: "toast", data: { state: kind } }, shape(KIND_SHAPE[kind] || "s-filled"), E("span", "toast__text", text));
-  if (o.action) el.append(btn(o.action.label, { name: o.action.name, run: () => { o.action.run(); close(); } }),
-    iconBtn("close", t("common_close"), { run: close }));
+  if (o.action) el.append(btn(o.action.label, { name: o.action.name, run: () => { o.action.run(); close(); } }));
+  el.append(h("button", { class: "btn btn--icon btn--ghost", type: "button", "aria-label": t("common_close"), on: { click: close } }, icon("close")));
   const start = () => { clearTimeout(timer); started = Date.now(); timer = setTimeout(close, left); };
   const pause = () => { if (timer) left = Math.max(1000, left - (Date.now() - started)); clearTimeout(timer); timer = 0; };
-  // runs again only when neither the pointer nor the focus is inside
   const resume = (e) => { if (!el.matches(":hover") && !el.contains(e.type === "focusout" ? e.relatedTarget : doc.activeElement)) start(); };
   for (const [ev, fn] of [["mouseenter", pause], ["mouseleave", resume], ["focusin", pause], ["focusout", resume]]) on(el, ev, fn);
   box.prepend(el);
@@ -241,7 +234,6 @@ function openModal(dlg, opener) {
   if (!dlg.open) dlg.showModal();
   return dlg;
 }
-// modal(dlg, {temp, scrim, onClose}): on closing, focus returns to the opener or the page title
 function modal(dlg, o = {}) {
   on(dlg, "close", () => {
     if (!dlg._noReturn) returnFocus(dlg._opener);
@@ -252,11 +244,7 @@ function modal(dlg, o = {}) {
   if (o.scrim) on(dlg, "click", (e) => { if (e.target === dlg && !dlg._busy) quit(dlg); });
   return dlg;
 }
-// quit(dlg): Cancel, the close icon and the scrim ask what Escape asks (the dialog's cancel event, 9.1)
 const quit = (dlg) => { if (dlg.dispatchEvent(new Event("cancel", { cancelable: true }))) dlg.close(); };
-// ask({kind confirm|destructive|typed|entry|info, title, text, body, fields, after, confirm, cancel, style, word, busy,
-// write, open(dlg, opener) for openModal, run(values, {result}) -> false stays open}): resolves run's answer, null on
-// cancel
 function ask(o) {
   return new Promise((resolve) => {
     const id = uid("dlg"), danger = o.kind === "destructive" || o.kind === "typed", fields = (o.fields || []).slice();
@@ -276,12 +264,16 @@ function ask(o) {
     const dlg = h("dialog", { class: "dialog" + (o.wide ? " dialog--wide" : ""), role: danger ? "alertdialog" : null,
       "aria-labelledby": id + "-title", "aria-describedby": text ? id + "-text" : null }, form);
     const values = () => fields.map((f) => f._control.value);
-    // what was typed, the typed word aside: closing asks first when it changed, except in a one-field entry (9.1)
     const kept = () => fields.filter((f) => f !== word).map((f) => f._control.value).join("\n"), first = kept();
-    // a wrong typed word: the button stays focusable, aria-disabled with its reason
     const wrong = () => word && word._control.value.trim() !== o.word, sync = () => disable(go, wrong() ? typed : null);
     if (word) { go._refused = () => word._control.focus(); on(word._control, "input", sync); sync(); }
-    const ro = (on) => { for (const f of fields) f._control.readOnly = on; };
+    const ro = (on) => {
+      for (const f of fields) {
+        const c = f._control;
+        if (c.matches("select, [type=checkbox], [type=radio]")) attr(c, "aria-disabled", on ? "true" : null);
+        else c.readOnly = on;
+      }
+    };
     on(dlg, "cancel", (e) => {
       if (dlg._busy) { result(res, "warn", t("common_busy_wait")); return e.preventDefault(); }
       if (!(o.kind === "entry" && fields.length < 2) && kept() !== first) {
@@ -317,13 +309,12 @@ function ask(o) {
 }
 const leaveAsk = (changes) => ask({ kind: "destructive", title: t("common_leave_title"), text: t("form_leave_body", { changes }),
   confirm: t("common_leave_without_saving"), cancel: t("common_stay") });
-// sheet({title, body, foot, cls, bodyTag, bodyLabel, onClose}): removed when it closes
 function sheet(o) {
   const id = uid("sheet");
   const dlg = h("dialog", { class: "sheet" + (o.cls ? " " + o.cls : ""), "aria-labelledby": id },
     h("div", { class: "sheet__handle", ...AH }),
     E("div", "sheet__head", h("h2", { class: "sheet__title", id, text: o.title }),
-      iconBtn("close", t("common_close"), { action: "close", run: () => dlg.close() })),
+      iconBtn("close", t("common_close"), { action: "close", run: () => quit(dlg) })),
     h(o.bodyTag || "div", { class: "sheet__body", "aria-label": o.bodyLabel }, o.body), o.foot ? E("div", "sheet__foot", o.foot) : null);
   return modal(dlg, { temp: true, scrim: true, onClose: o.onClose });
 }
@@ -333,14 +324,13 @@ const lock = { state: "locked", code: null, trustId: null, until: "", trustOffer
 function setLock(state, o = {}) {
   const was = lock.state;
   Object.assign(lock, o, { state });
-  if (state !== "unlocked") lock.code = null;   // never stored
+  if (state !== "unlocked") lock.code = null;
   for (const chip of $$(".chip--lock")) chip._paint();
   if (was !== state && !o.quiet) announce(t(state === "locked" ? "lock_announce_locked" : "lock_announce_unlocked"));
   doc.dispatchEvent(new CustomEvent("sw:lock", { detail: state }));
 }
 const unlock = (...a) => window.SW_LOCK.unlock(...a);
-// guard(what, run, onCancel): Locked opens the unlock dialog first; a write refused for its code (err.locked) asks again
-const restarting = () => !!$('.shell[data-state="restarting"]');   // 8.5
+const restarting = () => !!$('.shell[data-state="restarting"]');
 function guard(what, run, onCancel) {
   if (restarting()) { announce(t("common_wait_hub_back")); if (onCancel) onCancel(); return Promise.resolve(); }
   if (conf.lock && lock.state === "locked") return unlock(what, run, onCancel);
@@ -366,17 +356,35 @@ function setAppearance(v) {
   }
   return kept;
 }
-// in System mode the metas follow the phone's own light/dark switch; a chosen appearance gives the same colour
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintMetas);
 function setLook(look) {
   attr(root, "data-look", look);
-  paintMetas();                                        // the status bar follows the theme at once
+  paintMetas();
+  for (const i of $$(".theme-picker__input")) i.checked = i.value === look;
   return store.set("spoolwarden.look", look);
 }
-// the picker (3.4): one entry per theme that is built; a theme built later is one more entry here
+function setLangCookie(code) {
+  const secAttr = location.protocol === "https:" ? "; Secure" : "";
+  const clean = code && code !== "auto" ? String(code) : "";
+  const intakePath = "/intake";
+  doc.cookie = `spoolwarden_lang=; path=${intakePath}; max-age=0; SameSite=Lax${secAttr}`;
+  doc.cookie = clean
+    ? `spoolwarden_lang=${encodeURIComponent(clean)}; path=/; max-age=31536000; SameSite=Lax${secAttr}`
+    : `spoolwarden_lang=; path=/; max-age=0; SameSite=Lax${secAttr}`;
+}
+on(window, "storage", (e) => {
+  if (e.key === "spoolwarden.appearance" || e.key === null) {
+    const v = e.key === null ? store.get("spoolwarden.appearance") : e.newValue;
+    setAppearance(v === "light" || v === "dark" ? v : "system");
+  }
+  if (e.key === "spoolwarden.look" || e.key === null) {
+    const v = e.key === null ? store.get("spoolwarden.look") : e.newValue;
+    setLook(THEMES.includes(v) ? v : "console");
+  }
+});
 const THEMES = ["console", "workbench", "palette", "panes"];
 function themePicker(o = {}) {
-  const now = root.getAttribute("data-look") || "console", chosen = THEMES.includes(now) ? now : null;   // a theme with no tile: none is checked
+  const now = root.getAttribute("data-look") || "console", chosen = THEMES.includes(now) ? now : null;
   const fs = h("fieldset", { class: "theme-picker" }, h("legend", { class: o.legend ? "theme-picker__legend" : "sr" }, t("appearance_theme_title")));
   for (const look of THEMES) {
     const line = uid("look");
@@ -398,12 +406,10 @@ on(doc, "change", (e) => {
   if (res) result(res, kept ? "ok" : "warn", !kept ? t("appearance_storage_blocked") : look
     ? t("appearance_theme_saved", { name: $(".theme-picker__name", i.closest("label")).textContent }) : t("appearance_saved", { choice: t(APPEAR[i.value][1]) }));
 });
-// the phone form: an icon button with a menu of radio items
 const appearanceMenu = (b) => menu(b, () => [{ heading: t("appearance_title") }, ...Object.entries(APPEAR).map(([v, [ic, key]]) =>
   ({ label: t(key), icon: ic, checked: appearanceValue() === v, run: () => setAppearance(v) }))], { label: t("appearance_title") });
 
 // ----- overflow menu (4.2): menu(trigger, items | () => items, {label}) -----
-// item: {label, icon, reason, disabled, danger, checked, action, run} | {heading} | {separator}
 function menu(trigger, items, o = {}) {
   const id = uid("menu");
   let pop = null, typed = "", typedAt = 0;
@@ -458,19 +464,16 @@ function menu(trigger, items, o = {}) {
       move(l.slice(i + 1).concat(l.slice(0, i + 1)).find((b) => b.textContent.trim().toLowerCase().startsWith(typed)));
     }
   }
-  // a trigger that goes off (the Hub cannot be reached) while its menu is open: the menu closes and its items do nothing
   new MutationObserver(() => { if (pop && trigger.getAttribute("aria-disabled") === "true") close(pop.contains(doc.activeElement)); }).observe(trigger, { attributes: true, attributeFilter: ["aria-disabled"] });
   on(trigger, "click", () => (pop ? close(true) : open("first")));
   on(trigger, "keydown", (e) => {
-    if (trigger.getAttribute("aria-disabled") === "true") return;       // a trigger that is off opens nothing, by key either
+    if (trigger.getAttribute("aria-disabled") === "true") return;
     if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !pop) { e.preventDefault(); open(e.key === "ArrowUp" ? "last" : "first"); }
   });
   return { open, close };
 }
 
 // ----- fields (5.1 to 5.10) -----
-// field(o): the one maker of inputs, selects and textareas, always with a visible label (AUT-4). o: type, label,
-// optional, hint, unit, decimal, mono, row, short, options, value, placeholder, attrs, max, accept, effect, check, onSearch
 function field(o) {
   if (!o || !o.label) throw new Error("field(): a field needs a visible label");
   const kind = o.type || "text", id = o.id || uid("f");
@@ -478,7 +481,6 @@ function field(o) {
     : kind === "textarea" ? h("textarea", { rows: 3 }) : h("input", { type: kind === "secret" ? "password" : kind === "number" ? "text" : kind });
   Object.assign(control, { className: "field__control" + (o.mono ? " mono" : ""), id });
   if (o.name) control.name = o.name;
-  // a field that is not optional is aria-required
   const a = Object.assign(kind === "select" || kind === "file" ? {} : { autocomplete: "off" }, o.optional || o.disabled || kind === "search" ? {} : { "aria-required": "true" },
     kind === "number" ? { inputmode: o.decimal ? "decimal" : "numeric" } : kind === "search" ? { inputmode: "search", enterkeyhint: "search" } : {}, o.attrs);
   for (const [k, v] of Object.entries(a)) control.setAttribute(k, v);
@@ -516,7 +518,6 @@ function field(o) {
   else if (kind !== "search") box = control;
   wrap.append(...[label, box, hint, error].filter(Boolean));
   Object.assign(wrap, { _control: control, _error: error, _hint: hint, _check: o.check ? () => o.check(control.value) : null });
-  // checked on a change (focus leaves) and, while it shows an error, as it is typed in (5.1)
   const recheck = (e) => { if (wrap._check && (e.type === "change" || wrap.dataset.state === "error")) fieldError(wrap, wrap._check() || null); };
   on(control, "input", recheck); on(control, "change", recheck);
   if (kind === "search" && o.onSearch) {
@@ -526,7 +527,7 @@ function field(o) {
     on(control, "keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); go(); } else if (e.key === "Escape" && control.value) { control.value = ""; go(); }
     });
-    wrap._cancel = () => clearTimeout(timer);                  // a search still waiting for the typing to stop is dropped
+    wrap._cancel = () => clearTimeout(timer);
     wrap._busy = (on) => { const s = $(".spinner", box); if (on && !s) box.append(spinner()); if (!on && s) s.remove(); };
   }
   if (kind === "file") {
@@ -551,7 +552,6 @@ function check(o) {
   el._control = input;
   return el;
 }
-// toggle({label, hint, checked, apply(on) -> sentence, confirm(on) -> ask options, security, heading})
 function toggle(o) {
   const hintId = uid("hint");
   const input = h("input", { class: "toggle__input", type: "checkbox", role: "switch", checked: !!o.checked, disabled: !!o.disabled,
@@ -563,6 +563,7 @@ function toggle(o) {
     E("label", "toggle__row", input, E("span", "toggle__label", o.label), word, badge),
     o.hint ? h("p", { class: "toggle__hint", id: hintId, text: o.hint }) : null, res);
   const paint = () => { word.textContent = t(input.checked ? "status_on" : "status_off"); if (badge) badge.hidden = input.checked; };
+  input._paint = paint;
   paint();
   on(input, "click", (e) => { if (input.getAttribute("aria-busy") === "true") e.preventDefault(); });
   on(input, "change", async () => {
@@ -582,7 +583,6 @@ function toggle(o) {
   Object.assign(el, { _control: input, _result: res });
   return el;
 }
-// segmented({legend, legendSr, options, value, wide, apply(value), write, result})
 function segmented(o) {
   const name = o.name || uid("seg");
   const fs = E("fieldset", "segmented" + (o.wide ? " segmented--wide" : "") + (o.cls ? " " + o.cls : ""),
@@ -612,7 +612,6 @@ function segmented(o) {
 
 // ----- form group and the saving model (5.11) -----
 const groups = new Set();
-// formGroup(form, {title, send(key, value) -> reply, onSaved(keys)})
 function formGroup(form, o = {}) {
   const foot = $(".group__foot", form), res = $(".result", foot), save = $('[type="submit"]', form);
   let undo = $('[data-action="undo-changes"]', foot), mark = $(".group__dirty", foot);
@@ -632,7 +631,9 @@ function formGroup(form, o = {}) {
   const changed = () => { const cur = read(); return Object.keys(cur).filter((k) => cur[k] !== snap[k]); };
   const write = (vals) => {
     for (const e of controls()) if (e.name in vals) {
-      if (e.type === "radio") e.checked = e.value === vals[e.name]; else if (e.type === "checkbox") e.checked = !!vals[e.name]; else e.value = vals[e.name];
+      if (e.type === "radio") e.checked = e.value === vals[e.name];
+      else if (e.type === "checkbox") { e.checked = !!vals[e.name]; if (e._paint) e._paint(); }
+      else e.value = vals[e.name];
     }
   };
   const labelOf = (k) => {
@@ -668,13 +669,18 @@ function formGroup(form, o = {}) {
     }
     return guard(o.title || labelOf(keys[0]), () => send(keys));
   };
-  // changed keys only, one at a time: plain, then applies (after each job), then restarts
   async function send(keys) {
     const order = ["", "applies", "restarts"].flatMap((fx) => keys.filter((k) => effect(k) === fx));
     const cur = read(), saved = [], names = (ks) => ks.map(labelOf).join(", ");
     let failed = null, restarted = false;
+    const ro = (on) => {
+      for (const e of controls()) {
+        if (e.matches("select, [type=checkbox], [type=radio]")) attr(e, "aria-disabled", on ? "true" : null);
+        else e.readOnly = on;
+      }
+    };
     busy(save, t("common_saving"));
-    for (const e of controls()) e.readOnly = true;
+    ro(true);
     try {
       for (const k of order) {
         let reply;
@@ -698,7 +704,7 @@ function formGroup(form, o = {}) {
           if (end && end.state === "failed") { failed = {}; break; }
         }
       }
-    } finally { idle(save); for (const e of controls()) e.readOnly = false; paint(); }
+    } finally { idle(save); ro(false); paint(); }
     const rest = order.filter((k) => !saved.includes(k));
     if (!failed) result(res, "ok", restarted ? t("restart_saved") : t("form_saved_fields", { fields: names(saved) }));
     else result(res, "bad", saved.length ? t("form_saved_not_saved", { saved: names(saved), not_saved: names(rest) })
@@ -712,7 +718,6 @@ function formGroup(form, o = {}) {
 const dirtyGroups = () => [...groups].filter((g) => g.form.isConnected && g.dirty());
 const leaveText = (list = dirtyGroups()) => list.map((g, i) => t(i ? "form_leave_next" : "form_leave_first",
   { count: g.changed().length, group: $(".group__title", g.form).textContent })).join(", ");
-// unsaved-changes guard (5.11 behaviour 4): a link to another section, wherever it is
 const leave = (to) => leaveAsk(leaveText()).then((ok) => { if (ok) { for (const g of dirtyGroups()) g.reset(); location.hash = to; } });
 on(doc, "click", (e) => {
   const a = up(e, 'a[href^="#"]');
@@ -720,7 +725,6 @@ on(doc, "click", (e) => {
   e.preventDefault();
   leave(a.hash);
 }, true);
-// Back or Forward: the address already changed, so it is put back (capture: before the pages' listeners)
 on(window, "hashchange", (e) => {
   if (sec(e.oldURL) === sec(e.newURL) || !dirtyGroups().length) return;
   e.stopImmediatePropagation();
@@ -730,10 +734,7 @@ on(window, "hashchange", (e) => {
 on(window, "beforeunload", (e) => { if (dirtyGroups().length) { e.preventDefault(); e.returnValue = ""; } });
 
 // ----- collection (6.1): sort, expand, live patch; markup as the design, components -----
-// renumber(row, hide): shows or hides a result or detail row
 function renumber(row, hide) { row.hidden = hide; const c = row.closest(".coll"); if (c && c._number) c._number(); }
-// collection(el, {name, sort, result, total, first}): paged when total (all pages' items) is given, first = items
-// before this page; then aria-rowcount, and aria-rowindex on every shown row
 function collection(el, o = {}) {
   const headRow = $(".coll__head > .coll__row", el);
   if (headRow && $(".coll__sort", headRow) && !$(".coll__sortlabel", headRow))
@@ -787,7 +788,6 @@ function collection(el, o = {}) {
     },
   };
 }
-// pager({from, to, total, page, pages, go(page)}): "51–100 of 214", Previous, Next
 const pager = (o) => h("nav", { class: "coll__pager", "aria-label": t("coll_pages_label") },
   E("span", "mono", t("common_pager_range", { from: o.from, to: o.to, total: o.total })),
   [[o.page - 1, "common_previous"], [o.page + 1, "common_next"]].map(([p, key]) => (p >= 1 && p <= o.pages
@@ -803,7 +803,6 @@ function host(id) {
   on(el, "cancel", (e) => { const r = $(".detail", el); if (r && $('form[data-state="dirty"]', r)) { e.preventDefault(); closeDetail(r); } });
   return el;
 }
-// openDetail(region, {opener, focusTitle}): in place, or moved into the profile's host
 function closeNow(region, o = {}) {
   const dlg = region.closest("dialog"), row = region.closest(".coll__row--detail"), x = $(`[aria-controls="${region.id}"]`);
   if (dlg) { dlg.close(); return true; }
@@ -904,7 +903,6 @@ function swatch(hex, o = {}) {
   return el;
 }
 // ----- determinate bar (8.3) -----
-// progress({label, value, valuetext, name, indeterminate, decorative, failed})
 function progress(o = {}) {
   const lid = uid("pl"), role = !(o.decorative || o.indeterminate);
   const el = h("div", { class: "progress" + (o.indeterminate ? " progress--indeterminate" : ""), "aria-hidden": role ? null : "true",
@@ -923,7 +921,6 @@ function setProgress(el, v, text) {
 }
 // ----- banner, empty state, error state, loading skeleton (8.8, 10.1 to 10.3) -----
 const BANNER_ICON = { info: "info", warn: "warning", bad: "error", ok: "check" };
-// banner({kind, title, text, actions, inline, late, dismiss, version}); null when dismissed
 function banner(o) {
   const key = o.dismiss ? "spoolwarden.dismissed." + o.dismiss : null, ver = String(o.version || 1);
   if (key && store.get(key) === ver) return null;
@@ -933,10 +930,8 @@ function banner(o) {
     key && !o.inline ? iconBtn("close", t("common_dismiss"), { action: "dismiss", run: () => { store.set(key, ver); el.remove(); focusTitle(); } }) : null);
   return el;
 }
-// empty({icon | shape, title, text, actions, level}); `shape`: a state shape in the disc (switched off: s-hollow)
 const empty = (o) => E("div", "empty", h("span", { class: "empty__disc", ...AH }, o.shape ? shape(o.shape) : icon(o.icon || "info", "icon--l")),
   E("h" + (o.level || 2), "empty__title", o.title), o.text ? E("p", "empty__text", o.text) : null, o.actions ? E("div", "actions", o.actions) : null);
-// errorState({title, text, details, onTry, alert, level})
 function errorState(o) {
   const tb = o.onTry ? btn(t("common_try_again"), { cls: "btn--primary", action: "try-again" }) : null;
   if (tb) on(tb, "click", async () => { busy(tb, t("common_trying")); try { await o.onTry(); } finally { idle(tb); } });
@@ -944,7 +939,6 @@ function errorState(o) {
     E("h" + (o.level || 2), "error-state__title", o.title), E("p", "error-state__text", o.text || t("common_hub_no_answer")), tb,
     o.details ? E("details", "error-state__details", E("summary", null, t("common_details")), E("pre", "mono", o.details)) : null);
 }
-// loading(region, {thing, items, onTry, title}) -> {done(...content)}; slow line at 10 s, error at 30 s
 function loading(region, o = {}) {
   attr(region, "aria-busy", "true");
   const sk = E("div", "skeleton", E("span", "sr", t("common_loading_thing", { thing: o.thing || "" })),
@@ -958,7 +952,6 @@ function loading(region, o = {}) {
 }
 
 // ----- the shell (2.1 to 2.5): shell({hub, home, titleOf(section), onSection(section)}) -----
-// Panes on a phone (F6): the list of sections is the first page (history.state.swList)
 const panes = () => profile().nav === "list" && phone(), listNow = () => panes() && !!(history.state && history.state.swList);
 if (panes() && !location.hash.slice(1)) history.replaceState({ ...history.state, swList: true }, "");
 function shell(o = {}) {
@@ -995,8 +988,10 @@ function shell(o = {}) {
     if (focus) list ? ($(`.nav__group .nav__item[href="#${last}"]`, nav) || $(".nav__group .nav__item", nav)).focus() : focusTitle();
   };
   on(window, "hashchange", (e) => {
-    if (sec(e.oldURL) !== sec(e.newURL)) { const d = $("#detail-host[open] .detail"); if (d) closeDetail(d, { focus: false }); }
-    if (o.onSection) o.onSection(section()); paint(true);
+    const changed = sec(e.oldURL) !== sec(e.newURL);
+    if (changed) { const d = $("#detail-host[open] .detail"); if (d) closeDetail(d, { focus: false }); }
+    if (o.onSection) o.onSection(section(), changed);
+    paint(changed);
   });
   on(window, "popstate", () => { if (listNow() !== drawn) paint(true); });
   on(nav, "click", (e) => {
@@ -1039,7 +1034,7 @@ function shell(o = {}) {
 window.SW = Object.freeze({
   t, h, icon, shape, uid, profile, announce, configure, setting, api, HubError, errText, guard, lock, setLock,
   status, spinner, tooltip, btn, iconBtn, busy, idle, disable, result, toast, ask, sheet, openModal, modal,
-  leaveAsk, setAppearance, setLook, themePicker, appearanceMenu, menu, field, fieldError, check, toggle, segmented, formGroup,
+  leaveAsk, setAppearance, setLook, setLangCookie, themePicker, appearanceMenu, menu, field, fieldError, check, toggle, segmented, formGroup,
   collection, pager, openDetail, closeDetail, copy, swatch, paint, progress, setProgress, banner, empty, errorState, loading, shell, phone,
 });
 })();

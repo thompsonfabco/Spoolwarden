@@ -105,7 +105,7 @@ def test_report_collect_keeps_newest_three_and_copies_out(monkeypatch, tmp_path,
 def _seed_moves(count: int, subject_id: str = "212"):
     from datetime import datetime, timedelta, timezone
     st = events.store()
-    t0 = datetime(2026, 11, 20, 12, 0, tzinfo=timezone.utc)
+    t0 = datetime.now(timezone.utc) - timedelta(hours=1)
     for i in range(count):
         st.write("spool.moved", {"type": "spool", "id": subject_id}, {"type": "hub"},
                  {"spool": subject_id, "before_location": f"A{i}", "after_location": f"A{i + 1}"},

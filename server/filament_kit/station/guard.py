@@ -4,7 +4,7 @@ ranges and the allow-list reach the program; the program decides, request by req
   caller                                        may ask
   on the allow-list (the Hub)                   everything, plus POST /ticket, /voice, /voice/test, /ota/update, /restart (each with its proof) and GET /ota/status
   other home address, no session                GET /, GET /static/*, POST /session
-  other home address, with a session            also GET /state, GET /settings, POST /settings, GET /photo
+  other home address, with a session            also GET /state, GET /settings, POST /settings, POST /flow, GET /photo, GET /photo/*
   an address outside those ranges               nothing (the unit drops it first; this is the second line)
 
 Everything else answers 403 `{"error": code, "message": sentence}`; /last-tag and /ticket are never given to a session.
@@ -82,8 +82,8 @@ def allowed(caller: str, method: str, path: str, has_session: bool, from_page: b
         # address of the allow-list: when the session ends the page is refused and goes back to its sentence
         return has_session or not (from_page and method == "GET" and path in SESSION_GET)
     if method == "POST":
-        return path == "/session" or (has_session and path == "/settings")
-    return has_session and path in SESSION_GET
+        return path == "/session" or (has_session and path in ("/settings", "/flow"))
+    return has_session and (path in SESSION_GET or path.startswith("/photo/"))
 
 
 class WrongTickets:

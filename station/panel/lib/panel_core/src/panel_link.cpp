@@ -30,7 +30,9 @@ void Link::step(LinkIo &io) {
 
   uint32_t g = cfgGen_;  // new settings from the loop (a seqlock read: an odd or changed generation is tried again)
   if (!(g & 1) && g != seenGen_) {
+    std::atomic_signal_fence(std::memory_order_acq_rel);
     Settings tmp = pending_;
+    std::atomic_signal_fence(std::memory_order_acq_rel);
     if (cfgGen_ == g) {
       cfg_ = tmp; seenGen_ = g;
       io.close();
@@ -228,6 +230,9 @@ bool netScreen(const NetView &v, Screen &out) {
       name[i] = (c >= 0x20 && c < 0x7f) ? (char)c : '?';
     }
     snprintf(out.rows[3], sizeof out.rows[3], "Net: %s", name);
+  }
+  if (v.wifiJoined && v.settings && v.settings->addr[0]) {
+    snprintf(out.rows[4], sizeof out.rows[4], "%s:%u", v.settings->addr, (unsigned)v.settings->port);
   }
   return true;
 }

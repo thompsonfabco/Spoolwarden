@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +28,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thompsonfabco.filamentkit.R
+import com.thompsonfabco.filamentkit.ui.components.LocalToast
+import com.thompsonfabco.filamentkit.ui.components.NeedsHubReason
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.SwAction
@@ -34,9 +37,12 @@ import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwCollection
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
+import com.thompsonfabco.filamentkit.ui.components.SwIcon
+import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import kotlinx.coroutines.launch
 
 /** The one column the tag screens share: scrolls, centred, at most `columnMax` wide. */
 @Composable
@@ -119,6 +125,12 @@ fun LinkFindScreen(
             value = ui.query,
             onValueChange = vm::setQuery,
             label = { Text(stringResource(R.string.tag_find_search)) },
+            leadingIcon = { SwIcon(R.drawable.sw_ic_search, null, tint = colors.muted) },
+            trailingIcon = if (ui.query.isNotEmpty()) {
+                { SwIconButton(R.drawable.sw_ic_close, stringResource(R.string.common_clear_search), { vm.setQuery("") }) }
+            } else {
+                null
+            },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { vm.search() }),
@@ -180,12 +192,22 @@ fun LinkPreviewScreen(
     val ui by vm.state.collectAsStateWithLifecycle()
     val done by rememberUpdatedState(onDone)
     LaunchedEffect(ui.finished) { ui.finished?.let { done(it) } }
+    val toast = LocalToast.current
+    val scope = rememberCoroutineScope()
+    val wait = stringResource(R.string.common_load_wait)
     // the write is waited for: Back would drop its answer
-    BackHandler(enabled = ui.linking) {}
+    BackHandler(enabled = ui.linking) { scope.launch { toast?.show(wait) } }
     val space = SpoolwardenTheme.space
     TagPage(modifier) {
         val conflict = ui.conflict
         if (conflict != null) {
+            PageHeader(stringResource(R.string.tag_link_title))
+            HubNoticeOf(ui.failure, onPairAgain)
+            ui.failure?.let { f ->
+                hubFailureText(f)?.let {
+                    NoticeCard(NoticeKind.Bad, it, actions = listOf(SwAction(stringResource(R.string.common_try_again), vm::moveHere)))
+                }
+            }
             // the design, Android app "Tag already in use": the spool that has the tag, then the button that moves it
             if (ui.other != null) {
                 NoticeCard(NoticeKind.Warn, stringResource(R.string.tag_in_use))
@@ -196,6 +218,7 @@ fun LinkPreviewScreen(
             // the chosen spool has a tag of its own: moving the tag here replaces it
             val ownTag = conflict == ConflictReason.SpoolHasOtherTag
             val replaces = ui.spool?.tag != null
+            if (!online) NeedsHubReason()
             Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
                 SwButton(
                     stringResource(
@@ -204,7 +227,7 @@ fun LinkPreviewScreen(
                         else if (replaces) R.string.tag_move_replace
                         else R.string.tag_move_here,
                     ),
-                    vm::moveHere, Modifier.fillMaxWidth(), kind = SwButtonKind.Main, busy = ui.linking,
+                    vm::moveHere, Modifier.fillMaxWidth(), kind = SwButtonKind.Main, enabled = online, busy = ui.linking,
                 )
                 SwButton(stringResource(R.string.common_cancel), onBack, Modifier.fillMaxWidth(), kind = SwButtonKind.Quiet, enabled = !ui.linking)
             }
@@ -225,11 +248,12 @@ fun LinkPreviewScreen(
             vm.gross?.let {
                 Text(monoNumbers(stringResource(R.string.tag_link_weight, formatGrams(it))), style = MaterialTheme.typography.bodyMedium)
             }
+            if (!online) NeedsHubReason()
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s2)) {
                 SwButton(stringResource(R.string.common_back), onBack, enabled = !ui.linking)
                 SwButton(
                     stringResource(if (ui.linking) R.string.tag_link_linking else R.string.tag_link_button), vm::link,
-                    kind = SwButtonKind.Main, enabled = !ui.checking && ui.failure == null, busy = ui.linking,
+                    kind = SwButtonKind.Main, enabled = !ui.checking && ui.failure == null && online, busy = ui.linking,
                 )
             }
         }

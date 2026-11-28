@@ -5,6 +5,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -242,6 +243,8 @@ class CorrectionsScreensTest {
         val fake = Corrections({ CorrectionsWaiting(1, 10, listOf(entry("fb-1", "r1")), emptyList()) }, on)
         screen(fake)
         rule.onNodeWithText("Remove").performClick()
+        rule.waitForIdle()
+        rule.onAllNodesWithText("Remove").onLast().performClick()
         rule.waitForIdle()
         assertEquals(listOf("fb-1"), fake.removed)
     }

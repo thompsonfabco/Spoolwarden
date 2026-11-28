@@ -13,7 +13,7 @@ function lowRow(s) {
   return h("li", { class: "low__row", "data-spool": s.id },
     SW.swatch(lowHex(s.color)),
     h("div", { class: "low__text" },
-      h("span", { class: "low__name", textContent: s.filament || "", title: s.filament || "" }),
+      Object.assign(axLink(`#spools/${s.id}`, s.filament || SW.t("running_low_spool", { id: s.id }), "low__name"), { title: s.filament || "" }),
       h("span", { class: "low__meta muted" },
         h("span", { textContent: SW.t("running_low_spool", { id: s.id }) }),
         h("span", { class: "mono", textContent: SW.t("running_low_left", { grams: s.remaining_g }) }),
@@ -40,7 +40,8 @@ async function lowBody(region) {
   const L = SW.loading(region, { thing: axt("running_low_title"), items: 3, onTry: () => lowBody(region), title: axt("alerts_low_error") });
   try {
     const d = await api("spools/low");
-    L.done(h("ul", { class: "low__list" }, (d.spools || []).map(lowRow)),
+    const list = d.spools || [];
+    L.done(list.length ? h("ul", { class: "low__list" }, list.map(lowRow)) : SW.empty({ icon: "spool", title: axt("running_low_empty") }),
       h("p", { class: "low__foot muted" }, axt("alerts_low_foot", { grams: d.threshold_g }), " ", axLink("#settings/alerts", axt("alerts_low_foot_link"))));
   } catch (e) {
     L.done(SW.errorState({ title: axt("alerts_low_error"), text: hubText(e.message), onTry: () => lowBody(region) }));

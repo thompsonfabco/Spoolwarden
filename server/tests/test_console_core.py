@@ -761,10 +761,10 @@ def test_a_mode_as_it_is_changes_nothing(app, env):  # noqa: F811
 def test_the_page_will_not_set_a_mode_without_the_server(app, env):  # noqa: F811
     c = client(app)
     r = post(c, "modules/mode", {"mode": "station"})
-    assert r.status_code == 409 and "modules set weigh-station" in r.json()["error"]
+    assert r.status_code == 409 and "features setup weigh-station" in r.json()["error"]
     assert "server" in modules.enabled(config.load()) and not env
     p = c.get("/setup/api/modules/preview?mode=station").json()
-    assert p["refused"] and "modules set weigh-station" in p["refused"]
+    assert p["refused"] and "features setup weigh-station" in p["refused"]
 
 
 @pytest.mark.parametrize("mode", ["", "nope", None, 3])
@@ -782,7 +782,7 @@ def test_mode_preview_says_what_goes_and_comes_and_changes_nothing(app):
     c = client(app)
     before = (config.paths().etc / "config.json").read_bytes()
     p = c.get("/setup/api/modules/preview?mode=all-in-one").json()
-    assert p["refused"] is None and "station" in p["after"] and "Turns on: station" in p["notes"]
+    assert p["refused"] is None and "station" in p["after"] and "Turns on: Weigh Station." in p["notes"]
     assert (config.paths().etc / "config.json").read_bytes() == before
     assert c.get("/setup/api/modules/preview?mode=nope").status_code == 400
 

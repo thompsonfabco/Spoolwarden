@@ -109,8 +109,15 @@ fun ManualMapScreen(viewModel: ManualMapViewModel, printerName: String?, onBack:
                         }
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalArrangement = Arrangement.spacedBy(space.s2)) {
-                        SwButton(stringResource(R.string.common_yes), viewModel::yes, kind = SwButtonKind.Main, enabled = s.canAnswer)
-                        SwButton(stringResource(R.string.printer_mbl_no_other), viewModel::openOther, enabled = s.canAnswer)
+                        SwButton(stringResource(R.string.common_yes), viewModel::yes, kind = SwButtonKind.Main, enabled = s.canAnswer, busy = s.busy && !s.pickingOther)
+                        SwButton(stringResource(R.string.printer_mbl_no_other), viewModel::openOther, enabled = s.canAnswer, busy = s.busy && s.pickingOther)
+                    }
+                    if (m.dualNozzle && !seen.nozzleReported && s.nozzle == null) {
+                        Text(
+                            stringResource(R.string.printer_mbl_which_nozzle),
+                            color = SpoolwardenTheme.colors.muted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                 }
                 seen != null -> {

@@ -27,18 +27,23 @@ from . import state as st
 log = logging.getLogger("intake-station")
 
 # Lamps (yellow = Hold, red = Discard), modes 0 off, 1 on, 2 blink, 3 three blinks, 4 rapid blink
-STEP_LAMPS = {"pairing": (2, 0), "idle": (0, 0), "lookup": (4, 1), "camera": (2, 1), "recognising": (4, 1), "weigh": (2, 1),
-              "ready": (1, 1), "saving": (4, 1), "done": (3, 0), "phone": (0, 1)}
+STEP_LAMPS = {"pairing": (2, 0), "idle": (0, 0), "lookup": (4, 0), "camera": (2, 0), "recognising": (4, 1), "weigh": (2, 1),
+              "ready": (1, 1), "saving": (4, 0), "done": (3, 0), "phone": (0, 1)}
 LAMP_CHOICES = ("off", "yellow", "red", "both")  # what the station's page offers for a step (settings.py)
 DONE_SECONDS = 10  # done -> idle
+IDLE_MSG_SECONDS = 4  # transient idle messages auto-clear
 TITLE_WIDTH, LINE_WIDTH = 16, 21  # the OLED's title row (bold) and body rows (6x10 font)
 
 flow = st.flow
+_last_scale_snap = None
 
 
 def ascii_text(text, width=LINE_WIDTH):
-    """The panel's fonts are Latin-1 and its lines 21 characters: plain ASCII, cut to width."""
-    return unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode()[:width]
+    """The panel's fonts are Latin-1 and its lines 21 characters: plain ASCII, cut to width with ellipsis."""
+    s = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode()
+    if len(s) <= width:
+        return s
+    return (s[:width - 3] + "...") if width > 3 else s[:width]
 
 
 # ---- the kit server: one ServerApi, built again when `spoolwarden station pair` rewrites the pairing files -------
@@ -133,42 +138,56 @@ def lookup(seq, nfc_id):
             speech.say("No scale here. Use the phone.")
     elif status == 200:
         if go("camera", seq, display=[]):
-            speech.say("New tag. Show the spool to the camera.")
+            speech.say("New tag. Show the spool to the camera and press yellow to take a photo, or hold yellow to recognise.")
     elif go("phone", seq, display=d):
         speech.say("The server can't help. Use the phone.")
 
 
+_capturing = threading.Lock()
+
+
 def capture_photo(seq):
     """Take one spool photo and stay in camera so the user can add more or hold yellow to recognise."""
-    with st.lock:
-        if seq != flow["seq"] or flow["step"] != "camera":
-            return
-        full = len(st.state.get("photos") or []) >= st.MAX_STATION_PHOTOS
-    if full:
-        go("camera", seq, message=f"Max {st.MAX_STATION_PHOTOS} photos")
-        beep.beep("nothing")
-        speech.say("Maximum photos taken. Hold yellow to recognise.")
+    if not _capturing.acquire(blocking=False):
         return
-    jpeg, err = camera.grab_photo()
-    if not jpeg:
-        if err == "no camera":
-            go("phone", seq, display=["No camera"])
-        else:
-            go("camera", seq, message="Camera failed, retry")
-        beep.beep("nothing")
-        return
-    with st.lock:
-        if seq != flow["seq"]:
+    try:
+        with st.lock:
+            if seq != flow["seq"] or flow["step"] != "camera":
+                return
+            full = len(st.state.get("photos") or []) >= st.MAX_STATION_PHOTOS
+        if full:
+            go("camera", seq, message=f"Max {st.MAX_STATION_PHOTOS} photos")
+            beep.beep("nothing")
+            speech.say("Maximum photos taken. Hold yellow to recognise.")
             return
-        if not isinstance(st.state.get("photos"), list):
-            st.state["photos"] = []
-        st.state["photos"].append(jpeg)
-        st.state["photo"] = jpeg
-        st.state["photo_at"] = time.time()
-        n = len(st.state["photos"])
-    go("camera", seq, message=f"{n} photo{'s' if n != 1 else ''} - Hold: AI")
-    beep.beep("hold")
-    speech.say(f"Photo {n}. Press yellow for another, or hold yellow to recognise.")
+        jpeg, err = camera.grab_photo()
+        if not jpeg:
+            with st.lock:
+                if seq != flow["seq"] or flow["step"] != "camera":
+                    return
+                if err == "no camera":
+                    flow.update(step="phone", at=time.time(), message="", display=["No camera"])
+                else:
+                    flow.update(step="camera", at=time.time(), message="Camera failed, retry")
+            st.panel_dirty.set()
+            beep.beep("nothing")
+            speech.say("No camera." if err == "no camera" else "Camera failed. Try again.")
+            return
+        with st.lock:
+            if seq != flow["seq"] or flow["step"] != "camera":
+                return
+            if not isinstance(st.state.get("photos"), list):
+                st.state["photos"] = []
+            st.state["photos"].append(jpeg)
+            st.state["photo"] = jpeg
+            st.state["photo_at"] = time.time()
+            n = len(st.state["photos"])
+            flow.update(step="camera", at=time.time(), message="")
+        st.panel_dirty.set()
+        beep.beep("hold")
+        speech.say(f"Photo {n}. Press yellow for another, or hold yellow to recognise.")
+    finally:
+        _capturing.release()
 
 
 def recognise(seq, nfc_id):
@@ -178,13 +197,15 @@ def recognise(seq, nfc_id):
             return
         photos = list(st.state.get("photos") or [])
     if not photos:
-        jpeg, err = camera.grab_photo()
+        with _capturing:
+            jpeg, err = camera.grab_photo()
         if not jpeg:
             if err == "no camera":
                 go("phone", seq, display=["No camera"])
             else:
                 go("camera", seq, message="Camera failed, retry")
             beep.beep("nothing")
+            speech.say("No camera." if err == "no camera" else "Camera failed. Try again.")
             return
         with st.lock:
             if seq != flow["seq"]:
@@ -206,7 +227,7 @@ def recognise(seq, nfc_id):
     else:
         with st.lock:
             if seq == flow["seq"]:
-                st.state["photos"] = []
+                st.state.update(photo=None, photo_at=None, photos=[])
         if go("camera", seq, message=d[0] if d else "No match, retry"):  # no match, failed, cap, unreachable
             beep.beep("nothing")
             speech.say("Not recognised. Try again.")
@@ -341,8 +362,34 @@ def reset():
     flow.update(spool=None, filament=None, display=[], returning=False)
 
 
+def delete_last_photo() -> bool:
+    """Remove the most recently captured photo in the camera step."""
+    with st.lock:
+        if flow["step"] != "camera":
+            return False
+        photos = st.state.get("photos")
+        if not isinstance(photos, list) or not photos:
+            return False
+        photos.pop()
+        st.state["photo"] = photos[-1] if photos else None
+        st.state["photo_at"] = time.time() if photos else None
+        flow.update(at=time.time(), message="")
+        left = len(photos)
+    st.panel_dirty.set()
+    log.info("red: removed last photo (%d left)", left)
+    beep.beep("discard")
+    speech.say(f"Photo removed. {left} left." if left else "Photo removed.")
+    return True
+
+
 def on_red(long_press: bool = False):
-    """Red: start over, from any step; long press at weigh/ready after AI match rejects the match."""
+    """Red: undo last photo in camera (short press when >= 1 photo), reject AI match at weigh/ready (long press), else cancel."""
+    if not long_press:
+        with st.lock:
+            undo_photo = flow["step"] == "camera" and bool(st.state.get("photos"))
+        if undo_photo:
+            delete_last_photo()
+            return
     with st.lock:
         if long_press and flow["step"] in ("weigh", "ready") and flow.get("filament") and not flow.get("spool"):
             flow["seq"] += 1
@@ -370,13 +417,33 @@ def on_red(long_press: bool = False):
 
 def flow_tick(now):
     """Timeouts: back to idle after STATION_FLOW_TIMEOUT of no progress, or DONE_SECONDS after a save."""
+    global _last_scale_snap
     with st.lock:
-        step, at = flow["step"], flow["at"]
-        if step in ("idle", "pairing") or now - at <= (DONE_SECONDS if step == "done" else st.settings["flow_timeout"]):
+        step, at, msg = flow["step"], flow["at"], flow["message"]
+        if step == "idle":
+            _last_scale_snap = None
+            if msg and now - at > IDLE_MSG_SECONDS:
+                flow["message"] = ""
+                st.panel_dirty.set()
+            return
+        if step == "weigh":
+            sc = st.state["scale"] if st.state["scale"] is not None else st.state.get("panel_scale")
+            snap = (sc.get("grams"), sc.get("status")) if sc else None
+            if snap != _last_scale_snap:
+                _last_scale_snap = snap
+                st.panel_dirty.set()
+        else:
+            _last_scale_snap = None
+        if step == "pairing" or now - at <= (DONE_SECONDS if step == "done" else st.settings["flow_timeout"]):
             return
         reset()
     log.info("flow timeout at %s", step)
-    go("idle")
+    if step == "done":
+        go("idle")
+    else:
+        go("idle", message="Timed out")
+        beep.beep("discard")
+        speech.say("Timed out.")
 
 
 def tick_loop():
@@ -433,13 +500,40 @@ def lamps(now):
     return y, r
 
 
+def _scale_hint(sc) -> str:
+    """Short OLED status line for the live scale reading."""
+    if not sc:
+        return ""
+    status = sc.get("status", "")
+    grams = sc.get("grams")
+    if status == "stable":
+        return f"{grams:.0f} g (steady)" if grams is not None else "Steady"
+    if status == "moving":
+        return f"{grams:.0f} g (settling)" if grams is not None else "Settling..."
+    if status == "zero":
+        return "Scale at zero"
+    if status == "negative":
+        return "Scale below zero"
+    if status == "overload":
+        return "Scale overloaded"
+    if status == "calibrate":
+        return "Needs calibrating"
+    if status == "re_zero":
+        return "Needs zeroing"
+    if status.startswith("unit "):
+        return "Set scale to grams"
+    return status
+
+
 def screen():
     """The display's five rows (title, 4 body lines) for the current step; the panel adds room air at the bottom.
     The server's display lines fill the title and body rows 1-2; rows 3-4 are the station's hint and message."""
     paired = api().paired  # off the lock: it looks at the pairing files
+    computer = computer_scale()
     with st.lock:
         f, held = dict(flow), st.state["held"]
         photo_count = len(st.state.get("photos") or [])
+        sc = scale_reading(computer)
     what = f["spool"] or f["filament"] or {}
     d = [x for x in f["display"] if x] or [
         "Spool #%s" % what["id"] if f["spool"] and what.get("id") else "Recognised",
@@ -448,12 +542,13 @@ def screen():
     step, msg = f["step"], f["message"]
     back = bool(f.get("returning"))
     ai_matched = bool(f.get("filament") and not f.get("spool"))
+    scale_hint = _scale_hint(sc)
     from . import pair_request
     code = pair_request.status["code"]
     camera_rows = (
-        [f"{photo_count} photo{'s' if photo_count != 1 else ''}", "Yellow: add photo", "Hold yellow: AI", "Red: cancel", msg]
+        [f"{photo_count} photo{'s' if photo_count != 1 else ''}", "Yellow: add photo", "Hold yellow: AI", "Red: undo / Hold:quit", msg]
         if photo_count > 0 else
-        ["New Tag Scanned", "Yellow: take photo", "Hold yellow: AI", "", msg]
+        ["New Tag Scanned", "Yellow: take photo", "Hold yellow: AI", "Red: cancel", msg]
     )
     rows = {
         "pairing": ["Pair code", f"{code[:3]} {code[3:]}" if code else "Asking...",
@@ -463,9 +558,10 @@ def screen():
         "lookup": ["Tag scanned", "Looking it up...", "", "", ""],
         "camera": camera_rows,
         "recognising": ["Recognising...", "Please wait", "", "", "Red cancels"],
-        "weigh": ["Returning", d[0], d[1], "Yellow: weigh it", msg or "Hold: skip weighing"] if back else
-                 [d[0], d[1], d[2], "Scale+Yel/HoldRed:No" if ai_matched else "Scale, then yellow", msg],
-        "ready": ["%.0f g" % held if held is not None else "-", d[0], d[1], "Hold yellow: save", msg],
+        "weigh": ["Returning", d[0], d[1], "Yellow: weigh it", msg or scale_hint or "Hold: skip weighing"] if back else
+                 [d[0], d[1], d[2], "Press yellow: weigh", msg or scale_hint or ("Hold red: reject AI" if ai_matched else "")],
+        "ready": ["%.0f g" % held if held is not None else "-", d[0], d[1], "Hold yellow: save",
+                  msg or ("Yel:reweigh Red:rej" if ai_matched else "Press yel: re-weigh")],
         "saving": ["Saving...", d[0], d[1], "", ""],
         "done": [d[0], d[1], d[2], d[3] if back else "", ""],
         "phone": ["Use phone"] + [x for x in d if x.lower() != "use phone"][:2] + ["Red: start over", ""],

@@ -12,8 +12,10 @@ No JSON is stored.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
+import tempfile
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
@@ -170,49 +172,67 @@ def real_data(spoolman=None, registry_load=None) -> str | None:
     return None
 
 
+def _demo_lock():
+    from .. import locks
+    return locks.ProcessLock(
+        Path(tempfile.gettempdir()) / f"fk-demo-{hashlib.sha256(str(config.paths().state).encode()).hexdigest()[:16]}.lock"
+    )
+
+
 def start(now: datetime | None = None, *, spoolman=None, registry_load=None) -> dict:
     """Switch the demo on: only on an empty Hub (`NotEmpty` otherwise). Already on is a plain yes. `NotMountable` while `MOUNTABLE` is False. Makes the demo's
     folder with its inventory (the sample's) and the marker; returns `{demo: True}`."""
-    if is_on():
+    with _demo_lock():
+        if is_on():
+            return {"demo": True}
+        if not MOUNTABLE:                            # nothing is made or written: the seal is not complete in this version
+            raise NotMountable()
+        if real_data(spoolman, registry_load) is not None:
+            raise NotEmpty()
+        from . import inventory
+        d = folder()
+        d.mkdir(parents=True, exist_ok=True)
+        inventory.seed(d / inventory.FILE)
+        from . import printers
+        printers.seed_usage(now)
+        printers.rearm_all()
+        root = ET.Element("demo", version=VERSION, started=_now(now))
+        fd, tmp_str = tempfile.mkstemp(dir=d, prefix=MARKER + ".", suffix=".tmp")
+        tmp = Path(tmp_str)
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                ET.ElementTree(root).write(fh, encoding="utf-8", xml_declaration=True)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.chmod(tmp, 0o644)
+            _give_to_state_owner(d)
+            os.replace(tmp, d / MARKER)                  # the marker comes last: a half-made folder is not a demo
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+        _give_to_state_owner(d)
+        printers.switched()                          # a real printer family started before this closes its connections now
         return {"demo": True}
-    if not MOUNTABLE:                            # nothing is made or written: the seal is not complete in this version
-        raise NotMountable()
-    if real_data(spoolman, registry_load) is not None:
-        raise NotEmpty()
-    from . import inventory
-    d = folder()
-    d.mkdir(parents=True, exist_ok=True)
-    inventory.seed(d / inventory.FILE)
-    from . import printers
-    printers.seed_usage(now)
-    printers.rearm_all()
-    root = ET.Element("demo", version=VERSION, started=_now(now))
-    tmp = d / (MARKER + ".tmp")
-    ET.ElementTree(root).write(tmp, encoding="utf-8", xml_declaration=True)
-    _give_to_state_owner(d)
-    os.replace(tmp, d / MARKER)                  # the marker comes last: a half-made folder is not a demo
-    _give_to_state_owner(d)
-    printers.switched()                          # a real printer family started before this closes its connections now
-    return {"demo": True}
 
 
 def leave() -> dict:
     """Leave the demo: delete its folder. `NotDemo` when it is off. The Hub is as it was: empty."""
-    if not is_on():
-        raise NotDemo()
-    d = folder()
-    from .. import events                        # not at the top: events.py imports this module
-    try:                                         # the real log goes on above every id the demo gave: no cursor skips
-        high = events.EventStore(d / "events").last_id()
-        if high:
-            events.EventStore(config.paths().state / "events").carry(high)
-    except (OSError, events.EventError):
-        pass
-    (d / MARKER).unlink()                        # off first, so a half-deleted folder is no demo
-    shutil.rmtree(d, ignore_errors=True)
-    from . import printers
-    printers.switched()                          # and opens them again for the real registry
-    return {"demo": False}
+    with _demo_lock():
+        if not is_on():
+            raise NotDemo()
+        d = folder()
+        from .. import events                        # not at the top: events.py imports this module
+        try:                                         # the real log goes on above every id the demo gave: no cursor skips
+            high = events.EventStore(d / "events").last_id()
+            if high:
+                events.EventStore(config.paths().state / "events").carry(high)
+        except (OSError, events.EventError):
+            pass
+        (d / MARKER).unlink(missing_ok=True)         # off first, so a half-deleted folder is no demo
+        shutil.rmtree(d, ignore_errors=True)
+        from . import printers
+        printers.switched()                          # and opens them again for the real registry
+        return {"demo": False}
 
 
 def started() -> str | None:

@@ -157,11 +157,13 @@ function lineItem(line, canOrca, cols) {
   const expand = SW.iconBtn("chevron", SW.t("detail_for", { name }), { cls: "coll__expand" });
   expand.setAttribute("aria-expanded", "false");
   expand.setAttribute("aria-controls", id);
-  const more = SW.btn(SW.t("presets_set_parent"), { name: SW.t("presets_set_parent_for", { name }), icon: "chevron", action: "set-parent" });
-  const targets = (opener) => [["bambu", true], ["orca", canOrca]].filter((t) => t[1]).map(([target]) => ({ label: SW.t(TARGET[target]), run: () => setParent(line, target, box, opener) }));
-  SW.menu(more, targets(more), { label: SW.t("presets_set_parent") });
-  const detailMore = SW.btn(SW.t("presets_set_parent"), { name: SW.t("presets_set_parent_for", { name }), icon: "chevron", action: "set-parent" });
-  SW.menu(detailMore, targets(detailMore), { label: SW.t("presets_set_parent") });
+  const parentBtn = () => {
+    if (!canOrca) return SW.btn(SW.t("presets_set_parent"), { name: SW.t("presets_set_parent_for", { name }), action: "set-parent", run: (e) => setParent(line, "bambu", box, e.currentTarget) });
+    const b = SW.btn(SW.t("presets_set_parent"), { name: SW.t("presets_set_parent_for", { name }), icon: "chevron", action: "set-parent" });
+    SW.menu(b, [["bambu", true], ["orca", canOrca]].filter((t) => t[1]).map(([target]) => ({ label: SW.t(TARGET[target]), run: () => setParent(line, target, box, b) })), { label: SW.t("presets_set_parent") });
+    return b;
+  };
+  const more = parentBtn(), detailMore = parentBtn();
   const facts = h("dl", { class: "kv" },
     h("div", { class: "kv__row panes-only" }, h("dt", { class: "kv__key" }, SW.t("common_field_material")), h("dd", { class: "kv__value" }, line.material)),
     h("div", { class: "kv__row" }, h("dt", { class: "kv__key" }, SW.t("common_field_bambu_parent")), h("dd", { class: "kv__value" }, bambu)),
@@ -194,12 +196,26 @@ function linesCard(v) {
     h("div", { class: "coll__head", role: "rowgroup" }, h("div", { class: "coll__row", role: "row" },
       h("div", { class: "coll__cell", role: "columnheader", "data-col": "expand" }, h("span", { class: "sr" }, SW.t("common_details"))),
       sortHead("title", SW.t("common_field_line")),
-      plainHead("material", SW.t("common_field_material"), 2),
-      plainHead("presets", SW.t("presets_col_presets"), 1),
+      sortHead("material", SW.t("common_field_material")),
+      sortHead("presets", SW.t("presets_col_presets")),
       plainHead("bambu_parent", SW.t("common_field_bambu_parent"), 3),
       canOrca ? plainHead("orca_parent", SW.t("presets_col_orca_parent"), 3) : null,
       h("div", { class: "coll__cell", role: "columnheader", "data-col": "actions" }, h("span", { class: "sr" }, SW.t("common_actions"))))),
     ...v.lines.map((l) => lineItem(l, canOrca, cols)));
+  const emptyFiltered = SW.empty({ title: SW.t("spools_empty_filtered") });
+  emptyFiltered.hidden = true;
+  const search = SW.field({ type: "search", label: SW.t("common_search"), placeholder: SW.t("common_search_placeholder"), onSearch: (q) => {
+    const needle = String(q || "").trim().toLowerCase();
+    let shown = 0;
+    for (const item of table.querySelectorAll(".coll__item")) {
+      const text = item.textContent.toLowerCase();
+      const match = !needle || text.includes(needle);
+      item.hidden = !match;
+      if (match) shown++;
+    }
+    table.hidden = shown === 0;
+    emptyFiltered.hidden = shown > 0;
+  } });
   SW.collection(table, { name: "presets-lines", sort: "title:ascending", emptyPane: SW.t("presets_pane_empty") });
   table.addEventListener("click", (e) => {
     const x = e.target.closest(".coll__expand");
@@ -213,7 +229,7 @@ function linesCard(v) {
     const reg = table.querySelector(`.coll__item[data-id="${CSS.escape(openLineId)}"] .detail`);
     if (reg) setTimeout(() => SW.openDetail(reg, { focusTitle: false }), 0);
   }
-  return card(SW.t("presets_lines_title"), table);
+  return card(SW.t("presets_lines_title"), h("div", { class: "coll__toolbar" }, search), table, emptyFiltered);
 }
 
 // #presets/updates scrolls to the Updates card once each time the address is opened, not at every redraw

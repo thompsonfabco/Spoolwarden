@@ -5,7 +5,7 @@ const VERSION = "__VERSION__";   // the server writes its version here when it s
 const CACHE = "fk-shell-" + VERSION;
 // the web app's address as this worker sees it: its scope is the app's path (/intake/, or under the public path)
 const BASE = new URL(self.registration.scope).pathname.replace(/\/+$/, "");
-const SHELL = [BASE, ...["app.css", "app.js", "printers.js", "icon.png", "icon-512.png", "manifest-light.webmanifest",
+const SHELL = [BASE, BASE + "/", ...["app.css", "app.js", "printers.js", "icon.png", "icon-512.png", "manifest-light.webmanifest",
   "manifest-dark.webmanifest", "shared/theme-init.js", "shared/tokens.css", "shared/components.css", "shared/strings.js",
   "shared/components.js", "shared/hls.min.js", "shared/alerts.js", "shared/alerts.css", "shared/sprite.svg"].map((f) => BASE + "/" + f)];
 self.addEventListener("install", (event) => {
@@ -43,7 +43,7 @@ self.addEventListener("push", (event) => {
 });
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = new URL((event.notification.data && event.notification.data.url) || "./", self.location.origin).href;
+  const url = new URL((event.notification.data && event.notification.data.url) || "./", self.location.origin + BASE + "/").href;
   // an open window is taken to the place that fixes the alert (the page's own address, so a window of another site is never moved), else one opens
   event.waitUntil(self.clients.matchAll({ type: "window" }).then((all) => {
     for (const c of all) {

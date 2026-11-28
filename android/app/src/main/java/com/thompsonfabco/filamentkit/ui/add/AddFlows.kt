@@ -42,7 +42,7 @@ class AddFlows(
     /** A new draft on the photo path or, with [manual], the hand path; returns its id. */
     fun start(manual: Boolean, tag: String? = null): String {
         val id = store.create(manual).id
-        open(id, manual, tag)
+        synchronized(open) { openLocked(id, manual, tag) }
         return id
     }
 
@@ -65,9 +65,11 @@ class AddFlows(
     }
 
     /** The flow of draft [id]: the open one, or one restored from the draft. */
-    fun get(id: String): AddViewModel = synchronized(open) { open[id]?.vm } ?: open(id, store.get(id)?.manual == true, null)
+    fun get(id: String): AddViewModel = synchronized(open) {
+        open[id]?.vm ?: openLocked(id, store.get(id)?.manual == true, null)
+    }
 
-    private fun open(id: String, manual: Boolean, tag: String?): AddViewModel {
+    private fun openLocked(id: String, manual: Boolean, tag: String?): AddViewModel {
         val job = SupervisorJob(scope.coroutineContext[Job])
         val own = CoroutineScope(scope.coroutineContext + job)
         val vm = AddViewModel(
@@ -75,7 +77,7 @@ class AddFlows(
         )
         own.launch { vm.readDone.collect { _readFinished.emit(id) } }
         own.launch { vm.finished.collect { _addFinished.emit(id to it) } }
-        synchronized(open) { open[id] = Open(vm, job) }
+        open[id] = Open(vm, job)
         return vm
     }
 

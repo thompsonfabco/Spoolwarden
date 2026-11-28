@@ -77,7 +77,13 @@ class CheckedOutRulesTest {
 
     @Test fun anEntryWithoutSinceShowsNoTimeAndOneWithoutAHomeNoHome() {
         val s = row(7, true, slot = true).toSpoolSummary()
-        assertEquals(listOf(Say.Words(R.string.spools_in_place, listOf("Workshop X1 – A1"))), CheckedOutRules.lines(s, ZoneOffset.UTC))
+        assertEquals(
+            listOf(
+                Say.Words(R.string.spools_in_place, listOf("Workshop X1 – A1")),
+                Say.Words(R.string.spools_home_none),
+            ),
+            CheckedOutRules.lines(s, ZoneOffset.UTC),
+        )
     }
 
     @Test fun withoutASlotTheLocationIsWhereItIs() {

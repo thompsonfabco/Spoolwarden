@@ -90,7 +90,7 @@ if ($Export) {
     if (Test-Path $Export) { throw "Refusing to overwrite $Export" }
     $pass = Read-Passphrase "Backup passphrase, at least $MinPassphrase characters (you will need it to restore)" -Confirm
     if ($pass.Length -lt $MinPassphrase) { throw "The backup passphrase must be at least $MinPassphrase characters; nothing was written." }
-    # Passphrase-derived AES-256 key (PBKDF2-SHA256, 600k iterations); payload = JSON {jks b64, pw}.
+    # Passphrase-derived AES-256 + HMAC-SHA256 keys (PBKDF2-SHA256, 600k iterations); payload = JSON {jks b64, pw}.
     $payload = [Text.Encoding]::UTF8.GetBytes((@{
         jks = [Convert]::ToBase64String([IO.File]::ReadAllBytes($jks))
         pw  = (Read-StoredPassword)
@@ -99,10 +99,15 @@ if ($Export) {
     $rng = [Security.Cryptography.RandomNumberGenerator]::Create(); $rng.GetBytes($salt); $rng.GetBytes($iv); $rng.Dispose()
     $plainPass = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pass))
     $kdf = New-Object Security.Cryptography.Rfc2898DeriveBytes($plainPass, $salt, 600000, [Security.Cryptography.HashAlgorithmName]::SHA256)
-    $key = $kdf.GetBytes(32); $kdf.Dispose()
-    $aes = [Security.Cryptography.Aes]::Create(); $aes.Key = $key; $aes.IV = $iv
+    $derived = $kdf.GetBytes(64); $kdf.Dispose()
+    $encKey = [byte[]]$derived[0..31]
+    $macKey = [byte[]]$derived[32..63]
+    $aes = [Security.Cryptography.Aes]::Create(); $aes.Key = $encKey; $aes.IV = $iv
     $cipher = $aes.CreateEncryptor().TransformFinalBlock($payload, 0, $payload.Length); $aes.Dispose()
-    $out = [Text.Encoding]::ASCII.GetBytes('FKKS1') + $salt + $iv + $cipher
+    $headerAndCipher = [byte[]]([Text.Encoding]::ASCII.GetBytes('FKKS2') + $salt + $iv + $cipher)
+    $hmac = [Security.Cryptography.HMACSHA256]::new($macKey)
+    try { $tag = $hmac.ComputeHash($headerAndCipher) } finally { $hmac.Dispose() }
+    $out = $headerAndCipher + $tag
     [IO.File]::WriteAllBytes($Export, $out)
     Write-Host "Backup written to $Export (restore with -Import)."
     exit 0
@@ -111,15 +116,35 @@ if ($Export) {
 if ($Import) {
     if ((Test-Path $jks) -or (Test-Path $pwFile)) { throw 'A keystore already exists here; refusing to overwrite (use -Forget first).' }
     $raw = [IO.File]::ReadAllBytes($Import)
-    if ([Text.Encoding]::ASCII.GetString($raw, 0, 5) -ne 'FKKS1') { throw 'Not a filament-kit keystore backup.' }
-    $salt = $raw[5..20]; $iv = $raw[21..36]; $cipher = $raw[37..($raw.Length - 1)]
+    if ($raw.Length -lt 38) { throw 'Not a filament-kit keystore backup.' }
+    $magic = [Text.Encoding]::ASCII.GetString($raw, 0, 5)
+    if ($magic -ne 'FKKS2' -and $magic -ne 'FKKS1') { throw 'Not a filament-kit keystore backup.' }
+    if ($magic -eq 'FKKS2' -and $raw.Length -lt 70) { throw 'Wrong passphrase or corrupted backup.' }
+    $salt = [byte[]]$raw[5..20]; $iv = [byte[]]$raw[21..36]
     $pass = Read-Passphrase 'Backup passphrase'
     $plainPass = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pass))
-    $kdf = New-Object Security.Cryptography.Rfc2898DeriveBytes($plainPass, [byte[]]$salt, 600000, [Security.Cryptography.HashAlgorithmName]::SHA256)
-    $aes = [Security.Cryptography.Aes]::Create(); $aes.Key = $kdf.GetBytes(32); $aes.IV = [byte[]]$iv
+    $kdf = New-Object Security.Cryptography.Rfc2898DeriveBytes($plainPass, $salt, 600000, [Security.Cryptography.HashAlgorithmName]::SHA256)
+    if ($magic -eq 'FKKS2') {
+        $derived = $kdf.GetBytes(64); $kdf.Dispose()
+        $encKey = [byte[]]$derived[0..31]
+        $macKey = [byte[]]$derived[32..63]
+        $cipherEnd = $raw.Length - 33
+        $headerAndCipher = [byte[]]$raw[0..$cipherEnd]
+        $tag = [byte[]]$raw[($cipherEnd + 1)..($raw.Length - 1)]
+        $hmac = [Security.Cryptography.HMACSHA256]::new($macKey)
+        try { $expectedTag = $hmac.ComputeHash($headerAndCipher) } finally { $hmac.Dispose() }
+        $diff = 0
+        for ($i = 0; $i -lt 32; $i++) { $diff = $diff -bor ($tag[$i] -bxor $expectedTag[$i]) }
+        if ($diff -ne 0) { throw 'Wrong passphrase or corrupted backup.' }
+        $cipher = [byte[]]$raw[37..$cipherEnd]
+    } else {
+        $encKey = $kdf.GetBytes(32); $kdf.Dispose()
+        $cipher = [byte[]]$raw[37..($raw.Length - 1)]
+    }
+    $aes = [Security.Cryptography.Aes]::Create(); $aes.Key = $encKey; $aes.IV = $iv
     # A wrong passphrase can still decrypt to padding-valid garbage, so the JSON/base64 checks belong here too.
     try {
-        $plain = $aes.CreateDecryptor().TransformFinalBlock([byte[]]$cipher, 0, $cipher.Length)
+        $plain = $aes.CreateDecryptor().TransformFinalBlock($cipher, 0, $cipher.Length)
         $obj = [Text.Encoding]::UTF8.GetString($plain) | ConvertFrom-Json
         if (-not $obj.jks -or -not $obj.pw) { throw 'incomplete backup' }
         $jksBytes = [Convert]::FromBase64String($obj.jks)

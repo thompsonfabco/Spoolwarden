@@ -18,7 +18,7 @@ import urllib.parse
 
 import anyio
 
-from .. import config, station_client, voice_state
+from .. import config, demo, station_client, voice_state
 from ..station.page import catalogue_text
 
 log = logging.getLogger(__name__)
@@ -230,12 +230,16 @@ def routes(page) -> list[tuple]:
         return Refused(e.status, e.message, **extra)
 
     async def save(request, body):
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         try:
             return await anyio.to_thread.run_sync(lambda: save_voice(body))
         except VoiceError as e:
             raise refuse(e) from None
 
     async def test(request, body):
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         try:
             await anyio.to_thread.run_sync(lambda: play_test(config.load(), body))
         except VoiceError as e:

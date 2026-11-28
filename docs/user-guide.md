@@ -94,7 +94,7 @@ the usual Hub, this sets up:
 - the Weigh Station service `filament-kit-station`, which reads the scale and the reader and answers over HTTPS on port
   5003, for this computer only (`https://127.0.0.1:5003/state`; see [Is it working?](#is-it-working));
 - the Hub's link to it, so `sudo spoolwarden status` shows a line `station answering at
-  http://127.0.0.1:5003`, and the app can read the scale and the last tag;
+  https://127.0.0.1:5003`, and the app can read the scale and the last tag;
 - the computer changes the Weigh Station needs (see [Weigh Station](#intake-station)): brltty removed, ModemManager
   off, sleep and suspend off, audio unmuted, and a rule that lets the Weigh Station read the DYMO scale.
 
@@ -333,6 +333,8 @@ with `--new`.
 
 **Light, dark or system.** The page header has a switch with three choices: Light, Dark and System (the default, which follows your device). The choice is kept in that browser only.
 
+**Languages.** English (`en`), German (`de`), and Russian (`ru`) ship with the Hub (`de` and `ru` are machine-translated and unreviewed). Set the Hub's default language or install/remove language packs in **Settings > Language** on the Hub page (or per-browser/app in the phone or web app's Settings); language settings are managed in the Hub page and apps rather than the CLI.
+
 **Moving around.** The sections are a list down the side on a wide screen. On a phone the page has a bar at the bottom with Overview, Printers, Recent and Settings, and a **More** button that opens the other sections.
 
 ## Everyday commands
@@ -464,9 +466,10 @@ Run these in a Terminal on the Ubuntu computer, after `spoolwarden` (for example
 | `import spools\|locations <file> [-y]` | Import spools or locations from CSV (root; asks) | Spools |
 | `report [--out FILE]` | Collect a redacted Hub report (root) | Logs |
 | `status --history [--days 7\|30]` | Show check changes in the last 7 or 30 days | (none) |
-| `pair --home-assistant [--text] [--no-wait]` | Pair Home Assistant (viewer role): print the code and link | (none) |
+| `pair --home-assistant [--control] [--text] [--no-wait]` | Pair Home Assistant (`--control` grants printer and slot control) | (none) |
 | `local-intake status` | Does the local reader answer, which tiers it can use, the reader order | (none) |
 | `local-intake install [--tier auto\|cpu\|gpu] [--version VERSION] [--planned] [-y]` | Install or upgrade the local reader from its signed release on this machine (root; sizes are shown first) | (none) |
+| `local-intake update [--tier auto\|cpu\|gpu] [--version VERSION] [--planned] [-y]` | Upgrade the local reader to its latest signed release (root; sizes are shown first) | (none) |
 | `local-intake share-corrections [on\|off] [--delete-waiting] [--status]` | Share corrections: `on` or `off` sets it (root); no word sets the reader to the saved value; `--status` shows both | (none) |
 | `local-intake token [--remove]` | Set the local reader's bearer token (root; asked hidden, never shown), or remove it | (none) |
 | `local-intake plan` | What installing the latest reader release needs, per tier (saved when run as root) | (none) |

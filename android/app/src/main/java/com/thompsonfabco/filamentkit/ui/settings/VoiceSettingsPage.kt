@@ -16,15 +16,18 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -69,24 +72,56 @@ internal class VoiceActions(
  */
 @Composable
 internal fun VoiceSettingsPage(ui: VoiceUi, actions: VoiceActions, modifier: Modifier = Modifier) {
-    val saved = ui.settings ?: return
+    val saved = ui.settings
+    if (saved == null) {
+        SettingsPage(modifier) {
+            SettingsPanel {
+                if (ui.offline) {
+                    Text(stringResource(R.string.common_offline_title), style = MaterialTheme.typography.bodyLarge)
+                    NeedsHubReason()
+                } else {
+                    Text(
+                        stringResource(R.string.common_loading_settings),
+                        color = SpoolwardenTheme.colors.muted,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+        return
+    }
     val toast = LocalToast.current
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     LaunchedEffect(actions.said, toast) { actions.said.collect { toast?.show(it.resolve(context)) } }
     // the controls show the Hub's values again after a save that did not take (the revision) or a new answer
     var edit by remember(saved, ui.revision) { mutableStateOf(VoiceEdit.of(saved)) }
     var speakerText by remember(saved, ui.revision) { mutableStateOf(saved.speaker.toString()) }
+    var speakerError by remember(saved, ui.revision) { mutableStateOf<String?>(null) }
     val enabled = !ui.offline
     val space = SpoolwardenTheme.space
 
-    fun saveSpeaker() {
+    fun commitSpeaker(showError: Boolean = true): VoiceEdit? {
+        if (!speakerShown(saved)) return edit
         val n = speakerFrom(speakerText, saved.speakerRange)
         if (n == null) {
-            speakerText = edit.speaker.toString()
-        } else if (n != edit.speaker) {
+            if (showError) {
+                val range = saved.speakerRange!!
+                speakerError = context.getString(R.string.voice_speaker_error, range.first.toString(), range.last.toString())
+            }
+            return null
+        }
+        speakerError = null
+        if (n != edit.speaker) {
             edit = edit.copy(speaker = n)
             actions.onSave(edit)
         }
+        return edit
+    }
+
+    val latestCommit by rememberUpdatedState { commitSpeaker(showError = false) }
+    DisposableEffect(saved, ui.revision) {
+        onDispose { latestCommit() }
     }
 
     SettingsPage(modifier) {
@@ -102,14 +137,19 @@ internal fun VoiceSettingsPage(ui: VoiceUi, actions: VoiceActions, modifier: Mod
                 Column(verticalArrangement = Arrangement.spacedBy(space.s1)) {
                     OutlinedTextField(
                         value = speakerText,
-                        onValueChange = { speakerText = it.filter(Char::isDigit) },
+                        onValueChange = {
+                            speakerText = it.filter(Char::isDigit)
+                            speakerError = null
+                        },
                         label = { Text(stringResource(R.string.settings_voice_speaker)) },
+                        isError = speakerError != null,
+                        supportingText = speakerError?.let { msg -> { Text(msg) } },
                         singleLine = true,
                         enabled = enabled,
                         textStyle = SpoolwardenTheme.type.input,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { saveSpeaker() }),
-                        modifier = Modifier.width(SpoolwardenTheme.sizes.portField).onFocusChanged { if (!it.isFocused) saveSpeaker() },
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { commitSpeaker() }),
+                        modifier = Modifier.width(SpoolwardenTheme.sizes.portField).onFocusChanged { if (!it.isFocused) commitSpeaker() },
                     )
                     Text(
                         stringResource(R.string.voice_speaker_hint, range.last + 1),
@@ -132,8 +172,15 @@ internal fun VoiceSettingsPage(ui: VoiceUi, actions: VoiceActions, modifier: Mod
         }
         Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
             SwButton(
-                stringResource(R.string.settings_voice_test), { actions.onTest(edit) }, Modifier.fillMaxWidth(),
-                enabled = enabled, busy = ui.testing,
+                stringResource(R.string.settings_voice_test),
+                {
+                    focusManager.clearFocus()
+                    val ready = commitSpeaker() ?: return@SwButton
+                    actions.onTest(ready)
+                },
+                Modifier.fillMaxWidth(),
+                enabled = enabled,
+                busy = ui.testing,
             )
             if (ui.offline) NeedsHubReason()
         }

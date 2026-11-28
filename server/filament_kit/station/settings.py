@@ -71,7 +71,7 @@ def _spec(id_, label, kind, **more) -> dict:
 
 def specs() -> list[dict]:
     """The settings and what each accepts, in the order the page shows them: id, label, kind and (choices | min, max)."""
-    out = [_spec("beep", _t("station_setting_beep", "Beep when a tag is scanned"), "switch"),
+    out = [_spec("beep", _t("station_setting_beep", "Button panel & scan beeps"), "switch"),
            _spec("speech", _t("station_setting_speech", "Speak the steps aloud"), "switch"),
            _spec("voice", _t("station_setting_voice", "Voice"), "choice", choices=list(VOICES),
                  choice_labels={"auto": _t("station_voice_auto", "Automatic"), "espeak": _t("station_voice_espeak", "eSpeak")}),
@@ -136,7 +136,7 @@ def clean(spec: dict, value):
     elif kind == "choice":
         if isinstance(value, str) and value in spec["choices"]:
             return value
-    raise SettingsError(_t("station_settings_bad_value", "{id}: not a value this setting takes", id=spec["id"]))
+    raise SettingsError(_t("station_settings_bad_value", "{id}: not a value this setting takes", id=spec["label"]))
 
 
 def _text(value) -> str:
@@ -242,9 +242,13 @@ class Store:
             return [self._listed(s) for s in specs()]
 
     def _listed(self, s: dict) -> dict:
-        """One setting of the list. Speak and Volume show the Hub's value, read-only with a note, once it sent voice values."""
+        """One setting of the list. Speak, Volume, and Voice show the Hub's value, read-only with a note, when the Hub set them."""
         if s["id"] in HUB_VOICE_IDS and st.live:
             return dict(s, value=st.voice_value(s["id"]), readonly=True, note=st.VOICE_TEXTS["set_on_hub_note"])
+        if s["id"] == "voice" and "tts" in st.live:
+            return dict(s, value=st.live["tts"], readonly=True,
+                        note=_t("station_voice_tts_set_on_hub_note",
+                                "Voice is set on the Hub: Settings > Weigh Station voice."))
         return dict(s, value=self.current(s["id"]))
 
     @property
@@ -254,6 +258,8 @@ class Store:
 
     def _apply(self) -> None:
         for id_, key in _KEYS.items():
+            if key == "tts" and "tts" in st.live:
+                continue
             self.target[key] = self.current(id_)
         self.lamps.clear()
         self.lamps.update({i[5:]: v for i, v in self.values.items() if i.startswith("lamp.")})
@@ -269,7 +275,7 @@ class Store:
         """Take `{id: value}` (all of it or none: one bad value refuses the whole), keep it, apply it, answer the list."""
         if not isinstance(body, dict) or not body:
             raise SettingsError(_t("station_settings_none", "nothing to change"))
-        if st.live and any(k in body for k in HUB_VOICE_IDS):
+        if (st.live and any(k in body for k in HUB_VOICE_IDS)) or ("tts" in st.live and "voice" in body):
             raise SetOnHub()
         wanted = {s["id"]: s for s in specs()}
         new = {}

@@ -271,8 +271,9 @@ function modesCard() {
   for (const input of choice.querySelectorAll(".segmented__input")) {
     const label = input.nextElementSibling, mode = input.value;
     const line = mode === "custom" ? SW.t("features_setup_custom_line") : SW.t("features_setup_" + setupKey(mode) + "_line");
-    label.replaceChildren(h("span", { class: "segmented__name", textContent: label.textContent }), h("span", { class: "segmented__line", textContent: line }));
-    if (input.disabled && mode !== "custom") label.title = waiting ? SW.t("features_job_tooltip") : SW.t("features_setup_disabled");
+    const why = input.disabled && mode !== "custom" ? (waiting ? SW.t("features_job_tooltip") : SW.t("features_setup_disabled")) : null;
+    label.replaceChildren(h("span", { class: "segmented__name", textContent: label.textContent }), h("span", { class: "segmented__line", textContent: line }),
+      ...(why ? [h("span", { class: "segmented__hint muted", textContent: why })] : []));
   }
   const command = SW.t("features_setup_station_command", { hub_address: location.hostname });
   // the address `#features/setup-<setup>` opens that setup's drawer, once the page is drawn
@@ -346,14 +347,33 @@ function modulesCard() {
       { value: "on", label: SW.t("features_filter_on", { count: on }) },
       { value: "off", label: SW.t("features_filter_off", { count: S.modules.length - on }) },
       { value: "all", label: SW.t("features_filter_all") }] });
+  const clearLabel = SW.t("common_clear_filter") !== "common_clear_filter" ? SW.t("common_clear_filter") : "Clear filter";
+  const emptyFiltered = SW.empty({ title: SW.t("spools_empty_filtered"),
+    actions: [SW.btn(clearLabel, { action: "clear-filter", run: () => {
+      featuresFilter = "all";
+      const allRadio = filter.querySelector('input[value="all"]');
+      if (allRadio) allRadio.checked = true;
+      applyFilter();
+    } })] });
+  const applyFilter = () => {
+    let shown = 0;
+    for (const it of list.querySelectorAll(".coll__item")) {
+      const hide = featuresFilter === (it.dataset.state === "on" ? "off" : "on");
+      it.hidden = hide;
+      if (!hide) shown++;
+    }
+    list.hidden = shown === 0;
+    emptyFiltered.hidden = shown > 0;
+  };
   filter.addEventListener("change", (e) => {
     featuresFilter = e.target.value;
-    for (const it of list.querySelectorAll(".coll__item")) it.hidden = featuresFilter === (it.dataset.state === "on" ? "off" : "on");
+    applyFilter();
   });
+  applyFilter();
   // the address `#features/<feature>` opens that feature's drawer, once the page is drawn
   const want = S.modules.find((m) => m.name === featuresPlace() && m.name !== "server");
   if (want && !isDrawerOpen() && !waiting) setTimeout(() => { if (!isDrawerOpen() && list.isConnected) featureDrawer(want, list.querySelector(`[data-key="${CSS.escape(want.name)}"] button`) || list); }, 0);
-  return card(SW.t("nav_features"), h("div", { class: "coll__toolbar" }, filter), list);
+  return card(SW.t("nav_features"), h("div", { class: "coll__toolbar" }, filter), list, emptyFiltered);
 }
 
 // ----- applying again (the job strip is SW_JOBS', wired in setup_tabs.js) -----

@@ -161,10 +161,10 @@ def test_yellow_with_no_tag_refused(rig):
 def test_new_tag_goes_to_the_camera(rig):
     nfc.on_tag("4:bb:bb")
     assert "B 2200 90" in rig.ser.lines and rig.step() == "camera"
-    assert rig.lamp() == "L 2 1" and rig.row(0) == "New Tag Scanned"
-    assert rig.row(1) == "Yellow: take photo" and rig.row(2) == "Hold yellow: AI" and rig.row(3) == ""
+    assert rig.lamp() == "L 2 0" and rig.row(0) == "New Tag Scanned"
+    assert rig.row(1) == "Yellow: take photo" and rig.row(2) == "Hold yellow: AI" and rig.row(3) == "Red: cancel"
     assert rig.api.calls == [("tag", "4:bb:bb")]
-    assert rig.said[-1] == "New tag. Show the spool to the camera."
+    assert rig.said[-1] == "New tag. Show the spool to the camera and press yellow to take a photo, or hold yellow to recognise."
 
 
 def test_long_press_outside_ready_does_nothing(rig):
@@ -178,13 +178,13 @@ def test_short_press_yellow_at_camera_captures_and_accumulates_photos(rig):
     panel.on_line(b"P H")
     assert rig.step() == "camera" and len(st.state["photos"]) == 1 and st.state["photo"] == JPEG
     assert rig.row(0) == "1 photo" and rig.row(1) == "Yellow: add photo" and rig.row(2) == "Hold yellow: AI"
-    assert rig.row(3) == "Red: cancel" and rig.row(4) == "1 photo - Hold: AI"
+    assert rig.row(3) == "Red: undo / Hold:quit" and rig.row(4) == ""
     assert rig.said[-1] == "Photo 1. Press yellow for another, or hold yellow to recognise."
     assert not [c for c in rig.api.calls if c[0] == "recognize"]
 
     panel.on_line(b"P H")
     assert rig.step() == "camera" and len(st.state["photos"]) == 2
-    assert rig.row(0) == "2 photos" and rig.row(4) == "2 photos - Hold: AI"
+    assert rig.row(0) == "2 photos" and rig.row(4) == ""
     assert rig.said[-1] == "Photo 2. Press yellow for another, or hold yellow to recognise."
 
     panel.on_line(b"L H")
@@ -215,8 +215,8 @@ def test_yellow_at_camera_recognises(rig):
     assert (photos, uid, during) == ([JPEG], "4:bb:bb", "recognising")  # yellow rapid while it runs
     assert flow.STEP_LAMPS["recognising"] == (4, 1)
     assert rig.step() == "weigh"
-    assert rig.row(0) == "Recognised" and rig.row(1) == "Elegoo PLA Galaxy Blu"  # cut to 21 characters
-    assert rig.row(3) == "Scale+Yel/HoldRed:No" and rig.lamp() == "L 2 1"
+    assert rig.row(0) == "Recognised" and rig.row(1) == "Elegoo PLA Galaxy ..."  # cut to 21 characters with ellipsis
+    assert rig.row(3) == "Press yellow: weigh" and rig.lamp() == "L 2 1"
     assert rig.said[-1] == "Recognised Elegoo PLA Galaxy Blue. Put it on the scale, or hold red to reject."
     s = state_json()
     assert s["flow"]["step"] == "weigh" and s["flow"]["filament"] == FIL and s["photo"]["url"] == "/photo"
@@ -452,7 +452,7 @@ def test_refresh_reports_a_vanished_panel(rig):
 
 
 def test_screen_rows_are_ascii_and_cut():
-    assert flow.ascii_text("Café Crème PLA, très très long nom") == "Cafe Creme PLA, tres "
+    assert flow.ascii_text("Café Crème PLA, très très long nom") == "Cafe Creme PLA, tr..."
     assert len(flow.ascii_text("x" * 40, flow.TITLE_WIDTH)) == 16
 
 
@@ -580,7 +580,7 @@ def test_recognise_says_the_hubs_speak_text_when_there_is_one(rig, monkeypatch):
     monkeypatch.setattr(rig.api, "recognize", with_speak)
     nfc.on_tag("4:bb:bb")
     panel.on_line(b"L H")
-    assert rig.row(1) == "Elegoo PLA Galaxy Blu"  # the screen keeps "PLA"
+    assert rig.row(1) == "Elegoo PLA Galaxy ..."  # the screen keeps "PLA"
     assert rig.said[-1] == "Recognised Elegoo P L A Galaxy Blue. Put it on the scale, or hold red to reject."
 
 
@@ -708,7 +708,7 @@ def test_red_cancels_the_returning_step_and_nothing_is_sent(rig):
     assert rig.step() == "idle" and flow.flow["returning"] is False and rig.said[-1] == "Cancelled."
     assert sent(rig) == []
     nfc.on_tag(LINKED)  # the next, plain spool is not in returning mode
-    assert flow.flow["returning"] is False and rig.row(0) == "Spool #123" and rig.row(3) == "Scale, then yellow"
+    assert flow.flow["returning"] is False and rig.row(0) == "Spool #123" and rig.row(3) == "Press yellow: weigh"
 
 
 def test_red_after_weighing_cancels_too(rig):
@@ -725,18 +725,18 @@ def test_not_checked_out_shows_the_hubs_sentence_and_stays_on_the_step(rig):
     rig.api.mode = "not_out"
     nfc.on_tag(OUT)
     panel.on_line(b"L H")
-    assert rig.step() == "weigh" and rig.row(0) == "Returning" and rig.row(4) == "This spool is not che"  # cut to 21
+    assert rig.step() == "weigh" and rig.row(0) == "Returning" and rig.row(4) == "This spool is not ..."  # cut to 21
     assert rig.said[-1] == "This spool is not checked out."
     scale(800.0)
     panel.on_line(b"P H")
     panel.on_line(b"L H")
-    assert rig.step() == "ready" and rig.row(4) == "This spool is not che"  # the weighed save, refused the same way
+    assert rig.step() == "ready" and rig.row(4) == "This spool is not ..."  # the weighed save, refused the same way
 
 
 def test_an_older_hub_runs_the_plain_flow(rig):
     """No `checked_out` in the answer, so nothing changes."""
     nfc.on_tag(LINKED)
-    assert flow.flow["returning"] is False and rig.row(0) == "Spool #123" and rig.row(3) == "Scale, then yellow"
+    assert flow.flow["returning"] is False and rig.row(0) == "Spool #123" and rig.row(3) == "Press yellow: weigh"
     panel.on_line(b"L H")  # a long press at weigh stays a refusal, as before
     assert rig.step() == "weigh" and sent(rig) == []
     scale(1098.0)

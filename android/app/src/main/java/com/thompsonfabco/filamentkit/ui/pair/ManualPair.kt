@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -44,16 +45,22 @@ internal fun PairAddressScreen(
     BackHandler(onBack = onBack)
     var host by rememberSaveable { mutableStateOf(ui.host) }
     var port by rememberSaveable { mutableStateOf(ui.portText) }
+    var errorDismissed by remember(ui.error, ui.errorField) { mutableStateOf(false) }
+    val shownError = ui.error.takeUnless { errorDismissed }
+    val shownErrorField = ui.errorField.takeUnless { errorDismissed }
     val space = SpoolwardenTheme.space
     PairPage {
         PairHeading(stringResource(R.string.pair_address_heading))
         OutlinedTextField(
             value = host,
-            onValueChange = { host = it },
+            onValueChange = {
+                host = it
+                errorDismissed = true
+            },
             label = { Text(stringResource(R.string.pair_address_label)) },
             placeholder = { Text(stringResource(R.string.pair_address_placeholder)) },
-            supportingText = ui.error.takeIf { ui.errorField == PairField.Address }?.let { { Text(it.text()) } },
-            isError = ui.errorField == PairField.Address,
+            supportingText = shownError.takeIf { shownErrorField == PairField.Address }?.let { { Text(it.text()) } },
+            isError = shownErrorField == PairField.Address,
             singleLine = true,
             enabled = !ui.busy,
             textStyle = SpoolwardenTheme.type.input,
@@ -62,14 +69,18 @@ internal fun PairAddressScreen(
         )
         OutlinedTextField(
             value = port,
-            onValueChange = { port = it },
+            onValueChange = {
+                port = it
+                errorDismissed = true
+            },
             label = { Text(stringResource(R.string.pair_address_port_label)) },
-            supportingText = ui.error.takeIf { ui.errorField == PairField.Port }?.let { { Text(it.text()) } },
-            isError = ui.errorField == PairField.Port,
+            supportingText = shownError.takeIf { shownErrorField == PairField.Port }?.let { { Text(it.text()) } },
+            isError = shownErrorField == PairField.Port,
             singleLine = true,
             enabled = !ui.busy,
             textStyle = SpoolwardenTheme.type.input,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { onSubmit(host, port) }),
             modifier = Modifier.width(SpoolwardenTheme.sizes.portField),
         )
         Text(
@@ -81,7 +92,7 @@ internal fun PairAddressScreen(
                 stringResource(if (ui.busy) R.string.common_connecting else R.string.common_connect),
                 { onSubmit(host, port) }, Modifier.fillMaxWidth(), kind = SwButtonKind.Main, busy = ui.busy,
             )
-            if (ui.errorField == null) ui.error?.let { PairErrorLine(it, access) }
+            if (shownErrorField == null) shownError?.let { PairErrorLine(it, access) }
         }
     }
 }

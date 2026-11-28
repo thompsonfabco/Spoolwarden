@@ -99,9 +99,30 @@
 
   // Leave demo asks once, then the Hub deletes the demo's folder; the page reads its state again (the banner goes with `demo`)
   // (`after`: Settings > General's Leave demo says its result there once the page has read its state)
-  function demoLeave(after) {
-    return confirmed({ kind: "destructive", title: t("demo_leave_title"), text: t("demo_leave_text"), confirm: t("demo_leave") },
-      "demo", { on: false }, async () => { await refresh(); if (after) after(); });
+  async function demoLeave(after) {
+    const out = await sw().ask({
+      kind: "destructive", title: t("demo_leave_title"), text: t("demo_leave_text"), confirm: t("demo_leave"),
+      run: async (_, { result }) => {
+        let r = null;
+        await needCode(async () => {
+          try {
+            r = await api("demo", { on: false, code: theCode() });
+          } catch (e) {
+            if (e.locked) throw e;
+            if (e.status === 409 && e.data && (e.data.code === "not_in_demo" || e.data.error === "not_in_demo")) {
+              r = { ok: true, alreadyOff: true };
+            } else {
+              sw().result(result, "bad", typeof hubText === "function" ? hubText(e.message) : e.message);
+            }
+          }
+        });
+        return r || false;
+      },
+    });
+    if (!out) return null;
+    if (typeof refresh === "function") await refresh();
+    if (after) after(out);
+    return out;
   }
 
   // the sentence of a refused switch-on: a Hub with data answers by its code `not_empty` (Getting started and Settings read it alike)
@@ -122,6 +143,13 @@
 
   async function askApi(opts, body) {
     if (opts?.api) return opts.api(body);
+    if (body !== undefined && !opts?.fetch && typeof needCode === "function" && typeof api === "function" && typeof theCode === "function") {
+      let data;
+      await needCode(async () => {
+        data = await api("start", { ...body, code: theCode() });
+      });
+      return data;
+    }
     const fn = (opts && opts.fetch) || window.fetch.bind(window);
     const init = body === undefined
       ? { method: "GET", credentials: "same-origin", cache: "no-store" }
@@ -176,10 +204,22 @@
       if (typeof options.onChange === "function") options.onChange(data);
     }
 
+    function setTriggerBusy(trigger, on) {
+      if (!trigger || !trigger.isConnected) return;
+      const s = sw();
+      if (on) {
+        if (typeof s.busy === "function") s.busy(trigger, t("common_working"));
+        else trigger.disabled = true;
+      } else {
+        if (typeof s.idle === "function") s.idle(trigger);
+        else trigger.disabled = false;
+      }
+    }
+
     async function post(payload, trigger, errBox) {
       if (busy) return;
       busy = true;
-      if (trigger) trigger.disabled = true;
+      setTriggerBusy(trigger, true);
       if (errBox) showResult(errBox, null, "");
       try {
         const fresh = await askApi(options, payload);
@@ -191,7 +231,7 @@
         if (errBox) showResult(errBox, "bad", e.message);
       } finally {
         busy = false;
-        if (trigger && trigger.isConnected) trigger.disabled = false;
+        setTriggerBusy(trigger, false);
       }
     }
 
@@ -263,7 +303,7 @@
           const trigger = ev.currentTarget;
           if (busy) return;
           busy = true;
-          trigger.disabled = true;
+          setTriggerBusy(trigger, true);
           showResult(box, null, "");
           try {
             const r = await (options.demo || demoSend)(true);
@@ -272,7 +312,7 @@
             showResult(box, "bad", demoRefusal(e));
           } finally {
             busy = false;
-            if (trigger.isConnected) trigger.disabled = false;
+            setTriggerBusy(trigger, false);
           }
         },
       });
@@ -389,6 +429,9 @@
       if (allSet) {
         hideTimer = setTimeout(() => {
           hideTimer = null;
+          if (mount.contains(document.activeElement) && typeof pageTitle !== "undefined" && pageTitle && pageTitle.isConnected) {
+            pageTitle.focus({ preventScroll: true });
+          }
           mount.replaceChildren();
         }, completeDelayMs);
       }
@@ -401,8 +444,13 @@
         paint(data);
         notify(data);
         return data;
-      } catch {
-        mount.replaceChildren();
+      } catch (e) {
+        const s = sw();
+        if (typeof s.errorState === "function") {
+          mount.replaceChildren(s.errorState({ title: t("start_title"), text: (e && e.message) || t("common_hub_no_answer"), onTry: load }));
+        } else {
+          mount.replaceChildren();
+        }
         notify(null);
         return null;
       }

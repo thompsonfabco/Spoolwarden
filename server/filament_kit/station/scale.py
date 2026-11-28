@@ -55,17 +55,22 @@ def scale_loop():
                 while True:
                     if not select.select([fd], [], [], 5)[0]:
                         continue  # no change (or the scale switched itself off)
-                    r = parse_report(os.read(fd, 64))
+                    data = os.read(fd, 64)
+                    if not data:
+                        log.info("scale %s: EOF", path)
+                        break
+                    r = parse_report(data)
                     if not r:
                         continue
                     now = time.time()
                     with st.lock:
                         st.state.update(scale=r, scale_at=now)
-                        if r["status"] == "stable" and r["grams"] >= st.MIN_GRAMS:
+                        if r["status"] == "stable" and r["grams"] >= st.settings.get("min_grams", st.MIN_GRAMS):
                             st.state.update(last=r["grams"], last_at=now)
                     st.panel_dirty.set()
             finally:
                 os.close(fd)
+            time.sleep(3)
         except OSError as e:  # unplugged
             log.warning("scale %s: %s", path, e)
             time.sleep(3)

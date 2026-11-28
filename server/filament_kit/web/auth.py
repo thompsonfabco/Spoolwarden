@@ -30,7 +30,7 @@ from mcp.server.auth.provider import (AccessToken, AuthorizationCode, Authorizat
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, RedirectResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
 __all__ = ["AuthorizationParams", "CALLBACKS", "Lockout", "Provider", "Store", "auth_settings", "check_passphrase",
@@ -380,7 +380,7 @@ def _page(paras: list[str] | str, status: int = 200, *, path: str = "/login", he
 def _form(rid: str, error: str | None = None) -> str:
     """The passphrase form: the field with its Show button (signin.js wires it) and the Allow button."""
     label, e = _say("signin_passphrase"), html.escape
-    err = f"<p class=field__error id=pass-error>{e(error)}</p>" if error else ""
+    err = f"<p class=field__error id=pass-error role=alert>{e(error)}</p>" if error else ""
     return (f"<form method=post class=standalone__form><input type=hidden name=req value='{e(rid)}'>"
             f"<div class='field field--secret'><label class=field__label for=pass>{e(label)}</label>"
             "<div class=field__box><input class=field__control id=pass type=password name=passphrase required autofocus "
@@ -407,12 +407,17 @@ def lan_only(app: Any, lan_cidrs: Iterable[str]) -> Any:
     public = {f"/intake/shared/{n}" for n in pages.PUBLIC_SHARED} | {f"/intake/{n}" for n in pages.PUBLIC_OWN}
 
     async def wrapped(scope, receive, send):
-        path, client = scope.get("path", ""), (scope.get("client") or ("",))[0]
+        path, root = scope.get("path", ""), (scope.get("root_path") or "").rstrip("/")
+        if root and (path == root or path.startswith(root + "/")):
+            path = path[len(root):] or "/"
+        client = (scope.get("client") or ("",))[0]
         if scope["type"] == "http" and _lan_path(path) and path not in public and not is_lan(client, nets):
             log.debug("lan_only refused: non_lan_client")
             if path.rstrip("/") == "/intake" and scope.get("method") == "GET":     # the web app: its refusal page
                 page = HTMLResponse(pages.refusal(_shared(), _prefix(path), client), 403,
                                     headers={**PAGE_HEADERS, "Content-Security-Policy": REFUSAL_CSP})
+            elif path.startswith("/intake/api/"):
+                page = JSONResponse({"error": "home network only"}, 403, headers={"Content-Security-Policy": "default-src 'none'"})
             else:
                 page = _page(_home_only(client), 403, path=path)
             await page(scope, receive, send)

@@ -417,11 +417,12 @@ internal fun FilamentKitApp(
     // each ask for Spools with the Running low filter on (Home's line, an alert's action) counts one up
     var lowRequest by rememberSaveable { mutableIntStateOf(0) }
 
-    // App-wide, one per Api (owned by AppViewModel; replaced when the pinned client changes).
-    val updater by app.updater.current.collectAsStateWithLifecycle()
+    // App-wide, persistent across Hub/GitHub changes (owned by AppViewModel).
+    val updater = app.updater
     val online = connection is Connection.Online
-    LaunchedEffect(updater, online) {
-        if (online) updater?.onOnline()
+    LaunchedEffect(api, online) {
+        if (online) updater.onOnline()
+        if (api != null) updater.check()
     }
     // Which modules are on (label reading is optional); read again whenever the server comes online.
     val info by produceState<ServerInfo?>(null, api, online) {
@@ -454,7 +455,7 @@ internal fun FilamentKitApp(
         }
     }
     LaunchedEffect(lifecycle, updater) {
-        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { updater?.onResumed() }
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { updater.onResumed() }
     }
     // Alerts on this phone: on return to the app, a watching service that was stopped (the notification dismissed, Task
     // Manager) starts again while the app is showing
@@ -491,7 +492,8 @@ internal fun FilamentKitApp(
     // screens ask for the client at each call, so a trusted certificate or a re-pair reaches them with their state intact
     fun currentApi(): Api = app.session.api.value ?: throw ApiError.noHubPaired()
     // The Hub at a glance: one read per Api, shared by Home's Getting started line and the Hub screen
-    val hubVm: HubViewModel = viewModel(key = "hub-glance-${System.identityHashCode(api)}", factory = viewModelFactory {
+    val hubKey = "${config?.fingerprint.orEmpty()}:${System.identityHashCode(api)}"
+    val hubVm: HubViewModel = viewModel(key = "$hubKey:0", factory = viewModelFactory {
         initializer { HubViewModel(load = { currentApi().hub() }) }
     })
     val hubUi by hubVm.state.collectAsStateWithLifecycle()
@@ -509,7 +511,7 @@ internal fun FilamentKitApp(
         }
     }
     // the check history table on the Hub screen
-    val healthVm: HealthViewModel = viewModel(key = "hub-health-${System.identityHashCode(api)}", factory = viewModelFactory {
+    val healthVm: HealthViewModel = viewModel(key = "$hubKey:1", factory = viewModelFactory {
         initializer { HealthViewModel(load = { days -> currentApi().health(days) }) }
     })
     val healthUi by healthVm.state.collectAsStateWithLifecycle()
@@ -627,7 +629,7 @@ internal fun FilamentKitApp(
     val scanning = destination?.hasRoute(PairScanRoute::class) == true || destination?.hasRoute(SpoolsScanRoute::class) == true
     val storedCertificate = destination?.hasRoute(PairCertificateRoute::class) == true &&
         entry?.toRoute<PairCertificateRoute>()?.source == MismatchSource.STORED.routeSource()
-    val update = updater?.state?.collectAsStateWithLifecycle()?.value ?: UpdateUi()
+    val update by updater.state.collectAsStateWithLifecycle()
 
     val tabTapped: (Tab) -> Unit = { tapped ->
         // from the list page, or from a sheet over it (the Hub sheet's Hub settings): the section opens, so the list goes
@@ -1173,8 +1175,8 @@ internal fun FilamentKitApp(
                             onRefreshPrinters = printersVm::refresh,
                             onReviewCertificate = app.router::pairAgain,
                             onPairAgain = app.router::pairAgain,
-                            onInstallUpdate = { updater?.install() },
-                            onConfirmInstall = { updater?.confirmInstall() },
+                            onInstallUpdate = { updater.install() },
+                            onConfirmInstall = { updater.confirmInstall() },
                             presets = presets,
                             showPresets = api != null,
                             onBuildPresets = {
@@ -1617,13 +1619,13 @@ internal fun FilamentKitApp(
                         setupUrl = { HubPage.url(app.session.baseUrl()) },
                         onOpenHubGlance = ::openHubGlance,
                         update = UpdateActions(
-                            install = { updater?.install() },
-                            cancel = { updater?.cancel() },
-                            openSettings = { updater?.openPermissionSettings() },
-                            tapToInstall = { updater?.confirmInstall() },
-                            tryAgain = { updater?.checkNow() },
+                            install = { updater.install() },
+                            cancel = { updater.cancel() },
+                            openSettings = { updater.openPermissionSettings() },
+                            tapToInstall = { updater.confirmInstall() },
+                            tryAgain = { updater.checkNow() },
                         ),
-                        onCheckForUpdates = { updater?.checkNow() },
+                        onCheckForUpdates = { updater.checkNow() },
                         onSimulateTag = TagEvents::emit,
                         alerts = AlertsActions(
                             onSwitch = app::setAlertsOn,

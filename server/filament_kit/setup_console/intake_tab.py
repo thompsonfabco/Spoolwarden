@@ -14,7 +14,7 @@ from __future__ import annotations
 import anyio
 from starlette.responses import Response
 
-from .. import config, intake, intake_history
+from .. import config, demo, intake, intake_history
 from ..spoolman import Spoolman, SpoolmanError
 
 
@@ -57,6 +57,8 @@ def routes(page) -> list[tuple]:
         return Response(data, media_type="image/jpeg", headers=intake_history.photo_headers(data, thumb=thumb))
 
     async def revise(request, body):
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         def run() -> dict:
             cfg = config.load()
             cap = intake.ReadCap(config.paths().state / "reads.json", cfg["reads_per_day"])
@@ -71,6 +73,8 @@ def routes(page) -> list[tuple]:
         return out
 
     async def apply(request, body):
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         out = await anyio.to_thread.run_sync(lambda: call(
             intake_history.apply, sm(), request.path_params["hid"], proposal=body.get("proposal"),
             item=body.get("item"), values=body.get("values") if body.get("proposal") is None else None,
@@ -79,6 +83,8 @@ def routes(page) -> list[tuple]:
         return out
 
     async def undo(request, body):
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         out = await anyio.to_thread.run_sync(lambda: call(intake_history.undo, sm(), request.path_params["hid"],
                                                           body.get("revision")))
         page.audit(request, f"recently added record {request.path_params['hid']} revision undone")

@@ -232,7 +232,11 @@ class ManualMapViewModel(
         } catch (e: ApiError) {
             when {
                 e.code == "unauthorized" -> _state.update { it.copy(unauthorized = true) }
-                e.code == "stale" -> runCatching { set(backend.state(id)) }
+                e.code == "stale" -> try {
+                    set(backend.state(id))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {}
                 // the session was closed elsewhere (or the Hub restarted): show it as ended
                 e.code == "none" -> _state.update { s -> s.copy(map = s.map?.copy(open = false, step = null)) }
                 quiet -> _state.update { it.copy(lost = true) }

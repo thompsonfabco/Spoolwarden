@@ -54,6 +54,7 @@ const AN_TEXT = {
   analytics_orders_importing: "Importing orders...",
   analytics_orders_imported: "Imported {imported} orders ({skipped} already saved, {total} total).",
   analytics_orders_error_empty: "Paste CSV or JSON order data first.",
+  analytics_orders_upload: "Choose file…",
 };
 const anT = (key, vars) => (window.SW_TEXT && window.SW_TEXT[key] != null ? SW.t(key, vars)
   : AN_TEXT[key].replace(/\{([a-z0-9_]+)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m)));
@@ -81,7 +82,13 @@ const anMonth = (key, long) => {
   return new Date(Date.UTC(y, m - 1, 15)).toLocaleDateString(undefined, { month: long ? "long" : "short", year: "numeric", timeZone: "UTC" });
 };
 const anGrams = (g) => (g >= 1000 ? anT("analytics_kilograms", { kg: (g / 1000).toFixed(2) }) : anT("analytics_grams", { grams: Math.round(g) }));
-const anMoney = (v) => anT("analytics_currency_amount", { amount: Number(v || 0).toFixed(2) });
+const anMoney = (v, currency) => {
+  const n = Number(v || 0), code = String(currency || "").trim().toUpperCase();
+  if (/^[A-Z]{3}$/.test(code)) {
+    try { return new Intl.NumberFormat(undefined, { style: "currency", currency: code }).format(n); } catch { /* fall through */ }
+  }
+  return anT("analytics_currency_amount", { amount: n.toFixed(2) });
+};
 const anBlank = (month) => ({ month, grams: 0, prints: 0, unfinished_prints: 0, unfinished_grams: 0, cost: 0, unfinished_cost: 0,
   logged_only_grams: 0, no_weight_prints: 0, by_printer: [], by_material: [] });
 
@@ -184,10 +191,25 @@ function analyticsTab() {
     hint: anT("analytics_orders_hint"),
   });
   const orderResult = h("div", { class: "an__orders-result" });
+  const fileField = SW.field({ type: "file", label: anT("analytics_orders_upload"), accept: ".csv,.json,text/csv,application/json", optional: true });
+  fileField.hidden = true;
+  const fileInput = fileField._control;
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files && fileInput.files[0];
+    fileInput.value = "";
+    if (!file) return;
+    try {
+      orderData._control.value = await file.text();
+      SW.fieldError(orderData, null);
+    } catch (e) { SW.result(orderResult, "bad", hubText(e.message)); }
+  });
+  const uploadBtn = SW.btn(anT("analytics_orders_upload"), { cls: "btn--ghost", action: "upload-orders", run: () => fileInput.click() });
+  let importing = false;
   const importBtn = SW.btn(anT("analytics_orders_import_btn"), {
     action: "import-orders",
     cls: "btn--primary",
     run: async () => {
+      if (importing) return;
       const raw = orderData._control.value;
       if (!raw.trim()) {
         SW.fieldError(orderData, anT("analytics_orders_error_empty"));
@@ -195,12 +217,15 @@ function analyticsTab() {
         return;
       }
       SW.fieldError(orderData, null);
+      importing = true;
+      SW.busy(importBtn, anT("analytics_orders_importing"));
       SW.result(orderResult, "run", anT("analytics_orders_importing"));
       try {
         let res;
         await needCode(async () => {
           res = await api("orders/import", { data: raw, format: orderFormat._control.value, code: theCode() });
         });
+        if (!res) { SW.result(orderResult, null); return; }
         orderData._control.value = "";
         SW.result(orderResult, "ok", anT("analytics_orders_imported", {
           imported: res.imported,
@@ -214,6 +239,9 @@ function analyticsTab() {
       } catch (e) {
         if (e.locked) { SW.result(orderResult, null); throw e; }
         SW.result(orderResult, "bad", hubText(e.message));
+      } finally {
+        importing = false;
+        SW.idle(importBtn);
       }
     },
   });
@@ -222,7 +250,8 @@ function analyticsTab() {
     ordersSummary,
     orderFormat,
     orderData,
-    h("p", {}, importBtn),
+    fileField,
+    h("div", { class: "actions" }, uploadBtn, importBtn),
     orderResult);
 
   out.append(gate, main, costCard, ordersCard);
@@ -230,7 +259,7 @@ function analyticsTab() {
   let data = null, seq = 0;
 
   const drawCost = (answer, rows) => {
-    const totals = answer.totals || {};
+    const totals = answer.totals || {}, cur = answer.currency || totals.currency || (S && S.currency) || "";
     const totalCost = Number(totals.cost || rows.reduce((s, m) => s + (m.cost || 0), 0));
     const totalWaste = Number(totals.unfinished_cost || rows.reduce((s, m) => s + (m.unfinished_cost || 0), 0));
     const pricedRows = [...rows].reverse().filter((m) => (m.cost || 0) > 0 || (m.unfinished_cost || 0) > 0);
@@ -240,11 +269,11 @@ function analyticsTab() {
     }
     const pct = totalCost > 0 ? Math.round((totalWaste / totalCost) * 100) : 0;
     const summary = h("p", {
-      textContent: anT("analytics_cost_summary", { cost: anMoney(totalCost), waste: anMoney(totalWaste), percent: pct }),
+      textContent: anT("analytics_cost_summary", { cost: anMoney(totalCost, cur), waste: anMoney(totalWaste, cur), percent: pct }),
     });
     const head = [anT("analytics_col_month"), anT("analytics_col_cost"), anT("analytics_col_waste")];
     const table = anTable(anT("analytics_cost_title"), head, pricedRows.map((m) => [
-      anMonth(m.month, true), anMoney(m.cost), anMoney(m.unfinished_cost),
+      anMonth(m.month, true), anMoney(m.cost, cur), anMoney(m.unfinished_cost, cur),
     ]));
     costBody.replaceChildren(summary, table);
   };

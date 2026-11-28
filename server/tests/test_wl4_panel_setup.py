@@ -328,7 +328,7 @@ def test_a_panel_whose_lines_end_in_crlf_is_understood(env):
     panel.reply = ["AIR: 1\r", "P H\r", "OK\r", "OK\r"]
     ps.enable(panel, **GOOD)
     assert panel.reply == []
-    with pytest.raises(ps.PanelSetupError, match="did not accept"):
+    with pytest.raises(ps.PanelSetupError, match="too long"):
         ps.enable(Panel("ERR long\r"), **GOOD)
 
 
@@ -436,7 +436,7 @@ def test_crlf_fixture_through_the_full_enable_path(env):
     assert panel.lines[0].startswith("CFG WIFI ") and panel.lines[1].startswith("CFG LINK ")
     assert not any("\r" in l or "\n" in l for l in panel.lines)          # nothing of the panel's line endings goes back
     assert ps.stored_token() and config.load()["station"]["panel_link"] == "wifi"
-    with pytest.raises(ps.PanelSetupError, match="did not accept"):
+    with pytest.raises(ps.PanelSetupError, match="too long"):
         ps.enable(Panel("ERR long\r\n"), **GOOD)
     assert ps.disable(Panel("OK\r\n"))["panel_forgotten"] is True
 
@@ -456,7 +456,7 @@ def test_every_err_reason_is_a_refusal_with_the_right_sentence(env, reason):
     with pytest.raises(ps.PanelSetupError) as e:
         ps.enable(panel, **GOOD)
     want = ("The panel could not save the Wi-Fi settings. Run this again; if it fails again, flash the panel: "
-            "sudo spoolwarden weigh-station flash-display") if reason == "store" else "The panel did not accept the Wi-Fi settings."
+            "sudo spoolwarden weigh-station flash-display") if reason == "store" else ps._ERR_REASONS.get(reason, ps.TEXT_NOT_ACCEPTED)
     assert str(e.value) == want
     assert ps.stored_token() is None and not (state / ps.TOKEN_FILE).exists()
     assert config.load() == before and config.load()["station"]["panel_link"] == "usb"

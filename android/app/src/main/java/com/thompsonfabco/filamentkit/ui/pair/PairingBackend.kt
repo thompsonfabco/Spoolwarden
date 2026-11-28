@@ -6,6 +6,7 @@ import com.thompsonfabco.filamentkit.net.pinnedClient
 import com.thompsonfabco.filamentkit.net.probeFingerprint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 
 /** The network calls pairing needs. Real implementation: [NetPairingBackend]; tests pass a fake. */
 interface PairingBackend {
@@ -26,7 +27,7 @@ interface PairingBackend {
     suspend fun claim(host: String, port: Int, fingerprint: String, token: String)
 }
 
-class NetPairingBackend : PairingBackend {
+class NetPairingBackend(private val baseClient: OkHttpClient = OkHttpClient()) : PairingBackend {
     override suspend fun probe(host: String, port: Int): String =
         withContext(Dispatchers.IO) { probeFingerprint(host, port) }
 
@@ -41,5 +42,5 @@ class NetPairingBackend : PairingBackend {
     }
 
     private fun api(host: String, port: Int, fingerprint: String, token: String?) =
-        Api(pinnedClient(fingerprint), { "https://${if (':' in host) "[$host]" else host}:$port" }, { token })
+        Api(pinnedClient(fingerprint, baseClient), { "https://${if (':' in host) "[$host]" else host}:$port" }, { token })
 }

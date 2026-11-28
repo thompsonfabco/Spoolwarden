@@ -18,7 +18,7 @@ function ovAgo(ms) {
 const ovExact = (ms) => new Date(ms).toLocaleString();
 // the relative time as a <time> with its exact time on hover; it keeps itself right while it is on the page
 function ovTime(ms, text) {
-  const t = h("time", { datetime: new Date(ms).toISOString(), textContent: text(ms) });
+  const t = h("time", { tabindex: "0", datetime: new Date(ms).toISOString(), textContent: text(ms) });
   const timer = setInterval(() => { if (t.isConnected) t.textContent = text(ms); else clearInterval(timer); }, 15000);
   return SW.tooltip(t, ovExact(ms));
 }

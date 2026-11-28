@@ -2,6 +2,9 @@ package com.thompsonfabco.filamentkit.session
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.BuildConfig
 import com.thompsonfabco.filamentkit.alerts.AlertNotifier
@@ -23,6 +26,8 @@ import com.thompsonfabco.filamentkit.ui.theme.Appearance
 import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.spool.LoadGate
 import com.thompsonfabco.filamentkit.update.ApkInstaller
+import com.thompsonfabco.filamentkit.update.FallbackUpdateSource
+import com.thompsonfabco.filamentkit.update.GitHubUpdateSource
 import com.thompsonfabco.filamentkit.update.UpdateSource
 import com.thompsonfabco.filamentkit.update.Updater
 import java.io.File
@@ -66,17 +71,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         IntakeApi.of { this.session.api.value ?: throw ApiError.noHubPaired() },
     )
 
-    /** The update checker, one per [ServerSession.api]; its daily loop stops with the old client. */
-    val updater = ApiOwned(viewModelScope, session.api, Updater::class) { api ->
-        Updater(
-            source = UpdateSource.of(api),
-            installer = ApkInstaller(app),
-            currentVersion = BuildConfig.VERSION_CODE,
-            apkFile = File(app.cacheDir, "updates/filament-kit.apk"),
-            onProblem = router::report,
-            words = { app.getString(it.text) },
-        )
-    }
+    private val updaterStore = ViewModelStore()
+
+    /** The update checker: tries the paired Hub first and falls back to GitHub Releases. */
+    val updater: Updater = ViewModelProvider(
+        updaterStore,
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = Updater(
+                source = FallbackUpdateSource(
+                    hub = { session.api.value?.let(UpdateSource::of) },
+                    github = GitHubUpdateSource(),
+                ),
+                installer = ApkInstaller(app),
+                currentVersion = BuildConfig.VERSION_CODE,
+                apkFile = File(app.cacheDir, "updates/filament-kit.apk"),
+                onProblem = router::report,
+                words = { app.getString(it.text) },
+            ) as T
+        },
+    )[Updater::class.java]
 
     /** The switch "Alerts on this phone", the last event the watching service saw and the banners put away. */
     val alertsStore = AlertsStore.create(app)
@@ -181,8 +195,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Home → Discard (confirmed): delete the draft and its photos. */
     fun discardDraft(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            addFlows.release(id)
             draftsMutex.withLock {
-                addFlows.release(id)
                 runCatching { drafts.delete(id) }
                 updateDraftList()
             }
@@ -206,7 +220,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        updater.close()
+        updaterStore.clear()
     }
 
     /** Settings → Skip the fingerprint check for new servers. */

@@ -115,8 +115,6 @@ class OrcaStore:
         unknown or unresolvable."""
         if name in self.library:
             return dict(self.library[name])
-        if name not in self.bbl.names():
-            return None
         cfg = self.bbl.resolved(name)
         return copy.deepcopy(cfg) if cfg is not None else None
 

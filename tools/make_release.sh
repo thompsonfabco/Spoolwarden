@@ -59,7 +59,7 @@ cp install/remote/* "$stage/install/remote/"
 cp station/panel/firmware/intake-panel.bin station/panel/firmware/intake-panel-program.bin station/panel/firmware/VERSION "$stage/install/panel/"
 cp reader/firmware/printer-station.bin reader/firmware/VERSION "$stage/install/reader/"
 # A Windows checkout may have CRLF line endings; Linux needs LF.
-find "$stage" -type f \( -name '*.sh' -o -name '*.service' -o -name '*.timer' -o -name '*.path' -o -path '*/install/remote/*' \) \
+find "$stage" -type f \( -name '*.sh' -o -name '*.service' -o -name '*.timer' -o -name '*.path' -o -name '*.socket' -o -path '*/install/remote/*' \) \
     -exec sed -i 's/\r$//' {} +
 chmod 755 "$stage/install.sh" "$stage/uninstall.sh" "$stage/install/backup.sh" \
     "$stage/install/spoolwarden-cli.sh" "$stage/install/filament-kit-wrapper.sh" "$stage/install/spoolman.sh"

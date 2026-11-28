@@ -579,8 +579,9 @@ def test_no_command_prints_the_grouped_help_that_help_and_dash_h_print(capsys):
     heads = [i for i, line in enumerate(lines) if line in ("Everyday", "System")]
     assert [lines[i] for i in heads] == ["Everyday", "System"]
     assert "  catalog          Filament Catalog: status, update, roll back, add" in lines
-    assert lines[-2].startswith("Every command: -h  --json  -q/--quiet  -y/--yes")
-    for old in ("modules", "profiles", "library", "intake", "unpair", "ensure-fields", "local-intake", "reader "):
+    assert lines[-2].startswith("Every command: -h  --json  -q/--quiet  --numbered  --color auto|always|never")
+    assert "-y/--yes" in lines[-1]
+    for old in ("modules", "profiles", "library", "intake", "unpair", "ensure-fields", "reader "):
         assert not any(line.startswith(f"  {old}") for line in lines), old
 
 
@@ -869,9 +870,9 @@ def test_history_cli_commands_are_wired(capsys, monkeypatch):
     rc, out, _ = run(capsys, ["report"])
     assert rc == 0 and out.startswith("Hub report written:")
     assert run(capsys, ["backup", "password", "--show"])[1] == "Backup password is not set.\n"
+    monkeypatch.setattr(output, "terminal", lambda *a, **k: True)                          # setting and --remove check terminal (7)
     assert run(capsys, ["backup", "password"])[1].endswith("Backup password set. Every backup is now encrypted.\n")
     assert run(capsys, ["backup", "password", "--show"])[1] == "correct horse battery\n"     # the design, command line: the password
-    monkeypatch.setattr(output, "terminal", lambda *a, **k: True)                          # --remove asks first (7)
     monkeypatch.setattr("builtins.input", lambda prompt="": "y")
     assert run(capsys, ["backup", "password", "--remove"])[1].endswith("Removed the backup password.\n")
     assert any(c[1].startswith("/api/events?activity=1") for c in calls)

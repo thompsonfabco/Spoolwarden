@@ -5,27 +5,43 @@
   var T = JSON.parse(document.getElementById("texts").textContent);
   var $ = function (id) { return document.getElementById(id); };
   var timer = null;
+  var dirty = false;
 
   function say(el, text) { el.textContent = text; }
   function send(path, body) {
     return fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"},
                         body: JSON.stringify(body)});
   }
-  function openFromHub(text) {
+  function openFromHub(text, expired) {
     clearInterval(timer);
     $("status").textContent = "";           // the data goes off the page, not just out of sight
-    $("settings").textContent = "";
     $("photo").removeAttribute("src");
     $("photo").hidden = true;
     $("status-section").hidden = true;
+    if (expired && dirty) {
+      $("settings").querySelectorAll("input, select").forEach(function (el) { el.disabled = true; });
+      $("save").disabled = true;
+      $("reset").disabled = true;
+      say($("note"), T["station_page_session_expired_dirty"] || text);
+      return;
+    }
+    $("settings").textContent = "";
     $("settings-section").hidden = true;
     say($("note"), text);
   }
 
-  function row(dl, name, value) {
-    var dt = document.createElement("dt"), dd = document.createElement("dd");
+  function row(dl, key, name, value) {
+    var text = value === null || value === undefined || value === "" ? T["station_page_none"] : String(value);
+    var dd = dl.querySelector('dd[data-key="' + key + '"]');
+    if (dd) {
+      if (dd.textContent !== text) { say(dd, text); }
+      return;
+    }
+    var dt = document.createElement("dt");
+    dd = document.createElement("dd");
+    dd.dataset.key = key;
     say(dt, name);
-    say(dd, value === null || value === undefined || value === "" ? T["station_page_none"] : String(value));
+    say(dd, text);
     dl.appendChild(dt);
     dl.appendChild(dd);
   }
@@ -45,18 +61,61 @@
   function grams(g) { return tx("station_page_grams", {grams: g}) || String(g); }
   function scaleState(st) { return /^unit /.test(st || "") ? tx("station_scale_unit") || st : word("station_scale_", st); }
 
+  function updateFlowActions(s) {
+    var f = s.flow || {};
+    var step = f.step || "idle";
+    var y = $("act-yellow"), yl = $("act-yellow-long"), dp = $("act-del-photo"), rl = $("act-red-long"), r = $("act-red");
+    if (step === "camera") {
+      say(y, T["station_page_action_take_photo"]); y.hidden = false;
+      say(yl, T["station_page_action_recognise"]); yl.hidden = false;
+      say(dp, T["station_page_action_delete_photo"]); dp.hidden = !(s.photo_count > 0);
+      rl.hidden = true;
+    } else if (step === "weigh" || step === "ready") {
+      say(y, T["station_page_action_weigh"]); y.hidden = false;
+      if (step === "ready") {
+        say(yl, T["station_page_action_save"]); yl.hidden = false;
+      } else if (f.returning) {
+        say(yl, T["station_page_action_skip_weigh"]); yl.hidden = false;
+      } else {
+        yl.hidden = true;
+      }
+      dp.hidden = true;
+      say(rl, T["station_page_action_reject_ai"]); rl.hidden = !(f.filament && !f.spool);
+    } else {
+      y.hidden = true; yl.hidden = true; dp.hidden = true; rl.hidden = true;
+    }
+    say(r, T["station_page_action_cancel"]);
+    r.hidden = step === "idle";
+  }
+
   function showStatus(s) {
     var dl = $("status");
-    dl.textContent = "";
-    row(dl, T["station_page_tag"], s.tag && s.tag.nfc_id ? aged(s.tag.nfc_id, s.tag) : null);
-    row(dl, T["station_page_scale"], s.scale ? tx("station_page_scale_value", {grams: s.scale.grams, status: scaleState(s.scale.status)}) || grams(s.scale.grams) : null);
-    row(dl, T["station_page_last_weight"], s.last_weight ? aged(grams(s.last_weight.grams), s.last_weight) : null);
-    row(dl, T["station_page_panel"], s.panel ? (s.panel_version ? tx("station_page_panel_firmware", {panel: s.panel, version: s.panel_version}) || s.panel : s.panel) : null);
-    row(dl, T["station_page_air"], s.air ? tx("station_page_air_value", {temp: s.air.temp_c, rh: s.air.rh}) : null);
-    row(dl, T["station_page_step"], s.flow ? (s.flow.message ? tx("station_page_step_message", {step: word("station_step_", s.flow.step), message: s.flow.message}) : null) || word("station_step_", s.flow.step) : null);
-    row(dl, T["station_page_version"], s.version);
+    row(dl, "tag", T["station_page_tag"], s.tag && s.tag.nfc_id ? aged(s.tag.nfc_id, s.tag) : null);
+    row(dl, "scale", T["station_page_scale"], s.scale ? tx("station_page_scale_value", {grams: s.scale.grams, status: scaleState(s.scale.status)}) || grams(s.scale.grams) : null);
+    row(dl, "last_weight", T["station_page_last_weight"], s.last_weight ? aged(grams(s.last_weight.grams), s.last_weight) : null);
+    row(dl, "panel", T["station_page_panel"], s.panel ? (s.panel_version ? tx("station_page_panel_firmware", {panel: s.panel, version: s.panel_version}) || s.panel : s.panel) : null);
+    var airText = null;
+    if (s.air) {
+      airText = (s.air.rh !== null && s.air.rh !== undefined)
+        ? tx("station_page_air_value", {temp: s.air.temp_c, rh: s.air.rh})
+        : tx("station_page_air_temp_only", {temp: s.air.temp_c});
+      if (airText && s.air.hpa !== null && s.air.hpa !== undefined) {
+        airText = tx("station_page_air_hpa", {value: airText, hpa: s.air.hpa}) || airText;
+      }
+    }
+    row(dl, "air", T["station_page_air"], airText);
+    row(dl, "step", T["station_page_step"], s.flow ? (s.flow.message ? tx("station_page_step_message", {step: word("station_step_", s.flow.step), message: s.flow.message}) : null) || word("station_step_", s.flow.step) : null);
+    row(dl, "photos", T["station_page_photos"], s.photo_count > 0 ? String(s.photo_count) : null);
+    row(dl, "version", T["station_page_version"], s.version);
+    updateFlowActions(s);
     var img = $("photo");
-    if (s.photo) { img.src = "photo?page=1&t=" + encodeURIComponent(s.photo.taken_at || ""); img.hidden = false; } else { img.hidden = true; }
+    if (s.photo) {
+      var idx = s.photo_count > 0 ? s.photo_count - 1 : 0;
+      img.src = "photo?page=1&idx=" + idx + "&t=" + encodeURIComponent(s.photo.taken_at || "");
+      img.hidden = false;
+    } else {
+      img.hidden = true;
+    }
     say($("own-values"), T["station_page_own_values"]);
     $("own-values").hidden = !s.settings_changed;
   }
@@ -83,6 +142,7 @@
       input.min = s.min;
       input.max = s.max;
       input.step = 1;
+      input.required = true;
       input.value = s.value;
     }
     input.dataset.id = s.id;
@@ -98,10 +158,32 @@
     return label;
   }
 
+  function groupKey(id) {
+    if (id === "beep" || id === "speech" || id === "voice" || id === "volume") { return "audio"; }
+    if (id === "panel_swap" || id.indexOf("lamp.") === 0) { return "panel"; }
+    return "hardware";
+  }
+
   function showSettings(list) {
     var form = $("settings");
     form.textContent = "";
-    list.forEach(function (s) { form.appendChild(control(s)); });
+    dirty = false;
+    var groups = [
+      {key: "audio", title: T["station_page_group_audio"] || "Audio and voice", items: []},
+      {key: "panel", title: T["station_page_group_panel"] || "Panel and lamps", items: []},
+      {key: "hardware", title: T["station_page_group_hardware"] || "Scale, camera and timeouts", items: []}
+    ];
+    var byKey = {audio: groups[0], panel: groups[1], hardware: groups[2]};
+    list.forEach(function (s) { byKey[groupKey(s.id)].items.push(s); });
+    groups.forEach(function (g) {
+      if (!g.items.length) { return; }
+      var fs = document.createElement("fieldset");
+      var leg = document.createElement("legend");
+      say(leg, g.title);
+      fs.appendChild(leg);
+      g.items.forEach(function (s) { fs.appendChild(control(s)); });
+      form.appendChild(fs);
+    });
   }
 
   function values() {
@@ -116,7 +198,7 @@
   function load(first) {
     return fetch("state?page=1", {credentials: "same-origin"}).then(function (r) {
       if (r.status === 401 || r.status === 403) {
-        openFromHub(first ? T["station_page_open_from_hub"] : T["station_page_session_over"]);
+        openFromHub(first ? T["station_page_open_from_hub"] : T["station_page_session_over"], !first);
         return null;
       }
       return r.json();
@@ -143,10 +225,26 @@
   }
 
   function save(body, done) {
-    send("settings", body).then(function (r) { return r.json().then(function (d) { return [r.ok, d]; }); }).then(function (x) {
-      if (x[0]) { showSettings(x[1].settings || []); say($("result"), done); load(false); }
-      else { say($("result"), T["station_page_not_saved"].replace("{reason}", x[1].message || "")); }
+    if (!body.reset && !$("settings").reportValidity()) { return; }
+    send("settings", body).then(function (r) { return r.json().then(function (d) { return [r.ok, r.status, d]; }); }).then(function (x) {
+      if (x[0]) { showSettings(x[2].settings || []); say($("result"), done); load(false); }
+      else {
+        say($("result"), T["station_page_not_saved"].replace("{reason}", x[2].message || ""));
+        if (x[1] === 409) {
+          fetch("settings?page=1", {credentials: "same-origin"}).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+            if (d && d.settings) { showSettings(d.settings); }
+          });
+        }
+      }
     }).catch(function () { say($("result"), T["station_page_unreachable"]); });
+  }
+
+  function flowAction(action) {
+    say($("action-result"), "");
+    send("flow", {action: action}).then(function (r) { return r.json().then(function (d) { return [r.ok, d]; }); }).then(function (x) {
+      if (!x[0]) { say($("action-result"), x[1].message || ""); }
+      load(false);
+    }).catch(function () { say($("action-result"), T["station_page_unreachable"]); });
   }
 
   function start() {
@@ -155,10 +253,27 @@
     say($("settings-heading"), T["station_page_settings"]);
     say($("save"), T["station_page_save"]);
     say($("reset"), T["station_page_reset"]);
+    say($("act-test-voice"), T["station_page_action_test_voice"] || "Test speaker");
+    $("photo").alt = T["station_page_photo_alt"] || "Spool photo";
+    $("settings").addEventListener("input", function () { dirty = true; });
+    $("settings").addEventListener("change", function () { dirty = true; });
+    $("act-yellow").addEventListener("click", function () { flowAction("yellow"); });
+    $("act-yellow-long").addEventListener("click", function () { flowAction("yellow_long"); });
+    $("act-del-photo").addEventListener("click", function () { flowAction("delete_photo"); });
+    $("act-red-long").addEventListener("click", function () { flowAction("red_long"); });
+    $("act-red").addEventListener("click", function () { flowAction("red"); });
+    $("act-test-voice").addEventListener("click", function () {
+      say($("action-result"), "");
+      send("voice/test", {}).then(function (r) { return r.json().then(function (d) { return [r.ok, d]; }); }).then(function (x) {
+        if (!x[0]) { say($("action-result"), x[1].message || ""); }
+      }).catch(function () { say($("action-result"), T["station_page_unreachable"]); });
+    });
     $("save").addEventListener("click", function () { save(values(), T["station_page_saved"]); });
     // Enter in a field (Speaker volume) saves as Save does, and never submits the form to the page's own address (a reload)
     $("settings").addEventListener("submit", function (e) { e.preventDefault(); save(values(), T["station_page_saved"]); });
-    $("reset").addEventListener("click", function () { save({reset: true}, T["station_page_reset_done"]); });
+    $("reset").addEventListener("click", function () {
+      if (window.confirm(T["station_page_reset_confirm"])) { save({reset: true}, T["station_page_reset_done"]); }
+    });
     var m = /(?:^#|&)ticket=([A-Za-z0-9_-]+)/.exec(location.hash);
     if (!m) { load(true); return; }      // no ticket: a browser with no session is refused by the station, and the page says so
     history.replaceState(null, "", location.pathname + location.search);       // the ticket leaves the address bar at once

@@ -23,7 +23,7 @@ const flip = (key) => { sw(key).click(); };
 const dirty = () => ({ form: group().dataset.state || null, link: shown($('.subnav__link[data-id="alerts"] .subnav__dirty')), foot: shown($("#set-alerts .group__dirty")) });
 const result = () => text($("#set-alerts .group__foot .result__text"));
 const unlockAll = async () => { unlock(); await until(() => $('.settings__group[data-id="backups"] :is(.coll, p.muted, .result[data-state])'), "the backups list"); };
-const device = () => $("#set-alerts .alerts__device");
+const device = () => $('.settings__group[data-id="alerts"] .alerts__device');
 const devNote = () => text($(".alerts__state", device()));
 const notifySwitch = () => $(".toggle__input", device());
 """

@@ -108,9 +108,9 @@ void BootReport::server(int httpCode) {
   else server_ = "fail";
 }
 
-std::string helloLine(long build, bool configured, const char* wifi, const char* server) {
+std::string helloLine(int64_t build, bool configured, const char* wifi, const char* server) {
   char out[96];
-  snprintf(out, sizeof(out), "FK-READER %ld configured=%d wifi=%s server=%s", build, configured ? 1 : 0, wifi, server);
+  snprintf(out, sizeof(out), "FK-READER %lld configured=%d wifi=%s server=%s", (long long)build, configured ? 1 : 0, wifi, server);
   return out;
 }
 

@@ -7,6 +7,7 @@ import json
 import os
 import socket
 import tempfile
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -298,15 +299,32 @@ def _set_aside(xf: Path) -> None:
     os.replace(xf, names[0])
 
 
+_SAVE_LOCKS_GUARD = threading.Lock()
+_SAVE_LOCKS: dict[Path, object] = {}
+
+
+def _save_lock(etc_dir: Path):
+    from . import locks
+    with _SAVE_LOCKS_GUARD:
+        lock = _SAVE_LOCKS.get(etc_dir)
+        if lock is None:
+            lock = locks.ProcessLock(
+                Path(tempfile.gettempdir()) / f"fk-cfg-{hashlib.sha256(str(etc_dir).encode()).hexdigest()[:16]}.lock"
+            )
+            _SAVE_LOCKS[etc_dir] = lock
+        return lock
+
+
 def save(cfg: dict) -> None:
     """Both forms (the JSON form stays for one release, for `update --rollback`)."""
     from .profiles import statexml
     xf = _xml_file()
-    if any(x.startswith(f"{xf} (") for x in statexml.problems()) and xf.exists() and _parses_broken(xf):
-        _set_aside(xf)                  # never write over what could not be read (a passing read error keeps the file)
-        statexml.clear_problem(xf)
-    js = json.dumps(cfg, indent=2).encode("utf-8")
-    # config.json first, then config.xml with its hash: a stop in between leaves a hash that does not match, and the
-    # next read takes the newer JSON
-    _write(_file(), lambda fh: fh.write(js))
-    _write(xf, lambda fh: fh.write(statexml.dumps("config", {**cfg, "json_sha256": hashlib.sha256(js).hexdigest()})))
+    with _save_lock(xf.parent):
+        if any(x.startswith(f"{xf} (") for x in statexml.problems()) and xf.exists() and _parses_broken(xf):
+            _set_aside(xf)                  # never write over what could not be read (a passing read error keeps the file)
+            statexml.clear_problem(xf)
+        js = json.dumps(cfg, indent=2).encode("utf-8")
+        # config.json first, then config.xml with its hash: a stop in between leaves a hash that does not match, and the
+        # next read takes the newer JSON
+        _write(_file(), lambda fh: fh.write(js))
+        _write(xf, lambda fh: fh.write(statexml.dumps("config", {**cfg, "json_sha256": hashlib.sha256(js).hexdigest()})))

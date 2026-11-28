@@ -23,7 +23,7 @@ from xml.sax.saxutils import quoteattr
 import defusedxml.ElementTree as DET
 from defusedxml import DefusedXmlException
 
-from . import config, demo, pairing
+from . import config, demo, locks, pairing
 
 log = logging.getLogger(__name__)
 
@@ -110,6 +110,7 @@ class TokenStore:
     def __init__(self, path: Path | None = None):
         self.path = Path(path) if path else token_file()
         self._lock = threading.Lock()
+        self._flock = locks.ProcessLock(self.path.with_suffix(".lock"))
         self._stamp: tuple | None = None
         self._tokens: list[dict] = []
         self.errors: list[str] = []
@@ -184,7 +185,7 @@ class TokenStore:
         Reader is a device to flash and its token would outlive the demo): `TokenFileError` with the demo's sentence."""
         if demo.is_on():
             raise TokenFileError([demo.NOT_IN_DEMO])
-        with self._lock:
+        with self._flock, self._lock:
             tokens, n = self._read()
             if len(tokens) >= MAX_TOKENS:
                 raise TokenFileError([f"already {MAX_TOKENS} reader tokens: revoke one first"])
@@ -199,7 +200,7 @@ class TokenStore:
         """Remove the token with that id (or the only one with that name). Not in the demo, as `issue`."""
         if demo.is_on():
             raise TokenFileError([demo.NOT_IN_DEMO])
-        with self._lock:
+        with self._flock, self._lock:
             tokens, n = self._read()
             hit = [t for t in tokens if t["id"] == ref] or [t for t in tokens if t["name"] == ref]
             if len(hit) != 1:
@@ -310,6 +311,19 @@ def flush(buffer: SeenBuffer, kit) -> bool:
     return True
 
 
+_SEEN_LOCKS_GUARD = threading.Lock()
+_SEEN_LOCKS: dict[Path, locks.ProcessLock] = {}
+
+
+def _seen_lock(path: Path) -> locks.ProcessLock:
+    with _SEEN_LOCKS_GUARD:
+        lock = _SEEN_LOCKS.get(path)
+        if lock is None:
+            lock = locks.ProcessLock(path.with_suffix(".lock"))
+            _SEEN_LOCKS[path] = lock
+        return lock
+
+
 class SeenStore:
     """{token id: {build, last_seen}} of the readers: the Hub's own file, XML. `merge` is the Hub's (`record_seen`);
     `read` is any reader of the file. Never raises for a file that is missing, unreadable or damaged: nothing is
@@ -317,7 +331,6 @@ class SeenStore:
 
     def __init__(self, path: Path | None = None):
         self.path = Path(path) if path else seen_file()
-        self._lock = threading.Lock()
 
     def read(self) -> dict[str, dict]:
         try:
@@ -354,7 +367,7 @@ class SeenStore:
     def merge(self, updates: dict[str, dict], known: set[str] | None = None) -> None:
         """Keep the newest `last_seen` per id (and its build; an update with no build keeps the one known). Ids not in
         `known` (revoked tokens) are dropped. OSError when the file cannot be written."""
-        with self._lock:
+        with _seen_lock(self.path):
             rows = self.read()
             for tid, u in updates.items():
                 old = rows.get(tid)

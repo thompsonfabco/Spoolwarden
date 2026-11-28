@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -76,10 +78,12 @@ import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
 import com.thompsonfabco.filamentkit.ui.components.SwIconButton
+import com.thompsonfabco.filamentkit.ui.components.SwIconSize
 import com.thompsonfabco.filamentkit.ui.components.SwMenu
 import com.thompsonfabco.filamentkit.ui.components.SwMenuItem
 import com.thompsonfabco.filamentkit.ui.components.SwProgress
 import com.thompsonfabco.filamentkit.ui.components.SwSheet
+import com.thompsonfabco.filamentkit.ui.components.SwSkeletonRows
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.delay
 import okhttp3.OkHttpClient
@@ -171,7 +175,8 @@ fun PrinterScreen(
     }
     // the answer to a command (Pause, Stop ...) would otherwise stay until the next one
     LaunchedEffect(state.commandNote) {
-        if (state.commandNote != null) {
+        val note = state.commandNote
+        if (note != null && note.ok) {
             delay(COMMAND_MESSAGE_MS)
             viewModel.dismissCommandMessage()
         }
@@ -259,12 +264,13 @@ fun PrinterScreen(
             onPairAgain = onPairAgain,
         )
         val printer = state.printer
+        val offline = state.problem == Problem.Unreachable
         ScreenState(
             loaded = printer != null,
             loading = printer == null && state.problem == null,
-            error = state.problem?.let { problemText(it) },
+            error = state.problem?.takeIf { !offline }?.let { problemText(it) },
             onTryAgain = viewModel::retry,
-            offline = false,
+            offline = offline,
         ) {
             if (printer == null) return@ScreenState
             AutoNotice(printer, state, viewModel)
@@ -341,7 +347,8 @@ private fun StatusPanel(printer: Printer, state: PrinterUiState, viewModel: Prin
     val status = state.status
     PrinterPanel(title = null) {
         val kind = statusKind(printer.state)
-        if (printer.state == "connected" && status != null) {
+        val connected = PrinterHelp.isConnected(printer.state)
+        if (connected && status != null) {
             val word = jobWord(status.gcodeState)
             val text = when {
                 word == null -> stringResource(R.string.status_connected)
@@ -354,7 +361,7 @@ private fun StatusPanel(printer: Printer, state: PrinterUiState, viewModel: Prin
             fixLine(printer.state)?.let { Text(stringResource(it), color = kind.colour(colors), style = MaterialTheme.typography.bodyMedium) }
         }
         if (status == null) {
-            if (printer.state == "connected") Text(stringResource(R.string.printer_no_status), style = MaterialTheme.typography.bodyMedium)
+            if (connected) Text(stringResource(R.string.printer_no_status), style = MaterialTheme.typography.bodyMedium)
             return@PrinterPanel
         }
         if (PrinterHelp.isPrinting(status.gcodeState)) PrintProgress(status)
@@ -443,11 +450,12 @@ private fun Controls(printer: Printer, state: PrinterUiState, viewModel: Printer
     val space = SpoolwardenTheme.space
     val status = state.status
     val can = state.controlsEnabled
-    val running = state.printing
+    val active = state.printing
+    val canPauseOrResume = state.running || state.paused
     val showLight = status?.light != null
-    if (running || showLight) {
+    if (active || showLight) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalArrangement = Arrangement.spacedBy(space.s2)) {
-            if (running) {
+            if (canPauseOrResume) {
                 SwButton(
                     stringResource(if (state.paused) R.string.printer_resume else R.string.printer_pause),
                     viewModel::pauseOrResume, kind = SwButtonKind.Main, enabled = can,
@@ -460,13 +468,13 @@ private fun Controls(printer: Printer, state: PrinterUiState, viewModel: Printer
                 )
             }
         }
-        if (running) {
+        if (active) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 SwButton(stringResource(R.string.printer_stop), viewModel::askStop, kind = SwButtonKind.Destructive, enabled = can)
             }
         }
         when {
-            printer.state != "connected" -> Reason(R.string.slot_load_disabled)
+            !PrinterHelp.isConnected(printer.state) -> Reason(R.string.slot_load_disabled)
             state.commandBusy -> Reason(R.string.printer_waiting)
         }
     }
@@ -508,7 +516,7 @@ private fun CameraPanel(
     onShown: (Boolean) -> Unit,
     onPairAgain: () -> Unit,
 ) {
-    if (!printer.configured) return
+    if (!printer.configured || printer.camera.kind == null) return
     var big by rememberSaveable { mutableStateOf(false) }
     val space = SpoolwardenTheme.space
     PrinterPanel(
@@ -522,7 +530,7 @@ private fun CameraPanel(
     ) {
         if (!shown) return@PrinterPanel
         val kind = printer.camera.kind
-        if (kind == null || (kind != "hls" && kind != "mjpeg")) {
+        if (kind != "hls" && kind != "mjpeg") {
             Text(
                 stringResource(R.string.printer_camera_unsupported), color = SpoolwardenTheme.colors.muted,
                 style = MaterialTheme.typography.bodyMedium,
@@ -534,6 +542,12 @@ private fun CameraPanel(
             .background(SpoolwardenTheme.colors.surface3)
         Box(picture.clickable(onClickLabel = open) { big = true }) {
             if (visible && !big) CameraPlayer(printer, camera, onPairAgain)
+            Box(
+                Modifier.align(Alignment.BottomEnd).padding(space.s2)
+                    .background(SpoolwardenTheme.colors.text.copy(alpha = 0.55f), CircleShape).padding(space.s1),
+            ) {
+                SwIcon(R.drawable.sw_ic_search, null, size = SwIconSize.Small, tint = SpoolwardenTheme.colors.surface)
+            }
         }
     }
     if (big) {
@@ -544,10 +558,15 @@ private fun CameraPanel(
             Landscape()
             Box(Modifier.fillMaxSize().background(SpoolwardenTheme.colors.surface3)) {
                 if (visible) CameraPlayer(printer, camera, onPairAgain)
-                SwIconButton(
-                    R.drawable.sw_ic_close, stringResource(R.string.common_close), { big = false },
-                    modifier = Modifier.align(Alignment.TopEnd).padding(space.s2),
-                )
+                Box(
+                    Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(space.s2)
+                        .background(SpoolwardenTheme.colors.text.copy(alpha = 0.55f), CircleShape),
+                ) {
+                    SwIconButton(
+                        R.drawable.sw_ic_close, stringResource(R.string.common_close), { big = false },
+                        tint = SpoolwardenTheme.colors.surface,
+                    )
+                }
             }
         }
     }
@@ -676,7 +695,7 @@ private fun SlotSheet(
                 stringResource(R.string.printer_slot_title, slot.label), Modifier.semantics { heading() },
                 style = MaterialTheme.typography.titleMedium,
             )
-            val connected = printer.state == "connected"
+            val connected = PrinterHelp.isConnected(printer.state)
             when {
                 spool != null -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(space.s3), verticalAlignment = Alignment.CenterVertically) {
@@ -694,7 +713,8 @@ private fun SlotSheet(
                     SwButton(stringResource(R.string.printer_slot_open_spool), { onOpenSpool(spool) }, Modifier.fillMaxWidth(), kind = SwButtonKind.Main)
                     SwButton(
                         stringResource(R.string.common_unload), onUnload, Modifier.fillMaxWidth(),
-                        enabled = state.slotBusy == null && !state.unloading, busy = state.slotBusy == slot.label,
+                        enabled = state.slotBusy == null && !state.unloading,
+                        busy = state.slotBusy == slot.label && state.slotBusyAction == "unload",
                     )
                     ClearButton(onClear, state, slot)
                 }
@@ -720,7 +740,8 @@ private fun SlotSheet(
 private fun ClearButton(onClear: () -> Unit, state: PrinterUiState, slot: AmsSlot) {
     SwButton(
         stringResource(R.string.live_clear), onClear, Modifier.fillMaxWidth(),
-        enabled = state.slotBusy == null && !state.unloading && !state.clearing, busy = state.slotBusy == slot.label && state.clearAsk == null,
+        enabled = state.slotBusy == null && !state.unloading && !state.clearing,
+        busy = state.slotBusy == slot.label && state.slotBusyAction == "clear" && state.clearAsk == null,
     )
 }
 
@@ -942,6 +963,11 @@ private fun UsageList(s: ToolsUiState, tools: PrinterToolsViewModel) {
                 )
             }
             s.undoneNote?.let { ResultLine(Note(it)) }
+        }
+        if (!s.usageLoaded && s.usageProblem == null) {
+            Box(Modifier.padding(space.s4)) {
+                SwSkeletonRows(3)
+            }
         }
         if (s.usageLoaded && s.usage.isEmpty()) {
             Text(

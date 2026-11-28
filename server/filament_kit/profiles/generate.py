@@ -332,22 +332,24 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
                           if isinstance(n, str) and isinstance(v, list)}
 
     live_names = live.names() if live is not None else set()
+    live_by_cf = {n.casefold(): n for n in sorted(live_names)}
     snap_names = _snapshot_names(snapshot)
     snap_cf = {n.casefold() for n in snap_names}
     # with no live upload nothing can be seen as deleted in the app now (only what was deleted before)
     seen_live = live_names if live is not None else snap_names
     reset = live is not None and inapp.is_reset(snap_names, live_names)
     if reset:
-        problems.append(f"{len(snap_cf - {n.casefold() for n in live_names})} of {len(snap_names)} installed "
+        problems.append(f"{len(snap_cf - set(live_by_cf))} of {len(snap_names)} installed "
                         f"presets are gone from Bambu Studio at once; treated as an app reset, all rebuilt")
     live_cache: dict[str, tuple[dict | None, dict]] = {}
 
     def live_preset(name: str) -> tuple[dict | None, dict]:
-        if live is None or name not in live_names:
+        actual = live_by_cf.get(name.casefold())
+        if live is None or actual is None:
             return None, {}
-        if name not in live_cache:
-            live_cache[name] = live.preset(name)
-        return live_cache[name]
+        if actual not in live_cache:
+            live_cache[actual] = live.preset(actual)
+        return live_cache[actual]
 
     used = set()
     for n in live_names:
@@ -396,7 +398,7 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
         ids = sorted({f["id"] for f in fs if isinstance(f.get("id"), int) and not isinstance(f["id"], bool)})
         try:
             built = _build_line(line, fs, ids, printers=printers, store=store, library=library,
-                                live_preset=live_preset, live_names=live_names, snap_cf=snap_cf, ls=ls,
+                                live_preset=live_preset, live_by_cf=live_by_cf, snap_cf=snap_cf, ls=ls,
                                 snapshot=snapshot, seen_live=seen_live, snap_names=snap_names,
                                 deleted_before=deleted_before, restore=restore_deleted, reset=reset,
                                 base_out=base_out, user_id=live.user_id if live is not None else "", now=now,
@@ -414,7 +416,7 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
         manifest_lines[lid] = {"filament_id": line.filament_id, "spoolman_ids": ids, "vendor": line.vendor,
                                "product": line.product}
 
-    live_cf = {n.casefold() for n in live_names}
+    live_cf = set(live_by_cf)
     # a line still in Spoolman keeps its presets even if some were skipped this run (problems say why)
     prefixes = tuple(f"{ls[lid].vendor} {ls[lid].product} @".casefold() for lid in groups if lid in ls)
     stale = sorted(n for n in snap_names if n.casefold() in live_cf and n.casefold() not in generated
@@ -433,7 +435,7 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
 
 
 def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: Store, library: Library,
-                live_preset, live_names, snap_cf, ls: LineSet, snapshot, seen_live, snap_names, deleted_before,
+                live_preset, live_by_cf, snap_cf, ls: LineSet, snapshot, seen_live, snap_names, deleted_before,
                 restore, reset, base_out: Path, user_id: str, now: float, problems, clamps, edits,
                 deleted, planned: set[str], new_line: bool, restored: list[str] | None = None,
                 recorded: dict[str, dict], partial: Path | None,
@@ -482,7 +484,7 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
                 line.filament_id = fid
                 new_line = False
             continue
-        if name not in live_names:
+        if name.casefold() not in live_by_cf:
             continue
         j, _info = live_preset(name)
         fid = (j or {}).get("filament_id")

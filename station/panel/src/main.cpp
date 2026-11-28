@@ -109,12 +109,24 @@ struct Lamp {
   void update(uint32_t now) { digitalWrite(pin, panel::lampLit(mode, now - since) ? HIGH : LOW); }
 };
 
+static uint16_t beepHz = 0, beepMs = 0; static uint8_t beepsLeft = 0; static uint32_t nextBeep = 0;
+static bool beeping = false; static uint32_t beepEnd = 0;
+
+static void localBeep(uint16_t hz, uint16_t ms, uint8_t count = 1) {
+  beepHz = hz; beepMs = ms; beepsLeft = count; nextBeep = millis();
+}
+
 struct Button {
   uint8_t pin; char code;
   panel::ButtonTimer timer;  // "P" on a short press's release, "L" once held 800 ms
-  void poll(uint32_t now) {
+  void poll(uint32_t now, bool offline) {
     char kind = timer.poll(digitalRead(pin) == LOW, now);
-    if (kind) { char l[4] = {kind, ' ', code, 0}; emit(l); }
+    if (kind) {
+      if (offline) localBeep(350, 180, 1);
+      else if (kind == 'L') localBeep(2400, 45, 1);
+      char l[4] = {kind, ' ', code, 0};
+      emit(l);
+    }
   }
 };
 
@@ -259,8 +271,10 @@ struct Air {
     int32_t tenthsC = (centiC + (centiC < 0 ? -5 : 5)) / 10;
     int n = snprintf(shown, sizeof shown, "%s%d.%d\xb0" "C", tenthsC < 0 ? "-" : "", abs(tenthsC) / 10,
                      abs(tenthsC) % 10);
-    if (haveRh) n += snprintf(shown + n, sizeof shown - n, " %u%%RH", (unsigned)((rhTenths + 5) / 10));
-    if (centiHpa) snprintf(shown + n, sizeof shown - n, " %uhPa", (unsigned)((centiHpa + 50) / 100));
+    if (haveRh && n > 0 && (size_t)n < sizeof shown)
+      n += snprintf(shown + n, sizeof shown - n, " %u%%RH", (unsigned)((rhTenths + 5) / 10));
+    if (centiHpa && n > 0 && (size_t)n < sizeof shown)
+      snprintf(shown + n, sizeof shown - n, " %uhPa", (unsigned)((centiHpa + 50) / 100));
     shownAt = now;
   }
 };
@@ -408,8 +422,12 @@ struct Display {
       for (int r = 1; r <= 4; r++) u8g2.drawStr(0, 12 + r * 10, net.rows[r]);
     else if (!offline)
       for (int r = 1; r <= 4; r++) u8g2.drawStr(0, 12 + r * 10, rows[r]);
-    u8g2.drawHLine(0, 53, 128);
-    u8g2.drawStr(0, 63, air.shown[0] ? air.shown : "no air sensor");
+    else if (seen)
+      u8g2.drawStr(0, 12 + 10, "Check PC / USB cable");
+    if (air.shown[0]) {
+      u8g2.drawHLine(0, 53, 128);
+      u8g2.drawStr(0, 63, air.shown);
+    }
     u8g2.sendBuffer();
   }
   uint32_t airSeen = 0;
@@ -421,8 +439,6 @@ static Air air;
 static Nfc nfc;
 static Display display;
 static uint32_t lastL = 0;
-static uint16_t beepHz = 0, beepMs = 0; static uint8_t beepsLeft = 0; static uint32_t nextBeep = 0;
-static bool beeping = false; static uint32_t beepEnd = 0;
 static uint32_t lastUsb = 0;  // when the last line arrived on USB (0: none since boot)
 
 // What is read from one carrier: its line reader and the raw audio bytes still to come after an "A <n>" line.
@@ -571,7 +587,7 @@ void loop() {
     buzzerTone(beepHz); beeping = true; beepEnd = now + beepMs;
     beepsLeft--; nextBeep = now + beepMs + 60;
   }
-  btnHold.poll(now); btnDiscard.poll(now);
+  btnHold.poll(now, display.offline); btnDiscard.poll(now, display.offline);
   hold.update(now); discard.update(now);
   air.poll(now);
   nfc.poll(now);

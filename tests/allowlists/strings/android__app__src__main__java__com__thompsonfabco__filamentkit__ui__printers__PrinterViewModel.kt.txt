@@ -55,6 +55,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | bambu | Hub identifier (printer family), not a text (EV7b)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | camera_unavailable | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | cert_changed | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | clear | Hub identifier (printer action key), never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | connected | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | error | Hub identifier (printer state, job state, error code or field name), never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | exists | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
@@ -102,6 +103,8 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | too_old | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | turn on LAN Only mode and then Developer Mode, then try again. | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | unauthorized | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | unknown_model | Hub identifier (printer error code), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | unload | Hub identifier (printer action key), never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | usage | not text: a route, JSON field or wire value of history and data (HD9)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | write_refused | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | wrong_code | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)

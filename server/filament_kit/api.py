@@ -1334,6 +1334,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def intake_read(request: Request):
+        from . import http_body
+        request._body = await http_body.read_bytes(request, intake.MAX_PHOTOS * intake.MAX_PHOTO_BYTES + 256 * 1024)
         async with request.form(max_files=intake.MAX_PHOTOS, max_fields=10) as form:
             photos = []
             for i, f in enumerate(form.getlist("photo")):
@@ -1503,6 +1505,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return await run_in_threadpool(station_flow.tag_info, sm, request.path_params["uid"])
 
     async def station_recognize(request: Request):
+        from . import http_body
+        request._body = await http_body.read_bytes(request, intake.MAX_PHOTOS * intake.MAX_PHOTO_BYTES + 256 * 1024)
         async with request.form(max_files=intake.MAX_PHOTOS, max_fields=10) as form:
             files = form.getlist("image") or form.getlist("photo")
             photos = []
@@ -1636,7 +1640,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return JSONResponse({"spool": spool, "view": inventory.spool_view(spool)})   # raw and phone shape, as PATCH gives
 
     def _caller_host(request: Request) -> str | None:
-        raw = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip()
+        raw = (request.headers.get("host") or "").split(",")[0].strip()
         host = raw.rsplit(":", 1)[0] if ":" in raw and not raw.endswith("]") else raw
         return host or None
 

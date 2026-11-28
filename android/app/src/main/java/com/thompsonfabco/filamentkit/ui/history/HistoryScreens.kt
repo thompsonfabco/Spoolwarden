@@ -5,14 +5,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -33,6 +38,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -111,7 +117,7 @@ fun HistoryRecordEntry(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun HistoryListScreen(
     vm: HistoryListViewModel,
@@ -227,7 +233,7 @@ internal fun HistoryListScreen(
                             )
                         }
                         if (!h.ai) ReaderOffLine()
-                        s.share?.takeIf { it.on }?.let { ShareOnButton(it.count, onOpenCorrections) }
+                        s.share?.takeIf { it.on || (it.count ?: 0) > 0 }?.let { ShareOnButton(it.count, onOpenCorrections) }
                         if (h.records.isEmpty()) {
                             SwEmptyState(
                                 icon = R.drawable.sw_ic_clock,
@@ -235,37 +241,101 @@ internal fun HistoryListScreen(
                                 text = stringResource(if (h.keep == 0) R.string.recent_keep_none else R.string.recent_empty_text),
                             )
                         } else {
-                            val openOrToggle: (HistorySummary) -> Unit = { r ->
-                                when {
-                                    useCardDetail -> expandedIds = if (r.id in expandedIds) expandedIds - r.id else expandedIds + r.id
-                                    useSheetDetail || usePaneDetail -> sheetRecordId = r.id
-                                    else -> onOpen(r.id)
-                                }
-                            }
-                            SwLazyCollection(
-                                h.records, key = { it.id }, modifier = Modifier.weight(1f, fill = false),
-                                visual = SpoolwardenTheme.sizes.thumbS + SpoolwardenTheme.space.s3,
-                                tile = { r ->
-                                    val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
-                                    RecordTile(r, vm, Modifier.focusRequester(requester)) { openOrToggle(r) }
-                                },
-                                isExpanded = if (useCardDetail) ({ it.id in expandedIds }) else null,
-                                detail = if (useCardDetail) {
-                                    { r ->
-                                        val close = {
-                                            expandedIds = expandedIds - r.id
-                                            returnFocusId = r.id
-                                        }
-                                        SwCardDetail(onClose = close) {
-                                            recordDetail(r.id, true, close)
-                                        }
-                                    }
+                            var query by rememberSaveable { mutableStateOf("") }
+                            var sourceFilter by rememberSaveable { mutableStateOf<String?>(null) }
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                label = { Text(stringResource(R.string.common_search)) },
+                                leadingIcon = { SwIcon(R.drawable.sw_ic_search, null, tint = SpoolwardenTheme.colors.muted) },
+                                trailingIcon = if (query.isNotEmpty()) {
+                                    { SwIconButton(R.drawable.sw_ic_close, stringResource(R.string.common_clear_search), { query = "" }) }
                                 } else {
                                     null
                                 },
-                            ) { r ->
-                                val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
-                                RecordRow(r, vm, Modifier.focusRequester(requester)) { openOrToggle(r) }
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
+                                val chipMod = Modifier.defaultMinSize(minWidth = SpoolwardenTheme.sizes.row, minHeight = SpoolwardenTheme.sizes.row)
+                                FilterChip(
+                                    selected = sourceFilter == null,
+                                    onClick = { sourceFilter = null },
+                                    label = { Text(stringResource(R.string.features_filter_all)) },
+                                    modifier = chipMod,
+                                )
+                                FilterChip(
+                                    selected = sourceFilter == "phone",
+                                    onClick = { sourceFilter = if (sourceFilter == "phone") null else "phone" },
+                                    label = { Text(stringResource(R.string.recent_source_phone)) },
+                                    modifier = chipMod,
+                                )
+                                FilterChip(
+                                    selected = sourceFilter == "station",
+                                    onClick = { sourceFilter = if (sourceFilter == "station") null else "station" },
+                                    label = { Text(stringResource(R.string.recent_source_station)) },
+                                    modifier = chipMod,
+                                )
+                                FilterChip(
+                                    selected = sourceFilter == "hand",
+                                    onClick = { sourceFilter = if (sourceFilter == "hand") null else "hand" },
+                                    label = { Text(stringResource(R.string.recent_source_hand)) },
+                                    modifier = chipMod,
+                                )
+                            }
+                            val q = query.trim().lowercase()
+                            val filtered = h.records.filter { r ->
+                                val sourceOk = when (sourceFilter) {
+                                    null -> true
+                                    "hand" -> r.photos == 0
+                                    "phone" -> r.photos > 0 && (r.source == "phone" || r.source == "web")
+                                    else -> r.photos > 0 && r.source == sourceFilter
+                                }
+                                val qOk = q.isEmpty() ||
+                                    (RecentValues.filaments(r.spools)?.lowercase()?.contains(q) == true) ||
+                                    r.spools.any { it.spoolId?.toString()?.contains(q) == true } ||
+                                    r.state.lowercase().contains(q)
+                                sourceOk && qOk
+                            }
+                            if (filtered.isEmpty()) {
+                                SwEmptyState(
+                                    icon = R.drawable.sw_ic_clock,
+                                    title = stringResource(R.string.recent_empty_title),
+                                    text = stringResource(R.string.recent_empty_text),
+                                )
+                            } else {
+                                val openOrToggle: (HistorySummary) -> Unit = { r ->
+                                    when {
+                                        useCardDetail -> expandedIds = if (r.id in expandedIds) expandedIds - r.id else expandedIds + r.id
+                                        useSheetDetail || usePaneDetail -> sheetRecordId = r.id
+                                        else -> onOpen(r.id)
+                                    }
+                                }
+                                SwLazyCollection(
+                                    filtered, key = { it.id }, modifier = Modifier.weight(1f, fill = false),
+                                    visual = SpoolwardenTheme.sizes.thumbS + SpoolwardenTheme.space.s3,
+                                    tile = { r ->
+                                        val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
+                                        RecordTile(r, vm, Modifier.focusRequester(requester)) { openOrToggle(r) }
+                                    },
+                                    isExpanded = if (useCardDetail) ({ it.id in expandedIds }) else null,
+                                    detail = if (useCardDetail) {
+                                        { r ->
+                                            val close = {
+                                                expandedIds = expandedIds - r.id
+                                                returnFocusId = r.id
+                                            }
+                                            SwCardDetail(onClose = close) {
+                                                recordDetail(r.id, true, close)
+                                            }
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                ) { r ->
+                                    val requester = rowFocus.getOrPut(r.id) { FocusRequester() }
+                                    RecordRow(r, vm, Modifier.focusRequester(requester)) { openOrToggle(r) }
+                                }
                             }
                         }
                     }
@@ -401,7 +471,8 @@ private fun Thumb(vm: HistoryListViewModel, r: HistorySummary, side: Dp = Spoolw
         RecentPhoto(vm, r.id, 1, Modifier.size(side).clip(shape), description = null)
         Text(
             r.photos.toString(),
-            Modifier.align(Alignment.BottomEnd).background(colors.surface, shape).padding(horizontal = SpoolwardenTheme.space.s1),
+            Modifier.align(Alignment.BottomEnd).background(colors.surface, shape).padding(horizontal = SpoolwardenTheme.space.s1)
+                .clearAndSetSemantics {},
             color = colors.text, style = SpoolwardenTheme.type.dataSmall,
         )
     }

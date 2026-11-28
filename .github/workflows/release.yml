@@ -18,6 +18,7 @@ permissions:
 jobs:
   version:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     outputs:
       version: ${{ steps.check.outputs.version }}
       code: ${{ steps.check.outputs.code }}
@@ -74,6 +75,7 @@ jobs:
   server:
     needs: version
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
@@ -166,6 +168,7 @@ jobs:
   sync:
     needs: version
     runs-on: windows-2022
+    timeout-minutes: 30
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
@@ -221,6 +224,7 @@ jobs:
   sync-linux:
     needs: version
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
@@ -237,7 +241,7 @@ jobs:
 
       - name: PyInstaller and the Linux tarball
         run: |
-          pip install pyinstaller==6.11.1
+          pip install --require-hashes --only-binary :all: -r tools/release-sync-linux-requirements.txt
           bash pc-sync/linux/build.sh
           if [ ! -f "dist/filament-kit-sync-linux-x86_64-$VERSION.tar.gz" ]; then
             echo "::error::dist/filament-kit-sync-linux-x86_64-$VERSION.tar.gz was not built"
@@ -253,6 +257,7 @@ jobs:
   publish:
     needs: [version, server, sync, sync-linux]
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:

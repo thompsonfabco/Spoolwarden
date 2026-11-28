@@ -16,4 +16,15 @@
   btn.closest(".field__box").addEventListener("focusout", (e) => {
     if (!btn.closest(".field__box").contains(e.relatedTarget)) set(false);
   });
+  const form = btn.closest("form"), submit = form && form.querySelector("button[type=submit]");
+  if (form && submit) {
+    form.addEventListener("submit", (e) => {
+      if (submit.disabled) { e.preventDefault(); return; }
+      submit.disabled = true;
+      submit.setAttribute("aria-busy", "true");
+    });
+    window.addEventListener("pageshow", (e) => {
+      if (e.persisted) { submit.disabled = false; submit.removeAttribute("aria-busy"); }
+    });
+  }
 })();

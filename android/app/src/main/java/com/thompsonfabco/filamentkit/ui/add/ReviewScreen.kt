@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +41,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
+import com.thompsonfabco.filamentkit.ui.components.SwIconButton
 import com.thompsonfabco.filamentkit.ui.components.SwProgress
 import com.thompsonfabco.filamentkit.ui.history.ShareCheckLine
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -246,10 +248,21 @@ private fun FilamentPicker(state: AddUiState, vm: AddViewModel, open: Boolean, o
                 label = { Text(stringResource(R.string.add_picker_label)) },
                 placeholder = { Text(stringResource(R.string.add_picker_placeholder)) },
                 leadingIcon = { SwIcon(R.drawable.sw_ic_search, null) },
+                trailingIcon = if (state.filamentQuery.isNotEmpty()) {
+                    { SwIconButton(R.drawable.sw_ic_close, stringResource(R.string.common_clear_search), { vm.setFilamentQuery("") }) }
+                } else {
+                    null
+                },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { vm.retryFilaments() }),
                 modifier = Modifier.fillMaxWidth(),
             )
-            state.filamentsError?.let { NoticeCard(NoticeKind.Bad, it.string()) }
+            state.filamentsError?.let {
+                NoticeCard(
+                    NoticeKind.Bad, it.string(),
+                    actions = listOf(SwAction(stringResource(R.string.common_try_again), vm::retryFilaments)),
+                )
+            }
             if (state.filamentsError == null && !state.filamentsLoading && state.filaments.isEmpty()) {
                 Text(stringResource(R.string.add_picker_none), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
             }

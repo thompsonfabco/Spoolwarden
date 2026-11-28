@@ -19,7 +19,22 @@ let devMetaEl = null;            // the line under the title, kept to change its
 let devTrusted = null;           // trusted computers listed, once read (null: not read, locked or off)
 let devQrUrls = [];
 
-const devT = (key, vars) => SW.t(key, vars);
+const DEV_STUB = {
+  devices_ota_now: "Update now (OTA)",
+  devices_ota_confirm_title: "Update {name}?",
+  devices_ota_confirm_body: "This sends the latest firmware update to {name} and restarts it.",
+  devices_ota_queued: "OTA update queued.",
+  devices_restart: "Restart",
+  devices_restart_confirm_title: "Restart {name}?",
+  devices_restart_confirm_body: "This restarts {name} now.",
+  devices_restart_queued: "Restart queued.",
+};
+const devFill = (text, vars) => (vars ? String(text).replace(/\{([a-z][a-z0-9_]*)\}/g, (m, n) => (vars[n] != null ? String(vars[n]) : m)) : String(text));
+const devT = (key, vars) => {
+  const v = SW.t(key, vars);
+  return v !== key || !(key in DEV_STUB) ? v : devFill(DEV_STUB[key], vars);
+};
+const devKindKey = (kind) => String(kind || "").replace(/-/g, "_");
 
 const devPad = (n) => String(n).padStart(2, "0");
 const devStamp = (t) => { if (!t) return null; const d = new Date(t * 1000); return `${d.getFullYear()}-${devPad(d.getMonth() + 1)}-${devPad(d.getDate())} ${devPad(d.getHours())}:${devPad(d.getMinutes())}`; };
@@ -257,11 +272,11 @@ function devPairDialog(kind, first, known) {
 
 // ----- Paired devices (the design, Hub page): kind, version and out of date, Open, and the Tag Readers as rows -----
 // the sentence of an out-of-date row (the Hub gives the same one as `advice`)
-const devOod = (d) => (d.out_of_date && d.kind ? devT("devices_ood_" + d.kind, { version: d.version, newest: d.newest }) : null);
+const devOod = (d) => (d.out_of_date && d.kind ? devT("devices_ood_" + devKindKey(d.kind), { version: d.version, newest: d.newest }) : null);
 // the line under a name: the kind and the version, "Version not known" when the device has not said; none for a pairing without a kind
 function devKindLine(d) {
   if (!d.kind || d.kind === "builtin") return d.kind === "builtin" && d.version ? devT("devices_version", { version: d.version }) : null;
-  return devT("devices_kind_version", { kind: devT("devices_kind_" + d.kind.replace(/-/g, "_")), version: d.version ? devT("devices_version", { version: d.version }) : devT("devices_version_unknown") });
+  return devT("devices_kind_version", { kind: devT("devices_kind_" + devKindKey(d.kind)), version: d.version ? devT("devices_version", { version: d.version }) : devT("devices_version_unknown") });
 }
 // a station's line "Panel: on USB" / "Panel: on Wi-Fi": the sentence the Hub sends as `panel`, none when it is not known
 function devPanelLine(d) { return d.panel ? h("span", { class: "coll__sub muted", textContent: d.panel }) : null; }
@@ -329,7 +344,7 @@ const devLabel = (k) => { const w = String(k == null ? "" : k).replace(/_/g, " "
 function devFacts(d) {
   const ood = devOod(d);
   return [h("dl", { class: "kv" },
-    devFact(devT("devices_detail_kind"), d.kind === "builtin" ? SW.t("devices_built_in") : d.kind ? devT("devices_kind_" + d.kind) : SW.t("common_unknown")),
+    devFact(devT("devices_detail_kind"), d.kind === "builtin" ? SW.t("devices_built_in") : d.kind ? devT("devices_kind_" + devKindKey(d.kind)) : SW.t("common_unknown")),
     devFact(devT(d.kind === "reader" ? "devices_detail_build" : "devices_detail_version"), d.version || devT("devices_version_unknown")),
     devFact(devT("devices_detail_paired"), d.paired || SW.t("common_unknown")),
     devFact(devT("devices_detail_last_seen"), d.last_seen || SW.t("common_never"))),
@@ -388,8 +403,12 @@ function devSettingsForm(row, list, redo) {
   const save0 = g.save;
   g.save = async () => {
     const keys = g.changed();
-    if (keys.length && !(await SW.ask({ kind: "confirm", title: devT("devices_settings_preview_title"), confirm: devT("devices_settings_save"),
-      body: h("ul", {}, keys.map((k) => h("li", { textContent: devT("devices_settings_change", { name: by.get(k).label, from: was.get(k), to: shown(k) }) }))) }))) return;
+    if (keys.length) {
+      const bad = fields.filter((f) => { const err = f._check && f._check(); SW.fieldError(f, err || null); return !!err; });
+      if (bad.length) { bad[0]._control.focus(); return; }
+      if (!(await SW.ask({ kind: "confirm", title: devT("devices_settings_preview_title"), confirm: devT("devices_settings_save"),
+        body: h("ul", {}, keys.map((k) => h("li", { textContent: devT("devices_settings_change", { name: by.get(k).label, from: was.get(k), to: shown(k) }) }))) }))) return;
+    }
     plan = null;
     const done = await save0();
     plan = null;
@@ -442,23 +461,30 @@ function devOwnPage(d, address, pageFrom) {
 
 function devOtaActions(row) {
   const res = h("p", { class: "result", role: "status" });
-  const id = encodeURIComponent(row.id);
-  const otaBtn = SW.btn("Update now (OTA)", {
+  const id = encodeURIComponent(row.id), name = row.name || row.id;
+  let busy = false;
+  const runAction = async (btn, endpoint, titleKey, bodyKey, confirmKey, okKey) => {
+    if (busy) return;
+    const go = await SW.ask({ kind: "confirm", title: devT(titleKey, { name }), text: devT(bodyKey, { name }), confirm: devT(confirmKey), opener: btn });
+    if (!go) return;
+    busy = true;
+    SW.busy(btn, SW.t("common_working"));
+    try {
+      await coded(res, async () => {
+        SW.result(res, null);
+        await api(`device/${id}/${endpoint}`, { code: theCode() });
+        say(res, devT(okKey), true);
+      });
+    } finally { busy = false; SW.idle(btn); }
+  };
+  const otaBtn = SW.btn(devT("devices_ota_now"), {
     action: "device-ota",
-    run: () => coded(res, async () => {
-      SW.result(res, null);
-      await api(`device/${id}/ota`, { code: theCode() });
-      say(res, "OTA update queued.", true);
-    }),
+    run: () => runAction(otaBtn, "ota", "devices_ota_confirm_title", "devices_ota_confirm_body", "devices_ota_now", "devices_ota_queued"),
   });
-  const restartBtn = SW.btn("Restart", {
+  const restartBtn = SW.btn(devT("devices_restart"), {
     cls: "btn--ghost",
     action: "device-restart",
-    run: () => coded(res, async () => {
-      SW.result(res, null);
-      await api(`device/${id}/restart`, { code: theCode() });
-      say(res, "Restart queued.", true);
-    }),
+    run: () => runAction(restartBtn, "restart", "devices_restart_confirm_title", "devices_restart_confirm_body", "devices_restart", "devices_restart_queued"),
   });
   return h("div", { class: "devdetail__ota" }, h("div", { class: "actions" }, otaBtn, restartBtn), res);
 }
@@ -466,7 +492,21 @@ function devOtaActions(row) {
 function devDetail(d) {
   const body = h("div", { class: "devdetail" }), id = encodeURIComponent(d.id);
   history.replaceState(null, "", devAddress(d));
-  SW.ask({ kind: "info", title: d.name, body, confirm: SW.t("common_close"), wide: true }).then(() => {
+  SW.ask({ kind: "info", title: d.name, body, confirm: SW.t("common_close"), wide: true,
+    open: (dlg, opener) => {
+      SW.openModal(dlg, opener);
+      dlg.addEventListener("cancel", (e) => {
+        if (body.querySelector('form[data-state="dirty"]')) {
+          e.preventDefault();
+          SW.leaveAsk(devT("devices_settings_title")).then((leave) => { if (leave) dlg.close(); });
+        }
+      });
+    },
+    run: async () => {
+      if (!body.querySelector('form[data-state="dirty"]')) return true;
+      return await SW.leaveAsk(devT("devices_settings_title"));
+    }
+  }).then(() => {
     if (location.hash === devAddress(d)) history.replaceState(null, "", "#" + DEVICES);
   });
   const read = () => {

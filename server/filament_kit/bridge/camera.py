@@ -600,9 +600,16 @@ class HttpMjpegSource:
 
     def stop(self) -> None:
         self._stop.set()
-        r = self._resp
+        with self._lock:
+            r = self._resp
         if r is not None:
             try:
+                sock = getattr(getattr(getattr(r, "fp", None), "raw", None), "_sock", None)
+                if sock is not None:
+                    try:
+                        sock.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
                 r.close()
             except Exception:  # noqa: BLE001
                 pass
@@ -624,7 +631,8 @@ class HttpMjpegSource:
             try:
                 req = urllib.request.Request(self.url, headers={"User-Agent": "filament-kit"})
                 with urllib.request.urlopen(req, timeout=10) as r:
-                    self._resp = r
+                    with self._lock:
+                        self._resp = r
                     buf = b""
                     while not self._stop.is_set():
                         chunk = r.read1(65536) if hasattr(r, "read1") else r.read(65536)
@@ -650,7 +658,8 @@ class HttpMjpegSource:
                 if not self._stop.is_set():
                     log.info("camera %s: %s; retry in %.0f s", self.serial, e or type(e).__name__, delay)
             finally:
-                self._resp = None
+                with self._lock:
+                    self._resp = None
             if self._stop.wait(delay):
                 break
             delay = min(delay * 2, BACKOFF[1])
@@ -685,8 +694,8 @@ class Hub:
         self._lock = threading.Lock()
         self._serial_locks: dict[str, threading.RLock] = {}
         self._running: dict[str, object] = {}
-        # the printer each running source was started with; a first-use pin updates its cert_fp in place
-        self._targets: dict[str, registry.Printer] = {}
+        # the (printer, klipper_url) each running source was started with; a first-use pin updates p.cert_fp in place
+        self._targets: dict[str, tuple[registry.Printer, str | None]] = {}
         self._refs: dict[str, int] = {}
         self._stop_timers: dict[str, threading.Timer] = {}
         self._hls_last: dict[str, float] = {}
@@ -752,28 +761,33 @@ class Hub:
                 raise
             return src
 
+    def _klipper_target_url(self, serial: str, p: registry.Printer) -> str | None:
+        return (self._klipper_url(serial) if self._klipper_url else None) if p.family == "klipper" else None
+
     def _start(self, serial: str, p: registry.Printer, kind: str):
         """Start a new source for `p` and record it as running. Caller holds the printer's lock."""
+        url = self._klipper_target_url(serial, p)
         if p.family == "klipper":
-            src = HttpMjpegSource(p, self, self._klipper_url(serial) if self._klipper_url else "")
+            src = HttpMjpegSource(p, self, url or "")
         else:
             src = self._sources[kind](p, self)
         src.start()
         with self._lock:
             self._running[serial] = src
-            self._targets[serial] = p
+            self._targets[serial] = (p, url)
         return src
 
     @staticmethod
-    def _target(p: registry.Printer) -> tuple:
-        return p.ip, p.access_code, p.cert_fp, p.family, p.host, p.port
+    def _target(p: registry.Printer, url: str | None = None) -> tuple:
+        return p.ip, p.access_code, p.cert_fp, p.family, p.host, p.port, url
 
     def _retarget(self, serial: str, p: registry.Printer, kind: str, src):
         """The running source if it still points at the printer's (ip, Access Code, pin); otherwise it is stopped
         and a new one started (the printer moved, was re-keyed or added again). Caller holds the printer's lock."""
+        cur = self._target(p, self._klipper_target_url(serial, p))
         with self._lock:
             t = self._targets.get(serial)
-            same = t is not None and self._target(t) == self._target(p)
+            same = t is not None and self._target(*t) == cur
         if same:
             return src
         log.info("camera %s: the printer's address, Access Code or pin changed; restarting", serial)

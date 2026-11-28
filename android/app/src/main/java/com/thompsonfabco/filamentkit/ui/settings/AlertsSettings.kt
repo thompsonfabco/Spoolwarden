@@ -19,17 +19,22 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.core.app.NotificationManagerCompat
@@ -138,7 +143,21 @@ internal fun AlertsSettings(facts: AlertsFacts, actions: AlertsActions, modifier
                 { testSent = true; actions.onTest() },
                 Modifier.fillMaxWidth(), enabled = facts.on,
             )
-            if (testSent) Text(stringResource(R.string.settings_alerts_sent), color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodySmall)
+            if (!facts.on) {
+                Text(
+                    stringResource(R.string.settings_alerts_on),
+                    color = SpoolwardenTheme.colors.muted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (testSent) {
+                Text(
+                    stringResource(R.string.settings_alerts_sent),
+                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    color = SpoolwardenTheme.colors.muted,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
         SwButton(stringResource(R.string.settings_alerts_recent), actions.onRecent, Modifier.fillMaxWidth())
         if (facts.available && facts.config != null) {
@@ -184,16 +203,16 @@ private fun HubAlertRulesSection(
             }
         }
         SettingsDivider()
-        ThresholdField(stringResource(R.string.alerts_running_low_g), config.runningLowG, revision, enabled) { n ->
+        ThresholdField(stringResource(R.string.alerts_running_low_g), config.runningLowG, revision, enabled, min = LOW_G_MIN, max = LOW_G_MAX) { n ->
             onPatchConfig(buildJsonObject { put("running_low_g", JsonPrimitive(n)) })
         }
-        ThresholdField(stringResource(R.string.alerts_storage_warn_pct), config.storageWarnPercent, revision, enabled) { n ->
+        ThresholdField(stringResource(R.string.alerts_storage_warn_pct), config.storageWarnPercent, revision, enabled, min = PCT_WARN_MIN, max = PCT_WARN_MAX) { n ->
             onPatchConfig(buildJsonObject { put("storage_warn_percent", JsonPrimitive(n)) })
         }
-        ThresholdField(stringResource(R.string.alerts_storage_bad_pct), config.storageBadPercent, revision, enabled) { n ->
+        ThresholdField(stringResource(R.string.alerts_storage_bad_pct), config.storageBadPercent, revision, enabled, min = PCT_BAD_MIN, max = PCT_BAD_MAX) { n ->
             onPatchConfig(buildJsonObject { put("storage_bad_percent", JsonPrimitive(n)) })
         }
-        ThresholdField(stringResource(R.string.alerts_humidity_high_pct), config.humidityHighPct, revision, enabled) { n ->
+        ThresholdField(stringResource(R.string.alerts_humidity_high_pct), config.humidityHighPct, revision, enabled, min = HUMIDITY_MIN, max = HUMIDITY_MAX) { n ->
             onPatchConfig(buildJsonObject { put("humidity_high_pct", JsonPrimitive(n)) })
         }
     }
@@ -235,21 +254,35 @@ private fun ThresholdField(
     value: Int?,
     revision: Int,
     enabled: Boolean,
+    min: Int,
+    max: Int,
     onCommit: (Int) -> Unit,
 ) {
+    val context = LocalContext.current
     var text by remember(value, revision) { mutableStateOf(value?.toString().orEmpty()) }
-    fun commit() {
+    var error by remember(value, revision) { mutableStateOf<String?>(null) }
+    fun commit(showError: Boolean = true) {
         val parsed = text.trim().toIntOrNull()
-        if (parsed == null) {
-            text = value?.toString().orEmpty()
-        } else if (parsed != value) {
-            onCommit(parsed)
+        if (parsed == null || parsed !in min..max) {
+            if (showError) error = context.getString(R.string.alerts_error_whole, min.toString(), max.toString())
+        } else {
+            error = null
+            if (parsed != value) onCommit(parsed)
         }
+    }
+    val latestCommit by rememberUpdatedState { commit(showError = false) }
+    DisposableEffect(value, revision) {
+        onDispose { latestCommit() }
     }
     OutlinedTextField(
         value = text,
-        onValueChange = { text = it.filter(Char::isDigit) },
+        onValueChange = {
+            text = it.filter(Char::isDigit)
+            error = null
+        },
         label = { Text(label) },
+        isError = error != null,
+        supportingText = error?.let { msg -> { Text(msg) } },
         singleLine = true,
         enabled = enabled,
         textStyle = SpoolwardenTheme.type.input,
@@ -287,3 +320,12 @@ private fun AlertsSwitchRow(on: Boolean, onChange: (Boolean) -> Unit) {
         Text(stringResource(R.string.settings_alerts_phone_hint), color = colors.muted, style = MaterialTheme.typography.bodyMedium)
     }
 }
+
+private const val LOW_G_MIN = 10
+private const val LOW_G_MAX = 2000
+private const val PCT_WARN_MIN = 1
+private const val PCT_WARN_MAX = 99
+private const val PCT_BAD_MIN = 2
+private const val PCT_BAD_MAX = 100
+private const val HUMIDITY_MIN = 10
+private const val HUMIDITY_MAX = 95

@@ -97,7 +97,10 @@ def give_to_state_owner(path) -> None:
     could not read it: hand it to the owner of the state directory instead. A no-op for everyone else."""
     if getattr(os, "geteuid", lambda: -1)() != 0:
         return
-    st = os.stat(config.paths().state)
+    try:
+        st = os.stat(config.paths().state)
+    except FileNotFoundError:
+        return
     os.chown(path, st.st_uid, st.st_gid, follow_symlinks=False)      # never through a planted link
 
 

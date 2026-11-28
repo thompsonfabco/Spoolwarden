@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from .. import config, modules
+from . import texts
 
 _SETUP_NAME = {old: new for new, old in modules.MODE_ALIASES.items()}      # the setup names the page and the command show
 
@@ -20,18 +21,19 @@ def preview(mode: str) -> dict:
     if "server" not in modules.MODES[mode]:
         return {"mode": mode, "on": True, "notes": [], "after": sorted(on), "needs": [],
                 "refused": "this page is the Hub's, and that setup has none: at the Hub: "
-                           f"sudo filament-kit modules set {_SETUP_NAME[mode]} --hub ADDRESS"}
+                           f"sudo spoolwarden features setup {_SETUP_NAME[mode]} --hub ADDRESS"}
     notes: list[str] = []
     try:
         out = modules.set_mode(cfg, mode, say=notes.append)
     except modules.ModuleError as e:
         raise Refused(400, str(e)) from None
     after = modules.enabled(out)
-    off, gained = [n for n in modules.MODULES if n in on - after], [n for n in modules.MODULES if n in after - on]
+    off = [modules.MODULES[n].title for n in modules.MODULES if n in on - after]
+    gained = [modules.MODULES[n].title for n in modules.MODULES if n in after - on]
     if off:
-        notes.append("Turns off: " + ", ".join(off))
+        notes.append(texts.say("cli_plan_turns_off", list=", ".join(off)))
     if gained:
-        notes.append("Turns on: " + ", ".join(gained))
+        notes.append(texts.say("cli_plan_turns_on", list=", ".join(gained)))
     needs = [{"key": k, "prompt": modules._SETTING_PROMPTS[k].rstrip(": ")}
              for k in modules.missing_settings(after, out) if k != "station.allow"]
     return {"mode": mode, "on": True, "notes": notes, "after": [n for n in modules.MODULES if n in after],

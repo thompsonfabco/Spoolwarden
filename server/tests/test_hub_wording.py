@@ -129,5 +129,5 @@ def test_the_setup_refusals_name_the_new_setups(monkeypatch):
     assert setup_helper._SETUP_NAME == modes._SETUP_NAME == {"server": "hub", "station": "weigh-station",
                                                              "all-in-one": "hub-with-weigh-station"}
     out = modes.preview("station")
-    assert out["refused"].endswith("modules set weigh-station --hub ADDRESS") and "kit server" not in out["refused"]
+    assert out["refused"].endswith("features setup weigh-station --hub ADDRESS") and "kit server" not in out["refused"]
     assert set(modules.MODE_ALIASES) == {"hub", "weigh-station", "hub-with-weigh-station"}

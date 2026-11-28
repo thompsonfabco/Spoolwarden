@@ -43,7 +43,7 @@ const plHubText = (m) => (typeof hubText === "function" ? hubText(m) : String(m 
 function printerLive(p, ctx = {}) {
   const path = (what) => (ctx.path ? ctx.path(what) : `printers/${enc(p.serial)}/${what}`);
   const call = ctx.api || api;
-  const S = { live: null, usage: null, sig: {}, ctl: "", camOn: false, hls: null, busy: false, timer: 0, tries: 0, seen: false, wasActive: false,
+  const S = { live: null, usage: null, sig: {}, ctl: "", camOn: false, camOpen: false, hls: null, busy: false, pollErr: false, timer: 0, tries: 0, seen: false, wasActive: false,
     noLight: false, results: new Map(), undone: new Map() };
   const head = plE("div", "plive__state"), job = plE("div", "plive__job"), bar = SW.progress({ value: 0, name: t("printer_progress_name") });
   const pct = plE("span", "plive__pct mono"), prog = plE("div", "plive__prog", bar, pct), detail = plE("p", "plive__detail muted"), temps = plE("p", "plive__temps mono");
@@ -129,16 +129,16 @@ function printerLive(p, ctx = {}) {
     alerts.setAttribute("aria-label", t("live_alerts"));
     notes.replaceChildren(...[...(s.notes || []), s.spoolman_warning].filter((n) => typeof n === "string" && n).map((n) => plE("p", "muted", n)));
     loadAnyBtn.hidden = !up();
-    camBtn.hidden = !S.camOn && !(L.camera && L.camera.kind);
+    camBtn.hidden = !S.camOn && !S.camOpen && !(L.camera && L.camera.kind);
   }
 
   // ----- the controls -----
   function paintControls() {
     const L = S.live, s = (L && L.status) || {}, g = gcode(), light = (L && L.controls && L.controls.light) && !S.noLight;
     const sig = [up(), g, s.light, light, SW.lock.state === "locked"].join("|");
-    locked.replaceChildren(...(SW.lock.state === "locked" ? [plE("p", "muted", t("live_locked"), " ", unlockToShow())] : []));
     if (sig === S.ctl) return;
     S.ctl = sig;
+    locked.replaceChildren(...(SW.lock.state === "locked" ? [plE("p", "muted", t("live_locked"), " ", unlockToShow())] : []));
     const ctl = (action, key, cls) => { const b = SW.btn(t(key), { cls, action, run: () => command(action, b) }); return b; };
     const row = [];
     if (up() && g === "RUNNING") row.push(ctl("pause", "printer_pause", ""));
@@ -222,24 +222,32 @@ function printerLive(p, ctx = {}) {
     if (S.hls) { S.hls.destroy(); S.hls = null; }
   }
   function cameraStop() {
+    S.camSeq = (S.camSeq || 0) + 1;
     destroyHls();
     for (const m of camBox.querySelectorAll("img, video")) { m.removeAttribute("src"); if (m.load) m.load(); }   // drops the connection: the camera stops
     camBox.replaceChildren();
     camBox.hidden = true;
     S.camOn = false;
+    S.camOpen = false;
     camBtn.replaceChildren(SW.icon("camera", "icon--s"), t("printer_camera_show"));
     closeSession();
   }
   function cameraFail(text) {
     destroyHls();
+    for (const m of camBox.querySelectorAll("img, video")) { m.removeAttribute("src"); if (m.load) m.load(); }
+    S.camOn = false;
+    S.camOpen = true;
+    closeSession();
     camBox.hidden = false;
     camBox.replaceChildren(plE("div", "plive__camtext", plE("p", "", text), SW.btn(t("common_try_again"), { action: "try-again", run: () => cameraStart() })));
   }
   async function cameraStart() {
+    const seq = S.camSeq = (S.camSeq || 0) + 1;
     const kind = S.live && S.live.camera && S.live.camera.kind, name = p.name || (S.live && S.live.name) || "";
     destroyHls();
     closeSession();                                          // Try again: the old session goes before a new ticket is asked
     S.camOn = true;
+    S.camOpen = true;
     camBtn.replaceChildren(SW.icon("camera", "icon--s"), t("printer_camera_hide"));
     camBox.hidden = false;
     camBox.replaceChildren(plE("div", "plive__camtext", SW.spinner(), t("printer_camera_starting")));
@@ -250,12 +258,13 @@ function printerLive(p, ctx = {}) {
         const nativeHls = !hlsJs && !!v.canPlayType("application/vnd.apple.mpegurl");
         if (!hlsJs && !nativeHls) { cameraFail(t("printer_camera_no_hls")); return; }
         const src = await firstAddress("camera/index.m3u8");
-        if (!S.camOn) return;
+        if (!S.camOn || seq !== S.camSeq) return;
         v.addEventListener("error", () => { if (S.camOn) cameraFail(t("printer_camera_failed")); });
         if (nativeHls) {
           v.src = src;                                       // its segments are asked with the session's cookie
           camBox.replaceChildren(v);
         } else {
+          destroyHls();
           const hls = new window.Hls({ enableWorker: false, lowLatencyMode: false, xhrSetup: (xhr) => { xhr.withCredentials = true; } });
           S.hls = hls;
           hls.on(window.Hls.Events.ERROR, (_ev, data) => {
@@ -269,7 +278,7 @@ function printerLive(p, ctx = {}) {
         return;
       }
       const src = await firstAddress("camera.mjpeg");
-      if (!S.camOn) return;
+      if (!S.camOn || seq !== S.camSeq) return;
       const img = hx("img", { class: "plive__img", alt: t("printer_camera_alt", { printer: name }) });
       img.addEventListener("load", () => camBox.querySelector(".plive__camtext")?.remove(), { once: true });
       img.addEventListener("error", () => { if (S.camOn) cameraFail(t("printer_camera_failed")); });
@@ -277,11 +286,12 @@ function printerLive(p, ctx = {}) {
       img.src = src;
     } catch (e) {
       if (e.locked) { cameraStop(); throw e; }
+      if (!S.camOn || seq !== S.camSeq) return;
       cameraFail(e.data && e.data.code === "too_many_views" ? t("live_too_many") : e.message);
     }
   }
   function cameraToggle() {
-    if (S.camOn) { cameraStop(); return; }
+    if (S.camOn || S.camOpen) { cameraStop(); return; }
     return unlocked(() => cameraStart());
   }
 
@@ -427,13 +437,34 @@ function printerLive(p, ctx = {}) {
     slotSay(sl.label, "ok", [t("live_clear_done", { slot: sl.label }), done.waiting_ended ? t("live_clear_waiting") : "", done.printer_cleared ? t("live_clear_printer") : "", done.text || ""]);
   });
   // Load: a spool is picked (ctx.pickSpool, else the search below), the dry run says what would happen, then Load sends it
+  const normTag = (x) => String(x || "").replace(/[:\s-]/g, "").toLowerCase();
+  async function lookupLastTag(btn, noteEl, onFound) {
+    SW.busy(btn, t("common_working"));
+    SW.result(noteEl, null);
+    try {
+      const r = await call("spools/last-tag");
+      if (r && r.spool && r.spool.id != null) { onFound(r.spool); return; }
+      const uid = r && r.tag && (typeof r.tag === "string" ? r.tag : r.tag.uid);
+      if (!uid) { SW.result(noteEl, "info", t("spool_load_no_tag")); return; }
+      const sr = await call(`spools?q=${enc(uid)}&limit=10`);
+      const hit = (sr.spools || []).find((s) => s.tag && normTag(s.tag) === normTag(uid));
+      if (!hit) { SW.result(noteEl, "warn", t("spool_load_tag_unlinked", { tag: uid })); return; }
+      onFound(hit);
+    } catch (e) { if (e.locked) throw e; SW.result(noteEl, "bad", plHubText(e.message)); }
+    finally { SW.idle(btn); }
+  }
   async function pickSpool(sl, button) {
     if (ctx.pickSpool) return ctx.pickSpool(sl);
-    let chosen = null;
+    let chosen = null, asked = 0;
     const results = hx("div", { class: "plive__picks" }), note = hx("p", { class: "result", role: "status" });
+    const tagBtn = SW.btn(t("spool_load_last_tag"), { action: "last-tag", run: () => lookupLastTag(tagBtn, note, (s) => {
+      chosen = s;
+      let hit = [...results.children].find((b) => Number(b.dataset.spool) === s.id);
+      if (!hit) { hit = row(s); results.prepend(hit); }
+      for (const b of results.children) b.setAttribute("aria-pressed", String(b === hit));
+    }) });
     const find = SW.field({ type: "search", label: t("common_search"), placeholder: t("common_search_placeholder"), onSearch: (q) => search(q) });
-    let asked = 0;
-    const row = (s) => hx("button", { class: "btn plive__pick", type: "button", "aria-pressed": "false", data: { spool: s.id }, on: { click: (ev) => {
+    const row = (s) => hx("button", { class: "btn plive__pick", type: "button", "aria-pressed": String(!!(chosen && chosen.id === s.id)), data: { spool: s.id }, on: { click: (ev) => {
       chosen = s;
       for (const b of results.children) b.setAttribute("aria-pressed", String(b === ev.currentTarget));
     } } }, t("printer_load_row_id", { id: s.id }) + " " + spoolName(s), " ",
@@ -448,7 +479,8 @@ function printerLive(p, ctx = {}) {
       } catch (e) { if (mine === asked) SW.result(note, "bad", t("live_pick_failed")); }
     };
     search("");
-    const picked = await SW.ask({ kind: "confirm", title: t("live_pick_title", { slot: sl.label }), opener: button, confirm: t("common_load"), body: [find, results, note],
+    const picked = await SW.ask({ kind: "confirm", title: t("live_pick_title", { slot: sl.label }), opener: button, confirm: t("common_load"),
+      body: [plE("div", "actions", tagBtn, plE("span", "muted", t("spool_load_or"))), find, results, note],
       run: () => { if (!chosen) { SW.result(note, "warn", t("live_pick_none")); return false; } return chosen; } });
     return picked || null;
   }
@@ -469,7 +501,6 @@ function printerLive(p, ctx = {}) {
 
   // Load a spool (header button): Step 1 picks a spool (last tapped tag or search); Step 2 chooses Automatic or a slot and previews
   const allSlots = () => ((S.live && S.live.status && S.live.status.ams) || []).flatMap((u) => u.slots || []);
-  const normTag = (x) => String(x || "").replace(/[:\s-]/g, "").toLowerCase();
   const runLoadAny = (button) => unlocked(async () => {
     let chosen = null, selectedSlot = null, plan = null, planBusy = false, planSeq = 0, asked = 0;
     let dlgRef = null, confirmBtn = null;
@@ -482,7 +513,7 @@ function printerLive(p, ctx = {}) {
     };
     // Step 1
     const step1Note = hx("p", { class: "result", role: "status" }), picks = hx("div", { class: "plive__picks" });
-    const tagBtn = SW.btn(t("spool_load_last_tag"), { action: "last-tag", run: () => useLastTag() });
+    const tagBtn = SW.btn(t("spool_load_last_tag"), { action: "last-tag", run: () => lookupLastTag(tagBtn, step1Note, chooseSpool) });
     const find = SW.field({ type: "search", label: t("common_search"), placeholder: t("common_search_placeholder"), onSearch: (q) => search(q) });
     const spoolRow = (s) => hx("button", { class: "btn plive__pick", type: "button", data: { spool: s.id }, on: { click: () => chooseSpool(s) } },
       t("printer_load_row_id", { id: s.id }) + " " + spoolName(s), " ",
@@ -494,21 +525,6 @@ function printerLive(p, ctx = {}) {
         if (mine !== asked) return;
         picks.replaceChildren(...((r.spools || []).length ? r.spools.map(spoolRow) : [plE("p", "muted", t("spools_empty_filtered"))]));
       } catch { if (mine === asked) SW.result(step1Note, "bad", t("live_pick_failed")); }
-    };
-    const useLastTag = async () => {
-      SW.busy(tagBtn, t("common_working"));
-      SW.result(step1Note, null);
-      try {
-        const r = await call("spools/last-tag");
-        if (r && r.spool && r.spool.id != null) { chooseSpool(r.spool); return; }
-        const uid = r && r.tag && (typeof r.tag === "string" ? r.tag : r.tag.uid);
-        if (!uid) { SW.result(step1Note, "info", t("spool_load_no_tag")); return; }
-        const sr = await call(`spools?q=${enc(uid)}&limit=10`);
-        const hit = (sr.spools || []).find((s) => s.tag && normTag(s.tag) === normTag(uid));
-        if (!hit) { SW.result(step1Note, "warn", t("spool_load_tag_unlinked", { tag: uid })); return; }
-        chooseSpool(hit);
-      } catch (e) { if (e.locked) throw e; SW.result(step1Note, "bad", plHubText(e.message)); }
-      finally { SW.idle(tagBtn); }
     };
     const step1 = plE("div", "plive__group", plE("div", "actions", tagBtn, plE("span", "muted", t("spool_load_or"))),
       find, picks, plE("p", "muted", t("spool_load_pick_hint")), step1Note);
@@ -681,7 +697,8 @@ function printerLive(p, ctx = {}) {
 
   // ----- the read, every 2 s while this is on the page and the tab is visible -----
   async function refresh() {
-    try { S.live = await call(path("live")); } catch (e) { SW.result(msg, "bad", e.message); return; }
+    try { S.live = await call(path("live")); } catch (e) { S.pollErr = true; SW.result(msg, "bad", e.message); return; }
+    if (S.pollErr) { S.pollErr = false; SW.result(msg, null); }
     const was = S.wasActive;
     S.wasActive = active();
     paintState(); paintControls(); paintAuto(); paintSlots();
@@ -698,7 +715,7 @@ function printerLive(p, ctx = {}) {
     }
     S.seen = true;
     if (!root.getClientRects().length) {                           // the detail is closed (or the tab is another): no read, no picture
-      if (S.camOn) cameraStop();
+      if (S.camOn || S.camOpen) cameraStop();
       schedule(POLL_MS / 5); return;
     }
     if (!document.hidden) await refresh();

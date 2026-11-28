@@ -60,14 +60,8 @@ internal fun UpdatesSettings(
         UpdatePanel(update, appVersion, actions)
         SwButton(
             stringResource(if (update.checking) R.string.common_checking else R.string.settings_updates_check), onCheck,
-            Modifier.fillMaxWidth(), kind = SwButtonKind.Quiet, enabled = paired && !update.checking && !update.busy,
+            Modifier.fillMaxWidth(), kind = SwButtonKind.Quiet, enabled = !update.checking && !update.busy,
         )
-        if (!paired) {
-            Text(
-                stringResource(R.string.settings_updates_check_unpaired), color = SpoolwardenTheme.colors.muted,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
     }
 }
 
@@ -149,9 +143,12 @@ private fun InstallButton(onClick: () -> Unit) {
     SwButton(stringResource(R.string.app_update_install), onClick, kind = SwButtonKind.Main)
 }
 
-/** "<product> 0.5.3 is on your Hub. This app is 0.5.2." with the Hub's release as the update comes with. */
+/** "<product> 0.5.3 is on your Hub/available on GitHub. This app is 0.5.2." */
 @Composable
-private fun offered(update: UpdateUi, appVersion: String): String =
-    stringResource(R.string.app_update_offered, update.offeredVersion.orEmpty(), appVersion)
+private fun offered(update: UpdateUi, appVersion: String): String = stringResource(
+    if (update.fromGitHub) R.string.app_update_offered_github else R.string.app_update_offered,
+    update.offeredVersion.orEmpty(),
+    appVersion,
+)
 
 private const val PERCENT = 100f

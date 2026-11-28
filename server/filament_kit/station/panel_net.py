@@ -137,7 +137,8 @@ def hello_line(sock) -> tuple[bytes | None, bytes]:
 
 
 def usb_up() -> bool:
-    ser = st.panel["ser"]
+    with st.panel_lock:
+        ser = st.panel["ser"]
     return bool(ser) and not getattr(ser, "wifi", False)
 
 
@@ -151,6 +152,7 @@ def admit(link: Link) -> str | None:
         if current and current.address != link.address and time.time() - current.heard <= STALE_SECONDS:
             return "busy"
         st.panel["ser"] = link
+        st.ports["panel_version"], st.ports["panel_chip"], st.ports["panel_nfc"] = link.panel_version, link.panel_chip, None
     if current:
         current.close()  # its session sees it is no longer the panel and ends
     return None
@@ -160,7 +162,6 @@ def session(link: Link):
     """Speak the protocol with an admitted panel until it is gone or another panel replaces it (`panel_loop`'s inner
     loop, over the connection)."""
     from . import panel
-    st.ports["panel_version"], st.ports["panel_chip"], st.ports["panel_nfc"] = link.panel_version, link.panel_chip, None
     log.info("button panel on Wi-Fi from %s (firmware %s)", link.address, link.panel_version)
     panel.warn_swap_needs_fw9(link.panel_version)
     if link.panel_chip == "esp32c3":
@@ -168,7 +169,10 @@ def session(link: Link):
     seen = panel.Shown()
     why = "dropped"
     try:
-        while st.panel["ser"] is link:
+        while True:
+            with st.panel_lock:
+                if st.panel["ser"] is not link:
+                    break
             line = link.read_line(TICK)
             if line:
                 panel.on_line(line)
@@ -186,10 +190,10 @@ def session(link: Link):
         ours = st.panel["ser"] in (link, None)  # None: wire dropped it after a failed write
         if ours:
             st.panel["ser"] = None
+            st.ports["panel_version"] = st.ports["panel_chip"] = st.ports["panel_nfc"] = None
     link.close()
     if ours:
         panel.forget_panel_scale()
-        st.ports["panel_version"] = st.ports["panel_chip"] = st.ports["panel_nfc"] = None
     log.info("button panel on Wi-Fi gone (%s)", why)
 
 

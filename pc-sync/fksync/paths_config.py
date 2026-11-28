@@ -160,19 +160,19 @@ def load_slicer_paths(dirs: store.AppDirs) -> list[SlicerEntry]:
 
 
 def save_slicer_paths(dirs: store.AppDirs, entries: list[SlicerEntry]) -> dict:
-    dirs.ensure()
-    try:
-        cfg = store.load_config(dirs)
-    except ValueError:
-        cfg = {}
-    cfg["slicer_paths"] = [e.to_dict() for e in entries]
-    enabled_install = next((e for e in entries if e.kind == "orca_install" and e.enabled), None)
-    if enabled_install is not None:
-        cfg["orca_install"] = enabled_install.path
-    elif any(e.kind == "orca_install" for e in entries):
-        cfg.pop("orca_install", None)
-    store.save_config(dirs, cfg)
-    return cfg
+    with store.single_instance(dirs):
+        try:
+            cfg = store.load_config(dirs)
+        except ValueError:
+            cfg = {}
+        cfg["slicer_paths"] = [e.to_dict() for e in entries]
+        enabled_install = next((e for e in entries if e.kind == "orca_install" and e.enabled), None)
+        if enabled_install is not None:
+            cfg["orca_install"] = enabled_install.path
+        elif any(e.kind == "orca_install" for e in entries):
+            cfg.pop("orca_install", None)
+        store.save_config(dirs, cfg)
+        return cfg
 
 
 def resolve_bambu_entry(entry: SlicerEntry, preferred_user_id: str | None = None):

@@ -727,7 +727,7 @@ def set_section(text, section, values):
 
 
 def _set_key(text, section, key, value):
-    pat = re.compile(r"(?ms)(^\[{}\]\s*\n.*?)(^{}\s*=.*?$)".format(re.escape(section), re.escape(key)))
+    pat = re.compile(r"(?ms)(^\[{}\]\s*\n(?:(?!^\[).)*?)(^{}\s*=.*?$)".format(re.escape(section), re.escape(key)))
     if pat.search(text):
         return pat.sub(lambda mm: mm.group(1) + "{} = {}".format(key, value), text, count=1)
     return text.replace("[{}]\n".format(section), "[{}]\n{} = {}\n".format(section, key, value), 1)

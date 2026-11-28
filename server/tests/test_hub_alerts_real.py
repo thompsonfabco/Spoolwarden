@@ -66,7 +66,7 @@ def test_the_test_alert_arrives_once_and_a_saved_change_is_the_hub_s(hub_stub, t
     page = drive(hub_stub, tmp_path, HELPERS + r"""
 await open();
 await unlockAll();
-$('[data-action="alerts-test"]', group()).click();
+$('.settings__group[data-id="alerts"] [data-action="alerts-test"]').click();
 await until(() => $(".toasts .toast"), "the test alert");
 out.toast = text($(".toast__text"));
 await SW_ALERTS.poll(); await SW_ALERTS.poll();

@@ -258,6 +258,8 @@ def _answer_yes(monkeypatch) -> list[str]:
 
 def test_backup_password_is_set_shown_and_removed_through_the_helper(capsys, monkeypatch):
     """The design, command line: this test pinned other texts before; it now pins the design's."""
+    from filament_kit import output
+    monkeypatch.setattr(output, "terminal", lambda *a, **k: True)
     monkeypatch.setattr(secret_input, "ask", lambda prompt: "correct horse battery")
     assert run(capsys, ["backup", "password", "--show"])[1] == "Backup password is not set.\n"
     assert _words(run(capsys, ["backup", "password"])[1]) == _words(SET_LINES)
@@ -271,6 +273,8 @@ def test_backup_password_is_set_shown_and_removed_through_the_helper(capsys, mon
 
 
 def test_backup_password_is_typed_twice_with_the_designs_prompts(capsys, monkeypatch):
+    from filament_kit import output
+    monkeypatch.setattr(output, "terminal", lambda *a, **k: True)
     answers = iter(["correct horse battery", "correct horse battery"])
     prompts = []
     monkeypatch.setattr(secret_input, "ask", lambda prompt: prompts.append(prompt) or next(answers))
@@ -282,6 +286,8 @@ def test_backup_password_is_typed_twice_with_the_designs_prompts(capsys, monkeyp
 
 
 def test_two_different_backup_passwords_are_refused(capsys, monkeypatch):
+    from filament_kit import output
+    monkeypatch.setattr(output, "terminal", lambda *a, **k: True)
     answers = iter(["correct horse battery", "correct horse batterY"])
     monkeypatch.setattr(secret_input, "ask", lambda prompt: next(answers))
     assert history_cli.run_backup_password() == 2
@@ -298,6 +304,8 @@ def test_backup_password_remove_without_a_yes_changes_nothing(capsys, monkeypatc
 
 
 def test_a_password_that_is_too_short_is_refused_with_the_designs_words(capsys, monkeypatch):
+    from filament_kit import output
+    monkeypatch.setattr(output, "terminal", lambda *a, **k: True)
     monkeypatch.setattr(secret_input, "ask", lambda prompt: "short")
     rc, _, err = run(capsys, ["backup", "password"])
     assert rc == 2 and "use at least 10 characters." in err and not backup.password_set()
@@ -305,6 +313,8 @@ def test_a_password_that_is_too_short_is_refused_with_the_designs_words(capsys, 
 
 def test_backup_password_from_the_command_line_is_recorded_as_cli(monkeypatch):
     """The helper's settings.changed takes the actor of the command line, not a literal `page`."""
+    from filament_kit import output
+    monkeypatch.setattr(output, "terminal", lambda *a, **k: True)
     monkeypatch.setattr(secret_input, "ask", lambda prompt: "correct horse battery")
     with event_sink.acting("cli"):
         assert history_cli.run_backup_password() == 0

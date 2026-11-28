@@ -69,6 +69,16 @@ const REC_FROM = { phone: "recent_source_phone", web: "recent_source_phone", sta
 const recByHand = (r) => REC_FROM[r.source] !== "recent_source_station" && !r.photos;
 const recSource = (r) => (recByHand(r) || r.source === "cli" ? SW.t("recent_source_hand") : REC_FROM[r.source] ? SW.t(REC_FROM[r.source]) : r.source);
 const recSpools = (ids) => SW.t("recent_spool_label", { count: ids.length, ids: ids.join(", ") });
+function recSpoolLinks(ids) {
+  const parts = SW.t("recent_spool_label", { count: ids.length, ids: "\u0001" }).split("\u0001");
+  const out = [parts[0]];
+  ids.forEach((id, i) => {
+    if (i) out.push(", ");
+    out.push(Number.isInteger(id) ? h("a", { href: "#spools/" + id }, String(id)) : String(id));
+  });
+  if (parts[1]) out.push(parts[1]);
+  return h("span", {}, ...out);
+}
 const recToCheck = (r) => !!(r.confidence && (r.confidence.low.length || r.confidence.medium.length));
 const recAddress = () => {
   const m = location.hash.slice(1).match(/^recent(?:\/([^/?]+))?(?:\?(.*))?$/);
@@ -125,7 +135,7 @@ function intakeTab() {
 
 // ----- Download as CSV: the file the Hub gives for GET export/recent.csv, unlocked as a file leaves the Hub -----
 // Texts the catalogue does not have yet (only HD2 opens it): the catalogue's own wins once the key is there.
-const REC_STUB = { recent_download_csv: "Download as CSV", recent_csv_failed: "Could not download the file: {reason}", recent_print_labels: "Print labels" };
+const REC_STUB = { recent_download_csv: "Download as CSV", recent_csv_failed: "Could not download the file: {reason}", recent_print_labels: "Print labels", common_clear_filter: "Clear filter" };
 const recT = (key, vars) => {
   const v = SW.t(key, vars);
   return v !== key || !(key in REC_STUB) ? v : REC_STUB[key].replace(/\{([a-z]+)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m));
@@ -254,6 +264,12 @@ function listPage(body, d, page) {
   const paint = () => {
     const recs = recentFilter === "check" ? all.filter(recToCheck) : all;
     if (!all.length) { selBar.hidden = true; fill(list, SW.empty({ icon: "spool", title: SW.t("recent_empty_title"), text: SW.t("recent_empty_text") })); return; }
+    if (!recs.length) {
+      selBar.hidden = true;
+      fill(list, SW.empty({ icon: "spool", title: SW.t("spools_empty_filtered"),
+        actions: [SW.btn(recT("common_clear_filter"), { action: "clear-filter", run: () => { recentFilter = "all"; if (filter) filter._control.value = "all"; paint(); } })] }));
+      return;
+    }
     const pages = Math.max(1, Math.ceil(recs.length / REC_PAGE)), now = Math.min(page, pages), shown = recs.slice((now - 1) * REC_PAGE, now * REC_PAGE);
     shownIds = shown.map((r) => r.id);
     const table = recCollection(shown, recs.length > REC_PAGE ? { total: recs.length, first: (now - 1) * REC_PAGE } : null, () => shownIds, syncSel);
@@ -386,24 +402,28 @@ function recDraw(host, view, rec, first) {
   view.rec = rec;
   const names = recNames(rec.spools), ids = rec.spools.map((x) => x.spool_id);
   const printIds = ids.filter((n) => Number.isInteger(n));      // a spool that has no number yet has no label
+  const confirmLeaveDirty = async () => {
+    const f = host.querySelector('.recent__form[data-state="dirty"]');
+    return !f || await SW.leaveAsk(SW.t("recent_fields_title"));
+  };
   const at = view.d.records.findIndex((r) => r.id === view.id);
-  const go = (to) => { location.hash = "#recent/" + encodeURIComponent(to.id); };
+  const go = async (to) => { if (!(await confirmLeaveDirty())) return; location.hash = "#recent/" + encodeURIComponent(to.id); };
   const newer = at > 0 ? view.d.records[at - 1] : null, older = at >= 0 && at < view.d.records.length - 1 ? view.d.records[at + 1] : null;
   const step = (name, icon, other, cls) => { const b = SW.iconBtn(icon, SW.t(name), { cls, run: () => go(other) }); b.disabled = !other; return b; };
   const title = h("h2", { class: "detail__title", tabindex: "-1" }, names || SW.t("recent_no_spools"),
     rec.spools.length > 1 ? [" ", h("span", { class: "mono" }, SW.t("recent_times", { count: rec.spools.length }))] : null);
   const head = h("header", { class: "recent__head" },
-    h("p", { class: "page-head__crumbs" }, h("a", { href: "#recent" }, SW.t("nav_recently_added")), " / ", ids.length ? recSpools(ids) : SW.t("recent_no_spools")),
+    h("p", { class: "page-head__crumbs" }, h("a", { href: "#recent" }, SW.t("nav_recently_added")), " / ", ids.length ? recSpoolLinks(ids) : SW.t("recent_no_spools")),
     h("div", { class: "recent__bar" }, title, h("div", { class: "actions" },
       h("a", { class: "btn btn--ghost", href: "#recent" }, SW.t("common_back")),
-      printIds.length ? h("button", { class: "btn btn--ghost recent__print", type: "button", on: { click: () => recPrintAt(printIds) } }, recT("recent_print_labels")) : null,
+      printIds.length ? [recSizePicker(), h("button", { class: "btn btn--ghost recent__print", type: "button", on: { click: () => recPrintAt(printIds) } }, recT("recent_print_labels"))] : null,
       step("detail_newer", "chevron", newer, "recent__newer"), step("detail_older", "chevron", older, "recent__older"))),
     h("p", { class: "page-head__meta" }, h("span", { class: "mono" }, recTime(rec.at)), h("span", {}, recSource(rec)),
       SW.status(REC_STATE[rec.state] || "as_detected", { small: true, text: REC_STATE[rec.state] ? null : rec.state }),
-      h("span", {}, ids.length ? recSpools(ids) : SW.t("recent_no_spools"))));
+      ids.length ? recSpoolLinks(ids) : h("span", {}, SW.t("recent_no_spools"))));
   const side = h("div", { class: "recent__side" }, recPhotos(rec, view.id, names), recRevisions(rec, view, box("undo"), redraw), recFacts(rec, s, ids));
   const main = h("div", { class: "recent__main" },
-    items.length > 1 ? recItems(items, view, () => recDraw(host, view, rec, false)) : null,
+    items.length > 1 ? recItems(items, view, () => recDraw(host, view, rec, false), confirmLeaveDirty) : null,
     recFields(rec, s, view, box("fields"), redraw), recAsk(rec, s, view, box("ask"), redraw));
   const had = host.contains(document.activeElement);
   fill(host, head, h("div", { class: "recent__grid" }, main, side));
@@ -411,11 +431,19 @@ function recDraw(host, view, rec, first) {
 }
 
 // "Item 1", "Item 2": only when the record has several items; a change applies to all the spools of the item
-function recItems(items, view, again) {
+function recItems(items, view, again, confirmLeave) {
   const s = items.find((x) => x.item === view.item);
   const seg = SW.segmented({ legend: SW.t("recent_items_legend"), legendSr: true, name: "recent-item", value: String(view.item),
     options: items.map((x) => ({ value: String(x.item), label: SW.t("recent_item", { number: x.item + 1 }) })) });
-  seg.addEventListener("change", (e) => { view.item = Number(e.target.value); view.editing = false; recDataChanged(view, view.sent = (view.sent || 0) + 1); again(); });
+  seg.addEventListener("change", async (e) => {
+    const nextItem = Number(e.target.value);
+    if (confirmLeave && !(await confirmLeave())) {
+      const prev = seg.querySelector(`input[value="${view.item}"]`);
+      if (prev) prev.checked = true;
+      return;
+    }
+    view.item = nextItem; view.editing = false; recDataChanged(view, view.sent = (view.sent || 0) + 1); again();
+  });
   return h("div", { class: "recent__items" }, seg, s ? h("p", { class: "muted" }, SW.t("recent_item_line", { ids: s.spool_ids.join(", "), filament: s.filament_id })) : null);
 }
 
@@ -498,8 +526,17 @@ function recFields(rec, s, view, box, redraw) {
     })))),
     corrOn ? corrNote("recent_corr_on") : null,
     h("div", { class: "recent__foot" }, box, h("div", { class: "actions" },
-      SW.btn(SW.t("common_cancel"), { run: () => { view.editing = false; SW.result(box, null); redraw(rec); } }),
+      SW.btn(SW.t("common_cancel"), { action: "recent-cancel" }),
       SW.btn(SW.t("common_save_changes"), { type: "submit", cls: "btn--primary" }))));
+  const isDirty = () => REC_FIELDS.some(([k]) => fields[k]._control.value.trim() !== fields[k]._was.trim());
+  const syncDirty = () => {
+    if (isDirty()) form.dataset.state = "dirty"; else delete form.dataset.state;
+  };
+  for (const ev of ["input", "change"]) form.addEventListener(ev, syncDirty);
+  const cancelBtn = form.querySelector('[data-action="recent-cancel"]');
+  if (cancelBtn) cancelBtn.addEventListener("click", () => {
+    view.editing = false; SW.result(box, null); redraw(rec);
+  });
   const save = () => {
     const values = {}, bad = [];
     for (const [k, , , , kind] of REC_FIELDS) {
@@ -637,9 +674,9 @@ function recRevisions(rec, view, box, redraw) {
       last && v.n === last.n ? SW.btn(SW.t("revision_undo", { number: v.n }), { icon: "undo", run: () => recPost(box, histPath(view.id, "undo"), { revision: v.n }, (r) => {
         redraw(r);
         const gone = ((r.revisions.find((x) => x.n === v.n) || {}).filaments || {}).orphaned_by_undo || [];
-        const c = changes[0];
-        say(box, [c ? SW.t("revision_undone_result", { number: v.n, field: recLabel(c.field), value: recShow((REC_FIELD[c.field] || [])[4], c.old) || SW.t("common_field_empty_value") })
-          : SW.t("recent_result_undone", { number: v.n }), ...(gone.length ? [SW.t("recent_result_filament_empty", { ids: gone.join(", ") })] : [])].join(" "), true);
+        const undoneParts = changes.map((c) => SW.t("revision_undone_result", { number: v.n, field: recLabel(c.field), value: recShow((REC_FIELD[c.field] || [])[4], c.old) || SW.t("common_field_empty_value") }));
+        say(box, [...(undoneParts.length ? undoneParts : [SW.t("recent_result_undone", { number: v.n })]),
+          ...(gone.length ? [SW.t("recent_result_filament_empty", { ids: gone.join(", ") })] : [])].join(" "), true);
         const t = document.getElementById("recent-revisions"); if (t) t.focus();
       }, view) }) : null);
   }));

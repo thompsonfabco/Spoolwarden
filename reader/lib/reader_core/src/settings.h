@@ -12,6 +12,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 namespace reader {
@@ -84,6 +85,6 @@ class BootReport {
 };
 
 // The FK-READER answer.
-std::string helloLine(long build, bool configured, const char* wifi, const char* server);
+std::string helloLine(int64_t build, bool configured, const char* wifi, const char* server);
 
 }  // namespace reader

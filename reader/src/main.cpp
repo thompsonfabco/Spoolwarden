@@ -117,8 +117,9 @@ static const int OLED_H      = 64;
 static const int OLED_COLS   = OLED_W / 6;   // 21 columns at text size 1
 
 // --- Rotary encoder (KY-040 style: CLK/DT quadrature + SW push).
-//     Rotate = change slot; press = re-send the last tag; hold 1 s = printer
-//     list; hold 4 s = OTA check. If rotation feels reversed, swap CLK and DT. ---
+//     Rotate = change slot; press = Actions menu (Spool info, Re-send last tag,
+//     Unload slot, Status, Update FW); hold 1 s = printer list; hold 4 s = OTA check.
+//     If rotation feels reversed, swap CLK and DT. ---
 static const int PIN_ENC_CLK = 3;
 static const int PIN_ENC_DT  = 4;
 static const int PIN_ENC_SW  = 1;
@@ -149,6 +150,8 @@ static const uint32_t SETTLE_MS = 600;   // knob idle time before the slot choic
 static const uint32_t SCAN_COOLDOWN_MS = 2500;
 // How long a result stays on screen before reverting to the slot picker.
 static const uint32_t RESULT_HOLD_MS   = 4000;
+// Longer hold for multi-line Spool info / Status screens (dismissible by press/turn).
+static const uint32_t INFO_HOLD_MS     = 12000;
 // "Load filament" (queued) prompt stays up longer — you're walking to the AMS.
 static const uint32_t QUEUED_HOLD_MS   = 15000;
 // Printer + slot lists: refreshed at boot, every LIST_REFRESH_MS while the screen
@@ -175,6 +178,12 @@ std::vector<SlotEntry>& slots = slotCache.slots;
 Menu   menu;
 Button button;
 bool   serverOk = false;              // the last list fetch worked
+bool   nfcOk    = false;              // PN532 initialized cleanly
+
+enum UiState { UI_NORMAL, UI_ACTIONS, UI_CONFIRM_UNLOAD };
+UiState  uiState = UI_NORMAL;
+int      uiCursor = 0;
+uint32_t uiLastInput = 0;
 
 TagGate  tagGate;                     // which tag reads count as a new scan
 String   lastUid = "";
@@ -251,16 +260,49 @@ void loadSettings() {
 bool saveSettings(const Settings& s) {
   Preferences p;
   if (!p.begin("fk-cfg", false)) return false;
-  bool ok = p.putString("ssid", s.ssid.c_str()) == s.ssid.size() &&
-            p.putString("pass", s.pass.c_str()) == s.pass.size() &&
-            p.putString("base", s.base.c_str()) == s.base.size() &&
-            p.putString("token", s.token.c_str()) == s.token.size() &&
-            p.putString("ota_key", s.otaKey.c_str()) == s.otaKey.size() &&
-            p.putString("root_ca", s.rootCa.c_str()) == s.rootCa.size() &&
+  struct PrevStr  { const char* key; bool had; String val; };
+  struct PrevBool { const char* key; bool had; bool val; };
+  auto snapStr = [&](const char* k) -> PrevStr {
+    bool had = p.isKey(k);
+    return {k, had, had ? p.getString(k, "") : String()};
+  };
+  auto snapBool = [&](const char* k) -> PrevBool {
+    bool had = p.isKey(k);
+    return {k, had, had ? p.getBool(k, false) : false};
+  };
+  PrevStr prevStrs[] = {
+    snapStr("ssid"), snapStr("pass"), snapStr("base"), snapStr("token"),
+    snapStr("ota_key"), snapStr("root_ca"), snapStr("hub_ip"), snapStr("printer"),
+  };
+  PrevBool prevBools[] = {snapBool("buzzer_low"), snapBool("printer_new")};
+  auto writeStr = [&](const char* k, const std::string& v) -> bool {
+    if (v.empty()) return !p.isKey(k) || p.remove(k);
+    return p.putString(k, v.c_str()) == v.size();
+  };
+  bool ok = writeStr("ssid", s.ssid) &&
+            writeStr("pass", s.pass) &&
+            writeStr("base", s.base) &&
+            writeStr("token", s.token) &&
+            writeStr("ota_key", s.otaKey) &&
+            writeStr("root_ca", s.rootCa) &&
             p.putBool("buzzer_low", s.buzzerLow) == 1 &&
-            p.putString("hub_ip", s.hubIp.c_str()) == s.hubIp.size() &&
-            p.putString("printer", s.printer.c_str()) == s.printer.size() &&
+            writeStr("hub_ip", s.hubIp) &&
+            writeStr("printer", s.printer) &&
             p.putBool("printer_new", !s.printer.empty()) == 1;
+  if (!ok) {
+    for (const auto& prev : prevStrs) {
+      if (!prev.had) p.remove(prev.key);
+    }
+    for (const auto& prev : prevBools) {
+      if (!prev.had) p.remove(prev.key);
+    }
+    for (const auto& prev : prevStrs) {
+      if (prev.had) p.putString(prev.key, prev.val);
+    }
+    for (const auto& prev : prevBools) {
+      if (prev.had) p.putBool(prev.key, prev.val);
+    }
+  }
   p.end();
   return ok;
 }
@@ -315,7 +357,7 @@ void serialPoll() {
     if (!serialLines.push((char)Serial.read(), line)) continue;
     switch (command(line, arg)) {
       case CMD_HELLO:
-        Serial.println(helloLine((long)FW_BUILD, configured, boot.wifiText(), boot.serverText()).c_str());
+        Serial.println(helloLine((int64_t)FW_BUILD, configured, boot.wifiText(), boot.serverText()).c_str());
         break;
       case CMD_SET: {
         Settings s; std::string why;
@@ -374,8 +416,10 @@ bool needsScroll() {
 
 void header(const String& left, const String& right) {
   display.setTextSize(1);
+  int maxLeft = right.length() ? max(0, OLED_COLS - (int)right.length() - 1) : OLED_COLS;
+  String clipped = left.length() > (unsigned int)maxLeft ? left.substring(0, maxLeft) : left;
   display.setCursor(0, 0);
-  display.print(left);
+  display.print(clipped);
   if (right.length()) {
     display.setCursor(OLED_W - 6 * right.length(), 0);
     display.print(right);
@@ -389,22 +433,25 @@ void showPicker() {
   const PrinterEntry* p = curPrinter();
   const SlotEntry* s = curSlot();
   if (!p) {
-    header("filament-kit reader", "");
+    header("Spoolwarden reader", !nfcOk ? "NFC err" : "");
     display.setTextSize(1);
     display.setCursor(0, 20);
     if (WiFi.status() != WL_CONNECTED) display.print("No WiFi");
     else if (!serverOk)                display.print("Server unreachable\nretrying...");
     else                               display.print("No printers set up\non the server");
+    if (!nfcOk) { display.setCursor(0, 42); display.print("NFC error"); }
     if (updateReady) { display.setCursor(0, 54); display.print("update: hold knob 4s"); }
     display.display();
     return;
   }
-  String right = updateReady ? String("UPD")
-                             : (!s ? String("") : String(menu.slot + 1) + "/" + String(slots.size()));
+  String right;
+  if (!nfcOk) right = "NFC err";
+  else if (WiFi.status() != WL_CONNECTED || !serverOk) right = "Offline";
+  else if (updateReady) right = "UPD";
+  else if (s) right = String(menu.slot + 1) + "/" + String(slots.size());
   size_t nameCols = OLED_COLS - (right.length() ? right.length() + 1 : 0);
   header(marquee(p->name, nameCols, scrollStep).c_str(), right);
   if (!s) {
-    display.setTextSize(1);
     display.setTextSize(2);
     display.setCursor(0, 20);
     display.print("No slots");
@@ -448,27 +495,85 @@ void showPrinterList() {
   display.display();
 }
 
+enum ActionItemId {
+  ACT_ID_INFO,
+  ACT_ID_RESEND,
+  ACT_ID_UNLOAD,
+  ACT_ID_UPDATE,
+  ACT_ID_STATUS,
+  ACT_ID_BACK,
+};
+
+struct ActionItem {
+  const char* label;
+  ActionItemId id;
+};
+
+int buildActionItems(ActionItem* out, int maxItems) {
+  int n = 0;
+  if (n < maxItems) out[n++] = {"Spool info", ACT_ID_INFO};
+  if (lastUid.length() && n < maxItems) out[n++] = {"Re-send last tag", ACT_ID_RESEND};
+  if (n < maxItems) out[n++] = {"Unload slot", ACT_ID_UNLOAD};
+  if (updateReady && n < maxItems) out[n++] = {"Update FW", ACT_ID_UPDATE};
+  if (n < maxItems) out[n++] = {"Status", ACT_ID_STATUS};
+  if (n < maxItems) out[n++] = {"Back", ACT_ID_BACK};
+  return n;
+}
+
 void showActionList() {
-  static const char* const items[3] = {"Spool info", "Unload slot", "Back"};
+  ActionItem items[6];
+  int n = buildActionItems(items, 6);
+  if (uiCursor < 0) uiCursor = 0;
+  if (uiCursor >= n) uiCursor = n - 1;
   const SlotEntry* s = curSlot();
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
-  header(s ? s->label.c_str() : "Slot", String(menu.actionCursor + 1) + "/3");
-  for (int i = 0; i < 3; i++) {
-    int y = 14 + i * 12;
-    bool on = i == menu.actionCursor;
+  String right = String(uiCursor + 1) + "/" + String(n);
+  size_t titleCols = OLED_COLS - right.length() - 1;
+  header(marquee(s ? s->label : "Slot", titleCols, scrollStep).c_str(), right);
+  const int rows = 4;
+  int first = uiCursor - rows / 2;
+  if (first > n - rows) first = n - rows;
+  if (first < 0) first = 0;
+  for (int r = 0; r < rows && first + r < n; r++) {
+    int i = first + r;
+    int y = 14 + r * 12;
+    bool on = i == uiCursor;
     if (on) display.fillRect(0, y - 1, OLED_W, 11, SSD1306_WHITE);
     display.setTextColor(on ? SSD1306_BLACK : SSD1306_WHITE);
     display.setCursor(2, y + 1);
-    display.print(items[i]);
+    display.print(items[i].label);
+  }
+  display.setTextColor(SSD1306_WHITE);
+  display.display();
+}
+
+void showUnloadConfirm() {
+  static const char* const opts[2] = {"No", "Yes"};
+  const SlotEntry* s = curSlot();
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  String title = s ? String("Unload ") + s->label.c_str() : String("Unload slot");
+  header(title, "");
+  display.setTextSize(1);
+  display.setCursor(0, 16);
+  display.print("Unload this slot?");
+  for (int i = 0; i < 2; i++) {
+    int y = 30 + i * 12;
+    bool on = i == uiCursor;
+    if (on) display.fillRect(0, y - 1, OLED_W, 11, SSD1306_WHITE);
+    display.setTextColor(on ? SSD1306_BLACK : SSD1306_WHITE);
+    display.setCursor(2, y + 1);
+    display.print(opts[i]);
   }
   display.setTextColor(SSD1306_WHITE);
   display.display();
 }
 
 void redraw() {
-  if (menu.mode == MODE_PRINTERS) showPrinterList();
-  else if (menu.mode == MODE_ACTIONS) showActionList();
+  if (uiState == UI_ACTIONS) showActionList();
+  else if (uiState == UI_CONFIRM_UNLOAD) showUnloadConfirm();
+  else if (menu.mode == MODE_PRINTERS) showPrinterList();
   else showPicker();
 }
 
@@ -477,8 +582,11 @@ void showResult(const char* line1, const char* line2, bool big2, uint32_t holdMs
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
+  char clipped[OLED_COLS + 1];
+  strncpy(clipped, line1, OLED_COLS);
+  clipped[OLED_COLS] = '\0';
   display.setCursor(0, 0);
-  display.print(line1);
+  display.print(clipped);
   display.drawFastHLine(0, 11, OLED_W, SSD1306_WHITE);
   display.setTextSize(big2 ? 2 : 1);
   display.setCursor(0, big2 ? 24 : 16);
@@ -562,7 +670,8 @@ bool hubConnect(WiFiClientSecure& tls, uint32_t budgetMs) {
   ensureMdns();
   if (tls.connected()) return true;
   uint32_t t0 = millis();
-  std::vector<HubAddress> list = hubAddresses(cfg.base, cfg.hubIp, hubIpNow, mdnsSliceMs(budgetMs), mdnsLookup);
+  std::string hubIp = g_rcfg.hubIp[0] ? std::string(g_rcfg.hubIp) : cfg.hubIp;
+  std::vector<HubAddress> list = hubAddresses(cfg.base, hubIp, hubIpNow, mdnsSliceMs(budgetMs), mdnsLookup);
   tls.setHandshakeTimeout(HANDSHAKE_S);
   for (size_t i = 0; i < list.size(); i++) {
     uint32_t ms = connectSliceMs(budgetMs, millis() - t0, list.size() - i);
@@ -612,13 +721,21 @@ int apiRequest(const String& url, const char* body, String& resp, bool quick = f
   int code = -1;
   uint32_t readMs = boundMs ? boundMs : quick ? LIST_QUICK_TIMEOUT_MS : 12000;
   uint32_t connectMs = boundMs ? boundMs : quick ? LIST_QUICK_TIMEOUT_MS : 10000;
-  for (int attempt = 0; attempt < (quick || boundMs ? 1 : 2); attempt++) {
+  int maxAttempts = (quick || boundMs) ? 1 : 2;
+  for (int attempt = 0; attempt < maxAttempts; attempt++) {
+    bool reused = apiTls.connected();
     apiHttp.setReuse(true);
     apiHttp.setTimeout(readMs);
     apiHttp.setConnectTimeout(connectMs);
-    if (!apiHttp.begin(apiTls, url) || !hubConnect(apiTls, connectMs)) { apiHttp.end(); apiTls.stop(); continue; }
+    if (!apiHttp.begin(apiTls, url) || !hubConnect(apiTls, connectMs)) {
+      apiHttp.end(); apiTls.stop();
+      if (reused && maxAttempts == 1) maxAttempts = 2;
+      continue;
+    }
     apiHttp.addHeader("X-Auth-Token", cfg.token.c_str());
-    apiHttp.addHeader("X-Reader-Build", String(FW_BUILD));
+    char buildHdr[24];
+    snprintf(buildHdr, sizeof(buildHdr), "%lld", (long long)FW_BUILD);
+    apiHttp.addHeader("X-Reader-Build", buildHdr);
     if (body) { apiHttp.addHeader("Content-Type", "application/json"); code = apiHttp.POST(body); }
     else      code = apiHttp.GET();
     if (code <= 0) {
@@ -649,6 +766,7 @@ int apiRequest(const String& url, const char* body, String& resp, bool quick = f
       return code;
     }
     apiHttp.end(); apiTls.stop();
+    if (reused && maxAttempts == 1) maxAttempts = 2;
   }
   return code;
 }
@@ -701,13 +819,14 @@ uint32_t settleAt = 0;   // when to save the selection after the knob stops (0 =
 bool refreshListsNow(bool quick, uint32_t boundMs = 0) {
   if (WiFi.status() != WL_CONNECTED) { serverOk = false; return false; }
   std::string wantPrinter = !savedPrinter.empty() ? savedPrinter
-                                                  : (curPrinter() ? curPrinter()->id : std::string());
+                                                  : (g_rcfg.defaultPrinter[0] ? std::string(g_rcfg.defaultPrinter)
+                                                                              : (curPrinter() ? curPrinter()->id : std::string()));
   std::string wantLabel = wantedLabel(savedLabel, curSlot() ? curSlot()->label : std::string(),
                                       settleAt != 0 && menu.mode == MODE_SLOTS);
   String resp;
   int code = apiRequest(urlPrinters, nullptr, resp, quick, boundMs);
   boot.server(code);
-  if (boundMs) Serial.println(helloLine((long)FW_BUILD, true, boot.wifiText(), boot.serverText()).c_str());   // the Hub's answer, as soon as it is known
+  if (boundMs) Serial.println(helloLine((int64_t)FW_BUILD, true, boot.wifiText(), boot.serverText()).c_str());   // the Hub's answer, as soon as it is known
   bool ok = code == 200 && parsePrinters(resp.c_str(), printers);
   resp = "";
   if (!ok) {
@@ -731,6 +850,7 @@ void refreshLists(bool quick = false, uint32_t boundMs = 0) {
 }
 
 // ---- POST a scan --------------------------------------------------------------
+void showProgress(const char* title, const char* line, int pct);
 void sendScan(const String& uid) {
   const PrinterEntry* p = curPrinter();
   const SlotEntry* s = curSlot();
@@ -755,6 +875,9 @@ void sendScan(const String& uid) {
   // copy: a refresh after this call must not pull the strings out from under us
   PrinterEntry printer = *p;
   SlotEntry slot = *s;
+
+  buzzTick();
+  showProgress(slot.label.c_str(), "Scanning...", -1);
 
   std::string payload = scanBody(uid.c_str(), printer.id, slot.label);
   String resp;
@@ -812,6 +935,7 @@ void sendUnload() {
   if (!p || !s) { showResult("Unload", "No slot", true); buzzError(); return; }
   PrinterEntry printer = *p;
   SlotEntry slot = *s;
+  showProgress(slot.label.c_str(), "Unloading...", -1);
   std::string payload = unloadBody(printer.id, slot.label);
   String resp;
   int code = apiRequest(urlUnload, payload.c_str(), resp);
@@ -870,7 +994,10 @@ void showProgress(const char* title, const char* line, int pct) {
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
-  display.setCursor(0, 0);  display.print(title);
+  char clipped[OLED_COLS + 1];
+  strncpy(clipped, title, OLED_COLS);
+  clipped[OLED_COLS] = '\0';
+  display.setCursor(0, 0);  display.print(clipped);
   display.drawFastHLine(0, 11, OLED_W, SSD1306_WHITE);
   display.setCursor(0, 20); display.print(line);
   if (pct >= 0) {
@@ -890,7 +1017,7 @@ bool httpsGet(HTTPClient& http, WiFiClientSecure& tls, const String& url) {
 
 // sig2 signs SHA-256("fk-reader-ota\x01" || image SHA-256 || build, 8 bytes big-endian);
 // tools/ota_publish.py build_digest() makes the same bytes (otaSigPreimage, pinned by a test on both sides).
-bool verifySig(const uint8_t imgHash[32], long build, const char* sigB64) {
+bool verifySig(const uint8_t imgHash[32], int64_t build, const char* sigB64) {
   std::string pre = otaSigPreimage(imgHash, build);
   uint8_t hash[32];
   mbedtls_sha256_context c; mbedtls_sha256_init(&c); mbedtls_sha256_starts(&c, 0);
@@ -913,13 +1040,13 @@ void otaFail(const char* why) {
   buzzError();
 }
 
-struct Manifest { long build = 0; size_t size = 0; String sha, sig; };   // sig = the manifest's sig2
+struct Manifest { int64_t build = 0; size_t size = 0; String sha, sig; };   // sig = the manifest's sig2
 bool fetchManifest(Manifest& m) {
   String resp;
   if (apiRequest(urlManifest, nullptr, resp) != 200) return false;
   JsonDocument j;
   if (deserializeJson(j, resp)) return false;
-  m.build = j["build"] | 0L; m.size = j["size"] | 0;
+  m.build = j["build"] | 0LL; m.size = j["size"] | 0;
   m.sha = (const char*)(j["sha256"] | ""); m.sig = (const char*)(j["sig2"] | "");
   return true;
 }
@@ -933,8 +1060,8 @@ void checkForUpdate() {
   if (cfg.otaKey.empty()) { updateReady = false; return; }
   Manifest m;
   if (WiFi.status() == WL_CONNECTED && fetchManifest(m)) {
-    updateReady = m.build > (long)FW_BUILD;
-    Serial.printf("update check: running %ld, server %ld%s\n", (long)FW_BUILD, m.build,
+    updateReady = m.build > (int64_t)FW_BUILD;
+    Serial.printf("update check: running %lld, server %lld%s\n", (long long)FW_BUILD, (long long)m.build,
                   updateReady ? " -> UPDATE READY" : "");
   }
 }
@@ -946,12 +1073,12 @@ void otaCheck() {
 
   Manifest m;
   if (!fetchManifest(m)) { otaFail("no manifest"); return; }
-  long build = m.build; size_t size = m.size; String shaHex = m.sha, sigB64 = m.sig;
-  Serial.printf("OTA: running build %ld, server build %ld (%u bytes)\n", (long)FW_BUILD, build, size);
+  int64_t build = m.build; size_t size = m.size; String shaHex = m.sha, sigB64 = m.sig;
+  Serial.printf("OTA: running build %lld, server build %lld (%u bytes)\n", (long long)FW_BUILD, (long long)build, size);
   apiTls.stop();   // free the kept-alive TLS session's heap for the download
-  if (build <= (long)FW_BUILD) {
+  if (build <= (int64_t)FW_BUILD) {
     updateReady = false;
-    char l[40]; snprintf(l, sizeof(l), "up to date\nbuild %ld", (long)FW_BUILD);
+    char l[40]; snprintf(l, sizeof(l), "up to date\nbuild %lld", (long long)FW_BUILD);
     showResult("Firmware update", l, false); buzzOk();
     return;
   }
@@ -964,7 +1091,7 @@ void otaCheck() {
   }
   mbedtls_sha256_context sha; mbedtls_sha256_init(&sha); mbedtls_sha256_starts(&sha, 0);
   WiFiClient* s = http.getStreamPtr();
-  static uint8_t buf[4096];
+  std::vector<uint8_t> buf(2048);
   size_t got = 0; int lastPct = -1; uint32_t lastData = millis();
   while (got < size) {
     size_t avail = s->available();
@@ -972,11 +1099,11 @@ void otaCheck() {
       if (!http.connected() || millis() - lastData > 15000) break;
       delay(2); continue;
     }
-    int n = s->readBytes(buf, min(avail, min(sizeof(buf), size - got)));
+    int n = s->readBytes(buf.data(), min(avail, min(buf.size(), size - got)));
     if (n <= 0) continue;
     lastData = millis();
-    mbedtls_sha256_update(&sha, buf, n);
-    if (Update.write(buf, n) != (size_t)n) break;
+    mbedtls_sha256_update(&sha, buf.data(), n);
+    if (Update.write(buf.data(), n) != (size_t)n) break;
     got += n;
     int pct = got * 100 / size;
     if (pct != lastPct) {
@@ -1037,7 +1164,7 @@ void confirmOtaImage() {
   if (ok) {
     esp_ota_mark_app_valid_cancel_rollback();
     persistCompiledSettings();
-    Serial.printf("OTA image build %ld confirmed\n", (long)FW_BUILD);
+    Serial.printf("OTA image build %lld confirmed\n", (long long)FW_BUILD);
   } else {
     Serial.println("OTA image failed its health check -> rolling back");
     showProgress("Firmware update", "new build failed\nrolling back...", -1);
@@ -1048,13 +1175,14 @@ void confirmOtaImage() {
 }
 
 uint32_t rcfgSyncAt = 0;
+uint32_t otaBackoffUntil = 0;
 void syncRemoteConfig() {
   rcfgSyncAt = millis();
   if (WiFi.status() != WL_CONNECTED) return;
   String resp;
   if (apiRequest(urlConfig, nullptr, resp, true) != 200) return;
   RemoteConfig next;
-  if (!parseRemoteConfig(resp.c_str(), next)) return;
+  if (!parseRemoteConfig(resp.c_str(), next, cfg.buzzerLow)) return;
   bool changed = next.configVersion != g_rcfg.configVersion;
   bool buzzerLowChanged = next.buzzerLow != g_rcfg.buzzerLow;
   g_rcfg = next;
@@ -1063,10 +1191,18 @@ void syncRemoteConfig() {
     Serial.printf("remote config v%lu applied\n", (unsigned long)g_rcfg.configVersion);
   }
   if (buzzerLowChanged) buzzIdle();
-  if (g_rcfg.otaNow || (g_rcfg.autoOta && updateReady)) {
+  bool autoOtaDue = g_rcfg.autoOta && updateReady &&
+                    (!otaBackoffUntil || (int32_t)(millis() - otaBackoffUntil) >= 0);
+  if (g_rcfg.otaNow || autoOtaDue) {
     String ackResp;
     apiRequest(urlConfigAck, R"({"cmd":"ota"})", ackResp, true);
     otaCheck();
+    if (updateReady) {
+      uint32_t nextTry = millis() + 15UL * 60 * 1000;
+      otaBackoffUntil = nextTry ? nextTry : 1;
+    } else {
+      otaBackoffUntil = 0;
+    }
     return;
   }
   if (g_rcfg.rebootNow) {
@@ -1099,8 +1235,8 @@ void screenIdle() {
   uint32_t idle = millis() - lastActivity;
   uint32_t dimMs = (uint32_t)g_rcfg.dimAfterS * 1000UL;
   uint32_t offMs = (uint32_t)g_rcfg.offAfterS * 1000UL;
-  if (scr == SCR_ON  && idle > dimMs) { display.dim(true); scr = SCR_DIM; }
-  if (scr == SCR_DIM && idle > offMs) { display.ssd1306_command(SSD1306_DISPLAYOFF); scr = SCR_OFF; }
+  if (scr != SCR_OFF && idle > offMs) { display.ssd1306_command(SSD1306_DISPLAYOFF); scr = SCR_OFF; }
+  else if (scr == SCR_ON && idle > dimMs) { display.dim(true); scr = SCR_DIM; }
 }
 
 // Print every I2C address that ACKs (PN532 = 0x24, OLED = 0x3C).
@@ -1169,6 +1305,7 @@ void setup() {
 
   nfc.begin();
   uint32_t ver = nfc.getFirmwareVersion();
+  nfcOk = (ver != 0);
   if (!ver) Serial.println("PN532 not found");
   else {
     Serial.printf("PN532 found: chip PN5%02X fw %d.%d\n",
@@ -1176,7 +1313,7 @@ void setup() {
     nfc.SAMConfig();
   }
 
-  Serial.printf("firmware build %ld\n", (long)FW_BUILD);
+  Serial.printf("firmware build %lld\n", (long long)FW_BUILD);
   if (!configured) {
     const esp_partition_t* run = esp_ota_get_running_partition();
     esp_ota_img_states_t st;
@@ -1188,12 +1325,25 @@ void setup() {
       esp_ota_mark_app_invalid_rollback_and_reboot();
     }
     // A new board from the kit's image: nothing to join yet. Wait for the kit to write the settings over USB.
-    display.clearDisplay();
-    display.setCursor(0, 0);
-    display.print("Not set up yet.\nPlug me into the kit\nserver and run:\nreader setup\n(or the setup page)");
-    display.display();
-    Serial.println(helloLine((long)FW_BUILD, false, "-", "-").c_str());
-    for (;;) { serialPoll(); delay(10); }
+    auto drawUnconfigured = [&]() {
+      display.clearDisplay();
+      display.setTextColor(SSD1306_WHITE);
+      display.setTextSize(1);
+      display.setCursor(0, 0);
+      display.print("Not set up yet.\nPlug me into the kit\nserver and run:\nreader setup\n(or the setup page)");
+      display.display();
+    };
+    drawUnconfigured();
+    Serial.println(helloLine((int64_t)FW_BUILD, false, "-", "-").c_str());
+    lastActivity = millis();
+    for (;;) {
+      serialPoll();
+      screenIdle();
+      if (button.update(swPressed(), millis()) != BTN_NONE) {
+        if (wake()) drawUnconfigured();
+      }
+      delay(10);
+    }
   }
 
   WiFi.mode(WIFI_STA);
@@ -1203,7 +1353,7 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) { serialPoll(); delay(250); }
   boot.wifi(WiFi.status() == WL_CONNECTED);
   // Wi-Fi is known before the Hub is called: say so now (the Hub check below can take its full bound).
-  Serial.println(helloLine((long)FW_BUILD, true, boot.wifiText(), boot.serverText()).c_str());
+  Serial.println(helloLine((int64_t)FW_BUILD, true, boot.wifiText(), boot.serverText()).c_str());
   ensureMdns();
 
   apiTls.setCACert(rootCa());
@@ -1231,7 +1381,7 @@ void setup() {
   redraw();
   if (WiFi.status() != WL_CONNECTED || !serverOk) buzzError();
   else if (!hasConnectedOnce) { hasConnectedOnce = true; buzzOk(); }
-  Serial.println(helloLine((long)FW_BUILD, true, boot.wifiText(), boot.serverText()).c_str());
+  Serial.println(helloLine((int64_t)FW_BUILD, true, boot.wifiText(), boot.serverText()).c_str());
 }
 
 bool swallowPress = false;  // this press woke a dark screen: ignore the rest of it
@@ -1281,7 +1431,7 @@ void handleAction(Action a) {
     case ACT_ACTION_SP_INFO:
       buzzTick();
       if (curSlot()) {
-        showResult(curSlot()->label.c_str(), spoolInfoText(*curSlot()).c_str(), false);
+        showResult(curSlot()->label.c_str(), spoolInfoText(*curSlot()).c_str(), false, INFO_HOLD_MS);
       } else {
         redraw();
       }
@@ -1295,6 +1445,19 @@ void handleAction(Action a) {
   }
 }
 
+void showStatusScreen() {
+  char buf[160];
+  String ip = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : String("down");
+  String hub = cfg.base.empty() ? String("-") : String(cfg.base.c_str());
+  snprintf(buf, sizeof(buf), "IP: %s\nRSSI: %d dBm  NFC: %s\nHub: %s\nBuild: %lld",
+           ip.c_str(),
+           (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : 0,
+           nfcOk ? "ok" : "err",
+           hub.c_str(),
+           (long long)FW_BUILD);
+  showResult("Status", buf, false, INFO_HOLD_MS);
+}
+
 void loop() {
   serialPoll();
   uint32_t now = millis();
@@ -1306,14 +1469,30 @@ void loop() {
   if (d) {
     if (g_rcfg.encoderInvert) d = -d;
     if (wake()) redraw();                     // dark screen: this turn only wakes it
-    else { resultUntil = 0; handleAction(menu.rotate(d, np, ns, now)); }
+    else {
+      resultUntil = 0;
+      if (uiState == UI_ACTIONS) {
+        ActionItem items[6];
+        int n = buildActionItems(items, 6);
+        uiCursor = ((uiCursor + d) % n + n) % n;
+        uiLastInput = now;
+        buzzTick(); scrollStep = 0; redraw();
+      } else if (uiState == UI_CONFIRM_UNLOAD) {
+        uiCursor = ((uiCursor + d) % 2 + 2) % 2;
+        uiLastInput = now;
+        buzzTick(); redraw();
+      } else {
+        handleAction(menu.rotate(d, np, ns, now));
+      }
+    }
   }
   if (settleAt && (int32_t)(millis() - settleAt) >= 0) {
     settleAt = 0;
     if (menu.mode == MODE_SLOTS && curSlot()) saveSlot(curSlot()->label);
   }
 
-  // encoder push: short = re-send; hold 1 s = printer list; hold 4 s = OTA
+  // encoder push: short = Actions menu (or confirm/select in overlay);
+  // hold 1 s = printer list; hold 4 s = OTA
   BtnEvent ev = button.update(swPressed(), millis());
   if (ev != BTN_NONE) {
     Serial.printf("button: %s\n", ev == BTN_SHORT ? "short" : ev == BTN_CUE ? "1 s" :
@@ -1323,28 +1502,69 @@ void loop() {
   }
   if (ev == BTN_CUE) { if (!swallowPress) buzzTick(); }
   else if (ev != BTN_NONE) {
-    static uint32_t lastShortAt = 0;
+    bool hadResult = (resultUntil != 0);
     resultUntil = 0;
-    if (ev == BTN_SHORT && menu.mode == MODE_SLOTS) {
-      if (!lastUid.length() || (lastShortAt && (now - lastShortAt) <= 450)) {
-        lastShortAt = 0;
-        handleAction(menu.openActions(now));
+    if (ev == BTN_SHORT) {
+      if (hadResult) {
+        buzzTick();
+        redraw();
+      } else if (uiState == UI_CONFIRM_UNLOAD) {
+        bool yes = (uiCursor == 1);
+        uiState = UI_NORMAL;
+        buzzTick();
+        if (yes) sendUnload();
+        else redraw();
+      } else if (uiState == UI_ACTIONS) {
+        ActionItem items[6];
+        int n = buildActionItems(items, 6);
+        int idx = (uiCursor >= 0 && uiCursor < n) ? uiCursor : 0;
+        ActionItemId chosen = items[idx].id;
+        if (chosen == ACT_ID_UNLOAD) {
+          uiState = UI_CONFIRM_UNLOAD;
+          uiCursor = 0;
+          uiLastInput = now;
+          buzzTick();
+          redraw();
+        } else {
+          uiState = UI_NORMAL;
+          switch (chosen) {
+            case ACT_ID_INFO:   handleAction(ACT_ACTION_SP_INFO); break;
+            case ACT_ID_RESEND: handleAction(ACT_RESEND); break;
+            case ACT_ID_UPDATE: buzzTick(); otaCheck(); break;
+            case ACT_ID_STATUS: buzzTick(); showStatusScreen(); break;
+            default:            buzzTick(); redraw(); break;
+          }
+        }
+      } else if (menu.mode == MODE_SLOTS) {
+        uiState = UI_ACTIONS;
+        uiCursor = 0;
+        uiLastInput = now;
+        buzzTick();
+        scrollStep = 0;
+        redraw();
       } else {
-        lastShortAt = now;
         handleAction(menu.button(ev, np, now));
       }
+    } else if (ev == BTN_MENU && uiState != UI_NORMAL) {
+      uiState = UI_NORMAL;
+      buzzTick();
+      redraw();
     } else {
-      lastShortAt = 0;
+      uiState = UI_NORMAL;
       handleAction(menu.button(ev, np, now));
     }
+  }
+  if (uiState != UI_NORMAL && now - uiLastInput >= LIST_TIMEOUT_MS) {
+    uiState = UI_NORMAL;
+    redraw();
   }
   if (menu.tick(millis()) == ACT_CLOSE_LIST) redraw();
 
   // revert from a result screen after the hold window
-  if (resultUntil && millis() > resultUntil) { resultUntil = 0; redraw(); }
+  if (resultUntil && (int32_t)(millis() - resultUntil) >= 0) { resultUntil = 0; redraw(); }
 
-  // background refreshes (skipped while a result or the printer list is showing)
-  if (!resultUntil && menu.mode == MODE_SLOTS && !settleAt) {
+  // background refreshes (skipped while a result, overlay, or the printer list is showing)
+  if (!resultUntil && uiState == UI_NORMAL && menu.mode == MODE_SLOTS && !settleAt) {
     uint32_t listRefreshMs = (uint32_t)g_rcfg.listRefreshS * 1000UL;
     if (listsDue(millis(), listsAt, serverOk, scr != SCR_OFF, listRefreshMs, listRetryMs(listFails))) {
       static int bgRefreshCount = 0;
@@ -1373,6 +1593,7 @@ void loop() {
     if (tagGate.accept(u.c_str(), t, (uint32_t)g_rcfg.scanCooldownMs)) {
       lastUid = u;
       wake();
+      uiState = UI_NORMAL;
       if (menu.mode == MODE_PRINTERS || menu.mode == MODE_ACTIONS) { menu.mode = MODE_SLOTS; }   // a tap closes the list
       Serial.printf("tag %s -> %s / %s\n", u.c_str(),
                     curPrinter() ? curPrinter()->id.c_str() : "-", curSlot() ? curSlot()->label.c_str() : "-");

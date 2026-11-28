@@ -64,18 +64,21 @@ Type: filesandordirs; Name: "{app}\_internal"
 ; Per-user PATH: append {app} once (NeedsAddPath); the uninstaller removes just that entry (RemovePath in [Code]).
 Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath(ExpandConstant('{app}')); Flags: preservestringtype
 
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+
 [Icons]
 ; cmd /k keeps the window open so the result of pair/status stays readable.
 Name: "{group}\Pair Slicer Sync"; Filename: "{cmd}"; Parameters: "/k """"{app}\{#ExeName}"" pair"""; WorkingDir: "{app}"
 Name: "{group}\Slicer Sync status"; Filename: "{cmd}"; Parameters: "/k """"{app}\{#ExeName}"" status"""; WorkingDir: "{app}"
 Name: "{group}\Configure Slicer Sync"; Filename: "{app}\{#ConfigExeName}"; WorkingDir: "{app}"
-Name: "{userdesktop}\Configure Slicer Sync"; Filename: "{app}\{#ConfigExeName}"; WorkingDir: "{app}"
+Name: "{userdesktop}\Configure Slicer Sync"; Filename: "{app}\{#ConfigExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 Name: "{group}\Uninstall Spoolwarden Slicer Sync"; Filename: "{uninstallexe}"
 
 [Run]
 ; 1) The scheduled task is registered in [Code] (CurStepChanged), where its exit code is checked.
 ; 2) Pair this PC with the Hub, in a console (paste the link from 'sudo spoolwarden pair --pc').
-Filename: "{cmd}"; Parameters: "/k """"{app}\{#ExeName}"" pair"""; WorkingDir: "{app}"; Description: "Pair this PC with the Hub now"; Flags: postinstall nowait skipifsilent
+Filename: "{cmd}"; Parameters: "/k """"{app}\{#ExeName}"" pair"""; WorkingDir: "{app}"; Description: "Pair this PC with the Hub now"; Flags: postinstall nowait skipifsilent; Check: not IsAlreadyPaired
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\uninstall_task.ps1"""; RunOnceId: "RemoveScheduledTask"; Flags: runhidden waituntilterminated
@@ -84,8 +87,31 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile
 var
   SlicerPathsPage: TWizardPage;
   SlicerList: TNewCheckListBox;
+  BtnModify, BtnRemove: TNewButton;
+  StatusLbl: TNewStaticText;
   EntryKinds, EntryLabels, EntryPaths: array of string;
   EntryCustom: array of Boolean;
+  SlicerPathsChanged: Boolean;
+
+function IsAlreadyPaired: Boolean;
+var
+  Data: string;
+begin
+  Data := ExpandConstant('{localappdata}\filament-kit-sync');
+  Result := FileExists(Data + '\token') and
+            (FileExists(Data + '\config.xml') or FileExists(Data + '\config.json'));
+end;
+
+procedure UpdateSlicerButtons;
+var
+  HasSel: Boolean;
+begin
+  HasSel := (SlicerList.ItemIndex >= 0) and (SlicerList.ItemIndex < GetArrayLength(EntryPaths));
+  if BtnModify <> nil then
+    BtnModify.Enabled := HasSel;
+  if BtnRemove <> nil then
+    BtnRemove.Enabled := HasSel;
+end;
 
 procedure AddSlicerEntry(Kind, LabelText, PathVal: string; Checked, IsCustom: Boolean);
 var
@@ -112,6 +138,30 @@ begin
   SlicerList.AddCheckBox(LabelText + ' - ' + NormPath, '', 0, Checked, True, False, False, nil);
 end;
 
+procedure DetectOrcaFromUninstall(RootKey: Integer; BaseKey: string);
+var
+  Subkeys: TArrayOfString;
+  I: Integer;
+  SubPath, DisplayName, InstallDir: string;
+begin
+  if not RegGetSubkeyNames(RootKey, BaseKey, Subkeys) then
+    exit;
+  for I := 0 to GetArrayLength(Subkeys) - 1 do
+  begin
+    SubPath := BaseKey + '\' + Subkeys[I];
+    if RegQueryStringValue(RootKey, SubPath, 'DisplayName', DisplayName) and
+       (Pos('orcaslicer', Lowercase(Trim(DisplayName))) = 1) then
+    begin
+      if RegQueryStringValue(RootKey, SubPath, 'InstallLocation', InstallDir) then
+      begin
+        InstallDir := RemoveBackslashUnlessRoot(Trim(InstallDir));
+        if (InstallDir <> '') and FileExists(InstallDir + '\orca-slicer.exe') then
+          AddSlicerEntry('orca_install', 'Orca Slicer Install', InstallDir, True, False);
+      end;
+    end;
+  end;
+end;
+
 procedure AutoDetectSlicerPaths;
 var
   Candidate, InstallDir: string;
@@ -127,6 +177,11 @@ begin
   Candidate := ExpandConstant('{userappdata}\OrcaSlicer');
   if DirExists(Candidate) then
     AddSlicerEntry('orca', 'OrcaSlicer', Candidate, True, False);
+
+  DetectOrcaFromUninstall(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall');
+  DetectOrcaFromUninstall(HKEY_LOCAL_MACHINE, 'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall');
+  DetectOrcaFromUninstall(HKEY_CURRENT_USER, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall');
+  DetectOrcaFromUninstall(HKEY_CURRENT_USER, 'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall');
 
   if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OrcaSlicer', 'InstallLocation', InstallDir) then
   begin
@@ -151,44 +206,258 @@ begin
     AddSlicerEntry('orca_install', 'Orca Slicer Install', Candidate, True, False);
 end;
 
-procedure OnAutoDetectClick(Sender: TObject);
+function ExtractXmlTag(S, Tag: string): string;
+var
+  P, Q: Integer;
+  OpenTag, CloseTag: string;
 begin
+  Result := '';
+  OpenTag := '<' + Tag + '>';
+  CloseTag := '</' + Tag + '>';
+  P := Pos(OpenTag, S);
+  if P <= 0 then
+    exit;
+  Delete(S, 1, P + Length(OpenTag) - 1);
+  Q := Pos(CloseTag, S);
+  if Q > 0 then
+    Result := Copy(S, 1, Q - 1);
+end;
+
+function LoadExistingSlicerPaths: Boolean;
+var
+  CfgFile, S, Block, KindVal, LabelVal, PathVal, EnabledVal, CustomVal: string;
+  Raw: AnsiString;
+  P, Q: Integer;
+begin
+  Result := False;
+  CfgFile := ExpandConstant('{localappdata}\filament-kit-sync\config.xml');
+  if (not FileExists(CfgFile)) or (not LoadStringFromFile(CfgFile, Raw)) then
+    exit;
+  S := ExtractXmlTag(String(Raw), 'slicer_paths');
+  if S = '' then
+    exit;
+  while True do
+  begin
+    P := Pos('<item>', S);
+    if P <= 0 then
+      break;
+    Delete(S, 1, P + Length('<item>') - 1);
+    Q := Pos('</item>', S);
+    if Q <= 0 then
+      break;
+    Block := Copy(S, 1, Q - 1);
+    Delete(S, 1, Q + Length('</item>') - 1);
+    KindVal := Trim(ExtractXmlTag(Block, 'kind'));
+    LabelVal := Trim(ExtractXmlTag(Block, 'label'));
+    PathVal := Trim(ExtractXmlTag(Block, 'path'));
+    EnabledVal := Lowercase(Trim(ExtractXmlTag(Block, 'enabled')));
+    CustomVal := Lowercase(Trim(ExtractXmlTag(Block, 'custom')));
+    if (KindVal <> '') and (PathVal <> '') then
+    begin
+      if LabelVal = '' then
+        LabelVal := ExtractFileName(PathVal);
+      AddSlicerEntry(KindVal, LabelVal, PathVal, EnabledVal <> 'false', CustomVal = 'true');
+      Result := True;
+    end;
+  end;
+end;
+
+procedure OnSlicerListClick(Sender: TObject);
+begin
+  UpdateSlicerButtons;
+end;
+
+procedure OnSlicerListClickCheck(Sender: TObject);
+begin
+  SlicerPathsChanged := True;
+end;
+
+procedure OnAutoDetectClick(Sender: TObject);
+var
+  BeforeCount, Added: Integer;
+begin
+  BeforeCount := GetArrayLength(EntryPaths);
   AutoDetectSlicerPaths;
+  Added := GetArrayLength(EntryPaths) - BeforeCount;
+  if Added > 0 then
+  begin
+    SlicerPathsChanged := True;
+    StatusLbl.Caption := 'Found ' + IntToStr(Added) + ' new slicer folder(s).';
+  end
+  else
+    StatusLbl.Caption := 'No new slicer folders found.';
+  UpdateSlicerButtons;
+end;
+
+var
+  DlgPathEdit: TNewEdit;
+
+procedure OnDialogBrowseClick(Sender: TObject);
+var
+  Dir: string;
+begin
+  Dir := Trim(DlgPathEdit.Text);
+  if Dir = '' then
+    Dir := ExpandConstant('{userappdata}');
+  if BrowseForFolder('Select Bambu Studio or Orca Slicer folder:', Dir, False) then
+    DlgPathEdit.Text := RemoveBackslashUnlessRoot(Trim(Dir));
+end;
+
+function PromptSlicerEntry(Title: string; var Kind, LabelText, Dir: string): Boolean;
+var
+  Form: TSetupForm;
+  KindCombo: TNewComboBox;
+  LabelEdit: TNewEdit;
+  BrowseBtn, OkBtn, CancelBtn: TNewButton;
+  Lbl1, Lbl2, Lbl3: TNewStaticText;
+  TopY: Integer;
+begin
+  Result := False;
+  Form := CreateCustomForm();
+  try
+    Form.ClientWidth := ScaleX(420);
+    Form.ClientHeight := ScaleY(170);
+    Form.Caption := Title;
+    Form.CenterInsideControl(WizardForm, False);
+
+    TopY := ScaleY(12);
+    Lbl1 := TNewStaticText.Create(Form);
+    Lbl1.Parent := Form;
+    Lbl1.Left := ScaleX(12);
+    Lbl1.Top := TopY + ScaleY(3);
+    Lbl1.Caption := 'Kind:';
+
+    KindCombo := TNewComboBox.Create(Form);
+    KindCombo.Parent := Form;
+    KindCombo.Left := ScaleX(76);
+    KindCombo.Top := TopY;
+    KindCombo.Width := ScaleX(200);
+    KindCombo.Style := csDropDownList;
+    KindCombo.Items.Add('Bambu Studio');
+    KindCombo.Items.Add('Orca Slicer');
+    KindCombo.Items.Add('Orca Install');
+    if Kind = 'orca' then
+      KindCombo.ItemIndex := 1
+    else if Kind = 'orca_install' then
+      KindCombo.ItemIndex := 2
+    else
+      KindCombo.ItemIndex := 0;
+
+    TopY := TopY + ScaleY(30);
+    Lbl2 := TNewStaticText.Create(Form);
+    Lbl2.Parent := Form;
+    Lbl2.Left := ScaleX(12);
+    Lbl2.Top := TopY + ScaleY(3);
+    Lbl2.Caption := 'Label:';
+
+    LabelEdit := TNewEdit.Create(Form);
+    LabelEdit.Parent := Form;
+    LabelEdit.Left := ScaleX(76);
+    LabelEdit.Top := TopY;
+    LabelEdit.Width := ScaleX(332);
+    LabelEdit.Text := LabelText;
+
+    TopY := TopY + ScaleY(30);
+    Lbl3 := TNewStaticText.Create(Form);
+    Lbl3.Parent := Form;
+    Lbl3.Left := ScaleX(12);
+    Lbl3.Top := TopY + ScaleY(3);
+    Lbl3.Caption := 'Path:';
+
+    DlgPathEdit := TNewEdit.Create(Form);
+    DlgPathEdit.Parent := Form;
+    DlgPathEdit.Left := ScaleX(76);
+    DlgPathEdit.Top := TopY;
+    DlgPathEdit.Width := ScaleX(244);
+    DlgPathEdit.Text := Dir;
+
+    BrowseBtn := TNewButton.Create(Form);
+    BrowseBtn.Parent := Form;
+    BrowseBtn.Left := ScaleX(328);
+    BrowseBtn.Top := TopY - ScaleY(1);
+    BrowseBtn.Width := ScaleX(80);
+    BrowseBtn.Height := ScaleY(23);
+    BrowseBtn.Caption := 'Browse...';
+    BrowseBtn.OnClick := @OnDialogBrowseClick;
+
+    OkBtn := TNewButton.Create(Form);
+    OkBtn.Parent := Form;
+    OkBtn.Left := ScaleX(244);
+    OkBtn.Top := ScaleY(130);
+    OkBtn.Width := ScaleX(78);
+    OkBtn.Height := ScaleY(24);
+    OkBtn.Caption := 'OK';
+    OkBtn.ModalResult := mrOk;
+    OkBtn.Default := True;
+
+    CancelBtn := TNewButton.Create(Form);
+    CancelBtn.Parent := Form;
+    CancelBtn.Left := ScaleX(330);
+    CancelBtn.Top := ScaleY(130);
+    CancelBtn.Width := ScaleX(78);
+    CancelBtn.Height := ScaleY(24);
+    CancelBtn.Caption := 'Cancel';
+    CancelBtn.ModalResult := mrCancel;
+    CancelBtn.Cancel := True;
+
+    if Form.ShowModal() = mrOk then
+    begin
+      Dir := RemoveBackslashUnlessRoot(Trim(DlgPathEdit.Text));
+      if Dir = '' then
+        exit;
+      if KindCombo.ItemIndex = 1 then
+        Kind := 'orca'
+      else if KindCombo.ItemIndex = 2 then
+        Kind := 'orca_install'
+      else
+        Kind := 'bambu';
+      LabelText := Trim(LabelEdit.Text);
+      if LabelText = '' then
+        LabelText := ExtractFileName(Dir);
+      Result := True;
+    end;
+  finally
+    DlgPathEdit := nil;
+    Form.Free();
+  end;
 end;
 
 procedure OnModifyClick(Sender: TObject);
 var
   Idx: Integer;
-  Dir: string;
+  Kind, LabelText, Dir: string;
 begin
   Idx := SlicerList.ItemIndex;
   if (Idx < 0) or (Idx >= GetArrayLength(EntryPaths)) then
     exit;
+  Kind := EntryKinds[Idx];
+  LabelText := EntryLabels[Idx];
   Dir := EntryPaths[Idx];
-  if BrowseForFolder('Select slicer folder:', Dir, False) then
+  if PromptSlicerEntry('Modify Slicer Folder', Kind, LabelText, Dir) then
   begin
-    Dir := RemoveBackslashUnlessRoot(Trim(Dir));
+    EntryKinds[Idx] := Kind;
+    EntryLabels[Idx] := LabelText;
     EntryPaths[Idx] := Dir;
     EntryCustom[Idx] := True;
-    SlicerList.ItemCaption[Idx] := EntryLabels[Idx] + ' - ' + Dir;
+    SlicerList.ItemCaption[Idx] := LabelText + ' - ' + Dir;
+    SlicerPathsChanged := True;
+    StatusLbl.Caption := 'Updated slicer folder.';
   end;
 end;
 
 procedure OnAddClick(Sender: TObject);
 var
-  Dir, Kind: string;
+  Dir, Kind, LabelText: string;
 begin
   Dir := ExpandConstant('{userappdata}');
-  if BrowseForFolder('Select additional Bambu Studio or Orca Slicer folder:', Dir, False) then
+  Kind := 'bambu';
+  LabelText := '';
+  if PromptSlicerEntry('Add Slicer Folder', Kind, LabelText, Dir) then
   begin
-    Dir := RemoveBackslashUnlessRoot(Trim(Dir));
-    if FileExists(Dir + '\orca-slicer.exe') then
-      Kind := 'orca_install'
-    else if Pos('orca', Lowercase(Dir)) > 0 then
-      Kind := 'orca'
-    else
-      Kind := 'bambu';
-    AddSlicerEntry(Kind, ExtractFileName(Dir), Dir, True, True);
+    AddSlicerEntry(Kind, LabelText, Dir, True, True);
+    SlicerPathsChanged := True;
+    StatusLbl.Caption := 'Added slicer folder.';
+    UpdateSlicerButtons;
   end;
 end;
 
@@ -201,6 +470,7 @@ begin
   N := GetArrayLength(EntryPaths);
   if (Idx < 0) or (Idx >= N) then
     exit;
+  SlicerPathsChanged := True;
   SetArrayLength(CheckedStates, N);
   for I := 0 to N - 1 do
     CheckedStates[I] := SlicerList.Checked[I];
@@ -219,11 +489,13 @@ begin
   SlicerList.Items.Clear;
   for I := 0 to N - 2 do
     SlicerList.AddCheckBox(EntryLabels[I] + ' - ' + EntryPaths[I], '', 0, CheckedStates[I], True, False, False, nil);
+  StatusLbl.Caption := 'Removed slicer folder.';
+  UpdateSlicerButtons;
 end;
 
 procedure InitializeWizard;
 var
-  BtnAutoDetect, BtnModify, BtnAdd, BtnRemove: TNewButton;
+  BtnAutoDetect, BtnAdd: TNewButton;
   BtnTop, BtnWidth, BtnHeight, Gap: Integer;
 begin
   SlicerPathsPage := CreateCustomPage(wpWelcome, 'Slicer Locations', 'Select, modify, or add the Bambu Studio and Orca Slicer folders to sync.');
@@ -233,8 +505,10 @@ begin
   SlicerList.Left := 0;
   SlicerList.Top := 0;
   SlicerList.Width := SlicerPathsPage.SurfaceWidth;
-  SlicerList.Height := SlicerPathsPage.SurfaceHeight - ScaleY(36);
+  SlicerList.Height := SlicerPathsPage.SurfaceHeight - ScaleY(56);
   SlicerList.Anchors := [akLeft, akTop, akRight, akBottom];
+  SlicerList.OnClick := @OnSlicerListClick;
+  SlicerList.OnClickCheck := @OnSlicerListClickCheck;
 
   BtnTop := SlicerList.Top + SlicerList.Height + ScaleY(8);
   BtnHeight := ScaleY(24);
@@ -281,7 +555,18 @@ begin
   BtnRemove.Anchors := [akLeft, akBottom];
   BtnRemove.OnClick := @OnRemoveClick;
 
-  AutoDetectSlicerPaths;
+  StatusLbl := TNewStaticText.Create(SlicerPathsPage);
+  StatusLbl.Parent := SlicerPathsPage.Surface;
+  StatusLbl.Left := 0;
+  StatusLbl.Top := BtnTop + BtnHeight + ScaleY(6);
+  StatusLbl.Width := SlicerPathsPage.SurfaceWidth;
+  StatusLbl.Caption := '';
+  StatusLbl.Anchors := [akLeft, akRight, akBottom];
+
+  SlicerPathsChanged := False;
+  if not LoadExistingSlicerPaths then
+    AutoDetectSlicerPaths;
+  UpdateSlicerButtons;
 end;
 
 function JsonEscape(S: string): string;
@@ -297,6 +582,12 @@ begin
       Result := Result + '\\'
     else if Ch = '"' then
       Result := Result + '\"'
+    else if Ch = #9 then
+      Result := Result + '\t'
+    else if Ch = #10 then
+      Result := Result + '\n'
+    else if Ch = #13 then
+      Result := Result + '\r'
     else
       Result := Result + Ch;
   end;
@@ -306,6 +597,7 @@ procedure SaveSlicerPaths;
 var
   I, N, ResultCode: Integer;
   Json, JsonFile, EnabledStr, CustomStr: string;
+  Lines: TArrayOfString;
 begin
   N := GetArrayLength(EntryPaths);
   Json := '[';
@@ -327,11 +619,18 @@ begin
   Json := Json + ']';
 
   JsonFile := ExpandConstant('{tmp}\slicer-paths.json');
-  if SaveStringToFile(JsonFile, Json, False) then
+  SetArrayLength(Lines, 1);
+  Lines[0] := Json;
+  if SaveStringsToUTF8File(JsonFile, Lines, False) then
   begin
     ResultCode := -1;
-    Exec(ExpandConstant('{app}\{#ConfigExeName}'), '--apply-paths "' + JsonFile + '"',
-      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if not Exec(ExpandConstant('{app}\{#ConfigExeName}'), '--apply-paths "' + JsonFile + '"',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+    begin
+      Log('SaveSlicerPaths failed, exit code ' + IntToStr(ResultCode));
+      SuppressibleMsgBox('Could not save slicer locations (exit code ' + IntToStr(ResultCode) +
+        '). You can configure them later from Configure Slicer Sync.', mbError, MB_OK, IDOK);
+    end;
     DeleteFile(JsonFile);
   end;
 end;
@@ -394,10 +693,16 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Data: string;
+  HasConfig: Boolean;
 begin
   if CurStep = ssPostInstall then
   begin
-    SaveSlicerPaths;
+    Data := ExpandConstant('{localappdata}\filament-kit-sync');
+    HasConfig := FileExists(Data + '\config.xml') or FileExists(Data + '\config.json');
+    if SlicerPathsChanged or ((not WizardSilent) and (not HasConfig)) then
+      SaveSlicerPaths;
     RegisterTask;
   end;
 end;
@@ -406,7 +711,7 @@ end;
 function ReadDeviceId(Data: string): string;
 var
   Raw: AnsiString;
-  S: string;
+  S, Tag: string;
   P, Q: Integer;
 begin
   Result := '';
@@ -423,6 +728,34 @@ begin
         Result := Trim(Copy(S, 1, Q - 1));
         if Result <> '' then
           exit;
+      end;
+    end;
+    S := String(Raw);
+    P := Pos('<config', S);
+    if P > 0 then
+    begin
+      Delete(S, 1, P + Length('<config') - 1);
+      Q := Pos('>', S);
+      if Q > 0 then
+      begin
+        Tag := Copy(S, 1, Q - 1);
+        P := Pos('device="', Tag);
+        while (P > 1) and (Tag[P - 1] > ' ') do
+        begin
+          Delete(Tag, 1, P + Length('device="') - 1);
+          P := Pos('device="', Tag);
+        end;
+        if P > 0 then
+        begin
+          Delete(Tag, 1, P + Length('device="') - 1);
+          Q := Pos('"', Tag);
+          if Q > 0 then
+          begin
+            Result := Trim(Copy(Tag, 1, Q - 1));
+            if Result <> '' then
+              exit;
+          end;
+        end;
       end;
     end;
   end;

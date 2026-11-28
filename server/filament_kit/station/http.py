@@ -10,6 +10,7 @@ import ssl
 import time
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs
 
 
 def iso(t):
@@ -137,16 +138,32 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
                     "photo": {"url": "/photo", "taken_at": iso(s["photo_at"]), "age_seconds": age(s["photo_at"])}
                     if s["photo"] else None,
                     "photo_count": photo_count,
+                    "flash_notice": s.get("flash_notice"),
                     "ota": ota.status(),
                     "version": __version__, "settings_changed": bool(store and store.changed)})
-            if path == "/photo" and s["photo"]:
-                self.send_response(200)
-                self.send_header("Content-Type", "image/jpeg")
-                self.send_header("Content-Length", str(len(s["photo"])))
-                self.send_header("Cache-Control", "no-store")
-                self.send_header("X-Content-Type-Options", "nosniff")
-                self.end_headers()
-                return self.wfile.write(s["photo"])
+            if path == "/photo" or path.startswith("/photo/"):
+                photos = s.get("photos") if isinstance(s.get("photos"), list) and s.get("photos") else ([s["photo"]] if s.get("photo") else [])
+                img = None
+                if path.startswith("/photo/"):
+                    raw_idx = path[len("/photo/"):]
+                    if raw_idx.isdigit() and int(raw_idx) < len(photos):
+                        img = photos[int(raw_idx)]
+                else:
+                    qs = parse_qs(query)
+                    if "idx" in qs:
+                        raw_idx = qs["idx"][0]
+                        if raw_idx.isdigit() and int(raw_idx) < len(photos):
+                            img = photos[int(raw_idx)]
+                    elif s.get("photo"):
+                        img = s["photo"]
+                if img:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/jpeg")
+                    self.send_header("Content-Length", str(len(img)))
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("X-Content-Type-Options", "nosniff")
+                    self.end_headers()
+                    return self.wfile.write(img)
             self._error(404, "not_found")
 
         def _body(self):
@@ -208,7 +225,7 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
             caller = self._caller()
             if not guard.allowed(caller, "POST", path, self._session()):
                 return self._error(403, "forbidden")
-            if path not in ("/ticket", "/session", "/settings", "/voice", "/voice/test", "/ota/update", "/restart"):
+            if path not in ("/ticket", "/session", "/settings", "/voice", "/voice/test", "/flow", "/ota/update", "/restart"):
                 return self._error(404, "not_found")
             raw = self._body()
             if raw is None:
@@ -244,7 +261,7 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
                     return
                 code, reply_body = ota.trigger_update(data.get("version")) if path == "/ota/update" else ota.trigger_restart()
                 return self._send(code, reply_body)
-            if path in ("/voice", "/voice/test"):    # the Hub's call: an allow-listed address and the proof, as /settings
+            if path in ("/voice", "/voice/test"):    # the Hub's call (with proof)
                 if not (caller == guard.LISTED and proof is not None and access.proof_ok("voice", proof, raw)):
                     return self._error(403, "forbidden")
                 data = self._json(raw)
@@ -256,6 +273,30 @@ def make_handler(state_view: Callable[[], dict], allow: set[str], access=None, s
                 except speech.VoiceRefused as e:
                     return self._error(e.status, e.code, e.message)
                 return self._send(200, {})
+            if path == "/flow":
+                hub = caller == guard.LISTED and proof is not None and access.proof_ok("flow", proof, raw)
+                browser = (not hub and self._session() and self._same_origin()
+                           and (self.headers.get("Content-Type") or "").split(";")[0].strip() == "application/json")
+                if not (hub or browser):
+                    return self._error(403, "forbidden")
+                data = self._json(raw)
+                if data is None:
+                    return
+                from . import flow
+                action = data.get("action")
+                if action == "yellow":
+                    flow.on_yellow(False)
+                elif action == "yellow_long":
+                    flow.on_yellow(True)
+                elif action == "red":
+                    flow.on_red(False)
+                elif action == "red_long":
+                    flow.on_red(True)
+                elif action == "delete_photo":
+                    flow.delete_last_photo()
+                else:
+                    return self._error(400, "bad_request")
+                return self._send(200, {"ok": True, "flow": state_view().get("flow")})
             if store is None:
                 return self._error(404, "not_found")
             # a setting changes on the Hub call (allow-list and the proof of the pairing) or from the page's own session

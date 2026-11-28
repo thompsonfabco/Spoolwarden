@@ -270,7 +270,7 @@ def test_help_markdown_includes_a3_and_previously_missing_commands(capsys):
         "`import spools\\|locations <file> [-y]`",
         "`report [--out FILE]`",
         "`status --history [--days 7\\|30]`",
-        "`pair --home-assistant [--text] [--no-wait]`",
+        "`pair --home-assistant [--control] [--text] [--no-wait]`",
         "`local-intake status`",
         "`label-reader corrections [list]`",
         "`label-reader corrections package <file>`",

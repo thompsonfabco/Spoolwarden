@@ -38,17 +38,29 @@ def _ask(prompt: str) -> str:
     return line.strip()
 
 
-def _ask_link() -> str:
+def _ask_link() -> str | None:
     """The pairing link carries the token, so at a terminal it is read without echo (not left in the scrollback);
     empty means "type the Hub address instead". Piped stdin (tests, scripts) keeps the one visible line, and
-    FKSYNC_SHOW_LINK=1 switches the hiding off."""
+    FKSYNC_SHOW_LINK=1 switches the hiding off. Returns None if an fkit: link was rejected at the visible prompt."""
     if os.environ.get("FKSYNC_SHOW_LINK") == "1" or sys.stdin is None or not sys.stdin.isatty():
         return _ask("Paste the pairing link, or type the Hub address:")
     try:
-        text = getpass.getpass("Paste the pairing link (it is not shown), or press Enter to type the Hub address: ")
+        text = getpass.getpass(
+            "Paste the pairing link (hidden for security; not shown as you type/paste), "
+            "or press Enter to type the Hub address: "
+        )
     except (EOFError, OSError):
         return ""
-    return text.strip() or _ask("Server address:")
+    text = text.strip()
+    if text:
+        _out("Pairing input received.")
+        return text
+    addr = _ask("Server address:")
+    if addr.lower().startswith("fkit:"):
+        _out("Pairing links contain a secret token and cannot be entered at the visible Server address prompt.")
+        _out("Run 'pair' again and paste the fkit: link at the hidden prompt.")
+        return None
+    return addr
 
 
 def _grouped(fp: str) -> str:
@@ -185,6 +197,8 @@ def cmd_pair(dirs: store.AppDirs, appdata: Path | None = None,
              layout: studio.LinuxLayout | studio.MacLayout | None = None,
              secondary: bool = False) -> int:
     text = _ask_link()
+    if text is None:
+        return 1
     if not text:
         _out("Nothing entered.")
         return 1
@@ -461,8 +475,8 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None,
         _out(f"Bambu Studio:    {f.variant}, user {f.user_id}{pin}")
         _out(f"Preset folder:   {f.user_filament}")
         _out(f"Primary:         {f.variant} (its presets are uploaded and builds are made from them; it stays this "
-             f"folder whichever app you open last; to use another, set \"variant\" (and \"user_id\") in "
-             f"{dirs.config})" + (f"; changes at the next run because {why}" if why else ""))
+             f"folder whichever app you open last; to change folders, run '{APP} config' or Configure Slicer Sync, "
+             f'or set "variant" in {dirs.config})' + (f"; changes at the next run because {why}" if why else ""))
     except studio.NotFound as e:
         bambu_err = e.message
     o = None
@@ -512,7 +526,7 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None,
         if failed.get("class") == "offline":
             _out(f"Last try:        could not reach the Hub at {when}; the next run tries again: {failed.get('detail')}")
         else:
-            _out(f"Last run:        FAILED at {when}: {failed.get('detail')}")
+            _out(f"Last error:      FAILED at {when}: {failed.get('detail')}")
     for kind, rec in (st.get("rejected") or {}).items():
         if isinstance(rec, dict):
             _out(f"Upload refused:  the Hub refused the {kind} upload: {rec.get('error')}. It is tried again later.")
@@ -522,8 +536,8 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None,
     last = st.get("last") or {}
     if last:
         when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(last.get("at") or 0)))
-        _out(f"Last run:        {last.get('outcome')} at {when}: {last.get('detail', '')}")
-    else:
+        _out(f"Last succeeded:  {last.get('outcome')} at {when}: {last.get('detail', '')}")
+    elif not failed:
         _out("Last run:        none yet")
     if _task_registered() is False:
         _out(f"Scheduled task:  '{TASK_NAME}' is not registered, so nothing runs the sync by itself; run "
@@ -561,7 +575,12 @@ def cmd_apply_updates(dirs: store.AppDirs, key: str, names: list[str] | None, dr
         return 1
 
 
-def cmd_unpair(dirs: store.AppDirs) -> int:
+def cmd_unpair(dirs: store.AppDirs, yes: bool = False) -> int:
+    if not yes and sys.stdin is not None and sys.stdin.isatty():
+        ans = _ask("Unpair this PC from Spoolwarden? [y/N]:")
+        if ans.lower() not in ("y", "yes"):
+            _out("Cancelled.")
+            return 0
     try:
         with store.single_instance(dirs):           # a run reads and writes the config and token: not under its feet
             try:
@@ -569,15 +588,20 @@ def cmd_unpair(dirs: store.AppDirs) -> int:
             except ValueError:
                 cfg = {}
             dirs.token.unlink(missing_ok=True)
-            statexml.unlink(dirs.config)
+            slicer_paths = cfg.get("slicer_paths")
+            if slicer_paths:
+                store.save_config(dirs, {"slicer_paths": slicer_paths})
+                store.log(dirs, "unpaired this PC (token removed; slicer_paths preserved)")
+            else:
+                statexml.unlink(dirs.config)
+                store.log(dirs, "unpaired this PC (token and config removed)")
             store.drop_pair_aside(dirs)
-            store.log(dirs, "unpaired this PC (token and config removed)")
     except store.AlreadyRunning:
         _out("A sync run is in progress; try again in a minute.")
         return 1
     dev = cfg.get("device")
     _out("This PC is unpaired: its token is deleted.")
-    _out(f"On the Hub, also run 'sudo spoolwarden unpair {dev or '<id>'}' so another PC can become the sync PC.")
+    _out(f"On Spoolwarden, also run 'sudo spoolwarden unpair {dev or '<id>'}' so another PC can become the sync PC.")
     return 0
 
 
@@ -612,11 +636,11 @@ def _macos() -> bool:
 # --- entry ---------------------------------------------------------------------------------------
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog=APP, description="Sync Bambu Studio (and Orca Slicer) filament presets with the Hub (Spoolwarden).")
+    p = argparse.ArgumentParser(prog=APP, description="Sync Bambu Studio (and Orca Slicer) filament presets with Spoolwarden.")
     p.add_argument("--version", action="version", version=f"{APP} {__version__}")
     p.add_argument("--appdata", help=argparse.SUPPRESS)
     p.add_argument("--localappdata", help=argparse.SUPPRESS)
-    cmds = "pair,run,watch,status,unpair,apply-updates" + (",install-timer,uninstall-timer" if _linux() else "")
+    cmds = "pair,run,watch,status,unpair,config,apply-updates" + (",install-timer,uninstall-timer" if _linux() else "")
     sub = p.add_subparsers(dest="cmd", required=True, metavar="{" + cmds + "}")
     pr = sub.add_parser("pair", help="pair this PC with the Hub (paste the link from 'sudo spoolwarden pair --pc')")
     pr.add_argument("--secondary", action="store_true", help="pair this PC as a secondary (pull-only) PC")
@@ -631,7 +655,9 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("status", help="show the Hub, the Bambu Studio folders (the one uploaded and the others it "
                                   "installs into) and Orca Slicer's, a wait for a slicer to close, the last run "
                                   "and the installed build")
-    sub.add_parser("unpair", help="forget the Hub and delete this PC's token")
+    unp = sub.add_parser("unpair", help="forget Spoolwarden and delete this PC's token")
+    unp.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
+    sub.add_parser("config", help="open Configure Slicer Sync to manage slicer folders")
     au = sub.add_parser("apply-updates", help="in one of the other Bambu Studio folders, replace presets listed as "
                                               "differing ('status': Kept, differ) with the build's copy")
     au.add_argument("--folder", required=True, help="the folder, as <variant>-<user id> (e.g. BambuStudioBeta-123)")
@@ -672,7 +698,15 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_status(dirs, appdata, layout)
     if args.cmd == "apply-updates":
         return cmd_apply_updates(dirs, args.folder, None if args.all else args.name, args.dry_run)
-    return cmd_unpair(dirs)
+    if args.cmd == "config":
+        from fksync import config_gui
+        gui_argv = []
+        if args.appdata:
+            gui_argv.extend(["--appdata", args.appdata])
+        if args.localappdata:
+            gui_argv.extend(["--localappdata", args.localappdata])
+        return config_gui.main(gui_argv)
+    return cmd_unpair(dirs, yes=args.yes)
 
 
 if __name__ == "__main__":

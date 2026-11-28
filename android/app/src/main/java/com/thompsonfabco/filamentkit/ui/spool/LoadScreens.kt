@@ -38,6 +38,7 @@ import com.thompsonfabco.filamentkit.net.LoadResult
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.ui.ColorSwatch
 import com.thompsonfabco.filamentkit.ui.components.LocalToast
+import com.thompsonfabco.filamentkit.ui.components.NeedsHubReason
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.StatusKind
@@ -410,11 +411,12 @@ fun LoadPreviewScreen(
                 ),
             )
         }
+        if (!online) NeedsHubReason()
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(space.s2)) {
             SwButton(stringResource(R.string.common_back), onBack, enabled = !ui.writing)
             SwButton(
                 stringResource(if (ui.writing) R.string.spool_load_loading else R.string.common_load), vm::load,
-                kind = SwButtonKind.Main, enabled = ui.ready && !ui.checking && !ui.dropped, busy = ui.writing,
+                kind = SwButtonKind.Main, enabled = ui.ready && !ui.checking && !ui.dropped && online, busy = ui.writing,
             )
         }
     }

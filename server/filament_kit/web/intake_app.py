@@ -339,7 +339,7 @@ class IntakeApp:
 
     async def history_photo(self, request: Request):
         from .. import intake_history
-        thumb = request.query_params.get("size") == "thumb"
+        thumb = request.query_params.get("size") == "thumb" or request.query_params.get("thumb") == "1"
         fn = intake_history.photo_thumb if thumb else intake_history.photo
         data = await anyio.to_thread.run_sync(fn, request.path_params["hid"], request.path_params["n"])
         return Response(data, media_type="image/jpeg", headers=intake_history.photo_headers(data, thumb=thumb))

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import anyio
 
-from .. import config, storage, storage_api
+from .. import config, demo, storage, storage_api
 from ..spoolman import Spoolman, SpoolmanError
 
 
@@ -47,6 +47,8 @@ def routes(page) -> list[tuple]:
         return await anyio.to_thread.run_sync(run, lambda b: storage_api.preview(sm(), b), body)
 
     async def write(request, body):
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         if body.get("dry_run") is True:
             return await anyio.to_thread.run_sync(run, lambda b: storage_api.preview(sm(), b), body)
         r = await anyio.to_thread.run_sync(run, lambda b: storage_api.save(sm(), b), body)

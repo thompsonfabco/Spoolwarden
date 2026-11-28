@@ -99,7 +99,7 @@ fun PrinterSettingsScreen(
                 val fields = edit.fields(printer)
                 fields.forEachIndexed { i, field ->
                     if (i > 0) PanelDivider()
-                    SettingRow(field, printer) { edit.open(field) }
+                    SettingRow(field, printer, enabled = !editState.busy) { edit.open(field) }
                 }
             }
             SwButton(
@@ -141,13 +141,14 @@ internal fun accessCodeValue(p: Printer): Int =
     if (p.configured) R.string.status_set else R.string.status_not_set
 
 @Composable
-private fun SettingRow(field: EditField, printer: Printer, onClick: () -> Unit) {
+private fun SettingRow(field: EditField, printer: Printer, enabled: Boolean = true, onClick: () -> Unit) {
     val colors = SpoolwardenTheme.colors
     val space = SpoolwardenTheme.space
     val value = settingValue(field, printer)
     val open = stringResource(R.string.a11y_action_open)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row).clickable(onClickLabel = open, onClick = onClick)
+        Modifier.fillMaxWidth().heightIn(min = SpoolwardenTheme.sizes.row)
+            .clickable(enabled = enabled, onClickLabel = open, onClick = onClick)
             .padding(horizontal = space.s4, vertical = space.s2),
         horizontalArrangement = Arrangement.spacedBy(space.s3),
         verticalAlignment = Alignment.CenterVertically,

@@ -231,11 +231,9 @@ const sel = $("select[name=home]", sheet);
 out.options = [...sel.options].map((o) => o.textContent);
 out.current = sel.value;
 sel.value = "Rack 1"; sel.dispatchEvent(new Event("change", { bubbles: true }));
-$(".sheet__foot .btn", sheet).click();
-await settle(() => $(".result", sheet) && /Home is now/.test($(".result", sheet).textContent), "the result");
-out.done = text($(".result", sheet));
-$(".sheet__head [data-action=close]", sheet).click();
-await settle(() => !$("dialog[open]"), "the sheet to close");
+$(".sheet__foot .btn--primary", sheet).click();
+await settle(() => !$("dialog[open]") && toasts().some((t) => /Home is now/.test(t)), "the result");
+out.done = toasts().find((t) => /Home is now/.test(t));
 out.after = line(B);
 out.whereAfter = whereOf(B);
 """.replace("__B__", str(made["B"])).replace("__C__", str(made["C"])).replace("__D__", str(made["D"])))

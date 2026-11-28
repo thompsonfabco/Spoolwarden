@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.ui.add
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -39,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -62,10 +64,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
+import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwIcon
@@ -139,7 +144,7 @@ fun CaptureScreen(
                     }
                     SwButton(
                         pluralStringResource(R.plurals.add_photos_read, state.photos.size, state.photos.size), vm::read,
-                        Modifier.weight(1f), kind = SwButtonKind.Main, enabled = state.photos.isNotEmpty(),
+                        Modifier.weight(1f), kind = SwButtonKind.Main, enabled = state.photos.isNotEmpty() && !state.weightInvalid,
                     )
                 }
             }
@@ -234,12 +239,13 @@ internal fun SealedRow(sealed: Boolean, onChange: (Boolean) -> Unit, modifier: M
 private fun WeightField(state: AddUiState, vm: AddViewModel) {
     var text by remember(state.generation) { mutableStateOf(state.weight?.let(::grams).orEmpty()) }
     LaunchedEffect(state.sealed) { if (state.sealed) text = "" }
-    val bad = text.isNotBlank() && parseWeight(text) == null
+    val bad = !state.sealed && text.isNotBlank() && parseWeight(text) == null
     OutlinedTextField(
         value = text,
         onValueChange = {
             text = it
-            vm.setWeight(parseWeight(it))
+            val parsed = parseWeight(it)
+            vm.setWeight(parsed, invalid = it.isNotBlank() && parsed == null)
         },
         enabled = !state.sealed,
         label = { Text(stringResource(R.string.common_field_weight_with_spool_optional)) },
@@ -325,13 +331,21 @@ private fun decodeThumbnail(file: File, maxSide: Int): ImageBitmap? {
 internal fun CameraCapture(photos: Int, onPhoto: (ByteArray) -> Unit) {
     val context = LocalContext.current
     val space = SpoolwardenTheme.space
+    val lifecycleOwner = LocalLifecycleOwner.current
     var granted by remember { mutableStateOf(hasCamera(context)) }
     var noAsk by remember { mutableStateOf(false) }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         granted = it
         // denied and Android will not show its question again: only the app's settings can allow it
-        val activity = context as? Activity
+        val activity = context.findActivity()
         noAsk = !it && activity != null && !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.CAMERA)
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) granted = hasCamera(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     LaunchedEffect(Unit) { if (!granted) ask.launch(Manifest.permission.CAMERA) }
     if (!granted) {
@@ -353,16 +367,16 @@ internal fun CameraCapture(photos: Int, onPhoto: (ByteArray) -> Unit) {
         return
     }
 
-    val lifecycleOwner = LocalLifecycleOwner.current
     val capture = remember { ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build() }
     val previewView = remember { PreviewView(context) }
     var problem by remember { mutableStateOf(false) }
     var shotFailed by remember { mutableStateOf(false) }
     var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var shooting by remember { mutableStateOf(false) }
+    var attempt by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(lifecycleOwner) {
+    LaunchedEffect(lifecycleOwner, attempt) {
         try {
             val p = cameraProvider(context)
             provider = p
@@ -388,7 +402,12 @@ internal fun CameraCapture(photos: Int, onPhoto: (ByteArray) -> Unit) {
             Modifier.fillMaxWidth().aspectRatio(3f / 4f).clip(SpoolwardenTheme.shapes.r)
                 .border(SpoolwardenTheme.sizes.hairline, SpoolwardenTheme.colors.border, SpoolwardenTheme.shapes.r),
         )
-        if (problem) NoticeCard(NoticeKind.Bad, stringResource(R.string.add_photos_camera_error))
+        if (problem) {
+            NoticeCard(
+                NoticeKind.Bad, stringResource(R.string.add_photos_camera_error),
+                actions = listOf(SwAction(stringResource(R.string.common_try_again)) { attempt++ }),
+            )
+        }
         if (shotFailed) NoticeCard(NoticeKind.Bad, stringResource(R.string.add_photos_photo_failed))
         SwButton(
             stringResource(if (shooting) R.string.add_photos_taking else R.string.add_photos_take),
@@ -418,6 +437,7 @@ internal fun CameraCapture(photos: Int, onPhoto: (ByteArray) -> Unit) {
             // "Read labels" becomes the main action once there is a photo
             kind = if (photos == 0) SwButtonKind.Main else SwButtonKind.Plain,
             enabled = !shooting && !problem,
+            busy = shooting,
             icon = R.drawable.sw_ic_camera,
             trailing = stringResource(R.string.add_photos_count, photos, AddViewModel.MAX_PHOTOS),
         )
@@ -451,6 +471,15 @@ private suspend fun cameraProvider(context: Context): ProcessCameraProvider = su
             cont.resumeWithException(e.cause ?: e)
         }
     }, ContextCompat.getMainExecutor(context))
+}
+
+private fun Context.findActivity(): Activity? {
+    var c: Context? = this
+    while (c is ContextWrapper) {
+        if (c is Activity) return c
+        c = c.baseContext
+    }
+    return null
 }
 
 private fun hasCamera(context: Context) =

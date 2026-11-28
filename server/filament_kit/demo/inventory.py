@@ -10,19 +10,21 @@ and `<locations>`. Written whole and atomically on every change (a few dozen rec
 """
 from __future__ import annotations
 
+import math
 import os
-import threading
+import tempfile
 import urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .. import locks
 from ..bridge import xmlfile
 
 FILE = "inventory.xml"
 VERSION = "1"
 MAX_BYTES = 8_000_000
-_lock = threading.RLock()
+_lock = locks.ProcessLock(lambda: _path().with_name("inventory.lock"))
 
 _VENDOR = {"id": int, "name": str, "empty_spool_weight": float}
 _FILAMENT = {"id": int, "vendor_id": int, "name": str, "material": str, "color_hex": str, "density": float,
@@ -122,9 +124,19 @@ def _path() -> Path:
 
 
 def _save(inv: Inventory, path: Path) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    ET.ElementTree(inv.element()).write(tmp, encoding="utf-8", xml_declaration=True)
-    os.replace(tmp, path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            ET.ElementTree(inv.element()).write(fh, encoding="utf-8", xml_declaration=True)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
 
 def load() -> Inventory:
@@ -197,8 +209,14 @@ def _spool(inv: Inventory, sid: int) -> dict:
 def _apply_spool(inv: Inventory, s: dict, body: dict) -> None:
     _take(body, _SPOOL, s)
     if "used_weight" in body and "remaining_weight" not in body:
+        try:
+            used_weight = float(body["used_weight"])
+        except (ValueError, TypeError):
+            _bad("used_weight: must be a number", 422)
+        if not math.isfinite(used_weight):
+            _bad("used_weight: must be a finite number", 422)
         f = inv.filaments.get(s.get("filament_id"), {})
-        s["remaining_weight"] = max(0.0, s.get("initial_weight", f.get("weight", 1000.0)) - float(body["used_weight"]))
+        s["remaining_weight"] = max(0.0, s.get("initial_weight", f.get("weight", 1000.0)) - used_weight)
     if s.get("filament_id") not in inv.filaments:
         _bad("filament_id: no such filament", 422)
     if s.get("location") and s["location"] not in inv.locations and " – " not in s["location"]:
@@ -279,8 +297,15 @@ def _records(method: str, seg: list[str], query: dict, body: dict):
             return None
         _bad("Method Not Allowed", 405)
     if kind == "spool" and seg[2] == "use" and len(seg) == 3 and method == "PUT":
-        grams = float(body.get("use_weight") or 0)
-        initial = rec.get("initial_weight", inv.filaments[rec["filament_id"]].get("weight", 1000.0))
+        raw_weight = body.get("use_weight")
+        try:
+            grams = float(0 if raw_weight is None or raw_weight == "" else raw_weight)
+        except (ValueError, TypeError):
+            _bad("use_weight: must be a number", 422)
+        if not math.isfinite(grams):
+            _bad("use_weight: must be a finite number", 422)
+        f = inv.filaments.get(rec.get("filament_id"), {})
+        initial = rec.get("initial_weight", f.get("weight", 1000.0))
         rec["remaining_weight"] = round(min(initial, max(0.0, rec.get("remaining_weight", initial) - grams)), 3)
         rec.setdefault("first_used", _now())
         rec["last_used"] = _now()

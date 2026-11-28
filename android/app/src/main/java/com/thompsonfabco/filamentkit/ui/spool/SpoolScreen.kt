@@ -288,15 +288,16 @@ private fun Actions(
 ) {
     val space = SpoolwardenTheme.space
     val enabled = online && !ui.writing
+    val notEmpty = ui.spool?.state != SpoolState.Empty
     var menu by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
         SwButton(
             stringResource(R.string.spool_update_weight), vm::openWeight, Modifier.fillMaxWidth(),
-            kind = SwButtonKind.Main, enabled = enabled,
+            kind = SwButtonKind.Main, enabled = enabled && notEmpty,
         )
         if (!online) NeedsHubReason()
         FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalArrangement = Arrangement.spacedBy(space.s2)) {
-            if (printersOn) SwButton(stringResource(R.string.spool_load), onLoad, enabled = enabled)
+            if (printersOn) SwButton(stringResource(R.string.spool_load), onLoad, enabled = enabled && notEmpty)
             SwButton(stringResource(R.string.spool_move), vm::openMove, enabled = enabled)
             // checked out: back to its home, asking nothing; Home can be changed
             ui.spool?.takeIf { CheckedOutRules.offered(it) && CheckedOutRules.canReturn(it) }?.let {
@@ -441,12 +442,13 @@ private fun MoveSheet(vm: SpoolViewModel, m: MoveUi, current: String?, onPairAga
     SwSheet(onDismiss = vm::closeMove, gesturesEnabled = m.movingTo == null) {
         Column(Modifier.fillMaxWidth().padding(horizontal = space.s4).padding(bottom = space.s4), verticalArrangement = Arrangement.spacedBy(space.s2)) {
             Text(stringResource(R.string.spool_move_title), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+            if (m.movingTo != null) SwProgress(null)
             m.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = vm::retryMove) }
             val locations = m.locations
             when {
                 locations == null -> if (m.failure == null) SwSkeletonRows(SKELETON_ROWS)
                 locations.isEmpty() -> Text(stringResource(R.string.spool_move_none), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
-                else -> Column(Modifier.verticalScroll(rememberScrollState())) {
+                else -> Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                     val rows = m.storage?.rows() ?: locations.map { LocationRow(it, null, false) }
                     val holder = rows.holder(current)
                     rows.forEach { row ->
@@ -473,6 +475,7 @@ private fun MoveSheet(vm: SpoolViewModel, m: MoveUi, current: String?, onPairAga
                     }
                 }
             }
+            SwButton(stringResource(R.string.common_cancel), vm::closeMove, Modifier.fillMaxWidth(), kind = SwButtonKind.Quiet, enabled = m.movingTo == null)
         }
     }
 }
@@ -485,12 +488,13 @@ private fun HomeSheet(vm: SpoolViewModel, h: HomeUi, current: String?, onPairAga
     SwSheet(onDismiss = vm::closeHome, gesturesEnabled = h.savingTo == null) {
         Column(Modifier.fillMaxWidth().padding(horizontal = space.s4).padding(bottom = space.s4), verticalArrangement = Arrangement.spacedBy(space.s2)) {
             Text(stringResource(R.string.spools_home_title), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+            if (h.savingTo != null) SwProgress(null)
             h.failure?.let { HubFailureNotice(it, onPairAgain, onTryAgain = vm::retryHome) }
             val locations = h.locations
             when {
                 locations == null -> if (h.failure == null) SwSkeletonRows(SKELETON_ROWS)
                 locations.isEmpty() -> Text(stringResource(R.string.spool_move_none), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
-                else -> Column(Modifier.verticalScroll(rememberScrollState())) {
+                else -> Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
                     val rows = h.storage?.rows() ?: locations.map { LocationRow(it, null, false) }
                     rows.forEach { row ->
                         val name = row.name
@@ -515,6 +519,7 @@ private fun HomeSheet(vm: SpoolViewModel, h: HomeUi, current: String?, onPairAga
                     }
                 }
             }
+            SwButton(stringResource(R.string.common_cancel), vm::closeHome, Modifier.fillMaxWidth(), kind = SwButtonKind.Quiet, enabled = h.savingTo == null)
         }
     }
 }

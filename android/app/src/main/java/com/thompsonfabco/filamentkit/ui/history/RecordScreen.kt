@@ -389,7 +389,7 @@ private fun AskPanel(
     RecentPanel(stringResource(R.string.recent_ask_title)) {
         if (off) ReaderOffLine()
         OutlinedTextField(
-            note, onNote, Modifier.fillMaxWidth(),
+            note, { onNote(it.take(ASK_NOTE_MAX)) }, Modifier.fillMaxWidth(),
             enabled = !off && !waiting,
             label = { Text(stringResource(R.string.recent_ask_label)) },
             placeholder = { Text(stringResource(R.string.recent_ask_placeholder)) },
@@ -437,6 +437,7 @@ private fun AskPanel(
 }
 
 private const val ASK_LINES = 3
+private const val ASK_NOTE_MAX = 500
 
 /** The before-and-after list (02-components 7.9): `accentSoft` ground, a 1 dp `accentText` outline. */
 @OptIn(ExperimentalLayoutApi::class)

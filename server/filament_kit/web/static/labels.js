@@ -21,10 +21,19 @@ const el = (tag, props, ...kids) => { const e = Object.assign(document.createEle
 const title = tx(ids.length === 1 ? "labels_title_one" : "labels_title_many");
 $(".labels__title").textContent = title;
 document.title = title;
+const back = $(".labels__back");
+if (back) {
+  back.textContent = tx(window.opener ? "common_close" : "common_back");
+  back.addEventListener("click", (e) => {
+    if (window.opener) { e.preventDefault(); window.close(); }
+    else if (history.length > 1) { e.preventDefault(); history.back(); }
+  });
+}
 // the address the codes hold is the Hub's home address, which the page carries (the Hub's own name); this page's origin only when it has none
 $(".labels__note").textContent = tx("labels_address_note", { address: root.dataset.address || location.origin });
 const print = $(".labels__print");
 print.textContent = tx("labels_print");
+print.disabled = true;
 print.addEventListener("click", () => window.print());
 
 // the demo banner is on every screen, this one too; it is not printed
@@ -53,16 +62,22 @@ function ariaOf(id, v) {
   if (!name || !v.material || typeof v.net_g !== "number") return tx("labels_aria_plain", { number: id });
   return tx("labels_aria", { number: id, name, material: v.material, net: tx("labels_net", { grams: Math.round(v.net_g) }) });
 }
+const FETCH_MS = 15000;
+async function timedFetch(url) {
+  const c = new AbortController(), t = setTimeout(() => c.abort(), FETCH_MS);
+  try { return await fetch(url, { credentials: "same-origin", signal: c.signal }); }
+  finally { clearTimeout(t); }
+}
 const views = new Map();                                    // a spool is read once: a size change asks only for the labels again
 function viewOf(id) {
   if (!views.has(id)) views.set(id, (async () => {
-    try { const r = await fetch(`${base}/api/spools/${id}`, { credentials: "same-origin" }); return r.ok ? (await r.json()).view || null : null; }
+    try { const r = await timedFetch(`${base}/api/spools/${id}`); return r.ok ? (await r.json()).view || null : null; }
     catch (e) { return null; }
   })().then((v) => { if (!v) views.delete(id); return v; }));      // a spool not read is asked again at the next draw
   return views.get(id);
 }
 async function one(id) {
-  const [r, view] = await Promise.all([fetch(`${base}/api/spools/${id}/label.svg?size=${encodeURIComponent(size)}`, { credentials: "same-origin" }), viewOf(id)]);
+  const [r, view] = await Promise.all([timedFetch(`${base}/api/spools/${id}/label.svg?size=${encodeURIComponent(size)}`), viewOf(id)]);
   if (!r.ok) {
     let text = "";
     try { const j = await r.json(); text = j.message || j.error || ""; } catch (e) { /* not JSON */ }
@@ -78,6 +93,7 @@ function image(g, cls) {                                    // an img with role 
 }
 async function draw() {
   const mine = ++drawn, sheet = $(".labels__sheet"), err = $(".labels__error"), missing = $(".labels__missing");
+  print.disabled = true;
   err.hidden = true;
   missing.replaceChildren();
   for (const u of urls) URL.revokeObjectURL(u);
@@ -101,6 +117,7 @@ async function draw() {
   missing.append(...got.filter((g) => g.url == null).map((g) => el("p", { className: "labels__missing-line", textContent: tx("labels_missing", { id: g.id }) })));
   const ok = got.filter((g) => g.url != null), s = sizeOf(size);
   urls.push(...ok.map((g) => g.url));
+  print.disabled = ok.length === 0;
   if (!s.per) { sheet.replaceChildren(...ok.map((g) => image(g, `labels__img labels__img--${s.value}`))); return; }
   // a sheet: each page holds `per` labels in the sheet's own places; more labels go on further pages
   const pages = [];

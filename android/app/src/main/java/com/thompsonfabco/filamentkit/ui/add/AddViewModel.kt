@@ -168,6 +168,7 @@ data class AddUiState(
     val hint: String = "",
     val tag: String? = null,
     val weight: Double? = null,
+    val weightInvalid: Boolean = false,
     val sealed: Boolean = true,
     val questions: List<String> = emptyList(),
     /** The read's items as the server sent them, plus the user's edits; sent back to `add` as-is. */
@@ -355,6 +356,8 @@ class AddViewModel(
         findFilaments(q, FILAMENT_DEBOUNCE_MS)
     }
 
+    fun retryFilaments() = findFilaments(_state.value.filamentQuery)
+
     private fun findFilaments(q: String, wait: Long = 0) {
         filamentJob?.cancel()
         filamentJob = scope.launch {
@@ -501,12 +504,14 @@ class AddViewModel(
     }
 
     /** Grams on the scale, spool included; only used for one opened spool. */
-    fun setWeight(grams: Double?) {
+    fun setWeight(grams: Double?, invalid: Boolean = false) {
         val g = grams?.takeIf(::isValidWeight) // NaN, Infinity, 0 or less never reach the draft
-        edit { it.copy(weight = g, sealed = if (g != null) false else it.sealed) }
+        edit { it.copy(weight = g, weightInvalid = invalid, sealed = if (g != null) false else it.sealed) }
     }
 
-    fun setSealed(sealed: Boolean) = edit { it.copy(sealed = sealed, weight = if (sealed) null else it.weight) }
+    fun setSealed(sealed: Boolean) = edit {
+        it.copy(sealed = sealed, weight = if (sealed) null else it.weight, weightInvalid = if (sealed) false else it.weightInvalid)
+    }
 
     fun clearTag() = changeTag(null)
 

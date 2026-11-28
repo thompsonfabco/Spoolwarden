@@ -13,11 +13,13 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
@@ -69,10 +71,11 @@ internal fun SwTopBar(
             },
             navigationIcon = {
                 if (onBack != null) {
-                    // the drawing points right; the back arrow points left
+                    val ltr = LocalLayoutDirection.current == LayoutDirection.Ltr
+                    // the drawing points right; the back arrow points left in LTR and right in RTL
                     SwIconButton(
                         R.drawable.sw_ic_chevron, stringResource(R.string.common_back), onBack,
-                        iconModifier = Modifier.rotate(180f),
+                        iconModifier = if (ltr) Modifier.rotate(180f) else Modifier,
                     )
                 }
             },

@@ -66,18 +66,21 @@ class HomeScreenTest {
         labelReaderOff: Boolean = false,
         localNetwork: Boolean = false,
         loadedAgo: Long = 0,
+        nowMillis: Long? = System.currentTimeMillis(),
     ) {
+        val loadedAt = printers.loadedAt ?: ((nowMillis ?: System.currentTimeMillis()) - loadedAgo)
         rule.setContent {
             Themed {
                 HomeScreen(
                     connection = connection, drafts = drafts, update = update,
-                    printers = printers.copy(loadedAt = printers.loadedAt ?: System.currentTimeMillis() - loadedAgo),
+                    printers = printers.copy(loadedAt = loadedAt),
                     onAddSpools = { calls += "photos" }, onAddByHand = { calls += "hand" },
                     onResumeDraft = { calls += "resume $it" }, onDiscardDraft = { calls += "discard $it" },
                     onOpenPrinter = { calls += "printer $it" }, onOpenPrinters = { calls += "printers" },
                     onRefreshPrinters = { calls += "refresh" }, onReviewCertificate = { calls += "review" },
                     onPairAgain = { calls += "pair" }, onInstallUpdate = { calls += "install" },
                     onConfirmInstall = { calls += "confirm" },
+                    nowMillis = nowMillis,
                     showPrinters = showPrinters, labelReaderOff = labelReaderOff,
                     onOpenPresets = { calls += "presets" },
                     localNetworkPanel = { SwButton("Allow", {}, kind = SwButtonKind.Main) },

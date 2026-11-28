@@ -27,6 +27,7 @@ intake-panel <version> <chip> <token>`. A panel on USB wins over one on Wi-Fi.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
 import os
@@ -59,7 +60,8 @@ def on_line(line: bytes):
             return
         nfc.on_identifier(bytes.fromhex(hexid.decode("ascii")))
     elif line in (b"NFC ok", b"NFC none"):
-        st.ports["panel_nfc"] = line == b"NFC ok"
+        with st.panel_lock:
+            st.ports["panel_nfc"] = line == b"NFC ok"
         log.info("button panel NFC reader: %s", line[4:].decode())
     elif line.startswith(b"HELLO intake-panel"):  # unasked: the panel reset without its port dropping
         if line.split()[3:4] == [b"esp32c3"]:
@@ -83,7 +85,8 @@ def on_scale(line: bytes):
     with st.lock:   # what the panel itself says, whichever scale the station uses (WL3 reads it)
         st.state["panel_scale"] = {"grams": round(grams, 1), "status": "settled" if settled else "unsettled", "unit": "g"}
     if scale.find_scale():  # the computer's own scale wins
-        st.panel_scale["on"] = False
+        with st.lock:
+            st.panel_scale["on"] = False
         return
     now = time.time()
     with st.lock:
@@ -187,7 +190,8 @@ def update_firmware(ser):
         return False
     if st.settings["panel_flash"] and want not in st.flashed:
         st.flashed.add(want)
-        ser.close()
+        with contextlib.suppress(Exception):
+            ser.close()
         flash_panel(ser.port, want, ser.panel_version)
         return True
     log.warning("button panel runs firmware %s, not the bundled %s; using it as it is (%s)",
@@ -217,7 +221,8 @@ def open_panel(dev):
                 asked = True
     except Exception:
         pass
-    ser.close()
+    with contextlib.suppress(Exception):
+        ser.close()
     return None
 
 
@@ -231,7 +236,8 @@ def blank_c3_ports():
             continue
         ser = open_panel(dev)
         if ser:
-            ser.close()
+            with contextlib.suppress(Exception):
+                ser.close()
         else:
             blank.append(dev)
     return blank
@@ -244,11 +250,19 @@ def find_panel():
     for dev in st.panel_ttys():
         if dev != st.ports["nfc"] and (ser := open_panel(dev)):
             break
-    if ser or not getattr(st.panel["ser"], "wifi", False):
-        st.ports["panel"] = ser.port if ser else None
-        st.ports["panel_version"] = ser.panel_version if ser else None
-        st.ports["panel_chip"] = ser.panel_chip if ser else None
-        st.ports["panel_nfc"] = None  # until the panel says
+    with st.panel_lock:
+        wifi_up = getattr(st.panel["ser"], "wifi", False)
+        if ser:
+            st.ports["panel"] = ser.port
+            if not wifi_up:
+                st.ports["panel_version"] = ser.panel_version
+                st.ports["panel_chip"] = ser.panel_chip
+                st.ports["panel_nfc"] = None  # until the panel says
+        elif not wifi_up:
+            st.ports["panel"] = None
+            st.ports["panel_version"] = None
+            st.ports["panel_chip"] = None
+            st.ports["panel_nfc"] = None
     # else a panel on Wi-Fi is connected and the USB search found none: its HELLO set the version, chip and nfc, and the
     # speech format and volume read them; only a panel found on USB replaces them
     st.probed.set()  # after ports["panel"], so a waiting reader never sees the panel's port as free
@@ -310,20 +324,32 @@ def panel_loop():
         warn_swap_needs_fw9(ser.panel_version)
         with st.panel_lock:
             st.panel["ser"] = ser
+            st.ports["panel_version"] = ser.panel_version
+            st.ports["panel_chip"] = ser.panel_chip
+            st.ports["panel_nfc"] = None  # until the panel says
         if ser.panel_chip == "esp32c3":
             send_volume()
         seen = Shown()
         try:
-            while st.panel["ser"] is ser:
+            while True:
+                with st.panel_lock:
+                    if st.panel["ser"] is not ser:
+                        break
                 on_line(ser.readline().strip())
                 if not refresh(seen, time.time()):  # the flow's timeouts: flow.tick_loop
                     break
         except Exception as e:  # unplugged
             log.warning("panel %s: %s", ser.port, e)
         with st.panel_lock:
-            st.panel["ser"] = None
-        ser.close()
-        forget_panel_scale()
-        st.ports["panel"] = st.ports["panel_version"] = st.ports["panel_chip"] = st.ports["panel_nfc"] = None
+            if st.panel["ser"] is ser:
+                st.panel["ser"] = None
+            wifi_up = getattr(st.panel["ser"], "wifi", False)
+            st.ports["panel"] = None
+            if not wifi_up:
+                st.ports["panel_version"] = st.ports["panel_chip"] = st.ports["panel_nfc"] = None
+        with contextlib.suppress(Exception):
+            ser.close()
+        if not wifi_up:
+            forget_panel_scale()
         log.info("button panel gone")
         time.sleep(2)

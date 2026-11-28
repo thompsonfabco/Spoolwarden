@@ -142,9 +142,9 @@ fun MjpegView(
     onPairAgain: () -> Unit = {},
 ) {
     var frame by remember(url) { mutableStateOf<Bitmap?>(null) }
-    var error by remember(url) { mutableStateOf<String?>(null) }
-    var attempt by remember(url) { mutableIntStateOf(0) }
-    LaunchedEffect(url, attempt) {
+    var error by remember(url, client, headers) { mutableStateOf<String?>(null) }
+    var attempt by remember(url, client, headers) { mutableIntStateOf(0) }
+    LaunchedEffect(url, client, headers, attempt) {
         error = null
         error = try {
             streamMjpeg(client, url, headers) { jpeg ->

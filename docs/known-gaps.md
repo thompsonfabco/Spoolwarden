@@ -89,7 +89,7 @@ fixed.
 Things the pages and apps already show, or the other interfaces already do, that this version cannot do yet.
 
 23. **The demo cannot be switched on.** **Try the demo** answers "The demo cannot be switched on in this version."
-24. **Language offers no language besides English.** The choice is there; nothing else is in it.
+24. ~~Language offers no language besides English.~~ Fixed: German (`de`) and Russian (`ru`) language packs ship complete alongside English (`en`) in `strings/languages.xml`, though `de` and `ru` are not yet human-reviewed (`reviewed="false"`).
 25. **Devices shows no kind and no version for a paired phone or PC until it next calls the Hub.** The app (Android) and
     Slicer Sync report them with their calls; until then the row says "Version not known".
 26. ~~There is no Home Assistant integration to install yet.~~ Fixed: `spoolwarden-home-assistant` is available as a

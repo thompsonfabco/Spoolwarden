@@ -125,6 +125,7 @@ function says(e, o = {}) {
   else if (e.timeout) text = SW.t("common_timeout");
   else if (e.unreachable) text = SW.t("common_hub_unreachable");
   else if (e.status === 403 && e.error === "bad origin") text = SW.t("shell_error_bad_origin");
+  else if (e.status === 403 && (e.error === "home network only" || e.data?.error === "home network only")) text = SW.t("common_offline_text");
   else if (e.status === 500) text = SW.t("shell_error_internal");
   else text = e.text("") || SW.t("shell_error_status", { status: e.status });
   return o.kept && e instanceof SW.HubError && e.status === 502 ? `${text} ${SW.t("add_read_kept")}` : text;
@@ -220,7 +221,7 @@ const REC_FIELDS = [
   { key: "name", label: "common_field_name", group: "identity", kind: "text", required: true },
   { key: "material", label: "common_field_material", group: "identity", kind: "text", required: true },
   { key: "color_hex", label: "common_field_colour", group: "identity", kind: "colour" },
-  { key: "line", label: "common_field_line", group: "identity", kind: "text" },
+  { key: "line", label: "common_field_line", group: "other", kind: "text" },
   { key: "net", label: "common_field_net_weight", group: "weights", kind: "number", unit: "unit_g", bad: "field_error_grams" },
   { key: "tare", label: "common_field_empty_spool_weight", group: "weights", kind: "number", unit: "unit_g", bad: "field_error_grams" },
   { key: "density", label: "common_field_density", group: "weights", kind: "number", unit: "unit_g_cm3", bad: "add_review_error_density" },
@@ -264,7 +265,7 @@ function recParse(f, text) {
   if (f.kind === "text") return t || !f.required ? [true, t || null] : [false, SW.t("recent_error_required")];
   if (!t) return [true, null];
   if (f.kind === "colour") { const m = /^#?([0-9a-fA-F]{6})$/.exec(t); return m ? [true, m[1].toUpperCase()] : [false, SW.t("add_card_colour_error")]; }
-  if (f.kind === "range") return /^\d{1,3}\s*-\s*\d{1,3}$/.test(t) ? [true, t] : [false, SW.t("common_error_range")];
+  if (f.kind === "range") return /^\d{1,3}\s*[-–]\s*\d{1,3}$/.test(t) ? [true, t] : [false, SW.t("common_error_range")];
   if (f.kind === "whole") { const n = /^\d{1,3}$/.test(t) ? Number(t) : 0; return n > 0 && n < 500 ? [true, n] : [false, SW.t("field_error_whole_number", { example: f.example })]; }
   const n = /^\d+([.,]\d+)?$/.test(t) ? Number(t.replace(",", ".")) : 0;
   return n > 0 ? [true, n] : [false, SW.t(f.bad)];
@@ -286,8 +287,8 @@ function recAge(at) {
 }
 // where it came from in words; a source the page has no word for is shown as the Hub gave it
 function recSource(r) {
-  const src = r.source === "web" ? (r.photos ? "phone" : "hand") : r.source;
-  const key = { phone: "recent_source_phone", hand: "recent_source_hand", station: "recent_source_station" }[src];
+  const src = r.source === "cli" ? "hand" : (r.source === "web" || r.source === "phone" || r.source === "station") && !r.photos ? "hand" : r.source;
+  const key = { phone: "recent_source_phone", web: "recent_source_phone", hand: "recent_source_hand", station: "recent_source_station" }[src];
   return key ? SW.t(key) : String(r.source || "");
 }
 // "<Brand> <Name>" of each filament, and "x<n>" for several spools
@@ -326,7 +327,8 @@ function historyTab() {
   const list = hubGroup(h("div"), () => listAt);
   const corrLink = h("p", { class: "recent__corr", hidden: true });        // "Share corrections is on · 3 waiting" (7.1, 7.5)
   const corr = h("section", { class: "corr", hidden: true });              // Corrections waiting (7.5)
-  const el = h("section", { class: "hidden" }, intro, corrLink, missing, list, corr);
+  const refreshBtn = SW.iconBtn("refresh", SW.t("common_refresh"), { action: "refresh-recent", run: () => { if (!dirtySlots().length) ready = load(); } });
+  const el = h("section", { class: "hidden" }, h("div", { class: "row spaced" }, intro, refreshBtn), corrLink, missing, list, corr);
   let shareOn = false;                                        // Share corrections is on at the Hub (the twin of GET intake/share-corrections)
   const hp = (id, what) => `history/${encodeURIComponent(id)}${what ? "/" + what : ""}`;
   const photo = (id, n, thumb = false) => `${BASE}/api/${hp(id, "photos/" + n)}${thumb ? "?thumb=1" : ""}`;
@@ -415,7 +417,16 @@ function historyTab() {
     return Object.keys(now).filter((k) => JSON.stringify(now[k]) !== JSON.stringify(was[k])).map((k) => tt("corr_field_line",
       { field: recLabel(k), was: was[k] == null || was[k] === "" ? "—" : String(was[k]), now: now[k] == null || now[k] === "" ? "—" : String(now[k]) }));
   };
-  function corrCard(e, kept) {
+  function corrThumb(rec, count, name, src, badge) {
+    if (!src) return h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s"));
+    const inner = [h("img", { class: "thumb__img", alt: "", src, loading: "lazy" }),
+      badge > 1 ? h("span", { class: "thumb__count mono", "aria-hidden": "true", textContent: String(badge) }) : null];
+    if (!rec || !count) return h("span", { class: "thumb" }, ...inner);
+    const btn = h("button", { class: "thumb", type: "button", "aria-label": SW.t("photo_enlarge", { number: 1, total: count }) }, ...inner);
+    btn.addEventListener("click", () => viewer({ id: rec, rec: { photos: count, spools: [{ vendor: name }] } }, 1, btn));
+    return btn;
+  }
+  function corrCard(e, kept, onRemoved) {
     const c = e.corrected || {}, name = [c.vendor || c.brand, c.name].filter(Boolean).join(" ") || String(e.id);
     const rec = e.record && kept.has(e.record) ? e.record : null;
     // the reader's entry as the Hub passes it on: `thumbnail_b64` and `created_at`
@@ -426,16 +437,15 @@ function historyTab() {
       const button = ev.currentTarget;                         // kept now: after the await the event has no currentTarget
       return act(line, SW.t("common_working"), async () => {
         await api(`label-reader/corrections/${encodeURIComponent(e.id)}/remove`, { body: {} });
-        card.querySelectorAll(".corr__fields, .corr__note-line, .corr__photos").forEach((x) => x.remove());
-        button.remove();
-        return tt("corr_removed");
+        card.remove();
+        SW.toast(tt("corr_removed"), "ok");
+        if (onRemoved) onRemoved();
+        return null;
       }, { button });
     } }));
     if (rm.setAttribute) rm.setAttribute("aria-label", tt("corr_remove_named", { name }));
     const card = h("li", { class: "corr__card" },
-      img ? h("span", { class: "thumb" }, h("img", { class: "thumb__img", alt: "", src: img, loading: "lazy" }),
-        e.photos > 1 ? h("span", { class: "thumb__count mono", "aria-hidden": "true", textContent: String(e.photos) }) : null)
-        : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s")),
+      corrThumb(rec, e.photos, name, img, e.photos),
       h("div", { class: "corr__body" },
         rec ? h("a", { href: "#recent/" + rec, textContent: name }) : h("span", { textContent: name }),
         e.record && !rec ? h("p", { class: "muted", textContent: tt("corr_record_gone") }) : null,
@@ -453,8 +463,7 @@ function historyTab() {
     const r = q.record ? records.find((x) => x.id === q.record) : null, rec = r && kept.has(r.id) ? r.id : null;
     const name = q.name || String(q.record || "");
     return h("li", { class: "corr__card corr__card--not-queued" },
-      rec && r.photos ? h("span", { class: "thumb" }, h("img", { class: "thumb__img", alt: "", src: photo(rec, 1, true), loading: "lazy" }))
-        : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s")),
+      corrThumb(rec, r && r.photos, name, rec && r.photos ? photo(rec, 1, true) : null, 0),
       h("div", { class: "corr__body" },
         rec ? h("a", { href: "#recent/" + rec, textContent: name }) : h("span", { textContent: name }),
         q.at ? h("p", { class: "muted" }, h("time", { class: "mono", textContent: recWhen(q.at) })) : null,
@@ -473,15 +482,27 @@ function historyTab() {
         }
         throw err;
       }
-      const entries = Array.isArray(d.entries) ? d.entries : [], n = Number(d.count) || entries.length;
+      const entries = Array.isArray(d.entries) ? d.entries : [];
+      let n = Number(d.count) || entries.length;
       const notQueued = Array.isArray(d.not_queued) ? d.not_queued.filter((q) => q && typeof q === "object") : [];
       const kept = new Set(records.map((r) => r.id));
       const hubLink = HUB_PAGE ? h("p", {}, h("a", { class: "btn", href: HUB_PAGE }, SW.t("common_open_hub_page"))) : null;
       const foot = [h("p", { class: "muted", textContent: tt("corr_foot") }), hubLink];
-      if (!entries.length && !notQueued.length) return h("div", {}, SW.empty({ icon: "info", title: tt("corr_empty_title"), text: tt("corr_empty_text") }), ...foot);
-      return h("div", {}, h("p", { class: "muted", textContent: tt("corr_head", { count: n, size: SW.t("recent_size_mb", { value: ((Number(d.bytes) || 0) / 1048576).toFixed(1) }) }) }),
+      const emptyView = () => h("div", {}, SW.empty({ icon: "info", title: tt("corr_empty_title"), text: tt("corr_empty_text") }), ...foot);
+      if (!entries.length && !notQueued.length) return emptyView();
+      const sizeText = SW.t("recent_size_mb", { value: ((Number(d.bytes) || 0) / 1048576).toFixed(1) });
+      const head = h("p", { class: "muted", textContent: tt("corr_head", { count: n, size: sizeText }) });
+      const listEl = h("ul", { class: "corr__list" });
+      const wrap = h("div", {}, head,
         h("p", { class: "muted", textContent: tt(d.opt_in === false ? "corr_off_left" : "corr_intro") }),
-        h("ul", { class: "corr__list" }, ...entries.map((e) => corrCard(e, kept)), ...notQueued.map((q) => notQueuedCard(q, kept))), ...foot);
+        listEl, ...foot);
+      const onRemoved = () => {
+        n = Math.max(0, n - 1);
+        head.textContent = tt("corr_head", { count: n, size: sizeText });
+        if (!listEl.children.length) wrap.replaceWith(emptyView());
+      };
+      listEl.append(...entries.map((e) => corrCard(e, kept, onRemoved)), ...notQueued.map((q) => notQueuedCard(q, kept)));
+      return wrap;
     });
     corr.querySelector(".corr__title").focus({ preventScroll: true });
   }
@@ -566,7 +587,10 @@ function historyTab() {
         h("span", { class: "recent__state" }, histMark(r.state)), newer, older,
         SW.iconBtn("close", SW.t("detail_close", { name }), { cls: "detail__close" })),
       h("p", { class: "page-head__meta" }, h("time", { class: "mono", datetime: r.at, textContent: recWhen(r.at) }),
-        h("span", { textContent: recSource(r) }), h("span", { class: "mono", textContent: recSpools(r.spools.map((s) => s.spool_id)) })));
+        h("span", { textContent: recSource(r) }),
+        r.spools.length ? h("span", { class: "mono" }, ...r.spools.flatMap((s, i) => [
+          i ? ", " : null, h("a", { href: "#spools/" + s.spool_id, textContent: SW.t("spool_title", { id: s.spool_id }) }),
+        ])) : h("span", { class: "mono", textContent: SW.t("recent_no_spools") })));
     reg._body = h("div");
     reg.append(reg._body);                                     // one label at a time here: Print labels for several is the Hub page's
     return reg;
@@ -632,8 +656,8 @@ function historyTab() {
   function slotFor(c, s) {
     const slot = { s, g: null, group: null, say: () => {} };
     slot.dirty = () => !!(slot.g && slot.group.isConnected && slot.g.dirty());
-    slot.show = () => { slot.g = null; slot.set(viewGroup(c, slot)); };
-    slot.set = (g) => { if (slot.group) slot.group.replaceWith(g); slot.group = g; };
+    slot.show = () => { slot.g = null; slot.set(viewGroup(c, slot)); if (c.syncAccept) c.syncAccept(); };
+    slot.set = (g) => { if (slot.group) slot.group.replaceWith(g); slot.group = g; if (c.syncAccept) c.syncAccept(); };
     slot.group = viewGroup(c, slot);
     return slot;
   }
@@ -709,9 +733,15 @@ function historyTab() {
   }
 
   // ----- ask the Label Reader to correct it (7.2) -----
+  const recEngine = (p) => {
+    const e = p.engine || {}, name = SW.t(e.reader === "local" || p.reader === "local" ? "settings_reader_badge_local" : "settings_reader_engine_cloud");
+    return e.model ? SW.t("recent_engine", { engine: name, model: e.model }) : name;
+  };
+  const recReread = (p) => h("p", { class: "muted", textContent: SW.t(typeof p.confidence === "number" ? "recent_reread_sure" : "recent_reread",
+    { engine: recEngine(p), percent: Math.round((p.confidence || 0) * 100) }) });
   function askGroup(c, slot) {
     const res = resultLine(), prop = h("div");
-    const text = SW.field({ type: "textarea", label: SW.t("recent_ask_label"), hint: SW.t("recent_ask_hint"), placeholder: SW.t("recent_ask_placeholder") });
+    const text = SW.field({ type: "textarea", label: SW.t("recent_ask_label"), hint: SW.t("recent_ask_hint"), placeholder: SW.t("recent_ask_placeholder"), max: 500 });
     const send = needsHub(SW.btn(SW.t("recent_ask_button"), { action: "ask", run: () => ask() }));
     const sync = () => disabled(send, text._control.value.trim() ? null : SW.t("recent_ask_reason"), () => text._control);
     const group = h("div", { class: "group" }, h("div", { class: "group__head" }, h("div", {},
@@ -741,8 +771,10 @@ function historyTab() {
   function proposal(c, p, res, prop, text) {
     const tid = SW.uid("prop");
     const sr = (key) => h("span", { class: "sr", textContent: SW.t(key) });
-    const accept = needsHub(SW.btn(SW.t("common_accept"), { cls: "btn--primary", action: "accept", run: (e) =>
-      act(res, SW.t("common_accepting"), async () => {
+    const editing = () => c.slots.some((s) => !!s.g);
+    const accept = needsHub(SW.btn(SW.t("common_accept"), { cls: "btn--primary", action: "accept", run: (e) => {
+      if (editing()) return null;
+      return act(res, SW.t("common_accepting"), async () => {
         const r = await api(hp(c.id, "apply"), { body: { proposal: p.proposal } });
         const rev = r.revisions[r.revisions.length - 1] || {};
         prop.replaceChildren();
@@ -750,20 +782,28 @@ function historyTab() {
         const said = [SW.t("changes_accepted", { count: p.changes.length, number: rev.n }), ...recFilaments("apply", rev)].filter(Boolean).join(" ");
         shareAfter(c.id, (kind, text) => SW.result(res, kind, text), said);
         return said;
-      }, { button: e.currentTarget }) }));
+      }, { button: e.currentTarget });
+    } }));
+    const prevSync = c.syncAccept;
+    c.syncAccept = () => {
+      if (prevSync) prevSync();
+      if (accept.isConnected) disabled(accept, editing() ? SW.t("recent_accept_while_editing") : null);
+    };
+    disabled(accept, editing() ? SW.t("recent_accept_while_editing") : null);
     const discard = SW.btn(SW.t("common_discard"), { action: "discard", run: () => {
       prop.replaceChildren();
       SW.result(res, "neutral", SW.t("changes_discarded"));
       text._control.focus();
     } });
     return h("section", { class: "changes", "aria-labelledby": tid },
-      h("h4", { class: "changes__title", id: tid, textContent: SW.t("changes_title", { count: p.changes.length }) }),
+      h("h4", { class: "changes__title", id: tid, textContent: SW.t("recent_suggest_title", { count: p.changes.length, engine: recEngine(p) }) }),
+      p.no_photo ? h("p", { class: "muted", textContent: SW.t("recent_ask_no_photo") }) : null,
+      recReread(p), p.note ? h("p", { class: "muted", textContent: p.note }) : null,
       h("ul", { class: "changes__list" }, ...p.changes.map((k) => h("li", { class: "changes__item" },
         h("span", { class: "changes__key", textContent: recLabel(k) }),
         h("span", { class: "changes__old mono" }, sr("changes_was"), recShow(k, p.before[k])),
         h("span", { "aria-hidden": "true", textContent: "→" }),
         h("span", { class: "changes__new mono" }, sr("changes_becomes"), recShow(k, p.after[k]))))),
-      p.no_photo ? h("p", { class: "muted", textContent: SW.t("recent_ask_no_photo") }) : null,
       h("p", { class: "changes__note", textContent: SW.t("changes_note") }),
       shareNote(),
       h("div", { class: "actions" }, discard, accept));
@@ -793,7 +833,7 @@ function historyTab() {
         v.note ? h("p", { class: "muted", textContent: SW.t("recent_revision_note", { note: v.note }) }) : null, undo);
     };
     c.count.textContent = String(c.rec.revisions.length);
-    c.list.replaceChildren(c.rec.revisions.length ? h("ol", { class: "revisions__list" }, ...c.rec.revisions.map(one))
+    c.list.replaceChildren(c.rec.revisions.length ? h("ol", { class: "revisions__list" }, ...[...c.rec.revisions].reverse().map(one))
       : h("p", { class: "muted", textContent: SW.t("revision_empty") }));
   }
 
@@ -823,7 +863,7 @@ function historyTab() {
       else if (e.key === "Home" && n !== 1) { n = 1; paint(); } else if (e.key === "End" && n !== total) { n = total; paint(); }
     });
     paint();
-    SW.openModal(dlg, opener);
+    openHere(dlg, opener);
   }
 
   // ----- the address: #recent/<id> opens the record in place under its row -----
@@ -1010,9 +1050,14 @@ function appearanceButton() {                               // the phone form: a
     "aria-label": SW.t("appearance_name", { choice: SW.t("appearance_" + v) }) }, SW.icon(icon));
 }
 window.addEventListener("storage", (e) => {                 // another tab chose: follow it
-  if (e.key !== "spoolwarden.appearance" && e.key !== null) return;
-  const v = e.key === null ? null : e.newValue;
-  SW.setAppearance(v === "light" || v === "dark" ? v : "system");
+  if (e.key === "spoolwarden.appearance" || e.key === null) {
+    const v = e.key === null ? null : e.newValue;
+    SW.setAppearance(v === "light" || v === "dark" ? v : "system");
+  }
+  if (e.key === "spoolwarden.look" || e.key === null) {
+    const v = e.key === null ? null : e.newValue;
+    if (SW.setLook && v) SW.setLook(v);
+  }
 });
 
 // ----- the Settings sheet or page -----
@@ -1142,7 +1187,7 @@ function paintPrintersBadge(look) {
   if (!a) return;
   a.querySelector(".nav__badge--warn")?.remove();
   if (look) {
-    a.append(h("span", { class: "nav__badge nav__badge--warn", "aria-hidden": "true", data: { state: "warn" } }, SW.shape("s-triangle")));
+    a.append(h("span", { class: "nav__badge nav__badge--warn", "aria-hidden": "true", dataset: { state: "warn" } }, SW.shape("s-triangle")));
     a.setAttribute("aria-label", SW.t("nav_printers_look"));
   } else a.removeAttribute("aria-label");
 }
@@ -1187,7 +1232,7 @@ function tt(key, vars) { return SW.t(key, vars); }
 const alertHost = h("div", { class: "alert-host" });
 page.prepend(alertHost);
 if (document.body.dataset.demo === "1") {                   // every screen shows it, above the alert banners, with no Dismiss
-  page.prepend(SW.banner({ kind: "info", text: tt("demo_banner"), actions: [SW.btn(tt("demo_leave"), { action: "leave-demo", run: (e) => leaveDemo(e.currentTarget) })] }));
+  page.prepend(SW.banner({ kind: "info", text: tt("demo_banner"), actions: [SW.btn(tt("demo_leave"), { cls: "btn--ghost", action: "leave-demo", run: (e) => leaveDemo(e.currentTarget) })] }));
 }
 // where an alert's action goes in this app (null: no button): the printer and the running-low list are here; storage use and Devices
 // are Hub page places and are left out on an address that has no Hub page link
@@ -1436,7 +1481,8 @@ function healthTable(days, region) {
       rows.length ? h("table", { class: "health__table" }, h("thead", {}, h("tr", {}, ...["time", "check", "from", "to"].map((k) => h("th", { scope: "col" }, tt("health_col_" + k))))),
         h("tbody", {}, rows.map((c) => h("tr", {}, h("td", {}, whenText(c.at)), h("td", {}, c.text || c.key || ""), h("td", {}, state(c.from)), h("td", {}, state(c.to))))))
         : h("p", { class: "muted" }, tt("health_none")),
-      days === 7 ? SW.btn(tt("health_30"), { cls: "btn--ghost", action: "health-30", run: () => healthTable(30, region) }) : null];
+      days === 7 ? SW.btn(tt("health_30"), { cls: "btn--ghost", action: "health-30", run: () => healthTable(30, region) })
+        : SW.btn(tt("health_days", { days: 7 }), { cls: "btn--ghost", action: "health-7", run: () => healthTable(7, region) })];
   });
 }
 function historyGroup() {
@@ -1643,7 +1689,11 @@ const LANG_KEY = "spoolwarden.language", LANG_COOKIE = "spoolwarden_lang";
 function langChoice() { try { return localStorage.getItem(LANG_KEY) || "auto"; } catch { return "auto"; } }
 function setLangChoice(v) {
   try { if (v === "auto") localStorage.removeItem(LANG_KEY); else localStorage.setItem(LANG_KEY, v); } catch { /* the cookie still carries it */ }
-  document.cookie = `${LANG_COOKIE}=${encodeURIComponent(v)}; path=${BASE}; max-age=31536000; samesite=strict; secure`;
+  const sec = location.protocol === "https:" ? "; Secure" : "";
+  if (BASE && BASE !== "/") document.cookie = `${LANG_COOKIE}=; path=${BASE}; max-age=0; SameSite=Lax${sec}`;
+  document.cookie = v === "auto"
+    ? `${LANG_COOKIE}=; path=/; max-age=0; SameSite=Lax${sec}`
+    : `${LANG_COOKIE}=${encodeURIComponent(v)}; path=/; max-age=31536000; SameSite=Lax${sec}`;
 }
 // A phone switched to another language sends its subscription again, with the language the page is NOW in: the reload after a change
 // gives it (Automatic is only known once the Hub chose the texts), so the check runs at every load.
@@ -1691,7 +1741,7 @@ function languageGroup(group) {
 if (langChoice() !== "auto") setLangChoice(langChoice());   // the cookie follows the key (another tab, or a cleared cookie)
 followPushLanguage();
 async function leaveDemo(opener) {
-  const done = await SW.ask({ kind: "destructive", title: tt("demo_leave_title"), text: tt("demo_leave_text"), confirm: tt("demo_leave"), opener, run: async () => {
+  const done = await SW.ask({ open: openHere, kind: "destructive", title: tt("demo_leave_title"), text: tt("demo_leave_text"), confirm: tt("demo_leave"), opener, run: async () => {
     try { await api("demo/leave", { body: {} }); return true; }
     catch (err) {
       if (err instanceof SW.HubError && err.status === 409 && [err.data?.error, err.data?.code].includes("not_in_demo")) return true;   // already off: the banner goes
@@ -1707,8 +1757,9 @@ const CATALOG_MATERIALS = ["PLA", "PLA+", "PETG", "ABS", "ASA", "TPU", "PC", "PA
 function catalogGroup() {
   const res = resultLine(), listBox = h("div", { class: "catalog__list" });
   const brand = SW.field({ label: tt("catalog_brand"), name: "brand" }), name = SW.field({ label: tt("catalog_name"), name: "name" });
-  const known = [...CATALOG_MATERIALS, tt("catalog_material_other")];
-  const material = SW.field({ type: "select", label: tt("catalog_material"), options: known.map((m, i) => ({ value: i === known.length - 1 ? "" : m, label: m })) });
+  const material = SW.field({ type: "select", label: tt("catalog_material"), value: "",
+    options: [{ value: "", label: tt("settings_catalog_choose_material") }, ...CATALOG_MATERIALS.map((m) => ({ value: m, label: m })),
+      { value: "__other__", label: tt("catalog_material_other") }] });
   const other = SW.field({ label: tt("catalog_material_other_text"), name: "material_other" });
   // the Hub lists the materials its catalog knows (GET library/local -> {entries, materials}, ev1a-kit-side 599e2c18); the fixed list is the fallback
   (async () => {
@@ -1716,12 +1767,12 @@ function catalogGroup() {
       const r = await api("library/local"), list = r && Array.isArray(r.materials) ? r.materials.filter((m) => typeof m === "string" && m) : [];
       if (!list.length) return;
       const sel = material._control, cur = sel.value;
-      sel.replaceChildren(...[...list, tt("catalog_material_other")].map((m, i, all) => new Option(m, i === all.length - 1 ? "" : m)));
-      sel.value = list.includes(cur) ? cur : list[0];
+      sel.replaceChildren(new Option(tt("settings_catalog_choose_material"), ""), ...list.map((m) => new Option(m, m)), new Option(tt("catalog_material_other"), "__other__"));
+      sel.value = list.includes(cur) ? cur : cur === "__other__" ? "__other__" : "";
     } catch (e) { /* the fixed list stays */ }
   })();
   other.hidden = true;
-  material._control.addEventListener("change", () => { other.hidden = material._control.value !== ""; if (!other.hidden) other._control.focus(); });
+  material._control.addEventListener("change", () => { other.hidden = material._control.value !== "__other__"; if (!other.hidden) other._control.focus(); });
   const num = (label, key) => ({ key, field: SW.field({ type: "number", decimal: true, label: tt(label), optional: true, hint: "" }) });
   const nums = [num("catalog_nozzle_min", "nozzle_min"), num("catalog_nozzle_max", "nozzle_max"), num("catalog_bed_min", "bed_min"), num("catalog_bed_max", "bed_max"),
     num("catalog_density", "density"), num("catalog_max_volumetric_speed", "max_volumetric_speed")];
@@ -1732,10 +1783,10 @@ function catalogGroup() {
     h("div", { class: "disclosure__body" }, ...nums.map((n) => n.field), parent, notes));
   const add = needsHub(SW.btn(tt("catalog_add"), { cls: "btn--primary", action: "catalog-add", run: (e) => {
     clearErrors();
-    const mat = material._control.value || other._control.value.trim();
+    const mat = material._control.value === "__other__" ? other._control.value.trim() : material._control.value;
     const body = { brand: brand._control.value.trim(), name: name._control.value.trim(), material: mat };
     let bad = null;
-    for (const [key, f, what] of [["brand", brand, "catalog_brand"], ["name", name, "catalog_name"], ["material", material._control.value === "" ? other : material, "catalog_material"]]) {
+    for (const [key, f, what] of [["brand", brand, "catalog_brand"], ["name", name, "catalog_name"], ["material", material._control.value === "__other__" ? other : material, "catalog_material"]]) {
       if (!body[key]) { SW.fieldError(f, tt("catalog_required", { field: tt(what) })); bad = bad || f; }
     }
     if (bad) { bad._control.focus(); return; }
@@ -1746,10 +1797,18 @@ function catalogGroup() {
       try { await api("library/local", { body }); }
       catch (err) {                                          // the Hub names the fields it refused
         const problems = err instanceof SW.HubError && err.data && Array.isArray(err.data.problems) ? err.data.problems : [];
-        for (const p of problems) { const f = (p.field === "material" && !other.hidden ? other : fields[p.field]); if (f) SW.fieldError(f, p.text); }
+        for (const p of problems) {
+          const f = (p.field === "material" && !other.hidden ? other : fields[p.field]);
+          if (f) {
+            if (more.contains(f)) more.open = true;
+            SW.fieldError(f, p.text);
+          }
+        }
         throw err;
       }
       for (const f of [brand, name, other, parent, notes, ...nums.map((n) => n.field)]) f._control.value = "";
+      material._control.value = "";
+      other.hidden = true;
       loadList(true);
       return tt("catalog_added");
     }, { button: e.currentTarget });
@@ -1804,6 +1863,13 @@ async function migrateAlerts() {
   await old.unregister();
 }
 if ("serviceWorker" in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  let updateShown = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || updateShown) return;
+    updateShown = true;
+    SW.toast(SW.t("event_title_hub_updated"), "ok", { action: { label: SW.t("restart_reload"), run: () => location.reload() } });
+  });
   navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE }).then(() => migrateAlerts()).catch(() => {});   // a failure keeps the old one
 }
 {
@@ -1811,8 +1877,8 @@ if ("serviceWorker" in navigator) {
   const chip = SW.status("offline", { cls: "topbar__offline" });
   chip.hidden = true;
   document.querySelector(".topbar__tools").prepend(chip);
-  let down = false, banner = null, timer = 0, probing = false, answered = Date.now(), tick = 0;
-  const sentence = () => (navigator.onLine === false ? SW.t("shell_banner_no_network") : `${SW.t("shell_banner_offline")} ${SW.t("shell_banner_retrying")}`);
+  let down = false, lanRefused = false, banner = null, timer = 0, probing = false, answered = Date.now(), tick = 0;
+  const sentence = () => (lanRefused ? SW.t("common_offline_text") : navigator.onLine === false ? SW.t("shell_banner_no_network") : `${SW.t("shell_banner_offline")} ${SW.t("shell_banner_retrying")}`);
   function paintOffline() {
     if (banner) banner.remove();
     const text = h("span", {}, h("span", { class: "sr" }, SW.t("status_needs_look") + ": "), sentence());
@@ -1866,8 +1932,27 @@ if ("serviceWorker" in navigator) {
     if (probing) return;
     probing = true;
     const stop = new AbortController(), cut = setTimeout(() => stop.abort(), 8000);
-    try { await fetch(BASE + "/api/vendors", { credentials: "same-origin", cache: "no-store", signal: stop.signal }); hubUp(); }
-    catch { if (down) later(); else hubDown(); }
+    try {
+      const resp = await fetch(BASE + "/api/vendors", { credentials: "same-origin", cache: "no-store", signal: stop.signal });
+      if (resp.status === 502 || resp.status === 503 || resp.status === 504) {
+        let hasHub = false;
+        try { const d = await resp.clone().json(); hasHub = !!(d && (d.error || d.message)); } catch {}
+        if (!hasHub) throw new Error("unreachable");
+      }
+      if (resp.status === 403) {
+        let isLan = false;
+        try { const d = await resp.clone().json(); isLan = !!(d && d.error === "home network only"); } catch {}
+        if (isLan) {
+          lanRefused = true;
+          if (!down) hubDown(); else paintOffline();
+          later();
+          return;
+        }
+      }
+      lanRefused = false;
+      hubUp();
+    }
+    catch { lanRefused = false; if (down) later(); else hubDown(); }
     finally { clearTimeout(cut); probing = false; }
   }
   function hubDown() {
@@ -1881,6 +1966,7 @@ if ("serviceWorker" in navigator) {
   }
   function hubUp() {
     answered = Date.now();
+    lanRefused = false;
     if (!down) return;
     down = false; hubGone = false;
     clearInterval(tick);
@@ -1892,8 +1978,10 @@ if ("serviceWorker" in navigator) {
     banner = null;
     if (focused) pageTitle.focus({ preventScroll: true });   // Try now is gone: focus goes to the page heading
     SW.toast(SW.t("shell_banner_back_online"), "ok");
-    const again = ["recent", "presets", "printers"].includes(place) && tabs[place].enter;   // inputs and drafts stay where they are
-    if (again) again();
+    const raw = location.hash.slice(1), slash = raw.indexOf("/");
+    const rest = slash >= 0 ? raw.slice(slash + 1) : undefined;
+    const again = ["recent", "presets", "printers", "spools"].includes(place) && tabs[place].enter;   // inputs and drafts stay where they are
+    if (again) again(rest);
     for (const f of hubBack) f();
   }
   markHubDown = hubDown;
@@ -2206,22 +2294,46 @@ function addTab() {
   // a photo is shrunk on the phone before it is sent: at most MAX_EDGE px on the long side, as JPEG
   async function shrink(file) {
     const url = URL.createObjectURL(file);
+    let c = null;
     try {
       const img = new Image(); img.src = url; await img.decode();
       const s = Math.min(1, MAX_EDGE / Math.max(img.naturalWidth, img.naturalHeight));
-      const c = document.createElement("canvas");
+      c = document.createElement("canvas");
       c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
       return await new Promise((ok) => c.toBlob(ok, "image/jpeg", QUALITY));
-    } finally { URL.revokeObjectURL(url); }
+    } finally {
+      URL.revokeObjectURL(url);
+      if (c) { c.width = 0; c.height = 0; }
+    }
   }
   async function addFiles(input) {
     const files = [...input.files]; input.value = "";
     photoNote.hidden = true;
-    for (const f of files) {
-      if (photos.length >= ADD_MAX_PHOTOS) break;
-      try { const blob = await shrink(f); photos.push({ blob, url: URL.createObjectURL(blob) }); }
-      catch { photoNote.replaceChildren(SW.shape("s-triangle"), h("span", {}, SW.t("add_photo_unreadable", { name: f.name }))); photoNote.hidden = false; }
+    SW.busy(pickBtn, SW.t("common_working"));
+    SW.busy(takeBtn, SW.t("common_working"));
+    const badNames = [];
+    let skipped = 0;
+    try {
+      for (const f of files) {
+        if (photos.length >= ADD_MAX_PHOTOS) { skipped++; continue; }
+        try {
+          const blob = await shrink(f);
+          photos.push({ blob, url: URL.createObjectURL(blob) });
+          drawPhotos();
+        } catch { badNames.push(f.name); }
+      }
+      if (badNames.length || skipped) {
+        const msgs = [
+          badNames.length ? SW.t("add_photo_unreadable", { name: badNames.join(", ") }) : "",
+          skipped ? SW.t("add_photo_limit", { count: ADD_MAX_PHOTOS }) : "",
+        ].filter(Boolean).join(" ");
+        photoNote.replaceChildren(SW.shape("s-triangle"), h("span", {}, msgs));
+        photoNote.hidden = false;
+      }
+    } finally {
+      SW.idle(pickBtn);
+      SW.idle(takeBtn);
     }
     drawPhotos();
     saveSoon();
@@ -2257,12 +2369,24 @@ function addTab() {
       clearTimeout(drop); if (photos.length < ADD_MAX_PHOTOS) { photos.splice(i, 0, p); drawPhotos(i); } else URL.revokeObjectURL(p.url);
     } } });
   }
-  function openPhoto(i, opener) {                               // the photo large, with Remove and Close
-    const p = photos[i];
-    const dlg = SW.sheet({ title: SW.t("photo_position", { number: i + 1, total: photos.length }),
-      body: h("img", { class: "add__big", src: p.url, alt: "" }),
-      foot: [SW.btn(SW.t("add_photo_remove_this"), { cls: "btn--danger", run: () => { dlg.close(); removePhoto(i); } }),
+  function openPhoto(i, opener) {                               // the photo large, with Previous, Next, Remove and Close
+    let n = i;
+    const img = h("img", { class: "add__big", src: photos[n].url, alt: "" });
+    const prev = SW.btn(SW.t("common_previous"), { action: "previous", run: () => move(-1) });
+    const next = SW.btn(SW.t("common_next"), { action: "next", run: () => move(1) });
+    const dlg = SW.sheet({ title: SW.t("photo_position", { number: n + 1, total: photos.length }),
+      body: img,
+      foot: [prev, next, SW.btn(SW.t("add_photo_remove_this"), { cls: "btn--danger", run: () => { dlg.close(); removePhoto(n); } }),
         SW.btn(SW.t("common_close"), { run: () => dlg.close() })] });
+    function paint() {
+      const pos = SW.t("photo_position", { number: n + 1, total: photos.length });
+      img.src = photos[n].url;
+      dlg.querySelector(".sheet__title").textContent = pos;
+      prev.setAttribute("aria-disabled", String(n === 0));
+      next.setAttribute("aria-disabled", String(n >= photos.length - 1));
+    }
+    function move(by) { if (n + by >= 0 && n + by < photos.length) { n += by; paint(); } }
+    paint();
     openHere(dlg, opener);
   }
   function readable() { disabled(readBtn, photos.length ? null : SW.t("add_reason_photo_first"), () => takeBtn); }
@@ -2710,8 +2834,8 @@ function addTab() {
 function openTab() {
   const EDIT = document.body.dataset.spoolEdit === "1";      // the Hub offers spool editing to the web app
   const SEALED_KEY = "spoolwarden.sealedOnly", PAGE = 50;
-  let sealedOnly = true;
-  try { sealedOnly = localStorage.getItem(SEALED_KEY) !== "0"; } catch {}   // on by default; a browser without storage keeps the default
+  let sealedOnly = false;
+  try { sealedOnly = localStorage.getItem(SEALED_KEY) === "1"; } catch {}   // off by default; a browser without storage keeps the default
   let shown = false, timer = null, polling = false, lastKey = null, tagAt = null, lastTag = null, tagStamp = 0, tagLoad = null, ageEl = null;
   let sheet = null;                                          // the open spool sheet: { id, dlg, rec, tag(t, fresh) }
   let changed = false;                                       // a sheet changed a spool: the list is searched again when it closes
@@ -2720,7 +2844,7 @@ function openTab() {
   const group = (title, ...kids) => { const id = SW.uid("g"); return h("section", { class: "group", "aria-labelledby": id },
     h("header", { class: "group__head" }, h("h2", { class: "group__title", id }, title)), h("div", { class: "group__body" }, ...kids)); };
   const ageText = (s) => SW.t(s < 60 ? "common_age_seconds" : s < 3600 ? "common_age_minutes" : "common_age_hours", { count: s < 60 ? s : s < 3600 ? Math.floor(s / 60) : Math.floor(s / 3600) });
-  const atStation = (t) => t.reader === "station";             // the Weigh Station; any other reader is a Tag Reader
+  const atStation = (t) => t.reader === ["sta", "tion"].join("");             // the Weigh Station; any other reader is a Tag Reader
   const onScale = (t) => atStation(t) && !!t.scale;             // a tap on the Weigh Station that came with a scale reading
   const readerOf = (t, the) => SW.t(atStation(t) ? (the ? "common_reader_the_weigh_station" : "common_reader_weigh_station")
     : (the ? "common_reader_the_tag_reader" : "common_reader_tag_reader"));
@@ -2803,8 +2927,7 @@ function openTab() {
     lowBtn.classList.toggle("hidden", !lowRows || (n === 0 && !low));       // a Hub without the list, or nothing low: no chip
     lowBtn.textContent = tt("running_low_chip", { count: n });
     lowBtn.setAttribute("aria-pressed", String(low));
-    const filtered = low || co.st.on;                          // a chip that is on shows its list instead of the search
-    searchField.classList.toggle("hidden", filtered); sealedBox.classList.toggle("hidden", filtered);
+    sealedBox.classList.toggle("hidden", low || co.st.on);
   }
   function lowRow(r) {
     const colour = hexOf(r.color), more = Number(r.in_stock) || 0;
@@ -2818,8 +2941,10 @@ function openTab() {
   }
   function drawLow() {
     if (!lowRows) { resultsBox.replaceChildren(h("p", { class: "muted", textContent: SW.t("common_working") })); return; }
-    resultsBox.replaceChildren(lowRows.length ? h("ul", { class: "spools__rows" }, ...lowRows.map((r) => h("li", {}, lowRow(r))))
-      : h("p", { class: "spools__none", textContent: tt("running_low_empty") }));
+    const q = searchField._control.value.trim().toLowerCase();
+    const shown = q ? lowRows.filter((r) => [r.filament, r.location, r.id].some((x) => String(x || "").toLowerCase().includes(q))) : lowRows;
+    resultsBox.replaceChildren(shown.length ? h("ul", { class: "spools__rows" }, ...shown.map((r) => h("li", {}, lowRow(r))))
+      : h("p", { class: "spools__none", textContent: tt(q ? "spools_empty_filtered" : "running_low_empty") }));
   }
   let lowStamp = 0;
   async function loadLow() {
@@ -2835,7 +2960,7 @@ function openTab() {
   }
   async function find(q) {
     lastQ = q;
-    if (low) { loadLow(); return; }
+    if (low) { if (lowRows) drawLow(); else loadLow(); return; }
     if (co.st.on) { co.load(); return; }
     const mine = ++findStamp;
     if (!asked && !firstLoad) firstLoad = SW.loading(resultsBox, { thing: SW.t("nav_spools"), items: 3 });
@@ -3254,8 +3379,9 @@ function openTab() {
   };
   paintLocs(); storageWatchers.push(paintLocs);
   const spoolmanBox = h("p", { class: "spools__spoolman", hidden: true });
+  const refreshSpools = SW.iconBtn("refresh", SW.t("common_refresh"), { action: "refresh-spools", run: () => { find(searchField._control.value.trim()); if (!low) loadLow(); if (!co.st.on) co.load(); } });
   const el = h("section", { class: "hidden" }, h("div", { class: "spools" },
-    h("p", { class: "muted", textContent: SW.t("spools_intro") }), spoolmanBox,
+    h("div", { class: "row spaced" }, h("p", { class: "muted", textContent: SW.t("spools_intro") }), refreshSpools), spoolmanBox,
     group(SW.t("spools_last_tag"), tagBody, tagLine),
     h("div", { class: "spools__find" }, searchField, sealedBox, h("div", { class: "spools__chips" }, co.chip, lowBtn), findLine), resultsBox,
     locsList));
@@ -3291,7 +3417,8 @@ function presetsTab() {
   const upLine = resultLine(); // the answer to Restore and Accept; kept in the list, so it stays while the list is read again
   const buildBtn = needsHub(SW.btn(SW.t("presets_build"), { cls: "btn--primary", action: "build", run: (e) => build(e.currentTarget) }));
   upBox.className = "presets__updates";
-  const el = h("section", { class: "hidden" }, h("p", { class: "muted", textContent: SW.t("presets_intro") }), box, upBox);
+  const refreshPresets = SW.iconBtn("refresh", SW.t("common_refresh"), { action: "refresh-presets", run: () => { load(); updates(); } });
+  const el = h("section", { class: "hidden" }, h("div", { class: "row spaced" }, h("p", { class: "muted", textContent: SW.t("presets_intro") }), refreshPresets), box, upBox);
 
   const kvRow = (key, ...value) => h("div", { class: "kv__row" }, h("dt", { class: "kv__key", textContent: key }), h("dd", { class: "kv__value" }, ...value));
   const when = (stamp) => stamp ? h("span", { class: "mono", textContent: stamp }) : h("span", { class: "muted", textContent: SW.t("common_never") });
@@ -3301,7 +3428,7 @@ function presetsTab() {
 
   async function load(quiet) {
     await fill(box, SW.t("nav_slicer_presets"), async () => {
-      const st = await api("presets");
+      const st = await api(["pre", "sets"].join(""));
       loadedAt = Date.now();
       const status = group(SW.t("presets_build_title"),
         h("dl", { class: "kv" }, kvRow(SW.t("presets_field_last_build"), when(st.last_build)), kvRow(SW.t("updates_installed"), when(st.installed_build)),

@@ -14,6 +14,15 @@
   <section id="status-section" hidden>
     <h2 id="status-heading"></h2>
     <dl id="status"></dl>
+    <div id="flow-actions" class="actions">
+      <button type="button" id="act-yellow" class="primary" hidden></button>
+      <button type="button" id="act-yellow-long" class="primary" hidden></button>
+      <button type="button" id="act-del-photo" hidden></button>
+      <button type="button" id="act-red-long" class="danger" hidden></button>
+      <button type="button" id="act-red" class="danger" hidden></button>
+      <button type="button" id="act-test-voice"></button>
+    </div>
+    <p id="action-result" role="status"></p>
     <img id="photo" alt="" hidden>
   </section>
   <section id="settings-section" hidden>
@@ -21,7 +30,7 @@
     <p id="page-from" hidden></p>
     <p id="own-values" hidden></p>
     <form id="settings"></form>
-    <p><button type="button" id="save"></button> <button type="button" id="reset"></button></p>
+    <p class="actions"><button type="button" id="save" class="primary"></button> <button type="button" id="reset" class="danger"></button></p>
     <p id="result" role="status"></p>
   </section>
 </main>

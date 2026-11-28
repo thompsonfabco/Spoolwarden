@@ -141,7 +141,8 @@ label.filebtn.wide > button { flex: 1 1 auto; }
 
 /* the refusal and sign-in pages: one centred column, no navigation */
 main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4))); max-width: none; margin: 0 auto;
-                  padding: var(--s5); }
+                  padding: max(var(--s5), env(safe-area-inset-top)) max(var(--s5), env(safe-area-inset-right))
+                           calc(var(--s5) + env(safe-area-inset-bottom)) max(var(--s5), env(safe-area-inset-left)); }
 .standalone__brand { display: flex; gap: var(--s2); align-items: center; margin: var(--s5) 0;
                      font-size: var(--fs-l); font-weight: var(--fw-title); }
 .standalone h1 { font-size: var(--fs-xl); }
@@ -353,13 +354,17 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 /* the action bar: sticky above the bottom bar on a phone, at the bottom of the column from 601 px */
 .add__bar { position: sticky; bottom: var(--s2); z-index: 5; display: flex; align-items: center; gap: var(--s3); padding: var(--s3); border: var(--hairline) solid var(--border-strong);
             border-radius: var(--r); background: var(--surface); box-shadow: var(--e2); }
-@media (max-width: 600px) { .add__bar { bottom: calc(var(--tab) + env(safe-area-inset-bottom) + var(--s2)); } }
+@media (max-width: 600px) {
+  .add__bar { bottom: calc(var(--tab) + env(safe-area-inset-bottom) + var(--s2)); }
+  .shell:has(.nav[data-state="hidden"]) .add__bar { bottom: var(--s2); }
+}
 .add__bar-text { flex: 1 1 0; min-width: 0; font-size: var(--fs-m); }
 .add__bar-btn { flex: none; }
 
 /* the number of spools waiting, on the Add destination */
 .nav__badge { position: absolute; top: var(--s1); left: calc(50% + var(--s1)); display: grid; place-items: center; min-width: var(--s4); height: var(--s4); padding: 0 var(--s1);
               border: var(--hairline) solid var(--accent-text); border-radius: var(--s3); background: var(--accent-soft); color: var(--accent-text); font-size: var(--fs-xs); font-weight: var(--fw-label); }
+.nav__badge[data-state="warn"], .nav__badge--warn { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); }
 /* Spools: the last tag, the search, the rows and the spool sheet */
 .spools { display: grid; gap: var(--s4); }
 .spools p { margin: 0; }
@@ -461,6 +466,7 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
    but the labels and adds no padding of its own. */
 .labels { display: grid; gap: var(--s4); padding: var(--s4); }
 .labels__chrome { display: grid; gap: var(--s3); }
+.labels__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .labels__title { margin: 0; font-size: var(--fs-b); font-weight: var(--fw-title); line-height: var(--lh-title); }
 .labels__sheet { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s3); overflow-x: auto; }
 .labels__img { display: block; box-sizing: border-box; border: var(--hairline) solid var(--border); }
@@ -472,11 +478,14 @@ main.standalone { width: min(calc(var(--s7) * 10), calc(100vw - 2 * var(--s4)));
 .labels__page--a4-70x37 { width: 210mm; height: 297mm; padding: 0.5mm 0 0; column-gap: 0; grid-template-columns: repeat(3, 70mm); grid-auto-rows: 37mm; }
 .labels__page--letter-66x25 { width: 215.9mm; height: 279.4mm; padding: 12.7mm 0 0 4.7625mm; column-gap: 3.175mm; grid-template-columns: repeat(3, 66.675mm); grid-auto-rows: 25.4mm; }
 .labels__error[hidden], .labels__actual[hidden] { display: none; }
+@media screen and (max-width: 600px) { .labels__page { zoom: 0.42; } }
+@media screen and (min-width: 601px) and (max-width: 1024px) { .labels__page { zoom: 0.72; } }
 @media print {
   .labels { padding: 0; gap: 0; }
   .labels__chrome { display: none; }
   .labels__sheet { display: block; gap: 0; overflow: visible; }
   .labels__img, .labels__page { border: 0; }
+  .labels__page { zoom: 1; }
   .labels__img--62x29, .labels__img--50x30, .labels__page { break-after: page; }
 }
 

@@ -435,13 +435,14 @@ function openLoadDrawer(p, box, first) {
     picks = {};
     let ask = null;
     if (st && st.seen && st.ask) {
-      const other = keep("other", SW.field({ type: "select", label: SW.t("printers_load_no"), name: "other", options: v.positions.map((q) => ({ value: q.id, label: q.label })), value: st.position.id }));
+      const otherOpts = v.positions.filter((q) => q.id !== st.position.id).map((q) => ({ value: q.id, label: q.label }));
+      const other = otherOpts.length ? keep("other", SW.field({ type: "select", label: SW.t("printers_load_no"), name: "other", options: otherOpts, value: otherOpts[0].value })) : null;
       const noz = v.dual_nozzle && !st.seen.nozzle_reported ? keep("noz", SW.field({ type: "select", label: SW.t("common_field_nozzle"), name: "nozzle",
         options: [{ value: "right", label: SW.t("printers_load_nozzle_right") }, { value: "left", label: SW.t("printers_load_nozzle_left") }] })) : null;
       const nozzle = () => (st.seen.nozzle_reported ? st.seen.nozzle : noz ? noz._control.value : null);
       ask = E("div", "printers-ask", E("p", null, st.ask), noz,
         E("div", "actions", SW.btn(SW.t("common_yes"), { cls: "btn--primary", run: () => send("confirm", { position: st.position.id, reported: st.seen.reported, nozzle: nozzle() }) })),
-        E("div", "printers-ask__other", other, SW.btn(SW.t("printers_load_save"), { run: () => send("confirm", { position: other._control.value, reported: st.seen.reported, nozzle: nozzle() }) })));
+        other ? E("div", "printers-ask__other", other, SW.btn(SW.t("printers_load_save"), { run: () => send("confirm", { position: other._control.value, reported: st.seen.reported, nozzle: nozzle() }) })) : null);
     } else if (st && !v.reports_loads) {
       const pick = keep("pick", SW.field({ type: "select", label: SW.t("printers_load_slot"), name: "slot", options: (v.choices || []).map((c, i) => ({ value: String(i), label: c.label })) }));
       ask = E("div", "printers-ask", pick, E("div", "actions", SW.btn(SW.t("printers_load_save_unchecked"), { cls: "btn--primary",
@@ -460,7 +461,11 @@ function openLoadDrawer(p, box, first) {
       ask,
       st ? E("div", "actions",
         SW.btn(SW.t("printers_load_skip", { position: st.position.label }), { cls: "btn--ghost", run: () => send("skip", { position: st.position.id }) }),
-        SW.btn(SW.t("printers_load_stop"), { run: () => send("stop", {}) })) : null,
+        SW.btn(SW.t("printers_load_stop"), { run: async () => {
+          const stopIt = await SW.ask({ kind: "destructive", title: SW.t("printers_load_stop_title", { name: p.name }), text: SW.t("printers_load_stop_body"),
+            confirm: SW.t("printers_load_stop"), cancel: SW.t("printers_load_keep") });
+          if (stopIt) await send("stop", {});
+        } })) : null,
       st && v.summary ? E("p", "muted", v.summary) : null,
       idle ? E("div", "actions", SW.btn(SW.t("printers_manual_start"), { cls: "btn--primary", run: begin })) : positions,
       !v.open && v.offer_report ? E("div", "printers-offer", E("p", null, SW.t("printers_load_offer")),

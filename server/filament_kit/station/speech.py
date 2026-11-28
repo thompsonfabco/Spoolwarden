@@ -48,29 +48,38 @@ def say(text, opts=None):
 
 piper = {}  # the loaded Piper voice, kept between phrases (loading takes ~1 s, a phrase ~0.1 s)
 _piper_path = [None]  # model path currently loaded into `piper`
+_piper_lock = threading.Lock()
 
 
-def piper_voice():
+def piper_voice(opts=None):
     """The Piper voice if STATION_TTS allows it and its model is installed, else None (then espeak-ng speaks)."""
-    path = st.settings["piper_voice"]
-    if st.settings["tts"] == "espeak" or not os.path.exists(path):
-        return None
-    if _piper_path[0] != path:
-        piper.clear()
-        _piper_path[0] = path
-    if "voice" not in piper:
-        try:
-            from piper import PiperVoice  # the [station-tts] extra
-            piper["voice"] = PiperVoice.load(path)
-        except Exception as e:  # noqa: BLE001 - piper-tts missing or the model broken: don't retry every phrase
-            log.warning("piper: %s; speaking with espeak-ng", e)
-            piper["voice"] = None
-    return piper["voice"]
+    opts = opts or {}
+    tts = opts.get("tts") or st.settings["tts"]
+    with _piper_lock:
+        path = (voice.model_path(directory=os.path.dirname(st.settings["piper_voice"]) or voice.DIR, name=opts["voice"])
+                if opts.get("voice") else st.settings["piper_voice"])
+        if tts == "espeak" or not os.path.exists(path):
+            return None
+        if _piper_path[0] != path:
+            piper.clear()
+            _piper_path[0] = path
+        if "voice" not in piper:
+            try:
+                from piper import PiperVoice  # the [station-tts] extra
+                piper["voice"] = PiperVoice.load(path)
+            except Exception as e:  # noqa: BLE001 - piper-tts missing or the model broken: don't retry every phrase
+                log.warning("piper: %s; speaking with espeak-ng", e)
+                piper["voice"] = None
+        return piper["voice"]
 
 
 def engine():
     """Which voice speaks: for the log at start (which also preloads Piper's)."""
-    return f"Piper ({os.path.basename(st.settings['piper_voice'])})" if piper_voice() else "espeak-ng"
+    if piper_voice():
+        with _piper_lock:
+            name = os.path.basename(st.settings["piper_voice"])
+        return f"Piper ({name})"
+    return "espeak-ng"
 
 
 def piper_settings(voice, speaker, speed):
@@ -92,7 +101,7 @@ def synth(text, opts=None):
     espeak-ng's (the live speed); None if neither works. `opts` replaces the live speaker / speed for this phrase."""
     speaker = (opts or {}).get("speaker", st.voice_value("speaker"))
     speed = (opts or {}).get("speed", st.voice_value("speed"))
-    voice = piper_voice()
+    voice = piper_voice(opts)
     if voice:
         try:
             buf = io.BytesIO()
@@ -196,7 +205,7 @@ def speech_loop():
         speech_ready.clear()
         try:
             speak(*next_phrase())
-        except (OSError, subprocess.TimeoutExpired) as e:  # aplay missing or the output hung
+        except Exception as e:  # noqa: BLE001 - transient error must not kill the speech thread
             log.warning("speech: %s", e)
 
 
@@ -215,9 +224,13 @@ def apply_voice(values):
     if "tts" in values:
         st.settings["tts"] = values["tts"]
     if "voice" in values:
-        st.settings["piper_voice"] = voice.model_path(name=values["voice"])
-        piper.clear()
-        _piper_path[0] = None
+        with _piper_lock:
+            st.settings["piper_voice"] = voice.model_path(
+                directory=os.path.dirname(st.settings["piper_voice"]) or voice.DIR,
+                name=values["voice"],
+            )
+            piper.clear()
+            _piper_path[0] = None
     if "volume" in values and st.ports["panel_chip"] == "esp32c3":
         from . import panel
         panel.send_volume()

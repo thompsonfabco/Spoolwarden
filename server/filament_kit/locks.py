@@ -75,14 +75,16 @@ class ProcessLock:
     def release(self) -> None:
         if self._depth <= 0:
             raise RuntimeError("release of an unheld ProcessLock")
-        self._depth -= 1
-        if self._depth == 0 and self._fh is not None:
-            fh, self._fh = self._fh, None
-            try:
-                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
-            finally:
-                fh.close()
-        self._rlock.release()
+        try:
+            self._depth -= 1
+            if self._depth == 0 and self._fh is not None:
+                fh, self._fh = self._fh, None
+                try:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+                finally:
+                    fh.close()
+        finally:
+            self._rlock.release()
 
     def __enter__(self) -> "ProcessLock":
         self.acquire()

@@ -20,6 +20,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -34,6 +35,7 @@ import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.ui.components.HubNotice
 import com.thompsonfabco.filamentkit.ui.components.HubNoticeKind
+import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NeedsHubReason
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
@@ -45,6 +47,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Edit by hand (05-android-app 10.3) on saved item [item] of record [id]. The form lives in the record's view model
@@ -89,10 +92,15 @@ internal fun EditScreen(
     LaunchedEffect(vm, item, s.record) { vm.startEdit(item) }
     val e = s.edit
     var leaving by rememberSaveable { mutableStateOf(false) }
-    // Back asks when a field changed (2.5 rule 1) and is ignored while the save runs (rule 2)
+    val toast = LocalToast.current
+    val scope = rememberCoroutineScope()
+    val wait = stringResource(R.string.catalog_saving_wait)
+    // Back asks when a field changed (2.5 rule 1) and shows a toast while the save runs (rule 2)
     BackHandler(enabled = e != null) {
-        if (e != null && !e.busy) {
-            if (e.dirty) leaving = true else leave(vm, onClose)
+        if (e != null) {
+            if (e.busy) scope.launch { toast?.show(wait) }
+            else if (e.dirty) leaving = true
+            else leave(vm, onClose)
         }
     }
     val failure = s.error
@@ -164,7 +172,12 @@ private fun EditFields(vm: RecordViewModel, s: RecordState, e: EditUi) {
     }
     e.failure?.let { NoticeCard(NoticeKind.Bad, failureText(it)) }
     RecentGroup.entries.forEach { group ->
-        Text(stringResource(group.title), color = colors.muted, style = SpoolwardenTheme.type.tableHeader)
+        Text(
+            stringResource(group.title),
+            Modifier.semantics { heading() },
+            color = colors.muted,
+            style = SpoolwardenTheme.type.tableHeader,
+        )
         Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
             RecentField.entries.filter { it.group == group }.forEach { field ->
                 val text = e.texts[field].orEmpty()

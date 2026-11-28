@@ -16,7 +16,7 @@ try:
 except ImportError:
     _analytics = None
 
-from .. import orders_import
+from .. import demo, orders_import
 
 EMPTY = {"months": [], "insights": [], "notes": []}
 
@@ -52,6 +52,8 @@ def routes(page) -> list[tuple]:
         return await anyio.to_thread.run_sync(_load)
 
     async def import_orders_route(request, body):
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         if not isinstance(body, dict) or not isinstance(body.get("data"), str):
             raise Refused(400, "Order data is required", field="order_data")
         fmt = body.get("format") or "auto"

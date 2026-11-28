@@ -2,7 +2,10 @@ package com.thompsonfabco.filamentkit.ui.presets
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -15,16 +18,19 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -114,7 +120,9 @@ fun PresetsScreen(
         }
     }
     LaunchedEffect(pairing) { vm.pairedWith(pairing) }
-    val now = remember(nowMillis) { nowMillis ?: System.currentTimeMillis() }
+    val now = remember(nowMillis, s.status) { nowMillis ?: System.currentTimeMillis() }
+    var refreshing by remember { mutableStateOf(false) }
+    LaunchedEffect(s.status, s.lines) { refreshing = false }
     val presentation = rememberDetailPresentation()
     val useCardDetail = presentation == DetailPresentation.Card
     val useSheetDetail = presentation == DetailPresentation.Sheet
@@ -129,32 +137,38 @@ fun PresetsScreen(
         returnFocusLineId = null
     }
     val listBody: @Composable (Modifier) -> Unit = { listModifier ->
-        Column(
-            listModifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
-            horizontalAlignment = Alignment.CenterHorizontally,
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = { refreshing = true; vm.reload() },
+            modifier = listModifier.fillMaxSize(),
         ) {
             Column(
-                Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(space.s3),
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                StatusPanel(s, vm, now, onPairAgain)
-                NoticeCard(NoticeKind.Info, stringResource(R.string.presets_info))
-                SettingsPanel {
-                    SectionTitle(stringResource(R.string.presets_missing_title))
-                    Text(stringResource(R.string.presets_missing_text), style = MaterialTheme.typography.bodyMedium)
-                    SwButton(stringResource(R.string.catalog_add_line), onAddCatalogLine, Modifier.fillMaxWidth())
+                Column(
+                    Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(space.s3),
+                ) {
+                    StatusPanel(s, vm, now, onPairAgain)
+                    NoticeCard(NoticeKind.Info, stringResource(R.string.presets_info))
+                    SettingsPanel {
+                        SectionTitle(stringResource(R.string.presets_missing_title))
+                        Text(stringResource(R.string.presets_missing_text), style = MaterialTheme.typography.bodyMedium)
+                        SwButton(stringResource(R.string.catalog_add_line), onAddCatalogLine, Modifier.fillMaxWidth())
+                    }
+                    UncoveredPanel(s, vm, onPairAgain)
+                    LinesPanel(
+                        s, vm, onPairAgain,
+                        useCardDetail = useCardDetail,
+                        lineFocus = lineFocus,
+                        onCloseCard = { lineId ->
+                            vm.closeParent()
+                            returnFocusLineId = lineId
+                        },
+                    )
+                    if (updates != null) UpdatesPanel(s.status, updates, onChanged = vm::reload)
                 }
-                UncoveredPanel(s, vm, onPairAgain)
-                LinesPanel(
-                    s, vm, onPairAgain,
-                    useCardDetail = useCardDetail,
-                    lineFocus = lineFocus,
-                    onCloseCard = { lineId ->
-                        vm.closeParent()
-                        returnFocusLineId = lineId
-                    },
-                )
-                if (updates != null) UpdatesPanel(s.status, updates, onChanged = vm::reload)
             }
         }
     }
@@ -414,6 +428,7 @@ private fun PickField(
 
 // ---- product lines ----------------------------------------------------------------------------------------------
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LinesPanel(
     s: PresetsUiState,
@@ -424,6 +439,9 @@ private fun LinesPanel(
     onCloseCard: (String) -> Unit = {},
 ) {
     val lines = s.lines
+    val space = SpoolwardenTheme.space
+    var query by rememberSaveable { mutableStateOf("") }
+    var missingOnly by rememberSaveable { mutableStateOf(false) }
     SettingsPanel {
         SectionTitle(stringResource(R.string.presets_lines_title))
         if (lines == null) {
@@ -434,7 +452,33 @@ private fun LinesPanel(
         if (lines.isEmpty() && s.linesFail == null) {
             Text(stringResource(R.string.presets_lines_empty), style = MaterialTheme.typography.bodyMedium)
         }
-        lines.take(s.shown).forEachIndexed { i, line ->
+        if (lines.isNotEmpty()) {
+            FormField(query, { query = it }, stringResource(R.string.common_search))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
+                val chipMod = Modifier.defaultMinSize(minWidth = SpoolwardenTheme.sizes.row, minHeight = SpoolwardenTheme.sizes.row)
+                FilterChip(
+                    selected = !missingOnly,
+                    onClick = { missingOnly = false },
+                    label = { Text(stringResource(R.string.features_filter_all)) },
+                    modifier = chipMod,
+                )
+                FilterChip(
+                    selected = missingOnly,
+                    onClick = { missingOnly = true },
+                    label = { Text(stringResource(R.string.presets_parent_none)) },
+                    modifier = chipMod,
+                )
+            }
+        }
+        val q = query.trim().lowercase()
+        val filtered = lines.filter { line ->
+            (!missingOnly || line.bambuParent == null) &&
+                (q.isEmpty() || line.vendor.lowercase().contains(q) || line.product.lowercase().contains(q) || line.material.lowercase().contains(q))
+        }
+        if (lines.isNotEmpty() && filtered.isEmpty()) {
+            Text(stringResource(R.string.presets_parent_no_match), style = MaterialTheme.typography.bodyMedium)
+        }
+        filtered.take(s.shown).forEachIndexed { i, line ->
             if (i > 0) HorizontalDivider(color = SpoolwardenTheme.colors.border, thickness = SpoolwardenTheme.sizes.hairline)
             val requester = lineFocus.getOrPut(line.lineId) { FocusRequester() }
             val editing = useCardDetail && s.edit?.lineId == line.lineId
@@ -453,7 +497,7 @@ private fun LinesPanel(
                 }
             }
         }
-        if (lines.size > s.shown) SwButton(stringResource(R.string.presets_lines_more), vm::showMore, kind = SwButtonKind.Quiet)
+        if (filtered.size > s.shown) SwButton(stringResource(R.string.presets_lines_more), vm::showMore, kind = SwButtonKind.Quiet)
     }
 }
 
@@ -552,6 +596,13 @@ private fun ParentEditorBody(
                             RadioButton(picked, onClick = null)
                             Text(p, style = MaterialTheme.typography.bodyMedium)
                         }
+                    }
+                    if (matches.size > MATCH_CAP) {
+                        Text(
+                            stringResource(R.string.add_results_cut, MATCH_CAP),
+                            color = SpoolwardenTheme.colors.muted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                 }
                 fail?.let { FailureNotice(it, onPairAgain) }

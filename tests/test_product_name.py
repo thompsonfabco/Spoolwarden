@@ -6,6 +6,7 @@ history and are not read."""
 import ast
 import json
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -58,8 +59,13 @@ def _shell_messages(path):
 
 def sources():
     """(name, texts) of every visible text the rule covers."""
-    out = [("strings/en.json", [v for k, v in json.loads((ROOT / "strings" / "en.json").read_text("utf-8")).items()
-                                if isinstance(v, str) and k != "command_name"])]
+    out = []
+    for el in ET.parse(ROOT / "strings" / "languages.xml").getroot().findall("language"):
+        rel = f"strings/{el.attrib['file']}"
+        data = json.loads((ROOT / rel).read_text("utf-8"))
+        texts = [t for k, v in data.items() if k != "command_name"
+                 for t in (v.values() if isinstance(v, dict) else (v,))]
+        out.append((rel, texts))
     for p in (PKG / "setup_static", ROOT / "web-shared"):
         for f in sorted(p.iterdir()):
             if f.suffix in (".js", ".css", ".html"):

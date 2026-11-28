@@ -42,7 +42,7 @@ def test_with_no_file_the_installed_values_stand_and_nothing_changed(tmp_path):
     store, target, lamps, _ = make(tmp_path, speaker_volume=30, beep=False)
     assert value(store, "volume") == 30 and value(store, "beep") is False
     assert store.changed is False and lamps == {} and target["speaker_volume"] == 30
-    assert value(store, "lamp.lookup") == "both" and value(store, "lamp.idle") == "off"      # today's table
+    assert value(store, "lamp.lookup") == "yellow" and value(store, "lamp.idle") == "off"      # today's table
     assert not (tmp_path / "state" / "settings.xml").exists()
 
 
@@ -93,10 +93,10 @@ def test_one_bad_value_among_good_ones_changes_nothing(tmp_path):
 
 def test_the_file_is_xml_and_private(tmp_path):
     store, *_ = make(tmp_path)
-    store.change({"volume": 70, "lamp.lookup": "yellow"})
+    store.change({"volume": 70, "lamp.lookup": "both"})
     path = tmp_path / "state" / "settings.xml"
     text = path.read_text(encoding="utf-8")
-    assert text.startswith("<?xml") and '<setting id="volume" value="70"' in text and 'id="lamp.lookup" value="yellow"' in text
+    assert text.startswith("<?xml") and '<setting id="volume" value="70"' in text and 'id="lamp.lookup" value="both"' in text
     assert not text.lstrip().startswith("{")
     if os.name == "posix":
         assert stat.S_IMODE(path.stat().st_mode) == 0o600 and stat.S_IMODE(path.parent.stat().st_mode) == 0o700

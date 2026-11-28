@@ -101,7 +101,9 @@ def test_pc_sync_workflow_runs_on_both():
     assert "os: [windows-2022, ubuntu-24.04]" in text
     assert "shellcheck pc-sync/linux/*.sh" in text
     assert "bash pc-sync/linux/build.sh" in text
-    assert "pyinstaller==6.11.1" in text
+    assert "--require-hashes" in text
+    assert "-r tools/release-sync-requirements.txt" in text
+    assert "-r tools/release-sync-linux-requirements.txt" in text
 
 
 def test_release_builds_signs_and_publishes_the_tarball():

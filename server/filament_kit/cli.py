@@ -224,7 +224,7 @@ def cmd_pair(slicer_sync: bool = False, weigh_station: bool = False, home_assist
         # no QR scanner there: the link is pasted (printed by design, never logged)
         output.out("Paste this link into the Slicer Sync when it asks:" if slicer_sync else
                    "Paste this link or code into Home Assistant:" if home_assistant else
-                   "On the Weigh Station run: sudo spoolwarden station pair, then paste this link:")
+                   "On the Weigh Station run: sudo spoolwarden weigh-station pair, then paste this link:")
         output.out(pr.qr)
     elif text:
         # no terminal (an install log): the link as text, for a phone that gets it some other way
@@ -492,7 +492,10 @@ def cmd_backup(action: str, out: str | None, days: int | None = None, *,
         return 1
     output.emit({"ok": True, "path": str(path)})
     output.result(f"Backup written: {path}")
-    output.note("the zip is not encrypted and holds the setup secrets: store it somewhere safe.")
+    if path.name.endswith(".enc"):
+        output.note("the backup is encrypted with your backup password: keep the password safe to restore it.")
+    else:
+        output.note("the zip is not encrypted and holds the setup secrets: store it somewhere safe.")
     return 0
 
 
@@ -1877,7 +1880,7 @@ def _refresh_station_policy(cfg: dict) -> bool:
         apply.refresh_station(cfg)
     except (apply.ApplyError, modules.ModuleError) as e:
         output.error(f"the saved Weigh Station policy could not be applied ({e}).",
-                     cmd="sudo spoolwarden modules apply")
+                     cmd="sudo spoolwarden features apply")
         return False
     return True
 
@@ -3753,7 +3756,7 @@ class _Hub:
     def refused(e) -> int:
         """Print the Hub's refusal as an error (a module that is off gets the command that turns it on); its exit code."""
         module = re.fullmatch(r"the (\w+) module is off on this server", e.message)
-        output.error(e.message, cmd=f"sudo spoolwarden modules enable {module.group(1)}" if module else None)
+        output.error(e.message, cmd=f"sudo spoolwarden features on {module.group(1)}" if module else None)
         return output.USAGE if e.status in (400, 404) else output.FAILED
 
 
@@ -5713,7 +5716,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     from . import reader_setup as rs
     from . import reader_tokens
     if not a.token_file and not _is_root():
-        return output.need_sudo(_sudo_command("sudo spoolwarden reader setup"))
+        return output.need_sudo(_sudo_command("sudo spoolwarden tag-reader flash"))
     answers = None
     if getattr(a, "pending", False):        # the setup page's job: the answers it was given, nothing asked
         answers = rf.take_pending()
@@ -5838,7 +5841,7 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     print(result.message)
     if tid:
         output.out(f"Reader token {tid} ({a.name or 'printer-station'}). Remove it later with: "
-                   + f"sudo spoolwarden reader revoke {tid}")
+                   + f"sudo spoolwarden tag-reader revoke {tid}")
     print(f"Buzzer: {buzzer}-triggered. Unplug it from the server and power it where it lives; it keeps its settings.")
     if not real_key:
         print("Note: without --ota-pubkey it refuses updates over Wi-Fi; running this again with the board plugged in "
@@ -5942,7 +5945,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
     if token is None and not _is_root():
         output.error("this needs administrator rights to make the reader's token.",
                      "run it with sudo, or pass --token-file with a token made by:",
-                     cmd="sudo spoolwarden reader token")
+                     cmd="sudo spoolwarden tag-reader new-token")
         return output.NEEDS_SUDO
     ssid = a.ssid or ask("Wi-Fi name the reader joins: ").strip()
     password = _wifi_password(a, ask_secret)
@@ -5982,7 +5985,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         if not flashing:
             output.out("Build and flash with it as reader/README.md says (copy it to reader/src/secrets.h, then "
                        + "pio run -e esp32-c3-supermini -t upload), or here with: "
-                       + f"spoolwarden reader setup --secrets {out} --source <checkout>/reader")
+                       + f"sudo spoolwarden tag-reader flash --secrets {out} --source <checkout>/reader")
     if flashing:
         busy = None
         try:
@@ -6006,7 +6009,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
                  "board needs --buzzer low."))
     if tid:
         output.out(f"Reader token {tid} ({a.name or 'reader'}). Remove it later with: "
-                   + f"sudo spoolwarden reader revoke {tid}")
+                   + f"sudo spoolwarden tag-reader revoke {tid}")
     if not real_key:
         print("Note: without --ota-pubkey this reader refuses every update over Wi-Fi until it is flashed again with "
               "the key (py tools/ota_publish.py --init-key prints it).")
@@ -6650,8 +6653,13 @@ _HELP_GROUPS = [('Everyday',
    ('printer', 'List, test, map and manage printers'),
    ('klipper', 'The Klipper add-on'),
    ('recent', 'Recently added spools: show, correct, undo'),
-   ('spools', 'Spools running low'),
+   ('spools', 'Search and filter spools; show running low'),
+   ('spool', 'Show, weigh, move, empty, return or label one spool'),
+   ('add', 'Prints where spools are added'),
    ('events', 'What happened on the Hub: show, follow'),
+   ('activity', 'Show what was done on the Hub'),
+   ('undo', 'Undo a spool or slot change'),
+   ('usage', 'Show filament used by printers'),
    ('devices', 'Paired phones, PCs and Weigh Stations'),
    ('pair', 'Pair a phone, the Slicer Sync or a Weigh Station'),
    ('weigh-station', 'Weigh Station: pair it, flash its display'),
@@ -6663,9 +6671,13 @@ _HELP_GROUPS = [('Everyday',
    ('locations', 'Storage locations: the list, add, edit, move, remove'),
    ('alerts', 'What Spoolwarden warns you about: switches, limits, test'),
    ('label-reader', 'Label Reader: status and test'),
+   ('local-intake', 'Local label reader: status, install, update, test'),
    ('catalog', 'Filament Catalog: status, update, roll back, add'),
    ('backup', 'Make or list backups'),
    ('restore', 'Restore this Hub from a backup'),
+   ('export', 'Export Hub data as CSV'),
+   ('import', 'Import spools or locations from CSV'),
+   ('report', 'Collect a redacted Hub report'),
    ('web', "Access from outside the home, and Claude's connector"),
    ('remote', 'Remote access: certificate and firewall rules'),
    ('setup-code', "The Hub page's address and setup code"),
@@ -6674,7 +6686,8 @@ _HELP_GROUPS = [('Everyday',
    ('spoolman', "Spoolman: its address and Spoolwarden's extra fields"),
    ('update', 'Check, install or roll back Spoolwarden'),
    ('uninstall', 'Remove Spoolwarden from this machine'),
-   ('logs', "The end of a service's log")])]
+   ('logs', "The end of a service's log"),
+   ('help', 'Help for a command, aliases, or the command table')])]
 
 _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check', '{nav_overview}'),
  ('`printer list`', 'All printers, set up and found', '{nav_printers}'),
@@ -6809,7 +6822,7 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`backup password [--remove \\| --show]`',
   'Set the backup password (typed twice), remove it (asks) or print it; new backups are encrypted while one is set (root)',
   '{settings_backups_password_set} / {settings_backups_password_change} / {settings_backups_password_remove}'),
- ('`restore <zip> \\| --uploaded`', 'Restore (asks for the typed word)', '{settings_restore_heading}'),
+ ('`restore <zip> \\| --uploaded [--password-file FILE] [-y]`', 'Restore (asks for the typed word)', '{settings_restore_heading}'),
  ('`web status`', 'Access from outside: rows as in `status`', '{nav_settings} > {settings_group_network}'),
  ('`web passphrase`', 'Set or replace the web passphrase', '{settings_group_passphrase}'),
  ('`remote firewall`', 'Print the firewall rules (changes nothing)', '{settings_network_firewall}'),
@@ -6838,7 +6851,7 @@ _COMMAND_TABLE = [('`status`', 'Checks everything and prints one row per check',
  ('`import spools\\|locations <file> [-y]`', 'Import spools or locations from CSV (root; asks)', '{nav_spools}'),
  ('`report [--out FILE]`', 'Collect a redacted Hub report (root)', '{nav_logs}'),
  ('`status --history [--days 7\\|30]`', 'Show check changes in the last 7 or 30 days', '(none)'),
- ('`pair --home-assistant [--text] [--no-wait]`', 'Pair Home Assistant (viewer role): print the code and link', '(none)'),
+ ('`pair --home-assistant [--control] [--text] [--no-wait]`', 'Pair Home Assistant (`--control` grants printer and slot control)', '(none)'),
  ('`local-intake status`', 'Does the local reader answer, which tiers it can use, the reader order', '(none)'),
  ('`local-intake install [--tier auto\\|cpu\\|gpu] [--version VERSION] [--planned] [-y]`',
   'Install or upgrade the local reader from its signed release on this machine (root; sizes are shown first)', '(none)'),
@@ -6902,14 +6915,14 @@ _ALIASES = [('pair --pc', 'pair --slicer-sync'),
 
 def _top_help() -> str:
     """The design, command line: the groups in the Hub page's order, what each command is for, and the switches every command takes."""
-    lines = ["Spoolwarden on this Hub. Commands marked (sudo) in their own help need sudo.",
+    lines = ["Spoolwarden on this Hub. Commands marked (root) in their own help need sudo.",
              "Usage: spoolwarden <command> [options]    More: spoolwarden <command> -h", ""]
     for group, items in _HELP_GROUPS:
         lines.append(group)
         lines += [f"  {name:<16} {text}" for name, text in items]
         lines.append("")
-    lines += ["Every command: -h  --json  -q/--quiet  -y/--yes  --color auto|always|never",
-              "               --plain  --no-progress"]
+    lines += ["Every command: -h  --json  -q/--quiet  --numbered  --color auto|always|never",
+              "               --plain  --no-progress  (-y/--yes on commands that ask)"]
     return "\n".join(lines) + "\n"
 
 
@@ -7617,8 +7630,9 @@ def _json_refusal(a) -> int | None:
             (c == "catalog" and sub == "token" and not a.remove, "catalog token"),
             (c == "local-intake" and sub == "token" and not a.remove, "local-intake token"),
             (c == "printer" and sub in ("unpin", "forget-certificate") and not a.access_code, f"printer {sub}"),
-            (c == "printer" and sub == "map" and a.manual, "printer map --manual"),
-            (c == "klipper" and sub == "api-key" and not a.api_key and not a.clear, "klipper api-key"),
+            (c == "printer" and sub == "map" and a.manual, "printer map --by-loading"),
+            (c in ("printer", "klipper") and sub == "api-key" and not a.api_key and not a.clear, "printer api-key"),
+            (c == "weigh-station" and sub == "panel-wifi" and not a.off, "weigh-station panel-wifi"),
             (c == "backup" and sub == "password" and not a.remove and not a.show, "backup password"))
     for yes, name in asks:
         if yes:

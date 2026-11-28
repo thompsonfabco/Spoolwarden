@@ -32,7 +32,8 @@ async function lockOptions(chip) {
     return;
   }
   const ok = await SW.ask({ title: t("lock_trusted"), text: t("lock_trusted_body", { date: lock.until }), opener: chip,
-    body: h("p", null, h("a", { href: "#devices/trusted", text: t("lock_trusted_link") })), cancel: t("common_close"),
+    body: h("p", null, h("a", { href: "#devices/trusted", text: t("lock_trusted_link"),
+      on: { click: (e) => { const d = e.currentTarget.closest("dialog"); if (d) d.close(); } } })), cancel: t("common_close"),
     confirm: t("lock_trusted_stop"), style: "", run: () => SW.api(`${SW.setting("trustPath")}/${encodeURIComponent(lock.trustId)}/revoke`, { method: "POST" }).then(() => true) });
   if (ok) { SW.setLock("locked"); SW.toast(t("lock_toast_untrusted")); }
 }

@@ -13,7 +13,7 @@ build_dir = env.subst("$BUILD_DIR")  # noqa: F821
 gen = os.path.join(build_dir, "gen")
 os.makedirs(gen, exist_ok=True)
 header = os.path.join(gen, "fw_build.h")
-text = f"#pragma once\n#define FW_BUILD {build}L\n"
+text = f"#pragma once\n#define FW_BUILD {build}LL\n"
 if not os.path.exists(header) or open(header).read() != text:
     with open(header, "w") as f:
         f.write(text)

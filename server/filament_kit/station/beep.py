@@ -48,20 +48,27 @@ def tone(hz=1800, ms=120, rate=44100):
 
 
 BEEP_WAV = tone()
+TONE_WAVS = {
+    "scan": BEEP_WAV,
+    "hold": tone(2400, 80),
+    "discard": tone(700, 180),
+    "nothing": tone(400, 220),
+}
 
 
 def beep(kind="scan"):
-    """The panel's buzzer if the panel is connected, else (scan beep only) a tone on the PC's speaker output.
+    """The panel's buzzer if the panel is connected, else a tone on the PC's speaker output.
     Plays in the background so the reader loop isn't held up; a missing speaker only logs."""
-    if not st.settings["beep"] or wire.panel_send(TONES[kind]) or kind != "scan":
+    if not st.settings["beep"] or wire.panel_send(TONES[kind]):
         return
     dev = st.settings["beep_device"] or beep_device()
     if not dev:
         return
+    wav = TONE_WAVS.get(kind, BEEP_WAV)
 
     def play():
         try:
-            p = subprocess.run(["aplay", "-q", "-D", dev, "-"], input=BEEP_WAV, capture_output=True, timeout=5)
+            p = subprocess.run(["aplay", "-q", "-D", dev, "-"], input=wav, capture_output=True, timeout=5)
             if p.returncode:
                 log.warning("beep on %s: %s", dev, p.stderr.decode(errors="replace").strip())
         except (OSError, subprocess.TimeoutExpired) as e:  # aplay missing or the device hung

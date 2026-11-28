@@ -120,6 +120,7 @@ export default async (p) => {
   await ok(`document.querySelectorAll(".revisions__item[data-state=undone]").length === 3`, "all three revisions undone");
 
   // Newer and Older, and a record that is no longer kept
+  await p.eval('document.querySelectorAll(".toast button").forEach((b) => b.click())');
   await p.click(".recent__older");
   await p.waitFor(`location.hash === "#recent/${ids.long}"`, "the older record");
   await p.go("#recent/000000000000");

@@ -271,11 +271,12 @@ class _Redirect(urllib.request.HTTPRedirectHandler):
     unredirected header, so it never follows."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        o, t = urllib.parse.urlsplit(req.full_url), urllib.parse.urlsplit(newurl)
+        resolved = urllib.parse.urljoin(req.full_url, newurl)
+        o, t = urllib.parse.urlsplit(req.full_url), urllib.parse.urlsplit(resolved)
         same = (o.scheme, o.hostname, o.port) == (t.scheme, t.hostname, t.port)
         if t.scheme != "https" and not same:
             raise ReleaseError(f"refused a redirect to {t.scheme}://{t.hostname}")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        return super().redirect_request(req, fp, code, msg, headers, resolved)
 
 
 def _opener():

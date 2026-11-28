@@ -71,7 +71,7 @@ window.fetch = async (u, o) => {
   const path = String(u).replace(/^.*\\/setup\\/api\\//, "");
   if (o && o.method === "POST") sent.push([path, JSON.parse(o.body || "{}")]);
   if (tweak.delay[path]) await sleep(tweak.delay[path]);
-  if (tweak.fail[path] > 0) { tweak.fail[path]--; return new Response(JSON.stringify({ error: "the store is busy" }), { status: 503 }); }
+  if (tweak.fail[path] > 0) { tweak.fail[path]--; return new Response(JSON.stringify({ error: "the store is busy" }), { status: 500 }); }
   if (tweak.refuse[path] > 0) { tweak.refuse[path]--; return new Response(JSON.stringify({ error: "this is not the setup code", field: "code" }), { status: 403 }); }
   const r = await real(u, o);
   if (path === "state" && tweak.newDevice) {
@@ -290,11 +290,12 @@ out.label = $('[data-action="unpair"]', row()).getAttribute("aria-label");
 $('[data-action="unpair"]', row()).click();
 await until(dlg, "the Unpair dialog");
 out.dialog = [text($(".dialog__title", dlg())), text($(".dialog__text", dlg())), $$(".dialog__foot .btn", dlg()).map(text)];
-tweak.delay["devices/d1/revoke"] = 800;
+tweak.delay["devices/d1/revoke"] = 1500;
 $('.dialog__foot [data-action="confirm"]').click();
 await sleep(200);
 await refresh();                    // a redraw while the change is under way
-await until(() => !row(), "the device to go");
+await until(() => row(), "the row after the mid-change redraw");
+await until(() => !row() && !$('[aria-busy="true"]', card("Paired devices")), "the device to go");
 out.toast = await until(() => text($(".toast")), "the result");
 out.sent = sentTo("devices/d1/revoke");
 out.count = text($(".page-head__meta"));

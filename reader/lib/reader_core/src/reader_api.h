@@ -150,7 +150,7 @@ std::string joinUrl(const std::string& base, const std::string& path);
 
 struct RemoteConfig {
   uint32_t configVersion = 0;
-  char defaultPrinter[33] = {0};
+  char defaultPrinter[MAX_ID + 1] = {0};
   bool buzzerEnabled = true;
   bool buzzerLow = false;
   bool autoOta = true;
@@ -167,6 +167,6 @@ struct RemoteConfig {
 
 // Parse GET /reader/config. On success `out` is replaced and true is returned;
 // on malformed input `out` is left untouched and false is returned.
-bool parseRemoteConfig(const char* json, RemoteConfig& out);
+bool parseRemoteConfig(const char* json, RemoteConfig& out, bool defaultBuzzerLow = false);
 
 }  // namespace reader

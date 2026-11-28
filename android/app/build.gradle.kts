@@ -1,3 +1,5 @@
+import java.time.Duration
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -67,6 +69,7 @@ android {
         unitTests.all {
             // Robolectric native graphics (Bitmap codecs) needs JDK internals on JDK 17+.
             it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+            it.timeout.set(Duration.ofMinutes(20))
         }
     }
 }

@@ -660,7 +660,7 @@ locIn.files = dt.files;
 locIn.dispatchEvent(new Event("change", { bubbles: true }));
 await until(() => text($("#csv-import-locations .field__error")), "size error");
 out.err = text($("#csv-import-locations .field__error"));
-out.checkDisabled = $("#csv-import-locations .actions .btn:not(.btn--primary)").disabled;
+out.checkDisabled = $("#csv-import-locations .actions .btn:not(.btn--ghost):not(.btn--primary)").disabled;
 """)
     assert page["err"] == T("hub_csv_too_large")
     assert page["checkDisabled"] is True

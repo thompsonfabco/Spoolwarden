@@ -11,13 +11,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +34,7 @@ import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.HubCheckState
+import com.thompsonfabco.filamentkit.ui.components.LocalToast
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
@@ -40,12 +44,14 @@ import com.thompsonfabco.filamentkit.ui.settings.FieldRow
 import com.thompsonfabco.filamentkit.ui.settings.GroupTitle
 import com.thompsonfabco.filamentkit.ui.settings.SettingsPanel
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import kotlinx.coroutines.launch
 
 /**
  * The Hub at a glance: what the Hub says about itself, read-only, group by group. Each group ends with
- * "Change this on the Hub page." and, where the Hub gave an address for it, "Open the Hub page". [online] false keeps
- * what was read under the offline notice. An older Hub (404) says to update it.
+ * "Change this on the Hub page.", with one "Open the Hub page" button when the Hub gave an address. [online] false
+ * keeps what was read under the offline notice. An older Hub (404) says to update it.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun HubScreen(
     ui: HubUi,
@@ -60,43 +66,57 @@ internal fun HubScreen(
 ) {
     val space = SpoolwardenTheme.space
     val links = LocalUriHandler.current
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Column(
-            Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth().verticalScroll(rememberScrollState())
-                .padding(space.s4),
-            verticalArrangement = Arrangement.spacedBy(space.s3),
-        ) {
-            val hub = ui.hub
-            if (ui.unavailable) {
-                Text(stringResource(R.string.app_hub_unavailable), style = MaterialTheme.typography.bodyLarge)
-            } else {
-                ScreenState(
-                    loaded = hub != null,
-                    loading = ui.loading,
-                    error = if (ui.failed && online) ui.message ?: stringResource(R.string.common_offline_text) else null,
-                    onTryAgain = onTryAgain,
-                    offline = !online,
-                    loadedSecondsAgo = ui.loadedAt?.let { ((nowMillis - it) / MS_PER_SECOND).coerceAtLeast(0) } ?: 0,
-                ) {
-                    if (hub != null) {
-                        var openProblem by remember { mutableStateOf(false) }
-                        hubSections(hub).forEach { section ->
-                            SettingsPanel {
-                                GroupTitle(stringResource(section.group.title))
-                                section.lines.forEach { LineView(it) }
-                                Text(
-                                    stringResource(R.string.hub_change_on_page), color = SpoolwardenTheme.colors.muted,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                hub.hubPage?.let { page ->
-                                    SwButton(stringResource(R.string.common_open_hub_page), {
-                                        openProblem = runCatching { links.openUri(page) }.isFailure
-                                    }, Modifier.fillMaxWidth())
+    val toast = LocalToast.current
+    val scope = rememberCoroutineScope()
+    val hub = ui.hub
+    val browserError = stringResource(R.string.settings_hub_page_error_browser)
+
+    PullToRefreshBox(
+        isRefreshing = ui.loading && hub != null,
+        onRefresh = onTryAgain,
+        modifier = modifier.fillMaxSize(),
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            Column(
+                Modifier.widthIn(max = SpoolwardenTheme.sizes.columnMax).fillMaxWidth().verticalScroll(rememberScrollState())
+                    .padding(space.s4),
+                verticalArrangement = Arrangement.spacedBy(space.s3),
+            ) {
+                if (ui.unavailable) {
+                    Text(stringResource(R.string.app_hub_unavailable), style = MaterialTheme.typography.bodyLarge)
+                } else {
+                    ScreenState(
+                        loaded = hub != null,
+                        loading = ui.loading,
+                        error = if (ui.failed && online) ui.message ?: stringResource(R.string.common_offline_text) else null,
+                        onTryAgain = onTryAgain,
+                        offline = !online,
+                        loadedSecondsAgo = ui.loadedAt?.let { ((nowMillis - it) / MS_PER_SECOND).coerceAtLeast(0) } ?: 0,
+                    ) {
+                        if (hub != null) {
+                            var openProblem by remember { mutableStateOf(false) }
+                            hubSections(hub).forEach { section ->
+                                SettingsPanel {
+                                    GroupTitle(stringResource(section.group.title))
+                                    section.lines.forEach { LineView(it) }
+                                    Text(
+                                        stringResource(R.string.hub_change_on_page), color = SpoolwardenTheme.colors.muted,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
                                 }
+                                if (section.group == HubGroup.Status && health != null) HealthPanel(health, onHealthDays, onHealthTryAgain)
                             }
-                            if (section.group == HubGroup.Status && health != null) HealthPanel(health, onHealthDays, onHealthTryAgain)
+                            hub.hubPage?.let { page ->
+                                SwButton(stringResource(R.string.common_open_hub_page), {
+                                    val failed = runCatching { links.openUri(page) }.isFailure
+                                    openProblem = failed && toast == null
+                                    if (failed && toast != null) {
+                                        scope.launch { toast.show(browserError, kind = NoticeKind.Bad) }
+                                    }
+                                }, Modifier.fillMaxWidth())
+                            }
+                            if (openProblem) NoticeCard(NoticeKind.Bad, browserError)
                         }
-                        if (openProblem) NoticeCard(NoticeKind.Bad, stringResource(R.string.settings_hub_page_error_browser))
                     }
                 }
             }
@@ -116,11 +136,14 @@ private fun HealthPanel(health: HealthUi, onDays: (Int) -> Unit, onTryAgain: () 
     val answer = health.answer
     SettingsPanel {
         GroupTitle(stringResource(R.string.hub_health_title))
-        when {
-            health.failed && answer == null -> NoticeCard(
+        if (health.failed) {
+            NoticeCard(
                 NoticeKind.Bad, health.message ?: stringResource(R.string.common_offline_text),
                 actions = listOf(SwAction(stringResource(R.string.common_try_again), onTryAgain)),
             )
+        }
+        when {
+            health.failed && answer == null -> Unit
             answer == null -> Text(stringResource(R.string.common_working), color = colors.muted, style = MaterialTheme.typography.bodyMedium)
             else -> {
                 val words = HealthWords(
@@ -143,7 +166,7 @@ private fun HealthPanel(health: HealthUi, onDays: (Int) -> Unit, onTryAgain: () 
         SwButton(
             stringResource(if (long) R.string.hub_health_show_7 else R.string.hub_health_show_30),
             { onDays(if (long) HealthUi.DEFAULT_DAYS else HealthUi.LONG_DAYS) },
-            Modifier.fillMaxWidth(), enabled = !health.loading,
+            Modifier.fillMaxWidth(), enabled = !health.loading, busy = health.loading,
         )
     }
 }

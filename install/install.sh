@@ -508,6 +508,7 @@ config.save(cfg)
 print("Install mode: " + mode)
 '
     for cf in config.xml config.json; do
+        [ -e "$ETC/$cf" ] || continue
         chown root:filament-kit "$ETC/$cf"
         chmod 640 "$ETC/$cf"
     done

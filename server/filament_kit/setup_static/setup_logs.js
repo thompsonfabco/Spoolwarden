@@ -16,6 +16,8 @@ const ACT_TEXT = {
   activity_table: "Activity", activity_col_when: "When", activity_col_who: "Who", activity_col_what: "What", activity_col_thing: "Where",
   activity_col_undo: "Undo", activity_open: "Open",
   activity_undo: "Undo", activity_undo_of: "Undo: {what}", activity_put_back: "Put back.",
+  activity_undo_confirm_title: "Undo this change?", activity_undo_confirm_body: "{what}",
+  common_clear_filter: "Clear filters",
   activity_undone: "Undone.", activity_put_back_row: "This put an earlier change back.",
   activity_why_changed_since: "This changed again since, so it cannot be undone.",
   activity_why_too_old: "This is too old to undo. Changes can be undone for 7 days.",
@@ -163,7 +165,7 @@ function activityView() {
     const href = actPlace(ev.action), name = ev.subject && ev.subject.name;
     const undo = hubHasHistory("event_undo") && ev.undo && ev.undo.possible && !ev.undone
       ? SW.btn(actT("activity_undo"), { cls: "btn--ghost", icon: "undo", action: "undo", name: actT("activity_undo_of", { what }),
-        run: () => undoEvent(ev) })
+        run: (e) => undoEvent(ev, e.currentTarget) })
       : null;
     return h("div", { class: "coll__item", role: "rowgroup", "data-id": String(ev.id), tabindex: "-1" }, h("div", { class: "coll__row", role: "row" },
       cell("when", "activity_col_when", actWhen(ev.at)),
@@ -186,7 +188,11 @@ function activityView() {
       ? SW.btn(actT("activity_show_more"), { cls: "btn--ghost", action: "show-more", run: () => { actState.limit += ACT_PAGE; return load(list.length); } })
       : null;
     out.replaceChildren(list.length ? table(list) : SW.empty({ icon: "logs", level: 3,
-      title: actT(filtered ? "activity_empty_filtered" : "activity_empty_title"), text: filtered ? null : actT("activity_empty_text") }), more);
+      title: actT(filtered ? "activity_empty_filtered" : "activity_empty_title"), text: filtered ? null : actT("activity_empty_text"),
+      actions: filtered ? [SW.btn(actT("common_clear_filter"), { action: "clear-filter", run: () => {
+        actState.who = ""; actState.kind = ""; actState.limit = ACT_PAGE;
+        who._control.value = ""; kind._control.value = ""; SW.result(said, null); load();
+      } })] : null }), more);
     return list;
   };
   // asks for the newest `limit` rows; `from`: how many rows were there before Show more, the focus goes to the first new one
@@ -218,17 +224,25 @@ function activityView() {
     }
   }
   // Undo: the Hub answers {undone, event, note?}, or 409 {error, code?}; either way the list is read again, as the Hub's state moved
-  const undoEvent = (ev) => needCode(async () => {
+  const undoEvent = (ev, button) => needCode(async () => {
+    const what = ev.text || ev.title || "";
+    const go = await SW.ask({ kind: "confirm", title: actT("activity_undo_confirm_title"), text: what ? actT("activity_undo_confirm_body", { what }) : null,
+      confirm: actT("activity_undo"), opener: button });
+    if (!go) return;
     const id = String(ev.id);
+    if (button) SW.busy(button, SW.t("common_working"));
+    working(said, SW.t("common_working"));
     try {
       const r = await api(`events/${encodeURIComponent(id)}/undo`, { code: theCode() });
       say(said, [actT("activity_put_back"), r.note ? hubText(r.note) : ""].filter(Boolean).join(" "), true);
     } catch (e) {
-      if (e.locked) throw e;
+      if (e.locked) { SW.result(said, null); throw e; }
       const err = e.data && e.data.error && e.data.error !== "bad origin" ? e.data.error : "";
       const raw = err && !ACT_TEXT["activity_why_" + err] ? err : "";
       const why = actWhy(e.data && (e.data.code || err));
       say(said, hubText(raw || why || e.message), false);
+    } finally {
+      if (button && button.isConnected) SW.idle(button);
     }
     await load();
     const mine = [...out.querySelectorAll(".coll__item")].find((r) => r.dataset.id === id);

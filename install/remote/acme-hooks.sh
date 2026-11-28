@@ -45,13 +45,12 @@ case "$1" in
   pre)  systemctl is-active -q nginx && systemctl stop nginx; exit 0 ;;
   post) systemctl start nginx || true; exit 0 ;;
   deploy)
-    HOST=$(cat /etc/mcp-router/host) || exit 1
+    HOST=$(cat "$R/etc/mcp-router/host") || exit 1
     # certbot runs deploy hooks for every certificate on the machine; act on ours only
     [ "$(basename "${RENEWED_LINEAGE:-}")" = "$HOST" ] || exit 0
-    install -d -m 750 /etc/mcp-router/tls
+    install -d -m 750 "$T"
     keep_previous
-    install -m 644 "$RENEWED_LINEAGE/fullchain.pem" /etc/mcp-router/tls/fullchain.pem
-    install -m 600 "$RENEWED_LINEAGE/privkey.pem" /etc/mcp-router/tls/privkey.pem
+    take_pair "$RENEWED_LINEAGE" || exit 1
     if systemctl is-active -q nginx; then systemctl reload nginx; fi ;;
   check)
     [ -e "$R/etc/mcp-router/no-pair-check" ] && exit 0

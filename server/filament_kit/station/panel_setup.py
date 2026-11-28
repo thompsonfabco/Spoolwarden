@@ -59,6 +59,18 @@ TEXT_NO_ANSWER_USB = _t("panel_setup_no_answer_usb", "The panel did not answer o
 TEXT_NOT_ACCEPTED = _t("panel_setup_not_accepted", "The panel did not accept the Wi-Fi settings.")
 TEXT_PANEL_STORE = _t("panel_setup_panel_store", "The panel could not save the Wi-Fi settings. Run this again; if it fails again, "
                       "flash the panel: sudo {command} weigh-station flash-display")
+_ERR_REASONS = {
+    "long": _t("panel_setup_err_long", "A Wi-Fi set-up line was too long for the panel."),
+    "hex": _t("panel_setup_err_hex", "The panel could not read the Wi-Fi name or password."),
+    "ssid": TEXT_SSID,
+    "password": TEXT_PASSWORD,
+    "address": TEXT_ADDRESS,
+    "port": TEXT_PORT,
+    "fingerprint": TEXT_FINGERPRINT,
+    "token": _t("panel_setup_err_token", "The panel did not accept the pairing token."),
+    "cfg": TEXT_NOT_ACCEPTED,
+    "store": TEXT_PANEL_STORE,
+}
 TEXT_TIMEOUT = _t("panel_setup_timeout", "The panel did not answer in time.")
 TEXT_NOT_SAVED = _t("panel_setup_not_saved", "The panel took the Wi-Fi settings, but the station could not save them. "
                     "Run the set-up again.")
@@ -137,10 +149,10 @@ def _answer(send: Callable[[str | None], str], line: str | None) -> None:
         if reply.split(None, 1)[0] == REPLY_OK:
             return
         if reply.split(None, 1)[0] == REPLY_ERR:
-            # ERR <reason>: any reason is a refusal; only `store` (the panel's own flash) has its own sentence. The reason
-            # and the line are never shown.
+            # ERR <reason>: any reason is a refusal; map known tokens to user-facing sentences without echoing secrets.
             parts = reply.split()
-            raise PanelRefused(TEXT_PANEL_STORE if len(parts) > 1 and parts[1] == "store" else TEXT_NOT_ACCEPTED)
+            reason = parts[1] if len(parts) > 1 else ""
+            raise PanelRefused(_ERR_REASONS.get(reason, TEXT_NOT_ACCEPTED))
     raise PanelSetupError(TEXT_TIMEOUT)
 
 

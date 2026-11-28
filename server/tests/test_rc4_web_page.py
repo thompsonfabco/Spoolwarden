@@ -16,7 +16,7 @@ STUBS = r"""
 const made = [];
 function mk(tag, props, kids) {
   const e = { tag, props: props || {}, kids: kids.flat(Infinity).filter((k) => k != null && k !== false), removed: false, attrs: {}, hidden: !!(props && props.hidden),
-    remove() { this.removed = true; }, setAttribute(k, v) { this.attrs[k] = v; }, querySelectorAll() { return []; }, querySelector() { return { focus() {} }; },
+    remove() { this.removed = true; }, setAttribute(k, v) { this.attrs[k] = v; }, addEventListener() {}, querySelectorAll() { return []; }, querySelector() { return { focus() {} }; },
     replaceChildren(...k) { this.kids = k.flat(Infinity).filter((x) => x != null && x !== false); }, append(...k) { this.kids.push(...k); },
     get firstChild() { return this.kids[0] || null; } };
   made.push(e);
@@ -33,9 +33,11 @@ const results = [], asked = [], calls = [];
 let reloaded = 0;
 const SW = { HubError, t: tt, icon: () => null, busy: () => true, idle: () => {},
   result: (line, kind, text, o) => { results.push([kind, kind ? String(text) : null, o && o.action ? o.action.label : null]); line.state = kind; },
+  toast: (text, kind) => results.push([kind || "ok", String(text), null]),
   btn: (label, o = {}) => { const b = mk("button", { label, ...o }, []); b._run = o.run; return b; },
   empty: (o) => mk("empty", { textContent: o.title }, []), banner: (o) => mk("banner", { textContent: o.text }, []),
   ask: async (o) => { try { return await o.run(); } catch (err) { asked.push(err && err.text ? err.text("common_failed") : "common_failed"); return false; } } };
+const openHere = () => {};
 let answers = {};
 const api = async (path, opts = {}) => {
   calls.push([path, opts.body === undefined ? "GET" : "POST", opts.body]);
@@ -80,14 +82,14 @@ const ENTRY = %(entry)s;
   records = [{ id: "r1", photos: 2 }];
   answers = { "label-reader/corrections/c1/remove": { ok: true, removed: "c1" } };
   results.length = 0;
-  corrCard({ id: "c1", record: "r1", photos: 2, corrected: { vendor: "Polymaker", name: "PolyTerra" }, predicted: {} }, new Set(["r1"]));
+  const card = corrCard({ id: "c1", record: "r1", photos: 2, corrected: { vendor: "Polymaker", name: "PolyTerra" }, predicted: {} }, new Set(["r1"]));
   const rm = made.filter((b) => b.tag === "button" && b.props.action === "remove-correction").pop();
   const ev = { currentTarget: rm };
   const p = rm._run(ev);
   ev.currentTarget = null;                                  // what the browser does once the click is dispatched
   await p;
   out.removeResults = results.slice();
-  out.removeButtonGone = rm.removed;
+  out.removeButtonGone = card.removed;
   }
   if (RUN.has("reasons")) {
   // the reasons, empty or not (no dangling ": .")
@@ -218,6 +220,7 @@ LABELS_HARNESS = r"""
 const base = "/intake";
 let reply = null, asked = 0;
 const fetch = async (url) => { asked++; const r = typeof reply === "function" ? reply(url) : reply; return r; };
+const timedFetch = (url) => fetch(url);
 async function leaveRun() {
 %(leave)s
 }
@@ -301,7 +304,7 @@ def test_a_failed_leave_demo_says_the_hubs_words_and_does_not_recurse(tmp_path):
 
 def test_remove_on_corrections_waiting_reports_its_success(tmp_path):
     out = _page(tmp_path, "remove")
-    assert out["removeResults"][-1] == ["ok", "corr_removed", None] and out["removeButtonGone"] is True
+    assert ["ok", "corr_removed", None] in out["removeResults"] and out["removeButtonGone"] is True
     assert not any(r[0] == "bad" for r in out["removeResults"])
 
 

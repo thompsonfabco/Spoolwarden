@@ -211,13 +211,14 @@ textarea.field__control{min-height:calc(var(--s7) + var(--s6) + var(--s1));max-h
 .coll__title::after{content:"";position:absolute;inset:0}
 .coll__cell :is(button,input,a:not(.coll__title),.check){position:relative;z-index:1}
 .coll__sub{display:block;font-weight:var(--fw-text)}
-.coll__sort{position:relative;display:inline-flex;align-items:center;gap:var(--s1);min-height:calc(var(--s7) - var(--s1));padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer}
+.coll__sort{position:relative;display:inline-flex;align-items:center;gap:var(--s1);min-width:calc(var(--s7) + var(--s1));min-height:calc(var(--s7) + var(--s1));padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer}
 .coll__sort .icon,.field__chevron,.coll__expand[aria-expanded="true"] .icon{transform:rotate(90deg)}
 [aria-sort]>.coll__sort{color:var(--text)}
 [aria-sort="ascending"]>.coll__sort .icon{transform:rotate(-90deg)}
 .coll__item[data-state="off"]{color:var(--muted)}
 .coll__item:is([data-selected="true"],[aria-current="true"])>.coll__row:first-child{background:var(--surface-3)}
 .coll__toolbar{gap:var(--s2) var(--s3);margin-bottom:var(--s3)}
+.coll__toolbar .field__control{min-height:var(--ctl)}
 .coll__pager{justify-content:flex-end;margin-top:var(--s3)}
 /* detail region, key-value list (6.2, 6.3) */
 .detail__head{margin-bottom:var(--s3)}

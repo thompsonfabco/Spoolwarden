@@ -282,9 +282,9 @@ def test_status_says_the_last_run_failed_ahead_of_the_last_good_one(srv, paths, 
     capsys.readouterr()
     assert _main(paths, "status") == 0
     out = capsys.readouterr().out
-    assert "Last run:        FAILED at" in out and word in out
-    assert "Last run:        uploaded" in out
-    assert out.index("FAILED at") < out.index("Last run:        uploaded")
+    assert "Last error:      FAILED at" in out and word in out
+    assert "Last succeeded:  uploaded" in out
+    assert out.index("FAILED at") < out.index("Last succeeded:  uploaded")
 
 
 def test_a_run_that_gets_to_its_end_clears_the_failure(srv, paths, monkeypatch, capsys):  # noqa: F811

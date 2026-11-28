@@ -34,8 +34,12 @@ const voiceChoiceOf = (v, answerVoice, remote) => {
 };
 const voiceNumber = (v, key, dflt) => (v[key] == null || v[key] === "" || Number.isNaN(Number(v[key])) ? dflt : Number(v[key]));
 // the speakers the answer's `speaker_range` [first, last] counts; the many-speaker voice's own when the answer has none
-const voiceSpeakerCount = (a) => (Array.isArray(a.speaker_range) ? a.speaker_range[1] - a.speaker_range[0] + 1 : VOICE_SPEAKERS + 1);
-const voiceSpeaker = (v) => (/^\d+$/.test(String(v).trim()) && +v >= 0 && +v <= VOICE_SPEAKERS ? null : SW.t("field_error_range", { min: 0, max: VOICE_SPEAKERS }));
+const voiceSpeakerRange = (a) => (Array.isArray(a && a.speaker_range) && a.speaker_range.length >= 2 ? [Number(a.speaker_range[0]), Number(a.speaker_range[1])] : [0, VOICE_SPEAKERS]);
+const voiceSpeakerCount = (a) => { const [lo, hi] = voiceSpeakerRange(a); return hi - lo + 1; };
+const voiceSpeaker = (v, a) => {
+  const [lo, hi] = voiceSpeakerRange(a);
+  return /^\d+$/.test(String(v).trim()) && +v >= lo && +v <= hi ? null : SW.t("field_error_range", { min: lo, max: hi });
+};
 
 
 // a refusal of the Test route in words: by its code (busy, off, no_answer), else by the status, else the Hub's own sentence
@@ -55,9 +59,17 @@ function voiceGroup({ g }) {
   if (!g.station_on) return setGroup("voice", { desc: SW.t("settings_voice_desc"), body: [offNote("settings_voice_off")] });
   const body = h("div", { class: "voice__rows" });
   const el = setGroup("voice", { desc: SW.t("settings_voice_desc"), body: [body] });
-  later(api("station/voice").then((answer) => {
-    body.replaceChildren(...(answer.station === false ? [offNote("settings_voice_off")] : voiceRows(g.values || {}, answer)));
-  }).catch((e) => say(body, e.message, false)));
+  const load = () => {
+    const L = SW.loading(body, { thing: SW.t("settings_voice_desc"), items: 4, onTry: load, title: SW.t("settings_voice_desc") });
+    return api("station/voice").then((answer) => {
+      L.done();
+      body.replaceChildren(...(answer.station === false ? [offNote("settings_voice_off")] : voiceRows(g.values || {}, answer)));
+    }).catch((e) => {
+      L.done();
+      body.replaceChildren(SW.errorState({ title: SW.t("settings_voice_desc"), text: hubText(e.message), level: 3, onTry: load }));
+    });
+  };
+  later(load());
   return el;
 }
 
@@ -136,7 +148,7 @@ function voiceRows(v, a) {
     }
   });
   speaker._control.addEventListener("change", () => {
-    const bad = voiceSpeaker(speaker._control.value);
+    const bad = voiceSpeaker(speaker._control.value, a);
     SW.fieldError(speaker, bad);
     if (bad) return;
     const n = Number(speaker._control.value), was = saved.speaker;
@@ -155,7 +167,7 @@ function voiceRows(v, a) {
   let testing = false;
   async function press() {
     if (testing) return;
-    const speakerBad = !speaker.hidden && voiceSpeaker(speaker._control.value);
+    const speakerBad = !speaker.hidden && voiceSpeaker(speaker._control.value, a);
     if (speakerBad) { SW.fieldError(speaker, speakerBad); speaker._control.focus(); return; }
     testing = true;
     try {

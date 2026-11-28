@@ -943,6 +943,7 @@
     <!-- 1=reason -->
     <string name="flash_error">Could not read the firmware on this Hub. %1$s</string>
     <string name="flash_hub_started">Writing on the Hub has started. The job strip follows it; keep the board plugged in.</string>
+    <string name="flash_hub_running_hint">Flashing on the Hub runs to completion and cannot be stopped mid-write.</string>
     <string name="flash_name">Name</string>
     <string name="flash_printer">Printer</string>
     <string name="flash_printer_hint">The printer the Tag Reader starts on. The knob can still change it.</string>
@@ -959,6 +960,7 @@
     <string name="flash_wait_job">Wait for %1$s to finish.</string>
     <!-- 1=percent -->
     <string name="flash_writing_percent">Writing the firmware… %1$s %%</string>
+    <string name="flash_refresh_boards">Refresh boards</string>
     <string name="hub_bad_origin">The Hub refused this change because the page was opened under a different address. Reload the page and try again.</string>
     <!-- 1=address -->
     <string name="hub_forbidden_name">Open the Hub page by the Hub\'s own name or address, for example %1$s. Other names can be added in Settings > Network and addresses.</string>
@@ -2755,6 +2757,8 @@
     <string name="app_update_installing">Tap Install in the window Android shows.</string>
     <!-- 1=version 2=app_version -->
     <string name="app_update_offered">Spoolwarden %1$s is on your Hub. This app is %2$s.</string>
+    <!-- 1=version 2=app_version -->
+    <string name="app_update_offered_github">Spoolwarden %1$s is available on GitHub. This app is %2$s.</string>
     <string name="app_update_permission">Allow Spoolwarden to install apps, then tap Install update again.</string>
     <string name="app_update_signature">Android refused this update because it is not signed like the app on this phone. Do not install it; check where the app on your Hub came from.</string>
     <string name="app_update_signature_body">An update signed with a different key is what a forged app looks like, so Android refuses it and the app on this phone stays as it is. If you built or replaced the app on your Hub yourself, that is the reason. If you did not, do not install it: check where the app on your Hub came from.</string>
@@ -2847,6 +2851,7 @@
     <!-- 1=name -->
     <string name="presets_line_parent">Bambu Studio parent: %1$s</string>
     <string name="presets_line_parent_none">Bambu Studio parent: none</string>
+    <string name="presets_parent_none">No parent</string>
     <string name="presets_line_saved">Saved. A preset build was asked for.</string>
     <string name="presets_lines_empty">No lines yet. They are made from the filaments in Spoolman at the next build or when a spool is added.</string>
     <string name="presets_lines_more">Show more</string>
@@ -5046,8 +5051,28 @@
     <string name="station_page_panel_firmware">%1$s (firmware %2$s)</string>
     <!-- 1=temp 2=rh -->
     <string name="station_page_air_value">%1$s °C, %2$s %%</string>
+    <!-- 1=temp -->
+    <string name="station_page_air_temp_only">%1$s °C</string>
+    <!-- 1=value 2=hpa -->
+    <string name="station_page_air_hpa">%1$s, %2$s hPa</string>
     <!-- 1=step 2=message -->
     <string name="station_page_step_message">%1$s: %2$s</string>
+    <string name="station_page_photos">Photos</string>
+    <string name="station_page_photo_alt">Spool photo</string>
+    <string name="station_page_action_take_photo">Take photo</string>
+    <string name="station_page_action_recognise">Recognise</string>
+    <string name="station_page_action_weigh">Take weight</string>
+    <string name="station_page_action_save">Save</string>
+    <string name="station_page_action_skip_weigh">Skip weighing</string>
+    <string name="station_page_action_delete_photo">Remove last photo</string>
+    <string name="station_page_action_reject_ai">Reject AI match</string>
+    <string name="station_page_action_cancel">Cancel</string>
+    <string name="station_page_action_test_voice">Test speaker</string>
+    <string name="station_page_reset_confirm">Reset all settings back to the installed values?</string>
+    <string name="station_page_session_expired_dirty">This session is over. Your unsaved edits are still shown below; open this page from the Hub again to save them.</string>
+    <string name="station_page_group_audio">Audio and voice</string>
+    <string name="station_page_group_panel">Panel and lamps</string>
+    <string name="station_page_group_hardware">Scale, camera and timeouts</string>
     <string name="station_page_mode_home">Your home network</string>
     <string name="station_page_mode_subnets">This machine\'s own networks</string>
     <string name="station_page_mode_allowed">The allow-list only</string>
@@ -5074,7 +5099,7 @@
     <string name="station_lamp_yellow">Yellow lamp</string>
     <string name="station_lamp_red">Red lamp</string>
     <string name="station_lamp_both">Both lamps</string>
-    <string name="station_setting_beep">Beep when a tag is scanned</string>
+    <string name="station_setting_beep">Button panel &amp; scan beeps</string>
     <string name="station_setting_speech">Speak the steps aloud</string>
     <string name="station_setting_voice">Voice</string>
     <string name="station_setting_volume">Speaker volume (percent)</string>
@@ -5578,6 +5603,9 @@
     <string name="panel_setup_no_answer_usb">The panel did not answer over USB. Check the cable and try again.</string>
     <string name="panel_setup_not_accepted">The panel did not accept the Wi-Fi settings.</string>
     <string name="panel_setup_panel_store">The panel could not save the Wi-Fi settings. Run this again; if it fails again, flash the panel: sudo spoolwarden weigh-station flash-display</string>
+    <string name="panel_setup_err_long">A Wi-Fi set-up line was too long for the panel.</string>
+    <string name="panel_setup_err_hex">The panel could not read the Wi-Fi name or password.</string>
+    <string name="panel_setup_err_token">The panel did not accept the pairing token.</string>
     <string name="panel_setup_timeout">The panel did not answer in time.</string>
     <string name="panel_setup_not_saved">The panel took the Wi-Fi settings, but the station could not save them. Run the set-up again.</string>
     <string name="station_panel_wifi_lost">The panel was flashed from scratch, so its Wi-Fi set-up is gone. On the Weigh Station\'s computer, run: sudo spoolwarden weigh-station panel-wifi</string>
@@ -5590,6 +5618,7 @@
     <string name="station_voice_busy">The Weigh Station is in use. Try again when it is idle.</string>
     <string name="station_voice_off">Speaking is switched off.</string>
     <string name="station_voice_set_on_hub_note">Speaking and volume are set on the Hub: Settings > Weigh Station voice.</string>
+    <string name="station_voice_tts_set_on_hub_note">Voice is set on the Hub: Settings > Weigh Station voice.</string>
     <string name="station_voice_set_on_hub">Speaking and volume are set on the Hub.</string>
     <string name="voice_apps_readonly">Change the voice on the Hub page.</string>
     <string name="voice_busy">The Weigh Station is in use. Try again when it is idle.</string>

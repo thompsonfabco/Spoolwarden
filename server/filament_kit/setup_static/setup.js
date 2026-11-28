@@ -32,14 +32,15 @@ async function api(path, body) {
   let r;
   try { r = await fetch("/setup/api/" + path, init); } catch (e) {
     clearTimeout(timer);
+    hubJobs().down();                                       // nothing answered or timed out
     if (e && (e.name === "AbortError" || e.name === "TimeoutError") || ctrl.signal.aborted) {
       throw Object.assign(new Error(SW.t("common_timeout")), { timeout: true });
     }
-    hubJobs().down();                                       // nothing answered
     throw Object.assign(new Error(SW.t("common_hub_no_answer")), { unreachable: true });
   }
   clearTimeout(timer);
-  hubJobs().up();
+  if (r.status === 502 || r.status === 503 || r.status === 504) hubJobs().down();
+  else hubJobs().up();
   let data;
   try { data = await r.json(); } catch { data = { error: `HTTP ${r.status}` }; }
   if (!r.ok || data.error) throw Object.assign(hubError(r.status, data), { path });
@@ -473,9 +474,14 @@ function appearanceButton() {
     "aria-label": SW.t("appearance_name", { choice: SW.t("appearance_" + v) }) }, SW.icon(icon));
 }
 window.addEventListener("storage", (e) => {                   // another tab chose: follow it
-  if (e.key !== APPEARANCE_KEY && e.key !== null) return;
-  const v = e.key === null ? null : e.newValue;
-  SW.setAppearance(v === "light" || v === "dark" ? v : "system");
+  if (e.key === APPEARANCE_KEY || e.key === null) {
+    const v = e.key === null ? localStorage.getItem(APPEARANCE_KEY) : e.newValue;
+    SW.setAppearance(v === "light" || v === "dark" ? v : "system");
+  }
+  if (e.key === "spoolwarden.look" || e.key === null) {
+    const v = e.key === null ? localStorage.getItem("spoolwarden.look") : e.newValue;
+    SW.setLook(v || "console");
+  }
 });
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -492,8 +498,9 @@ document.addEventListener("DOMContentLoaded", () => {
     off: () => !S ? [] : [!S.printers.on && "printers", S.modules && S.modules.some((m) => m.name === "presets" && !m.on) && "presets"].filter(Boolean),
     onSection: () => {
     settleAddress();
-    window.scrollTo(0, 0);
-    if (S) render(); else pageTitle.textContent = SW.t(TABS[tabNow()][0]);
+    const now = tabNow();
+    if (now !== shown) window.scrollTo(0, 0);
+    if (S) render(); else pageTitle.textContent = SW.t(TABS[now][0]);
   } });
   if (typeof mountAlerts === "function") mountAlerts(main);     // setup_alertbar.js: the alert banners above the page header
   loadTrust().then(refresh);

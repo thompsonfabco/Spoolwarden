@@ -68,7 +68,7 @@ object CheckedOutRules {
     /** The lines under a row's name, in order: where it is, its home, since when. */
     fun lines(s: SpoolSummary, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): List<Say> = listOfNotNull(
         place(s),
-        s.home?.let { Say.Words(R.string.spools_home, listOf(it)) },
+        s.home?.let { Say.Words(R.string.spools_home, listOf(it)) } ?: Say.Words(R.string.spools_home_none),
         s.checkedOutSince?.let { Say.Words(R.string.spools_since, listOf(RecentValues.time(it, zone))) },
     )
 

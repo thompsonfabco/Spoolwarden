@@ -426,12 +426,13 @@ class PrinterConnection:
             w.event.wait(timeout)
         finally:
             self._pending.pop(sid, None)
-        t = threading.Timer(PUSHALL_AFTER_COMMAND, self.request_pushall)
-        t.daemon = True
-        t.start()
+        if not self._stopping:
+            t = threading.Timer(PUSHALL_AFTER_COMMAND, self.request_pushall)
+            t.daemon = True
+            t.start()
         reply = w.reply
         if reply is None:
-            if self._state != 'connected':
+            if self._state != 'connected' or self._stopping:
                 raise PrinterOffline(self.serial)
             return None
         if _developer_mode_refusal(reply):
@@ -463,13 +464,14 @@ class PrinterConnection:
         finally:
             for sid, _ in waiters:
                 self._pending.pop(sid, None)
-        t = threading.Timer(PUSHALL_AFTER_COMMAND, self.request_pushall)
-        t.daemon = True
-        t.start()
+        if not self._stopping:
+            t = threading.Timer(PUSHALL_AFTER_COMMAND, self.request_pushall)
+            t.daemon = True
+            t.start()
         replies = [w.reply for _, w in waiters]      # ok only if every node's reply succeeded
         reply = replies[0]
         if any(r is None for r in replies):
-            if self._state != 'connected':
+            if self._state != 'connected' or self._stopping:
                 raise PrinterOffline(self.serial)
             raise NoReply(self.serial)
         ok = all(str(r.get('result', '')).lower() == 'success' for r in replies)
@@ -591,7 +593,9 @@ class Manager:
             while not self._stop.wait(interval):
                 try:
                     self.sync()
-                    for conn in list(self._conns.values()):
+                    with self._lock:
+                        conns = list(self._conns.values())
+                    for conn in conns:
                         if conn.state != 'offline' and time.time() - (conn.updated or 0) > QUIET_PUSHALL:
                             conn.request_pushall()
                 except Exception:

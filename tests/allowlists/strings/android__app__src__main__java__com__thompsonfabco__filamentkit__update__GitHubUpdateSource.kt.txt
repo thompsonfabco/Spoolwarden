@@ -1,0 +1,41 @@
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | ${}.part | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | ${}/repos/$repo/releases/latest | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | %02x | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | (?m)^([0-9a-fA-F]{64}) [ *]filament-kit\\.apk\\s*$ | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | .githubusercontent.com | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | APK checksum mismatch | internal ApiError diagnostic; UpdateFailure maps to strings.xml
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | Accept | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | Could not download SHA256SUMS | internal ApiError diagnostic; UpdateFailure maps to strings.xml
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | Could not reach GitHub | internal ApiError diagnostic; UpdateFailure maps to strings.xml
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | Could not write ${} | internal ApiError diagnostic; UpdateFailure maps to strings.xml
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | GitHub returned HTTP ${} | internal ApiError diagnostic; UpdateFailure maps to strings.xml
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | GitHub | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | Invalid GitHub release JSON | internal ApiError diagnostic; UpdateFailure maps to strings.xml
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | No APK asset in latest GitHub release | internal ApiError diagnostic; UpdateFailure maps to strings.xml
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | SHA-256 | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | SHA256SUMS | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | Spoolwarden-Android/${} | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | The connection to GitHub was lost: ${} | internal ApiError diagnostic; UpdateFailure maps to strings.xml
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | Unexpected release version | internal ApiError diagnostic; UpdateFailure maps to strings.xml
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | User-Agent | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | ^(0|[1-9]\\d{0,3})\\.(0|[1-9]\\d?)\\.(0|[1-9]\\d?)$ | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | application/vnd.github+json | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | assets | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | browser_download_url | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | check_failed | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | damaged | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | filament-kit.apk | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | github.com | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | http | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | https | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | https://api.github.com | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | name | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | not_found | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | objects.githubusercontent.com | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | offline | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | release-assets.githubusercontent.com | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | storage | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | tag_name | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | thompsonfabco/Spoolwarden | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | unauthorized | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text
+android/app/src/main/java/com/thompsonfabco/filamentkit/update/GitHubUpdateSource.kt | v | GitHub release API/download constant, regex, filename, or internal error code; not user-facing text

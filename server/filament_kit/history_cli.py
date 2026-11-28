@@ -222,7 +222,7 @@ def cmd_undo(api, sm_factory, *, event_id: int | None = None, yes: bool = False)
 
     what = target.get("text") or target.get("kind") or f"event {event_id}"
     output.out(f"{target.get('at', '')[:16].replace('T', ' ')} · {what}")
-    rc = confirmed(CLI_UNDO_ASK, f"undo event {event_id}", f"spoolwarden undo {event_id}", yes)
+    rc = confirmed(CLI_UNDO_ASK, f"undo event {event_id}", f"sudo spoolwarden undo {event_id}", yes)
     if rc is not None:
         return rc
     from . import event_sink, undo
@@ -346,8 +346,13 @@ def cmd_import(sm_factory, *, kind: str, file: str, yes: bool = False) -> int:
     from . import csv_io
     from .spoolman import SpoolmanError
     try:
-        csv_text = pathlib.Path(file).read_bytes().decode("utf-8-sig")
-    except (OSError, UnicodeDecodeError):
+        raw_bytes = pathlib.Path(file).read_bytes()
+    except OSError as e:
+        output.error(f"cannot read {file}: {e.strerror or e}")
+        return output.FAILED
+    try:
+        csv_text = raw_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError:
         output.error(CLI_IMPORT_BAD_CSV)
         return output.FAILED
     try:
@@ -370,7 +375,7 @@ def cmd_import(sm_factory, *, kind: str, file: str, yes: bool = False) -> int:
         return output.FAILED
     ask = CLI_IMPORT_ASK_SPOOLS.format(n=dry.get("add", 0)) if kind == "spools" else CLI_IMPORT_ASK_LOCATIONS.format(
         n=add_n)
-    rc = confirmed(ask, f"import {kind}", f"spoolwarden import {kind} {file}", yes)
+    rc = confirmed(ask, f"import {kind}", f"sudo spoolwarden import {kind} {file}", yes)
     if rc is not None:
         return rc
     try:
@@ -397,12 +402,21 @@ def read_password_file(path: str) -> str:
 def _ask_new_password() -> tuple[str | None, int]:
     """The design, command line: the new password, typed twice (both secret). (password, 0) or (None, exit code after the error)."""
     from . import backup, secret_input
-    first = secret_input.ask(CLI_BACKUP_PW_NEW)
-    if len(first) < backup.MIN_PASSWORD_LEN:
-        output.error(CLI_BACKUP_PW_SHORT)
+    if not output.terminal():
+        output.error("setting a backup password needs a terminal.", "run it at a terminal:",
+                     cmd="sudo spoolwarden backup password")
         return None, output.USAGE
-    if secret_input.ask(CLI_BACKUP_PW_AGAIN) != first:
-        output.error(CLI_BACKUP_PW_MISMATCH)
+    try:
+        first = secret_input.ask(CLI_BACKUP_PW_NEW)
+        if len(first) < backup.MIN_PASSWORD_LEN:
+            output.error(CLI_BACKUP_PW_SHORT)
+            return None, output.USAGE
+        if secret_input.ask(CLI_BACKUP_PW_AGAIN) != first:
+            output.error(CLI_BACKUP_PW_MISMATCH)
+            return None, output.USAGE
+    except (EOFError, KeyboardInterrupt):
+        output.error("setting a backup password needs a terminal.", "run it at a terminal:",
+                     cmd="sudo spoolwarden backup password")
         return None, output.USAGE
     return first, 0
 
@@ -469,7 +483,7 @@ def add_parser(sub) -> None:
     p.add_argument("--who", default=None, help="filter by who did it")
     p.add_argument("--days", type=int, default=None, help="how many days back (default: the newest 50 events)")
 
-    p = sub.add_parser("undo", help="undo a spool or slot change")
+    p = sub.add_parser("undo", help="undo a spool or slot change (root)")
     p.add_argument("event_id", nargs="?", type=int, default=None, help="event id to undo (default: last CLI change)")
     p.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
 
@@ -477,18 +491,18 @@ def add_parser(sub) -> None:
     p.add_argument("--by", choices=["month"], default=None, help="show monthly table")
     p.add_argument("--printer", default=None, help="only this printer")
 
-    p = sub.add_parser("export", help="export Hub data as CSV")
+    p = sub.add_parser("export", help="export Hub data as CSV (root)")
     p.add_argument("dataset", choices=EXPORT_SETS, help="which dataset to export")
     p.add_argument("--out", default=None, help="write to file instead of stdout")
     p.add_argument("--days", type=int, default=None, help="days to include (usage/activity)")
     p.add_argument("--printer", default=None, help="filter usage by printer")
 
-    p = sub.add_parser("import", help="import spools or locations from CSV")
+    p = sub.add_parser("import", help="import spools or locations from CSV (root)")
     p.add_argument("kind", choices=["spools", "locations"], help="what to import")
     p.add_argument("file", help="CSV file to import")
     p.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
 
-    p = sub.add_parser("report", help="collect a redacted Hub report")
+    p = sub.add_parser("report", help="collect a redacted Hub report (root)")
     p.add_argument("--out", default=None, help="copy the report to this file")
 
 

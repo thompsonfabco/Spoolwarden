@@ -18,6 +18,7 @@ the key. A plural text is {"one": ..., "other": ...} and takes its form from `co
 from __future__ import annotations
 
 import logging
+import math
 import re
 import threading
 import time
@@ -609,9 +610,17 @@ def queue_test(caller: str) -> dict:
     caller = str(caller or "").strip()
     if not caller:
         raise ValueError("a test alert needs a device or a client id")
+    body = test_body()
+    now = time.monotonic()
     with _tlock:
-        _tests[caller] = (time.monotonic() + TEST_SECONDS, test_body())
-    return test_body()
+        for c in list(_tests):
+            if _tests[c][0] <= now:
+                del _tests[c]
+        _tests.pop(caller, None)
+        _tests[caller] = (now + TEST_SECONDS, body)
+        while len(_tests) > 500:
+            _tests.pop(next(iter(_tests)))
+    return body
 
 
 def _all_marker():
@@ -676,7 +685,7 @@ def whole(value, low: int, high: int, field: str | None = None) -> int:
     """`value` (a number or the text of one) as a whole number from `low` to `high`, or AlertsRefused."""
     if isinstance(value, str) and re.fullmatch(r"\s*\d+\s*", value):
         value = int(value)
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value != int(value) or not low <= value <= high:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value != int(value) or not low <= value <= high:
         raise AlertsRefused(say("alerts_error_whole", low=low, high=high), field)
     return int(value)
 

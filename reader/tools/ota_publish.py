@@ -29,6 +29,7 @@ import shlex
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -38,9 +39,9 @@ DEFAULT_KEY = Path.home() / ".filament-kit" / "reader-ota-key.pem"
 DEFAULT_REMOTE_DIR = "/var/lib/filament-kit/reader-fw"
 
 
-def run(cmd, **kw):
+def run(cmd, timeout=None, **kw):
     print("+", " ".join(cmd))
-    subprocess.run(cmd, check=True, **kw)
+    subprocess.run(cmd, check=True, timeout=timeout, **kw)
 
 
 def secrets_value(name, path=None):
@@ -63,8 +64,13 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None  # the 3xx then surfaces as an HTTPError
 
 
-def fetch_manifest(base, token, timeout=15):
+def fetch_manifest(base, token, timeout=15, allow_http=False):
     """GET <base>/fw/manifest.json with the token, never following a redirect."""
+    parsed = urllib.parse.urlparse(base)
+    if parsed.scheme != "https":
+        is_loopback = parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "localhost", "::1")
+        if not (allow_http and parsed.scheme == "http") and not is_loopback:
+            raise ValueError(f"refusing non-HTTPS manifest URL: {base!r} (pass --allow-http to override)")
     opener = urllib.request.build_opener(_NoRedirect)
     req = urllib.request.Request(manifest_url(base), headers={"X-Auth-Token": token})
     with opener.open(req, timeout=timeout) as r:
@@ -126,11 +132,12 @@ def sign_image(image, key, build):
             "sig": base64.b64encode(sig).decode(), "sig2": base64.b64encode(sig2).decode()}
 
 
-def make_stage(host):
+def make_stage(host, timeout=60):
     """A fresh private (mode 0700) staging folder on the host: the image carries the Wi-Fi
     password and the token, so it must not sit in a predictable, world-readable /tmp path."""
     print("+ ssh", host, "mktemp -d")
-    out = subprocess.run(["ssh", host, "mktemp -d"], check=True, capture_output=True, text=True).stdout
+    out = subprocess.run(["ssh", host, "mktemp -d"], check=True, capture_output=True, text=True,
+                         timeout=timeout).stdout
     stage = out.strip()
     if not stage.startswith("/") or "\n" in stage:
         sys.exit(f"ssh mktemp -d on {host} printed no usable folder: {out!r}")
@@ -146,10 +153,10 @@ def drop_stage(host, stage):
         print(f"could not remove {stage} on {host}: {e}; remove it by hand (it holds the image)")
 
 
-def live_problem(base, token, build):
+def live_problem(base, token, build, allow_http=False):
     """Why the live check failed (a string), or None when the server reports `build`."""
     try:
-        live = fetch_manifest(base, token)
+        live = fetch_manifest(base, token, allow_http=True) if allow_http else fetch_manifest(base, token)
     except (OSError, ValueError, http.client.HTTPException) as e:   # URLError/HTTPError/timeouts are OSError; bad JSON is ValueError
         return f"{type(e).__name__}: {e}"
     reported = live.get("build") if isinstance(live, dict) else live
@@ -189,6 +196,7 @@ def parse_args(argv=None):
                     help="write the public key PEM to PATH and exit")
     ap.add_argument("--dry-run", action="store_true", help="build + sign only, upload nothing")
     ap.add_argument("--no-verify", action="store_true", help="skip the live manifest check")
+    ap.add_argument("--allow-http", action="store_true", help="allow non-HTTPS --base-url for the live check")
     args = ap.parse_args(argv)
     if not args.init_key and not args.export_pubkey and not args.dry_run and not args.host:
         ap.error("--host is required unless --dry-run, --init-key, or --export-pubkey")
@@ -234,9 +242,10 @@ def main(argv=None):
     stage = make_stage(args.host)
     try:
         run(["scp", "-q", str(build_dir / "firmware.bin"), str(build_dir / "manifest.json"),
-             f"{args.host}:{stage}/"])
+             f"{args.host}:{stage}/"], timeout=300)
         run(["ssh", args.host, remote_install_cmd(stage, args.remote_dir, args.remote_owner,
-                                                  args.remote_group, sudo=not args.no_sudo)])
+                                                  args.remote_group, sudo=not args.no_sudo)],
+            timeout=60)
     except BaseException:    # the install command's own rm -rf did not run: the image holds the Wi-Fi password
         drop_stage(args.host, stage)
         raise
@@ -249,7 +258,7 @@ def main(argv=None):
     if not base or not token:
         sys.exit("uploaded, but cannot check it: no READER_BASE/READER_TOKEN (use --base-url and "
                  "the READER_TOKEN environment variable, or --no-verify)")
-    problem = live_problem(base, token, build)
+    problem = live_problem(base, token, build, allow_http=args.allow_http)
     if problem:
         sys.exit(f"uploaded, but the live check failed: {problem}")
     print(f"published build {build}. Hold the reader's knob for 4 s to install it.")

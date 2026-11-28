@@ -38,6 +38,7 @@ falls back to the Generic preset of that type and says so (never remembered).
 import json
 import os
 import re
+import tempfile
 import threading
 import urllib.error
 import urllib.request
@@ -85,7 +86,7 @@ def moonraker_url(printer):
     host = first_value(printer.config_value("print_host"))
     if not host:
         raise RuntimeError("the printer preset has no print host set (Printer settings > connection)")
-    if not re.match(r"^https?://", host):
+    if not re.match(r"^https?://", host, re.IGNORECASE):
         host = "http://" + host
     return host.rstrip("/")
 
@@ -100,7 +101,7 @@ def http_json(url, body=None):
 
 def active_spool(base):
     spool_id = http_json(base + "/server/spoolman/spool_id")["result"]["spool_id"]
-    if not spool_id:
+    if isinstance(spool_id, bool) or not isinstance(spool_id, int) or spool_id <= 0:
         return None
     return spool_by_id(base, spool_id)
 
@@ -245,16 +246,28 @@ def picks_path():
 def load_picks():
     try:
         with open(picks_path(), encoding="utf-8") as fh:
-            return json.load(fh)
+            data = json.load(fh)
     except (OSError, ValueError):
         return {}
+    return data if isinstance(data, dict) else {}
 
 
 def save_pick(filament_id, preset_name):
     picks = load_picks()
     picks[str(filament_id)] = preset_name
-    with open(picks_path(), "w", encoding="utf-8") as fh:
-        json.dump(picks, fh, indent=2)
+    path = picks_path()
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=os.path.dirname(path), prefix="picks.", suffix=".tmp", delete=False
+        ) as fh:
+            tmp = fh.name
+            json.dump(picks, fh, indent=2)
+        os.replace(tmp, path)
+    except BaseException:
+        if tmp and os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
 
 # ---- the sync itself -------------------------------------------------------
@@ -298,7 +311,7 @@ def run_sync():
             lines, ok = [], True
             for slot, lane in sorted(by_slot.items()):
                 sid = lane.get("spool_id")
-                if not isinstance(sid, int) or sid <= 0:
+                if isinstance(sid, bool) or not isinstance(sid, int) or sid <= 0:
                     lines.append(f"Slot {slot}: no spool")
                     continue
                 try:
@@ -334,7 +347,7 @@ def printer_hosts():
             for line in fh:
                 line = line.strip()
                 if line and not line.startswith("#"):
-                    hosts.append(line if re.match(r"^https?://", line) else "http://" + line)
+                    hosts.append(line if re.match(r"^https?://", line, re.IGNORECASE) else "http://" + line)
     except OSError:
         pass
     return sorted(set(h.rstrip("/") for h in hosts))
@@ -444,7 +457,8 @@ class SyncPanel:
     @classmethod
     def on_message(cls, message):
         kind = (message or {}).get("type")
-        post = lambda reply: cls.panel is not None and cls.panel.post(reply)
+        panel = cls.panel
+        post = lambda reply: panel is not None and panel.post(reply)
         if kind == "sync":
             in_background(sync_message, post)
         elif kind == "state":

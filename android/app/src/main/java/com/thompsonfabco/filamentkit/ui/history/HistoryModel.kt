@@ -146,7 +146,7 @@ object RecentValues {
         return when (field.kind) {
             FieldKind.Text -> Parsed.Ok(JsonPrimitive(t))
             FieldKind.Positive -> {
-                val n = t.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }
+                val n = t.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }
                 if (n == null) Parsed.Bad(positiveError(field)) else Parsed.Ok(JsonPrimitive(n))
             }
             FieldKind.Degrees -> {
@@ -235,7 +235,7 @@ class SourceLabel(@StringRes val word: Int?, val raw: String)
 /** Records without photos were added by hand; the others say where the photos came from. */
 fun sourceLabel(source: String, photos: Int): SourceLabel = when {
     photos == 0 -> SourceLabel(R.string.recent_source_hand, source)
-    source == "phone" -> SourceLabel(R.string.recent_source_phone, source)
+    source == "phone" || source == "web" -> SourceLabel(R.string.recent_source_phone, source)
     source == "station" -> SourceLabel(R.string.recent_source_station, source)
     else -> SourceLabel(null, source)
 }

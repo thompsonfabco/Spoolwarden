@@ -39,6 +39,8 @@ internal fun SettingsScreen(
 ) {
     val twoPanes = detail != null && SpoolwardenTheme.window == WindowClass.Desktop
     var chosen by rememberSaveable { mutableStateOf(SettingsGroup.Appearance) }
+    val groups = settingsGroups(facts.developer, facts.voice.shown)
+    if (chosen !in groups) chosen = SettingsGroup.Appearance
     if (!twoPanes) {
         SettingsList(facts, onOpen, modifier.fillMaxSize(), selected = null)
         return

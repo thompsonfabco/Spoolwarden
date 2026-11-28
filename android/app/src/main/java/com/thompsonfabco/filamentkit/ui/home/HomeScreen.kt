@@ -50,6 +50,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.alerts.BannerState
 import com.thompsonfabco.filamentkit.drafts.Draft
@@ -81,8 +84,10 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 import com.thompsonfabco.filamentkit.update.UpdateTexts
 import com.thompsonfabco.filamentkit.update.UpdateUi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
 
@@ -223,10 +228,14 @@ private const val TICK_MS = 30 * MS_PER_SECOND
 @Composable
 private fun tickingNow(): Long {
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(TICK_MS)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             now = System.currentTimeMillis()
+            while (true) {
+                withContext(Dispatchers.Default) { delay(TICK_MS) }
+                now = System.currentTimeMillis()
+            }
         }
     }
     return now

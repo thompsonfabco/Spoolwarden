@@ -582,12 +582,12 @@ READY = {
   const addBtn = button('Add', g);
   need('the form is Brand, Name, Material and Add, the rest closed under More (optional)', !!f('Brand') && !!f('Name') && !!f('Material') && !!addBtn && !$('details[open]', g) && $('details summary', g).textContent.includes('More (optional)'));
   await until('the Hub\'s own materials', () => $$('option', f('Material').querySelector('select')).some((o) => o.value === 'Wood PLA'));
-  need('the list is the Hub\'s, with Other last', $$('option', f('Material').querySelector('select')).map((o) => o.textContent).join('|') === 'PLA|PETG|Wood PLA|Other');
+  need('the list is the Hub\'s, with Other last', $$('option', f('Material').querySelector('select')).map((o) => o.textContent).join('|') === 'Choose…|PLA|PETG|Wood PLA|Other');
   addBtn.click();
   await until('the required errors', () => g.textContent.includes('Brand is required.') && g.textContent.includes('Name is required.'));
   need('nothing was posted', posted.length === 0);
   typeIn(f('Brand').querySelector('input'), 'Acme'); typeIn(f('Name').querySelector('input'), 'Blue');
-  typeIn(f('Material').querySelector('select'), ''); await until('the Other text', () => !$$('.field', g).find((x) => x.textContent.includes('Material (other)')).hidden);
+  typeIn(f('Material').querySelector('select'), '__other__'); await until('the Other text', () => !$$('.field', g).find((x) => x.textContent.includes('Material (other)')).hidden);
   typeIn($$('.field', g).find((x) => x.textContent.includes('Material (other)')).querySelector('input'), 'Nylonish');
   $('details', g).open = true; typeIn(f('Nozzle temperature from').querySelector('input'), '240');
   addBtn.click();
@@ -1432,16 +1432,16 @@ SP_READY = {
   const rows = $$('.spools__row').map((r) => r.textContent.replace(/\s+/g, ' '));
   need('the first row: filament, spool, place, grams, others', /Elegoo PLA Red/.test(rows[0]) && /Spool 11/.test(rows[0]) && /Rack 1 · 80 g left · 2 more in stock/.test(rows[0]));
   need('the last one is marked and has no stock line', /Last one/.test(rows[1]) && !/more in stock/.test(rows[1]) && /140 g left/.test(rows[1]) && !!$('.spools__last'));
-  need('the chip is on, the search is out of the way', chip.getAttribute('aria-pressed') === 'true' && search().closest('.hidden'));
+  need('the chip is on, Sealed only is out of the way', chip.getAttribute('aria-pressed') === 'true' && $('.spools .check').closest('.hidden') && !search().closest('.hidden'));
   stub(/^find\?/, (u, i) => sleep(700).then(() => fetchReal(u, i)));      // the search the chip asks for when off answers after the filter is on again (seen under load)
   chip.click();
-  await until('the search is back', () => !search().closest('.hidden') && chip.getAttribute('aria-pressed') === 'false');
+  await until('Sealed only is back', () => !$('.spools .check').closest('.hidden') && chip.getAttribute('aria-pressed') === 'false');
   const low2 = [{ id: 11, filament: 'Elegoo PLA Red', material: 'PLA', color: 'C0392B', remaining_g: 80, location: 'Rack 1', in_stock: 2, last_one: false }, { id: 12, filament: 'Bambu Lab PETG Orange', material: 'PETG', color: 'F2762E', remaining_g: 140, location: 'Dry bin 1', in_stock: 0, last_one: true }];
   stub(/^spools\/low$/, () => new Promise((r) => setTimeout(r, 700)).then(() => reply({ threshold_g: 150, spools: low2 })));      // an older question whose answer comes last
   location.hash = '#spools/low';
   await until('the address turns the filter on', () => $$('.spools__row').length === 2 && chip.getAttribute('aria-pressed') === 'true');
   stub(/^spools\/low$/, () => reply({ threshold_g: 150, spools: [] }));
-  tabs.spools.enter();
+  chip.click(); chip.click();
   await until('nothing low', () => text('.spools__none') === 'Nothing is running low.');
   await sleep(1000);
   need('the older answer does not bring the rows back', text('.spools__none') === 'Nothing is running low.' && $$('.spools__row').length === 0);
@@ -1449,13 +1449,13 @@ SP_READY = {
 """,
     "list": r"""
   await waitPage();
-  need('the intro', text('.spools > p').startsWith("Tap the spool's tag on a reader"));
+  need('the intro', text('.spools .row > p').startsWith("Tap the spool's tag on a reader"));
   need('the Last tag group says no tag yet', $$('.group__title').some((t) => t.textContent === 'Last tag') && text('.spools__tag').includes('No tag read yet: tap one on a reader.'));
   need('the search label is for screen readers', $('.spools__search .field__label').classList.contains('sr') && text('.spools__search .field__label') === 'Find a spool'
     && search().getAttribute('placeholder') === 'Brand, colour, material');
-  need('Sealed only is on', $('.spools .check__input').checked && text('.spools .check__label') === 'Sealed only');
-  need('two sealed spools, one filament group each', $$('.spools__row').length === 2 && $$('.spools__fil-name').length === 2);
-  need('a row says spool, place, weight and Sealed', /^Spool \d+/.test(text('.spools__row b')) && /Sealed stock · \d+ g · Sealed/.test(text('.spools__row-text')));
+  need('Sealed only is off', !$('.spools .check__input').checked && text('.spools .check__label') === 'Sealed only');
+  need('all four spools, one filament group each', $$('.spools__row').length === 4 && $$('.spools__fil-name').length === 4);
+  need('a row says spool, place, weight and Sealed', /^Spool \d+/.test(text('.spools__row b')) && $$('.spools__row-text').some((e) => /Sealed stock · \d+ g · Sealed/.test(e.textContent.replace(/\s+/g, ' '))));
   need('a swatch and a chevron in a row', $('.spools__row .swatch') && $('.spools__row .spools__chevron'));
   need('the filament line has material and number', /^[A-Z]+ · F\d+$/.test(text('.spools__fil-meta')));
   need('one h1', $$('h1').length === 1);
@@ -1478,19 +1478,19 @@ SP_READY = {
 """,
     "search_results": r"""
   await waitPage(); typeIn(search(), 'pla');
-  await until('the sealed PLA only', () => $$('.spools__row').length === 1 && text('.spools__fil-name').includes('Polymaker'));
-  $('.spools .check__input').click();
   await until('opened spools too', () => $$('.spools__row').length === 2 && $$('.spools__fil').length === 2);
-  need('Sealed only is remembered', localStorage.getItem('spoolwarden.sealedOnly') === '0');
   const second = $$('.spools__row')[1].textContent.replace(/\s+/g, ' ');
   need('an opened row has its place and weight, no Sealed word', /Rack 1 · \d+ g/.test(second) && !second.includes('Sealed'));
+  $('.spools .check__input').click();
+  await until('the sealed PLA only', () => $$('.spools__row').length === 1 && text('.spools__fil-name').includes('Polymaker'));
+  need('Sealed only is remembered', localStorage.getItem('spoolwarden.sealedOnly') === '1');
   FRESH();
 """,
     "search_empty": r"""
   await waitPage(); typeIn(search(), 'zzzz');
-  await until('no sealed spools', () => text('.spools__none') === 'No sealed spools match. Turn off Sealed only to include opened spools.');
-  $('.spools .check__input').click();
   await until('no spools', () => text('.spools__none') === 'No spools match.');
+  $('.spools .check__input').click();
+  await until('no sealed spools', () => text('.spools__none') === 'No sealed spools match. Turn off Sealed only to include opened spools.');
   FRESH();
 """,
     "search_error": r"""
@@ -1508,12 +1508,12 @@ SP_READY = {
 """,
     "sealed_remembered": r"""
   await waitPage();
-  if (localStorage.getItem('spoolwarden.sealedOnly') === null) {                // the first pass turns it off; the next passes load the page with it off
+  if (localStorage.getItem('spoolwarden.sealedOnly') === null) {                // the first pass turns it on; the next passes load the page with it on
     $('.spools .check__input').click();
-    await until('stored', () => localStorage.getItem('spoolwarden.sealedOnly') === '0');
+    await until('stored', () => localStorage.getItem('spoolwarden.sealedOnly') === '1');
     return;
   }
-  need('the box loads unchecked and the opened spools are listed', !$('.spools .check__input').checked && $$('.spools__row').length === 4);
+  need('the box loads checked and only the sealed spools are listed', $('.spools .check__input').checked && $$('.spools__row').length === 2);
 """,
     "sheet_from_row": r"""
   await waitPage(); const first = $('.spools__row'); first.click();
@@ -1996,7 +1996,7 @@ def test_spools_state_with_the_printers_feature_passes_the_audit(spools_hub_prin
 
 
 def test_spools_pages_of_fifty_pass_the_audit(spools_hub_paged):
-    script = SP_PAGED["paging"].replace("__TOTAL__", str(SP_BULK + 2))
+    script = SP_PAGED["paging"].replace("__TOTAL__", str(SP_BULK + 4))
     assert _spools_run(spools_hub_paged.url, "paging", script, "#spools")["views"] == 4
 
 

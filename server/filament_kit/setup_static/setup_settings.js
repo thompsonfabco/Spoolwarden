@@ -401,6 +401,8 @@ window.addEventListener("hashchange", () => {
   setHashMove = true;
   setTimeout(() => { setHashMove = false; }, 0);
   if (setEl && setEl.isConnected && tabNow() === "settings") {
+    const was = setEl.dataset.open;
+    applyHash();
     const id = setGroupId();
     if (id === "label-reader" && window.__swReaderArrived) {
       window.__swReaderArrived = false;
@@ -413,7 +415,7 @@ window.addEventListener("hashchange", () => {
       markCurrent(id);
       return;
     }
-    if (id && !SW.phone() && setEl.dataset.open !== id) scrollToGroup(id, true);
+    if (id && !SW.phone() && was !== id) scrollToGroup(id, true);
   }
 });
 
@@ -468,8 +470,8 @@ function groupGeneral({ g }) {
     attrs: { "data-key": "log_level", "data-effect": "" },
     options: ["error", "warning", "info", "debug"].map((lvl) => ({ value: lvl, label: SW.t("set_log_level_" + lvl) })),
   }));
-  fields.push(setLangBlock(), setDemoRow());
   const el = setGroup("general", { desc: SW.t("settings_general_desc"), save: SW.t("settings_general_save"), body: fields });
+  el._after = h("div", { class: "group__after" }, setLangBlock(), setDemoRow());
   const own = {
     spoolman: async (value) => {
       const f = el.elements.spoolman.closest(".field"), was = f._hint.textContent;
@@ -495,7 +497,8 @@ const setLangKeep = (code) => {
     if (code) localStorage.setItem(SET_LANG_KEY, code);
     else localStorage.removeItem(SET_LANG_KEY);
   } catch { /* storage refused: the choice lasts until the page closes */ }
-  document.cookie = code ? "spoolwarden_lang=" + encodeURIComponent(code) + "; path=/; SameSite=Lax" : "spoolwarden_lang=; path=/; max-age=0; SameSite=Lax";
+  const secure = location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = code ? "spoolwarden_lang=" + encodeURIComponent(code) + "; path=/; max-age=31536000; SameSite=Lax" + secure : "spoolwarden_lang=; path=/; max-age=0; SameSite=Lax" + secure;
 };
 const setLangName = (l) => (l.reviewed === false ? setT("settings_language_machine", { name: l.name }) : l.name);
 const setLangHave = (d) => [{ code: "en", name: "English", reviewed: true, installed: true, complete: 100 }, ...d.languages.filter((l) => l.installed && l.code !== "en")];
@@ -793,7 +796,7 @@ function readerInstall(g) {
   }).catch((e) => say(out, hubText(e.message), false));
   const tok = SW.field({ row: true, type: "secret", label: SW.t("settings_reader_token"), attrs: { "aria-required": "false" } }), set = S.local_intake_token && S.local_intake_token.set;
   const tokSet = SW.btn(SW.t(set ? "common_replace" : "settings_reader_token_set"), { action: "set-token", run: () => settingAct(tokBox, "local_intake_token", { token: tok._control.value },
-    () => loadGroup("label-reader", { quiet: true, fresh: true }), [tok._control]) });
+    () => loadGroup("label-reader", { quiet: true, fresh: true, result: ["ok", SW.t("common_saved")] }), [tok._control]) });
   tok._control.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); tokSet.click(); } });
   return h("div", { class: "settings__reader", ...(arrived ? { "data-arrived": "1" } : {}) },
     h("p", { class: "muted", textContent: have ? SW.t("settings_reader_local_installed", { version: have.version, tier: have.tier }) : SW.t("settings_reader_local_not_installed") }),
@@ -804,7 +807,8 @@ function readerInstall(g) {
     h("p", { class: "field__label" }, SW.t("settings_reader_token"), " ", SW.status(set ? "set" : "not_set", { small: true })),
     h("p", { class: "muted", textContent: SW.t("settings_reader_token_hint") }),
     tok, h("div", { class: "actions" }, tokSet,
-      set ? SW.btn(SW.t("common_remove"), { cls: "btn--ghost btn--danger", action: "remove-token", run: () => settingAct(tokBox, "local_intake_token/remove", {}, () => loadGroup("label-reader", { quiet: true, fresh: true })) }) : null), tokBox);
+      set ? SW.btn(SW.t("common_remove"), { cls: "btn--ghost btn--danger", action: "remove-token", run: (e) => confirmed({ ...destroy("settings_reader_token", "settings_reader_token_hint", "common_remove"), opener: e.currentTarget },
+        "local_intake_token/remove", {}, () => loadGroup("label-reader", { quiet: true, fresh: true, result: ["ok", SW.t("common_saved")] })) }) : null), tokBox);
 }
 
 // ----- Network and addresses -----
@@ -986,12 +990,8 @@ function openCustomEntriesDialog(opener, onChanged) {
     h("div", { class: "dialog__body" }, res, body),
     h("div", { class: "dialog__foot" }, closeBtn));
   const dlg = h("dialog", { class: "dialog dialog--wide", "aria-labelledby": id + "-title" }, form);
-  dlg.addEventListener("close", () => {
-    dlg.remove();
-    if (opener && opener.isConnected) opener.focus();
-  });
-  document.body.append(dlg);
-  dlg.showModal();
+  SW.modal(dlg, { temp: true });
+  SW.openModal(dlg, opener);
 
   const loadList = async () => {
     body.replaceChildren(h("p", { class: "muted", textContent: SW.t("common_loading_thing", { thing: setT("settings_catalog_entries_title") }) }));
@@ -999,8 +999,7 @@ function openCustomEntriesDialog(opener, onChanged) {
     try {
       data = await api("library/local");
     } catch (e) {
-      body.replaceChildren();
-      SW.result(res, "bad", hubText(e.message || setT("settings_catalog_entries_error")));
+      body.replaceChildren(SW.errorState({ title: setT("settings_catalog_entries_title"), text: hubText(e.message || setT("settings_catalog_entries_error")), level: 3, onTry: loadList }));
       return;
     }
     const entries = Array.isArray(data && data.entries) ? data.entries : [];

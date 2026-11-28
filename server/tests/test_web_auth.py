@@ -455,7 +455,7 @@ def test_login_wrong_passphrase_then_lockout(store, passfile, clock):
         r, rid = _sign_in(c, cid, _pkce()[1], passphrase="nope")
         assert r.status_code == 401
         # the design, web app: the form again, the error under the field, the field empty and focused
-        assert "<p class=field__error id=pass-error>Wrong passphrase.</p>" in r.text
+        assert "<p class=field__error id=pass-error role=alert>Wrong passphrase.</p>" in r.text
         assert "aria-describedby=pass-error aria-invalid=true" in r.text and "autofocus" in r.text
         assert "nope" not in r.text and "name=passphrase" in r.text
         for _ in range(4):

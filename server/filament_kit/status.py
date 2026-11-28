@@ -275,7 +275,7 @@ def _library_rows() -> Iterator[Row]:
             source = f"updated {time.strftime('%Y-%m-%d', time.localtime(at))}"
     n = st["local"]
     if source == "none":
-        yield Row(INFO, "Filament Catalog not downloaded (spoolwarden library update"
+        yield Row(INFO, "Filament Catalog not downloaded (spoolwarden catalog update"
                   + f"), {n} local addition{'' if n == 1 else 's'}", key="filament-catalog.version")
     else:
         yield Row(INFO, f"Filament Catalog version {st['version']} ({source}), {n} local addition{'' if n == 1 else 's'}",
@@ -441,7 +441,7 @@ def rows(cfg: dict | None = None, client_factory=None, *, live_key: bool = True,
             yield Row(OK, f"certificate present, fingerprint {cli.pairing.fingerprint(cert.read_bytes())}",
                       group="Hub", key="hub.certificate")
         else:
-            yield Row(FAIL, f"certificate missing ({cert})", "run: sudo spoolwarden cert",
+            yield Row(FAIL, f"certificate missing ({cert})", "run: sudo spoolwarden certificate",
                       group="Hub", key="hub.certificate")
         yield from storage_rows(api_up)
         yield from alerts_rows(cfg)
@@ -590,7 +590,7 @@ def web_rows(cfg: dict | None = None) -> Iterator[Row]:
     cfg = cfg if cfg is not None else config.load()
     web = cfg.get("web") or {}
     on = modules.enabled(cfg)
-    yield Row(OK if "web" in on else FAIL, "Web access is " + ("on" if "web" in on else "off"), "sudo spoolwarden modules enable web",
+    yield Row(OK if "web" in on else FAIL, "Web access is " + ("on" if "web" in on else "off"), "sudo spoolwarden features on web",
               key="web.access")
     public = str(web.get("public_url") or "").rstrip("/")
     yield Row(OK if public.startswith("https://") else FAIL, f"public URL {public or '(not set)'}",
@@ -642,7 +642,7 @@ def _fields_rows(cfg: dict) -> Iterator[Row]:
         return              # the row above already says Spoolman does not answer
     if missing:
         yield Row(FAIL, "Spoolman is missing Spoolwarden's extra fields: " + ", ".join(missing),
-                  "sudo spoolwarden ensure-fields", action="ensure_fields", group="Spoolman",
+                  "sudo spoolwarden spoolman fields", action="ensure_fields", group="Spoolman",
                   key="spoolman.fields")
 
 

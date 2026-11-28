@@ -757,8 +757,8 @@ def test_slicer_sync_and_weigh_station_print_the_instruction_and_the_link_never_
     assert lines[-1] == "Paired: pc." and [d["name"] for d in pairing.devices()] == ["pc"]
     rc, out, _ = run(capsys, "pair", "--weigh-station")
     lines = out.splitlines()
-    assert rc == 0 and lines[0] == "On the Weigh Station run: sudo spoolwarden station pair, then paste this link:"
-    assert lines[1].startswith("fkit://pair?") and "check it matches the one the Weigh Station shows" in lines[3]
+    assert rc == 0 and "On the Weigh Station run: sudo spoolwarden weigh-station pair, then paste this link:" in " ".join(lines[:2])
+    assert lines[2].startswith("fkit://pair?") and "check it matches the one the Weigh Station shows" in lines[4]
     assert pairing._read("devices.json")[-1]["scope"] == "station"
 
 

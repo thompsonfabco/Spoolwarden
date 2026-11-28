@@ -239,7 +239,8 @@ def test_without_orca_slicer_presets_nothing_says_zero_for_orca(hub, monkeypatch
     page = _drive(hub, tmp_path, WAIT + """
 await until(() => $(".coll--lines .coll__item"), "the product lines");
 return { head: text($(".page-head__meta")), build: text($("main .card p")), columns: document.querySelectorAll(".coll--lines .coll__head [role=columnheader]").length,
-  menu: await (async () => { $('[data-action="set-parent"]').click(); const l = await until(() => { const m = [...document.querySelectorAll(".menu__item")]; return m.length ? m : null; }, "the menu"); return l.map(text); })() };
+  hasMenu: $('[data-action="set-parent"]').getAttribute("aria-haspopup"),
+  dialog: await (async () => { $('[data-action="set-parent"]').click(); const d = await until(() => $("dialog[open]"), "the parent dialog"); return text(d); })() };
 """)
     assert "Orca" not in page["head"] and "Orca" not in page["build"], page
-    assert page["columns"] == 6 and page["menu"] == [T("presets_target_bambu")]
+    assert page["columns"] == 6 and page["hasMenu"] is None and T("presets_target_bambu") in page["dialog"] and "Orca" not in page["dialog"], page

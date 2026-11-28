@@ -66,7 +66,7 @@ def test_status_lines_when_things_fail(cfg, capsys, monkeypatch):
     assert lines(capsys) == [
         "--   service checks skipped (FK_NO_SYSTEMD=1)",
         f"FAIL certificate missing ({config.paths().etc / 'cert.pem'})",
-        "     fix: run: sudo spoolwarden cert",
+        "     fix: run: sudo spoolwarden certificate",
         "OK   Storage: 900 GB free of 1.0 TB (10 % used)",
         "--   display name: Workshop",
         f"FAIL Spoolman not reachable at {DEAD}: no answer",

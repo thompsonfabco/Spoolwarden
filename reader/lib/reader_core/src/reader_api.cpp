@@ -284,7 +284,7 @@ void readClampedU16(JsonVariantConst v, uint16_t& dst, uint16_t lo, uint16_t hi)
 
 }  // namespace
 
-bool parseRemoteConfig(const char* json, RemoteConfig& out) {
+bool parseRemoteConfig(const char* json, RemoteConfig& out, bool defaultBuzzerLow) {
   if (!json || strlen(json) > MAX_RESPONSE_BYTES) return false;
   JsonDocument doc;
   if (deserializeJson(doc, json) != DeserializationError::Ok || !doc.is<JsonObjectConst>()) {
@@ -292,12 +292,20 @@ bool parseRemoteConfig(const char* json, RemoteConfig& out) {
   }
   JsonObjectConst obj = doc.as<JsonObjectConst>();
   RemoteConfig cfg;
+  cfg.buzzerLow = defaultBuzzerLow;
   JsonVariantConst cv = obj["config_version"];
   if (cv.is<long long>()) {
     long long val = cv.as<long long>();
+    if (val > (long long)UINT32_MAX) val = (long long)UINT32_MAX;
     if (val >= 0) cfg.configVersion = (uint32_t)val;
   }
-  copyStr(obj["default_printer"], cfg.defaultPrinter, sizeof(cfg.defaultPrinter));
+  JsonVariantConst dpv = obj["default_printer"];
+  if (dpv.is<const char*>()) {
+    const char* dp = dpv.as<const char*>();
+    if (dp && strlen(dp) <= MAX_ID) {
+      copyStr(dpv, cfg.defaultPrinter, sizeof(cfg.defaultPrinter));
+    }
+  }
   readBool(obj["buzzer_enabled"], cfg.buzzerEnabled);
   readBool(obj["buzzer_low"], cfg.buzzerLow);
   readBool(obj["auto_ota"], cfg.autoOta);

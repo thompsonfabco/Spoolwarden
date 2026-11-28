@@ -7,6 +7,7 @@
 // The machine is stepped by one task (src/panel_net.h); it never blocks longer than one LinkIo call, and each call is
 // given the bound below. The panel's loop() talks to it only through two byte rings.
 #pragma once
+#include <atomic>
 #include <stddef.h>
 #include <stdint.h>
 #include "panel_cfg.h"
@@ -97,7 +98,13 @@ class Link {
   Link(ByteRing<4096> &rx, ByteRing<1024> &tx, const char *version) : rx_(rx), tx_(tx), version_(version) {}
 
   // From the main loop's side (a different task): the latest settings and whether USB is carrying the panel.
-  void configure(const Settings &s) { cfgGen_ = cfgGen_ + 1; pending_ = s; cfgGen_ = cfgGen_ + 1; }  // a seqlock: odd while writing
+  void configure(const Settings &s) {
+    cfgGen_ = cfgGen_ + 1;
+    std::atomic_signal_fence(std::memory_order_acq_rel);
+    pending_ = s;
+    std::atomic_signal_fence(std::memory_order_acq_rel);
+    cfgGen_ = cfgGen_ + 1;
+  }  // a seqlock: odd while writing
   void setUsbActive(bool on) { usb_ = on; }
 
   // One pass: at most one LinkIo call that waits (each with its bound), plus the non-waiting ones.

@@ -48,9 +48,10 @@ async function download(path, body, fallback, code = "") {
 }
 
 // A request whose body is a file; the code goes in a header, never in the address. `progress(share)` follows the upload.
-function upload(path, file, code, progress) {
+function upload(path, file, code, progress, onXhr) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
+    if (onXhr) onXhr(x);
     x.open("POST", "/setup/api/" + path);
     x.withCredentials = true;
     x.setRequestHeader("Content-Type", "application/zip");
@@ -62,6 +63,7 @@ function upload(path, file, code, progress) {
       if (x.status < 200 || x.status >= 300 || d.error) reject(hubError(x.status, d)); else resolve(d);
     };
     x.onerror = () => reject(Object.assign(new Error(SW.t("common_hub_no_answer")), { unreachable: true }));
+    x.onabort = () => reject(Object.assign(new Error(SW.t("common_cancel")), { aborted: true }));
     x.send(file);
   });
 }
@@ -109,31 +111,41 @@ function passwordPane(r, said, result) {
   const two = SW.field({ row: true, type: "secret", name: "backup_password_again", label: bkT("settings_backups_password_again"), attrs: { autocomplete: "new-password" },
     check: (x) => (x === one._control.value ? null : bkT("settings_backups_password_mismatch")) });
   const form = h("form", { id: "set-backups-password", novalidate: true });
+  const submitBtn = h("button", { class: "btn btn--primary", type: "submit", textContent: bkT(set ? "settings_backups_password_change" : "settings_backups_password_set") });
+  let saving = false;
   form.addEventListener("submit", (e) => {
     e.preventDefault();
+    if (saving) return;
     const bad = [one, two].filter((f) => { const err = f._check(); SW.fieldError(f, err || null); return !!err; });
     if (bad.length) return bad[0]._control.focus();
     return needCode(async () => {
+      saving = true;
+      SW.busy(submitBtn, SW.t("common_saving"));
       working(res, SW.t("common_saving"));
-      try { await api("backups/password", { password: one._control.value, code: theCode() }); } catch (x) {
-        if (x.locked) { SW.result(res, null); throw x; }
-        const code = x.data && x.data.code;
-        const err = x.data && x.data.error;
-        if (code === "too_short" || err === "too_short") {
-          const text = err && err !== "too_short" && err !== "bad origin" ? hubText(err) : bkT("settings_backups_password_short");
-          SW.result(res, null); SW.fieldError(one, text); one._control.focus(); return;
+      try {
+        try { await api("backups/password", { password: one._control.value, code: theCode() }); } catch (x) {
+          if (x.locked) { SW.result(res, null); throw x; }
+          const code = x.data && x.data.code;
+          const err = x.data && x.data.error;
+          if (code === "too_short" || err === "too_short") {
+            const text = err && err !== "too_short" && err !== "bad origin" ? hubText(err) : bkT("settings_backups_password_short");
+            SW.result(res, null); SW.fieldError(one, text); one._control.focus(); return;
+          }
+          say(res, hubText((err && err !== "bad origin" ? err : "") || x.message), false);
+          return;
         }
-        say(res, hubText((err && err !== "bad origin" ? err : "") || x.message), false);
-        return;
+        one._control.value = two._control.value = "";
+        await said(bkT("settings_backups_password_saved"));
+      } finally {
+        saving = false;
+        SW.idle(submitBtn);
       }
-      one._control.value = two._control.value = "";
-      await said(bkT("settings_backups_password_saved"));
     });
   });
   const drop = SW.btn(bkT("settings_backups_password_remove"), { cls: "btn--ghost", action: "remove-backup-password", run: (e) => confirmed({ kind: "destructive", opener: e.currentTarget,
     title: bkT("settings_backups_password_remove_title"), text: bkT("settings_backups_password_remove_text"), confirm: SW.t("common_remove") },
   "backups/password/remove", {}, () => said(bkT("settings_backups_password_removed"))) });
-  form.append(one, two, h("div", { class: "actions" }, h("button", { class: "btn btn--primary", type: "submit", textContent: bkT(set ? "settings_backups_password_change" : "settings_backups_password_set") }), set ? drop : null), res);
+  form.append(one, two, h("div", { class: "actions" }, submitBtn, set ? drop : null), res);
   if (result) SW.result(res, "ok", result);
   return h("div", { class: "backup-password" }, h("h3", { class: "settings__heading", textContent: bkT("settings_backups_password_heading") }), state, SW.banner({ kind: "warn", inline: true, text: bkT("settings_backups_password_warning") }), form);
 }
@@ -202,10 +214,13 @@ function restoreSteps() {
   const file = SW.field({ type: "file", label: SW.t("settings_restore_file"), accept: ".zip,.enc,application/zip", attrs: { "aria-required": "false" } });
   const bar = SW.progress({ name: SW.t("settings_restore_uploading"), value: 0 });
   bar.hidden = true;
+  let activeXhr = null, uploading = false;
   const go = SW.btn(SW.t("settings_restore_step2"), { cls: "btn--primary", action: "upload-check", run: () => start() });
+  const cancelUpload = SW.btn(SW.t("common_cancel"), { cls: "btn--ghost", action: "cancel-upload", run: () => { if (activeXhr) activeXhr.abort(); } });
+  cancelUpload.hidden = true;
   const mk = (n, title, ...kids) => h("li", { class: "steps__step" }, h("span", { class: "steps__num" }, String(n), h("span", { class: "sr", hidden: true }, " " + SW.t("status_done"))),
     h("div", { class: "steps__body" }, h("h4", { class: "steps__title", textContent: title }), ...kids));
-  const list = [mk(1, SW.t("settings_restore_step1"), file), mk(2, SW.t("settings_restore_step2"), go, bar, rbox), mk(3, SW.t("settings_restore_confirm"), sum, actions)];
+  const list = [mk(1, SW.t("settings_restore_step1"), file), mk(2, SW.t("settings_restore_step2"), h("div", { class: "actions" }, go, cancelUpload), bar, rbox), mk(3, SW.t("settings_restore_confirm"), sum, actions)];
   const steps = h("ol", { class: "steps" }, ...list);
   let stage = 1, summary = null;
   const paint = () => {
@@ -224,19 +239,30 @@ function restoreSteps() {
   const reset = () => { file._control.value = ""; file._control.dispatchEvent(new Event("change")); summary = null; sum.replaceChildren(); actions.replaceChildren(); stage = 1; SW.result(rbox, null); paint(); };
   file._control.addEventListener("change", () => { stage = file._control.files.length ? 2 : 1; summary = null; sum.replaceChildren(); actions.replaceChildren(); bar.hidden = true; SW.result(rbox, null); paint(); });
   const start = () => {
+    if (uploading) return;
     if (!file._control.files.length) { say(rbox, SW.t("settings_restore_error_file"), false); return; }
     return coded(rbox, async () => {
+      uploading = true;
+      SW.busy(go, SW.t("settings_restore_uploading"));
+      cancelUpload.hidden = false;
       working(rbox, SW.t("settings_restore_uploading"));
       bar.hidden = false;
       SW.setProgress(bar, 0);
       let s;
-      try { s = await upload("restore/upload", file._control.files[0], theCode(), (share) => SW.setProgress(bar, share, Math.round(share * 100) + " %")); } catch (e) {
-        bar.hidden = true;
+      try {
+        s = await upload("restore/upload", file._control.files[0], theCode(), (share) => SW.setProgress(bar, share, Math.round(share * 100) + " %"), (x) => { activeXhr = x; });
+      } catch (e) {
         if (e.locked) throw e;
-        say(rbox, e.status === 413 ? SW.t("settings_restore_error_large") : hubText(e.message), false);
+        if (e.aborted) SW.result(rbox, null);
+        else say(rbox, e.status === 413 ? SW.t("settings_restore_error_large") : hubText(e.message), false);
         return;
+      } finally {
+        uploading = false;
+        activeXhr = null;
+        cancelUpload.hidden = true;
+        bar.hidden = true;
+        SW.idle(go);
       }
-      bar.hidden = true;
       SW.result(rbox, null);
       checked(s);
     });
@@ -289,20 +315,31 @@ function backupsGroup() {
     } catch (e) { if (e.locked) throw e; say(list, hubText(e.message), false); }
   };
   // Back up now: the job's strip follows it; the list reads again when it has ended
-  const now = SW.btn(SW.t("settings_backups_now"), { cls: "btn--primary", action: "backup-now", run: () => needCode(async () => {
-    const wrap = el.closest(".settings__group");
-    working(box, SW.t("settings_backups_running"));
-    try { await api("job", { name: "backup", code: theCode() }); } catch (e) {
-      if (e.locked) { SW.result(box, null); throw e; }
-      say(box, hubText(e.message), false);
-      return;
-    }
-    if (wrap) wrap._hold = true;
-    const end = await SW.setting("waitJob")();
-    if (wrap) wrap._hold = false;
-    say(box, SW.t(end && end.state === "failed" ? "settings_backups_failed" : "settings_backups_done"), end && end.state === "failed" ? false : true);
-    if (SW.lock.state !== "locked") await show();
-  }) });
+  let backingUp = false;
+  const now = SW.btn(SW.t("settings_backups_now"), { cls: "btn--primary", action: "backup-now", run: () => {
+    if (backingUp) return;
+    return needCode(async () => {
+      backingUp = true;
+      SW.busy(now, SW.t("settings_backups_running"));
+      const wrap = el.closest(".settings__group");
+      working(box, SW.t("settings_backups_running"));
+      try {
+        try { await api("job", { name: "backup", code: theCode() }); } catch (e) {
+          if (e.locked) { SW.result(box, null); throw e; }
+          say(box, hubText(e.message), false);
+          return;
+        }
+        if (wrap) wrap._hold = true;
+        const end = await SW.setting("waitJob")();
+        if (wrap) wrap._hold = false;
+        say(box, SW.t(end && end.state === "failed" ? "settings_backups_failed" : "settings_backups_done"), end && end.state === "failed" ? false : true);
+        if (SW.lock.state !== "locked") await show();
+      } finally {
+        backingUp = false;
+        SW.idle(now);
+      }
+    });
+  } });
   body.append(warn,
     h("div", { class: "actions" }, now), box,
     heading("settings_backups_list"), codeRead("common_list_locked", list, show),

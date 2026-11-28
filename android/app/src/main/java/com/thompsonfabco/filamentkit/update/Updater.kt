@@ -30,6 +30,7 @@ fun percent(done: Long, total: Long): Int? =
 
 /** Where updates come from; [of] adapts the real [Api]. */
 interface UpdateSource {
+    val isGitHub: Boolean get() = false
     suspend fun info(): ServerInfo
     /** [onProgress]: (bytes so far, total or -1 when unknown). */
     suspend fun downloadApk(to: File, onProgress: (Long, Long) -> Unit)
@@ -89,6 +90,8 @@ data class UpdateUi(
     val installing: Boolean = false,
     /** The download is done and the APK is being handed to Android: it cannot be cancelled any more. */
     val writing: Boolean = false,
+    /** True when the latest check result came from GitHub Releases rather than the Hub. */
+    val fromGitHub: Boolean = false,
 )
 
 /** The server API version (`/api/info` `api`) this app understands. */
@@ -226,6 +229,7 @@ class Updater(
                     offeredVersion = info.version,
                     serverTooNew = info.api > SUPPORTED_API,
                     checked = true,
+                    fromGitHub = source.isGitHub,
                     // the Hub answered: a failure of reaching it is over (an install failure stays until the next try)
                     failure = it.failure?.takeUnless { f -> f in CHECK_FAILURES },
                     error = if (it.failure in CHECK_FAILURES) null else it.error,
@@ -248,6 +252,7 @@ class Updater(
         e is ApiError && e.code == "offline" -> UpdateFailure.HubUnreachable
         e is ApiError && e.code == "not_found" -> UpdateFailure.NoUpdate
         e is ApiError && e.code == "storage" -> UpdateFailure.Storage
+        e is ApiError && e.code == "damaged" -> UpdateFailure.Damaged
         e is FingerprintMismatch -> UpdateFailure.CertificateChanged
         checking -> UpdateFailure.CheckFailed
         else -> UpdateFailure.Generic

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import anyio
 
-from .. import firstrun, getting_started
+from .. import demo, firstrun, getting_started
 from .texts import say
 
 
@@ -25,6 +25,8 @@ def routes(page) -> list[tuple]:
         return await anyio.to_thread.run_sync(_view, page)
 
     async def write(request, body):
+        if demo.is_on():
+            raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
         keys = [k for k in ("hide", "keep", "done") if k in body]
         if len(keys) != 1:
             raise Refused(400, say("hub_start_hide_or_keep"))

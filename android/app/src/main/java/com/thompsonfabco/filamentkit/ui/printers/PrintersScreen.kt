@@ -158,8 +158,14 @@ fun PrintersScreen(
     val offline = state.problem is Problem.Unreachable
     ScreenTopBarActions { Overflow(!offline, viewModel::refresh, viewModel::openFind, viewModel::openGuide) }
     // the progress line shows a refresh, so the pull gesture only starts one
+    var refreshing by remember { mutableStateOf(false) }
+    LaunchedEffect(state.loading) { if (!state.loading) refreshing = false }
     val listBody: @Composable (Modifier) -> Unit = { listModifier ->
-        PullToRefreshBox(isRefreshing = false, onRefresh = viewModel::refresh, modifier = listModifier.fillMaxSize()) {
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = { refreshing = true; viewModel.refresh() },
+            modifier = listModifier.fillMaxSize(),
+        ) {
             Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
                 verticalArrangement = Arrangement.spacedBy(space.s3),
@@ -383,7 +389,7 @@ private fun PrinterRow(p: Printer, slots: List<SlotLook>, modifier: Modifier = M
             Text(modelLine(p), style = MaterialTheme.typography.bodySmall, color = colors.muted)
             Row(horizontalArrangement = Arrangement.spacedBy(space.s2), verticalAlignment = Alignment.CenterVertically) {
                 StatusLabel(statusKind(p.state), small = true)
-                jobWord(p.summary?.gcodeState.orEmpty()).takeIf { p.state == "connected" }?.let { word ->
+                jobWord(p.summary?.gcodeState.orEmpty()).takeIf { PrinterHelp.isConnected(p.state) }?.let { word ->
                     Text("·", style = MaterialTheme.typography.bodySmall, color = colors.muted)
                     Text(jobText(word, p.summary), style = MaterialTheme.typography.bodySmall)
                 }
@@ -418,9 +424,10 @@ internal fun PrinterTile(p: Printer, slots: List<SlotLook>, modifier: Modifier =
     val kind = statusKind(p.state)
     val (shown, more) = shownSlots(slots)
     val empty = stringResource(R.string.a11y_swatch_empty)
+    val job = jobWord(p.summary?.gcodeState.orEmpty()).takeIf { PrinterHelp.isConnected(p.state) }?.let { jobText(it, p.summary) }
     // what the tile shows, as one node: the name, model and status, the slots one by one, and the line on how to fix it
     val said = listOfNotNull(
-        p.name, model, stringResource(kind.word),
+        p.name, model, stringResource(kind.word), job,
         if (shown.isEmpty()) null else stringResource(R.string.common_field_label, stringResource(R.string.printers_col_slots)),
     ).plus(shown.map { slotWords(it, empty) })
         .plus(listOfNotNull(if (more > 0) stringResource(R.string.printers_slots_more, more) else null, fixLine(p.state)?.let { stringResource(it) }))
@@ -434,6 +441,9 @@ internal fun PrinterTile(p: Printer, slots: List<SlotLook>, modifier: Modifier =
         subtitle = model,
         status = { StatusLabel(kind, small = true) },
     ) {
+        if (job != null) {
+            Text(job, style = MaterialTheme.typography.bodySmall)
+        }
         if (slots.isNotEmpty()) {
             Text(stringResource(R.string.common_field_label, stringResource(R.string.printers_col_slots)), style = MaterialTheme.typography.bodyMedium, color = colors.muted)
             FlowRow(
@@ -558,8 +568,8 @@ private fun FoundRow(p: Printer, enabled: Boolean, reason: Boolean, onAdd: () ->
 @Composable
 private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: PrintersViewModel) {
     var code by remember(d.serial) { mutableStateOf("") }
-    var name by remember(d.serial) { mutableStateOf(d.name) }
-    var address by remember(d.serial) { mutableStateOf(d.address) }
+    var name by rememberSaveable(d.serial) { mutableStateOf(d.name) }
+    var address by rememberSaveable(d.serial) { mutableStateOf(d.address) }
     // a refusal that names a field is shown under that field, not as a notice
     val field = (d.problem as? Problem.HubSaid)?.field?.takeIf { it in setOf("address", "access_code") }
     val fieldText = d.problem?.takeIf { field != null }?.let { problemText(it) }
@@ -575,7 +585,6 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
             label = stringResource(if (d.busy) R.string.printer_add_connecting else R.string.common_add_printer),
             onClick = { viewModel.submitAdd(code, name, address) },
             kind = SwButtonKind.Main,
-            enabled = code.isNotBlank(),
             busy = d.busy,
         ),
         cancel = SwAction(stringResource(if (d.guided) R.string.common_back else R.string.common_cancel), viewModel::cancelAdd),

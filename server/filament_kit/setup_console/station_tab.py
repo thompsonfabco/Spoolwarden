@@ -11,7 +11,7 @@ import logging
 
 import anyio
 
-from .. import station_requests
+from .. import demo, station_requests
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +30,8 @@ def routes(page) -> list[tuple]:
 
     def answer(approve: bool):
         async def route(request, body):
+            if demo.is_on():
+                raise Refused(409, demo.NOT_IN_DEMO, code=demo.NOT_IN_DEMO_CODE)
             rid = request.path_params["id"]
             try:
                 r = await anyio.to_thread.run_sync(station_requests.decide, rid, approve)

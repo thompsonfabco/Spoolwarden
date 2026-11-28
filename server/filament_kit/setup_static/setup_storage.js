@@ -22,7 +22,8 @@ async function saveStorage(list) {
 
 // ----- Download as CSV: the file the Hub gives for GET export/locations.csv, unlocked as a file leaves the Hub -----
 // Texts the catalogue does not have yet (only opens it): the catalogue's own wins once the key is there.
-const ST_STUB = { storage_download_csv: "Download as CSV", storage_csv_failed: "Could not download the file: {reason}" };
+const ST_STUB = { storage_download_csv: "Download as CSV", storage_csv_failed: "Could not download the file: {reason}",
+  csv_import_empty: "This CSV file has no data rows." };
 const stT = (key, vars) => {
   const v = SW.t(key, vars);
   return v !== key || !(key in ST_STUB) ? v : ST_STUB[key].replace(/\{([a-z]+)\}/g, (m, n) => (vars && vars[n] != null ? String(vars[n]) : m));
@@ -63,25 +64,50 @@ function stOpenCsvImport({ kind, opener, onDone }) {
       h("th", { textContent: SW.t("csv_import_col_problems") }))),
     h("tbody", {}));
   const note = h("p", { class: "muted", hidden: true });
-  let region = null;
+  let region = null, inFlight = false;
   const checkBtn = SW.btn(SW.t("csv_import_check"), { disabled: true, run: () => runImport(true) });
   const commitBtn = SW.btn(SW.t(isSpools ? "csv_import_add_spools" : "csv_import_commit_locations", { count: 0 }),
     { cls: "btn--primary", disabled: true, run: () => runImport(false) });
+  const cancelBtn = SW.btn(SW.t("common_cancel"), { cls: "btn--ghost", run: () => SW.closeDetail(region) });
+
+  const canCommit = (d, bad) => {
+    if (!d) return false;
+    return isSpools ? d.add > 0 : ((d.add || 0) + (d.change || 0) > 0) && bad === 0;
+  };
 
   async function runImport(dry) {
-    if (!rawText) return;
+    if (!rawText || inFlight) return;
+    inFlight = true;
+    const activeBtn = dry ? checkBtn : commitBtn;
     SW.fieldError(fileField, "");
+    SW.busy(activeBtn, SW.t("common_working"));
+    checkBtn.disabled = true;
+    commitBtn.disabled = true;
     try {
-      const r = await fetch(`/setup/api/import/${kind}?dry_run=${dry ? "1" : "0"}`, {
-        method: "POST", credentials: "same-origin",
-        headers: { "Content-Type": "text/csv; charset=utf-8", "X-Setup-Code": theCode() },
-        body: rawText,
+      let d;
+      await needCode(async () => {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort("timeout"), 30000);
+        let r;
+        try {
+          r = await fetch(`/setup/api/import/${kind}?dry_run=${dry ? "1" : "0"}`, {
+            method: "POST", credentials: "same-origin", signal: ctrl.signal,
+            headers: { "Content-Type": "text/csv; charset=utf-8", "X-Setup-Code": theCode() },
+            body: rawText,
+          });
+        } catch (err) {
+          clearTimeout(timer);
+          if (err && (err.name === "AbortError" || err.name === "TimeoutError") || ctrl.signal.aborted) {
+            throw Object.assign(new Error(SW.t("common_timeout")), { timeout: true });
+          }
+          throw Object.assign(new Error(SW.t("common_hub_no_answer")), { unreachable: true });
+        }
+        clearTimeout(timer);
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw hubError(r.status, body);
+        d = body;
       });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        if (r.status === 401 || r.status === 403) { const err = new Error(d.error || ""); err.locked = true; throw err; }
-        throw new Error(d.error || SW.t("common_hub_no_answer"));
-      }
+      if (!d) return;
       if (!dry) {
         SW.closeDetail(region);
         SW.toast(isSpools ? SW.t("csv_import_added_spools", { count: d.add || 0 })
@@ -98,17 +124,23 @@ function stOpenCsvImport({ kind, opener, onDone }) {
         h("td", {}, row.problems && row.problems.length ? SW.status("bad", { small: true, text: row.problems.map((p) => p.text).join("; ") }) : ""))));
       table.hidden = rows.length === 0;
       const bad = rows.filter((row) => !row.ok).length;
-      note.textContent = bad ? SW.t("csv_import_left_out", { count: bad }) : "";
-      note.hidden = !bad;
-      if (isSpools) {
-        commitBtn.textContent = SW.t("csv_import_add_spools", { count: d.add || 0 });
-        commitBtn.disabled = !(d.add > 0);
+      if (rows.length === 0) {
+        note.textContent = stT("csv_import_empty");
+        note.hidden = false;
       } else {
-        commitBtn.disabled = !((d.add || 0) + (d.change || 0) > 0) || bad > 0;
+        note.textContent = bad ? SW.t("csv_import_left_out", { count: bad }) : "";
+        note.hidden = !bad;
       }
+      if (isSpools) commitBtn.textContent = SW.t("csv_import_add_spools", { count: d.add || 0 });
     } catch (e) {
-      if (e.locked) { SW.closeDetail(region); needCode(() => stOpenCsvImport({ kind, opener, onDone })); return; }
+      if (e.locked) throw e;
       SW.fieldError(fileField, hubText(e.message));
+    } finally {
+      inFlight = false;
+      SW.idle(activeBtn);
+      checkBtn.disabled = !rawText;
+      const badCount = lastPreview ? (lastPreview.rows || []).filter((row) => !row.ok).length : 0;
+      commitBtn.disabled = !canCommit(lastPreview, badCount);
     }
   }
   fileIn.addEventListener("change", async () => {
@@ -126,7 +158,7 @@ function stOpenCsvImport({ kind, opener, onDone }) {
     rawText = await f.text();
     await runImport(true);
   });
-  const body = h("div", { class: "csv-import" }, fileField, sampleLink, table, note, h("div", { class: "actions" }, checkBtn, commitBtn));
+  const body = h("div", { class: "csv-import" }, fileField, sampleLink, table, note, h("div", { class: "actions" }, cancelBtn, checkBtn, commitBtn));
   const id = `csv-import-${kind}`;
   const prev = document.getElementById(id);
   if (prev) prev.remove();
@@ -215,9 +247,12 @@ function storageGroup({ st }) {
     v.more = SW.iconBtn("more", "", {});
     SW.menu(v.more, () => {
       const r = rowOf(row._key);
-      return [...(r.overflow && !r.default_overflow && r.type === "bulk" ? [{ label: SW.t("storage_make_default_overflow"), run: () => mark(r, "default_overflow") }] : []),
+      const top = [
+        ...(r.overflow && !r.default_overflow && r.type === "bulk" ? [{ label: SW.t("storage_make_default_overflow"), run: () => mark(r, "default_overflow") }] : []),
         ...(r.type === "bulk" && !r.sealed ? [{ label: SW.t("storage_sealed_here"), run: () => mark(r, "sealed") }] : []),
-        { separator: true }, { label: SW.t("common_remove"), danger: true, run: () => remove(r, v.more) }];
+      ];
+      return [...top, ...(top.length ? [{ separator: true }] : []),
+        { label: SW.t("common_remove"), danger: true, run: () => remove(r, v.more) }];
     }, { get label() { return SW.t("common_actions_for", { name: rowOf(row._key).name }); } });
     v.el = h("div", { class: "coll__item", role: "rowgroup", "data-id": row._key },
       h("div", { class: "coll__row", role: "row" },

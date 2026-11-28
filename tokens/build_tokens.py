@@ -410,8 +410,8 @@ def load_strings(path):
         if not STRING_KEY.fullmatch(key):
             raise ValueError(f"string key {key!r} is not lower snake case")
         if isinstance(value, dict):
-            if set(value) != {"one", "other"} or not all(isinstance(v, str) for v in value.values()):
-                raise ValueError(f"{key}: a plural needs the texts 'one' and 'other'")
+            if set(value) not in ({"one", "other"}, {"one", "few", "many", "other"}) or not all(isinstance(v, str) for v in value.values()):
+                raise ValueError(f"{key}: a plural needs a valid CLDR form set ('one'/'other' or 'one'/'few'/'many'/'other')")
             out[key] = {q: fill(t) for q, t in value.items()}
         elif isinstance(value, str):
             out[key] = fill(value)
@@ -434,11 +434,15 @@ def placeholder_order(value):
     return names
 
 
+CLDR_PLURAL_ORDER = ("zero", "one", "two", "few", "many", "other")
+
+
 def generate_strings_js(strings):
     lines = [f"// {STRINGS_HEADER}", "window.SW_TEXT = Object.freeze({"]
     for key, value in strings.items():
         if isinstance(value, dict):
-            text = "{ " + ", ".join(f'"{q}": {json.dumps(value[q], ensure_ascii=False)}' for q in ("one", "other")) + " }"
+            forms = [q for q in CLDR_PLURAL_ORDER if q in value]
+            text = "{ " + ", ".join(f'"{q}": {json.dumps(value[q], ensure_ascii=False)}' for q in forms) + " }"
         else:
             text = json.dumps(value, ensure_ascii=False)
         lines.append(f"  {json.dumps(key)}: {text},")
@@ -486,7 +490,7 @@ def generate_strings_xml(strings):
             lines.append("    <!-- " + " ".join(f"{i}={n}" for i, n in enumerate(order, 1)) + " -->")
         if isinstance(value, dict):
             lines.append(f'    <plurals name="{key}">')
-            for q in ("one", "other"):
+            for q in (q for q in CLDR_PLURAL_ORDER if q in value):
                 lines.append(f'        <item quantity="{q}">{xml_text(value[q], order)}</item>')
             lines.append("    </plurals>")
         else:

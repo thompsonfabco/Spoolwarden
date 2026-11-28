@@ -17,15 +17,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +54,9 @@ import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButton
+import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
+import com.thompsonfabco.filamentkit.ui.components.SwDialog
+import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.components.SwEmptyState
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import kotlinx.coroutines.Dispatchers
@@ -70,6 +77,7 @@ fun CorrectionsEntry(
     CorrectionsScreen(vm, client, onOpenRecord, onOpenPhoto, onPairAgain)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CorrectionsScreen(
     vm: CorrectionsViewModel,
@@ -104,28 +112,55 @@ internal fun CorrectionsScreen(
     val failure = s.error
     val offline = failure == RecentFailure.Offline
     val ago = remember(s.loadedAt, s.error) { s.loadedAt?.let { (System.currentTimeMillis() - it) / MS_PER_S } ?: 0L }
-    Column(Modifier.fillMaxSize().padding(space.s4), verticalArrangement = Arrangement.spacedBy(space.s3)) {
-        when {
-            s.mismatch != null -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
-            s.unauthorized -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+    var pendingRemove by remember { mutableStateOf<CorrectionRow?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
+    LaunchedEffect(s.loading) { if (!s.loading) refreshing = false }
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = { refreshing = true; vm.refresh() },
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        Column(Modifier.fillMaxSize().padding(space.s4), verticalArrangement = Arrangement.spacedBy(space.s3)) {
+            when {
+                s.mismatch != null -> HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
+                s.unauthorized -> HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
+            }
+            if (s.readerDown) {
+                NoticeCard(
+                    NoticeKind.Bad, stringResource(R.string.corrections_reader_down),
+                    actions = listOf(SwAction(stringResource(R.string.common_try_again), vm::refresh)),
+                )
+            }
+            s.removeFailure?.let { NoticeCard(NoticeKind.Bad, failureText(it)) }
+            ScreenState(
+                loaded = s.loaded,
+                loading = s.loading,
+                modifier = Modifier.weight(1f),
+                error = if (failure != null && !offline) failureText(failure) else null,
+                onTryAgain = vm::refresh,
+                offline = offline,
+                loadedSecondsAgo = ago,
+            ) {
+                CorrectionsList(s, onRemoveAsk = { pendingRemove = it }, onOpenRecord = onOpenRecord, onOpenPhoto = onOpenPhoto)
+            }
         }
-        if (s.readerDown) {
-            NoticeCard(
-                NoticeKind.Bad, stringResource(R.string.corrections_reader_down),
-                actions = listOf(SwAction(stringResource(R.string.common_try_again), vm::refresh)),
-            )
-        }
-        s.removeFailure?.let { NoticeCard(NoticeKind.Bad, failureText(it)) }
-        ScreenState(
-            loaded = s.loaded,
-            loading = s.loading,
-            modifier = Modifier.weight(1f),
-            error = if (failure != null && !offline) failureText(failure) else null,
-            onTryAgain = vm::refresh,
-            offline = offline,
-            loadedSecondsAgo = ago,
+    }
+    pendingRemove?.let { target ->
+        val name = target.filament ?: stringResource(R.string.corrections_unnamed)
+        SwDialog(
+            title = stringResource(R.string.common_remove),
+            onClose = { pendingRemove = null },
+            confirm = SwDialogButton(
+                stringResource(R.string.common_remove),
+                {
+                    vm.remove(target.id)
+                    pendingRemove = null
+                },
+                kind = SwButtonKind.DestructiveFilled,
+            ),
+            cancel = SwAction(stringResource(R.string.common_cancel)) { pendingRemove = null },
         ) {
-            CorrectionsList(s, vm, onOpenRecord, onOpenPhoto)
+            Text(stringResource(R.string.corrections_a11y_remove, name), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -135,7 +170,7 @@ private const val MS_PER_S = 1000L
 @Composable
 private fun CorrectionsList(
     s: CorrectionsState,
-    vm: CorrectionsViewModel,
+    onRemoveAsk: (CorrectionRow) -> Unit,
     onOpenRecord: (String) -> Unit,
     onOpenPhoto: (String, Int) -> Unit,
 ) {
@@ -163,7 +198,7 @@ private fun CorrectionsList(
                 }
             }
         }
-        items(s.rows, key = { it.id }) { row -> CorrectionCard(row, onRemove = { vm.remove(row.id) }, onOpenRecord = onOpenRecord, onOpenPhoto = onOpenPhoto) }
+        items(s.rows, key = { it.id }) { row -> CorrectionCard(row, onRemove = { onRemoveAsk(row) }, onOpenRecord = onOpenRecord, onOpenPhoto = onOpenPhoto) }
         items(s.notTaken) { NotTakenCard(it, onOpenRecord) }
         item { Text(stringResource(R.string.corrections_foot), color = SpoolwardenTheme.colors.muted, style = MaterialTheme.typography.bodyMedium) }
     }

@@ -1,6 +1,8 @@
 package com.thompsonfabco.filamentkit.data
 
 import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -13,6 +15,15 @@ import com.thompsonfabco.filamentkit.ui.theme.Look
 import com.thompsonfabco.filamentkit.ui.theme.lookFromWire
 import com.thompsonfabco.filamentkit.ui.theme.wire
 import java.io.IOException
+import java.security.GeneralSecurityException
+import java.security.KeyStore
+import java.security.KeyStoreException
+import java.security.ProviderException
+import java.util.Base64
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,7 +75,7 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
     /** The paired server, or null when unpaired (or the stored value is unreadable). */
     val server: Flow<ServerConfig?> = store.data.map { prefs ->
         prefs[KEY]?.let { text ->
-            runCatching { json.decodeFromString<ServerConfig>(text) }
+            runCatching { json.decodeFromString<ServerConfig>(ServerCipher.decrypt(text)) }
                 .onFailure { e ->
                     Log.w(Settings::class.java.simpleName, e)
                     _corruptServerConfig.value = true
@@ -82,7 +93,8 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
 
     override suspend fun save(config: ServerConfig) {
         _corruptServerConfig.value = false
-        store.edit { it[KEY] = json.encodeToString(ServerConfig.serializer(), config) }
+        val encoded = json.encodeToString(ServerConfig.serializer(), config)
+        store.edit { it[KEY] = ServerCipher.encrypt(encoded) }
     }
 
     override suspend fun clear() {
@@ -160,5 +172,90 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
         private val Context.dataStore by preferencesDataStore("settings")
 
         fun create(context: Context): Settings = Settings(context.applicationContext.dataStore)
+    }
+}
+
+/**
+ * Encrypts the serialized [ServerConfig] with a non-exportable AES-256-GCM key in `AndroidKeyStore`.
+ * Falls back to plaintext in JVM/Robolectric unit tests where `AndroidKeyStore` is absent, and still
+ * reads legacy unencrypted JSON values.
+ */
+private object ServerCipher {
+    private const val KEYSTORE = "AndroidKeyStore"
+    private const val KEY_ALIAS = "filament_kit_server_config"
+    private const val TRANSFORMATION = "AES/GCM/NoPadding"
+    private const val GCM_TAG_BITS = 128
+    private const val KEY_BITS = 256
+    private const val PREFIX = "v1:"
+
+    @Synchronized
+    fun encrypt(plaintext: String): String {
+        val ks = keyStoreOrNull() ?: return plaintext
+        return try {
+            encryptWith(getOrCreateKey(ks), plaintext)
+        } catch (_: GeneralSecurityException) {
+            encryptWith(regenerateKey(ks), plaintext)
+        } catch (_: ProviderException) {
+            encryptWith(regenerateKey(ks), plaintext)
+        }
+    }
+
+    @Synchronized
+    fun decrypt(stored: String): String {
+        if (!stored.startsWith(PREFIX)) return stored
+        val parts = stored.removePrefix(PREFIX).split(':')
+        require(parts.size == 2) { "malformed encrypted server config" }
+        val key = existingKey() ?: error("AndroidKeyStore key missing for encrypted server config")
+        val iv = Base64.getDecoder().decode(parts[0])
+        val ct = Base64.getDecoder().decode(parts[1])
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
+        return String(cipher.doFinal(ct), Charsets.UTF_8)
+    }
+
+    private fun encryptWith(key: SecretKey, plaintext: String): String {
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, key)
+        val iv = Base64.getEncoder().encodeToString(cipher.iv)
+        val ct = Base64.getEncoder().encodeToString(cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8)))
+        return "$PREFIX$iv:$ct"
+    }
+
+    @Synchronized
+    private fun keyStoreOrNull(): KeyStore? = try {
+        KeyStore.getInstance(KEYSTORE).apply { load(null) }
+    } catch (_: KeyStoreException) {
+        null
+    }
+
+    @Synchronized
+    private fun existingKey(): SecretKey? {
+        val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }
+        return ks.getKey(KEY_ALIAS, null) as? SecretKey
+    }
+
+    @Synchronized
+    private fun getOrCreateKey(ks: KeyStore): SecretKey =
+        (ks.getKey(KEY_ALIAS, null) as? SecretKey) ?: generateKey()
+
+    @Synchronized
+    private fun regenerateKey(ks: KeyStore): SecretKey {
+        if (ks.containsAlias(KEY_ALIAS)) ks.deleteEntry(KEY_ALIAS)
+        return generateKey()
+    }
+
+    private fun generateKey(): SecretKey {
+        val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE)
+        gen.init(
+            KeyGenParameterSpec.Builder(
+                KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(KEY_BITS)
+                .build(),
+        )
+        return gen.generateKey()
     }
 }

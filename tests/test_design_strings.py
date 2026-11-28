@@ -16,6 +16,7 @@ from test_design_lints import _Scan, _rel, _script_sources, TESTS
 from test_design_sources import ROOT, TOKENS, _kotlin_sources
 
 SOURCE = ROOT / "strings" / "en.json"
+LANGUAGES_XML = ROOT / "strings" / "languages.xml"
 STRINGS_JS = ROOT / "strings" / "strings.js"
 STRINGS_XML = ROOT / "android" / "app" / "src" / "main" / "res" / "values" / "strings.xml"
 ALLOWLIST = TESTS / "allowlists" / "strings"
@@ -195,10 +196,64 @@ def test_generated_strings_equal_the_catalogue():
     assert not problems, "\n".join(problems)
 
 
+EXPECTED_PLURAL_FORMS = {
+    "en": {"one", "other"},
+    "de": {"one", "other"},
+    "ru": {"one", "few", "many", "other"},
+}
+
+
+def _language_files():
+    return [ROOT / "strings" / el.attrib["file"]
+            for el in ET.parse(LANGUAGES_XML).getroot().findall("language")]
+
+
 def test_the_names_are_held_once():
-    raw = json.loads(SOURCE.read_text(encoding="utf-8"))
-    assert all(isinstance(raw[e], str) and raw[e] for e in RESERVED.values())
-    problems = name_problems(raw)
+    for path in _language_files():
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        assert all(isinstance(raw[e], str) and raw[e] for e in RESERVED.values()), path.name
+        problems = name_problems(raw)
+        assert not problems, f"{path.name}:\n" + "\n".join(problems)
+
+
+def test_all_language_catalogues_are_valid():
+    en_raw = json.loads(SOURCE.read_text(encoding="utf-8"))
+    problems = []
+    for key, en_val in en_raw.items():
+        if isinstance(en_val, dict):
+            if set(en_val) != EXPECTED_PLURAL_FORMS["en"] or not all(isinstance(v, str) for v in en_val.values()):
+                problems.append(f"en.json: {key}: invalid plural forms (expected {sorted(EXPECTED_PLURAL_FORMS['en'])})")
+    for path in _language_files():
+        if path == SOURCE:
+            continue
+        expected_forms = EXPECTED_PLURAL_FORMS.get(path.stem)
+        if expected_forms is None:
+            problems.append(f"{path.name}: no expected CLDR plural form set configured")
+            continue
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        for key in sorted(set(en_raw) ^ set(raw)):
+            problems.append(f"{path.name}: key {key!r} is only in {'en.json' if key in en_raw else path.name}")
+        for key in sorted(set(en_raw) & set(raw)):
+            en_val, val = en_raw[key], raw[key]
+            if isinstance(en_val, dict):
+                if not isinstance(val, dict) or set(val) != expected_forms or not all(isinstance(v, str) for v in val.values()):
+                    problems.append(f"{path.name}: {key}: invalid plural forms (expected {sorted(expected_forms)})")
+                    continue
+                en_one_ph = placeholders(en_val["one"])
+                en_other_ph = placeholders(en_val["other"])
+                for q, text in val.items():
+                    form_ph = placeholders(text)
+                    if q == "one":
+                        if form_ph not in (en_one_ph, en_other_ph):
+                            problems.append(
+                                f"{path.name}: {key}.{q}: placeholders differ ({form_ph} not in {[en_one_ph, en_other_ph]})"
+                            )
+                    elif form_ph != en_other_ph:
+                        problems.append(f"{path.name}: {key}.{q}: placeholders differ ({form_ph} != {en_other_ph})")
+            elif not isinstance(val, str):
+                problems.append(f"{path.name}: {key}: expected string, got {type(val).__name__}")
+            elif placeholders(val) != placeholders(en_val):
+                problems.append(f"{path.name}: {key}: placeholders differ ({placeholders(val)} != {placeholders(en_val)})")
     assert not problems, "\n".join(problems)
 
 
@@ -274,7 +329,7 @@ def test_plants_are_found():
         ["strings.xml: key 'extra' is only in strings.xml"]
     # a text that differs
     assert len(catalogue_problems(raw, js.replace('"Back"', '"Go back"', 1), xml)) == 1
-    assert len(catalogue_problems(raw, js, xml.replace(">Cancel<", ">Stop<"))) == 1
+    assert len(catalogue_problems(raw, js, xml.replace(">Cancel<", ">Stop<", 1))) == 1
     # a placeholder renamed in one file
     assert catalogue_problems(raw, js.replace("{hub}", "{box}", 1), xml)
     assert catalogue_problems(raw, js, xml.replace("1=hub", "1=box", 1))

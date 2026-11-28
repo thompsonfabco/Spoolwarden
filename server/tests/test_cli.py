@@ -506,7 +506,7 @@ def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url, no_li
     assert cli.main(["status"], client_factory=_ok_client) == 0
     out = _status_lines(capsys)
     assert not any(ln.startswith("FAIL") for ln in out)
-    assert "--   Filament Catalog not downloaded (spoolwarden library update), 0 local additions" in out
+    assert "--   Filament Catalog not downloaded (spoolwarden catalog update), 0 local additions" in out
     assert "--   Slicer presets: no build yet (waiting for Slicer Sync)" in out
     assert "--   Slicer Sync: not set up (see README: Pair your PC)" in out
 

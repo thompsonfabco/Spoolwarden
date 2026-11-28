@@ -228,7 +228,7 @@ out.third = { n: count(), more: !!more() };
 await choose(filterSelect("Who"), "cli");
 out.cli = { ids: rowIds(), more: !!more() };
 await choose(filterSelect("What kind"), "spools");
-out.cliSpools = { ids: rowIds(), empty: text($(".logs__activity .empty")) };
+out.cliSpools = { ids: rowIds(), empty: text($(".logs__activity .empty__title")) };
 await choose(filterSelect("Who"), "device");
 out.deviceSpools = { ids: rowIds() };
 await choose(filterSelect("What kind"), "");
@@ -270,9 +270,11 @@ def test_undo_puts_back_and_says_so_with_the_hubs_note_and_the_row_stops_offerin
 await unlock();
 const said = () => text($(".logs__activity .result__text"));
 $(".btn", cellOf(rowOf(9), "actions")).click();
+(await until(() => $('dialog[open] [data-action="confirm"]'), "the undo confirm")).click();
 await until(() => said() && said().includes("Put back"), "the result");
 out.first = { said: said(), state: $(".logs__activity .result").dataset.state, row: { undo: !!$(".btn", cellOf(rowOf(9), "actions")), sub: text($(".coll__sub", rowOf(9))) } };
 $(".btn", cellOf(rowOf(6), "actions")).click();
+(await until(() => $('dialog[open] [data-action="confirm"]'), "the undo confirm")).click();
 await until(() => said() && said().includes("printer still"), "the result with the note");
 out.second = { said: said(), row: { undo: !!$(".btn", cellOf(rowOf(6), "actions")), sub: text($(".coll__sub", rowOf(6))) } };
 out.focus = document.activeElement.dataset ? document.activeElement.dataset.id : null;
@@ -290,6 +292,7 @@ def test_a_refused_undo_says_the_hubs_reason_and_the_row_then_says_it_too(stubbe
     page = drive(url, tmp_path, r"""
 await unlock();
 $(".btn", cellOf(rowOf(9), "actions")).click();
+(await until(() => $('dialog[open] [data-action="confirm"]'), "the undo confirm")).click();
 await until(() => text($(".logs__activity .result__text")), "the refusal");
 out.said = { text: text($(".logs__activity .result__text")), state: $(".logs__activity .result").dataset.state };
 await sleep(300);

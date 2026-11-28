@@ -697,7 +697,7 @@ class SetupPage:
         if name == "server" and "server" in on:
             return {"name": name, "on": False, "notes": [], "after": sorted(on), "needs": [],
                     "refused": "this page is the server module's: switch it off at the server: "
-                               "sudo filament-kit modules disable server", "code": "server_module"}
+                               "sudo spoolwarden features off server", "code": "server_module"}
         chosen, notes = modules.toggle(on, name)
         conflict = hubport.remote_conflict(cfg) if name == "remote" and name in chosen else None
         if conflict:

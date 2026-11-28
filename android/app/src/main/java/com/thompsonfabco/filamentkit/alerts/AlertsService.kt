@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 
 /**
  * The watching service: while "Alerts on this phone" is on it keeps one waiting connection to the Hub
@@ -41,6 +42,7 @@ import kotlinx.coroutines.withContext
  */
 class AlertsService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val baseClient = OkHttpClient()
     private var watching: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -76,7 +78,7 @@ class AlertsService : Service() {
         val settings = Settings.create(this)
         val store = AlertsStore.create(this)
         combine(store.on, settings.server) { on, config -> config.takeIf { on && it.isPaired() } }
-            .distinctUntilChangedBy { c -> c?.let { Triple(it.fingerprint, it.token, it.port) } }
+            .distinctUntilChangedBy { c -> c?.let { listOf(it.fingerprint, it.token, it.port, it.endpoints) } }
             .collectLatest { config ->
                 if (config == null) {
                     stopSelf()
@@ -95,7 +97,7 @@ class AlertsService : Service() {
 
     /** One pinned [Api] for [config]; a call that cannot reach the Hub looks for it again (address, name service). */
     private fun fetcher(config: ServerConfig): suspend (EventsQuery) -> EventsAnswer {
-        val client = pinnedClient(config.fingerprint)
+        val client = pinnedClient(config.fingerprint, baseClient)
         val endpoints = Endpoints(config.endpoints, config.port)
         val discovery = Discovery(this)
         val host = java.util.concurrent.atomic.AtomicReference<String?>(null)

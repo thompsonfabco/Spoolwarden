@@ -61,13 +61,14 @@ data class MoveUi(
     val lastTry: String? = null,
 )
 
-/** The Home sheet: the storage locations to choose the spool's home from; [locations] null while they load. */
+/** The Home sheet: the storage locations to choose the spool's home from; [locations] null while they load, [lastTry] the one that failed. */
 data class HomeUi(
     val locations: List<String>? = null,
     /** The same locations with how full each is; names only from an older Hub. */
     val storage: StorageAnswer? = null,
     val savingTo: String? = null,
     val failure: HubFailure? = null,
+    val lastTry: String? = null,
 )
 
 /** The toast of a move, with what Undo moves back to. */
@@ -398,8 +399,14 @@ class SpoolViewModel(
     }
 
     fun retryHome() {
-        _state.update { it.copy(home = it.home?.copy(failure = null)) }
-        loadHomeLocations()
+        val h = _state.value.home ?: return
+        val target = h.lastTry
+        if (h.locations == null || target == null) {
+            _state.update { it.copy(home = it.home?.copy(failure = null)) }
+            loadHomeLocations()
+        } else {
+            setHome(target)
+        }
     }
 
     /** Saves the chosen home at once; the current home only closes the sheet. A refusal (409, 400) shows in the sheet. */
@@ -412,7 +419,7 @@ class SpoolViewModel(
             return
         }
         _state.update { it.copy(home = h.copy(savingTo = location, failure = null)) }
-        run(onFailure = { f -> _state.update { it.copy(home = it.home?.copy(savingTo = null, failure = f)) } }) {
+        run(onFailure = { f -> _state.update { it.copy(home = it.home?.copy(savingTo = null, failure = f, lastTry = location)) } }) {
             val updated = backend.setHome(id, location).toSpoolSummary()
             _state.update {
                 it.copy(

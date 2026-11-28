@@ -46,6 +46,7 @@ import socket
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from urllib.parse import quote, urlparse
 
 from . import config, demo, station_client
@@ -151,28 +152,28 @@ def write_token(token: str):
     root:filament-kit 640 like the other secrets the service reads. The value is never printed or logged. ValueError
     for one that is not a single word of printable characters."""
     import os
-    import shutil
+    import tempfile
     token = (token or "").strip()
     if not token or not token.isprintable() or " " in token or len(token) > 400:
         raise ValueError("the reader's token is one word of printable characters")
     dest = config.paths().etc / TOKEN_FILE
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_name(dest.name + ".tmp")
+    fd, tmp_str = tempfile.mkstemp(dir=dest.parent, prefix=dest.name + ".", suffix=".tmp")
+    tmp = Path(tmp_str)
     try:
-        if os.name == "nt":
-            tmp.write_bytes((token + "\n").encode())
-        else:
-            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
-            with os.fdopen(fd, "wb") as fh:
-                os.fchmod(fh.fileno(), 0o640)
-                fh.write((token + "\n").encode())
-                fh.flush()
-                os.fsync(fh.fileno())
-            if os.geteuid() == 0:
+        with os.fdopen(fd, "wb") as fh:
+            if hasattr(os, "fchown") and hasattr(os, "geteuid") and os.geteuid() == 0:
                 try:
-                    shutil.chown(tmp, user="root", group="filament-kit")
-                except (LookupError, OSError):
+                    import grp
+                    import pwd
+                    os.fchown(fh.fileno(), pwd.getpwnam("root").pw_uid, grp.getgrnam(config.KIT_USER).gr_gid)
+                except (ImportError, KeyError, LookupError, OSError):
                     pass
+            if hasattr(os, "fchmod"):
+                os.fchmod(fh.fileno(), 0o640)
+            fh.write((token + "\n").encode())
+            fh.flush()
+            os.fsync(fh.fileno())
         config.grant_web_read(tmp)
         os.replace(tmp, dest)
     except BaseException:

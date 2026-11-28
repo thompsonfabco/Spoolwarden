@@ -10,6 +10,7 @@ permissions:
   contents: read
 jobs:
   build:
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -31,7 +32,7 @@ jobs:
       - name: PyInstaller
         if: runner.os == 'Windows'
         run: |
-          pip install pyinstaller==6.11.1
+          pip install --require-hashes --only-binary :all: -r tools/release-sync-requirements.txt
           pyinstaller --noconfirm pc-sync/fksync.spec
 
       - name: Smoke test
@@ -51,7 +52,7 @@ jobs:
       - name: PyInstaller and the Linux tarball
         if: runner.os == 'Linux'
         run: |
-          pip install pyinstaller==6.11.1
+          pip install --require-hashes --only-binary :all: -r tools/release-sync-linux-requirements.txt
           bash pc-sync/linux/build.sh
 
       - name: Smoke test (Linux)

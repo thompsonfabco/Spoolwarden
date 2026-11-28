@@ -9,7 +9,7 @@ namespace reader {
 
 // "fk-reader-ota\x01" || image SHA-256 (32 bytes) || build as 8 bytes big-endian.
 // The reader takes SHA-256 of this and checks the ECDSA signature against it.
-inline std::string otaSigPreimage(const uint8_t imgHash[32], long build) {
+inline std::string otaSigPreimage(const uint8_t imgHash[32], int64_t build) {
   std::string s("fk-reader-ota\x01");
   s.append(reinterpret_cast<const char*>(imgHash), 32);
   for (int i = 0; i < 8; i++) s.push_back((char)(uint8_t)((uint64_t)build >> (56 - 8 * i)));

@@ -175,7 +175,7 @@ function correctionsCard(on) {
       : src ? h("span", { class: "thumb" }, h("img", { class: "thumb__img", src, alt: "", width: 48, height: 48 }))
         : h("span", { class: "thumb thumb--none" }, SW.icon("camera", "icon--s"), h("span", { class: "sr" }, SW.t("photo_none")));
     const fields = Object.keys(c).filter((k) => JSON.stringify(c[k]) !== JSON.stringify(was[k]));
-    const remove = SW.btn(SW.t("common_remove"), { name: SW.t("settings_corr_remove_named", { name }), action: "remove-correction", run: () => removeOne(e.id) });
+    const remove = SW.btn(SW.t("common_remove"), { name: SW.t("settings_corr_remove_named", { name }), action: "remove-correction", run: (ev) => removeOne(e.id, name, ev.currentTarget) });
     return h("li", { class: "revisions__item corr__item", "data-id": String(e.id) },
       h("div", { class: "corr__photo" }, thumb),
       h("div", { class: "corr__record" },

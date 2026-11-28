@@ -49,9 +49,9 @@ fun HlsPlayer(
     onPairAgain: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    var error by remember(url) { mutableStateOf<String?>(null) }
-    var hasPicture by remember(url) { mutableStateOf(false) }
-    val player = remember(url) {
+    var error by remember(url, client, headers) { mutableStateOf<String?>(null) }
+    var hasPicture by remember(url, client, headers) { mutableStateOf(false) }
+    val player = remember(url, client, headers) {
         // the server waits for the stream to start before answering the first playlist request
         val http = client.newBuilder().readTimeout(30, TimeUnit.SECONDS).build()
         val source = OkHttpDataSource.Factory(http).setDefaultRequestProperties(headers)

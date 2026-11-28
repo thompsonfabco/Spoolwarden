@@ -21,7 +21,7 @@ function printersTab() {
   // ----- small helpers -----
   const words = (s) => { const w = String(s).replace(/_/g, " "); return w.charAt(0).toUpperCase() + w.slice(1); };
   const isUp = (p) => p.state === "connected" || p.state === "unknown_model";
-  const isLive = (s) => ["RUNNING", "PAUSE", "PREPARE"].includes((s || {}).gcode_state);
+  const isLive = (s) => ["RUNNING", "PAUSE", "PREPARE", "SLICING"].includes((s || {}).gcode_state);
   const meta = (id) => manageList.find((x) => x.id === id) || {};
   const known = (id) => printers.find((x) => x.id === id) || null;
   const nameOf = (id) => { const p = known(id) || meta(id); return (p && p.name) || id; };
@@ -345,11 +345,19 @@ function printersTab() {
     }
     async function finish(map) {
       const r = added_; added_ = null;
+      const fam = st.family;
       close();
       if (!r) return;
       await added(r);
       const id = r.printer && r.printer.id;
-      if (map && id) { try { await pj(`${enc(id)}/map`, {}); if (page && page.id === id) loadMap(); } catch (e) { /* the printer page has its own Map slots */ } }
+      if (map && id) {
+        if (fam === "klipper") {
+          if (!page || page.id !== id) await openPrinter(id);
+          if (page && page.id === id) openManual();
+        } else {
+          try { await pj(`${enc(id)}/map`, {}); if (page && page.id === id) loadMap(); } catch (e) { /* the printer page has its own Map slots */ }
+        }
+      }
     }
     async function scan() {
       const mine = ++scanned;
@@ -625,6 +633,7 @@ function printersTab() {
     const nativeHls = !hlsJs && !!v.canPlayType("application/vnd.apple.mpegurl");
     if (!hlsJs && !nativeHls) { g.camBox.replaceChildren(h("p", { class: "pcam__text" }, t("printer_camera_no_hls"))); return; }
     v.addEventListener("playing", up);
+    v.addEventListener("loadeddata", up);
     v.addEventListener("error", () => camFail(`${base}/camera/index.m3u8`));
     g.camBox.append(v);
     const src = `${base}/camera/index.m3u8`;
@@ -639,7 +648,16 @@ function printersTab() {
       hls.loadSource(src);
       hls.attachMedia(v);
     }
-    v.play().catch(() => {});
+    v.play().catch(() => {
+      up();
+      if (!g.camBox.querySelector(".pcam__play")) {
+        const playBtn = SW.btn(t("printer_camera_show"), { cls: "pcam__play", action: "play-cam", run: () => {
+          playBtn.remove();
+          v.play().catch(() => {});
+        } });
+        g.camBox.append(playBtn);
+      }
+    });
   }
   // The picture did not come. A request tells too many views (429) from the rest; its body is dropped at once.
   async function camFail(url) {
@@ -707,6 +725,8 @@ function printersTab() {
     const line = resultLine(), autoRefusal = resultLine(), plan = resultLine(), results = h("div", { class: "list" });
     const hint = h("p", { class: "muted" }, t("spool_load_pick_hint"));
     const find = SW.field({ type: "search", label: t("common_search"), placeholder: t("common_search_placeholder"), onSearch: (text) => search(text) });
+    const box = find.querySelector && find.querySelector(".field__box");
+    if (box) box.append(needsHub(SW.iconBtn("search", t("common_search"), { run: () => search(find._control.value.trim()) })));
     const picked = h("div", { class: "pload__picked", hidden: true });
     const search_ = h("div", { class: "pload__search" }, find, line, results, hint);
     const cancel = SW.btn(t("common_cancel"), { action: "cancel", run: () => dlg.close() });
@@ -741,7 +761,9 @@ function printersTab() {
         if (mine !== asked) return;
         const rows = res.filaments.flatMap((f) => f.spools.map((s) => ({ id: s.spool_id, vendor: f.vendor, name: f.name, location: s.location, remaining_g: s.remaining_g })));
         clear(line);
-        results.replaceChildren(...(rows.length ? rows.slice(0, 60).map(row) : [h("p", { class: "muted" }, t("spools_empty_filtered"))]));
+        const shown = rows.slice(0, 60);
+        results.replaceChildren(...(shown.length ? [...shown.map(row), ...(rows.length > 60 ? [h("p", { class: "muted" }, t("spools_cut"))] : [])]
+          : [h("p", { class: "muted" }, t("spools_empty_filtered"))]));
       } catch (e) { if (mine === asked) failed(line, e, () => search(text)); } finally { if (mine === asked && find._busy) find._busy(false); }
     }
     async function lastTap() {
@@ -758,7 +780,7 @@ function printersTab() {
       picked.hidden = false;
       if (!sl) pickTarget();
       picked.replaceChildren(h("p", {}, t("spool_load_picked", { id: s.id, name: spoolTitle(s), location: s.location || "?", grams: s.remaining_g != null ? Math.round(s.remaining_g) : "?" })),
-        SW.btn(t("common_change"), { cls: "btn--ghost", action: "change", run: () => { spool = null; picked.hidden = true; search_.hidden = false; clear(plan); disabled(go, t("spool_load_pick_first"), () => find._control); find._control.focus(); } }));
+        SW.btn(t("common_change"), { cls: "btn--ghost", action: "change", run: () => { spool = null; picked.hidden = true; where.hidden = true; clear(autoRefusal); search_.hidden = false; clear(plan); disabled(go, t("spool_load_pick_first"), () => find._control); find._control.focus(); } }));
       doLoad(true);                                     // the dry run first: the plan is shown before anything is sent
     }
     // dry: the plan (preset, nozzle, spools going back); then Load sends `dry_run: false`
@@ -950,15 +972,25 @@ function printersTab() {
       return [bar, list.length ? h("ul", { class: "pused" }, list.map((e) => usageRow(g, e))) : h("p", { class: "muted" }, t("printer_used_empty"))];
     }, { quiet: g.usageBox.childElementCount > 0 });    // a refresh after a job keeps what is shown until the new list arrives
   }
+  function usageNote(e) {
+    if (e.undone) return t("printer_usage_note_undone");
+    if (e.observe) return t("printer_usage_note_logged");
+    if (e.spool_id == null) return t("printer_usage_note_no_spool");
+    if (e.error) { const k = "printer_usage_reason_" + e.error; return t("printer_usage_note_not_taken", { reason: SW.t(k) !== k ? t(k) : String(e.error).replace(/_/g, " ") }); }
+    return "";
+  }
   function usageRow(g, e) {
     const line = resultLine(), said = g.undone.get(e.id);
     if (said) SW.result(line, "ok", said);
-    const from = e.spool === null ? t("printer_used_spool_gone") : e.spool ? t("printer_used_from_spool", { id: e.spool.id, name: spoolTitle(e.spool) }) : "";
-    const b = e.undone ? null : needsHub(SW.btn(t("common_undo"), { action: "undo", name: t("printer_used_undo_name", { grams: e.grams ?? "?", job: e.job || t("printer_used_job_default") }), run: () => undo(e, b) }));
+    const from = e.spool ? t("printer_used_from_spool", { id: e.spool.id, name: spoolTitle(e.spool) }) : e.spool === null && e.spool_id != null ? t("printer_used_spool_gone") : "";
+    const note = usageNote(e);
+    const sub = [from, note].filter(Boolean).join(" · ");
+    const counted = !e.undone && !e.observe && e.spool_id != null && !e.error && !String(e.id).startsWith("k-");
+    const b = counted ? needsHub(SW.btn(t("common_undo"), { action: "undo", name: t("printer_used_undo_name", { grams: e.grams ?? "?", job: e.job || t("printer_used_job_default") }), run: () => undo(e, b) })) : null;
     return h("li", { class: "pused__row", "data-state": e.undone ? "undone" : undefined },
       h("span", { class: "pused__grams mono" }, t("common_grams", { grams: e.grams ?? "?" })),
       h("span", { class: "pused__what" }, [e.job || t("printer_used_job_default"), e.slot].filter(Boolean).join(" · "), e.undone ? " " + t("recent_revision_undone") : ""),
-      h("span", { class: "pused__when mono muted" }, stamp(e.at)), from ? h("span", { class: "pused__from muted" }, from) : null, b, line);
+      h("span", { class: "pused__when mono muted" }, stamp(e.at)), sub ? h("span", { class: "pused__from muted" }, sub) : null, b, line);
   }
   async function undo(e, button) {
     const g = page;
@@ -1056,8 +1088,39 @@ function printersTab() {
   function openManual(opener) {
     const g = page, id = g.id;
     const body = h("div", { class: "pmanual" }), foot = h("div", { class: "pmanual__foot" }), line = resultLine();
+    async function confirmStop(btn) {
+      const m = g.manual;
+      if (!m || !m.v || !m.v.open) return true;
+      const ok = await sheetAsk({
+        kind: "confirm",
+        title: t("printers_load_stop_title", { name: nameOf(id) }),
+        text: t("printers_load_stop_body"),
+        confirm: t("printers_load_stop"),
+        cancel: t("common_keep"),
+        opener: btn,
+        run: async () => {
+          const r = await pj(mpath(m.id, "stop"), { session: m.v.session });
+          if (m === g.manual) { m.v = r; clearTimeout(m.timer); }
+        },
+      });
+      return !!ok;
+    }
     const dlg = SW.sheet({ title: t("printers_map_loading"), cls: "sheet--detail", body: [body, line], foot,
       onClose: () => { if (g.manual) manualStop(); if (page === g) loadMap(); } });
+    dlg.addEventListener("cancel", (e) => {
+      if (g.manual && g.manual.v && g.manual.v.open) {
+        e.preventDefault();
+        confirmStop().then((ok) => { if (ok) { manualStop(); dlg.close(); } });
+      }
+    });
+    const closeBtn = dlg.querySelector("[data-action=close]");
+    if (closeBtn) closeBtn.addEventListener("click", (e) => {
+      if (g.manual && g.manual.v && g.manual.v.open) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        confirmStop(closeBtn).then((ok) => { if (ok) { manualStop(); dlg.close(); } });
+      }
+    }, true);
     openHere(dlg, opener);
     const start = needsHub(SW.btn(t("printers_manual_start"), { cls: "btn--primary", action: "start", run: async () => {
       await act(line, t("common_working"), async () => {
@@ -1116,13 +1179,13 @@ function printersTab() {
       const kind = (q) => (q.status === "confirmed" ? "ok" : q.status === "by_hand" ? "info" : "neutral");
       let ask = null;
       if (st && st.seen && st.ask) {
-        const other = keep("other", SW.field({ type: "select", label: t("printers_load_no"), options: v.positions.map((q) => ({ value: q.id, label: q.label })) }));
-        other._control.value = st.position.id;
+        const otherOpts = v.positions.filter((q) => q.id !== st.position.id).map((q) => ({ value: q.id, label: q.label }));
+        const other = otherOpts.length ? keep("other", SW.field({ type: "select", label: t("printers_load_no"), options: otherOpts, value: otherOpts[0].value })) : null;
         const noz = keep("noz", v.dual_nozzle && !st.seen.nozzle_reported ? SW.field({ type: "select", label: t("common_field_nozzle"),
           options: [{ value: "right", label: t("printers_load_nozzle_right") }, { value: "left", label: t("printers_load_nozzle_left") }] }) : null);
         const nozzle = () => (st.seen.nozzle_reported ? st.seen.nozzle : noz ? noz._control.value : null);
         const yes = SW.btn(t("common_yes"), { cls: "btn--primary", action: "yes", run: () => send("confirm", { position: st.position.id, reported: st.seen.reported, nozzle: nozzle() }) });
-        const save = SW.btn(t("printers_load_save"), { action: "save", run: () => send("confirm", { position: other._control.value, reported: st.seen.reported, nozzle: nozzle() }) });
+        const save = other ? SW.btn(t("printers_load_save"), { action: "save", run: () => send("confirm", { position: other._control.value, reported: st.seen.reported, nozzle: nozzle() }) }) : null;
         ask = h("div", { class: "pmanual__ask" }, h("p", {}, st.ask), noz, yes, other, save);
       } else if (st && !v.reports_loads) {
         const pick = keep("pick", SW.field({ type: "select", label: t("printers_load_slot"), options: (v.choices || []).map((c, i) => ({ value: String(i), label: c.label })) }));
@@ -1138,7 +1201,7 @@ function printersTab() {
           h("div", { class: "printer__buttons" }, SW.btn(t("printer_mbl_share_yes"), { action: "share", run: () => send("offer", { share: true }) }),
             SW.btn(t("printers_load_offer_no"), { action: "no-share", run: () => send("offer", { share: false }) }))) : null);
       foot.replaceChildren(...(st ? [SW.btn(t("printers_load_skip", { position: st.position.label }), { action: "skip", run: () => send("skip", { position: st.position.id }) }),
-        SW.btn(t("common_stop"), { action: "stop", run: () => send("stop", {}) })] : []));
+        SW.btn(t("common_stop"), { action: "stop", run: async (e) => { if (await confirmStop(e.currentTarget)) draw(); } })] : []));
       if (!v.open) clearTimeout(m.timer);
     }
   }
@@ -1185,7 +1248,7 @@ function printersTab() {
     } else {
       // the Hub does not say whether a key is saved: only a refused key (state unauthorized) is known to be missing or wrong
       rows.push(settingsRow(t("common_moonraker_key"), p.state === "unauthorized" ? SW.status("not_set") : h("span", { class: "muted" }, "–"), changes ? sbtn(p.state === "unauthorized" ? "status_set" : "common_replace", t("common_moonraker_key"), (e) =>
-        change({ title: t("printers_key_title", { name }), confirm: t("common_save_key"), opener: e.currentTarget, fields: [keyField({ check: needs("printers_error_key") })] },
+        change({ title: t("printers_key_title", { name }), confirm: t("common_save_key"), opener: e.currentTarget, fields: [keyField({ optional: true })] },
           ([k]) => edit({ api_key: k }, t("printer_set_key_saved")), (r, done) => changed(done))) : null));
     }
     const forget = changes ? needsHub(SW.btn(t("printers_forget"), { icon: "trash", cls: "btn--danger", action: "forget", run: async () => {

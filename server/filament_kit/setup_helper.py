@@ -340,7 +340,7 @@ def _start_job(name: str, why: str = "", checked: bool = False) -> None:
 
 
 def _start_apply(checked: bool = False) -> None:
-    _start_job("apply", "saved, but the apply did not start; run at the Hub: sudo filament-kit modules apply", checked)
+    _start_job("apply", "saved, but the apply did not start; run at the Hub: sudo spoolwarden features apply", checked)
 
 
 def _not_applying() -> None:
@@ -474,7 +474,7 @@ def _module(req: dict) -> dict:
         raise Refused(400, "name must be a Feature and on true or false")
     if name == "server" and not want:
         raise Refused(409, "this page is the Hub's: switch it off at the Hub: "
-                           "sudo filament-kit modules disable server")
+                           "sudo spoolwarden features off server")
     answers = _answers(req.get("settings"))
     _not_applying()
     cfg = config.load()
@@ -855,7 +855,7 @@ def _mode(req: dict) -> dict:
         raise Refused(400, "setup must be one of: " + ", ".join(modules.MODE_ALIASES))
     if "server" not in modules.MODES[mode]:
         raise Refused(409, "this page is the Hub's, and that setup has none: at the Hub: "
-                           f"sudo filament-kit modules set {_SETUP_NAME[mode]} --hub ADDRESS")
+                           f"sudo spoolwarden features setup {_SETUP_NAME[mode]} --hub ADDRESS")
     answers = _answers(req.get("settings"))
     _not_applying()
     cfg = config.load()

@@ -117,8 +117,8 @@ const queryOf = (offset) => `spools?${new URLSearchParams({ ...(st.q ? { q: st.q
 
 // ----- the list -----
 const spPICK = "select";             // the column of the checkboxes (its name is the collection's reserved one, the design, components)
-const spCOLUMNS = [[spPICK, "spools_select_all", 1], ["expand", "common_details", 1, true], ["visual", "spools_col_colour", 1, true], ["number", "spools_col_number", 1], ["title", "spools_col_spool", 1],
-  ["material", "common_field_material", 2], ["left", "spools_col_left", 1], ["where", "spools_col_where", 3], ["state", "common_field_state", 1]];
+const spCOLUMNS = [[spPICK, "spools_select_all", 1], ["expand", "common_details", 1, true], ["visual", "spools_col_colour", 1, true], ["number", "spools_col_number", 1, false, true], ["title", "spools_col_spool", 1, false, true],
+  ["material", "common_field_material", 2, false, true], ["left", "spools_col_left", 1, false, true], ["where", "spools_col_where", 3, false, true], ["state", "common_field_state", 1, false, true]];
 const spCell = (col, prio, ...kids) => spX("div", { class: "coll__cell", role: "cell", "data-col": col, "data-prio": prio }, ...kids);
 const key = (k) => spE("span", "coll__key", { "aria-hidden": "true" }, tx(k));
 
@@ -191,8 +191,9 @@ function item(v) {
 function table(rows) {
   const all = SW.check({ label: tx("spools_select_all"), sr: true });
   all._control.classList.add("spools-pickall");
-  const head = spE("div", "coll__head", { role: "rowgroup" }, spE("div", "coll__row", { role: "row" }, spCOLUMNS.map(([col, k, prio, hidden]) => spX("div",
-    { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": prio }, col === spPICK ? all : hidden ? spE("span", "sr", tx(k)) : tx(k)))));
+  const head = spE("div", "coll__head", { role: "rowgroup" }, spE("div", "coll__row", { role: "row" }, spCOLUMNS.map(([col, k, prio, hidden, sortable]) => spX("div",
+    { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": prio },
+    col === spPICK ? all : hidden ? spE("span", "sr", tx(k)) : sortable ? spX("button", { class: "coll__sort", type: "button", "data-sort": col }, tx(k)) : tx(k)))));
   views.clear();
   const el = spX("div", { class: "coll coll--spools", role: "table", "aria-label": tx("nav_spools") }, head, rows.map((v) => item(v)));
   SW.collection(el, { name: SECTION, total: st.total, first: 0, emptyPane: tx("spools_pane_empty") });
@@ -298,25 +299,41 @@ function spToolbar() {
   return spE("div", "coll__toolbar spools-toolbar", search, parts.chips);
 }
 
+function clearFilters() {
+  st.q = "";
+  st.filter = "";
+  const inp = box && box.querySelector('input[type="search"]');
+  if (inp) inp.value = "";
+  if (parts && parts.chips) spPaintChips();
+  reload();
+}
+
 function paintReorder() {
   const data = st.reorder;
-  const items = (data && data.items) || [];
+  const q = st.q.trim().toLowerCase();
+  const allItems = (data && data.items) || [];
+  const items = q ? allItems.filter((r) => String(r.id).includes(q)
+    || (r.filament || "").toLowerCase().includes(q)
+    || (r.material || "").toLowerCase().includes(q)
+    || (r.last_seller || "").toLowerCase().includes(q)) : allItems;
   views.clear();
   chosen.clear();
   spSync();
   if (!items.length) {
-    parts.list.replaceChildren(SW.empty({ icon: "spool", title: tx("spools_reorder_empty_title"), text: tx("spools_reorder_empty_text") }));
+    parts.list.replaceChildren(q
+      ? SW.empty({ icon: "spool", title: tx("spools_empty_filtered"), actions: [SW.btn(tx("spools_clear"), { run: clearFilters })] })
+      : SW.empty({ icon: "spool", title: tx("spools_reorder_empty_title"), text: tx("spools_reorder_empty_text") }));
     parts.foot.replaceChildren();
     return;
   }
   const cols = [
-    ["visual", "spools_col_colour", 1, true], ["number", "spools_col_number", 1], ["title", "spools_col_spool", 1],
-    ["material", "common_field_material", 2], ["left", "spools_col_left", 1], ["stock", "spools_reorder_col_stock", 2],
-    ["burn", "spools_reorder_col_burn", 3], ["days", "spools_reorder_col_days_left", 1], ["order", "spools_reorder_col_order", 2],
+    ["visual", "spools_col_colour", 1, true], ["number", "spools_col_number", 1, false, true], ["title", "spools_col_spool", 1, false, true],
+    ["material", "common_field_material", 2, false, true], ["left", "spools_col_left", 1, false, true], ["stock", "spools_reorder_col_stock", 2, false, true],
+    ["burn", "spools_reorder_col_burn", 3, false, true], ["days", "spools_reorder_col_days_left", 1, false, true], ["order", "spools_reorder_col_order", 2],
   ];
   const head = spE("div", "coll__head", { role: "rowgroup" }, spE("div", "coll__row", { role: "row" },
-    cols.map(([col, k, prio, hidden]) => spX("div", { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": prio },
-      hidden ? spE("span", "sr", tx(k)) : tx(k)))));
+    cols.map(([col, k, prio, hidden, sortable]) => spX("div", { class: "coll__cell", role: "columnheader", "data-col": col, "data-prio": prio },
+      hidden ? spE("span", "sr", tx(k)) : sortable ? spX("button", { class: "coll__sort", type: "button", "data-sort": col }, tx(k)) : tx(k)))));
   const rows = items.map((r) => {
     const left = grams(r.remaining_g);
     const stock = r.last_one
@@ -346,6 +363,17 @@ function paintReorder() {
   });
   const el = spX("div", { class: "coll coll--spools coll--reorder", role: "table", "aria-label": tx("spools_reorder_title") }, head, rows);
   SW.collection(el, { name: "spools-reorder", total: items.length, first: 0 });
+  el.addEventListener("click", (e) => {
+    const link = e.target.closest("a.coll__title");
+    if (!link) return;
+    e.preventDefault();
+    const id = Number(link.closest(".coll__item").dataset.id);
+    st.filter = "";
+    if (parts && parts.chips) spPaintChips();
+    wanted.add(id);
+    if (/^#spools(\/\d*)?$/.test(location.hash)) history.replaceState(null, "", spaddressOf(id));
+    reload();
+  });
   parts.list.replaceChildren(el);
   parts.foot.replaceChildren(spE("p", "muted spools-shown", tx("spools_reorder_note", { grams: data.threshold_g, days: data.window_days })));
 }
@@ -357,7 +385,7 @@ function paint() {
     views.clear();
     const filtered = st.q || st.filter;
     parts.list.replaceChildren(filtered
-      ? SW.empty({ icon: "spool", title: st.filter === "checked_out" && !st.q ? tx("spools_empty_checked_out") : tx("spools_empty_filtered"), actions: [SW.btn(tx("spools_clear"), { run: () => { st.q = ""; st.filter = ""; box.replaceWith(region()); } })] })
+      ? SW.empty({ icon: "spool", title: st.filter === "checked_out" && !st.q ? tx("spools_empty_checked_out") : tx("spools_empty_filtered"), actions: [SW.btn(tx("spools_clear"), { run: clearFilters })] })
       : SW.empty({ icon: "spool", title: tx("spools_empty_title"), text: tx("spools_empty_text") }));
     parts.foot.replaceChildren();
     chosen.clear();
@@ -389,9 +417,11 @@ async function reload() {
       SW.announce(tx("spools_count", { count: st.total }));
       return;
     }
-    const r = await api(queryOf(0));
+    const at = addressId();
+    const [r, one] = await Promise.all([api(queryOf(0)), at != null ? api(`spools/${at}`).catch(() => null) : null]);
     if (mine !== seq) return;
     Object.assign(st, { reorder: null, rows: r.spools, total: r.total, more: r.has_more, url: r.spoolman_url || null, ready: true, filters: r.filters || null });
+    if (one && !st.rows.some((v) => v.id === one.spool.id)) st.rows.unshift(one.spool);
     parts.list.removeAttribute("aria-busy");
     spPaintChips();
     spCount();
@@ -435,26 +465,33 @@ async function spPlaces() {
 
 // Change home: the sheet "Home" with the storage locations as the Move choice does (each with how full), Save, "Home is now <location>."
 async function spHomeSheet(view, opener) {
-  let rows = [];
-  try { rows = ((await api("settings/storage")).locations || []); } catch { /* the choice then holds the current home only */ }
+  let rows = [], loadFailed = false;
+  try { rows = ((await api("settings/storage")).locations || []); } catch { loadFailed = true; }
+  if (loadFailed && view.v.home && !rows.some((l) => l.name === view.v.home)) rows = [{ name: view.v.home, used: null }];
   const label = (l) => { if (l.used == null) return l.name + ": " + SW.t("common_unknown"); const cap = l.limit != null ? l.limit : l.count; return cap != null ? tx("spools_home_option_of", { name: l.name, used: l.used ?? 0, capacity: cap }) : tx("spools_home_option", { name: l.name, used: l.used ?? 0 }); };
   const field = SW.field({ type: "select", label: tx("spools_home_place"), name: "home", options: rows.map((l) => ({ value: l.name, label: label(l) })) });
   if (view.v.home && rows.some((l) => l.name === view.v.home)) field._control.value = view.v.home;
   const out = slotBox();
+  if (loadFailed && !rows.length) SW.result(out, "bad", SW.t("common_hub_no_answer"));
   const save = SW.btn(tx("spools_home_save"), { cls: "btn--primary", name: `${tx("spools_home_save")}: ${spName(view.v)}` });
-  const dlg = SW.sheet({ title: tx("spools_home_title"), body: spE("div", "spools-homesheet", field, out), foot: save });
+  if (!rows.length) SW.disable(save, SW.t("common_hub_no_answer"));
+  const cancel = SW.btn(tx("common_cancel"), { cls: "btn--ghost", run: () => dlg.close() });
+  const dlg = SW.sheet({ title: tx("spools_home_title"), body: spE("div", "spools-homesheet", field, out), foot: [cancel, save] });
   save.addEventListener("click", () => needCode(async () => {
     if (!field._control.value) return;
+    SW.busy(save, tx("common_working"));
     SW.result(out, "run", tx("common_working"));
     try {
       const r = await api(`spools/${view.v.id}`, { home: field._control.value, dry_run: false, code: theCode() });
       view.update(r.spool);
       view.events(true);
-      SW.result(out, "ok", tx("spools_home_done", { location: r.spool.home || field._control.value }));
+      const msg = tx("spools_home_done", { location: r.spool.home || field._control.value });
+      dlg.close();
+      SW.toast(msg, "ok");
     } catch (e) {
       if (e.locked) { SW.result(out, null); throw e; }
       SW.result(out, "bad", hubText(e.message));                 // the Hub's sentence (409 not checked out, 400 unknown place)
-    }
+    } finally { SW.idle(save); }
   }));
   SW.openModal(dlg, opener);
 }
@@ -478,14 +515,14 @@ function factsOf(v, use) {
 // A change: the press asks the Hub what it would do (the code first), the answer is shown beside the button with Apply, and Apply sends
 // it for real. `make(dry)` gives the request; `say(r)` the preview sentence (null: nothing would change); `done(r)` the result sentence.
 function spChange(view, out, o) {
-  const send = (dry) => api(`spools/${view.v.id}${o.path || ""}`, { ...o.body(), dry_run: dry, code: theCode() });
+  const send = (dry, payload) => api(`spools/${view.v.id}${o.path || ""}`, { ...payload, dry_run: dry, code: theCode() });
   const fail = (e) => { if (e.locked) { SW.result(out, null); throw e; } out._said = null; SW.result(out, "bad", hubText(e.message)); };
-  const apply = async () => {
+  const apply = async (payload) => {
     if (o.ask && !(await SW.ask(o.ask(view.v)))) return;
     await needCode(async () => {
       SW.result(out, "run", tx("common_working"));
       let r;
-      try { r = await send(false); } catch (e) { fail(e); return; }
+      try { r = await send(false, payload); } catch (e) { fail(e); return; }
       view.update(r.spool);
       if (o.after) o.after(r);
       SW.result(out, "ok", o.done(r));
@@ -494,13 +531,18 @@ function spChange(view, out, o) {
     });
   };
   return async () => {
+    const payload = o.body();
     await needCode(async () => {
       SW.result(out, "run", tx("spools_previewing"));
       let r;
-      try { r = await send(true); } catch (e) { fail(e); return; }
+      try { r = await send(true, payload); } catch (e) { fail(e); return; }
       const text = o.say(r);
       if (!text) SW.result(out, "neutral", tx("spools_nothing"));
-      else SW.result(out, "info", text, { action: { label: o.applyLabel || tx("spools_apply"), name: tx("spools_apply_name", { what: o.applyLabel || o.label }), run: apply } });
+      else {
+        SW.result(out, "info", text, { action: { label: o.applyLabel || tx("spools_apply"), name: tx("spools_apply_name", { what: o.applyLabel || o.label }), run: () => apply(payload) } });
+        const dismiss = SW.iconBtn("close", tx("common_cancel"), { cls: "result__dismiss", run: () => SW.result(out, null) });
+        setTimeout(() => { if (out.dataset.state === "info") out.append(dismiss); }, 35);
+      }
     });
   };
 }
@@ -517,6 +559,8 @@ function detail(v0, view, id) {
   const weightBox = slotBox(), weight = SW.field({ type: "number", decimal: true, label: tx("common_field_weight_with_spool"), name: "gross", unit: "g", short: true, mono: true,
     hint: tx("spools_weight_hint"), check: (s) => { const n = Number(String(s).replace(",", ".")); return String(s).trim() && Number.isFinite(n) && n > 0 ? null : tx("spools_weight_error"); } });
   const weightGo = SW.btn(tx("spool_update_weight"), { cls: "btn--primary", name: `${tx("spool_update_weight")}: ${spName(v0)}` });
+  const weightEv = "input";
+  weight._control.addEventListener(weightEv, () => SW.result(weightBox, null));
   weightGo.addEventListener("click", () => {
     const bad = weight._check(); SW.fieldError(weight, bad);
     if (bad) { weight._control.focus(); return; }
@@ -530,6 +574,7 @@ function detail(v0, view, id) {
   const moveBox = slotBox(), move = SW.field({ type: "select", label: tx("spool_move_title"), name: "location", options: [{ value: "", label: tx("storage_automatic") }] });
   spPlaces().then((names) => { for (const n of names) move._control.append(spX("option", { value: n, text: n })); if (v0.location && names.includes(v0.location)) move._control.value = v0.location; });
   const moveGo = SW.btn(tx("spool_move"), { cls: "btn--primary", name: `${tx("spool_move")}: ${spName(v0)}` });
+  move._control.addEventListener("change", () => SW.result(moveBox, null));
   moveGo.addEventListener("click", spChange(view, moveBox, { label: tx("spool_move"), body: () => (move._control.value ? { location: move._control.value } : { auto_location: true }),
     say: (r) => (r.spool.location === r.before.location ? null : tx(r.placed_text ? "spools_preview_move_why" : "spools_preview_move", { before: r.before.location || tx("spools_no_place"), after: r.spool.location, why: r.placed_text })),
     done: (r) => tx("spool_result_moved", { location: r.spool.location }),
@@ -580,13 +625,22 @@ function detail(v0, view, id) {
     const on = spCanCO() && v.checked_out === true;
     homeLine.hidden = !on;
     if (!on) { homeLine.replaceChildren(); return; }
+    const what = v.home ? tx("spools_return_to", { home: v.home }) : tx("spools_return");
     homeLine.replaceChildren(spE("span", "spools-homeline__text", spHomeText(v)), " ",
-      SW.btn(tx("spools_change_home"), { cls: "btn--ghost", name: tx("spools_change_home_name", { name: spName(v) }), run: (e) => spHomeSheet(view, e.currentTarget) }));
+      SW.btn(tx("spools_change_home"), { cls: "btn--ghost", name: tx("spools_change_home_name", { name: spName(v) }), run: (e) => spHomeSheet(view, e.currentTarget) }), " ",
+      SW.btn(what, { cls: "btn--ghost", name: tx("spools_return_name", { what, name: spName(v) }), run: (e) => spReturn(v.id, e.currentTarget) }));
+  };
+  const syncEmpty = (v) => {
+    const isEmpty = v.state === "empty";
+    SW.disable(weightGo, isEmpty ? tx("common_empty") : null);
+    SW.disable(linkGo, isEmpty ? tx("common_empty") : null);
+    SW.disable(emptyGo, isEmpty ? tx("common_empty") : null);
   };
   const actions = (field, button, out) => spE("div", "spools-act", spE("div", "spools-act__row", field, button), out);
-  view.paintDetail = (nv) => { title.textContent = spName(nv); paintFacts(nv); paintHome(nv); };
+  view.paintDetail = (nv) => { title.textContent = spName(nv); paintFacts(nv); paintHome(nv); syncEmpty(nv); };
   paintFacts(v0);
   paintHome(v0);
+  syncEmpty(v0);
   api(`spools/${v0.id}`).then((r) => { use = r.last_use || null; paintFacts(view.v); }, () => { use = null; paintFacts(view.v); });
   const region = spX("section", { class: "detail", id, "aria-labelledby": id + "-title", hidden: true }, spE("header", "detail__head", back, title, closeBtn),
     spE("div", "detail__body",

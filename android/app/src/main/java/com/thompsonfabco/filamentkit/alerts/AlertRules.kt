@@ -162,7 +162,7 @@ sealed interface AlertTarget {
 
 fun alertTarget(place: String?, id: String?): AlertTarget = when (place) {
     "printer" -> id?.takeIf { it.isNotBlank() }?.let { AlertTarget.Printer(it) } ?: AlertTarget.AlertsList
-    "running_low" -> AlertTarget.RunningLow
+    "running-low", "running_low" -> AlertTarget.RunningLow
     else -> AlertTarget.AlertsList
 }
 

@@ -94,7 +94,11 @@ class InstallResult:
 def read_info(path: Path) -> dict:
     d = {}
     if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        for line in text.splitlines():
             if "=" in line:
                 k, v = line.split("=", 1)
                 d[k.strip()] = v.strip()
@@ -418,12 +422,13 @@ def write_preset(live: Path, fname: str, src_json: Path, src_info: Path, own_use
     .info is the primary's, so the preset gets that folder's own local .info instead (its user id; never the
     primary's cloud setting_id, only the folder's own one when the preset already had it)."""
     stem = Path(fname).stem
-    _write_live(live / fname, src_json.read_bytes())
+    src_bytes = src_json.read_bytes()
     info, old_info = read_info(src_info), read_info(live / f"{stem}.info")
     if own_user is not None:
         info = local_info(info, own_user)
     if old_info.get("setting_id") and not info.get("setting_id"):  # synced to the cloud since the build
         info.update(setting_id=old_info["setting_id"], base_id=old_info.get("base_id", ""), sync_info="update")
+    _write_live(live / fname, src_bytes)
     _write_live(live / f"{stem}.info", _info_bytes(info))
 
 

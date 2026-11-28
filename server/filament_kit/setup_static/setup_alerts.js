@@ -8,7 +8,7 @@
 // ----- the data: the Hub's own routes -----
 // GET alerts answers {types: [{key, title, on}] (the eight fixed keys), last_spool_only, running_low_g, storage_warn_percent,
 // storage_bad_percent}; POST settings/alerts (code) takes the same fields; POST alerts/test (no code) takes {client}.
-const ALERT_TYPES = ["runout", "paused", "failed", "printer_error", "finished", "storage", "running_low", "device_down"];
+const ALERT_TYPES = ["runout", "paused", "failed", "printer_error", "finished", "storage", "running_low", "humidity", "device_down"];
 const loadAlerts = () => api("alerts");
 // the group's row of SET_GROUPS: id, catalogue key of the name, icon, builder, the read it needs
 const ALERTS_GROUP = ["alerts", "settings_group_alerts", "warning", (d) => alertsGroup(d), "alerts"];
@@ -38,7 +38,12 @@ function alertsDevice() {
     if (painting) return;
     const want = notify._control.checked;
     SW.result(res, null);
-    await N().set(want);
+    notify._control.setAttribute("aria-busy", "true");
+    try {
+      await N().set(want);
+    } finally {
+      notify._control.removeAttribute("aria-busy");
+    }
     paint();
     if (!N().say()) say(res, axt(N().on() ? "alerts_notify_on" : "alerts_notify_off"), true);
   });
@@ -67,34 +72,78 @@ function alertsGroup({ al }) {
     t1._control.name = key;                                   // the form group reads the named controls
     return t1;
   };
-  const on = Object.fromEntries((al.types || []).map((x) => [x.key, x.on]));
+  const types = Array.isArray(al.types) && al.types.length
+    ? al.types
+    : ALERT_TYPES.map((key) => ({ key, title: axt("alerts_type_" + key), on: false }));
   const switches = [];
-  for (const key of ALERT_TYPES) {
-    switches.push(sw(key, axt("alerts_type_" + key), key === "device_down" ? axt("alerts_type_device_down_hint") : undefined, on[key]));
+  for (const item of types) {
+    const key = item.key;
+    const lbl = SW.t("alerts_type_" + key) !== "alerts_type_" + key ? axt("alerts_type_" + key) : (item.title || key);
+    switches.push(sw(key, lbl, key === "device_down" ? axt("alerts_type_device_down_hint") : undefined, item.on));
     if (key === "running_low") {
       const sub = sw("last_spool_only", axt("settings_alerts_last_spool"), undefined, al.last_spool_only);
       sub.classList.add("alerts__sub");
       switches.push(sub);
     }
   }
-  const bad = al.storage_bad_percent || 95;
+  const bad = al.storage_bad_percent ?? 95;
+  const hum = al.humidity_high_pct ?? 45;
+  let el;
   const fields = [
     requiredField({ name: "running_low_g", type: "number", mono: true, label: axt("settings_alerts_running_low"), unit: axt("settings_alerts_running_low_unit"), hint: axt("settings_alerts_running_low_hint"),
       value: String(al.running_low_g), check: alertsRange(10, 2000) }),
     requiredField({ name: "storage_warn_percent", type: "number", mono: true, label: axt("settings_alerts_storage_warn"), unit: axt("settings_alerts_storage_unit"),
-      hint: axt("settings_alerts_storage_hint", { percent: bad }), value: String(al.storage_warn_percent), check: alertsRange(1, bad - 1) }),
+      hint: axt("settings_alerts_storage_hint", { percent: bad }), value: String(al.storage_warn_percent),
+      check: (v) => {
+        const b = Number(el?.elements?.storage_bad_percent?.value ?? bad);
+        const max = Number.isFinite(b) && b > 1 ? b - 1 : 98;
+        return alertsRange(1, max)(v);
+      } }),
+    requiredField({ name: "storage_bad_percent", type: "number", mono: true, label: axt("alerts_storage_bad_pct"), unit: axt("settings_alerts_storage_unit"),
+      value: String(bad), check: alertsRange(2, 99) }),
+    requiredField({ name: "humidity_high_pct", type: "number", mono: true, label: axt("alerts_humidity_high_pct"), unit: axt("alerts_humidity_unit"),
+      value: String(hum), check: alertsRange(1, 99) }),
   ];
-  const el = setGroup("alerts", { desc: axt("settings_alerts_desc"), save: axt("settings_alerts_save"),
+  el = setGroup("alerts", { desc: axt("settings_alerts_desc"), save: axt("settings_alerts_save"),
     badges: [SW.status("note", { small: true, cls: "alerts__count", text: alertsState(al) })],
-    body: [h("div", { class: "alerts__types" }, ...switches), ...fields, alertsDevice()] });
+    body: [h("div", { class: "alerts__types" }, ...switches), ...fields] });
+  el._after = alertsDevice();
+
+  const syncDependents = () => {
+    const form = el.elements;
+    const setOff = (ctrl, off) => {
+      if (!ctrl) return;
+      const wrap = ctrl.closest(".toggle, .field");
+      if (wrap) {
+        if (off && wrap.dataset.state !== "error") wrap.dataset.state = "off";
+        else if (!off && wrap.dataset.state === "off") wrap.removeAttribute("data-state");
+      }
+      ctrl.disabled = !!off;
+    };
+    setOff(form.last_spool_only, !form.running_low?.checked);
+    setOff(form.running_low_g, !form.running_low?.checked);
+    setOff(form.storage_warn_percent, !form.storage?.checked);
+    setOff(form.storage_bad_percent, !form.storage?.checked);
+    setOff(form.humidity_high_pct, !form.humidity?.checked);
+  };
+  el.addEventListener("change", syncDependents);
+  el.addEventListener("sw:dirty", syncDependents);
+  syncDependents();
 
   // one request for the whole group: the first changed key sends all the fields, the others have nothing more to send
   let plan = null;
   const o = { send: null };
+  const typeKeys = types.map((x) => x.key);
   o.send = async (key) => {
     if (!plan) {
-      const form = el.elements, body = { types: ALERT_TYPES.map((k) => ({ key: k, on: form[k].checked })), last_spool_only: form.last_spool_only.checked,
-        running_low_g: Number(form.running_low_g.value), storage_warn_percent: Number(form.storage_warn_percent.value) };
+      const form = el.elements, body = {
+        types: typeKeys.map((k) => ({ key: k, on: form[k].checked })),
+        last_spool_only: form.last_spool_only ? form.last_spool_only.checked : al.last_spool_only,
+        running_low_g: Number(form.running_low_g.value),
+        storage_warn_percent: Number(form.storage_warn_percent.value),
+        storage_bad_percent: Number(form.storage_bad_percent.value),
+        humidity_high_pct: Number(form.humidity_high_pct.value),
+      };
       plan = { left: o.group.changed(), reply: null };
       try { plan.reply = await api("settings/alerts", { ...body, code: theCode() }); } catch (e) { plan = null; throw setRefusal(el, e); }
     }

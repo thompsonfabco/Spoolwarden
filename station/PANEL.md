@@ -38,17 +38,17 @@ raise `station.speaker_volume`, and mount the speaker sealed in the enclosure wi
 
 ## Behaviour: the intake flow
 
-Red cancels at any step. Yellow advances: a short press does the step's job, and a long press (0.8 s) saves.
+Red cancels at any step (except in `camera` with photos taken, where a short red press removes the last photo and a long press cancels; and in `weigh`/`ready` after an AI match, where a long red press rejects the match and returns to `camera`). Yellow advances: a short press does the step's job, and a long press (0.8 s) recognises or saves.
 
 | Step | What you do next | Yellow lamp | Red lamp | Display |
 |---|---|---|---|---|
 | idle | scan a spool's tag | off | off | "Ready" |
-| lookup (the server checks the tag) | wait | rapid blink | on | "Tag scanned" |
-| camera (a new tag) | show the spool to the camera, press yellow | blinking | on | "New Tag Scanned" |
+| lookup (the server checks the tag) | wait | rapid blink | off | "Tag scanned" |
+| camera (a new tag) | show the spool to the camera, press yellow to add a photo, hold yellow (0.8 s) to recognise; short red removes last photo, long red cancels | blinking | off | "New Tag Scanned" / photo count |
 | recognising | wait | rapid blink | on | "Recognising..." |
-| weigh (a recognised or linked spool) | spool on the scale, let it settle, press yellow | blinking | on | the spool and its colour |
-| ready (weight taken) | hold yellow to save (or press it again to re-weigh) | on | on | "1042 g", the spool, its colour |
-| saving | wait | rapid blink | on | "Saving..." |
+| weigh (a recognised or linked spool) | spool on the scale, let it settle, press yellow (long red rejects AI match) | blinking | on | the spool, its colour, live scale state |
+| ready (weight taken) | hold yellow to save (or press it again to re-weigh; long red rejects AI match) | on | on | "1042 g", the spool, its colour |
+| saving | wait | rapid blink | off | "Saving..." |
 | done | nothing: back to idle after 10 s | three blinks | off | "Saved" and the server's text |
 | phone (the server or its AI can't help) | use the phone app; red starts over | off | on | "Use phone" and why |
 
@@ -100,7 +100,7 @@ Red cancels at any step. Yellow advances: a short press does the step's job, and
 | PC → panel | `A <n>` + n raw bytes | speech, unsigned 8-bit mono at 8 kHz (n ≤ 1024): each byte is one sample, 128 is silence (on firmware 9 and older it is the speaker MOSFET's duty, 0 = off) |
 | panel → PC | `HELLO intake-panel <version> [<chip>]` | at boot and after `?`; firmware 13 answers `HELLO intake-panel 13 esp32c3`, and the chip token is missing on firmware 9 and older, which are ESP8266 (2: speaker and BME280; 3: PWM speaker; 4: AHT20; 5-6: whine-free PWM, 160 MHz; 7: OLED, long press; 8: "Waiting for PC" boot title; 9: long press on both buttons; 10: ESP32-C3, I2S speech, V volume, chip token; 11: PN532 on I2C, TAG and NFC lines; 12: loop clock read after the serial lines, so the 5 s watchdog cannot trip spuriously; 13: a dropped OLED is probed again and redrawn) |
 | panel → PC | `P H` / `P D` | the yellow / red button pressed: sent on release, if held under 0.8 s |
-| panel → PC | `L H` / `L D` | the yellow / red button held 0.8 s (a long press; its release sends nothing). A long press on red cancels, like a short one. With station.panel_swap (`STATION_PANEL_SWAP=1`), H is red and D is yellow, and the `L` lamp modes go out swapped. |
+| panel → PC | `L H` / `L D` | the yellow / red button held 0.8 s (a long press; its release sends nothing). Long red cancels in `camera` and rejects an AI match in `weigh`/`ready`. With station.panel_swap (`STATION_PANEL_SWAP=1`), H is red and D is yellow, and the `L` lamp modes go out swapped. |
 | panel → PC | `AIR <°C> <RH%\|-> <hPa\|->` | room air every 10 s; `-` = that sensor isn't fitted |
 | panel → PC | `TAG <hex>` | firmware 11: a tag read by the panel's PN532, its UID in lowercase hex, sent once per presentation (again only after no tag was seen for 1 s, or for a different tag). The station formats it like the USB reader's tags. |
 | panel → PC | `NFC ok` / `NFC none` | firmware 11: whether a PN532 answers on the I2C bus; sent after every HELLO and when that changes. `curl http://127.0.0.1:5003/state` shows it as `"panel_nfc"`. |

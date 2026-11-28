@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -111,12 +112,19 @@ fun AddProfileScreen(
                 // the optional values stay closed until asked for, or until the Hub names one of them
                 var more by rememberSaveable { mutableStateOf(false) }
                 val named = s.fieldProblems.keys.any { it.optional }
+                val expanded = more || named
                 val moreText = stringResource(R.string.settings_catalog_more)
+                val stateText = stringResource(if (expanded) R.string.nav_more_expanded else R.string.nav_more_collapsed)
                 SwButton(
-                    moreText, { more = !more }, Modifier.semantics { contentDescription = moreText },
+                    moreText, { more = !more },
+                    Modifier.semantics {
+                        contentDescription = moreText
+                        stateDescription = stateText
+                    },
                     kind = SwButtonKind.Quiet,
+                    enabled = !named,
                 )
-                if (more || named) {
+                if (expanded) {
                     Group(R.string.common_group_temperatures, s, vm, ProfileField.NozzleMin, ProfileField.NozzleMax, ProfileField.BedMin, ProfileField.BedMax)
                     Group(R.string.catalog_group_material, s, vm, ProfileField.Density, ProfileField.MaxVolumetric)
                     Group(R.string.catalog_group_slicer, s, vm, ProfileField.Parent)
@@ -248,7 +256,7 @@ private fun EntryRow(entry: LocalEntry, vm: AddProfileViewModel) {
 private fun RemoveDialog(entry: LocalEntry, s: AddProfileUiState, vm: AddProfileViewModel) {
     SwDialog(
         title = stringResource(R.string.catalog_remove_title, CatalogTexts.entryLine(entry.brand, entry.name)),
-        onClose = vm::cancelRemove,
+        onClose = { if (!s.removing) vm.cancelRemove() },
         confirm = SwDialogButton(stringResource(R.string.common_remove), vm::confirmRemove, kind = SwButtonKind.DestructiveFilled, busy = s.removing),
         cancel = SwAction(stringResource(R.string.common_cancel), vm::cancelRemove),
         cancelEnabled = !s.removing,
@@ -282,7 +290,7 @@ private fun Group(@androidx.annotation.StringRes title: Int, s: AddProfileUiStat
             if (f == ProfileField.Parent) {
                 CatalogParentField(s.values[f].orEmpty(), s.parents, !s.saving, onPick = { vm.set(f, it) }, error = error)
             } else if (f == ProfileField.Material) {
-                MaterialField(s.values[f].orEmpty(), s.materials ?: CatalogTexts.MATERIALS, !s.saving, onPick = { vm.set(f, it) }, error = error)
+                MaterialField(s.values[f].orEmpty(), s.materials ?: CatalogTexts.MATERIALS, !s.saving, onPick = { vm.set(f, it) }, error = error, resetKey = s.added)
             } else {
                 OutlinedTextField(
                     value = s.values[f].orEmpty(),
@@ -312,8 +320,15 @@ private const val BULLET = "• "
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MaterialField(value: String, materials: List<String>, enabled: Boolean, onPick: (String) -> Unit, error: String?) {
-    var other by rememberSaveable { mutableStateOf(value.isNotBlank() && value !in materials) }
+private fun MaterialField(
+    value: String,
+    materials: List<String>,
+    enabled: Boolean,
+    onPick: (String) -> Unit,
+    error: String?,
+    resetKey: Any? = null,
+) {
+    var other by rememberSaveable(resetKey) { mutableStateOf(value.isNotBlank() && value !in materials) }
     var open by remember { mutableStateOf(false) }
     val otherText = stringResource(R.string.settings_catalog_other)
     val shown = if (other) otherText else value
