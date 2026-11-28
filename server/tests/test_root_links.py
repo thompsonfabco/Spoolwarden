@@ -401,6 +401,8 @@ def test_pin_upload_works_in_the_helper_units_own_sandbox(tmp_path, monkeypatch)
                 "print('PINNED', sha, len(m.files))")
         env = [f"-E{k}={v}" for k, v in (("FK_ETC", E), ("FK_STATE", S), ("FK_BACKUPS", K), ("FK_NO_SYSTEMD", "1"),
                                          ("PYTHONPATH", Path(__file__).resolve().parents[1]))]
+        if os.environ.get("LD_LIBRARY_PATH"):
+            env.append(f"-ELD_LIBRARY_PATH={os.environ['LD_LIBRARY_PATH']}")
         r = subprocess.run(["systemd-run", "--quiet", "--wait", "--pipe", "--collect", "-p", "ProtectHome=read-only",
                             *props, *env, sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
         assert "PINNED" in r.stdout, r.stdout + r.stderr
