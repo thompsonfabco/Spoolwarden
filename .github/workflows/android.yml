@@ -90,7 +90,7 @@ jobs:
           exit 0
       # --no-build-cache: the Gradle cache restored above also holds Gradle's build cache, which hands back old test results
       # (":app:testDebugUnitTest FROM-CACHE") and runs no test at all
-      - run: timeout 25m ./gradlew --no-daemon --max-workers=24 testDebugUnitTest assembleDebug --no-build-cache
+      - run: timeout 25m ./gradlew --no-daemon testDebugUnitTest assembleDebug --no-build-cache
       - name: Verify executed unit tests
         run: |
           python3 - <<'EOF'
