@@ -1,5 +1,6 @@
 name: pc-sync
 on:
+  workflow_dispatch:
   push:
     branches: ['**']
     tags: ['**']
@@ -14,8 +15,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, ubuntu-24.04]
-    runs-on: ${{ matrix.os }}
+        include:
+          - name: windows
+            runner: [self-hosted, Windows, X64, testbox-windows]
+          - name: linux
+            runner: [self-hosted, Linux, X64, testbox-linux]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 

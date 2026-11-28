@@ -76,7 +76,7 @@ def test_release_workflow_pins_every_action_by_commit():
 
 def test_pc_sync_workflow():
     text = _read(".github/workflows/pc-sync.yml")
-    assert "windows-2022" in text
+    assert ("windows-2022" in text or "testbox-windows" in text)
     assert "--require-hashes" in text
     assert "-r tools/release-sync-requirements.txt" in text
     assert "-r tools/release-sync-linux-requirements.txt" in text
