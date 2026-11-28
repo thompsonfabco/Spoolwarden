@@ -313,10 +313,8 @@ var
   TopY: Integer;
 begin
   Result := False;
-  Form := CreateCustomForm();
+  Form := CreateCustomForm(420, 170, True, True);
   try
-    Form.ClientWidth := ScaleX(420);
-    Form.ClientHeight := ScaleY(170);
     Form.Caption := Title;
     Form.CenterInsideControl(WizardForm, False);
 

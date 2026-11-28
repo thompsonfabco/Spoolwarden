@@ -573,9 +573,9 @@ function stationAsksCard() {
       box);
   }) : [h("p", { class: "muted", textContent: SW.t("devices_requests_none") })]);
   // a read that is not the newest, or comes after the page locked or the card left, is dropped
-  async function read() {
+  async function read(quiet = false) {
     const n = ++me;
-    if (!loaded && !L) L = SW.loading(body, { thing: SW.t("devices_requests_title"), items: 1, onTry: devRetry(() => read()), title: SW.t("devices_requests_error", { reason: "" }).trim() });
+    if (!quiet && !loaded && !L) L = SW.loading(body, { thing: SW.t("devices_requests_title"), items: 1, onTry: devRetry(() => read()), title: SW.t("devices_requests_error", { reason: "" }).trim() });
     let r;
     try { r = await api("stations/requests", { code: theCode() }); } catch (e) {
       if (e.locked) throw e;
@@ -607,7 +607,7 @@ function stationAsksCard() {
     timer = setInterval(() => {
       if (!body.isConnected) { stop(); return; }
       if (document.hidden || SW.lock.state === "locked") return;
-      read().catch((e) => { if (e.locked) SW.setLock("locked"); });
+      read(true).catch((e) => { if (e.locked) SW.setLock("locked"); });
     }, ASK_EVERY);
     return read();
   });

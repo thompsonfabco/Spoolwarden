@@ -1197,7 +1197,7 @@ open class ScreenSemanticsTest {
 
     @Test fun settingsUpdatesNotPaired() {
         group("App updates", SettingsGroup.Updates, facts(paired = false))
-        auditAllFour("Pair with a Hub first: updates come from the Hub.")
+        auditAllFour("Check for updates")
     }
 
     @Test fun settingsHubWithTheFingerprintCheckOff() {

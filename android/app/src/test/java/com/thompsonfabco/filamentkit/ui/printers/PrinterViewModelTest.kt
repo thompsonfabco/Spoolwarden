@@ -51,7 +51,11 @@ class PrinterViewModelTest {
     private val dispatcher = StandardTestDispatcher()
 
     @Before fun setUp() = Dispatchers.setMain(dispatcher)
-    @After fun tearDown() = Dispatchers.resetMain()
+    @After fun tearDown() {
+        startedVms.forEach { it.stop() }
+        startedVms.clear()
+        Dispatchers.resetMain()
+    }
 
     private fun printer(state: String = "connected", configured: Boolean = true, name: String = "Garage H2D", family: String = "bambu") =
         Printer(id = "0948AB", name = name, model = "H2D", serial = "0948AB", configured = configured, state = state, family = family,
@@ -156,7 +160,9 @@ class PrinterViewModelTest {
 
     private val backend = FakeBackend(PrinterDetail(printer(), status()))
 
-    private fun vm() = PrinterViewModel(backend, "0948AB", pollMs = 2000)
+    private val startedVms = mutableListOf<PrinterViewModel>()
+
+    private fun vm() = PrinterViewModel(backend, "0948AB", pollMs = 2000).also { startedVms += it }
 
     // --- polling ---
 
@@ -664,7 +670,7 @@ class PrinterViewModelTest {
         vm.start(); runCurrent()
         vm.askClear(a1); runCurrent()
         assertNull(vm.state.value.clearAsk)
-        assertEquals(Note(Say.FromHub("Update the Hub to clear a slot."), ok = false), vm.state.value.slotNote)
+        assertEquals(Note(PrinterTexts.CLEAR_UPDATE_HUB, ok = false), vm.state.value.slotNote)
         assertNull(vm.state.value.slotBusy)
         backend.clearError = ApiError(409, "busy", "The Hub is busy")
         vm.askClear(a1); runCurrent()
