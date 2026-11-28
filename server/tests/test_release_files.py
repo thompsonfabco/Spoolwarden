@@ -1184,7 +1184,7 @@ def test_every_workflow_run_of_pytest_is_parallel():
     for name in ("pc-sync", "release", "reader"):
         for line in _read(f".github/workflows/{name}.yml").splitlines():
             if line.strip().removeprefix("run: ").startswith("pytest "):
-                assert "-n auto" in line, (name, line)
+                assert re.search(r"-n\s+(auto|\d+)", line), (name, line)
     assert "-n $Workers" in _read("tools/testenv.ps1") and "-rfEs" in _read("tools/testenv.ps1")
 
 

@@ -203,7 +203,7 @@ if wanted server; then
     fi
     if { [ -z "$SHARD" ] || [ "$SHARD" = audit ]; } && grep -rqs --include='*.py' browser_audit "$ROOT/server/tests"; then      # a tree without any has nothing to run as a group
         saved=$WORKERS
-        WORKERS=2
+        WORKERS=${FK_TESTENV_AUDIT_WORKERS:-2}
         parallel server-audit "$ROOT/server" -m browser_audit "${EXTRA[@]}"
         if [ "${LAST_RC:-0}" -eq 5 ] && has_selector; then       # exit 5 = nothing selected: the person's own -k or path asked for that
             FAILED=$FAILED_BEFORE
@@ -224,7 +224,7 @@ if wanted get; then
 fi
 if [ "$WITH_ROOT" -eq 1 ]; then
     SUDO=()
-    [ "$(id -u)" -eq 0 ] || SUDO=(sudo -n env "PYTHONPATH=$PYTHONPATH" PYTHONDONTWRITEBYTECODE=1)
+    [ "$(id -u)" -eq 0 ] || SUDO=(sudo -n env "PYTHONPATH=$PYTHONPATH" PYTHONDONTWRITEBYTECODE=1 ${LD_LIBRARY_PATH:+"LD_LIBRARY_PATH=$LD_LIBRARY_PATH"})
     run root "$ROOT/server" "${SUDO[@]}" "${PYTEST[@]}" --basetemp="$RUN/t-root" tests/test_root_links.py
 fi
 if [ "$WITH_KLIPPER" -eq 1 ]; then

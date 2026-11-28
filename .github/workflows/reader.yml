@@ -31,7 +31,7 @@ jobs:
         run: pio test -d reader -e native
 
       - name: OTA publish tool tests
-        run: pytest -q -n auto -rfEs reader/tools
+        run: pytest -q -n 16 -rfEs reader/tools
 
       - name: Firmware build (placeholder secrets)
         run: |

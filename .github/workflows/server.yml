@@ -11,6 +11,7 @@ permissions:
 
 env:
   FK_TESTENV_WORKERS: "12"
+  FK_TESTENV_AUDIT_WORKERS: "8"
 
 # The one recipe, tools/testenv.sh, the same as a builder's run, a review and the merge gate: [test,web], every suite, -rs. Without
 # [web] the web module's tests skip themselves, and that is the module facing the internet. Run whole on a 4-core runner the server
