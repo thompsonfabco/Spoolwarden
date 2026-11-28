@@ -316,7 +316,6 @@ begin
   Form := CreateCustomForm(420, 170, True, True);
   try
     Form.Caption := Title;
-    Form.CenterInsideControl(WizardForm, False);
 
     TopY := ScaleY(12);
     Lbl1 := TNewStaticText.Create(Form);
@@ -398,6 +397,7 @@ begin
     CancelBtn.ModalResult := mrCancel;
     CancelBtn.Cancel := True;
 
+    Form.FlipAndCenterIfNeeded(True, WizardForm, False);
     if Form.ShowModal() = mrOk then
     begin
       Dir := RemoveBackslashUnlessRoot(Trim(DlgPathEdit.Text));

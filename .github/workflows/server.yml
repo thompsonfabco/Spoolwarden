@@ -17,7 +17,7 @@ permissions:
 # shards, the audit job and the rest together run every test file and that this file runs every one of them.
 jobs:
   server-shard:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, testbox-linux]
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -38,7 +38,7 @@ jobs:
         run: bash tools/testenv.sh --shard ${{ matrix.shard }}/4
 
   server-audit:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, testbox-linux]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
@@ -54,7 +54,7 @@ jobs:
         run: bash tools/testenv.sh --shard audit
 
   other-suites:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, testbox-linux]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
@@ -73,7 +73,7 @@ jobs:
   test:
     needs: [server-shard, server-audit, other-suites]
     if: ${{ always() }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, testbox-linux]
     timeout-minutes: 5
     steps:
       - name: Every job passed
