@@ -32,7 +32,7 @@ jobs:
         run: pip install "./pc-sync[test]"
 
       - name: Tests
-        run: pytest -n auto -rfEs pc-sync/tests
+        run: pytest -n auto --basetemp="${{ runner.temp }}/pt" -rfEs pc-sync/tests
 
       - name: PyInstaller
         if: runner.os == 'Windows'

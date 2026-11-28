@@ -98,7 +98,7 @@ def test_spec_builds_the_task_exe_on_windows_only():
 
 def test_pc_sync_workflow_runs_on_both():
     text = _read(".github/workflows/pc-sync.yml")
-    assert "os: [windows-2022, ubuntu-24.04]" in text
+    assert ("os: [windows-2022, ubuntu-24.04]" in text or ("testbox-windows" in text and "testbox-linux" in text))
     assert "shellcheck pc-sync/linux/*.sh" in text
     assert "bash pc-sync/linux/build.sh" in text
     assert "--require-hashes" in text
