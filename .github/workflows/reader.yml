@@ -19,13 +19,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684  # v4.2.3
-        with:
-          path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('reader/platformio.ini') }}
-
       - name: Install
-        run: pip install platformio==6.1.18 pytest pytest-xdist cryptography
+        run: (pio --version 2>/dev/null | grep -q '6\.1\.18' && python -c 'import pytest, xdist, cryptography' 2>/dev/null) || pip install platformio==6.1.18 pytest pytest-xdist cryptography
 
       - name: Native unit tests (lib/reader_core)
         run: pio test -d reader -e native

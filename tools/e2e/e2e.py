@@ -76,7 +76,10 @@ class Run:
         self.logs.mkdir(parents=True, exist_ok=True)
         self.n = 0
         self.results: list[dict] = []
-        self.env = dict(os.environ, PIP_CACHE_DIR=str(work / "pipcache"), DEBIAN_FRONTEND="noninteractive")
+        pip_cache = os.environ.get("FK_E2E_PIP_CACHE") or str(work / "pipcache")
+        if os.environ.get("FK_E2E_PIP_CACHE"):
+            Path(pip_cache).mkdir(parents=True, exist_ok=True)
+        self.env = dict(os.environ, PIP_CACHE_DIR=pip_cache, DEBIAN_FRONTEND="noninteractive")
 
     def sh(self, cmd: list[str], *, name: str, log: bool = True, timeout: float = 1800, env: dict | None = None,
            input_text: str | None = None, cwd: Path | None = None) -> subprocess.CompletedProcess:

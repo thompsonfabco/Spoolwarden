@@ -21,13 +21,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          # the Gradle dependency cache (keyed on the build files): Maven Central answered HTTP 429 for a test runtime jar and failed three
-          # runs before any test ran; a cache hit downloads nothing
-          cache: gradle
-          cache-dependency-path: |
-            android/**/*.gradle*
-            android/**/gradle-wrapper.properties
-            android/gradle/libs.versions.toml
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407  # v3.2.2
         with:
           # the default also asks for the legacy 'tools' package, which current sdkmanager no longer has;
@@ -52,26 +45,24 @@ jobs:
           }
           EOF
           for attempt in 1 2 3; do
-            timeout 10m ./gradlew --no-daemon --init-script "$RUNNER_TEMP/fk-resolve.gradle" fkResolveDependencies && exit 0
+            timeout 10m ./gradlew --no-daemon --max-workers=24 --init-script "$RUNNER_TEMP/fk-resolve.gradle" fkResolveDependencies && exit 0
             echo "::warning::dependency download failed (attempt $attempt of 3)"
             [ "$attempt" -lt 3 ] && sleep $((attempt * 60))
           done
           echo "::warning::the dependencies could not be downloaded in advance; the next step resolves them again"
           exit 0
       # Robolectric downloads the android-all runtime jar of every SDK level the tests use at TEST time, into ~/.m2 (outside Gradle's cache, so
-      # the cache above does not cover it); one of them failed a run on a Maven Central error. Cache that folder ...
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
-        with:
-          path: ~/.m2/repository/org/robolectric
-          key: robolectric-android-all-${{ runner.os }}-${{ hashFiles('android/gradle/libs.versions.toml', 'android/app/src/test/**/robolectric.properties') }}
-          restore-keys: robolectric-android-all-${{ runner.os }}-
-      # ... and fill it here, retried: one test class per SDK level (each distinct @Config(sdk = [...]) in the tests, and a class without
+      # the cache above does not cover it); one of them failed a run on a Maven Central error. Fill it here, retried: one test class per SDK level (each distinct @Config(sdk = [...]) in the tests, and a class without
       # @Config for Robolectric's default level), run by Gradle itself, so the layout is Robolectric's own. Warns and goes on if all tries fail.
       # Try 2 fetches from the Google mirror of Maven Central (same paths) instead of repo1.maven.org: the tests of one SDK level failed on all
       # three tries from the runner (HTTP error from Maven Central) while the other levels downloaded fine. The property goes in through
       # JAVA_TOOL_OPTIONS, so Gradle prints "Picked up JAVA_TOOL_OPTIONS" lines (harmless). A failed try prints the cause from the test report.
       - name: Download the Robolectric runtime
         run: |
+          if [ -d "$HOME/.m2/repository/org/robolectric/android-all-instrumented" ] && find "$HOME/.m2/repository/org/robolectric/android-all-instrumented" -name '*.jar' -print -quit | grep -q .; then
+            echo "Robolectric runtime jars already cached in ~/.m2; skipping warm-up"
+            exit 0
+          fi
           src=app/src/test/java
           tests=()
           add() { if [ -n "$1" ]; then tests+=(--tests "*.$(basename "${1%.*}")"); fi; }
@@ -89,7 +80,7 @@ jobs:
             opts=""
             [ "$attempt" -eq 2 ] && opts="-Drobolectric.dependency.repo.url=$mirror -Drobolectric.dependency.repo.id=google-mirror"
             # --no-build-cache --rerun: the tests must really run here, a cached result downloads nothing
-            JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} $opts" timeout 10m ./gradlew --no-daemon testDebugUnitTest --no-build-cache --rerun "${tests[@]}" && exit 0
+            JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} $opts" timeout 10m ./gradlew --no-daemon --max-workers=24 testDebugUnitTest --no-build-cache --rerun "${tests[@]}" && exit 0
             echo "::warning::Robolectric runtime download failed (attempt $attempt of 3)"
             echo "cause (from the test report):"
             { grep -hE 'Server returned HTTP response code|FileNotFoundException|IOException|UnknownHost|ConnectException|SocketTimeout|SSLException' app/build/test-results/testDebugUnitTest/*.xml || true; } | sort -u | head -n 4 | cut -c1-300
@@ -99,7 +90,7 @@ jobs:
           exit 0
       # --no-build-cache: the Gradle cache restored above also holds Gradle's build cache, which hands back old test results
       # (":app:testDebugUnitTest FROM-CACHE") and runs no test at all
-      - run: timeout 25m ./gradlew --no-daemon testDebugUnitTest assembleDebug --no-build-cache
+      - run: timeout 25m ./gradlew --no-daemon --max-workers=24 testDebugUnitTest assembleDebug --no-build-cache
       - name: Verify executed unit tests
         run: |
           python3 - <<'EOF'

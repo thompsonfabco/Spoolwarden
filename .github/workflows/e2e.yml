@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: e2e-testbox-linux
+  cancel-in-progress: false
+
 jobs:
   e2e:
     runs-on: [self-hosted, Linux, X64, testbox-linux]
@@ -22,7 +26,7 @@ jobs:
           fetch-depth: 0
 
       - name: Needs
-        run: sudo apt-get update -q && sudo apt-get install -y -q python3-cryptography
+        run: python3 -c 'import cryptography' 2>/dev/null || (sudo apt-get update -q && sudo apt-get install -y -q python3-cryptography)
 
       - name: Which release
         id: previous
@@ -40,7 +44,8 @@ jobs:
       - name: Run
         env:
           PREVIOUS: ${{ steps.previous.outputs.tag }}
-        run: sudo bash tools/e2e/run.sh --previous "$PREVIOUS" --results "$RUNNER_TEMP/e2e-results.json"
+          FK_E2E_PIP_CACHE: /var/cache/fk-e2e-pip
+        run: sudo --preserve-env=FK_E2E_PIP_CACHE bash tools/e2e/run.sh --previous "$PREVIOUS" --results "$RUNNER_TEMP/e2e-results.json"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         if: always()

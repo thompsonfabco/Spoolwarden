@@ -70,6 +70,7 @@ android {
             // Robolectric native graphics (Bitmap codecs) needs JDK internals on JDK 17+.
             it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
             it.timeout.set(Duration.ofMinutes(20))
+            it.maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 8)
         }
     }
 }
