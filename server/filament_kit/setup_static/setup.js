@@ -39,10 +39,10 @@ async function api(path, body) {
     throw Object.assign(new Error(SW.t("common_hub_no_answer")), { unreachable: true });
   }
   clearTimeout(timer);
-  if (r.status === 502 || r.status === 503 || r.status === 504) hubJobs().down();
+  let data, hubAnswered = false;
+  try { data = await r.json(); hubAnswered = !!(data && typeof data === "object"); } catch { data = { error: `HTTP ${r.status}` }; }
+  if ((r.status === 502 || r.status === 503 || r.status === 504) && !hubAnswered) hubJobs().down();
   else hubJobs().up();
-  let data;
-  try { data = await r.json(); } catch { data = { error: `HTTP ${r.status}` }; }
   if (!r.ok || data.error) throw Object.assign(hubError(r.status, data), { path });
   return data;
 }
